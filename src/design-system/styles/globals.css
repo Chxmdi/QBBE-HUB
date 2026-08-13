@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+/*
+ * QBBE Hub design tokens — the single source for brand color, surfaces,
+ * typography, spacing, radius, shadow, and motion. (UI-001, UI-003)
+ * Values follow Part II Appendix A and Part III §4 of the master spec.
+ * Do not hard-code brand colors in feature components.
+ */
+
+@theme {
+  /* Brand */
+  --color-brand: #8f1538; /* QBBE Crimson — primary actions, active nav */
+  --color-brand-strong: #651128; /* Deep Crimson — pressed states */
+  --color-brand-soft: #f7e9ee; /* tinted selection surfaces (light) */
+  --color-accent: #c8a64d; /* Warm Gold — sparing premium accent */
+
+  /* Semantic status — never rely on color alone (A11Y-004) */
+  --color-success: #17834c;
+  --color-warning: #b86a11;
+  --color-danger: #c33b4a;
+  --color-info: #3f6fe5;
+
+  /* Light theme neutrals (default) */
+  --color-canvas: #f7f5f2; /* warm app background */
+  --color-surface: #ffffff; /* cards, panels, drawers, inputs */
+  --color-surface-soft: #f1eeea; /* table headers, quiet zones */
+  --color-ink: #1b191d; /* primary text */
+  --color-muted: #6c6870; /* secondary text and metadata */
+  --color-line: #e5dfda; /* 1px low-contrast borders */
+
+  /* Typography */
+  --font-sans: var(--font-app), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Radius (Part II §3.3) */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* Motion (120–180ms ease-out) */
+  --ease-app: cubic-bezier(0.2, 0, 0, 1);
+  --duration-fast: 120ms;
+  --duration-base: 160ms;
+
+  /* Shadows — subtle, short; menus/drawers/drag only */
+  --shadow-pop: 0 4px 16px rgb(27 25 29 / 0.1), 0 1px 3px rgb(27 25 29 / 0.08);
+  --shadow-raise: 0 1px 2px rgb(27 25 29 / 0.05);
+
+  /* Chart palette — validated with the dataviz six-checks validator against
+     the light surface. Status charts pair every color with a text label. */
+  --color-chart-good: #116639; /* completed */
+  --color-chart-todo: #c8811c; /* not started / ready */
+  --color-chart-progress: #3f6fe5; /* in progress / review */
+  --color-chart-overdue: #c33b4a; /* overdue */
+  --color-chart-primary: #8f1538; /* single-series magnitude */
+}
+
+/* Dark theme — a complete theme, not an inversion filter (Part II §2.3). */
+.dark {
+  --color-canvas: #17151a;
+  --color-surface: #211e24;
+  --color-surface-soft: #2b2730;
+  --color-ink: #f7f3f5;
+  --color-muted: #bdb6bf;
+  --color-line: #35313b;
+  --color-brand-soft: #3a1523;
+  --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-raise: 0 1px 2px rgb(0 0 0 / 0.3);
+
+  /* Dark mode selects its own chart steps, validated against the dark
+     surface — not an automatic flip. */
+  --color-chart-good: #2fa06a;
+  --color-chart-todo: #c8811c;
+  --color-chart-progress: #5b84ea;
+  --color-chart-overdue: #d25a66;
+  --color-chart-primary: #d0748d;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-canvas text-ink antialiased;
+    font-size: 14.5px;
+    line-height: 1.55;
+  }
+
+  /* Visible focus for keyboard users everywhere. (UI-007, A11Y-003) */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  .dark :focus-visible {
+    outline-color: var(--color-accent);
+  }
+
+  /* Reduced motion removes non-essential animation. (P0-UX-04, A11Y-006) */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  ::selection {
+    background: var(--color-brand);
+    color: #fff;
+  }
+}
+
+@layer utilities {
+  /* Editorial page title — used once per major page. */
+  .page-title {
+    @apply text-[26px] font-semibold tracking-[-0.02em] md:text-[32px];
+    line-height: 1.15;
+  }
+  .section-heading {
+    @apply text-[17px] font-semibold tracking-[-0.01em];
+  }
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.08em] text-muted;
+  }
+  .meta {
+    @apply text-[12.5px] text-muted;
+  }
+  .card {
+    @apply rounded-(--radius-md) border border-line bg-surface;
+  }
+  .interactive-row {
+    @apply transition-colors duration-(--duration-fast) hover:bg-surface-soft;
+  }
+}
+
+/* Print styles for report export (PDF via print). */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+}
