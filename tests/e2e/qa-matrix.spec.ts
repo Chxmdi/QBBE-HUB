@@ -229,7 +229,7 @@ test.describe("authorization", () => {
     await page.waitForURL("**/", { timeout: 30_000 });
 
     // CRM and Reports are staff-only: the route must redirect, not render.
-    for (const path of ["/crm", "/reports", "/admin"]) {
+    for (const path of ["/crm", "/reports", "/admin", "/programs", "/projects", "/schedule"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(page.url(), `${path} must not render for a volunteer`).not.toContain(

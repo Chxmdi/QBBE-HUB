@@ -9,6 +9,9 @@ export async function disconnectIntegration(
   provider: "gmail" | "google_calendar" | "volunteer_system",
 ): Promise<ActionResult> {
   const session = await requireSession();
+  if (provider === "volunteer_system" && !session.isAdmin) {
+    return { ok: false, error: "Admin access required." };
+  }
   const supabase = await createSupabaseServerClient();
   const query = supabase
     .from("integration_connection")
@@ -34,12 +37,10 @@ export async function disconnectIntegration(
     await supabase.from("calendar_event_link").delete().eq("user_id", session.userId);
   }
   if (provider === "volunteer_system") {
-    if (!session.isAdmin) return { ok: false, error: "Admin access required." };
-    // Disconnect drops VMS-sourced ids only; Hub tasks stay (P0-VOL-01).
-    await supabase
-      .from("user_profile")
-      .update({ vms_id: null })
-      .not("vms_id", "is", null);
+    const { error: clearError } = await supabase.rpc("clear_org_vms_ids");
+    if (clearError) {
+      await supabase.from("user_profile").update({ vms_id: null }).eq("id", session.userId);
+    }
   }
 
   await supabase.from("audit_event").insert({
@@ -65,6 +66,28 @@ export async function connectVolunteerSystem(): Promise<ActionResult> {
       ok: false,
       error:
         "Volunteer Management System is not configured. Set VMS_API_URL (and VMS_API_KEY) first.",
+    };
+  }
+  try {
+    const headers: Record<string, string> = {};
+    if (process.env.VMS_API_KEY) {
+      headers.Authorization = `Bearer ${process.env.VMS_API_KEY}`;
+    }
+    const response = await fetch(process.env.VMS_API_URL, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: `VMS responded ${response.status}. Connection was not recorded.`,
+      };
+    }
+  } catch {
+    return {
+      ok: false,
+      error: "Could not reach the Volunteer Management System. Connection was not recorded.",
     };
   }
   const supabase = await createSupabaseServerClient();

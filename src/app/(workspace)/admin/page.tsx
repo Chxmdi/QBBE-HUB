@@ -15,6 +15,7 @@ import { TeamMemberControls } from "@/features/admin/components/team-member-cont
 import { createTeam } from "@/features/admin/services/team.commands";
 import { createWorkflowRule } from "@/features/admin/services/workflow.commands";
 import { requireAdmin } from "@/lib/auth";
+import { transactionalEmailIsLive } from "@/lib/email-provider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
 import type { Membership } from "@/types/entities";
@@ -122,7 +123,7 @@ export default async function AdminPage() {
   const integrationMap = new Map(
     ((integrations ?? []) as IntegrationRow[]).map((i) => [i.provider, i]),
   );
-  const emailConfigured = Boolean(process.env.EMAIL_PROVIDER_API_KEY);
+  const emailConfigured = transactionalEmailIsLive();
   const googleConfigured = Boolean(
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
   );

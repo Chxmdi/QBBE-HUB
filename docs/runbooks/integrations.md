@@ -14,9 +14,10 @@ POST /api/jobs/notification-email
 Authorization: Bearer $CRON_JOB_SECRET
 ```
 
-Production SendGrid/Resend/etc. is configuration (`EMAIL_PROVIDER_API_KEY`,
-`EMAIL_FROM_ADDRESS`), not a new feature. Until that key is set, Admin
-invitations say **Invite recorded — email not sent**.
+Set `CRON_JOB_SECRET` (and `CRON_SECRET` to the same value on Vercel so
+platform cron sends the bearer header). Job routes skip login middleware.
+Admin invitations always say **Invite recorded — email not sent** until a
+production mail client is actually wired (`transactionalEmailIsLive()`).
 
 ## Gmail (gated)
 

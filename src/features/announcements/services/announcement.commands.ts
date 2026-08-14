@@ -141,6 +141,19 @@ export async function publishAnnouncement(
     metadata: { priority, requires_ack: requiresAck },
   });
 
+  if (!isScheduled) {
+    const { fireWorkflows } = await import("@/features/admin/services/workflow.runtime");
+    await fireWorkflows(supabase, {
+      organizationId: session.organizationId,
+      actorId: session.userId,
+      eventType: "announcement_published",
+      title,
+      sourceType: "announcement",
+      sourceId: announcement.id as string,
+      link: "/announcements",
+    });
+  }
+
   revalidatePath("/", "layout");
   return { ok: true, id: announcement.id as string };
 }

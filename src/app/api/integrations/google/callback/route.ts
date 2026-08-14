@@ -23,6 +23,10 @@ export async function GET(request: Request) {
     return fail("OAuth state mismatch. Try connecting again.");
   }
   const provider = state.startsWith("google_calendar:") ? "google_calendar" : "gmail";
+  const stateUser = state.split(":")[1];
+  if (stateUser !== session.userId) {
+    return fail("OAuth state did not match the signed-in user.");
+  }
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
     return fail("Google credentials are not configured.");
   }
@@ -86,6 +90,48 @@ export async function GET(request: Request) {
       .update({ status: "error", last_error: "Token store failed." })
       .eq("id", connection.id);
     return fail("Connected, but tokens could not be stored. Disconnect and retry.");
+  }
+
+  try {
+    if (provider === "gmail") {
+      const { fetchGmailMetadata } = await import("@/features/inbox/services/gmail-sync");
+      const rows = await fetchGmailMetadata(tokens.access_token);
+      if (rows.length) {
+        await supabase.from("gmail_message").upsert(
+          rows.map((row) => ({
+            organization_id: session.organizationId,
+            user_id: session.userId,
+            connection_id: connection.id,
+            ...row,
+          })),
+          { onConflict: "user_id,external_id" },
+        );
+      }
+    } else {
+      const { fetchCalendarOverlay } = await import("@/features/inbox/services/gmail-sync");
+      const rows = await fetchCalendarOverlay(tokens.access_token);
+      if (rows.length) {
+        await supabase.from("calendar_event_link").upsert(
+          rows.map((row) => ({
+            organization_id: session.organizationId,
+            user_id: session.userId,
+            connection_id: connection.id,
+            ...row,
+          })),
+          { onConflict: "user_id,external_id" },
+        );
+      }
+    }
+    await supabase
+      .from("integration_connection")
+      .update({ last_sync_at: new Date().toISOString(), last_error: null })
+      .eq("id", connection.id);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Initial sync failed.";
+    await supabase
+      .from("integration_connection")
+      .update({ status: "error", last_error: message })
+      .eq("id", connection.id);
   }
 
   const dest = provider === "gmail" ? "/inbox?filter=mail" : "/calendar";

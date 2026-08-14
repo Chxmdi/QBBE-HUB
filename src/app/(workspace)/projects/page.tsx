@@ -10,7 +10,7 @@ import { CreateFromTemplateButton } from "@/features/projects/components/create-
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { createProjectTemplate } from "@/features/admin/services/workflow.commands";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
-import { requireSession } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
 import type { Project } from "@/types/entities";
@@ -23,7 +23,7 @@ export default async function ProjectsPage({
 }: {
   searchParams: Promise<{ create?: string; stage?: string }>;
 }) {
-  const session = await requireSession();
+  const session = await requireStaff();
   const params = await searchParams;
   const supabase = await createSupabaseServerClient();
 

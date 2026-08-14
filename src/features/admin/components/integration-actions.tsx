@@ -47,7 +47,7 @@ export function IntegrationActions({
       <p className="meta mt-2">
         {connected
           ? "Provider key is present. Delivery runs via the notification-email job."
-          : "Set EMAIL_PROVIDER_API_KEY for production. Local Mailpit is enough for development."}
+          : "Transactional email is not live. Invites are recorded, not emailed. Local Mailpit is used when EMAIL_PROVIDER_API_KEY is unset."}
       </p>
     );
   }

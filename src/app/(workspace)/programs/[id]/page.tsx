@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { HealthBadge, StageBadge } from "@/components/shared/status-badges";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
-import { requireSession } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/utils";
 import type { ActivityEvent, EventRecord, Project } from "@/types/entities";
@@ -18,7 +18,7 @@ export default async function ProgramDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireSession();
+  await requireStaff();
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
 

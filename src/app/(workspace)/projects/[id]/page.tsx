@@ -18,7 +18,7 @@ import { StatusUpdateForm } from "@/features/projects/components/status-update-f
 import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
 import { TaskRow } from "@/features/tasks/components/task-row";
 import { TASK_SELECT, getPickerOptions } from "@/features/tasks/services/task.queries";
-import { requireSession } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
 import type {
@@ -39,7 +39,7 @@ export default async function ProjectDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string }>;
 }) {
-  const session = await requireSession();
+  const session = await requireStaff();
   const { id } = await params;
   const { tab: tabParam } = await searchParams;
   const tab = tabParam ?? "overview";

@@ -121,7 +121,7 @@ export async function updateTaskStatus(
       completed_at: status === "completed" ? new Date().toISOString() : null,
     })
     .eq("id", taskId)
-    .select("id, title, project_id, program_id")
+    .select("id, title, project_id, program_id, assignee_id")
     .maybeSingle();
 
   if (error || !updated) {
@@ -167,6 +167,19 @@ export async function updateTaskStatus(
       status === "completed"
         ? `completed “${updated.title}”`
         : `moved “${updated.title}” to ${status.replace(/_/g, " ")}`,
+  });
+
+  const { fireWorkflows } = await import("@/features/admin/services/workflow.runtime");
+  await fireWorkflows(supabase, {
+    organizationId: session.organizationId,
+    actorId: session.userId,
+    eventType: "task_status_changed",
+    status,
+    title: updated.title as string,
+    sourceType: "task",
+    sourceId: taskId,
+    link: `/my-work?task=${taskId}`,
+    assigneeId: (updated.assignee_id as string | null) ?? null,
   });
 
   revalidatePath("/", "layout");

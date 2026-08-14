@@ -10,12 +10,14 @@ integrations are tested.
 | Public a11y + responsive (auth routes) | `npm run test:a11y` → `tests/e2e/public-routes.spec.ts` | CI |
 | Authenticated 18-screen matrix + `/messages` | `npm run test:qa` — needs seeded QA DB | Opt-in |
 | RLS allow **and** deny | `npm run test:db` (`supabase/tests/rls.sql`) | Local Supabase |
-| Error monitoring | `ERROR_MONITORING_DSN` → `src/lib/observability.ts`; unset = local log only | Config |
+| Error monitoring | `ERROR_MONITORING_DSN` parsed as a Sentry DSN and posted to `/store/` | Config |
 | MFA for owner/admin | Supabase Auth setting + `deployment.md` step 7 | Operator |
 | Backups | `backup-recovery.md`; first restore drill still pending | Operator |
 | Privacy / retention | `privacy.md` | Review |
 | Channel history volume | `CHANNEL_HISTORY_PAGE_SIZE` + Load older | In product |
-| Honest integrations | Admin/Inbox stay **Not connected** without secrets | In product |
+| Honest integrations | Email/Gmail/VMS stay **Not connected** until a live send/sync/API succeeds | In product |
+| Cron jobs | `/api/jobs/*` skip session middleware; `vercel.json` crons; `CRON_JOB_SECRET` | In product |
+| Invite-only signup | `signup_allowed` RPC after the first organization exists | In product |
 | Coverage matrix | `docs/spec-coverage.md` | In product |
 
 ## Commands (developer)

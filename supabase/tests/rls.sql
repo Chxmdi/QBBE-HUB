@@ -248,6 +248,13 @@ begin
   end;
   reset role;
 
+  -- Invite-only: with an organization present, signup_allowed is false without an invite.
+  perform tests.clear_auth();
+  perform tests.ok(
+    public.signup_allowed('nobody@example.com') = false,
+    'signup is invite-only after an organization exists'
+  );
+
   perform tests.ok(true, 'RLS matrix complete');
 end;
 $$;

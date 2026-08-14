@@ -55,7 +55,7 @@ export async function inviteUser(input: unknown): Promise<InviteResult> {
   revalidatePath("/admin");
   return {
     ok: true,
-    emailSent: Boolean(process.env.EMAIL_PROVIDER_API_KEY),
+    emailSent: false,
   };
 }
 
@@ -132,6 +132,16 @@ export async function setMemberActive(
     })
     .eq("id", membershipId);
   if (error) return { ok: false, error: "Could not update the account." };
+
+  if (!active) {
+    try {
+      const { createSupabaseServiceClient } = await import("@/lib/supabase/service");
+      const admin = createSupabaseServiceClient();
+      await admin.auth.admin.signOut(membership.user_id, "global");
+    } catch {
+      // Service role is optional; the account-inactive page still blocks the UI.
+    }
+  }
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,

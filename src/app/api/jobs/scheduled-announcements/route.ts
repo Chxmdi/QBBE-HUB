@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cronAuthorized } from "@/lib/cron-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -7,10 +8,12 @@ export const dynamic = "force-dynamic";
  * Fan-out notifications for announcements whose publish_at has arrived
  * (P1-ANN-07). Idempotent via notification.dedupe_key.
  */
+export async function GET(request: Request) {
+  return POST(request);
+}
+
 export async function POST(request: Request) {
-  const secret = process.env.CRON_JOB_SECRET;
-  const auth = request.headers.get("authorization");
-  if (!secret || auth !== `Bearer ${secret}`) {
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -6,6 +6,7 @@ import {
   type Notifiable,
 } from "@/features/inbox/services/email-delivery";
 import { sendSmtpMail } from "@/lib/smtp";
+import { cronAuthorized } from "@/lib/cron-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -18,10 +19,12 @@ const CRITICAL = ["assignment", "mention", "announcement", "due_date"];
  * Local: Mailpit SMTP (default 127.0.0.1:54325). Production: set
  * EMAIL_PROVIDER_API_KEY — until then the job records an honest skip.
  */
+export async function GET(request: Request) {
+  return POST(request);
+}
+
 export async function POST(request: Request) {
-  const secret = process.env.CRON_JOB_SECRET;
-  const auth = request.headers.get("authorization");
-  if (!secret || auth !== `Bearer ${secret}`) {
+  if (!cronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -69,8 +72,8 @@ export async function POST(request: Request) {
   const smtpHost = process.env.SMTP_HOST ?? "127.0.0.1";
   const smtpPort = Number(process.env.SMTP_PORT ?? "54325");
   const from = process.env.EMAIL_FROM_ADDRESS || "hub@localhost";
-  const providerConfigured = Boolean(process.env.EMAIL_PROVIDER_API_KEY);
-  const useMailpit = !providerConfigured;
+  const { localMailpitEnabled } = await import("@/lib/email-provider");
+  const mailpit = localMailpitEnabled();
 
   let queued = 0;
   let sent = 0;
@@ -114,7 +117,7 @@ export async function POST(request: Request) {
     }
 
     try {
-      if (useMailpit) {
+      if (mailpit) {
         await sendSmtpMail({
           host: smtpHost,
           port: smtpPort,
@@ -124,15 +127,15 @@ export async function POST(request: Request) {
           text: notification.body ?? notification.title,
         });
       } else {
-        // Production provider hook: a real SendGrid/Resend call belongs here.
-        // Until a provider client is wired, record an honest pending state.
         await supabase
           .from("notification_delivery")
           .update({
-            status: "pending",
-            last_error: "EMAIL_PROVIDER_API_KEY is set but no provider client is wired yet.",
+            status: "failed",
+            last_error:
+              "EMAIL_PROVIDER_API_KEY is set but no production mail client is wired. Unset the key to use local Mailpit, or wire a provider.",
           })
           .eq("dedupe_key", dedupe);
+        failed += 1;
         continue;
       }
       await supabase
@@ -150,5 +153,5 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, queued, sent, skipped, failed, useMailpit });
+  return NextResponse.json({ ok: true, queued, sent, skipped, failed, useMailpit: mailpit });
 }
