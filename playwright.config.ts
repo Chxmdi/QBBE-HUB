@@ -15,11 +15,13 @@ export default defineConfig({
       ? { server: process.env.HTTPS_PROXY, bypass: "127.0.0.1,localhost" }
       : undefined,
     ignoreHTTPSErrors: true,
-    launchOptions: {
-      executablePath:
-        process.env.QA_CHROME_PATH ??
-        "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
-    },
+    // Only pin Chromium when the environment provides an explicit path
+    // (Cursor Cloud sandbox). GitHub Actions and local `npx playwright
+    // install` put browsers in ~/.cache/ms-playwright; a hardcoded
+    // /opt/pw-browsers path makes CI fail to launch.
+    launchOptions: process.env.QA_CHROME_PATH
+      ? { executablePath: process.env.QA_CHROME_PATH }
+      : undefined,
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },

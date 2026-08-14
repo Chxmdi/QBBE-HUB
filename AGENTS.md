@@ -64,8 +64,11 @@ the Docker daemon does not auto-start and Supabase must be started manually:
 - Standard commands are in `package.json`: `npm run lint`, `npm run typecheck`,
   `npm test` (Vitest), `npm run build`.
 - Public-route Playwright a11y suite (no DB needed, mirrors CI): build, serve,
-  then `npx playwright test public-routes`. `playwright.config.ts` looks for
-  Chromium at a hardcoded path; override it with
-  `QA_CHROME_PATH=$(find ~/.cache/ms-playwright -name chrome -type f | head -1)`.
+  then `npx playwright test public-routes`. Playwright uses the browser from
+  `npx playwright install` unless `QA_CHROME_PATH` is set (Cursor Cloud
+  sandbox only). GitHub Actions CI does **not** set `QA_CHROME_PATH`.
+- Database/RLS tests: `npm run test:db` against local Supabase
+  (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`). Requires
+  `supabase start` and the QA fixture users from `docs/runbooks/qa.md`.
 - The authenticated `qa-matrix` Playwright suite needs seeded QA users and is
   not part of routine setup — see `docs/runbooks/qa.md`.

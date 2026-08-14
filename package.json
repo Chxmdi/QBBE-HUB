@@ -14,6 +14,7 @@
     "test:e2e": "playwright test",
     "test:qa": "playwright test qa-matrix",
     "test:a11y": "playwright test public-routes",
+    "test:db": "psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -f supabase/tests/rls.sql",
     "db:types": "supabase gen types typescript --local > src/types/database.ts"
   },
   "dependencies": {
