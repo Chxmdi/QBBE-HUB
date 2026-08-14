@@ -4,41 +4,45 @@ Integrations are **staged deliberately** (spec Phases 4+). The UI shows
 honest "Not connected" states until each is configured — no misleading
 stubs (P0 §7.1).
 
-## Gmail (Phase 4)
+## Transactional email (Unit 9)
 
-Target design per GML-001..008:
+Local Mailpit from `supabase start` (UI `:54324`, SMTP `:54325`) is enough to
+complete the pipeline. Call:
+
+```
+POST /api/jobs/notification-email
+Authorization: Bearer $CRON_JOB_SECRET
+```
+
+Set `CRON_JOB_SECRET` (and `CRON_SECRET` to the same value on Vercel so
+platform cron sends the bearer header). Job routes skip login middleware.
+Admin invitations always say **Invite recorded — email not sent** until a
+production mail client is actually wired (`transactionalEmailIsLive()`).
+
+## Gmail (gated)
+
+Target design per GML-001..008. Do not mark done on stubs.
 
 1. Create a Google Cloud project (QBBE-owned). Configure the OAuth consent
    screen (internal) and credentials with the **narrowest scopes**
    (`gmail.readonly` initially).
 2. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-   `GOOGLE_OAUTH_REDIRECT_URI` in the server environment.
-3. Implement the OAuth flow server-side; store refresh tokens encrypted in
-   `integration_connection` (never sent to the browser).
-4. Use Gmail `watch` + Pub/Sub for change notification, the history cursor
-   for deltas, daily watch renewal, and idempotent sync keyed on message
-   IDs.
-5. Disconnect must revoke tokens and stop sync while retaining allowed
-   linkage records.
+   `GOOGLE_OAUTH_REDIRECT_URI` (`/api/integrations/google/callback`).
+3. Connect from Inbox or Admin. Tokens live in `integration_secret` (no
+   authenticated SELECT). Disconnect removes list ability.
+4. Sync is idempotent on Gmail message ids; metadata only (SEC-006).
 
-## Google Calendar (Phase 4)
+## Google Calendar overlay (P1-CAL-03)
 
-Same OAuth infrastructure; overlay events read-only first. Store
-`calendar_event_link` references, not copies.
+Same OAuth start URL with `?provider=google_calendar`. Overlay rows live in
+`calendar_event_link`. Until credentials exist the calendar stays Hub-only.
 
-## Volunteer Management System (Phase 4)
+## Volunteer Management System (gated)
 
-Server-to-server only. Store external volunteer IDs and minimal display
-data. The volunteer system stays the source of truth for identity,
-availability, and attendance (§10.4).
+Server-to-server only. Set `VMS_API_URL` (and `VMS_API_KEY`). Connect from
+Admin. Store `user_profile.vms_id` — do not duplicate the volunteer database.
+Disconnect clears VMS ids and does **not** delete Hub tasks.
 
-## Transactional email (Phase 4)
-
-Choose a provider (e.g. Resend/Postmark) with a verified QBBE sender
-domain. Set `EMAIL_PROVIDER_API_KEY` and `EMAIL_FROM_ADDRESS`. Deliver only
-critical categories initially (assignments, critical announcements) with
-the notification record as the source and `notification_delivery` for
-retry metadata (NTF-002).
 
 ## Health visibility
 

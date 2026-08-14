@@ -18,7 +18,8 @@ const ROUTES = [
   { path: "/programs", name: "programs" },
   { path: "/channels", name: "channels" },
   { path: "/announcements", name: "announcements" },
-  { path: "/inbox", name: "inbox" },
+    { path: "/inbox", name: "inbox" },
+    { path: "/messages", name: "messages" },
   { path: "/calendar", name: "calendar" },
   { path: "/schedule", name: "schedule" },
   { path: "/meetings", name: "meetings" },
@@ -228,7 +229,7 @@ test.describe("authorization", () => {
     await page.waitForURL("**/", { timeout: 30_000 });
 
     // CRM and Reports are staff-only: the route must redirect, not render.
-    for (const path of ["/crm", "/reports", "/admin"]) {
+    for (const path of ["/crm", "/reports", "/admin", "/programs", "/projects", "/schedule"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(page.url(), `${path} must not render for a volunteer`).not.toContain(
@@ -240,6 +241,9 @@ test.describe("authorization", () => {
     await page.goto("/");
     await expect(page.getByRole("link", { name: "Relationships" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "My Work" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "New project" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "View portfolio" })).toHaveCount(0);
   });
 
   test("unauthenticated access redirects to sign-in", async ({ browser }) => {

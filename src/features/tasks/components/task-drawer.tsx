@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { TASK_STATUS_META } from "@/components/shared/status-badges";
 import { addTaskComment, updateTask } from "@/features/tasks/services/task.commands";
 import { StatusSelect } from "@/features/tasks/components/status-select";
+import { TaskExtras } from "@/features/tasks/components/task-extras";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { relativeTime } from "@/lib/utils";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
@@ -30,7 +31,7 @@ const DETAIL_SELECT =
  * URL lands on the same record, and closing restores the list context
  * without a full navigation.
  */
-export function TaskDrawer({ people }: { people: Option[] }) {
+export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isStaff?: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -38,6 +39,9 @@ export function TaskDrawer({ people }: { people: Option[] }) {
 
   const [task, setTask] = useState<Task | null>(null);
   const [comments, setComments] = useState<TaskComment[]>([]);
+  const [checklist, setChecklist] = useState<{ id: string; title: string; completed_at: string | null }[]>([]);
+  const [blockers, setBlockers] = useState<{ blocking_task_id: string; title: string }[]>([]);
+  const [peopleTasks, setPeopleTasks] = useState<{ id: string; title: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [comment, setComment] = useState("");
@@ -48,8 +52,8 @@ export function TaskDrawer({ people }: { people: Option[] }) {
     setLoading(true);
     setNotFound(false);
     const supabase = createSupabaseBrowserClient();
-    const [{ data: taskRow }, { data: commentRows }] = await Promise.all([
-      supabase.from("task").select(DETAIL_SELECT).eq("id", id).maybeSingle(),
+    const [{ data: taskRow }, { data: commentRows }, { data: checkRows }, { data: depRows }, { data: taskOptions }] = await Promise.all([
+      supabase.from("task").select(DETAIL_SELECT + ", recurrence_rule").eq("id", id).maybeSingle(),
       supabase
         .from("task_comment")
         .select(
@@ -58,6 +62,16 @@ export function TaskDrawer({ people }: { people: Option[] }) {
         .eq("task_id", id)
         .is("deleted_at", null)
         .order("created_at"),
+      supabase
+        .from("checklist_item")
+        .select("id, title, completed_at")
+        .eq("task_id", id)
+        .order("sort_key"),
+      supabase
+        .from("task_dependency")
+        .select("blocking_task_id, blocking:blocking_task_id(title)")
+        .eq("blocked_task_id", id),
+      supabase.from("task").select("id, title").is("archived_at", null).limit(50),
     ]);
     setLoading(false);
     if (!taskRow) {
@@ -68,6 +82,14 @@ export function TaskDrawer({ people }: { people: Option[] }) {
     }
     setTask(taskRow as unknown as Task);
     setComments((commentRows ?? []) as unknown as TaskComment[]);
+    setChecklist((checkRows ?? []) as { id: string; title: string; completed_at: string | null }[]);
+    setBlockers(
+      ((depRows ?? []) as unknown as { blocking_task_id: string; blocking: { title: string } | null }[]).map((d) => ({
+        blocking_task_id: d.blocking_task_id,
+        title: d.blocking?.title ?? "Task",
+      })),
+    );
+    setPeopleTasks((taskOptions ?? []) as { id: string; title: string }[]);
   }, []);
 
   useEffect(() => {
@@ -242,6 +264,15 @@ export function TaskDrawer({ people }: { people: Option[] }) {
               </p>
             </div>
           </div>
+
+          <TaskExtras
+            taskId={task.id}
+            isStaff={isStaff}
+            recurrenceRule={(task as Task & { recurrence_rule?: string | null }).recurrence_rule ?? null}
+            checklist={checklist}
+            blockers={blockers}
+            peopleTasks={peopleTasks}
+          />
 
           <section aria-labelledby="drawer-comments">
             <h3 id="drawer-comments" className="section-heading mb-2">

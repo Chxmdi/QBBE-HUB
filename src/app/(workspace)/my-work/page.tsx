@@ -4,6 +4,7 @@ import { ClipboardList } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ListSkeleton } from "@/components/ui/skeleton";
+import { SaveViewButton } from "@/features/tasks/components/save-view-button";
 import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
 import { TaskDrawer } from "@/features/tasks/components/task-drawer";
 import {
@@ -76,11 +77,16 @@ export default async function MyWorkPage({
         title="My Work"
         description="Everything you own, grouped by urgency. Select rows for bulk changes, or open a task for full detail."
         actions={
-          <TaskCreateDialog
-            projects={options.projects}
-            people={options.people}
-            defaultOpen={params.create === "task"}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Suspense fallback={null}>
+              <SaveViewButton path="/my-work" />
+            </Suspense>
+            <TaskCreateDialog
+              projects={options.projects}
+              people={options.people}
+              defaultOpen={params.create === "task"}
+            />
+          </div>
         }
       />
 
@@ -109,7 +115,7 @@ export default async function MyWorkPage({
       )}
 
       <Suspense fallback={null}>
-        <TaskDrawer people={options.people} />
+        <TaskDrawer people={options.people} isStaff={session.isStaff} />
       </Suspense>
     </div>
   );

@@ -24,6 +24,7 @@ export function ChannelCreateDialog({ defaultOpen = false }: { defaultOpen?: boo
       purpose: (form.get("purpose") as string) || undefined,
       privacy: form.get("privacy"),
       type: form.get("type"),
+      postingPolicy: form.get("postingPolicy"),
     });
     setSaving(false);
     if (!result.ok) {
@@ -86,6 +87,14 @@ export function ChannelCreateDialog({ defaultOpen = false }: { defaultOpen?: boo
                 <option value="leadership">Leadership</option>
               </Select>
             </div>
+          </div>
+          <div>
+            <Label htmlFor="channel-posting">Who can post</Label>
+            <Select id="channel-posting" name="postingPolicy" defaultValue="everyone">
+              <option value="everyone">Everyone in the channel</option>
+              <option value="staff">Staff only</option>
+              <option value="admins">Admins only</option>
+            </Select>
           </div>
           {error ? (
             <p role="alert" className="text-[13px] text-danger-fg">

@@ -35,6 +35,7 @@ const publishSchema = z.object({
   priority: z.enum(["normal", "important", "critical"]).default("normal"),
   requiresAck: z.boolean().default(false),
   ackDeadline: z.string().optional(),
+  publishAt: z.string().optional(),
 });
 
 /**
@@ -50,7 +51,9 @@ export async function publishAnnouncement(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { title, body, priority, requiresAck, ackDeadline } = parsed.data;
+  const { title, body, priority, requiresAck, ackDeadline, publishAt } = parsed.data;
+  const publishAtIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString();
+  const isScheduled = new Date(publishAtIso).getTime() > Date.now() + 30_000;
 
   const supabase = await createSupabaseServerClient();
   const { data: channel } = await supabase
@@ -89,6 +92,7 @@ export async function publishAnnouncement(
       priority,
       requires_ack: requiresAck,
       ack_deadline: requiresAck && ackDeadline ? ackDeadline : null,
+      publish_at: publishAtIso,
       created_by: session.userId,
     })
     .select("id")
@@ -98,15 +102,17 @@ export async function publishAnnouncement(
     return { ok: false, error: "Could not publish the announcement." };
   }
 
-  // Fan out deduplicated notifications to active members (P0-NOT-04).
+  // Fan out now; scheduled announcements wait for the publish job (P1-ANN-07).
   const { data: members } = await supabase
     .from("organization_membership")
     .select("user_id")
     .eq("status", "active");
 
-  const recipients = (members ?? [])
-    .map((m) => m.user_id as string)
-    .filter((id) => id !== session.userId);
+  const recipients = isScheduled
+    ? []
+    : (members ?? [])
+        .map((m) => m.user_id as string)
+        .filter((id) => id !== session.userId);
 
   if (recipients.length > 0) {
     await supabase.from("notification").insert(
@@ -134,6 +140,19 @@ export async function publishAnnouncement(
     object_id: announcement.id,
     metadata: { priority, requires_ack: requiresAck },
   });
+
+  if (!isScheduled) {
+    const { fireWorkflows } = await import("@/features/admin/services/workflow.runtime");
+    await fireWorkflows(supabase, {
+      organizationId: session.organizationId,
+      actorId: session.userId,
+      eventType: "announcement_published",
+      title,
+      sourceType: "announcement",
+      sourceId: announcement.id as string,
+      link: "/announcements",
+    });
+  }
 
   revalidatePath("/", "layout");
   return { ok: true, id: announcement.id as string };

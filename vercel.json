@@ -1,0 +1,7 @@
+{
+  "crons": [
+    { "path": "/api/jobs/notification-email", "schedule": "*/10 * * * *" },
+    { "path": "/api/jobs/scheduled-announcements", "schedule": "*/5 * * * *" },
+    { "path": "/api/jobs/gmail-sync", "schedule": "*/15 * * * *" }
+  ]
+}

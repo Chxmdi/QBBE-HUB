@@ -21,6 +21,19 @@ export function SignUpForm() {
     setError(null);
     setLoading(true);
     const supabase = createSupabaseBrowserClient();
+    const { data: allowed, error: allowError } = await supabase.rpc("signup_allowed", {
+      p_email: email.trim(),
+    });
+    if (allowError) {
+      setLoading(false);
+      setError("Could not check whether sign-up is open. Try again.");
+      return;
+    }
+    if (allowed !== true) {
+      setLoading(false);
+      setError("This workspace is invite-only. Ask an administrator to send you an invitation.");
+      return;
+    }
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,

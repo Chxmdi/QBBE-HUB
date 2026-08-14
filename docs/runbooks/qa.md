@@ -81,3 +81,21 @@ If it fails, adjust the `--color-*-fg` tokens in
 - Real-device touch check on iOS Safari and Android Chrome.
 - Load/performance measurement with representative data volume (§20.5).
 - Backup restore rehearsal (see `backup-recovery.md`).
+- Privacy / retention review (`privacy.md`).
+- Launch-gate ticks (`launch-gate.md`).
+
+## 5. Database / RLS tests (TST-003)
+
+Against **local** Supabase after `supabase start`:
+
+```bash
+npm run test:db
+```
+
+That concatenates `supabase/tests/qa-users.sql` (idempotent owner/staff/volunteer
+with password `QaTest!2026`) and `supabase/tests/rls.sql` (allow **and** deny
+cases) into `psql` on `supabase_db_workspace`.
+
+**Recipe when you add a table:** ship indexes + RLS in the same migration, then
+add one allow and one deny assertion to `rls.sql`. Coverage status lives in
+`docs/spec-coverage.md`.

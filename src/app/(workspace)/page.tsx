@@ -94,11 +94,12 @@ export default async function HomePage() {
         )
       : null;
 
-  const attentionEmpty =
-    attention.overdueTasks.length === 0 &&
-    attention.blockedTasks.length === 0 &&
-    attention.unassignedTasks.length === 0 &&
-    attention.riskyProjects.length === 0;
+  const attentionEmpty = session.isStaff
+    ? attention.overdueTasks.length === 0 &&
+      attention.blockedTasks.length === 0 &&
+      attention.unassignedTasks.length === 0 &&
+      attention.riskyProjects.length === 0
+    : attention.overdueTasks.length === 0 && attention.blockedTasks.length === 0;
 
   const rail = data.announcementRail;
   const latestAnn = rail.latest;
@@ -113,7 +114,9 @@ export default async function HomePage() {
             <span aria-hidden>👋</span>
           </h1>
           <p className="mt-1.5 text-[14.5px] text-muted">
-            Here&apos;s what needs your attention today.
+            {session.isStaff
+              ? "Here's what needs your attention today."
+              : "Your assigned work, announcements, and upcoming schedule."}
           </p>
         </header>
 
@@ -143,7 +146,8 @@ export default async function HomePage() {
           </section>
         ) : null}
 
-        {/* Hero: portfolio pulse */}
+        {/* Hero: portfolio pulse — staff/leadership only (P0-VOL-02) */}
+        {session.isStaff ? (
         <section
           aria-label="Portfolio summary"
           className="card mb-5 flex flex-wrap items-center gap-x-8 gap-y-4 p-5"
@@ -211,6 +215,7 @@ export default async function HomePage() {
             </div>
           ) : null}
         </section>
+        ) : null}
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           {/* TODAY */}
@@ -288,7 +293,8 @@ export default async function HomePage() {
             </Link>
           </section>
 
-          {/* PROGRAM HEALTH */}
+          {/* PROGRAM HEALTH — staff only */}
+          {session.isStaff ? (
           <section aria-labelledby="program-health-heading" className="card p-5">
             <h2 id="program-health-heading" className="eyebrow mb-4">
               Program health
@@ -343,8 +349,10 @@ export default async function HomePage() {
               View portfolio <ArrowRight className="size-3.5" aria-hidden />
             </Link>
           </section>
+          ) : null}
 
-          {/* ACTIVITY OVERVIEW */}
+          {/* ACTIVITY OVERVIEW — staff only */}
+          {session.isStaff ? (
           <section aria-labelledby="activity-overview-heading" className="card p-5">
             <h2 id="activity-overview-heading" className="eyebrow mb-4">
               Activity overview
@@ -407,6 +415,7 @@ export default async function HomePage() {
               />
             </div>
           </section>
+          ) : null}
 
           {/* UPCOMING EVENTS */}
           <section aria-labelledby="upcoming-events-heading" className="card p-5">
@@ -493,7 +502,7 @@ export default async function HomePage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {attention.riskyProjects.length > 0 ? (
+              {session.isStaff && attention.riskyProjects.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
                     <AlertTriangle className="size-3.5 text-warning-fg" aria-hidden />
@@ -549,7 +558,7 @@ export default async function HomePage() {
                   </ul>
                 </div>
               ) : null}
-              {attention.unassignedTasks.length > 0 ? (
+              {session.isStaff && attention.unassignedTasks.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
                     <AlertTriangle className="size-3.5 text-warning-fg" aria-hidden />

@@ -15,6 +15,8 @@ const createChannelSchema = z.object({
     .enum(["organization", "team", "program", "project", "event", "operations", "leadership", "custom"])
     .default("custom"),
   projectId: z.string().uuid().optional(),
+  programId: z.string().uuid().optional(),
+  postingPolicy: z.enum(["everyone", "staff", "admins"]).default("everyone"),
 });
 
 export async function createChannel(input: unknown): Promise<ActionResult> {
@@ -24,7 +26,8 @@ export async function createChannel(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { name, purpose, privacy, type, projectId } = parsed.data;
+  const { name, purpose, privacy, type, projectId, programId, postingPolicy } =
+    parsed.data;
   const supabase = await createSupabaseServerClient();
 
   const slug = slugify(name) || `channel-${Date.now().toString(36)}`;
@@ -38,6 +41,8 @@ export async function createChannel(input: unknown): Promise<ActionResult> {
       privacy,
       purpose: purpose || null,
       project_id: projectId ?? null,
+      program_id: programId ?? null,
+      posting_policy: postingPolicy,
       owner_id: session.userId,
       created_by: session.userId,
     })
@@ -94,7 +99,15 @@ export async function joinChannel(channelId: string): Promise<ActionResult> {
 export async function leaveChannel(channelId: string): Promise<ActionResult> {
   const session = await requireSession();
   const supabase = await createSupabaseServerClient();
-  // RLS blocks leaving mandatory channels (P0-ANN-01).
+  const { data: channel } = await supabase
+    .from("channel")
+    .select("is_mandatory")
+    .eq("id", channelId)
+    .maybeSingle();
+  if (channel?.is_mandatory) {
+    return { ok: false, error: "You cannot leave a mandatory channel." };
+  }
+  // RLS also blocks leaving mandatory channels (P0-ANN-01).
   const { error } = await supabase
     .from("channel_member")
     .delete()
@@ -102,6 +115,42 @@ export async function leaveChannel(channelId: string): Promise<ActionResult> {
     .eq("user_id", session.userId);
   if (error) return { ok: false, error: "You cannot leave this channel." };
   revalidatePath("/channels");
+  return { ok: true };
+}
+
+export async function addChannelMember(
+  channelId: string,
+  userId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const supabase = await createSupabaseServerClient();
+  const { data: channel } = await supabase
+    .from("channel")
+    .select("owner_id")
+    .eq("id", channelId)
+    .maybeSingle();
+  if (!channel) return { ok: false, error: "Channel not found." };
+  if (!session.isAdmin && channel.owner_id !== session.userId) {
+    return { ok: false, error: "Only the channel owner or an admin can add members." };
+  }
+  const { error } = await supabase.from("channel_member").insert({
+    channel_id: channelId,
+    user_id: userId,
+    membership_source: "manual",
+  });
+  if (error && error.code !== "23505") {
+    return { ok: false, error: "Could not add that member." };
+  }
+  await supabase.from("audit_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    event_type: "communication",
+    action: "channel_member_added",
+    object_type: "channel",
+    object_id: channelId,
+    metadata: { user_id: userId },
+  });
+  revalidatePath(`/channels/${channelId}`);
   return { ok: true };
 }
 

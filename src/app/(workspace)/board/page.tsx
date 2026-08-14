@@ -18,7 +18,7 @@ export default async function BoardPage({
 }: {
   searchParams: Promise<{ project?: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const params = await searchParams;
   const [tasks, options] = await Promise.all([
     getBoardTasks(params.project),
@@ -45,7 +45,7 @@ export default async function BoardPage({
       />
       <TaskBoard tasks={tasks} />
       <Suspense fallback={null}>
-        <TaskDrawer people={options.people} />
+        <TaskDrawer people={options.people} isStaff={session.isStaff} />
       </Suspense>
     </div>
   );

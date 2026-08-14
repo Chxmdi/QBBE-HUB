@@ -52,6 +52,7 @@ export function MessageItem({
   isThreadReply = false,
   canConvert = true,
   isStaff = false,
+  highlighted = false,
 }: {
   message: Message;
   currentUserId: string;
@@ -62,6 +63,7 @@ export function MessageItem({
   isThreadReply?: boolean;
   canConvert?: boolean;
   isStaff?: boolean;
+  highlighted?: boolean;
 }) {
   const { toast } = useToast();
   const [showEmoji, setShowEmoji] = useState(false);
@@ -238,9 +240,11 @@ export function MessageItem({
   return (
     <div
       id={`message-${message.id}`}
+      data-highlighted={highlighted ? "true" : undefined}
       className={cn(
         "group relative flex gap-2.5 px-4 py-2 hover:bg-surface-soft/50",
         isThreadReply && "py-1.5",
+        highlighted && "bg-accent/15 ring-1 ring-brand/40",
       )}
     >
       <Avatar

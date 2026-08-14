@@ -13,7 +13,7 @@ export interface CalendarItem {
   id: string;
   date: Date;
   label: string;
-  kind: "task" | "milestone" | "meeting" | "event" | "follow_up";
+  kind: "task" | "milestone" | "meeting" | "event" | "follow_up" | "google";
   href: string;
   timed: boolean;
 }
@@ -24,6 +24,7 @@ export const KIND_STYLES: Record<CalendarItem["kind"], string> = {
   meeting: "bg-info/12 text-info-fg",
   event: "bg-success/12 text-success-fg",
   follow_up: "bg-warning/12 text-warning-fg",
+  google: "bg-surface-soft text-muted",
 };
 
 /** Short type prefix so kind never rests on color alone (§10.9). */
@@ -33,6 +34,7 @@ const KIND_PREFIX: Record<CalendarItem["kind"], string> = {
   meeting: "Meeting",
   event: "Event",
   follow_up: "Follow-up",
+  google: "Google",
 };
 
 /**
