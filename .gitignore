@@ -29,6 +29,8 @@ yarn-error.log*
 .env
 .env.*
 !.env.example
+# publishable (browser-shipped) values only; secrets stay in host env
+!.env.production
 
 # vercel
 .vercel
