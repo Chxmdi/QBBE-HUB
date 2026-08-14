@@ -14,7 +14,7 @@
     "test:e2e": "playwright test",
     "test:qa": "playwright test qa-matrix",
     "test:a11y": "playwright test public-routes",
-    "test:db": "sh -c 'cat supabase/tests/qa-users.sql supabase/tests/rls.sql | docker exec -i supabase_db_workspace psql -U postgres -d postgres -v ON_ERROR_STOP=1'",
+    "test:db": "sh -c 'DOCKER=docker; docker info >/dev/null 2>&1 || DOCKER=\"sudo docker\"; cat supabase/tests/qa-users.sql supabase/tests/rls.sql | $DOCKER exec -i supabase_db_workspace psql -U postgres -d postgres -v ON_ERROR_STOP=1'",
     "db:types": "supabase gen types typescript --local > src/types/database.ts"
   },
   "dependencies": {

@@ -69,8 +69,8 @@ the Docker daemon does not auto-start and Supabase must be started manually:
   sandbox only). GitHub Actions CI does **not** set `QA_CHROME_PATH`.
 - Database/RLS tests: `npm run test:db` against local Supabase
   (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`). Requires
-  `supabase start`. The script talks to the Docker container
-  `supabase_db_workspace`.
+  `supabase start`. Falls back to `sudo docker` when the daemon socket is
+  root-owned (typical on this VM).
 - Notification email job (Unit 9): `POST /api/jobs/notification-email` with
   `Authorization: Bearer $CRON_JOB_SECRET`. Local Mailpit SMTP is
   `127.0.0.1:54325` (UI `:54324`). Do not mark production email “connected”
