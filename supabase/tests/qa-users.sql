@@ -82,3 +82,12 @@ update organization_membership
 update organization_membership
   set role = 'volunteer'
   where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3';
+
+-- QA users skip first-run onboarding so authenticated Playwright can reach the workspace.
+update user_profile
+  set onboarded_at = coalesce(onboarded_at, now())
+  where id in (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3'
+  );

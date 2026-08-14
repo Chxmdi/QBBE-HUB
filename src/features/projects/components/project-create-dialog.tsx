@@ -43,7 +43,10 @@ export function ProjectCreateDialog({
       return;
     }
     setOpen(false);
-    if (result.id) router.push(`/projects/${result.id}`);
+    if (result.id) {
+      router.push(`/projects/${result.id}`);
+      return;
+    }
     router.refresh();
   }
 
