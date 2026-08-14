@@ -219,6 +219,100 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
+const bulkSchema = z.object({
+  taskIds: z.array(z.string().uuid()).min(1).max(200),
+  action: z.enum(["status", "assignee", "priority", "due", "archive"]),
+  status: z
+    .enum([
+      "not_started", "ready", "in_progress", "waiting",
+      "in_review", "completed", "cancelled",
+    ])
+    .optional(),
+  assigneeId: z.string().uuid().nullable().optional(),
+  priority: z.enum(["low", "medium", "high", "critical"]).optional(),
+  dueAt: z.string().nullable().optional(),
+});
+
+/**
+ * Bulk reassign / reprioritize / reschedule / archive (P0-TSK-05).
+ * "Blocked" is excluded from bulk status changes because each blocked task
+ * requires its own explanation (business rule §19).
+ */
+export async function bulkUpdateTasks(
+  input: unknown,
+): Promise<ActionResult & { updated?: number }> {
+  const session = await requireSession();
+  const parsed = bulkSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { taskIds, action, status, assigneeId, priority, dueAt } = parsed.data;
+
+  const patch: Record<string, unknown> = {};
+  if (action === "status") {
+    if (!status) return { ok: false, error: "Pick a status." };
+    patch.status = status;
+    patch.completed_at = status === "completed" ? new Date().toISOString() : null;
+  } else if (action === "assignee") {
+    if (assigneeId === undefined) return { ok: false, error: "Pick an assignee." };
+    patch.assignee_id = assigneeId;
+  } else if (action === "priority") {
+    if (!priority) return { ok: false, error: "Pick a priority." };
+    patch.priority = priority;
+  } else if (action === "due") {
+    patch.due_at = dueAt || null;
+  } else if (action === "archive") {
+    patch.archived_at = new Date().toISOString();
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: updated, error } = await supabase
+    .from("task")
+    .update(patch)
+    .in("id", taskIds)
+    .select("id, title, project_id, program_id");
+
+  if (error) {
+    return { ok: false, error: "Bulk update failed. No changes were applied." };
+  }
+
+  const rows = updated ?? [];
+  if (rows.length > 0) {
+    await supabase.from("activity_event").insert(
+      rows.map((row) => ({
+        organization_id: session.organizationId,
+        actor_id: session.userId,
+        verb: action === "archive" ? "archived" : "updated",
+        source_type: "task",
+        source_id: row.id,
+        project_id: row.project_id,
+        program_id: row.program_id,
+        summary: `bulk ${action === "archive" ? "archived" : "updated"} “${row.title}”`,
+      })),
+    );
+
+    // One deduplicated notification per newly assigned person.
+    if (action === "assignee" && assigneeId && assigneeId !== session.userId) {
+      await supabase.from("notification").insert(
+        rows.map((row) => ({
+          user_id: assigneeId,
+          organization_id: session.organizationId,
+          category: "assignment",
+          title: `${session.profile.full_name} assigned you a task`,
+          body: row.title,
+          source_type: "task",
+          source_id: row.id,
+          link: `/my-work?task=${row.id}`,
+          dedupe_key: `assign:${row.id}:${assigneeId}`,
+        })),
+      );
+    }
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true, updated: rows.length };
+}
+
 export async function addTaskComment(
   taskId: string,
   body: string,

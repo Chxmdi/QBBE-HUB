@@ -168,6 +168,18 @@ export function CommandPalette({
         role="listbox"
         className="max-h-[50vh] overflow-y-auto py-1.5"
       >
+        {query.length >= 2 ? (
+          <li>
+            <button
+              type="button"
+              onClick={() => go(`/search?q=${encodeURIComponent(query)}`)}
+              className="flex w-full items-center gap-3 border-b border-line px-4 py-2 text-left text-[13px] font-medium text-brand hover:bg-surface-soft"
+            >
+              <Search className="size-4" aria-hidden />
+              See all results for “{query}”
+            </button>
+          </li>
+        ) : null}
         {items.length === 0 ? (
           <li className="px-4 py-8 text-center text-[13.5px] text-muted">
             {query.length >= 2

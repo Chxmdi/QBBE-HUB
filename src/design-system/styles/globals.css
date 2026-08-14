@@ -141,6 +141,47 @@
   }
 }
 
+/*
+ * Compact display density for heavy operational screens (P1-UX-07).
+ * Tightens row and cell padding only — type size and hit targets on
+ * interactive controls are left alone so accessibility does not regress.
+ */
+[data-density="compact"] .interactive-row,
+[data-density="compact"] table td,
+[data-density="compact"] table th {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+
+[data-density="compact"] .card > ul > li,
+[data-density="compact"] .card > ol > li {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+
+/* Overlay entrance motion — 120-180ms, disabled by reduced-motion above. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* Print styles for report export (PDF via print). */
 @media print {
   .no-print {

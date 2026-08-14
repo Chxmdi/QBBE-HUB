@@ -105,6 +105,55 @@ export async function leaveChannel(channelId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * Archive / restore a channel (P0-COMM-05). History is preserved and stays
+ * searchable for authorized members; archived channels are read-only
+ * because can_post_in_channel requires archived_at is null. Both directions
+ * are audited (P0-GOV-05).
+ */
+export async function setChannelArchived(
+  channelId: string,
+  archived: boolean,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const supabase = await createSupabaseServerClient();
+
+  const { data: channel } = await supabase
+    .from("channel")
+    .select("is_mandatory, name")
+    .eq("id", channelId)
+    .maybeSingle();
+  if (!channel) return { ok: false, error: "Channel not found." };
+  if (channel.is_mandatory && archived) {
+    return {
+      ok: false,
+      error: "The mandatory announcements channel cannot be archived.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("channel")
+    .update({ archived_at: archived ? new Date().toISOString() : null })
+    .eq("id", channelId);
+  if (error) {
+    return { ok: false, error: "Only the channel owner or an admin can do that." };
+  }
+
+  await supabase.from("audit_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    event_type: "communication",
+    action: archived ? "channel_archived" : "channel_restored",
+    object_type: "channel",
+    object_id: channelId,
+    metadata: { name: channel.name },
+  });
+
+  revalidatePath("/channels");
+  revalidatePath(`/channels/${channelId}`);
+  return { ok: true };
+}
+
 /** Advances the member's last-read cursor (MSG-007). */
 export async function markChannelRead(channelId: string): Promise<ActionResult> {
   const session = await requireSession();

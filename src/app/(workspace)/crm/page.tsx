@@ -3,12 +3,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Handshake } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
-import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CompleteFollowUpButton } from "@/features/crm/components/complete-follow-up-button";
-import { createCrmOrganization } from "@/features/crm/services/crm.commands";
+import { CrmOrganizationDialog } from "@/features/crm/components/crm-organization-dialog";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
@@ -16,11 +15,6 @@ import type { CrmFollowUp, CrmOrganization } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Relationships" };
 export const dynamic = "force-dynamic";
-
-const CATEGORY_OPTIONS = [
-  "funder", "sponsor", "school", "university", "community",
-  "government", "vendor", "media", "donor", "association",
-];
 
 export default async function CrmPage() {
   const session = await requireSession();
@@ -55,28 +49,7 @@ export default async function CrmPage() {
         eyebrow="Relationship CRM"
         title="Relationships"
         description="Funders, schools, partners, and vendors — with one accountable owner and a next follow-up per relationship."
-        actions={
-          <EntityFormDialog
-            triggerLabel="New organization"
-            title="Add organization"
-            submitLabel="Add organization"
-            action={createCrmOrganization}
-            fields={[
-              { name: "name", label: "Name", type: "text", required: true },
-              {
-                name: "category",
-                label: "Category",
-                type: "select",
-                required: true,
-                colSpan: 1,
-                defaultValue: "community",
-                options: CATEGORY_OPTIONS.map((c) => ({ value: c, label: c })),
-              },
-              { name: "website", label: "Website", type: "url", colSpan: 1 },
-              { name: "notes", label: "Notes", type: "textarea" },
-            ]}
-          />
-        }
+        actions={<CrmOrganizationDialog />}
       />
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_360px]">

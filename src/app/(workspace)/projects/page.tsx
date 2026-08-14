@@ -61,8 +61,8 @@ export default async function ProjectsPage({
       {projectList.length === 0 ? (
         <EmptyState
           icon={<FolderKanban />}
-          title="No projects yet"
-          description="Create the first project to start tracking outcomes, milestones, and health."
+          title="Your first program starts here"
+          description="A project brings tasks, meetings, communication, and reporting together around one clear outcome with an accountable owner."
         />
       ) : (
         <div className="card overflow-hidden">

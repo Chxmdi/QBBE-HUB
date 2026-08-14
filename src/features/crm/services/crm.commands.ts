@@ -16,6 +16,55 @@ const orgSchema = z.object({
   notes: z.string().trim().max(5000).optional(),
 });
 
+export interface DuplicateMatch {
+  id: string;
+  name: string;
+  category: string;
+}
+
+/**
+ * Duplicate detection (§10.13 acceptance, CRM-005): warns on matching name
+ * or email domain before a new record is created, while still allowing a
+ * deliberate duplicate.
+ */
+export async function findDuplicateOrganizations(
+  name: string,
+  website?: string,
+): Promise<DuplicateMatch[]> {
+  const session = await requireSession();
+  if (!session.isStaff || name.trim().length < 3) return [];
+
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
+    .from("crm_organization")
+    .select("id, name, category, website")
+    .ilike("name", `%${name.trim()}%`)
+    .limit(5);
+
+  const matches = (data ?? []) as DuplicateMatch[] & { website?: string }[];
+
+  // Also match on the website's registrable host when one is supplied.
+  if (website) {
+    try {
+      const host = new URL(website).hostname.replace(/^www\./, "");
+      const { data: byDomain } = await supabase
+        .from("crm_organization")
+        .select("id, name, category")
+        .ilike("website", `%${host}%`)
+        .limit(5);
+      for (const row of byDomain ?? []) {
+        if (!matches.some((m) => m.id === row.id)) {
+          matches.push(row as DuplicateMatch);
+        }
+      }
+    } catch {
+      // Malformed URL — name matching alone is enough.
+    }
+  }
+
+  return matches.map((m) => ({ id: m.id, name: m.name, category: m.category }));
+}
+
 export async function createCrmOrganization(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   if (!session.isStaff) return { ok: false, error: "Staff access required." };

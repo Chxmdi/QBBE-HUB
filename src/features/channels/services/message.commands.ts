@@ -151,6 +151,177 @@ export async function toggleReaction(
   return { ok: true };
 }
 
+const editSchema = z.object({
+  messageId: z.string().uuid(),
+  body: z.string().trim().min(1, "Message cannot be empty.").max(10000),
+});
+
+/**
+ * Edits a message within policy (P0-MSG-05). Authorship is enforced by RLS;
+ * edited_at preserves visible evidence that the message changed.
+ */
+export async function editMessage(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  const parsed = editSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { messageId, body } = parsed.data;
+
+  const supabase = await createSupabaseServerClient();
+  const { data: existing } = await supabase
+    .from("message")
+    .select("author_id, deleted_at")
+    .eq("id", messageId)
+    .maybeSingle();
+
+  if (!existing) return { ok: false, error: "Message not found." };
+  if (existing.author_id !== session.userId) {
+    return { ok: false, error: "You can only edit your own messages." };
+  }
+  if (existing.deleted_at) {
+    return { ok: false, error: "This message was deleted." };
+  }
+
+  const { error } = await supabase
+    .from("message")
+    .update({ body, edited_at: new Date().toISOString() })
+    .eq("id", messageId);
+  if (error) return { ok: false, error: "Could not save the edit." };
+
+  return { ok: true };
+}
+
+/**
+ * Message → agenda item (P0-LINK-03). Keeps the source message link and
+ * proposes the converting user as owner.
+ */
+export async function convertMessageToAgendaItem(
+  messageId: string,
+  meetingId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const supabase = await createSupabaseServerClient();
+
+  // RLS filters this read — inaccessible messages cannot be converted.
+  const { data: message } = await supabase
+    .from("message")
+    .select("id, body")
+    .eq("id", messageId)
+    .maybeSingle();
+  if (!message) return { ok: false, error: "Message not found or not accessible." };
+
+  const { count } = await supabase
+    .from("agenda_item")
+    .select("id", { count: "exact", head: true })
+    .eq("meeting_id", meetingId);
+
+  const title = (message.body as string).split("\n")[0].slice(0, 300);
+  const { error } = await supabase.from("agenda_item").insert({
+    meeting_id: meetingId,
+    title,
+    kind: "discussion",
+    owner_id: session.userId,
+    proposed_by: session.userId,
+    source_message_id: messageId,
+    sort_key: (count ?? 0) + 1,
+    status: session.isStaff ? "accepted" : "proposed",
+  });
+  if (error) return { ok: false, error: "Could not add the agenda item." };
+
+  revalidatePath(`/meetings/${meetingId}`);
+  return { ok: true, id: meetingId };
+}
+
+/**
+ * Message → decision (P0-LINK-04), linked back to the originating thread.
+ */
+export async function convertMessageToDecision(
+  messageId: string,
+  detail?: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const supabase = await createSupabaseServerClient();
+
+  const { data: message } = await supabase
+    .from("message")
+    .select("id, body, channel:channel_id(project_id)")
+    .eq("id", messageId)
+    .maybeSingle();
+  if (!message) return { ok: false, error: "Message not found or not accessible." };
+
+  type ChannelRef = { project_id: string | null } | null;
+  const channel = message.channel as unknown as ChannelRef;
+  const title = (message.body as string).split("\n")[0].slice(0, 300);
+
+  const { data: decision, error } = await supabase
+    .from("decision")
+    .insert({
+      organization_id: session.organizationId,
+      project_id: channel?.project_id ?? null,
+      title,
+      detail: detail || `Captured from a channel conversation.`,
+      decided_by: session.userId,
+      source_message_id: messageId,
+    })
+    .select("id")
+    .single();
+  if (error || !decision) return { ok: false, error: "Could not record the decision." };
+
+  revalidatePath("/", "layout");
+  return { ok: true, id: decision.id as string };
+}
+
+/** Pins a message as a durable channel resource (P0-RES-02). */
+export async function pinMessage(
+  messageId: string,
+  channelId: string,
+  title: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const trimmed = title.trim().slice(0, 200);
+  if (!trimmed) return { ok: false, error: "Give the pinned resource a title." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.from("pinned_resource").insert({
+    channel_id: channelId,
+    message_id: messageId,
+    title: trimmed,
+    pinned_by: session.userId,
+  });
+  if (error) {
+    return { ok: false, error: "Could not pin — channel managers and staff can pin." };
+  }
+
+  await supabase.from("audit_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    event_type: "communication",
+    action: "message_pinned",
+    object_type: "message",
+    object_id: messageId,
+  });
+
+  revalidatePath(`/channels/${channelId}`);
+  return { ok: true };
+}
+
+export async function unpinResource(
+  resourceId: string,
+  channelId: string,
+): Promise<ActionResult> {
+  await requireSession();
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("pinned_resource")
+    .delete()
+    .eq("id", resourceId);
+  if (error) return { ok: false, error: "Could not remove the pin." };
+  revalidatePath(`/channels/${channelId}`);
+  return { ok: true };
+}
+
 export async function deleteMessage(messageId: string): Promise<ActionResult> {
   const session = await requireSession();
   const supabase = await createSupabaseServerClient();

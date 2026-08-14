@@ -39,6 +39,37 @@ export async function getBoardTasks(projectId?: string): Promise<Task[]> {
   return (data ?? []) as unknown as Task[];
 }
 
+export interface TaskFilters {
+  status?: string;
+  priority?: string;
+  project?: string;
+  q?: string;
+}
+
+/** My Work with shareable URL-driven filters (P0-TSK-09, §10.2). */
+export async function getMyTasksFiltered(
+  userId: string,
+  filters: TaskFilters,
+): Promise<Task[]> {
+  const supabase = await createSupabaseServerClient();
+  let query = supabase
+    .from("task")
+    .select(TASK_SELECT)
+    .eq("assignee_id", userId)
+    .is("archived_at", null)
+    .order("due_at", { ascending: true, nullsFirst: false })
+    .limit(300);
+
+  if (filters.status) query = query.eq("status", filters.status);
+  else query = query.in("status", OPEN_STATUSES);
+  if (filters.priority) query = query.eq("priority", filters.priority);
+  if (filters.project) query = query.eq("project_id", filters.project);
+  if (filters.q) query = query.ilike("title", `%${filters.q}%`);
+
+  const { data } = await query;
+  return (data ?? []) as unknown as Task[];
+}
+
 export interface SelectOption {
   id: string;
   label: string;

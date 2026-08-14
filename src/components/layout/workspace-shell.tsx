@@ -9,6 +9,8 @@ import {
 } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { CommandPalette } from "@/components/layout/command-palette";
+import { MobileNav } from "@/components/layout/mobile-nav";
+import { ToastProvider } from "@/components/ui/toast";
 
 /**
  * Persistent application shell (P0-UX-01): sidebar, topbar, command
@@ -24,6 +26,7 @@ export function WorkspaceShell({
   channels,
   programs,
   counts,
+  density = "comfortable",
   children,
 }: {
   name: string;
@@ -35,6 +38,7 @@ export function WorkspaceShell({
   channels: SidebarChannel[];
   programs: SidebarProgram[];
   counts: SidebarCounts;
+  density?: "comfortable" | "compact";
   children: React.ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
@@ -52,7 +56,8 @@ export function WorkspaceShell({
   }, []);
 
   return (
-    <div className="flex min-h-dvh">
+    <ToastProvider>
+    <div className="flex min-h-dvh" data-density={density}>
       <Sidebar
         isAdmin={isAdmin}
         isStaff={isStaff}
@@ -71,10 +76,12 @@ export function WorkspaceShell({
           avatarUrl={avatarUrl}
           isStaff={isStaff}
           unreadCount={unreadCount}
+          density={density}
           onOpenNav={() => setNavOpen(true)}
           onOpenPalette={() => setPaletteOpen(true)}
         />
-        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 py-6 md:px-8">
+        {/* pb-20 on mobile clears the fixed bottom navigation. */}
+        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pt-6 pb-24 md:px-8 md:pb-6">
           {children}
         </main>
       </div>
@@ -84,6 +91,13 @@ export function WorkspaceShell({
         isAdmin={isAdmin}
         isStaff={isStaff}
       />
+      <MobileNav
+        isAdmin={isAdmin}
+        isStaff={isStaff}
+        myWorkCount={counts.myWork}
+        onOpenMore={() => setNavOpen(true)}
+      />
     </div>
+    </ToastProvider>
   );
 }

@@ -76,6 +76,7 @@ export default async function ConversationPage({
         currentUserId={session.userId}
         canPost
         initialMessages={(messages ?? []) as unknown as Message[]}
+        isStaff={session.isStaff}
       />
     </div>
   );

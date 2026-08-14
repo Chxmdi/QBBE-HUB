@@ -8,13 +8,25 @@ import {
   Menu,
   Moon,
   Plus,
+  Rows3,
+  Rows4,
   Search,
   Sun,
 } from "lucide-react";
+import { setDisplayDensity } from "@/features/onboarding/services/onboarding.commands";
 import { Avatar } from "@/components/ui/avatar";
 import { cn, relativeTime } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types/entities";
+
+/** Categories that ask something of the reader, vs. pure information. */
+const ACTIONABLE_CATEGORIES = new Set([
+  "assignment",
+  "mention",
+  "approval",
+  "announcement",
+  "due_date",
+]);
 
 function useClickOutside(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
@@ -33,6 +45,7 @@ export function Topbar({
   avatarUrl,
   isStaff,
   unreadCount,
+  density = "comfortable",
   onOpenNav,
   onOpenPalette,
 }: {
@@ -40,6 +53,7 @@ export function Topbar({
   avatarUrl: string | null;
   isStaff: boolean;
   unreadCount: number;
+  density?: "comfortable" | "compact";
   onOpenNav: () => void;
   onOpenPalette: () => void;
 }) {
@@ -191,45 +205,63 @@ export function Topbar({
                     You&apos;re all caught up.
                   </li>
                 ) : (
-                  notifications.map((n) => (
-                    <li key={n.id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOpenMenu(null);
-                          if (n.link) router.push(n.link);
-                        }}
-                        className={cn(
-                          "w-full px-3.5 py-2 text-left text-[13px] hover:bg-surface-soft",
-                          !n.read_at && "bg-brand-soft/40",
-                        )}
-                      >
-                        <span className="flex items-start gap-2">
-                          {!n.read_at ? (
-                            <span
-                              aria-label="Unread"
-                              className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand"
-                            />
-                          ) : (
-                            <span className="mt-1.5 size-1.5 shrink-0" />
-                          )}
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium">
-                              {n.title}
-                            </span>
-                            {n.body ? (
-                              <span className="block truncate text-muted">
-                                {n.body}
-                              </span>
-                            ) : null}
-                            <span className="meta">
-                              {relativeTime(n.created_at)}
-                            </span>
-                          </span>
-                        </span>
-                      </button>
-                    </li>
-                  ))
+                  // Grouped actionable vs informational (§10.16).
+                  (["actionable", "informational"] as const).map((band) => {
+                    const items = notifications.filter((n) =>
+                      band === "actionable"
+                        ? ACTIONABLE_CATEGORIES.has(n.category)
+                        : !ACTIONABLE_CATEGORIES.has(n.category),
+                    );
+                    if (items.length === 0) return null;
+                    return (
+                      <li key={band}>
+                        <p className="px-3.5 pt-2 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-muted uppercase">
+                          {band === "actionable" ? "Needs you" : "For information"}
+                        </p>
+                        <ul>
+                          {items.map((n) => (
+                            <li key={n.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenMenu(null);
+                                  if (n.link) router.push(n.link);
+                                }}
+                                className={cn(
+                                  "w-full px-3.5 py-2 text-left text-[13px] hover:bg-surface-soft",
+                                  !n.read_at && "bg-brand-soft/40",
+                                )}
+                              >
+                                <span className="flex items-start gap-2">
+                                  {!n.read_at ? (
+                                    <span
+                                      aria-label="Unread"
+                                      className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand"
+                                    />
+                                  ) : (
+                                    <span className="mt-1.5 size-1.5 shrink-0" />
+                                  )}
+                                  <span className="min-w-0">
+                                    <span className="block truncate font-medium">
+                                      {n.title}
+                                    </span>
+                                    {n.body ? (
+                                      <span className="block truncate text-muted">
+                                        {n.body}
+                                      </span>
+                                    ) : null}
+                                    <span className="meta">
+                                      {relativeTime(n.created_at)}
+                                    </span>
+                                  </span>
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    );
+                  })
                 )}
               </ul>
               <Link
@@ -242,6 +274,25 @@ export function Topbar({
             </div>
           ) : null}
         </div>
+
+        {/* Display density for dense operational screens (P1-UX-07) */}
+        <button
+          type="button"
+          onClick={async () => {
+            const next = density === "compact" ? "comfortable" : "compact";
+            await setDisplayDensity(next);
+            router.refresh();
+          }}
+          aria-label={`Switch to ${density === "compact" ? "comfortable" : "compact"} density`}
+          title={`${density === "compact" ? "Comfortable" : "Compact"} density`}
+          className="hidden size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-surface-soft hover:text-ink md:flex"
+        >
+          {density === "compact" ? (
+            <Rows3 className="size-4.5" aria-hidden />
+          ) : (
+            <Rows4 className="size-4.5" aria-hidden />
+          )}
+        </button>
 
         <button
           type="button"

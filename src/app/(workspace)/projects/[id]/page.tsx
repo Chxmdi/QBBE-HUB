@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { CheckCircle2, Circle } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
+import { LinkTabs } from "@/components/shared/link-tabs";
 import { HealthBadge } from "@/components/shared/status-badges";
+import { CloseProjectDialog } from "@/features/projects/components/close-project-dialog";
+import { TaskDrawer } from "@/features/tasks/components/task-drawer";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StageSelect } from "@/features/projects/components/stage-select";
@@ -27,11 +31,15 @@ export const dynamic = "force-dynamic";
 
 export default async function ProjectDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const session = await requireSession();
   const { id } = await params;
+  const { tab: tabParam } = await searchParams;
+  const tab = tabParam ?? "overview";
   const supabase = await createSupabaseServerClient();
 
   const { data: projectRow } = await supabase
@@ -107,6 +115,12 @@ export default async function ProjectDetailPage({
           session.isStaff ? (
             <>
               <StageSelect projectId={project.id} stage={project.stage} />
+              {project.stage !== "completed" && project.stage !== "archived" ? (
+                <CloseProjectDialog
+                  projectId={project.id}
+                  projectName={project.name}
+                />
+              ) : null}
               <TaskCreateDialog
                 projects={[{ id: project.id, label: project.name }]}
                 people={options.people}
@@ -146,10 +160,43 @@ export default async function ProjectDetailPage({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_360px]">
+      <LinkTabs
+        active={tab}
+        tabs={[
+          { id: "overview", label: "Overview", href: `/projects/${project.id}` },
+          {
+            id: "tasks",
+            label: "Tasks",
+            href: `/projects/${project.id}?tab=tasks`,
+            count: openTasks.length,
+          },
+          {
+            id: "updates",
+            label: "Updates",
+            href: `/projects/${project.id}?tab=updates`,
+            count: (updates ?? []).length,
+          },
+          {
+            id: "activity",
+            label: "Activity",
+            href: `/projects/${project.id}?tab=activity`,
+          },
+        ]}
+      />
+
+      <div
+        className={
+          tab === "overview"
+            ? "grid grid-cols-1 gap-8 xl:grid-cols-[1fr_360px]"
+            : "max-w-4xl"
+        }
+      >
         <div className="space-y-8">
           {/* Tasks */}
-          <section aria-labelledby="project-tasks">
+          <section
+            aria-labelledby="project-tasks"
+            className={tab === "overview" || tab === "tasks" ? "" : "hidden"}
+          >
             <h2 id="project-tasks" className="section-heading mb-3">
               Tasks
               <span className="meta ml-2 font-normal">
@@ -181,7 +228,10 @@ export default async function ProjectDetailPage({
           </section>
 
           {/* Status updates */}
-          <section aria-labelledby="project-updates">
+          <section
+            aria-labelledby="project-updates"
+            className={tab === "overview" || tab === "updates" ? "" : "hidden"}
+          >
             <div className="mb-3 flex items-center justify-between">
               <h2 id="project-updates" className="section-heading">
                 Status updates
@@ -242,7 +292,7 @@ export default async function ProjectDetailPage({
           </section>
         </div>
 
-        <div className="space-y-8">
+        <div className={tab === "overview" ? "space-y-8" : "hidden"}>
           {/* Milestones */}
           <section aria-labelledby="project-milestones">
             <h2 id="project-milestones" className="section-heading mb-3">
@@ -299,7 +349,39 @@ export default async function ProjectDetailPage({
             )}
           </section>
         </div>
+
+        {/* Activity gets its own full-width tab */}
+        {tab === "activity" ? (
+          <section aria-labelledby="project-activity-tab">
+            <h2 id="project-activity-tab" className="section-heading mb-3">
+              Activity
+            </h2>
+            {(activity ?? []).length === 0 ? (
+              <p className="card px-4 py-6 text-center text-[13px] text-muted">
+                No recorded activity yet.
+              </p>
+            ) : (
+              <ol className="card divide-y divide-line">
+                {((activity ?? []) as unknown as ActivityEvent[]).map((event) => (
+                  <li key={event.id} className="px-4 py-2.5">
+                    <p className="text-[13px]">
+                      <span className="font-medium">
+                        {event.actor?.full_name ?? "System"}
+                      </span>{" "}
+                      {event.summary}
+                    </p>
+                    <p className="meta">{relativeTime(event.created_at)}</p>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        ) : null}
       </div>
+
+      <Suspense fallback={null}>
+        <TaskDrawer people={options.people} />
+      </Suspense>
     </div>
   );
 }

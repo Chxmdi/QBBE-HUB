@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   addMonths,
+  addWeeks,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -14,6 +15,12 @@ import {
   startOfWeek,
 } from "date-fns";
 import { PageHeader } from "@/components/shared/page-header";
+import {
+  AgendaView,
+  KIND_STYLES,
+  WeekView,
+  type CalendarItem,
+} from "@/features/calendar/components/week-view";
 import { cn } from "@/lib/utils";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -21,45 +28,39 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export const metadata: Metadata = { title: "Calendar" };
 export const dynamic = "force-dynamic";
 
-interface CalendarItem {
-  id: string;
-  date: Date;
-  label: string;
-  kind: "task" | "milestone" | "meeting" | "event" | "follow_up";
-  href: string;
-}
-
-const KIND_STYLES: Record<CalendarItem["kind"], string> = {
-  task: "bg-brand-soft text-brand dark:text-[#f2b8c8]",
-  milestone: "bg-accent/20 text-[#7a5f1a] dark:text-accent",
-  meeting: "bg-info/12 text-info",
-  event: "bg-success/12 text-success",
-  follow_up: "bg-warning/12 text-warning",
-};
-
-/** Unified calendar: one read model over distinct domain records (CAL-001). */
+/**
+ * Unified calendar: one read model over distinct domain records (CAL-001).
+ * Week is the primary operational view (§10.9); month remains available,
+ * and mobile falls back to an agenda list (§11.2).
+ */
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ view?: string; date?: string }>;
 }) {
   await requireSession();
   const params = await searchParams;
+  const view = params.view === "month" ? "month" : "week";
 
-  const current = params.month
-    ? parse(params.month, "yyyy-MM", new Date())
+  const anchor = params.date
+    ? parse(params.date, "yyyy-MM-dd", new Date())
     : new Date();
-  const monthStart = startOfMonth(current);
-  const monthEnd = endOfMonth(current);
-  const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
-  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
-  const days = eachDayOfInterval({ start: gridStart, end: gridEnd });
+
+  // Server-prepared bounded range (CAL-006).
+  const rangeStartDate =
+    view === "week"
+      ? startOfWeek(anchor, { weekStartsOn: 0 })
+      : startOfWeek(startOfMonth(anchor), { weekStartsOn: 0 });
+  const rangeEndDate =
+    view === "week"
+      ? endOfWeek(anchor, { weekStartsOn: 0 })
+      : endOfWeek(endOfMonth(anchor), { weekStartsOn: 0 });
 
   const supabase = await createSupabaseServerClient();
-  const rangeStart = gridStart.toISOString();
-  const rangeEnd = gridEnd.toISOString();
-  const dateStart = format(gridStart, "yyyy-MM-dd");
-  const dateEnd = format(gridEnd, "yyyy-MM-dd");
+  const rangeStartIso = rangeStartDate.toISOString();
+  const rangeEndIso = rangeEndDate.toISOString();
+  const dateStart = format(rangeStartDate, "yyyy-MM-dd");
+  const dateEnd = format(rangeEndDate, "yyyy-MM-dd");
 
   const [tasksRes, milestonesRes, meetingsRes, eventsRes, followUpsRes] =
     await Promise.all([
@@ -80,15 +81,15 @@ export default async function CalendarPage({
       supabase
         .from("meeting")
         .select("id, title, starts_at")
-        .gte("starts_at", rangeStart)
-        .lte("starts_at", rangeEnd)
+        .gte("starts_at", rangeStartIso)
+        .lte("starts_at", rangeEndIso)
         .neq("status", "cancelled")
         .limit(100),
       supabase
         .from("event")
         .select("id, name, starts_at")
-        .gte("starts_at", rangeStart)
-        .lte("starts_at", rangeEnd)
+        .gte("starts_at", rangeStartIso)
+        .lte("starts_at", rangeEndIso)
         .neq("status", "cancelled")
         .limit(100),
       supabase
@@ -106,7 +107,8 @@ export default async function CalendarPage({
       date: parse(t.due_at as string, "yyyy-MM-dd", new Date()),
       label: t.title as string,
       kind: "task" as const,
-      href: "/my-work",
+      href: `/my-work?task=${t.id}`,
+      timed: false,
     })),
     ...(milestonesRes.data ?? []).map((m) => ({
       id: `milestone-${m.id}`,
@@ -114,6 +116,7 @@ export default async function CalendarPage({
       label: m.name as string,
       kind: "milestone" as const,
       href: `/projects/${m.project_id}`,
+      timed: false,
     })),
     ...(meetingsRes.data ?? []).map((m) => ({
       id: `meeting-${m.id}`,
@@ -121,6 +124,7 @@ export default async function CalendarPage({
       label: m.title as string,
       kind: "meeting" as const,
       href: `/meetings/${m.id}`,
+      timed: true,
     })),
     ...(eventsRes.data ?? []).map((e) => ({
       id: `event-${e.id}`,
@@ -128,6 +132,7 @@ export default async function CalendarPage({
       label: e.name as string,
       kind: "event" as const,
       href: `/events/${e.id}`,
+      timed: true,
     })),
     ...(followUpsRes.data ?? []).map((f) => ({
       id: `follow-${f.id}`,
@@ -135,43 +140,85 @@ export default async function CalendarPage({
       label: f.title as string,
       kind: "follow_up" as const,
       href: `/crm/${f.crm_organization_id}`,
+      timed: false,
     })),
   ];
 
-  const previousMonth = format(addMonths(current, -1), "yyyy-MM");
-  const nextMonth = format(addMonths(current, 1), "yyyy-MM");
+  const previous = format(
+    view === "week" ? addWeeks(anchor, -1) : addMonths(anchor, -1),
+    "yyyy-MM-dd",
+  );
+  const next = format(
+    view === "week" ? addWeeks(anchor, 1) : addMonths(anchor, 1),
+    "yyyy-MM-dd",
+  );
+
+  const title =
+    view === "week"
+      ? `${format(rangeStartDate, "MMM d")} – ${format(rangeEndDate, "MMM d, yyyy")}`
+      : format(anchor, "MMMM yyyy");
+
+  const monthDays =
+    view === "month"
+      ? eachDayOfInterval({ start: rangeStartDate, end: rangeEndDate })
+      : [];
 
   return (
     <div>
       <PageHeader
         eyebrow="Schedule"
-        title={format(current, "MMMM yyyy")}
+        title={title}
         description="Tasks, milestones, meetings, events, and CRM follow-ups on one calendar."
         actions={
-          <nav aria-label="Month navigation" className="flex items-center gap-1">
-            <Link
-              href={`/calendar?month=${previousMonth}`}
-              className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-surface-soft"
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              role="group"
+              aria-label="Calendar view"
+              className="flex rounded-(--radius-sm) border border-line"
             >
-              ← {format(addMonths(current, -1), "MMM")}
-            </Link>
-            <Link
-              href="/calendar"
-              className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-surface-soft"
-            >
-              Today
-            </Link>
-            <Link
-              href={`/calendar?month=${nextMonth}`}
-              className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-surface-soft"
-            >
-              {format(addMonths(current, 1), "MMM")} →
-            </Link>
-          </nav>
+              {(["week", "month"] as const).map((option) => (
+                <Link
+                  key={option}
+                  href={`/calendar?view=${option}&date=${format(anchor, "yyyy-MM-dd")}`}
+                  aria-current={view === option ? "page" : undefined}
+                  className={cn(
+                    "px-3 py-1.5 text-[13px] font-medium capitalize first:rounded-l-[7px] last:rounded-r-[7px]",
+                    view === option
+                      ? "bg-brand text-white"
+                      : "text-muted hover:text-ink",
+                  )}
+                >
+                  {option}
+                </Link>
+              ))}
+            </div>
+            <nav aria-label="Date navigation" className="flex items-center gap-1">
+              <Link
+                href={`/calendar?view=${view}&date=${previous}`}
+                aria-label={`Previous ${view}`}
+                className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-surface-soft"
+              >
+                ←
+              </Link>
+              <Link
+                href={`/calendar?view=${view}`}
+                className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-surface-soft"
+              >
+                Today
+              </Link>
+              <Link
+                href={`/calendar?view=${view}&date=${next}`}
+                aria-label={`Next ${view}`}
+                className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-surface-soft"
+              >
+                →
+              </Link>
+            </nav>
+          </div>
         }
       />
 
-      {/* Legend — kinds are text-labeled, not color-alone */}
+      {/* Legend — kinds carry text labels, not color alone */}
       <div className="mb-4 flex flex-wrap gap-2">
         {(Object.keys(KIND_STYLES) as CalendarItem["kind"][]).map((kind) => (
           <span
@@ -186,76 +233,86 @@ export default async function CalendarPage({
         ))}
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full min-w-[720px] table-fixed border-collapse">
-          <thead>
-            <tr>
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                <th
-                  key={day}
-                  scope="col"
-                  className="border-b border-line bg-surface-soft/60 px-2 py-2 text-left text-[11.5px] font-semibold tracking-wide text-muted uppercase"
-                >
-                  {day}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: days.length / 7 }).map((_, week) => (
-              <tr key={week}>
-                {days.slice(week * 7, week * 7 + 7).map((day) => {
-                  const dayItems = items.filter((item) =>
-                    isSameDay(item.date, day),
-                  );
-                  return (
-                    <td
-                      key={day.toISOString()}
-                      className={cn(
-                        "h-28 border-b border-l border-line p-1.5 align-top first:border-l-0",
-                        !isSameMonth(day, current) && "bg-surface-soft/40",
-                      )}
+      {/* Mobile: agenda. Desktop: week grid or month grid. */}
+      <div className="md:hidden">
+        <AgendaView items={items} />
+      </div>
+      <div className="hidden md:block">
+        {view === "week" ? (
+          <WeekView anchor={anchor} items={items} />
+        ) : (
+          <div className="card overflow-x-auto">
+            <table className="w-full min-w-[720px] table-fixed border-collapse">
+              <thead>
+                <tr>
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                    <th
+                      key={day}
+                      scope="col"
+                      className="border-b border-line bg-surface-soft/60 px-2 py-2 text-left text-[11.5px] font-semibold tracking-wide text-muted uppercase"
                     >
-                      <p
-                        className={cn(
-                          "mb-1 text-[12px]",
-                          isToday(day)
-                            ? "inline-flex size-5.5 items-center justify-center rounded-full bg-brand font-semibold text-white"
-                            : isSameMonth(day, current)
-                              ? "font-medium"
-                              : "text-muted/60",
-                        )}
-                      >
-                        {format(day, "d")}
-                      </p>
-                      <ul className="space-y-1">
-                        {dayItems.slice(0, 3).map((item) => (
-                          <li key={item.id}>
-                            <Link
-                              href={item.href}
-                              title={item.label}
-                              className={cn(
-                                "block truncate rounded px-1.5 py-0.5 text-[11px] font-medium hover:opacity-80",
-                                KIND_STYLES[item.kind],
-                              )}
-                            >
-                              {item.label}
-                            </Link>
-                          </li>
-                        ))}
-                        {dayItems.length > 3 ? (
-                          <li className="px-1.5 text-[10.5px] text-muted">
-                            +{dayItems.length - 3} more
-                          </li>
-                        ) : null}
-                      </ul>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                      {day}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: monthDays.length / 7 }).map((_, week) => (
+                  <tr key={week}>
+                    {monthDays.slice(week * 7, week * 7 + 7).map((day) => {
+                      const dayItems = items.filter((item) =>
+                        isSameDay(item.date, day),
+                      );
+                      return (
+                        <td
+                          key={day.toISOString()}
+                          className={cn(
+                            "h-28 border-b border-l border-line p-1.5 align-top first:border-l-0",
+                            !isSameMonth(day, anchor) && "bg-surface-soft/40",
+                          )}
+                        >
+                          <p
+                            className={cn(
+                              "mb-1 text-[12px]",
+                              isToday(day)
+                                ? "inline-flex size-5.5 items-center justify-center rounded-full bg-brand font-semibold text-white"
+                                : isSameMonth(day, anchor)
+                                  ? "font-medium"
+                                  : "text-muted/60",
+                            )}
+                          >
+                            {format(day, "d")}
+                          </p>
+                          <ul className="space-y-1">
+                            {dayItems.slice(0, 3).map((item) => (
+                              <li key={item.id}>
+                                <Link
+                                  href={item.href}
+                                  title={item.label}
+                                  className={cn(
+                                    "block truncate rounded px-1.5 py-0.5 text-[11px] font-medium hover:opacity-80",
+                                    KIND_STYLES[item.kind],
+                                  )}
+                                >
+                                  {item.label}
+                                </Link>
+                              </li>
+                            ))}
+                            {dayItems.length > 3 ? (
+                              <li className="px-1.5 text-[10.5px] text-muted">
+                                +{dayItems.length - 3} more
+                              </li>
+                            ) : null}
+                          </ul>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

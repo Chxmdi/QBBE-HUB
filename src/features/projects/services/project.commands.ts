@@ -199,6 +199,144 @@ export async function updateProjectStage(input: unknown): Promise<ActionResult> 
   return { ok: true };
 }
 
+export interface UnresolvedWork {
+  openTasks: number;
+  blockedTasks: number;
+  openMilestones: number;
+  openFollowUps: number;
+  hasStatusUpdate: boolean;
+}
+
+/**
+ * Closing a project must surface unresolved work before confirmation
+ * (§10.5 acceptance, P0-PRJ-08). This reports what is still open so the
+ * manager decides deliberately.
+ */
+export async function getUnresolvedWork(
+  projectId: string,
+): Promise<UnresolvedWork> {
+  const supabase = await createSupabaseServerClient();
+  const [tasks, blocked, milestones, updates] = await Promise.all([
+    supabase
+      .from("task")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .is("archived_at", null)
+      .in("status", [
+        "not_started", "ready", "in_progress", "waiting", "blocked", "in_review",
+      ]),
+    supabase
+      .from("task")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .eq("status", "blocked")
+      .is("archived_at", null),
+    supabase
+      .from("milestone")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId)
+      .is("completed_at", null),
+    supabase
+      .from("project_status_update")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", projectId),
+  ]);
+
+  return {
+    openTasks: tasks.count ?? 0,
+    blockedTasks: blocked.count ?? 0,
+    openMilestones: milestones.count ?? 0,
+    openFollowUps: 0,
+    hasStatusUpdate: (updates.count ?? 0) > 0,
+  };
+}
+
+const closeSchema = z.object({
+  projectId: z.string().uuid(),
+  results: z.string().trim().min(1, "Describe what the project delivered.").max(5000),
+  lessons: z.string().trim().max(5000).optional(),
+  archiveOpenTasks: z.boolean().default(false),
+});
+
+/**
+ * Closes a project: records a final status update capturing results and
+ * lessons, optionally archives leftover tasks, and moves the project to
+ * completed with an audit trail (P0-PRJ-08).
+ */
+export async function closeProject(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const parsed = closeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const { projectId, results, lessons, archiveOpenTasks } = parsed.data;
+
+  const supabase = await createSupabaseServerClient();
+
+  // Final update is required before closure.
+  const { error: updateError } = await supabase
+    .from("project_status_update")
+    .insert({
+      project_id: projectId,
+      author_id: session.userId,
+      health: "on_track",
+      progress_summary: `Project closed. Results: ${results}`,
+      next_steps: lessons ? `Lessons learned: ${lessons}` : null,
+    });
+  if (updateError) {
+    return { ok: false, error: "Could not record the closing update." };
+  }
+
+  if (archiveOpenTasks) {
+    await supabase
+      .from("task")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("project_id", projectId)
+      .is("archived_at", null)
+      .in("status", [
+        "not_started", "ready", "in_progress", "waiting", "blocked", "in_review",
+      ]);
+  }
+
+  const { data: project, error } = await supabase
+    .from("project")
+    .update({
+      stage: "completed",
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", projectId)
+    .select("name, program_id")
+    .maybeSingle();
+
+  if (error || !project) return { ok: false, error: "Could not close the project." };
+
+  await supabase.from("activity_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    verb: "completed",
+    source_type: "project",
+    source_id: projectId,
+    project_id: projectId,
+    program_id: project.program_id,
+    summary: `closed project “${project.name}”`,
+  });
+
+  await supabase.from("audit_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    event_type: "project",
+    action: "project_closed",
+    object_type: "project",
+    object_id: projectId,
+    metadata: { archived_open_tasks: archiveOpenTasks },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/projects");
+  return { ok: true };
+}
+
 const createProgramSchema = z.object({
   name: z.string().trim().min(1, "A program needs a name.").max(200),
   description: z.string().trim().max(2000).optional(),

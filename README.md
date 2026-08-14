@@ -102,24 +102,42 @@ docs/runbooks/        deployment, integrations, backup & recovery
 
 ## Feature status vs. the master specification
 
-Implemented (P0 core): auth + invitations + role administration, programs,
-projects (lifecycle, health discipline, status updates, milestones,
-activity), tasks (board/list parity, My Work, blocked-reason rule,
-comments), channels (public/private, directory, join policies, restricted
-posting, threads, reactions, mentions, unread cursors, realtime), mandatory
-announcements with acknowledgment tracking and Home prominence, DMs/group
-DMs, message→task conversion, meetings (agenda builder, decisions, actions→
-tasks, channel summary handoff), events with role assignments, unified
-calendar, master schedule, notification center + inbox with dedupe keys,
-people directory with workload, CRM (organizations, contacts, interactions,
-follow-up queue), report snapshots with approval + CSV export, admin (users,
-invitations, integrations, audit viewer), permission-safe global search +
-⌘K palette, light/dark themes, responsive shell.
+**Screens (Part II §10)** — all 18 implemented: Home/Operations Dashboard,
+My Work, Board, Programs & Projects directory, Project command centre
+(tabbed), Channels, Announcements, Unified Inbox, Calendar (week + month +
+mobile agenda), Master Schedule, Meetings & Agendas, People, CRM, Reports,
+Documents & Resources, Notifications/Search/Command surfaces, Admin &
+Settings, Authentication & Onboarding.
+
+**Component system (Part II §9)** — button, input/textarea/select, avatar,
+badge, tabs, drawer (mobile sheet), modal, dropdown menu, toast, data table
+(sticky header, selection, sorting), empty state, skeleton, message item,
+announcement, task row/card.
+
+**P0 product requirements** — auth, invitations with role pre-assignment,
+role administration; programs; projects (lifecycle, health discipline,
+structured status updates, milestones, activity, closure surfacing
+unresolved work); tasks (board/list parity, My Work with URL-shareable
+filters, task drawer with deep links, bulk actions, blocked-reason rule,
+comments); channels (public/private, directory, join policies, restricted
+posting, archive/restore, pinned resources); messages (threads, reactions,
+server-parsed mentions, edit, delete with audit marker, permalinks, unread
+cursors, realtime with reconnect state); mandatory announcements with
+acknowledgment tracking and admin progress; DMs/group DMs; message →
+task / agenda item / decision conversion; meetings (agenda builder,
+decision log, actions → tasks, channel summary handoff); events with
+per-area role assignments; unified calendar; master schedule; notification
+centre grouped actionable vs informational with dedupe keys; people
+directory with workload; CRM with duplicate detection and follow-up queue;
+versioned report snapshots with approval + CSV export; documents with
+private storage and signed URLs; admin (users, invitations, integrations,
+audit viewer); permission-safe global search + ⌘K palette + dedicated
+results view; light/dark themes; mobile bottom navigation; display density.
 
 Deliberately staged (per roadmap Phases 4–6), shown honestly as
 not-connected in the UI: Gmail/Google Calendar OAuth sync, volunteer-system
 integration, email delivery/digests, workflow automation rules, scheduled
-announcements, opportunity pipeline, saved views, file attachments.
+announcements, opportunity pipeline forecasting.
 
 ## License
 

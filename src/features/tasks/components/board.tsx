@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter, useSearchParams } from "next/navigation";
 import { useOptimistic, useState, useTransition } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,14 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
   const [dropTarget, setDropTarget] = useState<TaskStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  function openTask(id: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("task", id);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
 
   function moveTask(id: string, status: TaskStatus) {
     const task = optimisticTasks.find((t) => t.id === id);
@@ -109,9 +118,13 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
                           dragId === task.id && "opacity-50",
                         )}
                       >
-                        <p className="text-[13.5px] leading-snug font-medium">
+                        <button
+                          type="button"
+                          onClick={() => openTask(task.id)}
+                          className="block w-full text-left text-[13.5px] leading-snug font-medium hover:text-brand"
+                        >
                           {task.title}
-                        </p>
+                        </button>
                         {task.blocked_reason ? (
                           <p className="text-[12px] text-danger">
                             Blocked: {task.blocked_reason}

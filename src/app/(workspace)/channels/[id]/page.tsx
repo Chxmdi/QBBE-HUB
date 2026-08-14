@@ -4,6 +4,11 @@ import { notFound } from "next/navigation";
 import { Hash, Lock, Megaphone, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ChannelView } from "@/features/channels/components/channel-view";
+import { ChannelAdminMenu } from "@/features/channels/components/channel-admin-menu";
+import {
+  PinnedResources,
+  type PinnedResourceRow,
+} from "@/features/channels/components/pinned-resources";
 import { JoinChannelButton } from "@/features/channels/components/join-channel-button";
 import { AnnouncementComposeDialog } from "@/features/announcements/components/announcement-compose-dialog";
 import { requireSession } from "@/lib/auth";
@@ -38,25 +43,34 @@ export default async function ChannelPage({
   if (!channelRow) notFound();
   const channel = channelRow as unknown as Channel;
 
-  const [{ data: membership }, { count: memberCount }, { data: messages }] =
-    await Promise.all([
-      supabase
-        .from("channel_member")
-        .select("role")
-        .eq("channel_id", id)
-        .eq("user_id", session.userId)
-        .maybeSingle(),
-      supabase
-        .from("channel_member")
-        .select("user_id", { count: "exact", head: true })
-        .eq("channel_id", id),
-      supabase
-        .from("message")
-        .select(MESSAGE_SELECT)
-        .eq("channel_id", id)
-        .order("created_at", { ascending: true })
-        .limit(200),
-    ]);
+  const [
+    { data: membership },
+    { count: memberCount },
+    { data: messages },
+    { data: pins },
+  ] = await Promise.all([
+    supabase
+      .from("channel_member")
+      .select("role")
+      .eq("channel_id", id)
+      .eq("user_id", session.userId)
+      .maybeSingle(),
+    supabase
+      .from("channel_member")
+      .select("user_id", { count: "exact", head: true })
+      .eq("channel_id", id),
+    supabase
+      .from("message")
+      .select(MESSAGE_SELECT)
+      .eq("channel_id", id)
+      .order("created_at", { ascending: true })
+      .limit(200),
+    supabase
+      .from("pinned_resource")
+      .select("id, title, url, message_id")
+      .eq("channel_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   const isMember = Boolean(membership);
   const canPost =
@@ -117,15 +131,36 @@ export default async function ChannelPage({
         {channel.type === "announcements" && session.isAdmin ? (
           <AnnouncementComposeDialog />
         ) : null}
-        {!isMember && channel.privacy === "public" ? (
+        {!isMember && channel.privacy === "public" && !channel.archived_at ? (
           <JoinChannelButton channelId={channel.id} />
         ) : null}
+        {session.isAdmin || channel.owner_id === session.userId ? (
+          <ChannelAdminMenu
+            channelId={channel.id}
+            archived={Boolean(channel.archived_at)}
+          />
+        ) : null}
       </header>
+      {channel.archived_at ? (
+        <p
+          role="status"
+          className="border-b border-line bg-surface-soft px-4 py-1.5 text-center text-[12.5px] text-muted md:px-6"
+        >
+          This channel is archived. History stays searchable for members, but no
+          new messages can be posted.
+        </p>
+      ) : null}
       {channel.purpose ? (
         <p className="border-b border-line bg-surface-soft/50 px-4 py-1.5 text-[12.5px] text-muted md:px-6">
           {channel.purpose}
         </p>
       ) : null}
+
+      <PinnedResources
+        channelId={channel.id}
+        resources={(pins ?? []) as PinnedResourceRow[]}
+        canManage={session.isStaff && isMember}
+      />
 
       <ChannelView
         channelId={channel.id}
@@ -134,6 +169,7 @@ export default async function ChannelPage({
         postDisabledHint={postDisabledHint}
         replyPolicy={channel.reply_policy}
         initialMessages={(messages ?? []) as unknown as Message[]}
+        isStaff={session.isStaff}
       />
     </div>
   );

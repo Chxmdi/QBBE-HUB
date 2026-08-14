@@ -1,10 +1,19 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ClipboardList } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
-import { TaskRow } from "@/features/tasks/components/task-row";
-import { getMyTasks, getPickerOptions } from "@/features/tasks/services/task.queries";
+import { TaskDrawer } from "@/features/tasks/components/task-drawer";
+import {
+  TaskFilterBar,
+  TaskList,
+} from "@/features/tasks/components/task-list";
+import {
+  getMyTasksFiltered,
+  getPickerOptions,
+} from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { myWorkBucket } from "@/lib/utils";
 import type { Task } from "@/types/entities";
@@ -22,12 +31,25 @@ const BUCKETS: { key: ReturnType<typeof myWorkBucket>; label: string }[] = [
 export default async function MyWorkPage({
   searchParams,
 }: {
-  searchParams: Promise<{ create?: string }>;
+  searchParams: Promise<{
+    create?: string;
+    status?: string;
+    priority?: string;
+    project?: string;
+    q?: string;
+  }>;
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  const filters = {
+    status: params.status,
+    priority: params.priority,
+    project: params.project,
+    q: params.q,
+  };
+
   const [tasks, options] = await Promise.all([
-    getMyTasks(session.userId),
+    getMyTasksFiltered(session.userId, filters),
     getPickerOptions(),
   ]);
 
@@ -37,12 +59,22 @@ export default async function MyWorkPage({
     grouped.get(myWorkBucket(task.due_at))!.push(task);
   }
 
+  const groups = BUCKETS.map((bucket) => ({
+    key: bucket.key,
+    label: bucket.label,
+    tasks: grouped.get(bucket.key)!,
+  }));
+
+  const filtersActive = Boolean(
+    filters.status || filters.priority || filters.project || filters.q,
+  );
+
   return (
     <div>
       <PageHeader
         eyebrow="Command center"
         title="My Work"
-        description="Everything you own, grouped by urgency. Status changes save immediately."
+        description="Everything you own, grouped by urgency. Select rows for bulk changes, or open a task for full detail."
         actions={
           <TaskCreateDialog
             projects={options.projects}
@@ -52,36 +84,33 @@ export default async function MyWorkPage({
         }
       />
 
+      <Suspense fallback={<div className="mb-5 h-9" />}>
+        <TaskFilterBar projects={options.projects} activeFilters={filters} />
+      </Suspense>
+
       {tasks.length === 0 ? (
-        <EmptyState
-          icon={<ClipboardList />}
-          title="No open work assigned to you"
-          description="When tasks are assigned to you — from projects, meetings, or conversations — they appear here grouped by due date."
-        />
+        filtersActive ? (
+          <EmptyState
+            icon={<ClipboardList />}
+            title="No tasks match these filters"
+            description="Try widening the status, priority, or project filter — or clear them to see all your open work."
+          />
+        ) : (
+          <EmptyState
+            icon={<ClipboardList />}
+            title="Your workload is clear"
+            description="When tasks are assigned to you — from projects, meetings, or conversations — they appear here grouped by due date."
+          />
+        )
       ) : (
-        <div className="space-y-7">
-          {BUCKETS.map((bucket) => {
-            const bucketTasks = grouped.get(bucket.key)!;
-            if (bucketTasks.length === 0) return null;
-            return (
-              <section key={bucket.key} aria-labelledby={`bucket-${bucket.key}`}>
-                <h2
-                  id={`bucket-${bucket.key}`}
-                  className="section-heading mb-2 flex items-center gap-2"
-                >
-                  {bucket.label}
-                  <span className="meta font-normal">{bucketTasks.length}</span>
-                </h2>
-                <div className="card overflow-hidden">
-                  {bucketTasks.map((task) => (
-                    <TaskRow key={task.id} task={task} />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-        </div>
+        <Suspense fallback={<ListSkeleton rows={6} />}>
+          <TaskList groups={groups} people={options.people} />
+        </Suspense>
       )}
+
+      <Suspense fallback={null}>
+        <TaskDrawer people={options.people} />
+      </Suspense>
     </div>
   );
 }

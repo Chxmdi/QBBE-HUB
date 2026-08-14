@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/layout/workspace-shell";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -13,6 +14,15 @@ export default async function WorkspaceLayout({
 }) {
   const session = await requireSession();
   const supabase = await createSupabaseServerClient();
+
+  // First run lands in onboarding rather than an unexplained dashboard
+  // (§10.18).
+  const { data: profile } = await supabase
+    .from("user_profile")
+    .select("onboarded_at, display_density")
+    .eq("id", session.userId)
+    .maybeSingle();
+  if (profile && !profile.onboarded_at) redirect("/welcome");
 
   // Live, permission-aware sidebar counts (Part IV §5.2).
   const [
@@ -84,6 +94,7 @@ export default async function WorkspaceLayout({
       channels={channels}
       programs={(programs ?? []).map((p) => ({ id: p.id, name: p.name }))}
       counts={{ myWork: myWorkCount ?? 0, inbox: unreadCount ?? 0 }}
+      density={(profile?.display_density as "comfortable" | "compact") ?? "comfortable"}
     >
       {children}
     </WorkspaceShell>

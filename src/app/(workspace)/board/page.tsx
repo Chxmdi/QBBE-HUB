@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { TaskBoard } from "@/features/tasks/components/board";
 import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
+import { TaskDrawer } from "@/features/tasks/components/task-drawer";
 import {
   getBoardTasks,
   getPickerOptions,
@@ -42,6 +44,9 @@ export default async function BoardPage({
         }
       />
       <TaskBoard tasks={tasks} />
+      <Suspense fallback={null}>
+        <TaskDrawer people={options.people} />
+      </Suspense>
     </div>
   );
 }

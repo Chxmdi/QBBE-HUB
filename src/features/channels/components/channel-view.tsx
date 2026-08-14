@@ -113,6 +113,7 @@ export function ChannelView({
   postDisabledHint,
   replyPolicy = "normal",
   initialMessages,
+  isStaff = false,
 }: {
   channelId?: string;
   conversationId?: string;
@@ -121,9 +122,11 @@ export function ChannelView({
   postDisabledHint?: string;
   replyPolicy?: "normal" | "threads_only" | "disabled";
   initialMessages: Message[];
+  isStaff?: boolean;
 }) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [threadRootId, setThreadRootId] = useState<string | null>(null);
+  const [connection, setConnection] = useState<"live" | "reconnecting">("live");
   const scrollRef = useRef<HTMLDivElement>(null);
   const container = channelId
     ? { column: "channel_id", id: channelId }
@@ -160,7 +163,18 @@ export function ChannelView({
           if (conversationId) void markConversationRead(conversationId);
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        // Visible but not alarming reconnect state (§14.3). On recovery we
+        // refetch so nothing missed during the gap stays missing.
+        if (status === "SUBSCRIBED") {
+          setConnection((previous) => {
+            if (previous === "reconnecting") void refresh();
+            return "live";
+          });
+        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setConnection("reconnecting");
+        }
+      });
     return () => {
       void supabase.removeChannel(subscription);
     };
@@ -215,10 +229,20 @@ export function ChannelView({
     <div className="flex min-h-0 flex-1">
       {/* Main column */}
       <div className={cn("flex min-w-0 flex-1 flex-col", threadRoot && "hidden md:flex")}>
+        {connection === "reconnecting" ? (
+          <p
+            role="status"
+            className="border-b border-line bg-warning/10 px-4 py-1.5 text-center text-[12.5px] text-warning"
+          >
+            Reconnecting to live updates… messages you send are still saved.
+          </p>
+        ) : null}
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto py-3">
           {roots.length === 0 ? (
             <p className="px-4 py-10 text-center text-[13.5px] text-muted">
-              No messages yet. Start the conversation.
+              {channelId
+                ? "No messages yet. This channel keeps discussion close to the work it belongs to — start the conversation below."
+                : "No messages yet. This conversation is private to its participants."}
             </p>
           ) : (
             roots.map((message) => (
@@ -226,6 +250,8 @@ export function ChannelView({
                 key={message.id}
                 message={message}
                 currentUserId={currentUserId}
+                channelId={channelId}
+                isStaff={isStaff}
                 replyCount={repliesByRoot.get(message.id)?.length ?? 0}
                 onOpenThread={
                   replyPolicy !== "disabled" ? setThreadRootId : undefined
@@ -265,6 +291,8 @@ export function ChannelView({
             <MessageItem
               message={threadRoot}
               currentUserId={currentUserId}
+              channelId={channelId}
+              isStaff={isStaff}
               onChanged={refresh}
               isThreadReply
             />
@@ -274,6 +302,8 @@ export function ChannelView({
                 key={reply.id}
                 message={reply}
                 currentUserId={currentUserId}
+                channelId={channelId}
+                isStaff={isStaff}
                 onChanged={refresh}
                 isThreadReply
               />
