@@ -27,6 +27,7 @@ export function AnnouncementComposeDialog() {
       priority: form.get("priority"),
       requiresAck,
       ackDeadline: (form.get("ackDeadline") as string) || undefined,
+      publishAt: (form.get("publishAt") as string) || undefined,
     });
     setSaving(false);
     if (!result.ok) {
@@ -86,6 +87,14 @@ export function AnnouncementComposeDialog() {
                 </FieldHint>
               </div>
             ) : null}
+            <div className="sm:col-span-2">
+              <Label htmlFor="ann-publish">Publish at (optional)</Label>
+              <Input id="ann-publish" name="publishAt" type="datetime-local" />
+              <FieldHint>
+                Leave blank to publish immediately. Future times wait for the
+                scheduled-announcements job.
+              </FieldHint>
+            </div>
           </div>
           {error ? (
             <p role="alert" className="text-[13px] text-danger-fg">

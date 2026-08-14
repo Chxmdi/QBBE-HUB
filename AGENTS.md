@@ -69,6 +69,18 @@ the Docker daemon does not auto-start and Supabase must be started manually:
   sandbox only). GitHub Actions CI does **not** set `QA_CHROME_PATH`.
 - Database/RLS tests: `npm run test:db` against local Supabase
   (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`). Requires
-  `supabase start` and the QA fixture users from `docs/runbooks/qa.md`.
-- The authenticated `qa-matrix` Playwright suite needs seeded QA users and is
-  not part of routine setup — see `docs/runbooks/qa.md`.
+  `supabase start`. The script talks to the Docker container
+  `supabase_db_workspace`.
+- Notification email job (Unit 9): `POST /api/jobs/notification-email` with
+  `Authorization: Bearer $CRON_JOB_SECRET`. Local Mailpit SMTP is
+  `127.0.0.1:54325` (UI `:54324`). Do not mark production email “connected”
+  without `EMAIL_PROVIDER_API_KEY`.
+- Gmail/VMS: OAuth and Connect stay unavailable until the matching env vars
+  exist. Inbox Mail is not a stub inbox — it shows Not connected.
+- Scheduled announcements: `POST /api/jobs/scheduled-announcements` with the
+  same cron secret fans out notifications when `publish_at` arrives.
+- Channel history loads the **newest** page first (`CHANNEL_HISTORY_PAGE_SIZE`);
+  use **Load older messages** for prior pages. A `.limit(N)` with
+  `created_at` ascending would have returned the oldest N instead.
+- Opt-in hello-world Playwright: `npx playwright test tests/e2e/hello-hub.spec.ts`
+  (not in CI). Uses `qa-owner@example.com` / `QaTest!2026`.

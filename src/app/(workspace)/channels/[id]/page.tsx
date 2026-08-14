@@ -3,14 +3,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Hash, Lock, Megaphone, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Suspense } from "react";
 import { ChannelView } from "@/features/channels/components/channel-view";
 import { ChannelAdminMenu } from "@/features/channels/components/channel-admin-menu";
+import { AddChannelMemberDialog } from "@/features/channels/components/add-channel-member";
+import { LeaveChannelButton } from "@/features/channels/components/leave-channel-button";
 import {
   PinnedResources,
   type PinnedResourceRow,
 } from "@/features/channels/components/pinned-resources";
 import { JoinChannelButton } from "@/features/channels/components/join-channel-button";
 import { AnnouncementComposeDialog } from "@/features/announcements/components/announcement-compose-dialog";
+import { CHANNEL_HISTORY_PAGE_SIZE } from "@/features/channels/history";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Channel, Message } from "@/types/entities";
@@ -48,6 +52,7 @@ export default async function ChannelPage({
     { count: memberCount },
     { data: messages },
     { data: pins },
+    { data: orgMembers },
   ] = await Promise.all([
     supabase
       .from("channel_member")
@@ -63,13 +68,17 @@ export default async function ChannelPage({
       .from("message")
       .select(MESSAGE_SELECT)
       .eq("channel_id", id)
-      .order("created_at", { ascending: true })
-      .limit(200),
+      .order("created_at", { ascending: false })
+      .limit(CHANNEL_HISTORY_PAGE_SIZE),
     supabase
       .from("pinned_resource")
       .select("id, title, url, message_id")
       .eq("channel_id", id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("organization_membership")
+      .select("user_id, user_profile:user_id(id, full_name)")
+      .eq("status", "active"),
   ]);
 
   const isMember = Boolean(membership);
@@ -135,10 +144,21 @@ export default async function ChannelPage({
           <JoinChannelButton channelId={channel.id} />
         ) : null}
         {session.isAdmin || channel.owner_id === session.userId ? (
-          <ChannelAdminMenu
-            channelId={channel.id}
-            archived={Boolean(channel.archived_at)}
-          />
+          <>
+            <AddChannelMemberDialog
+              channelId={channel.id}
+              people={((orgMembers ?? []) as unknown as { user_id: string; user_profile: { full_name: string } | null }[])
+                .filter((m) => m.user_profile)
+                .map((m) => ({ id: m.user_id, label: m.user_profile!.full_name }))}
+            />
+            <ChannelAdminMenu
+              channelId={channel.id}
+              archived={Boolean(channel.archived_at)}
+            />
+          </>
+        ) : null}
+        {isMember && !channel.is_mandatory ? (
+          <LeaveChannelButton channelId={channel.id} />
         ) : null}
       </header>
       {channel.archived_at ? (
@@ -162,15 +182,17 @@ export default async function ChannelPage({
         canManage={session.isStaff && isMember}
       />
 
-      <ChannelView
-        channelId={channel.id}
-        currentUserId={session.userId}
-        canPost={canPost}
-        postDisabledHint={postDisabledHint}
-        replyPolicy={channel.reply_policy}
-        initialMessages={(messages ?? []) as unknown as Message[]}
-        isStaff={session.isStaff}
-      />
+      <Suspense fallback={<p className="px-4 py-6 text-[13px] text-muted">Loading messages…</p>}>
+        <ChannelView
+          channelId={channel.id}
+          currentUserId={session.userId}
+          canPost={canPost}
+          postDisabledHint={postDisabledHint}
+          replyPolicy={channel.reply_policy}
+          initialMessages={[...((messages ?? []) as unknown as Message[])].reverse()}
+          isStaff={session.isStaff}
+        />
+      </Suspense>
     </div>
   );
 }

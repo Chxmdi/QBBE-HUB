@@ -1,10 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { TaskStatus } from "@/types/entities";
+import {
+  TASK_STATUSES,
+  blockedReasonError,
+  bulkSchema,
+  createTaskSchema,
+  updateTaskSchema,
+} from "@/features/tasks/schemas";
 
 /**
  * Task commands — durable server mutations (WORK-002). Validation happens
@@ -16,16 +22,6 @@ export interface ActionResult {
   error?: string;
   id?: string;
 }
-
-const createTaskSchema = z.object({
-  title: z.string().trim().min(1, "A task needs a title.").max(300),
-  description: z.string().trim().max(5000).optional(),
-  projectId: z.string().uuid().optional(),
-  milestoneId: z.string().uuid().optional(),
-  assigneeId: z.string().uuid().optional(),
-  priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
-  dueAt: z.string().optional(),
-});
 
 export async function createTask(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
@@ -102,23 +98,18 @@ export async function createTask(input: unknown): Promise<ActionResult> {
   return { ok: true, id: task.id as string };
 }
 
-const VALID_STATUSES: TaskStatus[] = [
-  "not_started", "ready", "in_progress", "waiting", "blocked",
-  "in_review", "completed", "cancelled",
-];
-
 export async function updateTaskStatus(
   taskId: string,
   status: TaskStatus,
   blockedReason?: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  if (!VALID_STATUSES.includes(status)) {
+  if (!(TASK_STATUSES as readonly string[]).includes(status)) {
     return { ok: false, error: "Unknown status." };
   }
-  if (status === "blocked" && !blockedReason?.trim()) {
-    // Business rule §19: blocked work requires an explanation.
-    return { ok: false, error: "Marking a task blocked requires a reason." };
+  const blockedError = blockedReasonError(status, blockedReason);
+  if (blockedError) {
+    return { ok: false, error: blockedError };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -135,6 +126,33 @@ export async function updateTaskStatus(
 
   if (error || !updated) {
     return { ok: false, error: "Could not update the task status." };
+  }
+
+  if (status === "completed") {
+    const { data: source } = await supabase
+      .from("task")
+      .select("title, description, project_id, program_id, assignee_id, priority, due_at, recurrence_rule")
+      .eq("id", taskId)
+      .maybeSingle();
+    if (source?.recurrence_rule && source.due_at) {
+      const { nextOccurrence } = await import("@/features/tasks/recurrence");
+      const nextDue = nextOccurrence(source.recurrence_rule as string, source.due_at as string);
+      await supabase.from("task").insert({
+        organization_id: session.organizationId,
+        program_id: source.program_id,
+        project_id: source.project_id,
+        title: source.title,
+        description: source.description,
+        priority: source.priority,
+        assignee_id: source.assignee_id,
+        requester_id: session.userId,
+        due_at: nextDue,
+        created_by: session.userId,
+        status: "not_started",
+        recurrence_rule: source.recurrence_rule,
+        recurrence_anchor: nextDue,
+      });
+    }
   }
 
   await supabase.from("activity_event").insert({
@@ -154,16 +172,6 @@ export async function updateTaskStatus(
   revalidatePath("/", "layout");
   return { ok: true };
 }
-
-const updateTaskSchema = z.object({
-  taskId: z.string().uuid(),
-  title: z.string().trim().min(1).max(300).optional(),
-  description: z.string().trim().max(5000).nullable().optional(),
-  assigneeId: z.string().uuid().nullable().optional(),
-  priority: z.enum(["low", "medium", "high", "critical"]).optional(),
-  dueAt: z.string().nullable().optional(),
-  projectId: z.string().uuid().nullable().optional(),
-});
 
 export async function updateTask(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
@@ -218,20 +226,6 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
   revalidatePath("/", "layout");
   return { ok: true };
 }
-
-const bulkSchema = z.object({
-  taskIds: z.array(z.string().uuid()).min(1).max(200),
-  action: z.enum(["status", "assignee", "priority", "due", "archive"]),
-  status: z
-    .enum([
-      "not_started", "ready", "in_progress", "waiting",
-      "in_review", "completed", "cancelled",
-    ])
-    .optional(),
-  assigneeId: z.string().uuid().nullable().optional(),
-  priority: z.enum(["low", "medium", "high", "critical"]).optional(),
-  dueAt: z.string().nullable().optional(),
-});
 
 /**
  * Bulk reassign / reprioritize / reschedule / archive (P0-TSK-05).

@@ -8,7 +8,12 @@ import {
   MemberRoleSelect,
   RevokeInvitationButton,
 } from "@/features/admin/components/member-controls";
-import { inviteUser } from "@/features/admin/services/admin.commands";
+import { InviteUserDialog } from "@/features/admin/components/invite-user-dialog";
+import { TransferOwnershipButton } from "@/features/admin/components/transfer-ownership-button";
+import { IntegrationActions } from "@/features/admin/components/integration-actions";
+import { TeamMemberControls } from "@/features/admin/components/team-member-controls";
+import { createTeam } from "@/features/admin/services/team.commands";
+import { createWorkflowRule } from "@/features/admin/services/workflow.commands";
 import { requireAdmin } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
@@ -70,7 +75,15 @@ export default async function AdminPage() {
   const session = await requireAdmin();
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: members }, { data: invitations }, { data: audit }, { data: integrations }] =
+  const [
+    { data: members },
+    { data: invitations },
+    { data: audit },
+    { data: integrations },
+    { data: teams },
+    { data: teamMembers },
+    { data: rules },
+  ] =
     await Promise.all([
       supabase
         .from("organization_membership")
@@ -93,6 +106,12 @@ export default async function AdminPage() {
       supabase
         .from("integration_connection")
         .select("provider, status, last_sync_at"),
+      supabase.from("team").select("id, name, description").order("name"),
+      supabase.from("team_member").select("team_id, user_id"),
+      supabase
+        .from("workflow_rule")
+        .select("id, name, enabled, trigger_event")
+        .order("created_at", { ascending: false }),
     ]);
 
   const memberList = ((members ?? []) as unknown as Membership[]).filter(
@@ -103,6 +122,19 @@ export default async function AdminPage() {
   const integrationMap = new Map(
     ((integrations ?? []) as IntegrationRow[]).map((i) => [i.provider, i]),
   );
+  const emailConfigured = Boolean(process.env.EMAIL_PROVIDER_API_KEY);
+  const googleConfigured = Boolean(
+    process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
+  );
+  const vmsConfigured = Boolean(process.env.VMS_API_URL);
+  const teamList = (teams ?? []) as { id: string; name: string; description: string | null }[];
+  const teamMemberList = (teamMembers ?? []) as { team_id: string; user_id: string }[];
+  const ruleList = (rules ?? []) as {
+    id: string;
+    name: string;
+    enabled: boolean;
+    trigger_event: string;
+  }[];
 
   return (
     <div>
@@ -111,29 +143,7 @@ export default async function AdminPage() {
         title="Admin"
         description="Users, access, invitations, integrations, and the audit trail."
         actions={
-          <EntityFormDialog
-            triggerLabel="Invite user"
-            title="Invite a user"
-            submitLabel="Create invitation"
-            action={inviteUser}
-            fields={[
-              { name: "email", label: "Email", type: "email", required: true },
-              {
-                name: "intendedRole",
-                label: "Role",
-                type: "select",
-                required: true,
-                defaultValue: "staff",
-                options: [
-                  { value: "admin", label: "Workspace Admin" },
-                  { value: "staff", label: "Staff" },
-                  { value: "volunteer", label: "Volunteer" },
-                  { value: "guest", label: "Read-only guest" },
-                ],
-                hint: "When this person signs up with the invited email, the role is applied automatically.",
-              },
-            ]}
-          />
+          <InviteUserDialog emailConfigured={emailConfigured} />
         }
       />
 
@@ -183,12 +193,22 @@ export default async function AdminPage() {
                           {formatDate(member.joined_at)}
                         </td>
                         <td className="px-4 py-3">
-                          <MemberActiveToggle
-                            membershipId={member.id}
-                            active={member.status === "active"}
-                            isOwner={member.role === "owner"}
-                            isSelf={member.user_id === session.userId}
-                          />
+                          <div className="flex flex-col items-end gap-1">
+                            <MemberActiveToggle
+                              membershipId={member.id}
+                              active={member.status === "active"}
+                              isOwner={member.role === "owner"}
+                              isSelf={member.user_id === session.userId}
+                            />
+                            {session.role === "owner" &&
+                            member.role !== "owner" &&
+                            member.status === "active" ? (
+                              <TransferOwnershipButton
+                                membershipId={member.id}
+                                name={profile.full_name}
+                              />
+                            ) : null}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -204,6 +224,12 @@ export default async function AdminPage() {
           <h2 id="admin-invitations" className="section-heading mb-3">
             Invitations
           </h2>
+          {!emailConfigured ? (
+            <p className="mb-3 rounded-(--radius-sm) bg-warning/10 px-3 py-2 text-[13px] text-warning-fg">
+              Invite recorded — email not sent, until EMAIL_PROVIDER_API_KEY is
+              configured. The row still assigns the intended role on sign-up.
+            </p>
+          ) : null}
           {invitationList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
               No invitations yet. Invited users get their intended role on sign-up.
@@ -258,7 +284,10 @@ export default async function AdminPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {INTEGRATION_CATALOG.map((integration) => {
               const connection = integrationMap.get(integration.provider);
-              const connected = connection?.status === "connected";
+              const connected =
+                integration.provider === "email"
+                  ? emailConfigured
+                  : connection?.status === "connected";
               return (
                 <div key={integration.provider} className="card p-4">
                   <div className="mb-1 flex items-center justify-between">
@@ -268,20 +297,146 @@ export default async function AdminPage() {
                     </Badge>
                   </div>
                   <p className="text-[13px] text-muted">{integration.description}</p>
+                  <IntegrationActions
+                    provider={integration.provider as "gmail" | "google_calendar" | "volunteer_system" | "email"}
+                    connected={
+                      integration.provider === "email"
+                        ? emailConfigured
+                        : connected
+                    }
+                    googleConfigured={googleConfigured}
+                    vmsConfigured={vmsConfigured}
+                  />
                   {connection?.last_sync_at ? (
                     <p className="meta mt-1.5">
                       Last sync {relativeTime(connection.last_sync_at)}
                     </p>
-                  ) : (
-                    <p className="meta mt-1.5">
-                      Configure credentials per docs/runbooks/integrations.md, then
-                      connect from here.
-                    </p>
-                  )}
+                  ) : null}
                 </div>
               );
             })}
           </div>
+        </section>
+
+        <section aria-labelledby="admin-teams">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 id="admin-teams" className="section-heading">
+              Teams
+            </h2>
+            <EntityFormDialog
+              triggerLabel="Create team"
+              triggerVariant="secondary"
+              title="Create team"
+              submitLabel="Create"
+              action={createTeam}
+              fields={[
+                { name: "name", label: "Name", type: "text", required: true },
+                { name: "description", label: "Description", type: "textarea" },
+              ]}
+            />
+          </div>
+          {teamList.length === 0 ? (
+            <p className="card px-4 py-6 text-center text-[13px] text-muted">
+              No teams yet. Create a team to group people and auto-provision a
+              private team channel.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {teamList.map((team) => {
+                const membersOfTeam = teamMemberList.filter((m) => m.team_id === team.id);
+                return (
+                  <li key={team.id} className="card p-4">
+                    <p className="text-[14px] font-semibold">{team.name}</p>
+                    {team.description ? (
+                      <p className="meta mb-2">{team.description}</p>
+                    ) : null}
+                    <ul className="mt-2 space-y-1.5">
+                      {memberList
+                        .filter((m) => m.status === "active" && m.user_profile)
+                        .map((m) => {
+                          const isMember = membersOfTeam.some((tm) => tm.user_id === m.user_id);
+                          return (
+                            <li key={m.id} className="flex items-center justify-between gap-2">
+                              <span className="text-[13px]">{m.user_profile!.full_name}</span>
+                              <TeamMemberControls
+                                teamId={team.id}
+                                userId={m.user_id}
+                                isMember={isMember}
+                                label={isMember ? "member" : m.user_profile!.full_name.split(" ")[0] ?? "person"}
+                              />
+                            </li>
+                          );
+                        })}
+                    </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        <section aria-labelledby="admin-workflows">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 id="admin-workflows" className="section-heading">
+              Workflow rules
+            </h2>
+            <EntityFormDialog
+              triggerLabel="Add rule"
+              triggerVariant="secondary"
+              title="Workflow rule"
+              submitLabel="Create"
+              action={createWorkflowRule}
+              fields={[
+                { name: "name", label: "Name", type: "text", required: true },
+                {
+                  name: "triggerEvent",
+                  label: "When",
+                  type: "select",
+                  required: true,
+                  defaultValue: "task_status_changed",
+                  options: [
+                    { value: "task_status_changed", label: "Task status changes" },
+                    { value: "announcement_published", label: "Announcement published" },
+                  ],
+                },
+                {
+                  name: "conditionStatus",
+                  label: "Status (optional)",
+                  type: "text",
+                  placeholder: "completed",
+                },
+                {
+                  name: "actionCategory",
+                  label: "Then",
+                  type: "select",
+                  required: true,
+                  defaultValue: "notify_assignee",
+                  options: [
+                    { value: "notify_assignee", label: "Notify assignee" },
+                    { value: "notify_admins", label: "Notify admins" },
+                  ],
+                },
+              ]}
+            />
+          </div>
+          {ruleList.length === 0 ? (
+            <p className="card px-4 py-6 text-center text-[13px] text-muted">
+              No workflow rules yet. Rules run on Hub events after the P0
+              surfaces are stable.
+            </p>
+          ) : (
+            <ul className="card divide-y divide-line">
+              {ruleList.map((rule) => (
+                <li key={rule.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="min-w-0 flex-1 text-[13.5px] font-medium">{rule.name}</span>
+                  <Badge tone={rule.enabled ? "success" : "neutral"}>
+                    {rule.enabled ? "On" : "Off"}
+                  </Badge>
+                  <span className="meta">{rule.trigger_event.replace(/_/g, " ")}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         {/* Audit history (P0-ADM-03) */}

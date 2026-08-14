@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { ChannelView } from "@/features/channels/components/channel-view";
+import { CHANNEL_HISTORY_PAGE_SIZE } from "@/features/channels/history";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Message } from "@/types/entities";
@@ -40,8 +42,8 @@ export default async function ConversationPage({
       .from("message")
       .select(MESSAGE_SELECT)
       .eq("conversation_id", id)
-      .order("created_at", { ascending: true })
-      .limit(200),
+      .order("created_at", { ascending: false })
+      .limit(CHANNEL_HISTORY_PAGE_SIZE),
   ]);
 
   type MemberRow = {
@@ -71,13 +73,15 @@ export default async function ConversationPage({
           Private to {(members ?? []).length} participants
         </span>
       </header>
-      <ChannelView
-        conversationId={id}
-        currentUserId={session.userId}
-        canPost
-        initialMessages={(messages ?? []) as unknown as Message[]}
-        isStaff={session.isStaff}
-      />
+      <Suspense fallback={<p className="px-4 py-6 text-[13px] text-muted">Loading conversation…</p>}>
+        <ChannelView
+          conversationId={id}
+          currentUserId={session.userId}
+          canPost
+          initialMessages={[...((messages ?? []) as unknown as Message[])].reverse()}
+          isStaff={session.isStaff}
+        />
+      </Suspense>
     </div>
   );
 }

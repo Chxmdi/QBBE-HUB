@@ -1,0 +1,21 @@
+{
+  "messages": [
+    {
+      "id": "msg-1",
+      "threadId": "thr-1",
+      "snippet": "Thanks for confirming the Saturday workshop.",
+      "internalDate": "1718000000000",
+      "payload": {
+        "headers": [
+          { "name": "Subject", "value": "Venue confirmation" },
+          { "name": "From", "value": "partner@example.org" }
+        ]
+      }
+    },
+    {
+      "id": "msg-1",
+      "threadId": "thr-1",
+      "snippet": "duplicate"
+    }
+  ]
+}
