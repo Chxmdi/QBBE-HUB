@@ -122,7 +122,7 @@ export function EntityFormDialog({
             );
           })}
           {error ? (
-            <p role="alert" className="text-[13px] text-danger sm:col-span-2">
+            <p role="alert" className="text-[13px] text-danger-fg sm:col-span-2">
               {error}
             </p>
           ) : null}

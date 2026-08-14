@@ -12,7 +12,7 @@ export default function WorkspaceNotFound() {
         This record doesn&apos;t exist, was archived, or your access doesn&apos;t
         include it. Deep links always re-check authorization.
       </p>
-      <Link href="/" className="mt-2 text-[13.5px] font-medium text-brand hover:underline">
+      <Link href="/" className="mt-2 text-[13.5px] font-medium text-brand-fg hover:underline">
         Back to Home
       </Link>
     </div>

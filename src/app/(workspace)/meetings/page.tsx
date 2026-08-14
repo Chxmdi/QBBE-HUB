@@ -59,7 +59,7 @@ export default async function MeetingsPage({
         <div className="min-w-0 flex-1 basis-52">
           <Link
             href={`/meetings/${meeting.id}`}
-            className="text-[14px] font-medium hover:text-brand"
+            className="text-[14px] font-medium hover:text-brand-fg"
           >
             {meeting.title}
           </Link>

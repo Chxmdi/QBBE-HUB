@@ -104,7 +104,7 @@ export function StatusUpdateForm({ projectId }: { projectId: string }) {
         </div>
       </div>
       {error ? (
-        <p role="alert" className="text-[13px] text-danger">
+        <p role="alert" className="text-[13px] text-danger-fg">
           {error}
         </p>
       ) : null}

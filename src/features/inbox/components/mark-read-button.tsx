@@ -26,7 +26,7 @@ export function MarkReadButton({ notificationId }: { notificationId: string }) {
       disabled={saving}
       aria-label="Mark as read"
       title="Mark as read"
-      className="rounded-(--radius-sm) p-1.5 text-muted transition-colors hover:bg-surface-soft hover:text-success disabled:opacity-50"
+      className="rounded-(--radius-sm) p-1.5 text-muted transition-colors hover:bg-surface-soft hover:text-success-fg disabled:opacity-50"
     >
       <Check className="size-4" aria-hidden />
     </button>

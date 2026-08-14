@@ -54,3 +54,33 @@ recovery emails (ENV-002).
 `npm run lint && npm run typecheck && npm test && npm run build` must pass
 (mirrored in `.github/workflows/ci.yml`). Production promotion is a manual,
 auditable action in Vercel.
+
+## QA matrix (Part II §16.1)
+
+Two Playwright suites:
+
+| Suite | Command | Needs |
+|---|---|---|
+| `tests/e2e/public-routes.spec.ts` | `npm run test:a11y` | a built app only — runs in CI |
+| `tests/e2e/qa-matrix.spec.ts` | `npm run test:qa` | a built app **plus** network access to the Supabase project and a seeded QA database |
+
+The public suite covers the auth routes across six widths, both themes,
+axe-core WCAG 2.2 A/AA rules, keyboard traversal, focus visibility, reduced
+motion, and unauthenticated redirects. It runs on every pull request.
+
+The authenticated suite covers all 18 workspace routes at the same widths and
+themes, plus 200% zoom, the command palette, the task drawer and deep links,
+URL-shareable filters, empty/permission states, and volunteer-vs-staff
+authorization boundaries. Run it against a preview deployment or locally:
+
+```bash
+QA_BASE_URL=https://<preview>.vercel.app npm run test:qa
+```
+
+It needs a QA database with seeded fixtures and three accounts (owner, staff,
+volunteer). **Never point it at production** — it writes data. Reset any QA
+database afterwards.
+
+Colour-contrast regressions are additionally guarded by
+`tests/unit/contrast.test.ts`, which runs in the normal unit suite without a
+browser.

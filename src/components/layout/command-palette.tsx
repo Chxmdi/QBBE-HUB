@@ -173,7 +173,7 @@ export function CommandPalette({
             <button
               type="button"
               onClick={() => go(`/search?q=${encodeURIComponent(query)}`)}
-              className="flex w-full items-center gap-3 border-b border-line px-4 py-2 text-left text-[13px] font-medium text-brand hover:bg-surface-soft"
+              className="flex w-full items-center gap-3 border-b border-line px-4 py-2 text-left text-[13px] font-medium text-brand-fg hover:bg-surface-soft"
             >
               <Search className="size-4" aria-hidden />
               See all results for “{query}”

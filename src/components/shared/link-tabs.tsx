@@ -40,7 +40,7 @@ export function LinkTabs({
               "-mb-px shrink-0 border-b-2 px-3 py-2 text-[13.5px] font-medium whitespace-nowrap",
               "transition-colors duration-(--duration-fast)",
               selected
-                ? "border-brand text-brand"
+                ? "border-brand text-brand-fg"
                 : "border-transparent text-muted hover:text-ink",
             )}
           >

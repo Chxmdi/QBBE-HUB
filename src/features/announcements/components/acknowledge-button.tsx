@@ -32,7 +32,7 @@ export function AcknowledgeButton({
 
   if (state === "done") {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-success">
+      <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-success-fg">
         <CheckCircle2 className="size-4" aria-hidden />
         Acknowledged
       </span>
@@ -45,7 +45,7 @@ export function AcknowledgeButton({
         Acknowledge
       </Button>
       {state === "error" ? (
-        <p role="alert" className="text-[12px] text-danger">
+        <p role="alert" className="text-[12px] text-danger-fg">
           Could not save — try again.
         </p>
       ) : null}

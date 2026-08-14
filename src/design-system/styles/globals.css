@@ -14,11 +14,27 @@
   --color-brand-soft: #f7e9ee; /* tinted selection surfaces (light) */
   --color-accent: #c8a64d; /* Warm Gold — sparing premium accent */
 
-  /* Semantic status — never rely on color alone (A11Y-004) */
+  /* Semantic status — never rely on color alone (A11Y-004).
+     Base tokens are FILL colors (white text sits on them at >= 4.5:1). */
   --color-success: #17834c;
   --color-warning: #b86a11;
   --color-danger: #c33b4a;
   --color-info: #3f6fe5;
+
+  /*
+   * Foreground variants for colored TEXT, kept separate from the fills.
+   * The Part II §2.2 status values land at 3.5-4.5:1 as small text on the
+   * warm light surfaces, just under WCAG AA, so these are darkened per
+   * Appendix A ("token values may be adjusted after contrast testing").
+   * Fills above keep the exact brand values. Verified >= 4.5:1 against
+   * surface, canvas, and soft surface in both themes (A11Y-001) — see
+   * tests/unit/contrast.test.ts.
+   */
+  --color-brand-fg: #8f1538;
+  --color-success-fg: #12693d;
+  --color-warning-fg: #96560d;
+  --color-danger-fg: #b83343;
+  --color-info-fg: #3563d6;
 
   /* Light theme neutrals (default) */
   --color-canvas: #f7f5f2; /* warm app background */
@@ -64,6 +80,13 @@
   --color-muted: #bdb6bf;
   --color-line: #35313b;
   --color-brand-soft: #3a1523;
+
+  /* Lightened foregrounds so colored text stays legible on charcoal. */
+  --color-brand-fg: #e0839a;
+  --color-success-fg: #3fbf7f;
+  --color-warning-fg: #e0983d;
+  --color-danger-fg: #ef7a85;
+  --color-info-fg: #7ba3f5;
   --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.35);
   --shadow-raise: 0 1px 2px rgb(0 0 0 / 0.3);
 

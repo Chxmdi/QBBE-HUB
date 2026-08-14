@@ -154,7 +154,7 @@ export function DocumentList({
                 type="button"
                 onClick={() => open(doc)}
                 disabled={busyId === doc.id}
-                className="flex items-start gap-2.5 text-left hover:text-brand disabled:opacity-60"
+                className="flex items-start gap-2.5 text-left hover:text-brand-fg disabled:opacity-60"
               >
                 <span className="mt-0.5 text-muted">
                   <DocumentIcon doc={doc} />
@@ -176,14 +176,14 @@ export function DocumentList({
               {doc.project ? (
                 <Link
                   href={`/projects/${doc.project.id}`}
-                  className="hover:text-brand hover:underline"
+                  className="hover:text-brand-fg hover:underline"
                 >
                   {doc.project.name}
                 </Link>
               ) : doc.program ? (
                 <Link
                   href={`/programs/${doc.program.id}`}
-                  className="hover:text-brand hover:underline"
+                  className="hover:text-brand-fg hover:underline"
                 >
                   {doc.program.name}
                 </Link>

@@ -84,7 +84,7 @@ export default async function ProjectsPage({
                     <td className="px-4 py-3">
                       <Link
                         href={`/projects/${project.id}`}
-                        className="font-medium hover:text-brand"
+                        className="font-medium hover:text-brand-fg"
                       >
                         {project.name}
                       </Link>

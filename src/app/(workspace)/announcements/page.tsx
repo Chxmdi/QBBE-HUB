@@ -111,7 +111,7 @@ export default async function AnnouncementsPage() {
         )}
       >
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <Megaphone className="size-4 text-brand" aria-hidden />
+          <Megaphone className="size-4 text-brand-fg" aria-hidden />
           <Badge tone={PRIORITY_TONE[announcement.priority]}>
             {announcement.priority}
           </Badge>
@@ -152,7 +152,7 @@ export default async function AnnouncementsPage() {
           {announcement.message?.channel_id ? (
             <Link
               href={`/channels/${announcement.message.channel_id}`}
-              className="text-[12.5px] font-medium text-brand hover:underline"
+              className="text-[12.5px] font-medium text-brand-fg hover:underline"
             >
               Open in channel →
             </Link>
@@ -161,7 +161,7 @@ export default async function AnnouncementsPage() {
             {needsAck ? (
               <AcknowledgeButton announcementId={announcement.id} />
             ) : acknowledged ? (
-              <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-success">
+              <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-success-fg">
                 <CheckCircle2 className="size-4" aria-hidden />
                 You acknowledged this
               </span>

@@ -179,7 +179,7 @@ export function TaskList({
                             <span>No project</span>
                           )}
                           {task.blocked_reason ? (
-                            <span className="text-danger">
+                            <span className="text-danger-fg">
                               Blocked: {task.blocked_reason}
                             </span>
                           ) : null}
@@ -189,9 +189,9 @@ export function TaskList({
                         className={cn(
                           "text-[12.5px] whitespace-nowrap",
                           due.tone === "danger"
-                            ? "font-medium text-danger"
+                            ? "font-medium text-danger-fg"
                             : due.tone === "warning"
-                              ? "font-medium text-warning"
+                              ? "font-medium text-warning-fg"
                               : "text-muted",
                         )}
                       >
@@ -383,7 +383,7 @@ export function TaskFilterBar({
       {hasFilters ? (
         <Link
           href="/my-work"
-          className="text-[13px] font-medium text-brand hover:underline"
+          className="text-[13px] font-medium text-brand-fg hover:underline"
         >
           Clear filters
         </Link>

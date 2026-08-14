@@ -88,7 +88,7 @@ export function ChannelCreateDialog({ defaultOpen = false }: { defaultOpen?: boo
             </div>
           </div>
           {error ? (
-            <p role="alert" className="text-[13px] text-danger">
+            <p role="alert" className="text-[13px] text-danger-fg">
               {error}
             </p>
           ) : null}

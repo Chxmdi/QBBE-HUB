@@ -93,7 +93,7 @@ export default async function MeetingDetailPage({
   return (
     <div>
       <div className="mb-2">
-        <Link href="/meetings" className="meta hover:text-brand hover:underline">
+        <Link href="/meetings" className="meta hover:text-brand-fg hover:underline">
           ← Meetings
         </Link>
       </div>
@@ -126,7 +126,7 @@ export default async function MeetingDetailPage({
         {project ? (
           <Link
             href={`/projects/${project.id}`}
-            className="text-[13px] font-medium text-brand hover:underline"
+            className="text-[13px] font-medium text-brand-fg hover:underline"
           >
             {project.name} →
           </Link>
@@ -139,7 +139,7 @@ export default async function MeetingDetailPage({
             href={meeting.meeting_link}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 text-[13px] font-medium text-brand hover:underline"
+            className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
           >
             Join meeting <ExternalLink className="size-3.5" aria-hidden />
           </a>

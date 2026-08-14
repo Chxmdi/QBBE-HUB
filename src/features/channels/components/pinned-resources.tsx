@@ -58,7 +58,7 @@ export function PinnedResources({
           {resource.message_id ? (
             <a
               href={`#message-${resource.message_id}`}
-              className="max-w-56 truncate hover:text-brand"
+              className="max-w-56 truncate hover:text-brand-fg"
             >
               {resource.title}
             </a>
@@ -67,7 +67,7 @@ export function PinnedResources({
               href={resource.url}
               target="_blank"
               rel="noreferrer noopener"
-              className="max-w-56 truncate hover:text-brand"
+              className="max-w-56 truncate hover:text-brand-fg"
             >
               {resource.title}
             </a>
@@ -79,7 +79,7 @@ export function PinnedResources({
               type="button"
               onClick={() => remove(resource.id)}
               aria-label={`Remove pin: ${resource.title}`}
-              className="text-muted hover:text-danger"
+              className="text-muted hover:text-danger-fg"
             >
               <X className="size-3" aria-hidden />
             </button>
@@ -90,7 +90,7 @@ export function PinnedResources({
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="text-[12.5px] font-medium text-brand hover:underline"
+          className="text-[12.5px] font-medium text-brand-fg hover:underline"
         >
           +{resources.length - 3} more
         </button>

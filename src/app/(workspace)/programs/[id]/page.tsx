@@ -66,7 +66,7 @@ export default async function ProgramDetailPage({
   return (
     <div>
       <div className="mb-2">
-        <Link href="/programs" className="meta hover:text-brand hover:underline">
+        <Link href="/programs" className="meta hover:text-brand-fg hover:underline">
           ← Programs
         </Link>
       </div>
@@ -104,7 +104,7 @@ export default async function ProgramDetailPage({
                   <div className="min-w-0 flex-1 basis-48">
                     <Link
                       href={`/projects/${project.id}`}
-                      className="font-medium hover:text-brand"
+                      className="font-medium hover:text-brand-fg"
                     >
                       {project.name}
                     </Link>
@@ -138,7 +138,7 @@ export default async function ProgramDetailPage({
                   <li key={event.id} className="px-4 py-2.5">
                     <Link
                       href={`/events/${event.id}`}
-                      className="text-[13.5px] font-medium hover:text-brand"
+                      className="text-[13.5px] font-medium hover:text-brand-fg"
                     >
                       {event.name}
                     </Link>

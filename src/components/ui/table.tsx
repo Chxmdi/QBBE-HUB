@@ -70,7 +70,7 @@ export function SortableHeader({
       <button
         type="button"
         onClick={() => onSort(sortKey)}
-        className="inline-flex items-center gap-1 hover:text-brand"
+        className="inline-flex items-center gap-1 hover:text-brand-fg"
       >
         {label}
         {isActive ? (

@@ -193,7 +193,7 @@ export function DocumentUploadDialog({
             </div>
             {contextInputs}
             {error ? (
-              <p role="alert" className="text-[13px] text-danger">
+              <p role="alert" className="text-[13px] text-danger-fg">
                 {error}
               </p>
             ) : null}
@@ -232,7 +232,7 @@ export function DocumentUploadDialog({
             </div>
             {contextInputs}
             {error ? (
-              <p role="alert" className="text-[13px] text-danger">
+              <p role="alert" className="text-[13px] text-danger-fg">
                 {error}
               </p>
             ) : null}

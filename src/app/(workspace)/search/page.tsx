@@ -147,7 +147,7 @@ export default async function SearchPage({
             typeFilter ? (
               <Link
                 href={`/search?q=${encodeURIComponent(query)}`}
-                className="text-[13.5px] font-medium text-brand hover:underline"
+                className="text-[13.5px] font-medium text-brand-fg hover:underline"
               >
                 Clear type filter
               </Link>

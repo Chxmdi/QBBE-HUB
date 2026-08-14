@@ -129,7 +129,7 @@ export default async function SchedulePage() {
                     <div className="w-64 shrink-0 border-r border-line px-4 py-3">
                       <Link
                         href={`/projects/${project.id}`}
-                        className="block truncate text-[13.5px] font-medium hover:text-brand"
+                        className="block truncate text-[13.5px] font-medium hover:text-brand-fg"
                       >
                         {project.name}
                       </Link>

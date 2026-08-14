@@ -88,7 +88,7 @@ export function AnnouncementComposeDialog() {
             ) : null}
           </div>
           {error ? (
-            <p role="alert" className="text-[13px] text-danger">
+            <p role="alert" className="text-[13px] text-danger-fg">
               {error}
             </p>
           ) : null}

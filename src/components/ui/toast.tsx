@@ -39,22 +39,22 @@ const toneMeta: Record<
 > = {
   success: {
     icon: <CheckCircle2 className="size-4" aria-hidden />,
-    classes: "border-success/30 text-success",
+    classes: "border-success/30 text-success-fg",
     label: "Success",
   },
   warning: {
     icon: <AlertTriangle className="size-4" aria-hidden />,
-    classes: "border-warning/30 text-warning",
+    classes: "border-warning/30 text-warning-fg",
     label: "Warning",
   },
   error: {
     icon: <XCircle className="size-4" aria-hidden />,
-    classes: "border-danger/30 text-danger",
+    classes: "border-danger/30 text-danger-fg",
     label: "Error",
   },
   info: {
     icon: <Info className="size-4" aria-hidden />,
-    classes: "border-info/30 text-info",
+    classes: "border-info/30 text-info-fg",
     label: "Information",
   },
 };
@@ -118,7 +118,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                       item.action!.onClick();
                       dismiss(item.id);
                     }}
-                    className="mt-1 text-[12.5px] font-medium text-brand hover:underline"
+                    className="mt-1 text-[12.5px] font-medium text-brand-fg hover:underline"
                   >
                     {item.action.label}
                   </button>

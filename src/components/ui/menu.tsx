@@ -120,7 +120,7 @@ export function Menu({
                 className={cn(
                   "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13.5px]",
                   "hover:bg-surface-soft focus-visible:bg-surface-soft",
-                  item.destructive ? "text-danger" : "text-ink",
+                  item.destructive ? "text-danger-fg" : "text-ink",
                 )}
               >
                 {item.icon}

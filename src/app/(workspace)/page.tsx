@@ -65,7 +65,7 @@ function AttentionTask({ task, reason }: { task: Task; reason: string }) {
       <Link
         href="/board"
         aria-label={`Open board for ${task.title}`}
-        className="text-muted hover:text-brand"
+        className="text-muted hover:text-brand-fg"
       >
         <ArrowRight className="size-4" aria-hidden />
       </Link>
@@ -128,7 +128,7 @@ export default async function HomePage() {
                   key={a.id}
                   className="flex flex-wrap items-center gap-3 rounded-(--radius-md) border border-brand/30 bg-brand-soft/60 px-4 py-3"
                 >
-                  <Megaphone className="size-4.5 shrink-0 text-brand" aria-hidden />
+                  <Megaphone className="size-4.5 shrink-0 text-brand-fg" aria-hidden />
                   <div className="min-w-0 flex-1">
                     <p className="text-[13.5px] font-semibold">{a.title}</p>
                     <p className="meta">
@@ -184,10 +184,10 @@ export default async function HomePage() {
                 <span
                   className={
                     healthPercent >= 70
-                      ? "text-[28px] leading-none font-semibold text-success"
+                      ? "text-[28px] leading-none font-semibold text-success-fg"
                       : healthPercent >= 40
-                        ? "text-[28px] leading-none font-semibold text-warning"
-                        : "text-[28px] leading-none font-semibold text-danger"
+                        ? "text-[28px] leading-none font-semibold text-warning-fg"
+                        : "text-[28px] leading-none font-semibold text-danger-fg"
                   }
                 >
                   {healthPercent}%
@@ -230,7 +230,7 @@ export default async function HomePage() {
                       href={`/meetings/${meeting.id}`}
                       className="interactive-row -mx-2 flex items-center gap-3 rounded-(--radius-sm) px-2 py-2"
                     >
-                      <span className="flex size-8 items-center justify-center rounded-full bg-info/10 text-info">
+                      <span className="flex size-8 items-center justify-center rounded-full bg-info/10 text-info-fg">
                         <Presentation className="size-4" aria-hidden />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -241,7 +241,7 @@ export default async function HomePage() {
                           {meeting.project?.name ?? "Meeting"}
                         </span>
                       </span>
-                      <time className="text-[12.5px] font-medium whitespace-nowrap text-brand">
+                      <time className="text-[12.5px] font-medium whitespace-nowrap text-brand-fg">
                         {formatTime(meeting.starts_at)}
                       </time>
                     </Link>
@@ -253,7 +253,7 @@ export default async function HomePage() {
                       href="/my-work"
                       className="interactive-row -mx-2 flex items-center gap-3 rounded-(--radius-sm) px-2 py-2"
                     >
-                      <span className="flex size-8 items-center justify-center rounded-full bg-brand-soft text-brand">
+                      <span className="flex size-8 items-center justify-center rounded-full bg-brand-soft text-brand-fg">
                         <ClipboardList className="size-4" aria-hidden />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -267,8 +267,8 @@ export default async function HomePage() {
                       <span
                         className={
                           task.due_at && task.due_at < new Date().toISOString().slice(0, 10)
-                            ? "text-[12.5px] font-medium whitespace-nowrap text-danger"
-                            : "text-[12.5px] font-medium whitespace-nowrap text-warning"
+                            ? "text-[12.5px] font-medium whitespace-nowrap text-danger-fg"
+                            : "text-[12.5px] font-medium whitespace-nowrap text-warning-fg"
                         }
                       >
                         {task.due_at && task.due_at < new Date().toISOString().slice(0, 10)
@@ -282,7 +282,7 @@ export default async function HomePage() {
             )}
             <Link
               href="/my-work"
-              className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand hover:underline"
+              className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
             >
               View my work <ArrowRight className="size-3.5" aria-hidden />
             </Link>
@@ -303,7 +303,7 @@ export default async function HomePage() {
                   <li key={program.id}>
                     <Link href={`/programs/${program.id}`} className="group block">
                       <span className="mb-1.5 flex items-baseline justify-between gap-3">
-                        <span className="truncate text-[13.5px] font-medium group-hover:text-brand">
+                        <span className="truncate text-[13.5px] font-medium group-hover:text-brand-fg">
                           {program.name}
                         </span>
                         <span className="flex items-center gap-2 whitespace-nowrap">
@@ -315,11 +315,11 @@ export default async function HomePage() {
                           <span
                             className={
                               program.tone === "good"
-                                ? "text-[11.5px] font-medium text-success"
+                                ? "text-[11.5px] font-medium text-success-fg"
                                 : program.tone === "attention"
-                                  ? "text-[11.5px] font-medium text-warning"
+                                  ? "text-[11.5px] font-medium text-warning-fg"
                                   : program.tone === "risk"
-                                    ? "text-[11.5px] font-medium text-danger"
+                                    ? "text-[11.5px] font-medium text-danger-fg"
                                     : "text-[11.5px] font-medium text-muted"
                             }
                           >
@@ -338,7 +338,7 @@ export default async function HomePage() {
             )}
             <Link
               href="/projects"
-              className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand hover:underline"
+              className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
             >
               View portfolio <ArrowRight className="size-3.5" aria-hidden />
             </Link>
@@ -361,8 +361,8 @@ export default async function HomePage() {
                   <p
                     className={
                       completionDelta >= 0
-                        ? "flex items-center gap-1 text-[12px] font-medium text-success"
-                        : "flex items-center gap-1 text-[12px] font-medium text-danger"
+                        ? "flex items-center gap-1 text-[12px] font-medium text-success-fg"
+                        : "flex items-center gap-1 text-[12px] font-medium text-danger-fg"
                     }
                   >
                     {completionDelta >= 0 ? (
@@ -416,7 +416,7 @@ export default async function HomePage() {
               </h2>
               <Link
                 href="/calendar"
-                className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand hover:underline"
+                className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-fg hover:underline"
               >
                 View calendar <ArrowRight className="size-3.5" aria-hidden />
               </Link>
@@ -439,7 +439,7 @@ export default async function HomePage() {
                         className="interactive-row -mx-2 flex items-center gap-3 rounded-(--radius-sm) px-2 py-2"
                       >
                         <span className="flex w-11 shrink-0 flex-col items-center rounded-(--radius-sm) border border-line bg-surface-soft/70 py-1">
-                          <span className="text-[9.5px] font-bold tracking-wide text-brand uppercase">
+                          <span className="text-[9.5px] font-bold tracking-wide text-brand-fg uppercase">
                             {date.toLocaleDateString("en-CA", { month: "short", timeZone: timezone })}
                           </span>
                           <span className="text-[16px] leading-tight font-bold">
@@ -469,7 +469,7 @@ export default async function HomePage() {
             )}
             <Link
               href="/events"
-              className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand hover:underline"
+              className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
             >
               View all events <ArrowRight className="size-3.5" aria-hidden />
             </Link>
@@ -483,7 +483,7 @@ export default async function HomePage() {
           </h2>
           {attentionEmpty ? (
             <div className="card px-5 py-6 text-center">
-              <CheckCircle2 className="mx-auto mb-1.5 size-6 text-success" aria-hidden />
+              <CheckCircle2 className="mx-auto mb-1.5 size-6 text-success-fg" aria-hidden />
               <p className="text-[14px] font-medium">
                 Nothing needs escalation right now.
               </p>
@@ -496,7 +496,7 @@ export default async function HomePage() {
               {attention.riskyProjects.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <AlertTriangle className="size-3.5 text-warning" aria-hidden />
+                    <AlertTriangle className="size-3.5 text-warning-fg" aria-hidden />
                     Projects at risk
                   </p>
                   <ul>
@@ -505,7 +505,7 @@ export default async function HomePage() {
                         <span className="min-w-0 flex-1">
                           <Link
                             href={`/projects/${p.id}`}
-                            className="block truncate text-[13.5px] font-medium hover:text-brand"
+                            className="block truncate text-[13.5px] font-medium hover:text-brand-fg"
                           >
                             {p.name}
                           </Link>
@@ -522,7 +522,7 @@ export default async function HomePage() {
               {attention.overdueTasks.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <OctagonAlert className="size-3.5 text-danger" aria-hidden />
+                    <OctagonAlert className="size-3.5 text-danger-fg" aria-hidden />
                     Overdue tasks
                   </p>
                   <ul>
@@ -539,7 +539,7 @@ export default async function HomePage() {
               {attention.blockedTasks.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <OctagonAlert className="size-3.5 text-danger" aria-hidden />
+                    <OctagonAlert className="size-3.5 text-danger-fg" aria-hidden />
                     Blocked work
                   </p>
                   <ul>
@@ -552,7 +552,7 @@ export default async function HomePage() {
               {attention.unassignedTasks.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <AlertTriangle className="size-3.5 text-warning" aria-hidden />
+                    <AlertTriangle className="size-3.5 text-warning-fg" aria-hidden />
                     Unassigned tasks
                   </p>
                   <ul>
@@ -617,7 +617,7 @@ export default async function HomePage() {
               <Link
                 href={`/channels/${rail.channelId}`}
                 aria-label="Open announcements channel"
-                className="text-muted transition-colors hover:text-brand"
+                className="text-muted transition-colors hover:text-brand-fg"
               >
                 <ArrowUpRight className="size-4" aria-hidden />
               </Link>
@@ -627,8 +627,8 @@ export default async function HomePage() {
           {latestAnn ? (
             <div className="border-b border-line bg-brand-soft/40 px-4 py-4">
               <p className="mb-1.5 flex items-center gap-1.5">
-                <Megaphone className="size-3.5 text-brand" aria-hidden />
-                <span className="text-[10.5px] font-bold tracking-[0.08em] text-brand uppercase">
+                <Megaphone className="size-3.5 text-brand-fg" aria-hidden />
+                <span className="text-[10.5px] font-bold tracking-[0.08em] text-brand-fg uppercase">
                   Organization announcement
                 </span>
                 <span className="meta ml-auto">
@@ -647,7 +647,7 @@ export default async function HomePage() {
               {latestAnn.requires_ack ? (
                 <div className="mt-3 space-y-2">
                   {latestAnn.acknowledgedByMe ? (
-                    <p className="inline-flex items-center gap-1.5 text-[13px] font-medium text-success">
+                    <p className="inline-flex items-center gap-1.5 text-[13px] font-medium text-success-fg">
                       <CheckCircle2 className="size-4" aria-hidden />
                       You acknowledged this
                     </p>
@@ -714,7 +714,7 @@ export default async function HomePage() {
             <div className="border-t border-line p-3">
               <Link
                 href={`/channels/${rail.channelId}`}
-                className="block rounded-(--radius-sm) border border-line bg-canvas px-3 py-2 text-center text-[13px] font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand"
+                className="block rounded-(--radius-sm) border border-line bg-canvas px-3 py-2 text-center text-[13px] font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand-fg"
               >
                 Open #announcements
               </Link>

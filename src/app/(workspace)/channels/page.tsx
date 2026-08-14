@@ -58,7 +58,7 @@ export default async function ChannelsPage({
         <div className="min-w-0 flex-1 basis-48">
           <Link
             href={`/channels/${channel.id}`}
-            className="text-[14px] font-medium hover:text-brand"
+            className="text-[14px] font-medium hover:text-brand-fg"
           >
             {channel.slug}
           </Link>

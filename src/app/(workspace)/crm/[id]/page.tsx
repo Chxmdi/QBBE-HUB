@@ -68,7 +68,7 @@ export default async function CrmDetailPage({
   return (
     <div>
       <div className="mb-2">
-        <Link href="/crm" className="meta hover:text-brand hover:underline">
+        <Link href="/crm" className="meta hover:text-brand-fg hover:underline">
           ← Relationships
         </Link>
       </div>

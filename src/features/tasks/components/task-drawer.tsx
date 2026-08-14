@@ -163,7 +163,7 @@ export function TaskDrawer({ people }: { people: Option[] }) {
             {task.project ? (
               <Link
                 href={`/projects/${task.project.id}`}
-                className="text-[12.5px] font-medium text-brand hover:underline"
+                className="text-[12.5px] font-medium text-brand-fg hover:underline"
               >
                 {task.project.name} →
               </Link>
@@ -171,7 +171,7 @@ export function TaskDrawer({ people }: { people: Option[] }) {
           </div>
 
           {task.blocked_reason ? (
-            <p className="rounded-(--radius-sm) bg-danger/10 px-3 py-2 text-[13px] text-danger">
+            <p className="rounded-(--radius-sm) bg-danger/10 px-3 py-2 text-[13px] text-danger-fg">
               <span className="font-medium">Blocked:</span> {task.blocked_reason}
             </p>
           ) : null}

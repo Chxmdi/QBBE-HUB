@@ -103,7 +103,7 @@ export function CrmOrganizationDialog() {
 
           {duplicates.length > 0 ? (
             <div className="rounded-(--radius-sm) border border-warning/30 bg-warning/10 p-3">
-              <p className="flex items-center gap-1.5 text-[13.5px] font-medium text-warning">
+              <p className="flex items-center gap-1.5 text-[13.5px] font-medium text-warning-fg">
                 <AlertTriangle className="size-4" aria-hidden />
                 {duplicates.length === 1
                   ? "A similar organization already exists"
@@ -114,7 +114,7 @@ export function CrmOrganizationDialog() {
                   <li key={duplicate.id}>
                     <Link
                       href={`/crm/${duplicate.id}`}
-                      className="font-medium text-brand hover:underline"
+                      className="font-medium text-brand-fg hover:underline"
                     >
                       {duplicate.name}
                     </Link>
@@ -172,7 +172,7 @@ export function CrmOrganizationDialog() {
           </div>
 
           {error ? (
-            <p role="alert" className="text-[13px] text-danger">
+            <p role="alert" className="text-[13px] text-danger-fg">
               {error}
             </p>
           ) : null}

@@ -97,7 +97,7 @@ export default async function ReportsPage() {
               <div className="min-w-0 flex-1 basis-64">
                 <Link
                   href={`/reports/${report.id}`}
-                  className="text-[14px] font-medium hover:text-brand"
+                  className="text-[14px] font-medium hover:text-brand-fg"
                 >
                   {report.title}
                 </Link>

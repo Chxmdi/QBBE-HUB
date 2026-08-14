@@ -28,7 +28,7 @@ export function ApproveReportButton({ reportId }: { reportId: string }) {
         Approve
       </Button>
       {error ? (
-        <p role="alert" className="text-[12px] text-danger">
+        <p role="alert" className="text-[12px] text-danger-fg">
           {error}
         </p>
       ) : null}

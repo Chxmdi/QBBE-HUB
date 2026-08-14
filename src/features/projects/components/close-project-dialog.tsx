@@ -76,7 +76,7 @@ export function CloseProjectDialog({
             <p className="text-[13.5px] text-muted">Checking for open work…</p>
           ) : hasOpenWork ? (
             <div className="rounded-(--radius-sm) border border-warning/30 bg-warning/10 p-3">
-              <p className="flex items-center gap-1.5 text-[13.5px] font-medium text-warning">
+              <p className="flex items-center gap-1.5 text-[13.5px] font-medium text-warning-fg">
                 <AlertTriangle className="size-4" aria-hidden />
                 This project still has open work
               </p>
@@ -99,7 +99,7 @@ export function CloseProjectDialog({
               </ul>
             </div>
           ) : (
-            <p className="flex items-center gap-1.5 rounded-(--radius-sm) bg-success/10 px-3 py-2 text-[13.5px] text-success">
+            <p className="flex items-center gap-1.5 rounded-(--radius-sm) bg-success/10 px-3 py-2 text-[13.5px] text-success-fg">
               <CheckCircle2 className="size-4" aria-hidden />
               No open tasks or milestones remain.
             </p>
@@ -144,7 +144,7 @@ export function CloseProjectDialog({
           ) : null}
 
           {error ? (
-            <p role="alert" className="text-[13px] text-danger">
+            <p role="alert" className="text-[13px] text-danger-fg">
               {error}
             </p>
           ) : null}

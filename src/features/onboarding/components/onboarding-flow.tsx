@@ -192,7 +192,7 @@ export function OnboardingFlow({
               <FieldHint>Due dates and meeting times display in this zone.</FieldHint>
             </div>
             {error ? (
-              <p role="alert" className="text-[13px] text-danger">
+              <p role="alert" className="text-[13px] text-danger-fg">
                 {error}
               </p>
             ) : null}
@@ -237,7 +237,7 @@ export function OnboardingFlow({
               </span>
             </label>
             {error ? (
-              <p role="alert" className="text-[13px] text-danger">
+              <p role="alert" className="text-[13px] text-danger-fg">
                 {error}
               </p>
             ) : null}
@@ -324,7 +324,7 @@ export function OnboardingFlow({
               </li>
             </ul>
             {error ? (
-              <p role="alert" className="text-[13px] text-danger">
+              <p role="alert" className="text-[13px] text-danger-fg">
                 {error}
               </p>
             ) : null}

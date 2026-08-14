@@ -25,7 +25,7 @@ export function JoinChannelButton({ channelId }: { channelId: string }) {
         Join
       </Button>
       {state === "error" ? (
-        <span role="alert" className="text-[12px] text-danger">
+        <span role="alert" className="text-[12px] text-danger-fg">
           Couldn&apos;t join
         </span>
       ) : null}

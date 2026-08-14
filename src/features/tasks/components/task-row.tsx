@@ -26,7 +26,7 @@ export function TaskRow({
           {task.project ? (
             <Link
               href={`/projects/${task.project.id}`}
-              className="truncate hover:text-brand hover:underline"
+              className="truncate hover:text-brand-fg hover:underline"
             >
               {task.project.name}
             </Link>
@@ -34,7 +34,7 @@ export function TaskRow({
             <span>No project</span>
           )}
           {task.blocked_reason ? (
-            <span className="text-danger">Blocked: {task.blocked_reason}</span>
+            <span className="text-danger-fg">Blocked: {task.blocked_reason}</span>
           ) : null}
         </p>
       </div>
@@ -42,9 +42,9 @@ export function TaskRow({
         className={cn(
           "text-[12.5px] whitespace-nowrap",
           due.tone === "danger"
-            ? "font-medium text-danger"
+            ? "font-medium text-danger-fg"
             : due.tone === "warning"
-              ? "font-medium text-warning"
+              ? "font-medium text-warning-fg"
               : "text-muted",
         )}
       >

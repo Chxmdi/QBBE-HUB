@@ -51,7 +51,7 @@ export function MobileNav({
                 className={cn(
                   "relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 px-1 py-1.5",
                   "text-[10.5px] font-medium transition-colors",
-                  active ? "text-brand" : "text-muted",
+                  active ? "text-brand-fg" : "text-muted",
                 )}
               >
                 <tab.icon className="size-5" aria-hidden />

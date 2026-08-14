@@ -70,7 +70,7 @@ export default async function CrmPage() {
                   <div className="min-w-0 flex-1 basis-48">
                     <Link
                       href={`/crm/${org.id}`}
-                      className="text-[14px] font-medium hover:text-brand"
+                      className="text-[14px] font-medium hover:text-brand-fg"
                     >
                       {org.name}
                     </Link>
@@ -113,7 +113,7 @@ export default async function CrmPage() {
                       {followUp.crm_organization?.name} ·{" "}
                       <span
                         className={
-                          followUp.due_at < today ? "font-medium text-danger" : ""
+                          followUp.due_at < today ? "font-medium text-danger-fg" : ""
                         }
                       >
                         {followUp.due_at < today ? "Overdue · " : ""}

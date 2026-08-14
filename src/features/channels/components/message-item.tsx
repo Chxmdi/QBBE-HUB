@@ -341,7 +341,7 @@ export function MessageItem({
           <button
             type="button"
             onClick={() => onOpenThread(message.id)}
-            className="mt-1.5 text-[12.5px] font-medium text-brand hover:underline"
+            className="mt-1.5 text-[12.5px] font-medium text-brand-fg hover:underline"
           >
             {replyCount} {replyCount === 1 ? "reply" : "replies"}
           </button>

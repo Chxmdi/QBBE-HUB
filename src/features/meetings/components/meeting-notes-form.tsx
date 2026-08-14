@@ -34,11 +34,11 @@ export function MeetingNotesForm({
       />
       <div className="flex items-center justify-end gap-3">
         {state === "saved" ? (
-          <span role="status" className="text-[12.5px] text-success">
+          <span role="status" className="text-[12.5px] text-success-fg">
             Saved
           </span>
         ) : state === "error" ? (
-          <span role="alert" className="text-[12.5px] text-danger">
+          <span role="alert" className="text-[12.5px] text-danger-fg">
             Could not save — try again
           </span>
         ) : null}

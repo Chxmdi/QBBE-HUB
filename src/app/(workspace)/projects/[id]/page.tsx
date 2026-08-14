@@ -103,7 +103,7 @@ export default async function ProjectDetailPage({
   return (
     <div>
       <div className="mb-2">
-        <Link href="/projects" className="meta hover:text-brand hover:underline">
+        <Link href="/projects" className="meta hover:text-brand-fg hover:underline">
           ← Projects
         </Link>
       </div>
@@ -142,7 +142,7 @@ export default async function ProjectDetailPage({
               {project.owner.full_name}
             </span>
           ) : (
-            <span className="text-[13.5px] text-warning">Unassigned</span>
+            <span className="text-[13.5px] text-warning-fg">Unassigned</span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -150,7 +150,7 @@ export default async function ProjectDetailPage({
           <HealthBadge health={project.health} />
         </div>
         {project.health_reason ? (
-          <p className="text-[13px] text-warning">{project.health_reason}</p>
+          <p className="text-[13px] text-warning-fg">{project.health_reason}</p>
         ) : null}
         <div className="flex items-center gap-2">
           <span className="meta">Timeline</span>
@@ -275,12 +275,12 @@ export default async function ProjectDetailPage({
                       </p>
                     ) : null}
                     {update.blockers ? (
-                      <p className="mt-1 text-[13px] text-danger">
+                      <p className="mt-1 text-[13px] text-danger-fg">
                         <span className="font-medium">Blockers:</span> {update.blockers}
                       </p>
                     ) : null}
                     {update.decisions_needed ? (
-                      <p className="mt-1 text-[13px] text-warning">
+                      <p className="mt-1 text-[13px] text-warning-fg">
                         <span className="font-medium">Decisions needed:</span>{" "}
                         {update.decisions_needed}
                       </p>
@@ -307,7 +307,7 @@ export default async function ProjectDetailPage({
                 {((milestones ?? []) as Milestone[]).map((m) => (
                   <li key={m.id} className="flex items-center gap-2.5 px-4 py-2.5">
                     {m.completed_at ? (
-                      <CheckCircle2 className="size-4 shrink-0 text-success" aria-label="Completed" />
+                      <CheckCircle2 className="size-4 shrink-0 text-success-fg" aria-label="Completed" />
                     ) : (
                       <Circle className="size-4 shrink-0 text-muted/50" aria-label="Open" />
                     )}

@@ -52,7 +52,7 @@ export function MemberRoleSelect({
         <option value="guest">Guest</option>
       </Select>
       {error ? (
-        <p role="alert" className="mt-1 text-[12px] text-danger">
+        <p role="alert" className="mt-1 text-[12px] text-danger-fg">
           {error}
         </p>
       ) : null}
@@ -100,14 +100,14 @@ export function MemberActiveToggle({
         onClick={handleToggle}
         className={
           active
-            ? "text-[12.5px] font-medium text-danger hover:underline"
-            : "text-[12.5px] font-medium text-success hover:underline"
+            ? "text-[12.5px] font-medium text-danger-fg hover:underline"
+            : "text-[12.5px] font-medium text-success-fg hover:underline"
         }
       >
         {active ? "Deactivate" : "Reactivate"}
       </button>
       {error ? (
-        <p role="alert" className="mt-1 text-[12px] text-danger">
+        <p role="alert" className="mt-1 text-[12px] text-danger-fg">
           {error}
         </p>
       ) : null}
@@ -125,7 +125,7 @@ export function RevokeInvitationButton({ invitationId }: { invitationId: string 
     <button
       type="button"
       onClick={handleRevoke}
-      className="text-[12.5px] font-medium text-danger hover:underline"
+      className="text-[12.5px] font-medium text-danger-fg hover:underline"
     >
       Revoke
     </button>

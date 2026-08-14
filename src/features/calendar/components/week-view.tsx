@@ -19,11 +19,11 @@ export interface CalendarItem {
 }
 
 export const KIND_STYLES: Record<CalendarItem["kind"], string> = {
-  task: "bg-brand-soft text-brand dark:text-[#f2b8c8]",
+  task: "bg-brand-soft text-brand-fg dark:text-[#f2b8c8]",
   milestone: "bg-accent/20 text-[#7a5f1a] dark:text-accent",
-  meeting: "bg-info/12 text-info",
-  event: "bg-success/12 text-success",
-  follow_up: "bg-warning/12 text-warning",
+  meeting: "bg-info/12 text-info-fg",
+  event: "bg-success/12 text-success-fg",
+  follow_up: "bg-warning/12 text-warning-fg",
 };
 
 /** Short type prefix so kind never rests on color alone (§10.9). */
@@ -79,7 +79,7 @@ export function WeekView({
                 <p
                   className={cn(
                     "text-[17px] font-semibold",
-                    isToday(day) && "text-brand",
+                    isToday(day) && "text-brand-fg",
                   )}
                 >
                   {format(day, "d")}
@@ -172,7 +172,7 @@ export function AgendaView({ items }: { items: CalendarItem[] }) {
             <p
               className={cn(
                 "mb-1.5 text-[12.5px] font-semibold",
-                isToday(date) && "text-brand",
+                isToday(date) && "text-brand-fg",
               )}
             >
               {format(date, "EEEE, MMM d")}

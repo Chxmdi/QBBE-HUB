@@ -46,7 +46,7 @@ export function StageSelect({
         ))}
       </Select>
       {error ? (
-        <p role="alert" className="mt-1 text-[12px] text-danger">
+        <p role="alert" className="mt-1 text-[12px] text-danger-fg">
           {error}
         </p>
       ) : null}

@@ -62,7 +62,7 @@ export function Composer({
   return (
     <div className="border-t border-line bg-surface p-3">
       {error ? (
-        <p role="alert" className="mb-2 text-[12.5px] text-danger">
+        <p role="alert" className="mb-2 text-[12.5px] text-danger-fg">
           {error} <button type="button" onClick={submit} className="font-medium underline">Retry</button>
         </p>
       ) : null}
@@ -232,7 +232,7 @@ export function ChannelView({
         {connection === "reconnecting" ? (
           <p
             role="status"
-            className="border-b border-line bg-warning/10 px-4 py-1.5 text-center text-[12.5px] text-warning"
+            className="border-b border-line bg-warning/10 px-4 py-1.5 text-center text-[12.5px] text-warning-fg"
           >
             Reconnecting to live updates… messages you send are still saved.
           </p>

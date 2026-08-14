@@ -12,11 +12,12 @@ type Tone =
 
 const toneClasses: Record<Tone, string> = {
   neutral: "bg-surface-soft text-muted",
-  brand: "bg-brand-soft text-brand dark:text-[#f2b8c8]",
-  success: "bg-success/12 text-success",
-  warning: "bg-warning/12 text-warning",
-  danger: "bg-danger/12 text-danger",
-  info: "bg-info/12 text-info",
+  // Foreground tokens are already theme-aware; no per-theme override needed.
+  brand: "bg-brand-soft text-brand-fg",
+  success: "bg-success/12 text-success-fg",
+  warning: "bg-warning/12 text-warning-fg",
+  danger: "bg-danger/12 text-danger-fg",
+  info: "bg-info/12 text-info-fg",
   accent: "bg-accent/15 text-[#8a6d1f] dark:text-accent",
 };
 

@@ -194,7 +194,7 @@ export function Topbar({
                 <button
                   type="button"
                   onClick={markAllRead}
-                  className="text-[12px] font-medium text-brand hover:underline"
+                  className="text-[12px] font-medium text-brand-fg hover:underline"
                 >
                   Mark all read
                 </button>
@@ -267,7 +267,7 @@ export function Topbar({
               <Link
                 href="/inbox"
                 onClick={() => setOpenMenu(null)}
-                className="block border-t border-line px-3.5 py-2 text-center text-[12.5px] font-medium text-brand hover:underline"
+                className="block border-t border-line px-3.5 py-2 text-center text-[12.5px] font-medium text-brand-fg hover:underline"
               >
                 Open Inbox
               </Link>
@@ -326,7 +326,7 @@ export function Topbar({
               <form action="/auth/sign-out" method="post">
                 <button
                   type="submit"
-                  className="w-full px-3 py-1.5 text-left text-[13.5px] text-danger hover:bg-surface-soft"
+                  className="w-full px-3 py-1.5 text-left text-[13.5px] text-danger-fg hover:bg-surface-soft"
                 >
                   Sign out
                 </button>

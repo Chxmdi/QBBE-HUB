@@ -72,7 +72,7 @@ export default async function EventDetailPage({
   return (
     <div>
       <div className="mb-2">
-        <Link href="/events" className="meta hover:text-brand hover:underline">
+        <Link href="/events" className="meta hover:text-brand-fg hover:underline">
           ← Events
         </Link>
       </div>
@@ -108,7 +108,7 @@ export default async function EventDetailPage({
         {program ? (
           <Link
             href={`/programs/${program.id}`}
-            className="text-[13px] font-medium text-brand hover:underline"
+            className="text-[13px] font-medium text-brand-fg hover:underline"
           >
             {program.name} →
           </Link>
@@ -116,7 +116,7 @@ export default async function EventDetailPage({
         {project ? (
           <Link
             href={`/projects/${project.id}`}
-            className="text-[13px] font-medium text-brand hover:underline"
+            className="text-[13px] font-medium text-brand-fg hover:underline"
           >
             {project.name} →
           </Link>

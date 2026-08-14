@@ -62,7 +62,7 @@ function SignInFormInner() {
         />
       </div>
       {error ? (
-        <p role="alert" className="text-[13px] text-danger">
+        <p role="alert" className="text-[13px] text-danger-fg">
           {error}
         </p>
       ) : null}
@@ -71,7 +71,7 @@ function SignInFormInner() {
       </Button>
       <p className="text-center text-[13px] text-muted">
         New to QBBE Hub?{" "}
-        <Link href="/sign-up" className="font-medium text-brand hover:underline">
+        <Link href="/sign-up" className="font-medium text-brand-fg hover:underline">
           Create an account
         </Link>
       </p>

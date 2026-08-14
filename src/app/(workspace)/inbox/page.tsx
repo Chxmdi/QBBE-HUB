@@ -108,7 +108,7 @@ export default async function InboxPage({
                     {notification.link ? (
                       <Link
                         href={notification.link}
-                        className="text-[13.5px] font-medium hover:text-brand"
+                        className="text-[13.5px] font-medium hover:text-brand-fg"
                       >
                         {notification.title}
                       </Link>

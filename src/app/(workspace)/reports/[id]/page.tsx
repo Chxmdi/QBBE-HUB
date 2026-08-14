@@ -136,7 +136,7 @@ export default async function ReportDetailPage({
   return (
     <div className="mx-auto max-w-3xl">
       <div className="no-print mb-2">
-        <Link href="/reports" className="meta hover:text-brand hover:underline">
+        <Link href="/reports" className="meta hover:text-brand-fg hover:underline">
           ← Reports
         </Link>
       </div>

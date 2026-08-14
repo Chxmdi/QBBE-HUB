@@ -36,6 +36,18 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
 
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Accessibility & responsive QA (public routes)
+        run: |
+          npx next start -p 3000 -H 127.0.0.1 &
+          npx wait-on -t 60000 http://127.0.0.1:3000/sign-in
+          npx playwright test public-routes
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+
       - name: Dependency audit (high+)
         run: npm audit --audit-level=high
         continue-on-error: true

@@ -111,7 +111,7 @@ export default async function ChannelPage({
         {channel.project_id ? (
           <Link
             href={`/projects/${channel.project_id}`}
-            className="text-[12.5px] font-medium text-brand hover:underline"
+            className="text-[12.5px] font-medium text-brand-fg hover:underline"
           >
             View linked project →
           </Link>
@@ -119,7 +119,7 @@ export default async function ChannelPage({
         {channel.program_id ? (
           <Link
             href={`/programs/${channel.program_id}`}
-            className="text-[12.5px] font-medium text-brand hover:underline"
+            className="text-[12.5px] font-medium text-brand-fg hover:underline"
           >
             View linked program →
           </Link>

@@ -68,7 +68,7 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
   return (
     <div>
       {error ? (
-        <p role="alert" className="mb-3 rounded-(--radius-sm) bg-danger/10 px-3 py-2 text-[13px] text-danger">
+        <p role="alert" className="mb-3 rounded-(--radius-sm) bg-danger/10 px-3 py-2 text-[13px] text-danger-fg">
           {error}
         </p>
       ) : null}
@@ -121,12 +121,12 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
                         <button
                           type="button"
                           onClick={() => openTask(task.id)}
-                          className="block w-full text-left text-[13.5px] leading-snug font-medium hover:text-brand"
+                          className="block w-full text-left text-[13.5px] leading-snug font-medium hover:text-brand-fg"
                         >
                           {task.title}
                         </button>
                         {task.blocked_reason ? (
-                          <p className="text-[12px] text-danger">
+                          <p className="text-[12px] text-danger-fg">
                             Blocked: {task.blocked_reason}
                           </p>
                         ) : null}
@@ -137,9 +137,9 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
                               className={cn(
                                 "text-[11.5px]",
                                 due.tone === "danger"
-                                  ? "font-medium text-danger"
+                                  ? "font-medium text-danger-fg"
                                   : due.tone === "warning"
-                                    ? "font-medium text-warning"
+                                    ? "font-medium text-warning-fg"
                                     : "text-muted",
                               )}
                             >

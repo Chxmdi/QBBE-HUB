@@ -92,7 +92,7 @@ export function SignUpForm() {
         <FieldHint>At least 8 characters.</FieldHint>
       </div>
       {error ? (
-        <p role="alert" className="text-[13px] text-danger">
+        <p role="alert" className="text-[13px] text-danger-fg">
           {error}
         </p>
       ) : null}
@@ -101,7 +101,7 @@ export function SignUpForm() {
       </Button>
       <p className="text-center text-[13px] text-muted">
         Already have an account?{" "}
-        <Link href="/sign-in" className="font-medium text-brand hover:underline">
+        <Link href="/sign-in" className="font-medium text-brand-fg hover:underline">
           Sign in
         </Link>
       </p>

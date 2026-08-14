@@ -82,7 +82,7 @@ export default async function ProgramsPage() {
                 className="card group flex flex-col gap-3 p-5 transition-colors hover:border-brand/40"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <h2 className="text-[16px] font-semibold group-hover:text-brand">
+                  <h2 className="text-[16px] font-semibold group-hover:text-brand-fg">
                     {program.name}
                   </h2>
                   <HealthBadge health={worstHealth} />
