@@ -71,14 +71,18 @@ the Docker daemon does not auto-start and Supabase must be started manually:
   (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`). Requires
   `supabase start`. Falls back to `sudo docker` when the daemon socket is
   root-owned (typical on this VM).
-- Notification email job (Unit 9): `POST /api/jobs/notification-email` with
-  `Authorization: Bearer $CRON_JOB_SECRET`. Local Mailpit SMTP is
-  `127.0.0.1:54325` (UI `:54324`). Do not mark production email “connected”
-  without `EMAIL_PROVIDER_API_KEY`.
-- Gmail/VMS: OAuth and Connect stay unavailable until the matching env vars
-  exist. Inbox Mail is not a stub inbox — it shows Not connected.
-- Scheduled announcements: `POST /api/jobs/scheduled-announcements` with the
-  same cron secret fans out notifications when `publish_at` arrives.
+- Notification email job (Unit 9): `GET` or `POST /api/jobs/notification-email`
+  with `Authorization: Bearer $CRON_JOB_SECRET` (or Vercel `CRON_SECRET`).
+  `/api/jobs/*` is excluded from session middleware so cron can run.
+  Local Mailpit SMTP is `127.0.0.1:54325` (UI `:54324`). Do not mark
+  production email “connected” — no production mail client is wired yet.
+- Gmail/VMS: OAuth Connect syncs Gmail metadata immediately when credentials
+  exist. VMS Connect probes the API and refuses if it is unreachable.
+- Scheduled announcements: `GET`/`POST /api/jobs/scheduled-announcements`.
+- Gmail/calendar refresh: `GET`/`POST /api/jobs/gmail-sync`.
+- Deactivated members are sent to `/account-inactive`, not a sign-in loop.
+- After the first organization exists, `/sign-up` is invite-only
+  (`signup_allowed` RPC).
 - Channel history loads the **newest** page first (`CHANNEL_HISTORY_PAGE_SIZE`);
   use **Load older messages** for prior pages. A `.limit(N)` with
   `created_at` ascending would have returned the oldest N instead.
