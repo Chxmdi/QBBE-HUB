@@ -7,7 +7,8 @@ master schedule, unified inbox, relationship CRM, reporting, people and
 access administration — one product, one data model, one permission system.
 
 Built from the **QBBE Hub Master Product, UI/UX & Development Specification
-v1.0** as a feature-first modular monolith.
+v1.0** as a feature-first modular monolith. The governing implementation and
+deployment goal is versioned in [`docs/master-spec.md`](docs/master-spec.md).
 
 ## Stack
 
@@ -20,6 +21,10 @@ v1.0** as a feature-first modular monolith.
 | Validation | Zod schemas at every server-action trust boundary |
 | Testing | Vitest (unit) · Playwright (e2e scaffold) |
 | Hosting | Vercel (app) + Supabase (data), QBBE-owned accounts |
+
+**Runtime:** Node.js 20.9 or newer is required. The production build uses
+Next.js 16's supported Webpack opt-out (`next build --webpack`) while the
+development server retains Turbopack by default.
 
 ## Getting started
 
@@ -100,8 +105,9 @@ docs/runbooks/        deployment, integrations, backup, privacy, launch-gate
   non-leavable membership at the database layer.
 - Audit events record access changes, channel and announcement actions,
   report generation/approval/export, and destructive actions.
-- No service-role key is used in request handling; the browser only ever
-  holds the anon key.
+- The browser only ever holds the publishable/anon key. Server-only
+  integration workers use the service role for narrowly scoped token and sync
+  operations; it is never exposed to a client.
 
 ## Feature status vs. the master specification
 
@@ -125,10 +131,12 @@ statuses on board and list; private channel membership; DMs in nav with
 message permalinks; teams; volunteer-simplified Home; snapshot reports with
 CSV **and** PDF export; RLS allow+deny harness.
 
-Gated until live credentials exist (UI stays **Not connected**, never a fake
-inbox or volunteer DB): Gmail OAuth, Google Calendar overlay ingest, Volunteer
-Management System, production transactional email (local Mailpit is enough for
-the notification job). ADR-003 (plain-text messages) remains.
+External integrations require QBBE-owned credentials before they can be
+validated in a real environment: Gmail OAuth/sync/watch, Google Calendar
+overlay and linked-meeting lifecycle, Google Drive metadata sync, Volunteer
+Management System sync, and production transactional email. Until configured,
+the UI stays **Not connected** and never substitutes fake operational data.
+ADR-003 (plain-text messages) remains.
 
 Deliberately out of first release (P2): native mobile apps, collaborative
 docs, built-in video, autonomous AI, presence, opportunity forecasting, Slack

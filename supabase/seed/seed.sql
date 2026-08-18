@@ -27,19 +27,21 @@ begin
 
   -- Programs
   insert into program (organization_id, name, slug, description, lead_id, created_by)
-  values
-    (v_org, 'Family First', 'family-first', 'Family and community education support services.', v_user, v_user),
-    (v_org, 'Tutoring & Mentorship', 'tutoring-mentorship', 'After-school tutoring and mentorship programming.', v_user, v_user)
+  values (v_org, 'Family First', 'family-first', 'Family and community education support services.', v_user, v_user)
   returning id into v_program;
-  select id into v_program2 from program where slug = 'tutoring-mentorship';
+
+  insert into program (organization_id, name, slug, description, lead_id, created_by)
+  values (v_org, 'Tutoring & Mentorship', 'tutoring-mentorship', 'After-school tutoring and mentorship programming.', v_user, v_user)
+  returning id into v_program2;
 
   -- Projects
   insert into project (organization_id, program_id, name, outcome, owner_id, stage, health, start_date, target_date, created_by)
-  values
-    (v_org, v_program, 'Fall Community Workshop Series', 'Deliver six community workshops with 80% attendance satisfaction.', v_user, 'active', 'on_track', current_date - 30, current_date + 60, v_user),
-    (v_org, v_program2, 'Tutor Recruitment Drive', 'Recruit and onboard 25 qualified volunteer tutors before the winter term.', v_user, 'active', 'at_risk', current_date - 14, current_date + 30, v_user)
+  values (v_org, v_program, 'Fall Community Workshop Series', 'Deliver six community workshops with 80% attendance satisfaction.', v_user, 'active', 'on_track', current_date - 30, current_date + 60, v_user)
   returning id into v_project;
-  select id into v_project2 from project where name = 'Tutor Recruitment Drive';
+
+  insert into project (organization_id, program_id, name, outcome, owner_id, stage, health, start_date, target_date, created_by)
+  values (v_org, v_program2, 'Tutor Recruitment Drive', 'Recruit and onboard 25 qualified volunteer tutors before the winter term.', v_user, 'active', 'at_risk', current_date - 14, current_date + 30, v_user)
+  returning id into v_project2;
 
   update project set health_reason = 'Applications are below target; outreach expansion planned.'
     where id = v_project2;
@@ -52,8 +54,7 @@ begin
   values
     (v_project, 'Venue and speakers confirmed', current_date + 7, 1),
     (v_project, 'Registration open', current_date + 21, 2),
-    (v_project2, 'Outreach campaign launched', current_date + 5, 1)
-  returning id into v_milestone;
+    (v_project2, 'Outreach campaign launched', current_date + 5, 1);
 
   -- Tasks
   insert into task (organization_id, program_id, project_id, title, description, status, priority, assignee_id, due_at, created_by, sort_key)
@@ -118,10 +119,11 @@ begin
 
   -- CRM
   insert into crm_organization (organization_id, name, category, owner_id, created_by)
-  values
-    (v_org, 'Fondation Horizon', 'funder', v_user, v_user),
-    (v_org, 'McGill University — Faculty of Education', 'university', v_user, v_user)
+  values (v_org, 'Fondation Horizon', 'funder', v_user, v_user)
   returning id into v_crm;
+
+  insert into crm_organization (organization_id, name, category, owner_id, created_by)
+  values (v_org, 'McGill University — Faculty of Education', 'university', v_user, v_user);
 
   insert into crm_contact (organization_id, crm_organization_id, full_name, role_title, email, owner_id)
   values (v_org, v_crm, 'Program Officer (seed contact)', 'Program Officer', 'contact@example.org', v_user);

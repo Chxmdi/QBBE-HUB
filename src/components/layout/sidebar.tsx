@@ -97,7 +97,7 @@ export function Sidebar({
       <div className="relative flex-1 space-y-5 overflow-y-auto px-2.5 pb-4">
         {groups.map((group) => (
           <div key={group.label}>
-            <p className="px-2 pb-1.5 text-[10.5px] font-semibold tracking-[0.12em] text-white/40 uppercase">
+            <p className="px-2 pb-1.5 text-[10.5px] font-semibold tracking-[0.12em] text-white/70 uppercase">
               {group.label}
             </p>
             <ul className="space-y-0.5">
@@ -144,7 +144,7 @@ export function Sidebar({
 
         {channels.length > 0 ? (
           <div>
-            <p className="px-2 pb-1.5 text-[10.5px] font-semibold tracking-[0.12em] text-white/40 uppercase">
+            <p className="px-2 pb-1.5 text-[10.5px] font-semibold tracking-[0.12em] text-white/70 uppercase">
               Channels
             </p>
             <ul className="space-y-0.5">
@@ -167,7 +167,7 @@ export function Sidebar({
                             : "text-white/70 hover:bg-white/8 hover:text-white",
                       )}
                     >
-                      <span aria-hidden className="text-white/40">
+                      <span aria-hidden className="text-white/70">
                         #
                       </span>
                       <span className="truncate">{channel.slug}</span>
@@ -187,13 +187,13 @@ export function Sidebar({
 
         {isStaff && programs.length > 0 ? (
           <div>
-            <p className="flex items-center justify-between px-2 pb-1.5 text-[10.5px] font-semibold tracking-[0.12em] text-white/40 uppercase">
+            <p className="flex items-center justify-between px-2 pb-1.5 text-[10.5px] font-semibold tracking-[0.12em] text-white/70 uppercase">
               Programs
               <Link
                 href="/programs"
                 onClick={onMobileClose}
                 aria-label="Add or manage programs"
-                className="rounded p-0.5 text-white/40 hover:text-white"
+                className="rounded p-0.5 text-white/70 hover:text-white"
               >
                 <Plus className="size-3.5" aria-hidden />
               </Link>
@@ -257,7 +257,7 @@ export function Sidebar({
               </span>
             ) : null}
           </span>
-          <ChevronRight className="size-4 text-white/40" aria-hidden />
+          <ChevronRight className="size-4 text-white/70" aria-hidden />
         </Link>
       </div>
     </nav>

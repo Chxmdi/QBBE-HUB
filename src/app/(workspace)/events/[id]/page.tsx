@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { assignEventRole } from "@/features/events/services/event.commands";
+import { assignEventRole, updateEvent, updateEventStatus } from "@/features/events/services/event.commands";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -43,6 +43,8 @@ export default async function EventDetailPage({
     name: string;
     description: string | null;
     starts_at: string;
+    ends_at: string | null;
+    event_type: string | null;
     location: string | null;
     status: string;
     volunteer_need: number | null;
@@ -81,9 +83,54 @@ export default async function EventDetailPage({
         title={event.name}
         description={event.description ?? undefined}
         actions={
-          <Badge tone={event.status === "completed" ? "success" : "info"}>
-            {(event.status as string).replace(/_/g, " ")}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={event.status === "completed" ? "success" : event.status === "cancelled" ? "neutral" : "info"}>
+              {(event.status as string).replace(/_/g, " ")}
+            </Badge>
+            {session.isStaff && event.status !== "cancelled" ? (
+              <>
+                <EntityFormDialog
+                  triggerLabel="Edit"
+                  triggerVariant="secondary"
+                  title="Edit event"
+                  submitLabel="Save changes"
+                  action={updateEvent}
+                  extraValues={{ eventId: event.id }}
+                  fields={[
+                    { name: "name", label: "Name", type: "text", required: true, defaultValue: event.name },
+                    { name: "description", label: "Description", type: "textarea", defaultValue: event.description ?? "" },
+                    { name: "eventType", label: "Event type", type: "text", defaultValue: event.event_type ?? "", colSpan: 1 },
+                    { name: "volunteerNeed", label: "Volunteers needed", type: "number", defaultValue: event.volunteer_need ? String(event.volunteer_need) : "", colSpan: 1 },
+                    { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1, defaultValue: new Date(event.starts_at).toISOString().slice(0, 16) },
+                    { name: "endsAt", label: "Ends", type: "datetime-local", required: true, colSpan: 1, defaultValue: new Date(event.ends_at ?? new Date(new Date(event.starts_at).getTime() + 60 * 60_000)).toISOString().slice(0, 16) },
+                    { name: "location", label: "Location", type: "text", defaultValue: event.location ?? "" },
+                  ]}
+                />
+                <EntityFormDialog
+                  triggerLabel="Update status"
+                  triggerVariant="secondary"
+                  title="Update event status"
+                  submitLabel="Save status"
+                  action={updateEventStatus}
+                  extraValues={{ eventId: event.id }}
+                  fields={[{
+                    name: "status",
+                    label: "Status",
+                    type: "select",
+                    required: true,
+                    defaultValue: event.status,
+                    options: [
+                      { value: "planning", label: "Planning" },
+                      { value: "confirmed", label: "Confirmed" },
+                      { value: "in_progress", label: "In progress" },
+                      { value: "completed", label: "Completed" },
+                      { value: "cancelled", label: "Cancelled — remove Google event" },
+                    ],
+                  }]}
+                />
+              </>
+            ) : null}
+          </div>
         }
       />
 

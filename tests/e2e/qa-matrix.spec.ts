@@ -65,6 +65,11 @@ async function horizontalOverflow(page: Page): Promise<number> {
 }
 
 test.describe("QA matrix", () => {
+  // The responsive sweep visits 240 authenticated route/theme/viewport
+  // combinations. It is intentionally broader than the default unit-style
+  // Playwright timeout and runs outside the regular CI unit suite.
+  test.setTimeout(10 * 60_000);
+
   test.beforeEach(async ({ page }) => {
     await signIn(page);
   });
@@ -181,7 +186,7 @@ test.describe("QA matrix", () => {
     await page.goto("/my-work");
     const firstTask = page
       .locator("button")
-      .filter({ hasText: /Workshop task|Review the consolidated/ })
+      .filter({ hasText: /Confirm workshop venue contract|Draft registration form/ })
       .first();
     await firstTask.click();
 

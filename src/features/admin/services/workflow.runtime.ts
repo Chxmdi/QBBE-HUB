@@ -10,13 +10,19 @@ export async function fireWorkflows(
   options: {
     organizationId: string;
     actorId: string;
-    eventType: "task_status_changed" | "announcement_published";
+    eventType:
+      | "task_status_changed"
+      | "announcement_published"
+      | "project_health_changed"
+      | "meeting_completed"
+      | "event_assignment_created";
     status?: string;
     title: string;
     sourceType: string;
     sourceId: string;
     link: string;
     assigneeId?: string | null;
+    eventOwnerId?: string | null;
   },
 ) {
   const { data: rules } = await supabase
@@ -38,11 +44,31 @@ export async function fireWorkflows(
     .eq("status", "active")
     .in("role", ["owner", "admin"]);
   const adminIds = (admins ?? []).map((row) => row.user_id as string);
+  const targetTeamIds = [...new Set(
+    matched
+      .filter((rule) => rule.action?.type === "notify_team" && rule.action.teamId)
+      .map((rule) => rule.action.teamId!),
+  )];
+  const { data: teamMembers } = targetTeamIds.length > 0
+    ? await supabase
+      .from("team_member")
+      .select("team_id, user_id")
+      .in("team_id", targetTeamIds)
+    : { data: [] as { team_id: string; user_id: string }[] };
+  const memberIdsByTeam = new Map<string, string[]>();
+  for (const member of teamMembers ?? []) {
+    const teamId = member.team_id as string;
+    const memberIds = memberIdsByTeam.get(teamId) ?? [];
+    memberIds.push(member.user_id as string);
+    memberIdsByTeam.set(teamId, memberIds);
+  }
 
   for (const rule of matched) {
     const recipients = workflowRecipients({
       actionType: rule.action?.type ?? "notify_assignee",
       assigneeId: options.assigneeId ?? null,
+      eventOwnerId: options.eventOwnerId ?? null,
+      teamMemberIds: rule.action?.teamId ? memberIdsByTeam.get(rule.action.teamId) ?? [] : [],
       adminIds,
       actorId: options.actorId,
     });

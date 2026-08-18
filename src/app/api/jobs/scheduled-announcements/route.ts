@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cronAuthorized } from "@/lib/cron-auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { recordJobRun } from "@/lib/job-observability";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
 
   let fanned = 0;
   for (const announcement of due ?? []) {
+    const startedAt = new Date().toISOString();
     const { data: members } = await supabase
       .from("organization_membership")
       .select("user_id")
@@ -42,8 +44,17 @@ export async function POST(request: Request) {
     const recipients = (members ?? [])
       .map((m) => m.user_id as string)
       .filter((id) => id !== announcement.created_by);
-    if (recipients.length === 0) continue;
-    const { error } = await supabase.from("notification").insert(
+    if (recipients.length === 0) {
+      await recordJobRun(supabase, {
+        organizationId: announcement.organization_id,
+        jobName: "scheduled_announcements",
+        status: "succeeded",
+        details: { announcementId: announcement.id, recipients: 0 },
+        startedAt,
+      });
+      continue;
+    }
+    const { data: inserted, error } = await supabase.from("notification").upsert(
       recipients.map((userId) => ({
         user_id: userId,
         organization_id: announcement.organization_id,
@@ -55,8 +66,28 @@ export async function POST(request: Request) {
         urgency: announcement.priority === "critical" ? "critical" : "normal",
         dedupe_key: `announcement:${announcement.id}:${userId}`,
       })),
-    );
-    if (!error) fanned += recipients.length;
+      { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
+    ).select("id");
+    if (!error) {
+      const insertedCount = inserted?.length ?? 0;
+      fanned += insertedCount;
+      await recordJobRun(supabase, {
+        organizationId: announcement.organization_id,
+        jobName: "scheduled_announcements",
+        status: "succeeded",
+        details: { announcementId: announcement.id, recipients: recipients.length, inserted: insertedCount },
+        startedAt,
+      });
+    } else {
+      await recordJobRun(supabase, {
+        organizationId: announcement.organization_id,
+        jobName: "scheduled_announcements",
+        status: "failed",
+        details: { announcementId: announcement.id, recipients: recipients.length },
+        error: error.message,
+        startedAt,
+      });
+    }
   }
 
   return NextResponse.json({ ok: true, fanned });

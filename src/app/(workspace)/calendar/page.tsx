@@ -103,6 +103,10 @@ export default async function CalendarPage({
         .from("calendar_event_link")
         .select("id, title, starts_at, html_link")
         .eq("user_id", session.userId)
+        // Hub-owned meeting/event links render through their source record.
+        // The overlay contains only Calendar-only events, avoiding duplicates.
+        .is("meeting_id", null)
+        .is("event_id", null)
         .gte("starts_at", rangeStartIso)
         .lte("starts_at", rangeEndIso)
         .limit(100),

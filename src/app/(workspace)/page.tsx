@@ -334,6 +334,7 @@ export default async function HomePage() {
                         </span>
                       </span>
                       <ProgressBar
+                        label={`${program.name} completion`}
                         percent={program.completionPercent}
                         tone={program.tone}
                       />
@@ -671,6 +672,7 @@ export default async function HomePage() {
                         : ""}
                     </p>
                     <ProgressBar
+                      label="Announcement acknowledgment progress"
                       percent={
                         latestAnn.totalRecipients > 0
                           ? (latestAnn.ackCount / latestAnn.totalRecipients) * 100

@@ -9,9 +9,15 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import { createProgram } from "@/features/projects/services/project.commands";
 
-export function ProgramCreateDialog({ people }: { people: Option[] }) {
+export function ProgramCreateDialog({
+  people,
+  defaultOpen = false,
+}: {
+  people: Option[];
+  defaultOpen?: boolean;
+}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 

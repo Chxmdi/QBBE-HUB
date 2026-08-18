@@ -82,6 +82,14 @@ export default async function ChannelPage({
   ]);
 
   const isMember = Boolean(membership);
+  const initialMessages = [...((messages ?? []) as unknown as Message[])].reverse();
+  const { data: saved } = initialMessages.length
+    ? await supabase
+        .from("saved_message")
+        .select("message_id")
+        .eq("user_id", session.userId)
+        .in("message_id", initialMessages.map((message) => message.id))
+    : { data: [] as { message_id: string }[] };
   const canPost =
     isMember &&
     !channel.archived_at &&
@@ -189,7 +197,8 @@ export default async function ChannelPage({
           canPost={canPost}
           postDisabledHint={postDisabledHint}
           replyPolicy={channel.reply_policy}
-          initialMessages={[...((messages ?? []) as unknown as Message[])].reverse()}
+          initialMessages={initialMessages}
+          initialSavedMessageIds={(saved ?? []).map((row) => row.message_id as string)}
           isStaff={session.isStaff}
         />
       </Suspense>

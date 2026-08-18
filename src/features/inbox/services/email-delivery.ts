@@ -58,3 +58,20 @@ export function alreadyDelivered(
 ): boolean {
   return existingKeys.has(deliveryDedupeKey(notificationId, channel));
 }
+
+export const MAX_DELIVERY_ATTEMPTS = 5;
+
+/** 1, 5, 25, 125 minute retry schedule, capped at five total attempts. */
+export function nextDeliveryAttempt(attempts: number, now = new Date()): string | null {
+  if (attempts >= MAX_DELIVERY_ATTEMPTS) return null;
+  const minutes = 5 ** Math.max(0, attempts - 1);
+  return new Date(now.getTime() + minutes * 60_000).toISOString();
+}
+
+export function deliveryCanRetry(
+  delivery: { status: string; attempts: number; next_attempt_at: string | null },
+  now = new Date(),
+): boolean {
+  return delivery.status === "failed" && delivery.attempts < MAX_DELIVERY_ATTEMPTS &&
+    (!delivery.next_attempt_at || new Date(delivery.next_attempt_at).getTime() <= now.getTime());
+}

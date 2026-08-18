@@ -22,7 +22,11 @@ export async function GET(request: Request) {
   if (!code || !state || !expected || state !== expected) {
     return fail("OAuth state mismatch. Try connecting again.");
   }
-  const provider = state.startsWith("google_calendar:") ? "google_calendar" : "gmail";
+  const provider = state.startsWith("google_calendar:")
+    ? "google_calendar"
+    : state.startsWith("google_drive:")
+      ? "google_drive"
+      : "gmail";
   const stateUser = state.split(":")[1];
   if (stateUser !== session.userId) {
     return fail("OAuth state did not match the signed-in user.");
@@ -94,10 +98,15 @@ export async function GET(request: Request) {
 
   try {
     if (provider === "gmail") {
-      const { fetchGmailMetadata } = await import("@/features/inbox/services/gmail-sync");
+      const { createGmailInboxWatch, fetchGmailMetadata, fetchGmailProfile } = await import("@/features/inbox/services/gmail-sync");
+      const profile = await fetchGmailProfile(tokens.access_token);
+      const { error: accountError } = await supabase.from("integration_connection")
+        .update({ external_account_id: profile.emailAddress })
+        .eq("id", connection.id);
+      if (accountError) throw new Error("Could not save the connected Gmail address.");
       const rows = await fetchGmailMetadata(tokens.access_token);
       if (rows.length) {
-        await supabase.from("gmail_message").upsert(
+        const { error: messageError } = await supabase.from("gmail_message").upsert(
           rows.map((row) => ({
             organization_id: session.organizationId,
             user_id: session.userId,
@@ -106,13 +115,37 @@ export async function GET(request: Request) {
           })),
           { onConflict: "user_id,external_id" },
         );
+        if (messageError) throw new Error(`Could not save Gmail metadata: ${messageError.message}`);
       }
-    } else {
+      const topicName = process.env.GOOGLE_GMAIL_PUBSUB_TOPIC;
+      const pushConfigured = Boolean(
+        topicName && process.env.GOOGLE_GMAIL_PUBSUB_AUDIENCE && process.env.GOOGLE_GMAIL_PUBSUB_SERVICE_ACCOUNT_EMAIL,
+      );
+      const watch = pushConfigured
+        ? await createGmailInboxWatch(tokens.access_token, topicName!)
+        : null;
+      const { error: cursorError } = await supabase.from("integration_secret")
+        .update({
+          gmail_history_id: profile.historyId ?? watch?.historyId ?? null,
+          gmail_pending_history_id: null,
+          gmail_watch_expiration_at: watch?.expirationAt ?? null,
+        })
+        .eq("connection_id", connection.id);
+      if (cursorError) throw new Error(`Could not save Gmail synchronization state: ${cursorError.message}`);
+    } else if (provider === "google_calendar") {
       const { fetchCalendarOverlay } = await import("@/features/inbox/services/gmail-sync");
-      const rows = await fetchCalendarOverlay(tokens.access_token);
-      if (rows.length) {
-        await supabase.from("calendar_event_link").upsert(
-          rows.map((row) => ({
+      const sync = await fetchCalendarOverlay(tokens.access_token);
+      // A reconnect starts a new full mirror. Clear only imported overlays;
+      // linked Hub meetings/events remain durable sources of truth.
+      const { error: resetError } = await supabase.from("calendar_event_link")
+        .delete()
+        .eq("connection_id", connection.id)
+        .is("meeting_id", null)
+        .is("event_id", null);
+      if (resetError) throw new Error(`Could not reset Google Calendar overlay: ${resetError.message}`);
+      if (sync.rows.length) {
+        const { error: calendarError } = await supabase.from("calendar_event_link").upsert(
+          sync.rows.map((row) => ({
             organization_id: session.organizationId,
             user_id: session.userId,
             connection_id: connection.id,
@@ -120,7 +153,43 @@ export async function GET(request: Request) {
           })),
           { onConflict: "user_id,external_id" },
         );
+        if (calendarError) throw new Error(`Could not save Google Calendar overlay: ${calendarError.message}`);
       }
+      const { error: cursorError } = await supabase.from("integration_secret")
+        .update({ google_calendar_sync_token: sync.syncToken })
+        .eq("connection_id", connection.id);
+      if (cursorError) throw new Error(`Could not save Google Calendar sync token: ${cursorError.message}`);
+    } else {
+      const { fetchGoogleDriveSync } = await import("@/features/inbox/services/gmail-sync");
+      const sync = await fetchGoogleDriveSync(tokens.access_token);
+      const { error: resetError } = await supabase.from("document")
+        .delete()
+        .eq("integration_connection_id", connection.id);
+      if (resetError) throw new Error(`Could not reset Google Drive metadata: ${resetError.message}`);
+      if (sync.rows.length) {
+        const { error: driveError } = await supabase.from("document").upsert(
+          sync.rows.map((row) => ({
+            organization_id: session.organizationId,
+            title: row.title,
+            description: row.description,
+            kind: "link",
+            url: row.url,
+            mime_type: row.mime_type,
+            visibility: "organization",
+            owner_id: session.userId,
+            created_by: session.userId,
+            integration_connection_id: connection.id,
+            external_id: row.external_id,
+            external_updated_at: row.updated_at,
+          })),
+          { onConflict: "integration_connection_id,external_id" },
+        );
+        if (driveError) throw new Error(`Could not save Google Drive metadata: ${driveError.message}`);
+      }
+      const { error: cursorError } = await supabase.from("integration_secret")
+        .update({ google_drive_page_token: sync.pageToken })
+        .eq("connection_id", connection.id);
+      if (cursorError) throw new Error(`Could not save Google Drive page token: ${cursorError.message}`);
     }
     await supabase
       .from("integration_connection")
@@ -134,6 +203,6 @@ export async function GET(request: Request) {
       .eq("id", connection.id);
   }
 
-  const dest = provider === "gmail" ? "/inbox?filter=mail" : "/calendar";
+  const dest = provider === "gmail" ? "/inbox?filter=mail" : provider === "google_calendar" ? "/calendar" : "/documents";
   return NextResponse.redirect(new URL(dest, request.url));
 }

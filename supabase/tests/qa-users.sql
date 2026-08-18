@@ -14,6 +14,7 @@ create or replace function tests.ensure_auth_user(
 ) returns void
 language plpgsql
 security definer
+set search_path = tests, public, auth
 as $$
 begin
   if exists (select 1 from auth.users where id = p_id or email = p_email) then

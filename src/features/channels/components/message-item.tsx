@@ -1,7 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
+  Bookmark,
   CalendarPlus,
   Gavel,
   Link2,
@@ -26,6 +28,7 @@ import {
   deleteMessage,
   editMessage,
   pinMessage,
+  toggleSavedMessage,
   toggleReaction,
 } from "@/features/channels/services/message.commands";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -53,6 +56,7 @@ export function MessageItem({
   canConvert = true,
   isStaff = false,
   highlighted = false,
+  initiallySaved = false,
 }: {
   message: Message;
   currentUserId: string;
@@ -64,7 +68,9 @@ export function MessageItem({
   canConvert?: boolean;
   isStaff?: boolean;
   highlighted?: boolean;
+  initiallySaved?: boolean;
 }) {
+  const router = useRouter();
   const { toast } = useToast();
   const [showEmoji, setShowEmoji] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -72,6 +78,7 @@ export function MessageItem({
   const [saving, setSaving] = useState(false);
   const [dialog, setDialog] = useState<ActiveDialog>(null);
   const [meetings, setMeetings] = useState<UpcomingMeeting[]>([]);
+  const [saved, setSaved] = useState(initiallySaved);
   const deleted = Boolean(message.deleted_at);
   const isAuthor = message.author_id === currentUserId;
 
@@ -94,7 +101,7 @@ export function MessageItem({
     const result = await convertMessageToTask(message.id);
     if (result.ok) {
       toast("Task created from this message.", {
-        action: { label: "Open My Work", onClick: () => window.location.assign("/my-work") },
+        action: { label: "Open My Work", onClick: () => router.push("/my-work") },
       });
     } else {
       toast(result.error ?? "Conversion failed.", { tone: "error" });
@@ -177,6 +184,16 @@ export function MessageItem({
     else toast(result.error ?? "Delete failed.", { tone: "error" });
   }
 
+  async function handleToggleSaved() {
+    const result = await toggleSavedMessage(message.id);
+    if (!result.ok) {
+      toast(result.error ?? "Could not save this message.", { tone: "error" });
+      return;
+    }
+    setSaved(Boolean(result.saved));
+    toast(result.saved ? "Message saved." : "Message removed from saved messages.");
+  }
+
   function copyPermalink() {
     // Permission-checked permalink (P0-MSG-06): the target re-checks access.
     const base = channelId
@@ -188,6 +205,11 @@ export function MessageItem({
 
   const menuItems = [
     { label: "Copy link", onSelect: copyPermalink, icon: <Link2 className="size-4" aria-hidden /> },
+    {
+      label: saved ? "Remove from saved" : "Save message",
+      onSelect: handleToggleSaved,
+      icon: <Bookmark className="size-4" aria-hidden />,
+    },
     ...(isAuthor
       ? [
           {

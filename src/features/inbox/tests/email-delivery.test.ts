@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   alreadyDelivered,
+  deliveryCanRetry,
   deliveryDedupeKey,
+  nextDeliveryAttempt,
   shouldQueueEmail,
 } from "@/features/inbox/services/email-delivery";
 
@@ -43,6 +45,22 @@ describe("shouldQueueEmail", () => {
         { email_critical: true },
       ),
     ).toBe(false);
+  });
+});
+
+describe("delivery retries", () => {
+  it("uses bounded exponential backoff and does not retry terminal rows", () => {
+    const now = new Date("2026-08-18T12:00:00.000Z");
+    expect(nextDeliveryAttempt(1, now)).toBe("2026-08-18T12:01:00.000Z");
+    expect(nextDeliveryAttempt(2, now)).toBe("2026-08-18T12:05:00.000Z");
+    expect(nextDeliveryAttempt(5, now)).toBeNull();
+  });
+
+  it("retries only failed rows whose scheduled time has arrived", () => {
+    const now = new Date("2026-08-18T12:00:00.000Z");
+    expect(deliveryCanRetry({ status: "failed", attempts: 2, next_attempt_at: "2026-08-18T11:59:00.000Z" }, now)).toBe(true);
+    expect(deliveryCanRetry({ status: "failed", attempts: 2, next_attempt_at: "2026-08-18T12:01:00.000Z" }, now)).toBe(false);
+    expect(deliveryCanRetry({ status: "sent", attempts: 1, next_attempt_at: null }, now)).toBe(false);
   });
 });
 

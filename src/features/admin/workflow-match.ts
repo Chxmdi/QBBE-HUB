@@ -13,7 +13,7 @@ export interface WorkflowRuleRow {
   enabled: boolean;
   trigger_event: string;
   condition: { status?: string };
-  action: { type?: string };
+  action: { type?: string; teamId?: string };
 }
 
 export function matchingWorkflows(
@@ -26,10 +26,17 @@ export function matchingWorkflows(
 export function workflowRecipients(options: {
   actionType: string;
   assigneeId: string | null;
+  eventOwnerId?: string | null;
+  teamMemberIds?: string[];
   adminIds: string[];
   actorId: string;
 }): string[] {
-  const ids =
-    options.actionType === "notify_admins" ? options.adminIds : options.assigneeId ? [options.assigneeId] : [];
+  const ids = options.actionType === "notify_admins"
+    ? options.adminIds
+    : options.actionType === "notify_event_owner"
+      ? options.eventOwnerId ? [options.eventOwnerId] : []
+      : options.actionType === "notify_team"
+        ? options.teamMemberIds ?? []
+      : options.assigneeId ? [options.assigneeId] : [];
   return [...new Set(ids.filter((id) => id && id !== options.actorId))];
 }

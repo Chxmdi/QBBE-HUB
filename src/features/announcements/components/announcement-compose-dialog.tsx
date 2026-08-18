@@ -9,9 +9,9 @@ import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input
 import { publishAnnouncement } from "@/features/announcements/services/announcement.commands";
 
 /** Admin-only announcement composer for the mandatory channel (P0-ANN-02). */
-export function AnnouncementComposeDialog() {
+export function AnnouncementComposeDialog({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [requiresAck, setRequiresAck] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);

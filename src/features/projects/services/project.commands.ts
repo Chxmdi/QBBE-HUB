@@ -151,7 +151,7 @@ export async function publishStatusUpdate(input: unknown): Promise<ActionResult>
       health_reason: data.healthReason?.trim() || data.blockers?.trim() || null,
     })
     .eq("id", data.projectId)
-    .select("name, program_id")
+    .select("name, program_id, owner_id")
     .maybeSingle();
 
   await supabase.from("activity_event").insert({
@@ -164,6 +164,21 @@ export async function publishStatusUpdate(input: unknown): Promise<ActionResult>
     program_id: project?.program_id ?? null,
     summary: `published a status update for “${project?.name ?? "project"}” (${data.health.replace(/_/g, " ")})`,
   });
+
+  if (project) {
+    const { fireWorkflows } = await import("@/features/admin/services/workflow.runtime");
+    await fireWorkflows(supabase, {
+      organizationId: session.organizationId,
+      actorId: session.userId,
+      eventType: "project_health_changed",
+      status: data.health,
+      title: project.name as string,
+      sourceType: "project",
+      sourceId: data.projectId,
+      link: `/projects/${data.projectId}`,
+      assigneeId: (project.owner_id as string | null) ?? null,
+    });
+  }
 
   revalidatePath(`/projects/${data.projectId}`);
   revalidatePath("/projects");

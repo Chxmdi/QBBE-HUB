@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapVmsIdentity, vmsDisconnectEffect } from "@/features/admin/services/vms";
+import { mapVmsIdentities, mapVmsIdentity, vmsDisconnectEffect } from "@/features/admin/services/vms";
 import fixture from "@/features/admin/tests/vms-identity.fixture.json";
 
 describe("VMS contract", () => {
@@ -14,6 +14,13 @@ describe("VMS contract", () => {
 
   it("rejects incomplete payloads", () => {
     expect(mapVmsIdentity({ name: "No id" })).toBeNull();
+  });
+
+  it("maps a VMS list envelope and deduplicates external identities", () => {
+    expect(mapVmsIdentities({ volunteers: [fixture, fixture, { id: "vms-7", name: "Unavailable", availability: "unavailable" }] })).toEqual([
+      { vmsId: "vms-42", displayName: "QA Volunteer", availability: "available" },
+      { vmsId: "vms-7", displayName: "Unavailable", availability: "unavailable" },
+    ]);
   });
 
   it("disconnect drops VMS fields only", () => {

@@ -56,6 +56,14 @@ export default async function ConversationPage({
 
   const title =
     conversation.title ?? (others.map((o) => o.full_name).join(", ") || "Just you");
+  const initialMessages = [...((messages ?? []) as unknown as Message[])].reverse();
+  const { data: saved } = initialMessages.length
+    ? await supabase
+        .from("saved_message")
+        .select("message_id")
+        .eq("user_id", session.userId)
+        .in("message_id", initialMessages.map((message) => message.id))
+    : { data: [] as { message_id: string }[] };
 
   return (
     <div className="-mx-4 -my-6 flex h-[calc(100dvh-3.5rem)] flex-col md:-mx-8">
@@ -78,7 +86,8 @@ export default async function ConversationPage({
           conversationId={id}
           currentUserId={session.userId}
           canPost
-          initialMessages={[...((messages ?? []) as unknown as Message[])].reverse()}
+          initialMessages={initialMessages}
+          initialSavedMessageIds={(saved ?? []).map((row) => row.message_id as string)}
           isStaff={session.isStaff}
         />
       </Suspense>

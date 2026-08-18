@@ -176,6 +176,7 @@ export default async function AnnouncementsPage() {
               {ackCount} of {totalMembers ?? 0} members acknowledged
             </p>
             <ProgressBar
+              label="Announcement acknowledgment progress"
               percent={
                 totalMembers && totalMembers > 0
                   ? (ackCount / totalMembers) * 100

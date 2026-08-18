@@ -6,7 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 export async function disconnectIntegration(
-  provider: "gmail" | "google_calendar" | "volunteer_system",
+  provider: "gmail" | "google_calendar" | "google_drive" | "volunteer_system",
 ): Promise<ActionResult> {
   const session = await requireSession();
   if (provider === "volunteer_system" && !session.isAdmin) {
@@ -36,6 +36,18 @@ export async function disconnectIntegration(
   if (provider === "google_calendar") {
     await supabase.from("calendar_event_link").delete().eq("user_id", session.userId);
   }
+  if (provider === "google_drive") {
+    const { data: connection } = await supabase
+      .from("integration_connection")
+      .select("id")
+      .eq("organization_id", session.organizationId)
+      .eq("provider", provider)
+      .eq("user_id", session.userId)
+      .maybeSingle();
+    if (connection) {
+      await supabase.from("document").delete().eq("integration_connection_id", connection.id);
+    }
+  }
   if (provider === "volunteer_system") {
     const { error: clearError } = await supabase.rpc("clear_org_vms_ids");
     if (clearError) {
@@ -55,6 +67,7 @@ export async function disconnectIntegration(
   revalidatePath("/admin");
   revalidatePath("/inbox");
   revalidatePath("/calendar");
+  revalidatePath("/documents");
   return { ok: true };
 }
 

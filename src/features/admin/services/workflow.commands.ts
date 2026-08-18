@@ -50,9 +50,20 @@ export async function deleteSavedView(id: string): Promise<ActionResult> {
 
 const workflowSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  triggerEvent: z.enum(["task_status_changed", "announcement_published"]),
+  triggerEvent: z.enum([
+    "task_status_changed",
+    "announcement_published",
+    "project_health_changed",
+    "meeting_completed",
+    "event_assignment_created",
+  ]),
   conditionStatus: z.string().optional(),
-  actionCategory: z.enum(["notify_assignee", "notify_admins"]).default("notify_assignee"),
+  actionCategory: z.enum(["notify_assignee", "notify_admins", "notify_event_owner", "notify_team"]).default("notify_assignee"),
+  actionTeamId: z.string().uuid().optional(),
+}).superRefine((value, context) => {
+  if (value.actionCategory === "notify_team" && !value.actionTeamId) {
+    context.addIssue({ code: "custom", path: ["actionTeamId"], message: "Select the team to notify." });
+  }
 });
 
 export async function createWorkflowRule(input: unknown): Promise<ActionResult> {
@@ -61,6 +72,14 @@ export async function createWorkflowRule(input: unknown): Promise<ActionResult> 
   const parsed = workflowSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid rule." };
   const supabase = await createSupabaseServerClient();
+  if (parsed.data.actionCategory === "notify_team") {
+    const { data: team } = await supabase
+      .from("team")
+      .select("id")
+      .eq("id", parsed.data.actionTeamId!)
+      .maybeSingle();
+    if (!team) return { ok: false, error: "Team not found." };
+  }
   const { data, error } = await supabase
     .from("workflow_rule")
     .insert({
@@ -70,7 +89,10 @@ export async function createWorkflowRule(input: unknown): Promise<ActionResult> 
       condition: parsed.data.conditionStatus
         ? { status: parsed.data.conditionStatus }
         : {},
-      action: { type: parsed.data.actionCategory },
+      action: {
+        type: parsed.data.actionCategory,
+        ...(parsed.data.actionTeamId ? { teamId: parsed.data.actionTeamId } : {}),
+      },
       created_by: session.userId,
     })
     .select("id")

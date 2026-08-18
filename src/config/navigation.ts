@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Bookmark,
   Building2,
   CalendarDays,
   CalendarRange,
@@ -54,6 +55,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Inbox", href: "/inbox", icon: Inbox, access: "member" },
       { label: "Channels", href: "/channels", icon: MessagesSquare, access: "member" },
       { label: "Messages", href: "/messages", icon: MessageSquare, access: "member" },
+      { label: "Saved", href: "/saved", icon: Bookmark, access: "member" },
       {
         label: "Announcements",
         href: "/announcements",

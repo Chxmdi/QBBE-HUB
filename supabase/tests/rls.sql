@@ -10,6 +10,7 @@ create schema if not exists tests;
 create or replace function tests.ok(condition boolean, msg text)
 returns void
 language plpgsql
+set search_path = tests, public, auth
 as $$
 begin
   if not condition then
@@ -22,6 +23,7 @@ $$;
 create or replace function tests.authenticate(uid uuid)
 returns void
 language plpgsql
+set search_path = tests, public, auth
 as $$
 begin
   perform set_config('role', 'authenticated', true);
@@ -38,6 +40,7 @@ $$;
 create or replace function tests.clear_auth()
 returns void
 language plpgsql
+set search_path = tests, public, auth
 as $$
 begin
   perform set_config('role', 'anon', true);
@@ -56,13 +59,83 @@ declare
   v_vol uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3';
   n int;
   v_private uuid;
+  v_private_message uuid;
+  v_private_task uuid;
+  v_private_label uuid;
+  v_private_meeting uuid;
+  v_private_agenda uuid;
+  v_other_org uuid;
+  v_other_team uuid;
+  v_other_program uuid;
+  v_other_project uuid;
+  v_other_milestone uuid;
+  v_other_task uuid;
+  v_other_label uuid;
+  v_other_crm uuid;
   v_project uuid;
+  v_job_run uuid;
   v_title text;
 begin
   -- Fixtures must exist.
   select count(*) into n from auth.users
     where id in (v_owner, v_staff, v_vol);
   perform tests.ok(n = 3, 'qa users exist');
+
+  -- A member of one organization must not discover another organization's
+  -- core directory records, teams, or membership list.
+  insert into organization (name, slug)
+  values ('RLS Isolated Organization', 'rls-isolated-' || substr(gen_random_uuid()::text, 1, 8))
+  returning id into v_other_org;
+  insert into team (organization_id, name) values (v_other_org, 'Private team')
+  returning id into v_other_team;
+  insert into program (organization_id, name, slug, created_by)
+  values (v_other_org, 'Private program', 'private-program-' || substr(gen_random_uuid()::text, 1, 8), v_owner)
+  returning id into v_other_program;
+  insert into project (organization_id, program_id, name, owner_id, created_by)
+  values (v_other_org, v_other_program, 'Private project', v_owner, v_owner)
+  returning id into v_other_project;
+  insert into milestone (project_id, name) values (v_other_project, 'Private milestone')
+  returning id into v_other_milestone;
+  insert into task (organization_id, project_id, title, created_by)
+  values (v_other_org, v_other_project, 'Private task', v_owner)
+  returning id into v_other_task;
+  insert into label (organization_id, name) values (v_other_org, 'Private label')
+  returning id into v_other_label;
+  insert into crm_organization (organization_id, name, created_by)
+  values (v_other_org, 'Private CRM organization', v_owner)
+  returning id into v_other_crm;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from organization where id = v_other_org;
+    perform tests.ok(n = 0, 'volunteer cannot read an organization they do not belong to');
+    select count(*) into n from organization_membership where organization_id = v_other_org;
+    perform tests.ok(n = 0, 'volunteer cannot read another organization membership list');
+    select count(*) into n from team where id = v_other_team;
+    perform tests.ok(n = 0, 'volunteer cannot read another organization team');
+    select count(*) into n from team_member where team_id = v_other_team;
+    perform tests.ok(n = 0, 'volunteer cannot read another organization team members');
+    select count(*) into n from program where id = v_other_program;
+    perform tests.ok(n = 0, 'volunteer cannot read another organization program');
+    select count(*) into n from project where id = v_other_project;
+    perform tests.ok(n = 0, 'volunteer cannot read another organization project');
+    select count(*) into n from milestone where id = v_other_milestone;
+    perform tests.ok(n = 0, 'volunteer cannot read another organization milestone');
+    select count(*) into n from task where id = v_other_task;
+    perform tests.ok(n = 0, 'volunteer cannot read another organization task');
+    select count(*) into n from label where id = v_other_label;
+    perform tests.ok(n = 0, 'volunteer cannot read another organization label');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_staff);
+  begin
+    set local role authenticated;
+    select count(*) into n from crm_organization where id = v_other_crm;
+    perform tests.ok(n = 0, 'staff cannot read another organization CRM records');
+  end;
+  reset role;
 
   -- Anon cannot read profiles (existence leak).
   perform tests.clear_auth();
@@ -73,6 +146,27 @@ begin
   exception
     when insufficient_privilege then
       perform tests.ok(true, 'anon cannot read user_profile (privilege denied)');
+  end;
+  reset role;
+
+  -- Job execution records are operationally useful to admins but never to volunteers.
+  insert into background_job_run (organization_id, job_name, status)
+  select o.id, 'rls_test', 'succeeded' from organization o limit 1
+  returning id into v_job_run;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from background_job_run where id = v_job_run;
+    perform tests.ok(n = 0, 'volunteer cannot read background job runs');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_owner);
+  begin
+    set local role authenticated;
+    select count(*) into n from background_job_run where id = v_job_run;
+    perform tests.ok(n = 1, 'owner can read background job runs');
   end;
   reset role;
 
@@ -136,6 +230,90 @@ begin
   end;
   reset role;
 
+  -- Task children inherit task visibility rather than organization membership.
+  insert into task (organization_id, title, status, assignee_id, requester_id, created_by)
+  select o.id, 'Private task fixture', 'not_started', v_owner, v_owner, v_owner
+  from organization o limit 1
+  returning id into v_private_task;
+  insert into checklist_item (task_id, title) values (v_private_task, 'Private checklist');
+  insert into task_comment (task_id, author_id, body) values (v_private_task, v_owner, 'Private task comment');
+  insert into label (organization_id, name)
+  select o.id, 'Private task label ' || substr(gen_random_uuid()::text, 1, 8)
+  from organization o limit 1
+  returning id into v_private_label;
+  insert into task_label (task_id, label_id) values (v_private_task, v_private_label);
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from checklist_item where task_id = v_private_task;
+    perform tests.ok(n = 0, 'volunteer cannot read checklist for an inaccessible task');
+    select count(*) into n from task_comment where task_id = v_private_task;
+    perform tests.ok(n = 0, 'volunteer cannot read comments for an inaccessible task');
+    select count(*) into n from task_label where task_id = v_private_task;
+    perform tests.ok(n = 0, 'volunteer cannot read labels for an inaccessible task');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_owner);
+  begin
+    set local role authenticated;
+    select count(*) into n from task_comment where task_id = v_private_task;
+    perform tests.ok(n = 1, 'assignee can read children for an accessible task');
+  end;
+  reset role;
+
+  -- Meeting children must not bypass a meeting's organizer/attendee policy.
+  insert into meeting (organization_id, title, organizer_id, starts_at)
+  select o.id, 'Private meeting fixture', v_owner, now()
+  from organization o limit 1
+  returning id into v_private_meeting;
+  insert into meeting_attendee (meeting_id, user_id)
+  values (v_private_meeting, v_owner);
+  insert into agenda_item (meeting_id, title)
+  values (v_private_meeting, 'Private agenda')
+  returning id into v_private_agenda;
+  insert into decision (organization_id, meeting_id, title)
+  select o.id, v_private_meeting, 'Private decision'
+  from organization o limit 1;
+  insert into meeting_action (meeting_id, agenda_item_id, title)
+  values (v_private_meeting, v_private_agenda, 'Private action');
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from meeting where id = v_private_meeting;
+    perform tests.ok(n = 0, 'volunteer cannot read an inaccessible meeting');
+    select count(*) into n from meeting_attendee where meeting_id = v_private_meeting;
+    perform tests.ok(n = 0, 'volunteer cannot read attendees for an inaccessible meeting');
+    select count(*) into n from agenda_item where meeting_id = v_private_meeting;
+    perform tests.ok(n = 0, 'volunteer cannot read agenda for an inaccessible meeting');
+    select count(*) into n from decision where meeting_id = v_private_meeting;
+    perform tests.ok(n = 0, 'volunteer cannot read decisions for an inaccessible meeting');
+    select count(*) into n from meeting_action where meeting_id = v_private_meeting;
+    perform tests.ok(n = 0, 'volunteer cannot read actions for an inaccessible meeting');
+  end;
+  reset role;
+
+  insert into meeting_attendee (meeting_id, user_id)
+  values (v_private_meeting, v_vol);
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from meeting where id = v_private_meeting;
+    perform tests.ok(n = 1, 'attendee can read their meeting');
+    select count(*) into n from meeting_attendee where meeting_id = v_private_meeting;
+    perform tests.ok(n = 2, 'attendee can read attendees for an accessible meeting');
+    select count(*) into n from agenda_item where meeting_id = v_private_meeting;
+    perform tests.ok(n = 1, 'attendee can read agenda for an accessible meeting');
+    select count(*) into n from decision where meeting_id = v_private_meeting;
+    perform tests.ok(n = 1, 'attendee can read decisions for an accessible meeting');
+    select count(*) into n from meeting_action where meeting_id = v_private_meeting;
+    perform tests.ok(n = 1, 'attendee can read actions for an accessible meeting');
+  end;
+  reset role;
+
   -- Private channel: create as owner (bypass RLS as postgres for setup).
   insert into channel (
     organization_id, name, slug, type, privacy, owner_id, created_by
@@ -162,13 +340,41 @@ begin
   -- Volunteer cannot see messages in that channel.
   insert into message (organization_id, channel_id, author_id, body)
   select o.id, v_private, v_owner, 'secret-rls-' || v_private::text
-  from organization o limit 1;
+  from organization o limit 1
+  returning id into v_private_message;
+
+  insert into message_mention (message_id, mentioned_user_id)
+  values (v_private_message, v_owner);
 
   perform tests.authenticate(v_vol);
   begin
     set local role authenticated;
     select count(*) into n from message where channel_id = v_private;
     perform tests.ok(n = 0, 'volunteer cannot read private channel messages');
+  end;
+  reset role;
+
+  -- Mention metadata must not reveal an inaccessible private message.
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from message_mention where message_id = v_private_message;
+    perform tests.ok(n = 0, 'volunteer cannot read private message mentions');
+  end;
+  reset role;
+
+  -- A guessed private-message UUID cannot be saved by a non-member.
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    insert into saved_message (user_id, message_id) values (v_vol, v_private_message);
+    perform tests.ok(false, 'volunteer must not save an inaccessible private message');
+  exception
+    when others then
+      if sqlerrm like 'FAIL:%' then
+        raise;
+      end if;
+      perform tests.ok(true, 'volunteer cannot save inaccessible private message');
   end;
   reset role;
 
@@ -198,6 +404,51 @@ begin
     set local role authenticated;
     select count(*) into n from channel where id = v_private;
     perform tests.ok(n = 1, 'volunteer can see private channel after being added');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from message_mention where message_id = v_private_message;
+    perform tests.ok(n = 1, 'volunteer can read private message mentions after being added');
+  end;
+  reset role;
+
+  -- Once channel visibility is granted, a personal saved-message bookmark is allowed.
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    insert into saved_message (user_id, message_id) values (v_vol, v_private_message);
+    select count(*) into n from saved_message where user_id = v_vol and message_id = v_private_message;
+    perform tests.ok(n = 1, 'volunteer can save an accessible private message');
+  end;
+  reset role;
+
+  -- Members may update their own notification level but not self-promote.
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    update channel_member set muted_level = 'mentions'
+      where channel_id = v_private and user_id = v_vol;
+    select count(*) into n from channel_member
+      where channel_id = v_private and user_id = v_vol and muted_level = 'mentions';
+    perform tests.ok(n = 1, 'volunteer can update own channel notification level');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    update channel_member set role = 'manager'
+      where channel_id = v_private and user_id = v_vol;
+    perform tests.ok(false, 'volunteer must not promote own channel role');
+  exception
+    when others then
+      if sqlerrm like 'FAIL:%' then
+        raise;
+      end if;
+      perform tests.ok(true, 'volunteer cannot promote own channel role');
   end;
   reset role;
 

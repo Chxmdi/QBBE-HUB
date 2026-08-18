@@ -118,6 +118,29 @@ export async function leaveChannel(channelId: string): Promise<ActionResult> {
   return { ok: true };
 }
 
+const muteSchema = z.object({
+  channelId: z.string().uuid(),
+  mutedLevel: z.enum(["all", "mentions", "muted"]),
+});
+
+/** Updates only the caller's delivery preference for a channel. */
+export async function setChannelMute(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  const parsed = muteSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid channel preference." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("channel_member")
+    .update({ muted_level: parsed.data.mutedLevel })
+    .eq("channel_id", parsed.data.channelId)
+    .eq("user_id", session.userId);
+  if (error) return { ok: false, error: "Could not update this channel preference." };
+
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
 export async function addChannelMember(
   channelId: string,
   userId: string,

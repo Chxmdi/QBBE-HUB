@@ -55,6 +55,7 @@ export function CommandPalette({
   const [loading, setLoading] = useState(false);
 
   const navItems = visibleNav({ isAdmin, isStaff }).flatMap((g) => g.items);
+  const remoteResults = query.length >= 2 ? results : [];
   const navMatches = query
     ? navItems.filter((i) =>
         i.label.toLowerCase().includes(query.toLowerCase()),
@@ -69,7 +70,7 @@ export function CommandPalette({
         href: n.href,
         icon: <n.icon className="size-4" aria-hidden />,
       })),
-      ...results.map((r) => ({
+      ...remoteResults.map((r) => ({
         label: r.title,
         sub: r.result_type,
         href: r.href,
@@ -94,22 +95,24 @@ export function CommandPalette({
 
   // Debounced permission-safe search.
   useEffect(() => {
-    if (!query || query.length < 2) {
-      setResults([]);
-      return;
-    }
-    setLoading(true);
+    if (!query || query.length < 2) return;
+    let cancelled = false;
     const timer = setTimeout(async () => {
+      setLoading(true);
       const supabase = createSupabaseBrowserClient();
       const { data } = await supabase.rpc("global_search", {
         p_query: query,
         p_limit: 12,
       });
+      if (cancelled) return;
       setResults((data as SearchResult[] | null) ?? []);
       setActiveIndex(0);
       setLoading(false);
     }, 200);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [query]);
 
   const go = useCallback(
@@ -157,7 +160,7 @@ export function CommandPalette({
           aria-expanded={items.length > 0}
           className="h-12 flex-1 bg-transparent text-[14.5px] outline-none placeholder:text-muted/60"
         />
-        {loading ? (
+        {loading && query.length >= 2 ? (
           <span className="meta" aria-live="polite">
             Searching…
           </span>

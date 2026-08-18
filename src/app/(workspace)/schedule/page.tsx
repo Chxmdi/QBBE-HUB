@@ -28,6 +28,11 @@ const HEALTH_BAR: Record<string, string> = {
   unknown: "bg-(--color-chart-progress)",
 };
 
+const HEALTH_BAR_TEXT: Record<string, string> = {
+  at_risk: "text-ink",
+  paused: "text-ink",
+};
+
 /**
  * Master Schedule (P0-GNT-01): server-prepared bounded window — never an
  * unbounded multi-year DOM timeline (CAL-006).
@@ -149,7 +154,12 @@ export default async function SchedulePage() {
                           )}
                           style={{ left: `${startOffset}%`, width: `${width}%` }}
                         >
-                          <span className="truncate text-[10.5px] font-semibold text-white">
+                          <span
+                            className={cn(
+                              "truncate text-[10.5px] font-semibold",
+                              HEALTH_BAR_TEXT[project.health] ?? "text-white",
+                            )}
+                          >
                             {project.name}
                           </span>
                         </Link>

@@ -5,6 +5,8 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MarkReadButton } from "@/features/inbox/components/mark-read-button";
+import { GmailReplyForm } from "@/features/inbox/components/gmail-reply-form";
+import { getGmailMessageDetail } from "@/features/inbox/services/gmail.commands";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { cn, relativeTime } from "@/lib/utils";
@@ -25,7 +27,7 @@ const CATEGORIES = [
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string; google_error?: string }>;
+  searchParams: Promise<{ filter?: string; google_error?: string; message?: string }>;
 }) {
   const session = await requireSession();
   const params = await searchParams;
@@ -53,7 +55,7 @@ export default async function InboxPage({
     filter === "mail"
       ? supabase
           .from("gmail_message")
-          .select("id, subject, snippet, from_address, received_at, thread_id")
+          .select("id, external_id, subject, snippet, from_address, received_at, thread_id")
           .eq("user_id", session.userId)
           .order("received_at", { ascending: false })
           .limit(50)
@@ -62,6 +64,9 @@ export default async function InboxPage({
 
   const items = (notifications ?? []) as Notification[];
   const unread = items.filter((n) => !n.read_at);
+  const selectedMail = filter === "mail" && params.message
+    ? await getGmailMessageDetail(params.message)
+    : null;
 
   return (
     <div>
@@ -104,7 +109,7 @@ export default async function InboxPage({
                 title="Gmail is not connected"
                 description={
                   googleConfigured
-                    ? "Connect your QBBE Google account to list mail metadata here. Send and reply are not available in this release."
+                    ? "Connect your QBBE Google account to list mail and securely reply without storing message bodies in QBBE Hub."
                     : "Gmail stays disconnected until an administrator sets GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and the redirect URI. This is not a fake inbox."
                 }
               />
@@ -116,10 +121,10 @@ export default async function InboxPage({
               />
             ) : (
               <ul className="card divide-y divide-line">
-                {((mail ?? []) as { id: string; subject: string | null; snippet: string | null; from_address: string | null; received_at: string | null }[]).map(
+                {((mail ?? []) as { id: string; external_id: string; subject: string | null; snippet: string | null; from_address: string | null; received_at: string | null }[]).map(
                   (row) => (
                     <li key={row.id} className="px-4 py-3">
-                      <p className="text-[13.5px] font-medium">{row.subject ?? "(no subject)"}</p>
+                      <Link href={`/inbox?filter=mail&message=${encodeURIComponent(row.external_id)}`} className="text-[13.5px] font-medium hover:text-brand-fg">{row.subject ?? "(no subject)"}</Link>
                       <p className="meta truncate">{row.from_address} · {row.snippet}</p>
                     </li>
                   ),
@@ -175,6 +180,14 @@ export default async function InboxPage({
               ))}
             </ul>
           )}
+          {selectedMail ? (
+            <article className="card mt-5 p-5">
+              <p className="text-[15px] font-semibold">{selectedMail.subject ?? "(no subject)"}</p>
+              <p className="meta mt-1">From: {selectedMail.from ?? "Unknown"} · To: {selectedMail.to ?? "Unknown"}</p>
+              <pre className="mt-4 max-h-96 overflow-auto whitespace-pre-wrap font-sans text-[13.5px] leading-relaxed">{selectedMail.body || "No plain-text body was supplied by Gmail."}</pre>
+              {selectedMail.from ? <GmailReplyForm to={selectedMail.from} subject={selectedMail.subject ?? ""} threadId={selectedMail.threadId} messageId={selectedMail.messageId} /> : null}
+            </article>
+          ) : null}
           {unread.length > 0 ? (
             <p className="meta mt-3">
               {unread.length} unread of {items.length} shown
@@ -204,14 +217,14 @@ export default async function InboxPage({
                     Reconnect required: {gmailConnection.last_error}
                   </p>
                 ) : null}
-                <p className="meta mt-2">Send and reply are not implemented.</p>
+                <p className="meta mt-2">Open a synced message to read it on demand and reply through Gmail. Existing read-only connections must reconnect to grant send permission.</p>
               </>
             ) : (
               <>
                 <Badge tone="neutral">Not connected</Badge>
                 <p className="mt-2.5 text-[13px] text-muted">
                   {googleConfigured
-                    ? "Connect Gmail to list mail next to Hub notifications. Send/reply is not shown as working."
+                    ? "Connect Gmail to list mail and send/reply from a selected message."
                     : "Gmail integration requires a QBBE-approved Google OAuth configuration. Once credentials exist, Connect appears here."}
                 </p>
                 {googleConfigured ? (

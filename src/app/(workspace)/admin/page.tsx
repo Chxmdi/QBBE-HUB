@@ -14,6 +14,7 @@ import { IntegrationActions } from "@/features/admin/components/integration-acti
 import { TeamMemberControls } from "@/features/admin/components/team-member-controls";
 import { createTeam } from "@/features/admin/services/team.commands";
 import { createWorkflowRule } from "@/features/admin/services/workflow.commands";
+import { integrationHealthLabel, integrationHealthTone } from "@/features/admin/services/integration-health";
 import { requireAdmin } from "@/lib/auth";
 import { transactionalEmailIsLive } from "@/lib/email-provider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -47,6 +48,15 @@ interface IntegrationRow {
   provider: string;
   status: string;
   last_sync_at: string | null;
+  last_error: string | null;
+}
+
+interface JobRunRow {
+  id: string;
+  job_name: string;
+  status: string;
+  error: string | null;
+  finished_at: string;
 }
 
 const INTEGRATION_CATALOG = [
@@ -59,6 +69,11 @@ const INTEGRATION_CATALOG = [
     provider: "google_calendar",
     name: "Google Calendar",
     description: "Calendar overlay and meeting sync with scoped OAuth.",
+  },
+  {
+    provider: "google_drive",
+    name: "Google Drive",
+    description: "Metadata sync for Drive resources. Opening a resource respects its Drive sharing controls.",
   },
   {
     provider: "volunteer_system",
@@ -84,6 +99,7 @@ export default async function AdminPage() {
     { data: teams },
     { data: teamMembers },
     { data: rules },
+    { data: jobRuns },
   ] =
     await Promise.all([
       supabase
@@ -106,13 +122,18 @@ export default async function AdminPage() {
         .limit(30),
       supabase
         .from("integration_connection")
-        .select("provider, status, last_sync_at"),
+        .select("provider, status, last_sync_at, last_error"),
       supabase.from("team").select("id, name, description").order("name"),
       supabase.from("team_member").select("team_id, user_id"),
       supabase
         .from("workflow_rule")
         .select("id, name, enabled, trigger_event")
         .order("created_at", { ascending: false }),
+      supabase
+        .from("background_job_run")
+        .select("id, job_name, status, error, finished_at")
+        .order("finished_at", { ascending: false })
+        .limit(20),
     ]);
 
   const memberList = ((members ?? []) as unknown as Membership[]).filter(
@@ -136,6 +157,7 @@ export default async function AdminPage() {
     enabled: boolean;
     trigger_event: string;
   }[];
+  const jobRunList = (jobRuns ?? []) as JobRunRow[];
 
   return (
     <div>
@@ -155,7 +177,7 @@ export default async function AdminPage() {
             Members
           </h2>
           <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto [contain:paint]">
               <table className="w-full text-left text-[13.5px]">
                 <thead>
                   <tr className="border-b border-line bg-surface-soft/60">
@@ -218,6 +240,26 @@ export default async function AdminPage() {
               </table>
             </div>
           </div>
+        </section>
+
+        <section aria-labelledby="admin-job-runs">
+          <h2 id="admin-job-runs" className="section-heading mb-3">Background jobs</h2>
+          {jobRunList.length === 0 ? (
+            <p className="card px-4 py-6 text-center text-[13px] text-muted">
+              No completed background jobs have been recorded for this organization yet.
+            </p>
+          ) : (
+            <ul className="card divide-y divide-line">
+              {jobRunList.map((run) => (
+                <li key={run.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-[13px]">
+                  <span className="min-w-36 font-medium">{run.job_name.replaceAll("_", " ")}</span>
+                  <Badge tone={run.status === "succeeded" ? "success" : "danger"}>{run.status}</Badge>
+                  <span className="meta ml-auto">{relativeTime(run.finished_at)}</span>
+                  {run.error ? <p className="basis-full text-[12.5px] text-danger-fg">{run.error}</p> : null}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         {/* Invitations (AUTH-007) */}
@@ -289,22 +331,26 @@ export default async function AdminPage() {
                 integration.provider === "email"
                   ? emailConfigured
                   : connection?.status === "connected";
+              const status = integration.provider === "email"
+                ? (emailConfigured ? "connected" : "configuration_required")
+                : connection?.status;
               return (
                 <div key={integration.provider} className="card p-4">
                   <div className="mb-1 flex items-center justify-between">
                     <p className="text-[14px] font-semibold">{integration.name}</p>
-                    <Badge tone={connected ? "success" : "neutral"}>
-                      {connected ? "Connected" : "Not connected"}
+                    <Badge tone={integrationHealthTone(status)}>
+                      {integrationHealthLabel(status)}
                     </Badge>
                   </div>
                   <p className="text-[13px] text-muted">{integration.description}</p>
                   <IntegrationActions
-                    provider={integration.provider as "gmail" | "google_calendar" | "volunteer_system" | "email"}
+                    provider={integration.provider as "gmail" | "google_calendar" | "google_drive" | "volunteer_system" | "email"}
                     connected={
                       integration.provider === "email"
                         ? emailConfigured
                         : connected
                     }
+                    status={status}
                     googleConfigured={googleConfigured}
                     vmsConfigured={vmsConfigured}
                   />
@@ -312,6 +358,9 @@ export default async function AdminPage() {
                     <p className="meta mt-1.5">
                       Last sync {relativeTime(connection.last_sync_at)}
                     </p>
+                  ) : null}
+                  {connection?.last_error ? (
+                    <p className="mt-1.5 text-[12.5px] text-danger-fg">{connection.last_error}</p>
                   ) : null}
                 </div>
               );
@@ -398,6 +447,9 @@ export default async function AdminPage() {
                   options: [
                     { value: "task_status_changed", label: "Task status changes" },
                     { value: "announcement_published", label: "Announcement published" },
+                    { value: "project_health_changed", label: "Project health changes" },
+                    { value: "meeting_completed", label: "Meeting completed" },
+                    { value: "event_assignment_created", label: "Event role assigned" },
                   ],
                 },
                 {
@@ -415,7 +467,16 @@ export default async function AdminPage() {
                   options: [
                     { value: "notify_assignee", label: "Notify assignee" },
                     { value: "notify_admins", label: "Notify admins" },
+                    { value: "notify_event_owner", label: "Notify event owner" },
+                    { value: "notify_team", label: "Notify a team" },
                   ],
+                },
+                {
+                  name: "actionTeamId",
+                  label: "Team to notify",
+                  type: "select",
+                  hint: "Required only when “Notify a team” is selected.",
+                  options: teamList.map((team) => ({ value: team.id, label: team.name })),
                 },
               ]}
             />

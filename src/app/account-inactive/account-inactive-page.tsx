@@ -1,10 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 
 export function AccountInactivePage() {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -18,7 +20,7 @@ export function AccountInactivePage() {
       setError("Could not sign out. Try again.");
       return;
     }
-    window.location.assign("/sign-in");
+    router.replace("/sign-in");
   }
 
   return (

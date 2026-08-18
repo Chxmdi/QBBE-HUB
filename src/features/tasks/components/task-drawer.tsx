@@ -93,12 +93,9 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
   }, []);
 
   useEffect(() => {
-    if (taskId) void load(taskId);
-    else {
-      setTask(null);
-      setComments([]);
-      setNotFound(false);
-    }
+    if (!taskId) return;
+    const timer = window.setTimeout(() => void load(taskId), 0);
+    return () => window.clearTimeout(timer);
   }, [taskId, load]);
 
   function close() {

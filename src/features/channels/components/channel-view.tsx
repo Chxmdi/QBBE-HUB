@@ -102,7 +102,7 @@ export function Composer({
         </Button>
       </div>
       <p className="meta mt-1.5 px-1">
-        Enter to send · Shift+Enter for a new line · @Full Name to mention
+        Enter to send · Shift+Enter for a new line · @Full Name or @Team to mention
       </p>
     </div>
   );
@@ -121,6 +121,7 @@ export function ChannelView({
   postDisabledHint,
   replyPolicy = "normal",
   initialMessages,
+  initialSavedMessageIds = [],
   isStaff = false,
 }: {
   channelId?: string;
@@ -130,6 +131,7 @@ export function ChannelView({
   postDisabledHint?: string;
   replyPolicy?: "normal" | "threads_only" | "disabled";
   initialMessages: Message[];
+  initialSavedMessageIds?: string[];
   isStaff?: boolean;
 }) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -139,6 +141,7 @@ export function ChannelView({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [threadRootId, setThreadRootId] = useState<string | null>(null);
   const [connection, setConnection] = useState<"live" | "reconnecting">("live");
+  const savedMessageIds = new Set(initialSavedMessageIds);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToLatestRef = useRef(true);
   const searchParams = useSearchParams();
@@ -236,9 +239,9 @@ export function ChannelView({
     const targetId = permalinkId || threadParam;
     if (!targetId) return;
     const target = messages.find((m) => m.id === targetId);
-    if (target?.thread_root_id) setThreadRootId(target.thread_root_id);
-    else if (threadParam) setThreadRootId(threadParam);
     const timer = window.setTimeout(() => {
+      if (target?.thread_root_id) setThreadRootId(target.thread_root_id);
+      else if (threadParam) setThreadRootId(threadParam);
       document.getElementById(`message-${targetId}`)?.scrollIntoView({
         block: "center",
         behavior: "smooth",
@@ -325,6 +328,7 @@ export function ChannelView({
                 isStaff={isStaff}
                 replyCount={repliesByRoot.get(message.id)?.length ?? 0}
                 highlighted={permalinkId === message.id}
+                initiallySaved={savedMessageIds.has(message.id)}
                 onOpenThread={
                   replyPolicy !== "disabled" ? setThreadRootId : undefined
                 }
@@ -368,6 +372,7 @@ export function ChannelView({
               onChanged={refresh}
               isThreadReply
               highlighted={permalinkId === threadRoot.id}
+              initiallySaved={savedMessageIds.has(threadRoot.id)}
             />
             <div className="mx-4 my-1 border-t border-line" />
             {(repliesByRoot.get(threadRoot.id) ?? []).map((reply) => (
@@ -380,6 +385,7 @@ export function ChannelView({
                 onChanged={refresh}
                 isThreadReply
                 highlighted={permalinkId === reply.id}
+                initiallySaved={savedMessageIds.has(reply.id)}
               />
             ))}
           </div>

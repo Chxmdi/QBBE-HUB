@@ -13,8 +13,12 @@ function googleConfigured(): boolean {
 }
 
 const SCOPES: Record<string, string> = {
-  gmail: "https://www.googleapis.com/auth/gmail.readonly",
-  google_calendar: "https://www.googleapis.com/auth/calendar.readonly",
+  gmail: "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send",
+  // `calendar.events` is the narrowest scope that permits Hub-created meeting
+  // events to be created, updated, and deleted. Existing read-only grants must
+  // reauthenticate to receive this expanded consent.
+  google_calendar: "https://www.googleapis.com/auth/calendar.events",
+  google_drive: "https://www.googleapis.com/auth/drive.metadata.readonly",
 };
 
 export async function GET(request: Request) {
@@ -29,8 +33,9 @@ export async function GET(request: Request) {
     );
   }
   const url = new URL(request.url);
-  const provider = url.searchParams.get("provider") === "google_calendar"
-    ? "google_calendar"
+  const requested = url.searchParams.get("provider");
+  const provider = requested === "google_calendar" || requested === "google_drive"
+    ? requested
     : "gmail";
   const state = `${provider}:${session.userId}:${crypto.randomUUID()}`;
   const cookieStore = await cookies();

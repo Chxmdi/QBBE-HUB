@@ -104,7 +104,7 @@ export function WeekView({
                           KIND_STYLES[item.kind],
                         )}
                       >
-                        <span className="block text-[9.5px] tracking-wide uppercase opacity-80">
+                        <span className="block text-[9.5px] tracking-wide uppercase">
                           {KIND_PREFIX[item.kind]}
                         </span>
                         <span className="line-clamp-2">{item.label}</span>
@@ -123,7 +123,7 @@ export function WeekView({
                       KIND_STYLES[item.kind],
                     )}
                   >
-                    <span className="block text-[9.5px] opacity-80">
+                    <span className="block text-[9.5px]">
                       {format(item.date, "h:mm a")} · {KIND_PREFIX[item.kind]}
                     </span>
                     <span className="line-clamp-2">{item.label}</span>
@@ -131,7 +131,7 @@ export function WeekView({
                 ))}
 
                 {dayItems.length === 0 ? (
-                  <p className="px-1.5 py-3 text-center text-[11px] text-muted/60">
+                  <p className="px-1.5 py-3 text-center text-[11px] text-muted">
                     Nothing scheduled
                   </p>
                 ) : null}

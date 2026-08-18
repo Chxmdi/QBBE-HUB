@@ -6,8 +6,10 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { CompleteFollowUpButton } from "@/features/crm/components/complete-follow-up-button";
 import { CrmOrganizationDialog } from "@/features/crm/components/crm-organization-dialog";
+import { createCrmContact, createFollowUp } from "@/features/crm/services/crm.commands";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
@@ -16,9 +18,14 @@ import type { CrmFollowUp, CrmOrganization } from "@/types/entities";
 export const metadata: Metadata = { title: "Relationships" };
 export const dynamic = "force-dynamic";
 
-export default async function CrmPage() {
+export default async function CrmPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ create?: string }>;
+}) {
   const session = await requireSession();
   if (!session.isStaff) redirect("/");
+  const params = await searchParams;
   const supabase = await createSupabaseServerClient();
 
   const [{ data: organizations }, { data: followUps }] = await Promise.all([
@@ -42,6 +49,10 @@ export default async function CrmPage() {
   const orgList = (organizations ?? []) as unknown as CrmOrganization[];
   const followUpList = (followUps ?? []) as unknown as CrmFollowUp[];
   const today = new Date().toISOString().slice(0, 10);
+  const organizationOptions = orgList.map((organization) => ({
+    value: organization.id,
+    label: organization.name,
+  }));
 
   return (
     <div>
@@ -49,8 +60,58 @@ export default async function CrmPage() {
         eyebrow="Relationship CRM"
         title="Relationships"
         description="Funders, schools, partners, and vendors — with one accountable owner and a next follow-up per relationship."
-        actions={<CrmOrganizationDialog />}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <CrmOrganizationDialog defaultOpen={params.create === "organization"} />
+            {organizationOptions.length > 0 ? <EntityFormDialog
+              triggerLabel="New contact"
+              triggerVariant="secondary"
+              title="Add CRM contact"
+              submitLabel="Add contact"
+              defaultOpen={params.create === "contact"}
+              action={createCrmContact}
+              fields={[
+                {
+                  name: "crmOrganizationId",
+                  label: "Organization",
+                  type: "select",
+                  required: true,
+                  options: organizationOptions,
+                },
+                { name: "fullName", label: "Name", type: "text", required: true },
+                { name: "roleTitle", label: "Role", type: "text" },
+                { name: "email", label: "Email", type: "email" },
+                { name: "phone", label: "Phone", type: "text" },
+              ]}
+            /> : null}
+            {organizationOptions.length > 0 ? <EntityFormDialog
+              triggerLabel="New follow-up"
+              triggerVariant="secondary"
+              title="Add CRM follow-up"
+              submitLabel="Add follow-up"
+              defaultOpen={params.create === "follow-up"}
+              action={createFollowUp}
+              fields={[
+                {
+                  name: "crmOrganizationId",
+                  label: "Organization",
+                  type: "select",
+                  required: true,
+                  options: organizationOptions,
+                },
+                { name: "title", label: "Follow-up", type: "text", required: true },
+                { name: "dueAt", label: "Due date", type: "date", required: true },
+              ]}
+            /> : null}
+          </div>
+        }
       />
+
+      {organizationOptions.length === 0 && ["contact", "follow-up"].includes(params.create ?? "") ? (
+        <p role="status" className="mb-5 rounded-(--radius-sm) bg-surface-soft px-3 py-2 text-[13px] text-muted">
+          Create an organization first, then add its contacts and follow-ups.
+        </p>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_360px]">
         <section aria-labelledby="crm-orgs">

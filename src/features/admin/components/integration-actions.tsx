@@ -11,11 +11,13 @@ import { Button } from "@/components/ui/button";
 export function IntegrationActions({
   provider,
   connected,
+  status,
   googleConfigured,
   vmsConfigured,
 }: {
-  provider: "gmail" | "google_calendar" | "volunteer_system" | "email";
+  provider: "gmail" | "google_calendar" | "google_drive" | "volunteer_system" | "email";
   connected: boolean;
+  status?: string | null;
   googleConfigured: boolean;
   vmsConfigured: boolean;
 }) {
@@ -46,13 +48,13 @@ export function IntegrationActions({
     return (
       <p className="meta mt-2">
         {connected
-          ? "Provider key is present. Delivery runs via the notification-email job."
-          : "Transactional email is not live. Invites are recorded, not emailed. Local Mailpit is used when EMAIL_PROVIDER_API_KEY is unset."}
+          ? "A provider key and sender address are configured. Delivery runs through the notification-email job."
+          : "Transactional email requires EMAIL_PROVIDER_API_KEY and EMAIL_FROM_ADDRESS. Local Mailpit is used only when no provider key is configured."}
       </p>
     );
   }
 
-  if (provider === "gmail" || provider === "google_calendar") {
+  if (provider === "gmail" || provider === "google_calendar" || provider === "google_drive") {
     if (!googleConfigured && !connected) {
       return (
         <p className="meta mt-2">
@@ -72,7 +74,7 @@ export function IntegrationActions({
             href={`/api/integrations/google/start?provider=${provider}`}
             className="inline-flex h-9 items-center rounded-(--radius-sm) bg-brand px-3 text-[13px] font-medium text-white hover:bg-brand-strong"
           >
-            Connect
+            {status === "authentication_expired" ? "Reauthenticate" : "Connect"}
           </a>
         )}
         {error ? <p className="text-[12.5px] text-danger-fg">{error}</p> : null}

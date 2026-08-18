@@ -18,7 +18,7 @@ const toneClasses: Record<Tone, string> = {
   warning: "bg-warning/12 text-warning-fg",
   danger: "bg-danger/12 text-danger-fg",
   info: "bg-info/12 text-info-fg",
-  accent: "bg-accent/15 text-[#8a6d1f] dark:text-accent",
+  accent: "bg-accent/15 text-accent-fg",
 };
 
 export function Badge({
