@@ -323,6 +323,13 @@ export function Topbar({
               <p className="truncate px-3 py-2 text-[13px] font-medium">
                 {name}
               </p>
+              <Link
+                href="/settings/notifications"
+                onClick={() => setOpenMenu(null)}
+                className="block px-3 py-1.5 text-[13.5px] hover:bg-surface-soft"
+              >
+                Email preferences
+              </Link>
               <form action="/auth/sign-out" method="post">
                 <button
                   type="submit"

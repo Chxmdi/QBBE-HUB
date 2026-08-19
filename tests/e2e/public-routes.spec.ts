@@ -120,8 +120,37 @@ test("sign-in is fully keyboard operable", async ({ page }) => {
   expect(outline).not.toBe("none");
 });
 
+test("the job endpoint refuses anyone without the shared secret", async ({
+  request,
+}) => {
+  // No secret at all, and a wrong one. Both are refused before the handler is
+  // looked up, so this holds with no database behind it.
+  for (const headers of [{}, { "x-job-secret": "not-the-secret" }]) {
+    const response = await request.post("/api/jobs/drain-notifications", {
+      headers,
+      failOnStatusCode: false,
+    });
+    expect(response.status()).toBe(403);
+  }
+
+  // GET is not a method this route implements, so it cannot be triggered by a
+  // crawler or a link prefetch.
+  const get = await request.get("/api/jobs/drain-notifications", {
+    failOnStatusCode: false,
+  });
+  expect(get.status()).toBe(405);
+});
+
 test("protected routes redirect unauthenticated visitors", async ({ page }) => {
-  for (const path of ["/", "/my-work", "/admin", "/crm"]) {
+  for (const path of [
+    "/",
+    "/my-work",
+    "/admin",
+    "/admin/jobs",
+    "/admin/email",
+    "/settings/notifications",
+    "/crm",
+  ]) {
     await page.goto(path);
     await page.waitForURL("**/sign-in**", { timeout: 15_000 });
     expect(page.url()).toContain("/sign-in");

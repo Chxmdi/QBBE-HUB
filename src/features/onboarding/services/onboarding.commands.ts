@@ -37,39 +37,6 @@ export async function saveOnboardingProfile(
   return { ok: true };
 }
 
-const preferencesSchema = z.object({
-  emailCritical: z.boolean().default(true),
-  emailDigest: z.boolean().default(false),
-  quietHoursStart: z.coerce.number().int().min(0).max(23).nullable().optional(),
-  quietHoursEnd: z.coerce.number().int().min(0).max(23).nullable().optional(),
-});
-
-export async function saveNotificationPreferences(
-  input: unknown,
-): Promise<ActionResult> {
-  const session = await requireSession();
-  const parsed = preferencesSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
-  const data = parsed.data;
-
-  const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("notification_preference").upsert(
-    {
-      user_id: session.userId,
-      email_critical: data.emailCritical,
-      email_digest: data.emailDigest,
-      quiet_hours_start: data.quietHoursStart ?? null,
-      quiet_hours_end: data.quietHoursEnd ?? null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id" },
-  );
-
-  if (error) return { ok: false, error: "Could not save your preferences." };
-  revalidatePath("/", "layout");
-  return { ok: true };
-}
-
 /** Marks onboarding complete. Optional steps never block the workspace. */
 export async function completeOnboarding(): Promise<ActionResult> {
   const session = await requireSession();

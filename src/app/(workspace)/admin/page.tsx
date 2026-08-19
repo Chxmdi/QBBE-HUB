@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { AdminNav } from "@/features/admin/components/admin-nav";
 import {
   MemberActiveToggle,
   MemberRoleSelect,
@@ -62,7 +63,8 @@ const INTEGRATION_CATALOG = [
   {
     provider: "email",
     name: "Transactional email",
-    description: "Notification email delivery via a verified QBBE sender domain.",
+    description:
+      "Notification and digest delivery. The pipeline is live; see Admin → Email for the delivery ledger and the transport currently in use.",
   },
 ];
 
@@ -136,6 +138,7 @@ export default async function AdminPage() {
           />
         }
       />
+      <AdminNav />
 
       <div className="space-y-10">
         {/* Members (P0-ADM-01, P0-PPL-03) */}

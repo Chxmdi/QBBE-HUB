@@ -7,7 +7,8 @@ Two suites, split by what they need.
 Covers the routes that render without a database round-trip, across the full
 §16.1 matrix: six widths (1440/1280/1024/768/390/320), both themes,
 horizontal-overflow detection, axe (WCAG 2.2 A + AA), keyboard traversal,
-focus visibility, reduced motion, and unauthenticated redirects.
+focus visibility, reduced motion, unauthenticated redirects, and the
+`/api/jobs/*` secret guard.
 
 ```bash
 npm run build
@@ -74,7 +75,20 @@ If it fails, adjust the `--color-*-fg` tokens in
 `--color-danger`, …) keep the exact Part II §2.2 brand values; only the
 `-fg` text variants are tuned for contrast, as Appendix A permits.
 
-## 4. Still manual before launch
+## 4. Background jobs and email — always on
+
+`tests/unit/drain-notifications.test.ts` and `tests/unit/job-handlers.test.ts`
+run the real job handlers against an in-memory Supabase double
+(`tests/support/fake-supabase.ts`) that reproduces unique-index violations,
+queue visibility timeouts, and archiving. They cover crash recovery,
+exactly-once delivery, dead-lettering after the attempt limit, quiet-hours
+deferral, the mandatory-delivery carve-out, and digest assembly.
+
+The database side of those same guarantees — the enqueue trigger, the dedupe
+index, pgmq's redelivery and archive behaviour — is verified directly against
+Postgres. See the verification table in `jobs.md`.
+
+## 5. Still manual before launch
 
 - Screen-reader smoke test (VoiceOver / NVDA) of: post a message, move a
   task, acknowledge an announcement, complete a meeting.

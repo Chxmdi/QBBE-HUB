@@ -14,9 +14,9 @@ import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { QbbeLogo } from "@/components/layout/qbbe-logo";
+import { saveNotificationPreferences } from "@/features/notifications/services/preferences.commands";
 import {
   completeOnboarding,
-  saveNotificationPreferences,
   saveOnboardingProfile,
 } from "@/features/onboarding/services/onboarding.commands";
 import { cn } from "@/lib/utils";

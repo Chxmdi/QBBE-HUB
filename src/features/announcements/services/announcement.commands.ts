@@ -118,8 +118,11 @@ export async function publishAnnouncement(
         body: body.slice(0, 140),
         source_type: "announcement",
         source_id: announcement.id,
-        link: "/channels",
-        urgency: priority === "critical" ? "critical" : "normal",
+        link: "/announcements",
+        // An announcement that must be acknowledged is never routine mail:
+        // 'high' and above are exempt from the per-category opt-outs, which is
+        // how NTF-003's carve-out is enforced at delivery time.
+        urgency: priority === "critical" ? "critical" : requiresAck ? "high" : "normal",
         dedupe_key: `announcement:${announcement.id}:${userId}`,
       })),
     );

@@ -34,6 +34,15 @@ recovery emails (ENV-002).
    Recovery settings before entering pilot data.
 7. Turn on MFA for the Primary Owner and Workspace Admin accounts
    (AUTH-006).
+8. Wire the scheduler to the deployment. Nothing runs on a schedule until
+   this is done, and Admin → Jobs will say so:
+
+   ```sql
+   select app.configure_job_runner('https://<domain>', '<CRON_JOB_SECRET>');
+   ```
+
+   The secret must match the `CRON_JOB_SECRET` environment variable and be at
+   least 32 characters. Full details in `jobs.md`.
 
 ## Schema changes (ENV-005, REP-004)
 
