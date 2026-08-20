@@ -69,8 +69,12 @@ All times are UTC, because pg_cron evaluates in UTC.
 | `retry-failed-emails` | every 15 min | Recovers deliveries stranded by a crash, releases holds whose re-queue was lost, and rescues notifications the trigger could not enqueue. |
 | `daily-digest` | hourly | Builds each subscriber's digest **at their own local digest hour**. |
 | `announcement-nudge` | 13:00 | Reminds anyone who has not acknowledged a required announcement. |
-| `due-date-reminders` | 12:00 | Notifies assignees of work due today, tomorrow, or overdue. |
+| `due-date-reminders` | 12:00 | Notifies assignees of work — tasks and CRM follow-ups — due today, tomorrow, or overdue. |
 | `stale-project-sweep` | Mondays 10:00 | Flags active projects with no activity in 14 days to their lead. |
+| `scheduled-announcements` | every 5 min | Fans out notifications for announcements whose publish time has arrived. |
+| `google-sync` | every 15 min | Pulls Gmail metadata, Calendar overlay and Drive links for every connected account. |
+| `gmail-watch-renew` | 07:00 | Renews Gmail push subscriptions a day before they lapse. |
+| `vms-sync` | 08:00 | Refreshes volunteer availability from the Volunteer Management System. |
 | `purge-job-history` | 06:00 | Trims `job_run` and `email_delivery` past retention. |
 
 The digest runs hourly rather than at a fixed time on purpose: each recipient's
@@ -95,11 +99,37 @@ pgmq is **at-least-once**. Exactly-once *effects* come from the handlers:
 
 ## Transports
 
-With no `EMAIL_PROVIDER_API_KEY`, the pipeline runs end to end but the final
-step logs instead of sending, and the ledger row records `provider = 'log'`.
-That makes the whole path exercisable in development and CI without an account,
-and it is impossible to mistake for a real send — Admin → Email shows a banner
-whenever the log transport is active.
+Three, picked by what the environment provides:
+
+| Transport | When | Ledger records |
+|---|---|---|
+| `resend` | `EMAIL_PROVIDER_API_KEY` is set | `provider = 'resend'` plus the provider's message id |
+| `smtp` | `SMTP_HOST` is set and no provider key is — local Mailpit | `provider = 'smtp'` |
+| `log` | neither | `provider = 'log'` |
+
+The pipeline runs end to end in all three, so queue → rules → template → ledger
+is exercisable in development and CI without an account. A development run can
+never be mistaken for a real one: the ledger says which transport ran, and Admin
+→ Email shows a banner whenever mail is not really going out.
+
+## Integration jobs
+
+`google-sync`, `gmail-watch-renew` and `vms-sync` reach outside the Hub. Two
+behaviours are worth knowing:
+
+- **Cursors.** Each connection stores its own cursor — a Gmail history id, a
+  Calendar sync token, a Drive page token — so a run asks the provider only for
+  what changed. When a provider reports a cursor as too old, the handler fetches
+  a full snapshot *before* clearing the existing mirror, so a transient failure
+  cannot leave the workspace with nothing.
+- **Health.** A failure writes a classified status onto
+  `integration_connection`, so Admin → Integrations shows what is wrong rather
+  than a silently stale panel. Per-organization detail (which connection, how
+  many records changed) goes to `background_job_run`; the runtime-level outcome
+  goes to `job_run`.
+
+A job whose credentials are absent reports itself skipped rather than failed —
+an integration that is switched off is not a fault.
 
 ## Operating it
 

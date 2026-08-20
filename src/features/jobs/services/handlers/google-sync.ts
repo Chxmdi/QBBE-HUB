@@ -1,6 +1,3 @@
-import { NextResponse } from "next/server";
-import { cronAuthorized } from "@/lib/cron-auth";
-import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   fetchCalendarOverlay,
   fetchGmailChangedMetadata,
@@ -12,33 +9,30 @@ import {
 } from "@/features/inbox/services/gmail-sync";
 import { classifyIntegrationFailure } from "@/features/admin/services/integration-health";
 import { recordJobRun } from "@/lib/job-observability";
+import type { JobContext, JobResult } from "../runner";
 
-export const dynamic = "force-dynamic";
+/**
+ * Pulls changes from the connected Google services — Gmail metadata, Calendar
+ * overlay, and Drive resource links.
+ *
+ * Each connection carries its own cursor (a Gmail history id, a Calendar sync
+ * token, a Drive page token), so a run asks Google only for what changed since
+ * the last completed sync. When Google reports a cursor as too old, the handler
+ * falls back to a full fetch — and fetches *before* clearing the existing
+ * mirror, so a transient failure cannot leave the workspace with nothing.
+ *
+ * A failure marks the connection with a classified status, so Admin →
+ * Integrations shows what is wrong rather than a silently stale panel.
+ */
 
-export async function GET(request: Request) {
-  return POST(request);
-}
-
-export async function POST(request: Request) {
-  if (!cronAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let supabase;
-  try {
-    supabase = createSupabaseServiceClient();
-  } catch {
-    return NextResponse.json({ error: "Service role is not configured." }, { status: 503 });
-  }
-
-  const { data: connections, error: connectionError } = await supabase
+export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
+  const { data: connections, error: connectionError } = await db
     .from("integration_connection")
     .select("id, user_id, organization_id, provider, status")
     .in("provider", ["gmail", "google_calendar", "google_drive"])
     .eq("status", "connected");
   if (connectionError) {
-    console.error("Google sync could not load integration connections", { error: connectionError.message });
-    return NextResponse.json({ error: "Could not load Google integration connections." }, { status: 500 });
+    throw new Error(`could not load Google connections: ${connectionError.message}`);
   }
 
   let synced = 0;
@@ -48,7 +42,7 @@ export async function POST(request: Request) {
     const startedAt = new Date().toISOString();
     try {
       if (!connection.user_id) throw new Error("Google integration has no connected user.");
-      const { data: secret, error: secretError } = await supabase
+      const { data: secret, error: secretError } = await db
         .from("integration_secret")
         .select("access_token, refresh_token, token_expires_at, gmail_history_id, gmail_pending_history_id, google_calendar_sync_token, google_drive_page_token")
         .eq("connection_id", connection.id)
@@ -63,7 +57,7 @@ export async function POST(request: Request) {
         const refreshed = await refreshGoogleAccessToken(secret.refresh_token as string);
         if (!refreshed?.access_token) throw new Error("Google access token expired and could not be refreshed.");
         accessToken = refreshed.access_token;
-        const { error: tokenUpdateError } = await supabase.from("integration_secret").update({
+        const { error: tokenUpdateError } = await db.from("integration_secret").update({
           access_token: refreshed.access_token,
           token_expires_at: refreshed.expires_in
             ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
@@ -75,7 +69,7 @@ export async function POST(request: Request) {
       if (connection.provider === "gmail") {
         const saveRows = async (rows: Awaited<ReturnType<typeof fetchGmailMetadata>>) => {
           if (!rows.length) return;
-          const { error } = await supabase.from("gmail_message").upsert(
+          const { error } = await db.from("gmail_message").upsert(
             rows.map((row) => ({
               organization_id: connection.organization_id,
               user_id: connection.user_id,
@@ -93,13 +87,13 @@ export async function POST(request: Request) {
             const changed = await fetchGmailChangedMetadata(accessToken, delta.messageIds);
             await saveRows(changed.rows);
             if (changed.removedIds.length) {
-              const { error } = await supabase.from("gmail_message")
+              const { error } = await db.from("gmail_message")
                 .delete()
                 .eq("connection_id", connection.id)
                 .in("external_id", changed.removedIds);
               if (error) throw new Error(`Could not remove stale Gmail metadata: ${error.message}`);
             }
-            const { error } = await supabase.from("integration_secret")
+            const { error } = await db.from("integration_secret")
               .update({ gmail_history_id: delta.historyId ?? historyId, gmail_pending_history_id: null })
               .eq("connection_id", connection.id);
             if (error) throw new Error(`Could not save Gmail history cursor: ${error.message}`);
@@ -109,7 +103,7 @@ export async function POST(request: Request) {
             const rows = await fetchGmailMetadata(accessToken);
             await saveRows(rows);
             const profile = await fetchGmailProfile(accessToken);
-            const { error } = await supabase.from("integration_secret")
+            const { error } = await db.from("integration_secret")
               .update({ gmail_history_id: profile.historyId, gmail_pending_history_id: null })
               .eq("connection_id", connection.id);
             if (error) throw new Error(`Could not reset Gmail history cursor: ${error.message}`);
@@ -118,7 +112,7 @@ export async function POST(request: Request) {
           const rows = await fetchGmailMetadata(accessToken);
           await saveRows(rows);
           const profile = await fetchGmailProfile(accessToken);
-          const { error } = await supabase.from("integration_secret")
+          const { error } = await db.from("integration_secret")
             .update({ gmail_history_id: profile.historyId, gmail_pending_history_id: null })
             .eq("connection_id", connection.id);
           if (error) throw new Error(`Could not initialize Gmail history cursor: ${error.message}`);
@@ -126,7 +120,7 @@ export async function POST(request: Request) {
       } else if (connection.provider === "google_calendar") {
         const saveCalendarSync = async (sync: Awaited<ReturnType<typeof fetchCalendarOverlay>>) => {
           if (sync.rows.length) {
-            const { error } = await supabase.from("calendar_event_link").upsert(
+            const { error } = await db.from("calendar_event_link").upsert(
               sync.rows.map((row) => ({
                 organization_id: connection.organization_id,
                 user_id: connection.user_id,
@@ -138,7 +132,7 @@ export async function POST(request: Request) {
             if (error) throw new Error(`Could not save Google Calendar overlay: ${error.message}`);
           }
           if (sync.removedIds.length) {
-            const { error } = await supabase.from("calendar_event_link")
+            const { error } = await db.from("calendar_event_link")
               .delete()
               .eq("connection_id", connection.id)
               .is("meeting_id", null)
@@ -146,7 +140,7 @@ export async function POST(request: Request) {
               .in("external_id", sync.removedIds);
             if (error) throw new Error(`Could not remove stale Google Calendar overlay: ${error.message}`);
           }
-          const { error } = await supabase.from("integration_secret")
+          const { error } = await db.from("integration_secret")
             .update({ google_calendar_sync_token: sync.syncToken })
             .eq("connection_id", connection.id);
           if (error) throw new Error(`Could not save Google Calendar sync token: ${error.message}`);
@@ -162,7 +156,7 @@ export async function POST(request: Request) {
           // Fetch before replacing the mirror so a transient Google failure
           // cannot discard the last known overlay.
           const fullSync = await fetchCalendarOverlay(accessToken);
-          const { error } = await supabase.from("calendar_event_link")
+          const { error } = await db.from("calendar_event_link")
             .delete()
             .eq("connection_id", connection.id)
             .is("meeting_id", null)
@@ -173,7 +167,7 @@ export async function POST(request: Request) {
       } else {
         const saveDriveSync = async (sync: Awaited<ReturnType<typeof fetchGoogleDriveSync>>) => {
           if (sync.rows.length) {
-            const { error } = await supabase.from("document").upsert(
+            const { error } = await db.from("document").upsert(
               sync.rows.map((row) => ({
               organization_id: connection.organization_id,
               title: row.title,
@@ -193,13 +187,13 @@ export async function POST(request: Request) {
             if (error) throw new Error(`Could not save Google Drive metadata: ${error.message}`);
           }
           if (sync.removedIds.length) {
-            const { error } = await supabase.from("document")
+            const { error } = await db.from("document")
               .delete()
               .eq("integration_connection_id", connection.id)
               .in("external_id", sync.removedIds);
             if (error) throw new Error(`Could not remove stale Google Drive metadata: ${error.message}`);
           }
-          const { error } = await supabase.from("integration_secret")
+          const { error } = await db.from("integration_secret")
             .update({ google_drive_page_token: sync.pageToken })
             .eq("connection_id", connection.id);
           if (error) throw new Error(`Could not save Google Drive page token: ${error.message}`);
@@ -211,19 +205,19 @@ export async function POST(request: Request) {
           const message = driveError instanceof Error ? driveError.message : "Google Drive synchronization failed.";
           if (!pageToken || !message.includes("full synchronization is required")) throw driveError;
           const fullSync = await fetchGoogleDriveSync(accessToken);
-          const { error } = await supabase.from("document")
+          const { error } = await db.from("document")
             .delete()
             .eq("integration_connection_id", connection.id);
           if (error) throw new Error(`Could not reset Google Drive metadata: ${error.message}`);
           await saveDriveSync(fullSync);
         }
       }
-      const { error: connectionUpdateError } = await supabase
+      const { error: connectionUpdateError } = await db
         .from("integration_connection")
-        .update({ last_sync_at: new Date().toISOString(), last_error: null, status: "connected" })
+        .update({ last_sync_at: now.toISOString(), last_error: null, status: "connected" })
         .eq("id", connection.id);
       if (connectionUpdateError) throw new Error(`Could not record synchronization: ${connectionUpdateError.message}`);
-      await recordJobRun(supabase, {
+      await recordJobRun(db, {
         organizationId: connection.organization_id,
         jobName: "google_sync",
         status: "succeeded",
@@ -234,11 +228,11 @@ export async function POST(request: Request) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "sync failed";
       console.error("Google integration synchronization failed", { connectionId: connection.id, provider: connection.provider, error: message });
-      await supabase
+      await db
         .from("integration_connection")
         .update({ status: classifyIntegrationFailure(message), last_error: message })
         .eq("id", connection.id);
-      await recordJobRun(supabase, {
+      await recordJobRun(db, {
         organizationId: connection.organization_id,
         jobName: "google_sync",
         status: "failed",
@@ -250,5 +244,9 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, synced, failed });
+  return {
+    processed: synced,
+    failed,
+    metadata: { connections: (connections ?? []).length },
+  };
 }

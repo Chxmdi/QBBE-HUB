@@ -4,7 +4,10 @@ import type { JobContext, JobResult } from "../runner";
 /**
  * Tells assignees about work that is due, or overdue.
  *
- * One reminder per task per state per day. The state is part of the dedupe key,
+ * Covers assigned tasks and open CRM follow-ups: both are dated commitments a
+ * person owns, and both go quiet in exactly the same way.
+ *
+ * One reminder per record per state per day. The state is part of the dedupe key,
  * so a task that slips from "due today" to "overdue" produces a second, honest
  * reminder rather than going quiet — but an overdue task does not re-nudge
  * every day forever either: the key includes the date, so the reminder repeats
@@ -12,6 +15,14 @@ import type { JobContext, JobResult } from "../runner";
  */
 
 const OPEN_STATUSES = ["not_started", "ready", "in_progress", "waiting", "blocked", "in_review"];
+
+interface FollowUpRow {
+  id: string;
+  organization_id: string;
+  title: string;
+  due_at: string;
+  owner_id: string;
+}
 
 interface TaskRow {
   id: string;
@@ -113,11 +124,55 @@ export async function dueDateReminders({
     });
   }
 
+  // Open CRM follow-ups are the same promise in a different table.
+  const { data: followUpRows, error: followUpError } = await db
+    .from("crm_follow_up")
+    .select("id, organization_id, title, due_at, owner_id")
+    .eq("status", "open")
+    .not("owner_id", "is", null)
+    .not("due_at", "is", null)
+    .lte("due_at", horizon)
+    .order("due_at", { ascending: true })
+    .limit(definition.batch_size);
+
+  if (followUpError) {
+    throw new Error(`could not load follow-ups: ${followUpError.message}`);
+  }
+
+  for (const followUp of (followUpRows ?? []) as unknown as FollowUpRow[]) {
+    const zone = zones.get(followUp.organization_id) ?? "America/Toronto";
+    const today = dateInZone(zone, now);
+    const due = followUp.due_at.slice(0, 10);
+
+    let state: "overdue" | "today" | "tomorrow" | null = null;
+    if (due < today) state = "overdue";
+    else if (due === today) state = "today";
+    else if (due === addDays(today, 1)) state = "tomorrow";
+    if (!state) continue;
+
+    drafts.push({
+      user_id: followUp.owner_id,
+      organization_id: followUp.organization_id,
+      category: "due_date",
+      title: `${state === "overdue" ? "Overdue follow-up" : "Follow-up due"}: ${followUp.title}`,
+      body: `Due ${due}.`,
+      source_type: "crm_follow_up",
+      source_id: followUp.id,
+      link: "/crm",
+      urgency: state === "overdue" ? "high" : "normal",
+      dedupe_key: `follow-up:${followUp.id}:${state}:${today}`,
+    });
+  }
+
   const created = await createNotifications(db, drafts);
 
   return {
     processed: created,
     failed: 0,
-    metadata: { scanned: (taskRows ?? []).length, candidates: drafts.length },
+    metadata: {
+      tasksScanned: (taskRows ?? []).length,
+      followUpsScanned: (followUpRows ?? []).length,
+      candidates: drafts.length,
+    },
   };
 }

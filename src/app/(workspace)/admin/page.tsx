@@ -17,7 +17,7 @@ import { createTeam } from "@/features/admin/services/team.commands";
 import { createWorkflowRule } from "@/features/admin/services/workflow.commands";
 import { integrationHealthLabel, integrationHealthTone } from "@/features/admin/services/integration-health";
 import { requireAdmin } from "@/lib/auth";
-import { transactionalEmailIsLive } from "@/lib/email-provider";
+import { transactionalEmailIsLive } from "@/features/notifications/services/email-provider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
 import type { Membership } from "@/types/entities";

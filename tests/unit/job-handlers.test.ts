@@ -285,7 +285,7 @@ describe("isoWeekKey", () => {
 
 describe("the registry", () => {
   it("registers a handler for every scheduled job", () => {
-    // These names must match `job_definition` in migration 0008; the runner
+    // These names must match `job_definition` in the database; the runner
     // refuses anything absent from either side.
     expect(JOB_NAMES.sort()).toEqual(
       [
@@ -293,9 +293,13 @@ describe("the registry", () => {
         "daily-digest",
         "drain-notifications",
         "due-date-reminders",
+        "gmail-watch-renew",
+        "google-sync",
         "purge-job-history",
         "retry-failed-emails",
+        "scheduled-announcements",
         "stale-project-sweep",
+        "vms-sync",
       ].sort(),
     );
     for (const name of JOB_NAMES) {

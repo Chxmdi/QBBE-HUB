@@ -1,16 +1,20 @@
 /**
  * Transactional email transport.
  *
- * Two transports, chosen by whether a provider key is configured:
+ * Three transports, chosen by what the environment actually provides:
  *
- *   resend — the real one. Called over plain fetch rather than an SDK, so the
- *            dependency surface stays at zero and the same code runs in Node
- *            and in an edge runtime.
- *   log    — used when no key is set. It records the message and reports
- *            success, so the whole pipeline (queue → rules → template →
- *            ledger) is exercisable in development and in CI without an
- *            account. The ledger row says `provider = 'log'`, so nobody can
- *            mistake a development run for a real send.
+ *   resend — the real one, used whenever a provider key is set. Called over
+ *            plain fetch rather than an SDK, so the dependency surface stays at
+ *            zero and the same code runs in Node and in an edge runtime.
+ *   smtp   — local Mailpit (`supabase start` exposes SMTP on :54325). Used when
+ *            SMTP_HOST is set and no provider key is, so a developer can read
+ *            the actual message rather than a log line.
+ *   log    — the last resort. It records the message and reports success, so
+ *            the whole pipeline (queue → rules → template → ledger) is
+ *            exercisable in CI with no account and no mail server.
+ *
+ * The ledger records which transport ran, so a development send can never be
+ * mistaken for a real one.
  *
  * Failures are classified. A transient one (network, 429, 5xx) is retried by
  * the queue; a permanent one (malformed address, rejected domain) is not,
@@ -18,6 +22,7 @@
  */
 
 import { emailApiKey, emailFromAddress } from "@/lib/env";
+import { sendSmtpMail } from "@/lib/smtp";
 
 export interface OutboundEmail {
   to: string;
@@ -44,8 +49,17 @@ export class EmailSendError extends Error {
 }
 
 /** Which transport this deployment will use. Surfaced in Admin → Email. */
-export function activeTransport(): "resend" | "log" {
-  return emailApiKey() ? "resend" : "log";
+export function activeTransport(): "resend" | "smtp" | "log" {
+  if (emailApiKey()) return "resend";
+  return process.env.SMTP_HOST ? "smtp" : "log";
+}
+
+/**
+ * A production sender needs both a credential and a verified From address.
+ * Admin surfaces use this to say plainly whether email is really going out.
+ */
+export function transactionalEmailIsLive(): boolean {
+  return Boolean(process.env.EMAIL_PROVIDER_API_KEY && process.env.EMAIL_FROM_ADDRESS);
 }
 
 /** A 4xx other than 408/429 means the request itself is wrong; do not retry. */
@@ -90,6 +104,25 @@ async function sendViaResend(email: OutboundEmail, apiKey: string): Promise<Send
   return { provider: "resend", providerMessageId: payload.id ?? null };
 }
 
+async function sendViaSmtp(email: OutboundEmail): Promise<SendResult> {
+  try {
+    await sendSmtpMail({
+      host: process.env.SMTP_HOST!,
+      port: Number(process.env.SMTP_PORT ?? 54325),
+      from: emailFromAddress(),
+      to: email.to,
+      subject: email.subject,
+      text: email.text,
+    });
+  } catch (cause) {
+    // A local mail server being down is transient by nature.
+    throw new EmailSendError(`SMTP delivery failed: ${String(cause)}`, {
+      retryable: true,
+    });
+  }
+  return { provider: "smtp", providerMessageId: null };
+}
+
 function sendViaLog(email: OutboundEmail): SendResult {
   console.info(
     JSON.stringify({
@@ -111,5 +144,7 @@ export async function sendEmail(email: OutboundEmail): Promise<SendResult> {
   }
 
   const apiKey = emailApiKey();
-  return apiKey ? sendViaResend(email, apiKey) : sendViaLog(email);
+  if (apiKey) return sendViaResend(email, apiKey);
+  if (process.env.SMTP_HOST) return sendViaSmtp(email);
+  return sendViaLog(email);
 }
