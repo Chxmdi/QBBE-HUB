@@ -7,7 +7,8 @@ master schedule, unified inbox, relationship CRM, reporting, people and
 access administration — one product, one data model, one permission system.
 
 Built from the **QBBE Hub Master Product, UI/UX & Development Specification
-v1.0** as a feature-first modular monolith.
+v1.0** as a feature-first modular monolith. The governing implementation and
+deployment goal is versioned in [`docs/master-spec.md`](docs/master-spec.md).
 
 ## Stack
 
@@ -20,6 +21,10 @@ v1.0** as a feature-first modular monolith.
 | Validation | Zod schemas at every server-action trust boundary |
 | Testing | Vitest (unit) · Playwright (e2e scaffold) |
 | Hosting | Vercel (app) + Supabase (data), QBBE-owned accounts |
+
+**Runtime:** Node.js 20.9 or newer is required. The production build uses
+Next.js 16's supported Webpack opt-out (`next build --webpack`) while the
+development server retains Turbopack by default.
 
 ## Getting started
 
@@ -68,6 +73,9 @@ v1.0** as a feature-first modular monolith.
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Strict TypeScript check |
 | `npm test` | Vitest unit tests |
+| `npm run test:db` | Local Supabase RLS allow/deny (`supabase start` required) |
+| `npm run test:a11y` | Playwright public-route a11y (CI) |
+| `npm run test:qa` | Authenticated 18-screen matrix (seeded QA DB) |
 | `npm run db:types` | Regenerate DB types from a linked Supabase project |
 
 ## Repository map
@@ -82,7 +90,7 @@ src/lib/              supabase clients, auth helpers, utils
 supabase/migrations/  schema, RLS policies, triggers, search (append-only)
 supabase/seed/        development/test fixtures only
 docs/adr/             architecture decision records
-docs/runbooks/        deployment, integrations, backup & recovery
+docs/runbooks/        deployment, integrations, backup, privacy, launch-gate
 ```
 
 ## Security model (summary)
@@ -97,8 +105,9 @@ docs/runbooks/        deployment, integrations, backup & recovery
   non-leavable membership at the database layer.
 - Audit events record access changes, channel and announcement actions,
   report generation/approval/export, and destructive actions.
-- No service-role key is used in request handling; the browser only ever
-  holds the anon key.
+- The browser only ever holds the publishable/anon key. Server-only
+  integration workers use the service role for narrowly scoped token and sync
+  operations; it is never exposed to a client.
 
 ## Feature status vs. the master specification
 
@@ -114,30 +123,24 @@ badge, tabs, drawer (mobile sheet), modal, dropdown menu, toast, data table
 (sticky header, selection, sorting), empty state, skeleton, message item,
 announcement, task row/card.
 
-**P0 product requirements** — auth, invitations with role pre-assignment,
-role administration; programs; projects (lifecycle, health discipline,
-structured status updates, milestones, activity, closure surfacing
-unresolved work); tasks (board/list parity, My Work with URL-shareable
-filters, task drawer with deep links, bulk actions, blocked-reason rule,
-comments); channels (public/private, directory, join policies, restricted
-posting, archive/restore, pinned resources); messages (threads, reactions,
-server-parsed mentions, edit, delete with audit marker, permalinks, unread
-cursors, realtime with reconnect state); mandatory announcements with
-acknowledgment tracking and admin progress; DMs/group DMs; message →
-task / agenda item / decision conversion; meetings (agenda builder,
-decision log, actions → tasks, channel summary handoff); events with
-per-area role assignments; unified calendar; master schedule; notification
-centre grouped actionable vs informational with dedupe keys; people
-directory with workload; CRM with duplicate detection and follow-up queue;
-versioned report snapshots with approval + CSV export; documents with
-private storage and signed URLs; admin (users, invitations, integrations,
-audit viewer); permission-safe global search + ⌘K palette + dedicated
-results view; light/dark themes; mobile bottom navigation; display density.
+**P0 product requirements** — see `docs/spec-coverage.md` for the unit-by-unit
+matrix (implemented / gated / tests). Highlights that are live: auth and
+invitations with honest “email not sent” when no provider is configured;
+programs and projects (including milestone create/complete); canonical task
+statuses on board and list; private channel membership; DMs in nav with
+message permalinks; teams; volunteer-simplified Home; snapshot reports with
+CSV **and** PDF export; RLS allow+deny harness.
 
-Deliberately staged (per roadmap Phases 4–6), shown honestly as
-not-connected in the UI: Gmail/Google Calendar OAuth sync, volunteer-system
-integration, email delivery/digests, workflow automation rules, scheduled
-announcements, opportunity pipeline forecasting.
+External integrations require QBBE-owned credentials before they can be
+validated in a real environment: Gmail OAuth/sync/watch, Google Calendar
+overlay and linked-meeting lifecycle, Google Drive metadata sync, Volunteer
+Management System sync, and production transactional email. Until configured,
+the UI stays **Not connected** and never substitutes fake operational data.
+ADR-003 (plain-text messages) remains.
+
+Deliberately out of first release (P2): native mobile apps, collaborative
+docs, built-in video, autonomous AI, presence, opportunity forecasting, Slack
+bridge, service-user/case records.
 
 ## License
 

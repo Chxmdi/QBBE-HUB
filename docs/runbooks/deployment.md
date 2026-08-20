@@ -22,8 +22,8 @@ recovery emails (ENV-002).
      `https://<domain>/auth/callback` to redirect URLs.
    - Enable email confirmation.
    - **Restrict signup**: either disable public signup once the Primary
-     Owner exists, or restrict to invited emails (Admin → Invite user
-     records the intended role which is applied automatically on sign-up).
+     Owner exists, or restrict to invited emails. The app also enforces
+     invite-only via `signup_allowed` after the first organization exists.
 4. Create the Vercel project from this repository. Set env vars:
    `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_ANON_KEY` (plus optional integrations per

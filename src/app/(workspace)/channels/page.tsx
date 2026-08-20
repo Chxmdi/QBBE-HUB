@@ -84,7 +84,7 @@ export default async function ChannelsPage({
         description="Team communication that stays close to the work. Public channels are open to every member; private channels are membership-only."
         actions={
           <>
-            {session.isAdmin ? <AnnouncementComposeDialog /> : null}
+            {session.isAdmin ? <AnnouncementComposeDialog defaultOpen={params.create === "announcement"} /> : null}
             {session.isStaff ? (
               <ChannelCreateDialog defaultOpen={params.create === "1"} />
             ) : null}

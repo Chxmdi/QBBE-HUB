@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Bookmark,
   Building2,
   CalendarDays,
   CalendarRange,
@@ -12,6 +13,7 @@ import {
   KanbanSquare,
   Layers,
   Megaphone,
+  MessageSquare,
   MessagesSquare,
   Presentation,
   Settings,
@@ -52,6 +54,8 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Inbox", href: "/inbox", icon: Inbox, access: "member" },
       { label: "Channels", href: "/channels", icon: MessagesSquare, access: "member" },
+      { label: "Messages", href: "/messages", icon: MessageSquare, access: "member" },
+      { label: "Saved", href: "/saved", icon: Bookmark, access: "member" },
       {
         label: "Announcements",
         href: "/announcements",

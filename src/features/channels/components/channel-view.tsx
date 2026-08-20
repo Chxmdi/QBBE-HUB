@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { SendHorizonal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageItem } from "@/features/channels/components/message-item";
@@ -9,6 +10,7 @@ import {
   markConversationRead,
   sendMessage,
 } from "@/features/channels/services/message.commands";
+import { CHANNEL_HISTORY_PAGE_SIZE } from "@/features/channels/history";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types/entities";
@@ -16,6 +18,12 @@ import type { Message } from "@/types/entities";
 const MESSAGE_SELECT =
   "id, channel_id, conversation_id, thread_root_id, author_id, body, is_system, created_at, edited_at, deleted_at, " +
   "author:author_id(id, full_name, email, avatar_url, title, timezone), reactions:message_reaction(message_id, user_id, emoji)";
+
+function mergeByCreatedAt(left: Message[], right: Message[]): Message[] {
+  const byId = new Map<string, Message>();
+  for (const message of [...left, ...right]) byId.set(message.id, message);
+  return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
 
 export function Composer({
   placeholder,
@@ -94,7 +102,7 @@ export function Composer({
         </Button>
       </div>
       <p className="meta mt-1.5 px-1">
-        Enter to send · Shift+Enter for a new line · @Full Name to mention
+        Enter to send · Shift+Enter for a new line · @Full Name or @Team to mention
       </p>
     </div>
   );
@@ -113,6 +121,7 @@ export function ChannelView({
   postDisabledHint,
   replyPolicy = "normal",
   initialMessages,
+  initialSavedMessageIds = [],
   isStaff = false,
 }: {
   channelId?: string;
@@ -122,12 +131,22 @@ export function ChannelView({
   postDisabledHint?: string;
   replyPolicy?: "normal" | "threads_only" | "disabled";
   initialMessages: Message[];
+  initialSavedMessageIds?: string[];
   isStaff?: boolean;
 }) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [hasOlder, setHasOlder] = useState(
+    initialMessages.length >= CHANNEL_HISTORY_PAGE_SIZE,
+  );
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [threadRootId, setThreadRootId] = useState<string | null>(null);
   const [connection, setConnection] = useState<"live" | "reconnecting">("live");
+  const savedMessageIds = new Set(initialSavedMessageIds);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToLatestRef = useRef(true);
+  const searchParams = useSearchParams();
+  const permalinkId = searchParams.get("message");
+  const threadParam = searchParams.get("thread");
   const container = channelId
     ? { column: "channel_id", id: channelId }
     : { column: "conversation_id", id: conversationId! };
@@ -138,10 +157,32 @@ export function ChannelView({
       .from("message")
       .select(MESSAGE_SELECT)
       .eq(container.column, container.id)
-      .order("created_at", { ascending: true })
-      .limit(200);
-    if (data) setMessages(data as unknown as Message[]);
+      .order("created_at", { ascending: false })
+      .limit(CHANNEL_HISTORY_PAGE_SIZE);
+    const latest = ([...((data ?? []) as unknown as Message[])] as Message[]).reverse();
+    setMessages((current) => mergeByCreatedAt(current, latest));
   }, [container.column, container.id]);
+
+  const loadOlder = useCallback(async () => {
+    if (loadingOlder || messages.length === 0) return;
+    setLoadingOlder(true);
+    stickToLatestRef.current = false;
+    const oldest = messages[0];
+    const supabase = createSupabaseBrowserClient();
+    const { data } = await supabase
+      .from("message")
+      .select(MESSAGE_SELECT)
+      .eq(container.column, container.id)
+      .lt("created_at", oldest.created_at)
+      .order("created_at", { ascending: false })
+      .limit(CHANNEL_HISTORY_PAGE_SIZE);
+    const older = ([...((data ?? []) as unknown as Message[])] as Message[]).reverse();
+    setHasOlder(older.length >= CHANNEL_HISTORY_PAGE_SIZE);
+    if (older.length) {
+      setMessages((current) => mergeByCreatedAt(older, current));
+    }
+    setLoadingOlder(false);
+  }, [container.column, container.id, loadingOlder, messages]);
 
   // Realtime: new-message signal → refetch by cursor (MSG-010).
   useEffect(() => {
@@ -186,10 +227,28 @@ export function ChannelView({
     if (conversationId) void markConversationRead(conversationId);
   }, [channelId, conversationId, messages.length]);
 
-  // Keep scrolled to the latest message.
+  // Keep scrolled to the latest message unless a permalink is targeting one
+  // or the user just loaded older history.
   useEffect(() => {
+    if (permalinkId || threadParam || !stickToLatestRef.current) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages.length]);
+  }, [messages.length, permalinkId, threadParam]);
+
+  // Consume ?message= / ?thread= (P0-MSG-06). Access is already re-checked by RLS.
+  useEffect(() => {
+    const targetId = permalinkId || threadParam;
+    if (!targetId) return;
+    const target = messages.find((m) => m.id === targetId);
+    const timer = window.setTimeout(() => {
+      if (target?.thread_root_id) setThreadRootId(target.thread_root_id);
+      else if (threadParam) setThreadRootId(threadParam);
+      document.getElementById(`message-${targetId}`)?.scrollIntoView({
+        block: "center",
+        behavior: "smooth",
+      });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [permalinkId, threadParam, messages]);
 
   const roots = messages.filter((m) => !m.thread_root_id);
   const repliesByRoot = new Map<string, Message[]>();
@@ -210,7 +269,10 @@ export function ChannelView({
       conversationId,
       body,
     });
-    if (result.ok) await refresh();
+    if (result.ok) {
+      stickToLatestRef.current = true;
+      await refresh();
+    }
     return result;
   }
 
@@ -238,6 +300,18 @@ export function ChannelView({
           </p>
         ) : null}
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto py-3">
+          {hasOlder ? (
+            <div className="mb-2 flex justify-center">
+              <button
+                type="button"
+                onClick={() => void loadOlder()}
+                disabled={loadingOlder}
+                className="rounded-(--radius-sm) px-3 py-1 text-[12.5px] font-medium text-brand-fg hover:underline disabled:opacity-60"
+              >
+                {loadingOlder ? "Loading older messages…" : "Load older messages"}
+              </button>
+            </div>
+          ) : null}
           {roots.length === 0 ? (
             <p className="px-4 py-10 text-center text-[13.5px] text-muted">
               {channelId
@@ -253,6 +327,8 @@ export function ChannelView({
                 channelId={channelId}
                 isStaff={isStaff}
                 replyCount={repliesByRoot.get(message.id)?.length ?? 0}
+                highlighted={permalinkId === message.id}
+                initiallySaved={savedMessageIds.has(message.id)}
                 onOpenThread={
                   replyPolicy !== "disabled" ? setThreadRootId : undefined
                 }
@@ -295,6 +371,8 @@ export function ChannelView({
               isStaff={isStaff}
               onChanged={refresh}
               isThreadReply
+              highlighted={permalinkId === threadRoot.id}
+              initiallySaved={savedMessageIds.has(threadRoot.id)}
             />
             <div className="mx-4 my-1 border-t border-line" />
             {(repliesByRoot.get(threadRoot.id) ?? []).map((reply) => (
@@ -306,6 +384,8 @@ export function ChannelView({
                 isStaff={isStaff}
                 onChanged={refresh}
                 isThreadReply
+                highlighted={permalinkId === reply.id}
+                initiallySaved={savedMessageIds.has(reply.id)}
               />
             ))}
           </div>

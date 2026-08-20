@@ -16,7 +16,11 @@ const inviteSchema = z.object({
  * this email, the bootstrap trigger applies the intended role and marks the
  * invitation accepted.
  */
-export async function inviteUser(input: unknown): Promise<ActionResult> {
+export interface InviteResult extends ActionResult {
+  emailSent?: boolean;
+}
+
+export async function inviteUser(input: unknown): Promise<InviteResult> {
   const session = await requireSession();
   if (!session.isAdmin) return { ok: false, error: "Admin access required." };
   const parsed = inviteSchema.safeParse(input);
@@ -49,7 +53,10 @@ export async function inviteUser(input: unknown): Promise<ActionResult> {
   });
 
   revalidatePath("/admin");
-  return { ok: true };
+  return {
+    ok: true,
+    emailSent: false,
+  };
 }
 
 const roleSchema = z.object({
@@ -126,6 +133,16 @@ export async function setMemberActive(
     .eq("id", membershipId);
   if (error) return { ok: false, error: "Could not update the account." };
 
+  if (!active) {
+    try {
+      const { createSupabaseServiceClient } = await import("@/lib/supabase/service");
+      const admin = createSupabaseServiceClient();
+      await admin.auth.admin.signOut(membership.user_id, "global");
+    } catch {
+      // Service role is optional; the account-inactive page still blocks the UI.
+    }
+  }
+
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
     actor_id: session.userId,
@@ -151,5 +168,65 @@ export async function revokeInvitation(invitationId: string): Promise<ActionResu
     .is("accepted_at", null);
   if (error) return { ok: false, error: "Could not revoke the invitation." };
   revalidatePath("/admin");
+  return { ok: true };
+}
+
+export async function transferOwnership(targetMembershipId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  if (session.role !== "owner") {
+    return { ok: false, error: "Only the Primary Owner can transfer ownership." };
+  }
+  const supabase = await createSupabaseServerClient();
+  const { data: target } = await supabase
+    .from("organization_membership")
+    .select("id, user_id, role, status")
+    .eq("id", targetMembershipId)
+    .maybeSingle();
+  if (!target) return { ok: false, error: "Membership not found." };
+  if (target.status !== "active") {
+    return { ok: false, error: "Cannot transfer ownership to a deactivated account." };
+  }
+  if (target.user_id === session.userId) {
+    return { ok: false, error: "You already hold Primary Owner." };
+  }
+
+  const { data: current } = await supabase
+    .from("organization_membership")
+    .select("id")
+    .eq("user_id", session.userId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (!current) return { ok: false, error: "Your membership was not found." };
+
+  const demote = await supabase
+    .from("organization_membership")
+    .update({ role: "admin" })
+    .eq("id", current.id);
+  if (demote.error) return { ok: false, error: "Could not demote the current owner." };
+
+  const promote = await supabase
+    .from("organization_membership")
+    .update({ role: "owner" })
+    .eq("id", targetMembershipId);
+  if (promote.error) {
+    await supabase
+      .from("organization_membership")
+      .update({ role: "owner" })
+      .eq("id", current.id);
+    return { ok: false, error: "Could not promote the new owner." };
+  }
+
+  await supabase.from("audit_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    event_type: "access",
+    action: "ownership_transferred",
+    object_type: "organization_membership",
+    object_id: targetMembershipId,
+    metadata: { from: session.userId, to: target.user_id },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/people");
   return { ok: true };
 }

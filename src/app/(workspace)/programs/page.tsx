@@ -7,7 +7,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProgramCreateDialog } from "@/features/programs/components/program-create-dialog";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
-import { requireSession } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Project, ProjectHealth } from "@/types/entities";
 
@@ -22,8 +22,13 @@ interface ProgramRow {
   lead: { id: string; full_name: string; avatar_url: string | null } | null;
 }
 
-export default async function ProgramsPage() {
-  await requireSession();
+export default async function ProgramsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ create?: string }>;
+}) {
+  await requireStaff();
+  const params = await searchParams;
   const supabase = await createSupabaseServerClient();
 
   const [{ data: programs }, { data: projects }, options] = await Promise.all([
@@ -50,7 +55,9 @@ export default async function ProgramsPage() {
         eyebrow="Long-running services"
         title="Programs"
         description="Programs organize QBBE's ongoing services; projects deliver their time-bound outcomes."
-        actions={<ProgramCreateDialog people={options.people} />}
+        actions={
+          <ProgramCreateDialog people={options.people} defaultOpen={params.create === "1"} />
+        }
       />
 
       {programList.length === 0 ? (

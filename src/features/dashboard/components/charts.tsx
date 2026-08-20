@@ -32,7 +32,7 @@ export function StatusDonut({ slices }: { slices: DonutSlice[] }) {
     });
 
   return (
-    <div className="flex items-center gap-5">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-5">
       <svg
         viewBox="0 0 120 120"
         className="size-32 shrink-0"
@@ -86,16 +86,16 @@ export function StatusDonut({ slices }: { slices: DonutSlice[] }) {
           tasks
         </text>
       </svg>
-      <ul className="space-y-1.5">
+      <ul className="w-full min-w-0 space-y-1.5">
         {slices.map((slice) => (
-          <li key={slice.label} className="flex items-center gap-2 text-[12.5px]">
+          <li key={slice.label} className="flex min-w-0 items-center gap-2 text-[12.5px]">
             <span
               aria-hidden
               className="size-2.5 rounded-full"
               style={{ background: `var(${slice.colorVar})` }}
             />
-            <span className="text-muted">{slice.label}</span>
-            <span className="ml-auto pl-3 font-semibold tabular-nums">
+            <span className="min-w-0 truncate text-muted">{slice.label}</span>
+            <span className="ml-auto shrink-0 pl-3 font-semibold tabular-nums">
               {slice.value}
               {total > 0 ? (
                 <span className="ml-1 font-normal text-muted">
@@ -182,9 +182,11 @@ export function WeeklyBars({ weeks }: { weeks: WeekBar[] }) {
 export function ProgressBar({
   percent,
   tone,
+  label = "Progress",
 }: {
   percent: number;
   tone: "good" | "attention" | "risk" | "neutral";
+  label?: string;
 }) {
   const color =
     tone === "good"
@@ -198,6 +200,7 @@ export function ProgressBar({
     <div
       className="h-1.5 w-full overflow-hidden rounded-full bg-surface-soft"
       role="progressbar"
+      aria-label={label}
       aria-valuenow={Math.round(percent)}
       aria-valuemin={0}
       aria-valuemax={100}

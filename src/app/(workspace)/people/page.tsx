@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { PersonDeepLink } from "@/features/admin/components/person-deep-link";
 import type { Membership, OrgRole } from "@/types/entities";
 
 export const metadata: Metadata = { title: "People" };
@@ -27,11 +28,16 @@ const ROLE_TONES: Record<OrgRole, "brand" | "accent" | "info" | "neutral"> = {
   guest: "neutral",
 };
 
-export default async function PeoplePage() {
+export default async function PeoplePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ person?: string; team?: string }>;
+}) {
   const session = await requireSession();
+  const params = await searchParams;
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: members }, openTasks] = await Promise.all([
+  const [{ data: members }, openTasks, { data: teams }, { data: teamMembers }] = await Promise.all([
     supabase
       .from("organization_membership")
       .select(
@@ -49,12 +55,23 @@ export default async function PeoplePage() {
           .not("assignee_id", "is", null)
           .then((res) => (res.data ?? []) as { assignee_id: string }[])
       : Promise.resolve([] as { assignee_id: string }[]),
+    supabase.from("team").select("id, name").order("name"),
+    supabase.from("team_member").select("team_id, user_id"),
   ]);
 
   const memberList = ((members ?? []) as unknown as Membership[]).filter(
     (m) => m.user_profile,
   );
-  const active = memberList.filter((m) => m.status === "active");
+  const teamList = (teams ?? []) as { id: string; name: string }[];
+  const teamMemberList = (teamMembers ?? []) as { team_id: string; user_id: string }[];
+  const teamFilter = params.team;
+  const highlighted = params.person ?? null;
+  const inTeam = teamFilter
+    ? new Set(teamMemberList.filter((m) => m.team_id === teamFilter).map((m) => m.user_id))
+    : null;
+  const active = memberList.filter(
+    (m) => m.status === "active" && (!inTeam || inTeam.has(m.user_id)),
+  );
   const inactive = memberList.filter((m) => m.status !== "active");
 
   const workload = new Map<string, number>();
@@ -69,6 +86,34 @@ export default async function PeoplePage() {
         title="People"
         description="Internal users, roles, and current workload context."
       />
+      <PersonDeepLink personId={highlighted} />
+      {teamList.length > 0 ? (
+        <nav aria-label="Filter by team" className="mb-4 flex flex-wrap gap-1.5">
+          <a
+            href="/people"
+            className={
+              !teamFilter
+                ? "rounded-full border border-brand bg-brand px-3 py-1 text-[13px] font-medium text-white"
+                : "rounded-full border border-line bg-surface px-3 py-1 text-[13px] font-medium text-muted"
+            }
+          >
+            All
+          </a>
+          {teamList.map((team) => (
+            <a
+              key={team.id}
+              href={`/people?team=${team.id}`}
+              className={
+                teamFilter === team.id
+                  ? "rounded-full border border-brand bg-brand px-3 py-1 text-[13px] font-medium text-white"
+                  : "rounded-full border border-line bg-surface px-3 py-1 text-[13px] font-medium text-muted"
+              }
+            >
+              {team.name}
+            </a>
+          ))}
+        </nav>
+      ) : null}
 
       {active.length === 0 ? (
         <EmptyState
@@ -96,7 +141,15 @@ export default async function PeoplePage() {
                 {active.map((member) => {
                   const profile = member.user_profile!;
                   return (
-                    <tr key={member.id} className="border-b border-line last:border-b-0">
+                    <tr
+                      key={member.id}
+                      id={`person-${member.user_id}`}
+                      className={
+                        member.user_id === highlighted
+                          ? "border-b border-line bg-brand-soft/40 last:border-b-0"
+                          : "border-b border-line last:border-b-0"
+                      }
+                    >
                       <td className="px-4 py-3">
                         <span className="flex items-center gap-2.5">
                           <Avatar name={profile.full_name} src={profile.avatar_url} size="md" />

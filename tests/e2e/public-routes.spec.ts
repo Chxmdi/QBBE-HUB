@@ -125,7 +125,8 @@ test("the job endpoint refuses anyone without the shared secret", async ({
 }) => {
   // No secret at all, and a wrong one. Both are refused before the handler is
   // looked up, so this holds with no database behind it.
-  for (const headers of [{}, { "x-job-secret": "not-the-secret" }]) {
+  const attempts: Record<string, string>[] = [{}, { "x-job-secret": "not-the-secret" }];
+  for (const headers of attempts) {
     const response = await request.post("/api/jobs/drain-notifications", {
       headers,
       failOnStatusCode: false,

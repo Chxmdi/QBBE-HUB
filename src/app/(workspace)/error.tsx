@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { reportError } from "@/lib/observability";
 
 /**
  * Recoverable error boundary — human-readable message with a retry path,
@@ -17,7 +18,7 @@ export default function WorkspaceError({
 }) {
   useEffect(() => {
     // Surface for diagnostics; server logs carry the correlated digest.
-    console.error(error);
+    reportError(error, { digest: error.digest });
   }, [error]);
 
   return (

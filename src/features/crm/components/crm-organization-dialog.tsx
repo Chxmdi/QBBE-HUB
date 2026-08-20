@@ -23,10 +23,10 @@ const CATEGORIES = [
  * Creates a relationship record, surfacing possible duplicates before the
  * record is created while still allowing a deliberate one (§10.13).
  */
-export function CrmOrganizationDialog() {
+export function CrmOrganizationDialog({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
   const [acknowledged, setAcknowledged] = useState(false);
   const [error, setError] = useState<string | null>(null);

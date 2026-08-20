@@ -1,16 +1,11 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypeScript from "eslint-config-next/typescript";
 
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  // Next 16 publishes native flat configs. Loading them directly avoids the
+  // legacy compatibility bridge, which cannot validate their plugin objects.
+  ...nextCoreWebVitals,
+  ...nextTypeScript,
   {
     ignores: [
       "node_modules/**",
@@ -18,6 +13,7 @@ const eslintConfig = [
       "out/**",
       "coverage/**",
       "next-env.d.ts",
+      "supabase/.temp/**",
     ],
   },
 ];

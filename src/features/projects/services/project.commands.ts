@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { slugify } from "@/lib/utils";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const createProjectSchema = z.object({
@@ -53,6 +54,32 @@ export async function createProject(input: unknown): Promise<ActionResult> {
     user_id: ownerId ?? session.userId,
     role: "manager",
   });
+
+  const channelSlug = `project-${slugify(name) || project.id.slice(0, 8)}`;
+  const { data: channel } = await supabase
+    .from("channel")
+    .insert({
+      organization_id: session.organizationId,
+      name,
+      slug: channelSlug,
+      type: "project",
+      privacy: "public",
+      purpose: `Project conversation for ${name}.`,
+      project_id: project.id,
+      program_id: programId ?? null,
+      owner_id: ownerId ?? session.userId,
+      created_by: session.userId,
+    })
+    .select("id")
+    .maybeSingle();
+  if (channel) {
+    await supabase.from("channel_member").insert({
+      channel_id: channel.id,
+      user_id: ownerId ?? session.userId,
+      role: "manager",
+      membership_source: "project",
+    });
+  }
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,
@@ -124,7 +151,7 @@ export async function publishStatusUpdate(input: unknown): Promise<ActionResult>
       health_reason: data.healthReason?.trim() || data.blockers?.trim() || null,
     })
     .eq("id", data.projectId)
-    .select("name, program_id")
+    .select("name, program_id, owner_id")
     .maybeSingle();
 
   await supabase.from("activity_event").insert({
@@ -137,6 +164,21 @@ export async function publishStatusUpdate(input: unknown): Promise<ActionResult>
     program_id: project?.program_id ?? null,
     summary: `published a status update for “${project?.name ?? "project"}” (${data.health.replace(/_/g, " ")})`,
   });
+
+  if (project) {
+    const { fireWorkflows } = await import("@/features/admin/services/workflow.runtime");
+    await fireWorkflows(supabase, {
+      organizationId: session.organizationId,
+      actorId: session.userId,
+      eventType: "project_health_changed",
+      status: data.health,
+      title: project.name as string,
+      sourceType: "project",
+      sourceId: data.projectId,
+      link: `/projects/${data.projectId}`,
+      assigneeId: (project.owner_id as string | null) ?? null,
+    });
+  }
 
   revalidatePath(`/projects/${data.projectId}`);
   revalidatePath("/projects");
@@ -374,6 +416,32 @@ export async function createProgram(input: unknown): Promise<ActionResult> {
 
   if (error || !program) return { ok: false, error: "Could not create the program." };
 
+  const channelSlug = `program-${slug || program.id.slice(0, 8)}`;
+  const { data: channel } = await supabase
+    .from("channel")
+    .insert({
+      organization_id: session.organizationId,
+      name,
+      slug: channelSlug,
+      type: "program",
+      privacy: "public",
+      purpose: `Program conversation for ${name}.`,
+      program_id: program.id,
+      owner_id: leadId ?? session.userId,
+      created_by: session.userId,
+    })
+    .select("id")
+    .maybeSingle();
+  if (channel) {
+    await supabase.from("channel_member").insert({
+      channel_id: channel.id,
+      user_id: leadId ?? session.userId,
+      role: "manager",
+      membership_source: "program",
+    });
+  }
+
   revalidatePath("/programs");
+  revalidatePath("/channels");
   return { ok: true, id: program.id as string };
 }

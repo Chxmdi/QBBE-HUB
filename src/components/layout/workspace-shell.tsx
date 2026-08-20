@@ -74,6 +74,7 @@ export function WorkspaceShell({
         <Topbar
           name={name}
           avatarUrl={avatarUrl}
+          isAdmin={isAdmin}
           isStaff={isStaff}
           unreadCount={unreadCount}
           density={density}

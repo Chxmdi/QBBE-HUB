@@ -15,6 +15,10 @@ import type { Meeting } from "@/types/entities";
 export const metadata: Metadata = { title: "Meetings" };
 export const dynamic = "force-dynamic";
 
+function meetingListCutoff() {
+  return new Date(Date.now() - 3600_000).toISOString();
+}
+
 export default async function MeetingsPage({
   searchParams,
 }: {
@@ -23,6 +27,7 @@ export default async function MeetingsPage({
   const session = await requireSession();
   const params = await searchParams;
   const supabase = await createSupabaseServerClient();
+  const cutoff = meetingListCutoff();
 
   const [{ data: upcoming }, { data: past }, { data: projects }] =
     await Promise.all([
@@ -32,7 +37,7 @@ export default async function MeetingsPage({
           "id, title, purpose, organizer_id, starts_at, ends_at, location, meeting_link, status, notes, channel_id, program_id, project_id, " +
             "organizer:organizer_id(id, full_name, email, avatar_url, title, timezone), project:project_id(id, name)",
         )
-        .gte("starts_at", new Date(Date.now() - 3600_000).toISOString())
+        .gte("starts_at", cutoff)
         .neq("status", "cancelled")
         .order("starts_at")
         .limit(30),
@@ -42,7 +47,7 @@ export default async function MeetingsPage({
           "id, title, purpose, organizer_id, starts_at, ends_at, location, meeting_link, status, notes, channel_id, program_id, project_id, " +
             "organizer:organizer_id(id, full_name, email, avatar_url, title, timezone), project:project_id(id, name)",
         )
-        .lt("starts_at", new Date(Date.now() - 3600_000).toISOString())
+        .lt("starts_at", cutoff)
         .order("starts_at", { ascending: false })
         .limit(15),
       supabase

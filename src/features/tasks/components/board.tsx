@@ -9,15 +9,7 @@ import { StatusSelect } from "@/features/tasks/components/status-select";
 import { updateTaskStatus } from "@/features/tasks/services/task.commands";
 import { cn, dueLabel } from "@/lib/utils";
 import type { Task, TaskStatus } from "@/types/entities";
-
-const BOARD_COLUMNS: TaskStatus[] = [
-  "not_started",
-  "ready",
-  "in_progress",
-  "blocked",
-  "in_review",
-  "completed",
-];
+import { BOARD_COLUMNS } from "@/features/tasks/schemas";
 
 /**
  * Kanban board — a projection of the same durable task records as the list

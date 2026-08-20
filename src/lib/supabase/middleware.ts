@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth"];
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth", "/account-inactive"];
 
 /**
  * Refreshes the Supabase session on every request and redirects
@@ -11,6 +11,12 @@ const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth"];
  * still enforced by RLS.
  */
 export async function updateSession(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  // Cron/job routes authenticate with CRON_JOB_SECRET, not a user session.
+  if (path.startsWith("/api/jobs")) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -38,7 +44,6 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
 
   if (!user && !isPublic) {

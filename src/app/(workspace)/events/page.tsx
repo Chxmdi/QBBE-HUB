@@ -22,6 +22,10 @@ const STATUS_TONES = {
   cancelled: "neutral",
 } as const;
 
+function eventListCutoff() {
+  return Date.now() - 3600_000;
+}
+
 export default async function EventsPage({
   searchParams,
 }: {
@@ -51,12 +55,12 @@ export default async function EventsPage({
     ]);
 
   const eventList = (events ?? []) as unknown as EventRecord[];
-  const now = Date.now();
+  const cutoff = eventListCutoff();
   const upcoming = eventList
-    .filter((e) => new Date(e.starts_at).getTime() >= now - 3600_000)
+    .filter((e) => new Date(e.starts_at).getTime() >= cutoff)
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   const past = eventList.filter(
-    (e) => new Date(e.starts_at).getTime() < now - 3600_000,
+    (e) => new Date(e.starts_at).getTime() < cutoff,
   );
 
   function EventRow({ event }: { event: EventRecord }) {
@@ -119,7 +123,7 @@ export default async function EventsPage({
                   options: (projects ?? []).map((p) => ({ value: p.id, label: p.name })),
                 },
                 { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1 },
-                { name: "endsAt", label: "Ends", type: "datetime-local", colSpan: 1 },
+                { name: "endsAt", label: "Ends (defaults to one hour)", type: "datetime-local", colSpan: 1 },
                 { name: "location", label: "Location", type: "text", colSpan: 1 },
                 {
                   name: "volunteerNeed",

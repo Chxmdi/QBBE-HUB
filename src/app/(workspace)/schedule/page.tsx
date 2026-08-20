@@ -10,7 +10,7 @@ import { CalendarRange } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { HealthBadge } from "@/components/shared/status-badges";
 import { EmptyState } from "@/components/ui/empty-state";
-import { requireSession } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types/entities";
@@ -28,12 +28,17 @@ const HEALTH_BAR: Record<string, string> = {
   unknown: "bg-(--color-chart-progress)",
 };
 
+const HEALTH_BAR_TEXT: Record<string, string> = {
+  at_risk: "text-ink",
+  paused: "text-ink",
+};
+
 /**
  * Master Schedule (P0-GNT-01): server-prepared bounded window — never an
  * unbounded multi-year DOM timeline (CAL-006).
  */
 export default async function SchedulePage() {
-  await requireSession();
+  await requireStaff();
   const supabase = await createSupabaseServerClient();
 
   const windowStart = startOfMonth(addMonths(new Date(), -1));
@@ -149,7 +154,12 @@ export default async function SchedulePage() {
                           )}
                           style={{ left: `${startOffset}%`, width: `${width}%` }}
                         >
-                          <span className="truncate text-[10.5px] font-semibold text-white">
+                          <span
+                            className={cn(
+                              "truncate text-[10.5px] font-semibold",
+                              HEALTH_BAR_TEXT[project.health] ?? "text-white",
+                            )}
+                          >
                             {project.name}
                           </span>
                         </Link>

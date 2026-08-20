@@ -7,6 +7,9 @@ import { PageHeader } from "@/components/shared/page-header";
 import { LinkTabs } from "@/components/shared/link-tabs";
 import { HealthBadge } from "@/components/shared/status-badges";
 import { CloseProjectDialog } from "@/features/projects/components/close-project-dialog";
+import { CompleteMilestoneButton } from "@/features/projects/components/complete-milestone-button";
+import { createMilestone } from "@/features/projects/services/milestone.commands";
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { TaskDrawer } from "@/features/tasks/components/task-drawer";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -15,7 +18,7 @@ import { StatusUpdateForm } from "@/features/projects/components/status-update-f
 import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
 import { TaskRow } from "@/features/tasks/components/task-row";
 import { TASK_SELECT, getPickerOptions } from "@/features/tasks/services/task.queries";
-import { requireSession } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
 import type {
@@ -36,7 +39,7 @@ export default async function ProjectDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string }>;
 }) {
-  const session = await requireSession();
+  const session = await requireStaff();
   const { id } = await params;
   const { tab: tabParam } = await searchParams;
   const tab = tabParam ?? "overview";
@@ -295,9 +298,25 @@ export default async function ProjectDetailPage({
         <div className={tab === "overview" ? "space-y-8" : "hidden"}>
           {/* Milestones */}
           <section aria-labelledby="project-milestones">
-            <h2 id="project-milestones" className="section-heading mb-3">
-              Milestones
-            </h2>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 id="project-milestones" className="section-heading">
+                Milestones
+              </h2>
+              {session.isStaff ? (
+                <EntityFormDialog
+                  triggerLabel="Add milestone"
+                  triggerVariant="secondary"
+                  title="Add milestone"
+                  submitLabel="Create"
+                  extraValues={{ projectId: project.id }}
+                  action={createMilestone}
+                  fields={[
+                    { name: "name", label: "Name", type: "text", required: true },
+                    { name: "dueDate", label: "Target date", type: "date" },
+                  ]}
+                />
+              ) : null}
+            </div>
             {(milestones ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
                 No milestones defined.
@@ -317,6 +336,12 @@ export default async function ProjectDetailPage({
                     <span className="meta whitespace-nowrap">
                       {formatDate(m.due_date)}
                     </span>
+                    {session.isStaff ? (
+                      <CompleteMilestoneButton
+                        milestoneId={m.id}
+                        completed={Boolean(m.completed_at)}
+                      />
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -380,7 +405,7 @@ export default async function ProjectDetailPage({
       </div>
 
       <Suspense fallback={null}>
-        <TaskDrawer people={options.people} />
+        <TaskDrawer people={options.people} isStaff={session.isStaff} />
       </Suspense>
     </div>
   );

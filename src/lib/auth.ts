@@ -50,10 +50,23 @@ export const getSessionContext = cache(
   },
 );
 
-/** Redirects to sign-in when unauthenticated; returns session otherwise. */
+/** Redirects to sign-in when unauthenticated; inactive members get a dedicated page. */
 export async function requireSession(): Promise<SessionContext> {
   const session = await getSessionContext();
-  if (!session) redirect("/sign-in");
+  if (session) return session;
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/sign-in");
+  redirect("/account-inactive");
+}
+
+/** Route gate for staff-and-above surfaces (portfolio, CRM, reports). */
+export async function requireStaff(): Promise<SessionContext> {
+  const session = await requireSession();
+  if (!session.isStaff) redirect("/");
   return session;
 }
 

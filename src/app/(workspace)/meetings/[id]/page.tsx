@@ -6,12 +6,14 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { CancelMeetingButton } from "@/features/meetings/components/cancel-meeting-button";
 import { CompleteMeetingButton } from "@/features/meetings/components/complete-meeting-button";
 import { MeetingNotesForm } from "@/features/meetings/components/meeting-notes-form";
 import {
   addAgendaItem,
   addMeetingAction,
   recordDecision,
+  updateMeeting,
 } from "@/features/meetings/services/meeting.commands";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
@@ -52,6 +54,7 @@ export default async function MeetingDetailPage({
     title: string;
     purpose: string | null;
     starts_at: string;
+    ends_at: string | null;
     location: string | null;
     meeting_link: string | null;
     status: string;
@@ -89,6 +92,8 @@ export default async function MeetingDetailPage({
   const organizer = meeting.organizer;
   const project = meeting.project;
   const isCompleted = meeting.status === "completed";
+  const isCancelled = meeting.status === "cancelled";
+  const isActive = !isCompleted && !isCancelled;
 
   return (
     <div>
@@ -102,13 +107,33 @@ export default async function MeetingDetailPage({
         title={meeting.title}
         description={meeting.purpose ?? undefined}
         actions={
-          session.isStaff && !isCompleted ? (
-            <CompleteMeetingButton meetingId={meeting.id} />
+          session.isStaff && isActive ? (
+            <div className="flex flex-wrap items-start gap-2">
+              <EntityFormDialog
+                triggerLabel="Edit"
+                triggerVariant="secondary"
+                title="Edit meeting"
+                submitLabel="Save changes"
+                action={updateMeeting}
+                extraValues={{ meetingId: meeting.id }}
+                fields={[
+                  { name: "title", label: "Title", type: "text", required: true, defaultValue: meeting.title },
+                  { name: "purpose", label: "Purpose", type: "textarea", defaultValue: meeting.purpose ?? "" },
+                  { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1, defaultValue: new Date(meeting.starts_at).toISOString().slice(0, 16) },
+                  { name: "durationMinutes", label: "Duration (minutes)", type: "number", required: true, colSpan: 1, defaultValue: String(Math.max(15, Math.round(((meeting.ends_at ? new Date(meeting.ends_at).getTime() : new Date(meeting.starts_at).getTime() + 3_600_000) - new Date(meeting.starts_at).getTime()) / 60_000))) },
+                  { name: "location", label: "Location", type: "text", defaultValue: meeting.location ?? "" },
+                ]}
+              />
+              <CancelMeetingButton meetingId={meeting.id} />
+              <CompleteMeetingButton meetingId={meeting.id} />
+            </div>
           ) : isCompleted ? (
             <Badge tone="success">
               <CheckCircle2 className="size-3" aria-hidden />
               Completed{meeting.summary_posted_at ? " · summary posted" : ""}
             </Badge>
+          ) : isCancelled ? (
+            <Badge tone="danger">Cancelled</Badge>
           ) : undefined
         }
       />
@@ -154,7 +179,7 @@ export default async function MeetingDetailPage({
               <h2 id="agenda-heading" className="section-heading">
                 Agenda
               </h2>
-              {!isCompleted ? (
+              {isActive ? (
                 <EntityFormDialog
                   triggerLabel="Add item"
                   triggerVariant="secondary"
@@ -222,7 +247,7 @@ export default async function MeetingDetailPage({
             <h2 id="notes-heading" className="section-heading mb-3">
               Notes
             </h2>
-            {session.isStaff ? (
+            {session.isStaff && !isCancelled ? (
               <MeetingNotesForm meetingId={meeting.id} initialNotes={meeting.notes} />
             ) : meeting.notes ? (
               <p className="card p-4 text-[13.5px] whitespace-pre-wrap">
@@ -244,7 +269,7 @@ export default async function MeetingDetailPage({
                 <Gavel className="size-4 text-muted" aria-hidden />
                 Decisions
               </h2>
-              {session.isStaff ? (
+              {session.isStaff && !isCancelled ? (
                 <EntityFormDialog
                   triggerLabel="Record"
                   triggerVariant="secondary"
@@ -284,7 +309,7 @@ export default async function MeetingDetailPage({
                 <ListChecks className="size-4 text-muted" aria-hidden />
                 Actions
               </h2>
-              {session.isStaff ? (
+              {session.isStaff && !isCancelled ? (
                 <EntityFormDialog
                   triggerLabel="Add action"
                   triggerVariant="secondary"

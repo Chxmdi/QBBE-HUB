@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { mentionRecipientIds } from "@/features/channels/mention-recipients";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const sendMessageSchema = z.object({
@@ -54,30 +55,40 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
 
   // Server-side mention parsing (MSG-005).
   if (body.includes("@")) {
-    const { data: members } = await supabase
-      .from("organization_membership")
-      .select("user_id, user_profile:user_id(full_name)")
-      .eq("status", "active");
+    const [{ data: members }, { data: teams }, { data: audience }] = await Promise.all([
+      supabase.from("organization_membership").select("user_id, user_profile:user_id(full_name)").eq("status", "active"),
+      supabase.from("team").select("id, name").eq("organization_id", session.organizationId),
+      channelId
+        ? supabase.from("channel_member").select("user_id").eq("channel_id", channelId)
+        : supabase.from("conversation_member").select("user_id").eq("conversation_id", conversationId!),
+    ]);
 
     type MemberRow = {
       user_id: string;
       user_profile: { full_name: string } | null;
     };
-    const lowered = body.toLowerCase();
-    const mentioned = ((members ?? []) as unknown as MemberRow[]).filter(
-      (m) =>
-        m.user_profile &&
-        m.user_id !== session.userId &&
-        lowered.includes(`@${m.user_profile.full_name.toLowerCase()}`),
-    );
+    const teamIds = (teams ?? []).map((team) => team.id as string);
+    const { data: teamMembers } = teamIds.length
+      ? await supabase.from("team_member").select("team_id, user_id").in("team_id", teamIds)
+      : { data: [] as { team_id: string; user_id: string }[] };
+    const mentioned = mentionRecipientIds({
+      body,
+      authorId: session.userId,
+      eligibleUserIds: (audience ?? []).map((row) => row.user_id as string),
+      members: ((members ?? []) as unknown as MemberRow[]).flatMap((member) => member.user_profile
+        ? [{ userId: member.user_id, fullName: member.user_profile.full_name }]
+        : []),
+      teams: (teams ?? []).map((team) => ({ id: team.id as string, name: team.name as string })),
+      teamMembers: (teamMembers ?? []).map((member) => ({ teamId: member.team_id as string, userId: member.user_id as string })),
+    });
 
-    for (const member of mentioned) {
+    for (const userId of mentioned) {
       await supabase.from("message_mention").insert({
         message_id: message.id,
-        mentioned_user_id: member.user_id,
+        mentioned_user_id: userId,
       });
       await supabase.from("notification").insert({
-        user_id: member.user_id,
+        user_id: userId,
         organization_id: session.organizationId,
         category: "mention",
         title: `${session.profile.full_name} mentioned you`,
@@ -85,7 +96,7 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
         source_type: "message",
         source_id: message.id,
         link: channelId ? `/channels/${channelId}` : `/messages/${conversationId}`,
-        dedupe_key: `mention:${message.id}:${member.user_id}`,
+        dedupe_key: `mention:${message.id}:${userId}`,
       });
     }
   }
@@ -149,6 +160,54 @@ export async function toggleReaction(
     });
   }
   return { ok: true };
+}
+
+/**
+ * Saves a message to the caller's personal collection. The readable-message
+ * lookup deliberately happens before the write: a guessed UUID must never be
+ * enough to create a reference to a private channel or conversation.
+ */
+export async function toggleSavedMessage(
+  messageId: string,
+): Promise<ActionResult & { saved?: boolean }> {
+  const session = await requireSession();
+  if (!z.string().uuid().safeParse(messageId).success) {
+    return { ok: false, error: "Invalid message." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: message } = await supabase
+    .from("message")
+    .select("id")
+    .eq("id", messageId)
+    .maybeSingle();
+  if (!message) return { ok: false, error: "Message not found or not accessible." };
+
+  const { data: existing } = await supabase
+    .from("saved_message")
+    .select("message_id")
+    .eq("user_id", session.userId)
+    .eq("message_id", messageId)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase
+      .from("saved_message")
+      .delete()
+      .eq("user_id", session.userId)
+      .eq("message_id", messageId);
+    if (error) return { ok: false, error: "Could not remove the saved message." };
+    revalidatePath("/saved");
+    return { ok: true, saved: false };
+  }
+
+  const { error } = await supabase.from("saved_message").insert({
+    user_id: session.userId,
+    message_id: messageId,
+  });
+  if (error) return { ok: false, error: "Could not save this message." };
+  revalidatePath("/saved");
+  return { ok: true, saved: true };
 }
 
 const editSchema = z.object({

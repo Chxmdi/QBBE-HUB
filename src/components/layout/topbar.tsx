@@ -43,6 +43,7 @@ function useClickOutside(onClose: () => void) {
 export function Topbar({
   name,
   avatarUrl,
+  isAdmin,
   isStaff,
   unreadCount,
   density = "comfortable",
@@ -51,13 +52,13 @@ export function Topbar({
 }: {
   name: string;
   avatarUrl: string | null;
+  isAdmin: boolean;
   isStaff: boolean;
   unreadCount: number;
   density?: "comfortable" | "compact";
   onOpenNav: () => void;
   onOpenPalette: () => void;
 }) {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [openMenu, setOpenMenu] = useState<
     "notifications" | "create" | "profile" | null
   >(null);
@@ -66,15 +67,8 @@ export function Topbar({
   const router = useRouter();
   const menuRef = useClickOutside(() => setOpenMenu(null));
 
-  useEffect(() => {
-    setTheme(
-      document.documentElement.classList.contains("dark") ? "dark" : "light",
-    );
-  }, []);
-
   function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
+    const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
     document.documentElement.classList.toggle("dark", next === "dark");
     try {
       localStorage.setItem("qbbe-theme", next);
@@ -113,11 +107,16 @@ export function Topbar({
     ...(isStaff
       ? [
           { label: "Project", href: "/projects?create=1" },
+          { label: "Program", href: "/programs?create=1" },
           { label: "Meeting", href: "/meetings?create=1" },
           { label: "Event", href: "/events?create=1" },
           { label: "Channel", href: "/channels?create=1" },
+          { label: "CRM organization", href: "/crm?create=organization" },
+          { label: "CRM contact", href: "/crm?create=contact" },
+          { label: "CRM follow-up", href: "/crm?create=follow-up" },
         ]
       : []),
+    ...(isAdmin ? [{ label: "Announcement", href: "/channels?create=announcement" }] : []),
   ];
 
   return (
@@ -134,7 +133,7 @@ export function Topbar({
       <button
         type="button"
         onClick={onOpenPalette}
-        className="flex h-9 flex-1 items-center gap-2 rounded-(--radius-sm) border border-line bg-surface px-3 text-left text-[13.5px] text-muted transition-colors hover:border-brand/40 md:max-w-md"
+        className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-(--radius-sm) border border-line bg-surface px-3 text-left text-[13.5px] text-muted transition-colors hover:border-brand/40 md:max-w-md"
       >
         <Search className="size-4" aria-hidden />
         <span className="flex-1 truncate">Search or jump to…</span>
@@ -297,14 +296,11 @@ export function Topbar({
         <button
           type="button"
           onClick={toggleTheme}
-          aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          aria-label="Toggle color theme"
           className="flex size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-surface-soft hover:text-ink"
         >
-          {theme === "dark" ? (
-            <Sun className="size-4.5" aria-hidden />
-          ) : (
-            <Moon className="size-4.5" aria-hidden />
-          )}
+          <Sun className="hidden size-4.5 dark:block" aria-hidden />
+          <Moon className="block size-4.5 dark:hidden" aria-hidden />
         </button>
 
         {/* Profile */}
@@ -324,9 +320,16 @@ export function Topbar({
                 {name}
               </p>
               <Link
+                href="/settings"
+                onClick={() => setOpenMenu(null)}
+                className="block px-3 py-1.5 text-[13.5px] text-ink hover:bg-surface-soft"
+              >
+                Account settings
+              </Link>
+              <Link
                 href="/settings/notifications"
                 onClick={() => setOpenMenu(null)}
-                className="block px-3 py-1.5 text-[13.5px] hover:bg-surface-soft"
+                className="block px-3 py-1.5 text-[13.5px] text-ink hover:bg-surface-soft"
               >
                 Email preferences
               </Link>

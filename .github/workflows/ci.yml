@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -53,4 +56,35 @@ jobs:
 
       - name: Dependency audit (high+)
         run: npm audit --audit-level=high
-        continue-on-error: true
+
+  database-security:
+    name: Database security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install from lockfile
+        run: npm ci
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v3
+        with:
+          version: 2.114.0
+
+      - name: Start migrated local database
+        run: supabase start
+
+      - name: RLS allow/deny matrix
+        run: npm run test:db
+
+      - name: Database security advisor
+        run: supabase db advisors --local --type security --fail-on error
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop

@@ -38,7 +38,7 @@ export default async function CalendarPage({
 }: {
   searchParams: Promise<{ view?: string; date?: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const params = await searchParams;
   const view = params.view === "month" ? "month" : "week";
 
@@ -62,7 +62,7 @@ export default async function CalendarPage({
   const dateStart = format(rangeStartDate, "yyyy-MM-dd");
   const dateEnd = format(rangeEndDate, "yyyy-MM-dd");
 
-  const [tasksRes, milestonesRes, meetingsRes, eventsRes, followUpsRes] =
+  const [tasksRes, milestonesRes, meetingsRes, eventsRes, followUpsRes, googleRes] =
     await Promise.all([
       supabase
         .from("task")
@@ -98,6 +98,17 @@ export default async function CalendarPage({
         .gte("due_at", dateStart)
         .lte("due_at", dateEnd)
         .eq("status", "open")
+        .limit(100),
+      supabase
+        .from("calendar_event_link")
+        .select("id, title, starts_at, html_link")
+        .eq("user_id", session.userId)
+        // Hub-owned meeting/event links render through their source record.
+        // The overlay contains only Calendar-only events, avoiding duplicates.
+        .is("meeting_id", null)
+        .is("event_id", null)
+        .gte("starts_at", rangeStartIso)
+        .lte("starts_at", rangeEndIso)
         .limit(100),
     ]);
 
@@ -141,6 +152,14 @@ export default async function CalendarPage({
       kind: "follow_up" as const,
       href: `/crm/${f.crm_organization_id}`,
       timed: false,
+    })),
+    ...(googleRes.data ?? []).map((g) => ({
+      id: `google-${g.id}`,
+      date: new Date(g.starts_at as string),
+      label: g.title as string,
+      kind: "google" as const,
+      href: (g.html_link as string | null) || "/calendar",
+      timed: true,
     })),
   ];
 

@@ -159,6 +159,13 @@ export default async function ReportDetailPage({
               <Download className="size-4" aria-hidden />
               CSV
             </a>
+            <a
+              href={`/reports/${report.id}/pdf`}
+              className="inline-flex h-9 items-center gap-1.5 rounded-(--radius-sm) border border-line bg-surface px-3 text-[13px] font-medium hover:bg-surface-soft"
+            >
+              <Download className="size-4" aria-hidden />
+              PDF
+            </a>
             <PrintHint />
             {session.isAdmin && report.status !== "approved" ? (
               <ApproveReportButton reportId={report.id as string} />

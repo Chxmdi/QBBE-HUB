@@ -6,8 +6,11 @@ import { HealthBadge, StageBadge } from "@/components/shared/status-badges";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProjectCreateDialog } from "@/features/projects/components/project-create-dialog";
+import { CreateFromTemplateButton } from "@/features/projects/components/create-from-template";
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
+import { createProjectTemplate } from "@/features/admin/services/workflow.commands";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
-import { requireSession } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
 import type { Project } from "@/types/entities";
@@ -20,7 +23,7 @@ export default async function ProjectsPage({
 }: {
   searchParams: Promise<{ create?: string; stage?: string }>;
 }) {
-  await requireSession();
+  const session = await requireStaff();
   const params = await searchParams;
   const supabase = await createSupabaseServerClient();
 
@@ -35,10 +38,11 @@ export default async function ProjectsPage({
     .limit(100);
   if (params.stage) query = query.eq("stage", params.stage);
 
-  const [{ data: projects }, options, { data: programs }] = await Promise.all([
+  const [{ data: projects }, options, { data: programs }, { data: templates }] = await Promise.all([
     query,
     getPickerOptions(),
     supabase.from("program").select("id, name").eq("status", "active").order("name"),
+    supabase.from("project_template").select("id, name").order("name"),
   ]);
 
   const projectList = (projects ?? []) as unknown as Project[];
@@ -50,11 +54,29 @@ export default async function ProjectsPage({
         title="Projects"
         description="Every project keeps one accountable owner, a stage, health, and a target date."
         actions={
-          <ProjectCreateDialog
-            programs={(programs ?? []).map((p) => ({ id: p.id, label: p.name }))}
-            people={options.people}
-            defaultOpen={params.create === "1"}
-          />
+          session.isStaff ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <CreateFromTemplateButton
+                templates={(templates ?? []) as { id: string; name: string }[]}
+              />
+              <EntityFormDialog
+                triggerLabel="Save template"
+                triggerVariant="secondary"
+                title="Project template"
+                submitLabel="Save"
+                action={createProjectTemplate}
+                fields={[
+                  { name: "name", label: "Name", type: "text", required: true },
+                  { name: "outcome", label: "Default outcome", type: "textarea" },
+                ]}
+              />
+              <ProjectCreateDialog
+                programs={(programs ?? []).map((p) => ({ id: p.id, label: p.name }))}
+                people={options.people}
+                defaultOpen={params.create === "1"}
+              />
+            </div>
+          ) : undefined
         }
       />
 
