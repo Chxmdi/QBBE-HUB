@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const inviteSchema = z.object({
   email: z.string().trim().email("Enter a valid email."),
@@ -22,6 +23,9 @@ export interface InviteResult extends ActionResult {
 
 export async function inviteUser(input: unknown): Promise<InviteResult> {
   const session = await requireSession();
+
+  const limited = await enforceRateLimit("invitation:create", session.userId);
+  if (limited) return limited;
   if (!session.isAdmin) return { ok: false, error: "Admin access required." };
   const parsed = inviteSchema.safeParse(input);
   if (!parsed.success) {

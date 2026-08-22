@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const linkSchema = z.object({
   title: z.string().trim().min(1, "Give the resource a title.").max(200),
@@ -18,6 +19,9 @@ const linkSchema = z.object({
 /** Registers an external resource link (QBBE-controlled Drive, etc.). */
 export async function createDocumentLink(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+
+  const limited = await enforceRateLimit("document:upload", session.userId);
+  if (limited) return limited;
   const parsed = linkSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };

@@ -11,6 +11,9 @@ import type { JobContext, JobResult } from "../runner";
  *
  * Dead-lettered queue messages are deliberately left alone: an administrator
  * should decide what happens to mail that never went out.
+ *
+ * Rate-limit counters are different again — they are worthless the moment their
+ * window closes, so anything older than a day goes.
  */
 
 const SUCCESS_RETENTION_DAYS = 30;
@@ -59,12 +62,24 @@ export async function purgeJobHistory({ db, now }: JobContext): Promise<JobResul
     throw new Error(`could not purge deliveries: ${deliveryError.message}`);
   }
 
+  // Rate-limit windows are only meaningful while they are open.
+  const { data: purgedCounters, error: counterError } = await db
+    .from("rate_limit_counter")
+    .delete()
+    .lt("window_start", new Date(now.getTime() - 86_400_000).toISOString())
+    .select("bucket");
+
+  if (counterError) {
+    throw new Error(`could not purge rate-limit counters: ${counterError.message}`);
+  }
+
   const runs = (purgedRuns ?? []).length + (purgedFailures ?? []).length;
   const deliveries = (purgedDeliveries ?? []).length;
+  const counters = (purgedCounters ?? []).length;
 
   return {
-    processed: runs + deliveries,
+    processed: runs + deliveries + counters,
     failed: 0,
-    metadata: { runs, deliveries },
+    metadata: { runs, deliveries, counters },
   };
 }

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { MissingEnvError, jobSecret } from "@/lib/env";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import {
   DisabledJobError,
   UnknownJobError,
@@ -17,6 +18,8 @@ import {
  *   - constant-time secret comparison, so the header cannot be discovered by
  *     timing the endpoint;
  *   - an unknown or disabled job name is refused before any work begins;
+ *   - a rate limit per job name, so a leaked secret cannot be used to hammer
+ *     the runtime faster than the scheduler ever would;
  *   - the response never echoes the secret or an internal stack.
  *
  * The route runs on the Node runtime because it uses the service-role key and
@@ -54,6 +57,13 @@ export async function POST(
   }
 
   const { job } = await params;
+
+  // Well above any real schedule (the busiest job runs once a minute), so this
+  // only ever catches a loop or an abused secret.
+  const limited = await enforceRateLimit("job:run", job);
+  if (limited) {
+    return NextResponse.json({ error: "too many requests" }, { status: 429 });
+  }
 
   try {
     const outcome = await runJob(job);

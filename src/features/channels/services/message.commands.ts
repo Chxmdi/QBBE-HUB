@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { mentionRecipientIds } from "@/features/channels/mention-recipients";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const sendMessageSchema = z.object({
   channelId: z.string().uuid().optional(),
@@ -22,6 +23,9 @@ const sendMessageSchema = z.object({
  */
 export async function sendMessage(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+
+  const limited = await enforceRateLimit("message:create", session.userId);
+  if (limited) return limited;
   const parsed = sendMessageSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const generateSchema = z.object({
   reportType: z.enum(["program_quarterly", "project"]),
@@ -21,6 +22,9 @@ const generateSchema = z.object({
  */
 export async function generateReport(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+
+  const limited = await enforceRateLimit("report:generate", session.userId);
+  if (limited) return limited;
   if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = generateSchema.safeParse(input);
   if (!parsed.success) {

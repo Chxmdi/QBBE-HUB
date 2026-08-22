@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { TaskStatus } from "@/types/entities";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import {
   TASK_STATUSES,
   blockedReasonError,
@@ -25,6 +26,9 @@ export interface ActionResult {
 
 export async function createTask(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+
+  const limited = await enforceRateLimit("task:create", session.userId);
+  if (limited) return limited;
   const parsed = createTaskSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };

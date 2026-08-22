@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export async function acknowledgeAnnouncement(
   announcementId: string,
@@ -47,6 +48,9 @@ export async function publishAnnouncement(
   input: unknown,
 ): Promise<ActionResult> {
   const session = await requireSession();
+
+  const limited = await enforceRateLimit("announcement:publish", session.userId);
+  if (limited) return limited;
   const parsed = publishSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };

@@ -44,6 +44,27 @@ recovery emails (ENV-002).
    The secret must match the `CRON_JOB_SECRET` environment variable and be at
    least 32 characters. Full details in `jobs.md`.
 
+## Branches and gates (CICD-001)
+
+`main` is the release branch and the only one production deploys from. It must
+be protected in GitHub settings — Settings → Branches → Add rule for `main`:
+
+- Require a pull request before merging (at least one approval).
+- Require status checks to pass: **Verify** and **Database security**.
+- Require branches to be up to date before merging.
+- Do not allow force pushes or deletions.
+
+Work happens on short-lived branches off `main` and returns through a pull
+request. CI runs on every pull request and on every push to `main`; there is no
+path to production that skips it.
+
+Two gates exist specifically to catch drift that only shows up at runtime:
+
+- **Migration filenames are unique and ordered** — a duplicate version prefix
+  makes `supabase db push` order ambiguous.
+- **Every registered job has a handler** — a `job_definition` row without a
+  handler is a schedule firing into nothing; a handler without a row never runs.
+
 ## Schema changes (ENV-005, REP-004)
 
 - Migrations are append-only once applied to a shared environment. Fix
