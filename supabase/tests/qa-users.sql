@@ -1,5 +1,9 @@
 -- QA fixture users (docs/runbooks/qa.md). Idempotent. Never run in production.
--- Password for all three: QaTest!2026
+-- Password for all five: QaTest!2026
+--
+-- One user per organization role, because the permission matrix is only
+-- meaningful if every role in it is actually represented: owner, admin, staff,
+-- volunteer, guest.
 -- The bootstrap trigger provisions the first user as Primary Owner.
 
 create schema if not exists tests;
@@ -76,6 +80,17 @@ select tests.ensure_auth_user(
   'QA Volunteer'
 );
 
+select tests.ensure_auth_user(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4',
+  'qa-admin@example.com',
+  'QA Admin'
+);
+select tests.ensure_auth_user(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5',
+  'qa-guest@example.com',
+  'QA Guest'
+);
+
 -- Force intended roles in case the trigger ran before the invitation existed.
 update organization_membership
   set role = 'staff'
@@ -83,6 +98,12 @@ update organization_membership
 update organization_membership
   set role = 'volunteer'
   where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3';
+update organization_membership
+  set role = 'admin'
+  where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4';
+update organization_membership
+  set role = 'guest'
+  where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5';
 
 -- QA users skip first-run onboarding so authenticated Playwright can reach the workspace.
 update user_profile
@@ -90,5 +111,7 @@ update user_profile
   where id in (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3'
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5'
   );

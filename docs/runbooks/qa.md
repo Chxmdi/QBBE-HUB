@@ -49,21 +49,46 @@ npm run test:qa
 
 ### QA test users
 
-The matrix expects three confirmed accounts, all with password
-`QaTest!2026`:
+One account per organization role, all with password `QaTest!2026`. Every role
+is represented because a permission matrix missing a role is a statement about
+the roles it has, not the ones it claims:
 
 | Email | Role | Purpose |
 |---|---|---|
 | `qa-owner@example.com` | owner | Full-access surfaces |
+| `qa-admin@example.com` | admin | Administration without ownership |
 | `qa-staff@example.com` | staff | Staff-scoped surfaces |
 | `qa-volunteer@example.com` | volunteer | Negative authorization cases |
+| `qa-guest@example.com` | guest | The most restricted role |
 
 Because Supabase confirms email by default, insert them directly into
 `auth.users` with `email_confirmed_at` set (the bootstrap trigger then
 provisions profiles, membership, and mandatory channels). Never create these
 in the production project — the first sign-up there becomes Primary Owner.
 
-## 3. Contrast regression guard — always on
+## 3. Permission matrix — runs in CI against a local database
+
+`supabase/tests/rls.sql` is the allow/deny matrix, run by the
+**Database security** CI job against a freshly migrated local Supabase
+(`npm run test:db`). It covers all five roles and, for each new table, the
+recipe is one allow case and one deny case in the same pull request as the
+policy.
+
+```bash
+supabase start        # migrations applied to a fresh local database
+npm run test:db       # qa-users.sql + rls.sql through psql
+```
+
+The administrative assertions seed a row first, so "an admin can read this"
+means they saw something rather than counting zero — and that block
+deliberately has no exception handler, because an admin denied their own
+administration surface is a failure, not a differently-worded pass.
+
+**Recipe when you add a table:** ship indexes and RLS in the same migration as
+the table, then add one allow and one deny assertion here in the same pull
+request. Coverage status lives in `docs/spec-coverage.md`.
+
+## 4. Contrast regression guard — always on
 
 `tests/unit/contrast.test.ts` computes WCAG contrast for every colored-text
 token against surface, canvas, and soft-surface in **both** themes, plus
@@ -75,7 +100,7 @@ If it fails, adjust the `--color-*-fg` tokens in
 `--color-danger`, …) keep the exact Part II §2.2 brand values; only the
 `-fg` text variants are tuned for contrast, as Appendix A permits.
 
-## 4. Background jobs and email — always on
+## 5. Background jobs and email — always on
 
 `tests/unit/drain-notifications.test.ts` and `tests/unit/job-handlers.test.ts`
 run the real job handlers against an in-memory Supabase double
@@ -88,7 +113,7 @@ The database side of those same guarantees — the enqueue trigger, the dedupe
 index, pgmq's redelivery and archive behaviour — is verified directly against
 Postgres. See the verification table in `jobs.md`.
 
-## 5. Still manual before launch
+## 6. Still manual before launch
 
 - Screen-reader smoke test (VoiceOver / NVDA) of: post a message, move a
   task, acknowledge an announcement, complete a meeting.
@@ -97,19 +122,3 @@ Postgres. See the verification table in `jobs.md`.
 - Backup restore rehearsal (see `backup-recovery.md`).
 - Privacy / retention review (`privacy.md`).
 - Launch-gate ticks (`launch-gate.md`).
-
-## 5. Database / RLS tests (TST-003)
-
-Against **local** Supabase after `supabase start`:
-
-```bash
-npm run test:db
-```
-
-That concatenates `supabase/tests/qa-users.sql` (idempotent owner/staff/volunteer
-with password `QaTest!2026`) and `supabase/tests/rls.sql` (allow **and** deny
-cases) into `psql` on `supabase_db_workspace`.
-
-**Recipe when you add a table:** ship indexes + RLS in the same migration, then
-add one allow and one deny assertion to `rls.sql`. Coverage status lives in
-`docs/spec-coverage.md`.

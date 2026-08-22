@@ -5,6 +5,19 @@ import {
   type WorkflowRuleRow,
 } from "@/features/admin/workflow-match";
 
+/**
+ * Runs the workflow rules that match an event, and records what each one did.
+ *
+ * Every matched rule writes a `workflow_execution` row whether or not it
+ * reached anybody. A rule that matched and then found no recipients is the most
+ * useful thing to be able to see — without it, "why didn't this notify anyone?"
+ * has no answer — so `skipped` is a recorded outcome, not a missing row.
+ *
+ * Logging never blocks the automation: a failure to write history is reported
+ * and swallowed, because losing the notification would be worse than losing its
+ * audit entry.
+ */
+
 export async function fireWorkflows(
   supabase: SupabaseClient,
   options: {
@@ -27,7 +40,7 @@ export async function fireWorkflows(
 ) {
   const { data: rules } = await supabase
     .from("workflow_rule")
-    .select("id, enabled, trigger_event, condition, action")
+    .select("id, name, enabled, trigger_event, condition, action")
     .eq("organization_id", options.organizationId)
     .eq("enabled", true);
 
@@ -63,6 +76,8 @@ export async function fireWorkflows(
     memberIdsByTeam.set(teamId, memberIds);
   }
 
+  const executions: Record<string, unknown>[] = [];
+
   for (const rule of matched) {
     const recipients = workflowRecipients({
       actionType: rule.action?.type ?? "notify_assignee",
@@ -72,8 +87,29 @@ export async function fireWorkflows(
       adminIds,
       actorId: options.actorId,
     });
-    if (recipients.length === 0) continue;
-    await supabase.from("notification").insert(
+
+    const entry = {
+      organization_id: options.organizationId,
+      rule_id: rule.id,
+      rule_name: (rule as { name?: string }).name ?? "Unnamed rule",
+      trigger_event: options.eventType,
+      source_type: options.sourceType,
+      source_id: options.sourceId,
+      recipient_count: recipients.length,
+    };
+
+    if (recipients.length === 0) {
+      // Matched, but the action had nobody to address — worth recording,
+      // because this is the shape of a misconfigured rule.
+      executions.push({
+        ...entry,
+        outcome: "skipped",
+        detail: `No recipient for action "${rule.action?.type ?? "notify_assignee"}".`,
+      });
+      continue;
+    }
+
+    const { error } = await supabase.from("notification").insert(
       recipients.map((userId) => ({
         user_id: userId,
         organization_id: options.organizationId,
@@ -86,5 +122,21 @@ export async function fireWorkflows(
         dedupe_key: `workflow:${rule.id}:${options.sourceId}:${userId}`,
       })),
     );
+
+    executions.push(
+      error
+        ? { ...entry, outcome: "failed", detail: error.message.slice(0, 500) }
+        : { ...entry, outcome: "notified" },
+    );
+  }
+
+  if (executions.length > 0) {
+    const { error } = await supabase.from("workflow_execution").insert(executions);
+    // History is valuable, but not at the cost of the thing it describes.
+    if (error) {
+      console.error(
+        JSON.stringify({ event: "workflow.history_write_failed", error: error.message }),
+      );
+    }
   }
 }

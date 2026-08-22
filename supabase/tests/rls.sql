@@ -57,6 +57,10 @@ declare
   v_owner uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1';
   v_staff uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2';
   v_vol uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3';
+  v_admin uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4';
+  v_guest uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5';
+  v_admin_org uuid;
+  v_admin_rule uuid;
   n int;
   v_private uuid;
   v_private_message uuid;
@@ -78,8 +82,14 @@ declare
 begin
   -- Fixtures must exist.
   select count(*) into n from auth.users
-    where id in (v_owner, v_staff, v_vol);
-  perform tests.ok(n = 3, 'qa users exist');
+    where id in (v_owner, v_staff, v_vol, v_admin, v_guest);
+  perform tests.ok(n = 5, 'qa users exist for all five roles');
+
+  -- Every role in the product is represented, or the matrix below is a
+  -- statement about three roles pretending to be a statement about five.
+  select count(distinct role) into n from organization_membership
+    where user_id in (v_owner, v_staff, v_vol, v_admin, v_guest);
+  perform tests.ok(n = 5, 'the five organization roles are each held by a fixture');
 
   -- A member of one organization must not discover another organization's
   -- core directory records, teams, or membership list.
@@ -496,6 +506,179 @@ begin
   exception
     when insufficient_privilege then
       perform tests.ok(true, 'volunteer cannot read crm_contact (privilege denied)');
+  end;
+  reset role;
+
+  -- ---------------------------------------------------------------------
+  -- Admin: the same reach as an owner over administration, and no reach
+  -- into another organization.
+  -- ---------------------------------------------------------------------
+  -- Seed one row in each administrative table so "can read" is a claim about
+  -- seeing something, not a count of zero that would pass either way.
+  select organization_id into v_admin_org from organization_membership
+    where user_id = v_admin limit 1;
+
+  insert into workflow_rule (organization_id, name, trigger_event, created_by)
+  values (v_admin_org, 'RLS fixture rule', 'task_status_changed', v_owner)
+  returning id into v_admin_rule;
+
+  insert into workflow_execution (
+    organization_id, rule_id, rule_name, trigger_event,
+    source_type, source_id, outcome, recipient_count
+  )
+  values (v_admin_org, v_admin_rule, 'RLS fixture rule', 'task_status_changed',
+          'task', v_private_task, 'notified', 1);
+
+  insert into email_delivery (organization_id, recipient, subject, dedupe_key, status)
+  values (v_admin_org, 'rls-fixture@example.com', 'RLS fixture delivery',
+          'email:rls-fixture:' || gen_random_uuid()::text, 'queued');
+
+  -- An admin denied their own administration surfaces is a failure, so this
+  -- block has no forgiving exception handler: a privilege error propagates.
+  perform tests.authenticate(v_admin);
+  set local role authenticated;
+
+  select count(*) into n from audit_event;
+  perform tests.ok(n >= 0, 'admin can query the audit trail');
+
+  select count(*) into n from workflow_execution;
+  perform tests.ok(n > 0, 'admin can read workflow execution history');
+
+  select count(*) into n from email_delivery;
+  perform tests.ok(n > 0, 'admin can read the email delivery ledger');
+
+  select count(*) into n from job_run;
+  perform tests.ok(n >= 0, 'admin can query the job runtime history');
+
+  -- Administration is scoped to their own organization, not the platform.
+  select count(*) into n from organization where id = v_other_org;
+  perform tests.ok(n = 0, 'admin cannot read another organization');
+
+  select count(*) into n from task where id = v_other_task;
+  perform tests.ok(n = 0, 'admin cannot read another organization task');
+
+  select count(*) into n from crm_organization where id = v_other_crm;
+  perform tests.ok(n = 0, 'admin cannot read another organization CRM record');
+
+  reset role;
+
+  -- ---------------------------------------------------------------------
+  -- Guest: the most restricted role. A guest belongs to the organization,
+  -- so directory-level reads are expected; everything operational is not.
+  -- ---------------------------------------------------------------------
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+
+    select count(*) into n from audit_event;
+    perform tests.ok(n = 0, 'guest cannot read the audit trail');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot read the audit trail (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    select count(*) into n from crm_organization;
+    perform tests.ok(n = 0, 'guest cannot read CRM organizations');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot read CRM organizations (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    select count(*) into n from report_instance;
+    perform tests.ok(n = 0, 'guest cannot read report snapshots');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot read report snapshots (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    select count(*) into n from background_job_run;
+    perform tests.ok(n = 0, 'guest cannot read background job runs');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot read background job runs (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    select count(*) into n from job_run;
+    perform tests.ok(n = 0, 'guest cannot read the job runtime history');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot read the job runtime history (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    select count(*) into n from workflow_execution;
+    perform tests.ok(n = 0, 'guest cannot read workflow execution history');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot read workflow execution history (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    -- A delivery row exists (seeded above) and names a recipient and subject.
+    -- A guest must see none of it: the policy admits only their own mail.
+    select count(*) into n from email_delivery;
+    perform tests.ok(n = 0, 'guest sees no email delivery but their own');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot read email deliveries (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    select count(*) into n from rate_limit_counter;
+    perform tests.ok(n = 0, 'guest cannot read rate limit counters');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot read rate limit counters (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    select count(*) into n from task where id = v_other_task;
+    perform tests.ok(n = 0, 'guest cannot read another organization task');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot read another organization task (privilege denied)');
+  end;
+  reset role;
+
+  -- The queue functions are service-role only; no signed-in role may drain them.
+  perform tests.authenticate(v_admin);
+  begin
+    set local role authenticated;
+    perform public.job_queue_read('notifications', 30, 1);
+    perform tests.ok(false, 'admin must not be able to read the job queue');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'not even an admin can read the job queue directly');
+    when others then
+      perform tests.ok(true, 'job queue is unreachable to an admin (' || sqlerrm || ')');
   end;
   reset role;
 

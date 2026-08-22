@@ -52,6 +52,16 @@ interface IntegrationRow {
   last_error: string | null;
 }
 
+interface WorkflowExecutionRow {
+  id: string;
+  rule_name: string;
+  trigger_event: string;
+  outcome: string;
+  recipient_count: number;
+  detail: string | null;
+  created_at: string;
+}
+
 interface JobRunRow {
   id: string;
   job_name: string;
@@ -102,6 +112,7 @@ export default async function AdminPage() {
     { data: teamMembers },
     { data: rules },
     { data: jobRuns },
+    { data: workflowRuns },
   ] =
     await Promise.all([
       supabase
@@ -136,6 +147,11 @@ export default async function AdminPage() {
         .select("id, job_name, status, error, finished_at")
         .order("finished_at", { ascending: false })
         .limit(20),
+      supabase
+        .from("workflow_execution")
+        .select("id, rule_name, trigger_event, outcome, recipient_count, detail, created_at")
+        .order("created_at", { ascending: false })
+        .limit(20),
     ]);
 
   const memberList = ((members ?? []) as unknown as Membership[]).filter(
@@ -160,6 +176,7 @@ export default async function AdminPage() {
     trigger_event: string;
   }[];
   const jobRunList = (jobRuns ?? []) as JobRunRow[];
+  const workflowRunList = (workflowRuns ?? []) as WorkflowExecutionRow[];
 
   return (
     <div>
@@ -486,8 +503,8 @@ export default async function AdminPage() {
           </div>
           {ruleList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              No workflow rules yet. Rules run on Hub events after the P0
-              surfaces are stable.
+              No workflow rules yet. A rule watches for one kind of Hub event
+              and notifies the people you choose when it happens.
             </p>
           ) : (
             <ul className="card divide-y divide-line">
@@ -498,6 +515,47 @@ export default async function AdminPage() {
                     {rule.enabled ? "On" : "Off"}
                   </Badge>
                   <span className="meta">{rule.trigger_event.replace(/_/g, " ")}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Why did this fire? — the automation's own record. */}
+          <h3 className="section-heading mt-6 mb-3 text-[13px]">Recent runs</h3>
+          {workflowRunList.length === 0 ? (
+            <p className="card px-4 py-5 text-center text-[13px] text-muted">
+              Nothing has triggered a rule yet. Every run is recorded here with
+              who it reached.
+            </p>
+          ) : (
+            <ul className="card divide-y divide-line">
+              {workflowRunList.map((run) => (
+                <li key={run.id} className="px-4 py-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-0 flex-1 text-[13.5px] font-medium">
+                      {run.rule_name}
+                    </span>
+                    <Badge
+                      tone={
+                        run.outcome === "notified"
+                          ? "success"
+                          : run.outcome === "failed"
+                            ? "danger"
+                            : "neutral"
+                      }
+                    >
+                      {run.outcome === "notified"
+                        ? `notified ${run.recipient_count}`
+                        : run.outcome}
+                    </Badge>
+                    <span className="meta whitespace-nowrap">
+                      {relativeTime(run.created_at)}
+                    </span>
+                  </div>
+                  <span className="meta">
+                    {run.trigger_event.replace(/_/g, " ")}
+                    {run.detail ? ` \u00b7 ${run.detail}` : ""}
+                  </span>
                 </li>
               ))}
             </ul>
