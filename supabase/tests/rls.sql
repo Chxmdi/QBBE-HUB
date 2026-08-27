@@ -63,7 +63,11 @@ declare
   v_admin_rule uuid;
   v_other_risk uuid;
   v_other_issue uuid;
+  v_other_opportunity uuid;
   v_risk uuid;
+  v_org uuid;
+  v_crm uuid;
+  v_opportunity uuid;
   n int;
   v_private uuid;
   v_private_message uuid;
@@ -123,6 +127,9 @@ begin
   insert into issue (organization_id, project_id, title, severity, created_by)
   values (v_other_org, v_other_project, 'Private issue', 'critical', v_owner)
   returning id into v_other_issue;
+  insert into opportunity (organization_id, crm_organization_id, title, owner_id, created_by)
+  values (v_other_org, v_other_crm, 'Private opportunity', v_owner, v_owner)
+  returning id into v_other_opportunity;
 
   perform tests.authenticate(v_vol);
   begin
@@ -623,6 +630,60 @@ begin
   exception
     when insufficient_privilege then
       perform tests.ok(true, 'guest cannot read a project risk (privilege denied)');
+  end;
+  reset role;
+
+  -- ---------------------------------------------------------------------
+  -- The funding pipeline. Money conversations are commercially sensitive, so
+  -- they follow the rest of the CRM: staff and above, own organization only.
+  -- ---------------------------------------------------------------------
+  select organization_id into v_org from organization_membership
+    where user_id = v_staff limit 1;
+
+  perform tests.authenticate(v_staff);
+  set local role authenticated;
+
+  insert into crm_organization (organization_id, name, category, created_by)
+  values (v_org, 'RLS fixture funder', 'funder', v_staff)
+  returning id into v_crm;
+
+  insert into opportunity (organization_id, crm_organization_id, title,
+                           kind, stage, amount_requested, owner_id, created_by)
+  values (v_org, v_crm, 'RLS fixture grant', 'grant', 'submitted',
+          10000, v_staff, v_staff)
+  returning id into v_opportunity;
+
+  select count(*) into n from opportunity where id = v_opportunity;
+  perform tests.ok(n = 1, 'staff can read an opportunity they created');
+
+  select count(*) into n from opportunity where id = v_opportunity and is_open;
+  perform tests.ok(n = 1, 'a submitted opportunity is derived as open');
+
+  select count(*) into n from opportunity where id = v_other_opportunity;
+  perform tests.ok(n = 0, 'staff cannot read another organization opportunity');
+
+  reset role;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from opportunity;
+    perform tests.ok(n = 0, 'volunteer cannot read the funding pipeline');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'volunteer cannot read the funding pipeline (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    insert into opportunity (organization_id, crm_organization_id, title, owner_id)
+    values (v_org, v_crm, 'Guest bid', v_guest);
+    perform tests.ok(false, 'guest should not be able to record an opportunity');
+  exception
+    when insufficient_privilege or check_violation then
+      perform tests.ok(true, 'guest cannot record an opportunity (privilege denied)');
   end;
   reset role;
 

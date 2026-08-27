@@ -23,6 +23,7 @@ export const SEARCH_RESULT_TYPES = [
   "document",
   "risk",
   "issue",
+  "opportunity",
   "crm",
   "message",
 ] as const;
@@ -47,6 +48,7 @@ export const SEARCH_TYPE_LABELS: Record<
   document: { singular: "Document", plural: "Documents" },
   risk: { singular: "Risk", plural: "Risks" },
   issue: { singular: "Issue", plural: "Issues" },
+  opportunity: { singular: "Opportunity", plural: "Opportunities" },
   crm: { singular: "Relationship", plural: "Relationships" },
   message: { singular: "Message", plural: "Messages" },
 };

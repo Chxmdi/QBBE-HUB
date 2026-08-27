@@ -10,6 +10,10 @@ import {
   createFollowUp,
   recordInteraction,
 } from "@/features/crm/services/crm.commands";
+import { DeepLinkScroll } from "@/components/shared/deep-link-scroll";
+import { OpportunityPipeline } from "@/features/crm/components/opportunity-pipeline";
+import { getOpportunitiesForCrmOrganization } from "@/features/crm/services/opportunity.queries";
+import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
@@ -20,12 +24,16 @@ export const dynamic = "force-dynamic";
 
 export default async function CrmDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ opportunity?: string }>;
 }) {
   const session = await requireSession();
   if (!session.isStaff) redirect("/");
   const { id } = await params;
+  const { opportunity: highlightId = null } = await searchParams;
+  const today = new Date().toISOString().slice(0, 10);
   const supabase = await createSupabaseServerClient();
 
   const { data: org } = await supabase
@@ -38,8 +46,14 @@ export default async function CrmDetailPage({
 
   if (!org) notFound();
 
-  const [{ data: contacts }, { data: interactions }, { data: followUps }] =
-    await Promise.all([
+  const [
+    { data: contacts },
+    { data: interactions },
+    { data: followUps },
+    pipeline,
+    options,
+    { data: programRows },
+  ] = await Promise.all([
       supabase
         .from("crm_contact")
         .select("id, crm_organization_id, full_name, role_title, email, phone, owner_id, status")
@@ -58,12 +72,23 @@ export default async function CrmDetailPage({
         .select("id, crm_organization_id, owner_id, title, due_at, status")
         .eq("crm_organization_id", id)
         .order("due_at"),
+      getOpportunitiesForCrmOrganization(id, today),
+      getPickerOptions(),
+      supabase
+        .from("program")
+        .select("id, name")
+        .eq("status", "active")
+        .order("name"),
     ]);
 
   const owner = org.owner as unknown as { full_name: string; avatar_url: string | null } | null;
   const contactList = (contacts ?? []) as unknown as CrmContact[];
   const interactionList = (interactions ?? []) as unknown as CrmInteraction[];
   const followUpList = (followUps ?? []) as unknown as CrmFollowUp[];
+  const programOptions = (programRows ?? []).map((p) => ({
+    id: p.id as string,
+    label: p.name as string,
+  }));
 
   return (
     <div>
@@ -90,6 +115,22 @@ export default async function CrmDetailPage({
       />
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_360px]">
+        <div className="space-y-8">
+        {/* Money first: it is the question a trustee asks about a funder. */}
+        <OpportunityPipeline
+          pipeline={pipeline}
+          crmOrganizationId={org.id as string}
+          people={options.people}
+          programs={programOptions}
+          projects={options.projects}
+          contacts={contactList.map((c) => ({ id: c.id, label: c.full_name }))}
+          today={today}
+          highlightId={highlightId}
+        />
+        <DeepLinkScroll
+          targetId={highlightId ? `opportunity-${highlightId}` : null}
+        />
+
         <section aria-labelledby="interactions-heading">
           <div className="mb-3 flex items-center justify-between">
             <h2 id="interactions-heading" className="section-heading">
@@ -165,6 +206,7 @@ export default async function CrmDetailPage({
             </ol>
           )}
         </section>
+        </div>
 
         <div className="space-y-8">
           <section aria-labelledby="contacts-heading">

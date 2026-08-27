@@ -10,6 +10,11 @@ import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { CompleteFollowUpButton } from "@/features/crm/components/complete-follow-up-button";
 import { CrmOrganizationDialog } from "@/features/crm/components/crm-organization-dialog";
 import { createCrmContact, createFollowUp } from "@/features/crm/services/crm.commands";
+import {
+  DecisionsExpected,
+  PipelineTotals,
+} from "@/features/crm/components/pipeline-summary";
+import { getPipeline } from "@/features/crm/services/opportunity.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
@@ -28,7 +33,7 @@ export default async function CrmPage({
   const params = await searchParams;
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: organizations }, { data: followUps }] = await Promise.all([
+  const [{ data: organizations }, { data: followUps }, pipeline] = await Promise.all([
     supabase
       .from("crm_organization")
       .select(
@@ -44,6 +49,7 @@ export default async function CrmPage({
       .eq("status", "open")
       .order("due_at")
       .limit(20),
+    getPipeline(new Date().toISOString().slice(0, 10)),
   ]);
 
   const orgList = (organizations ?? []) as unknown as CrmOrganization[];
@@ -113,6 +119,8 @@ export default async function CrmPage({
         </p>
       ) : null}
 
+      <PipelineTotals pipeline={pipeline} />
+
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_360px]">
         <section aria-labelledby="crm-orgs">
           <h2 id="crm-orgs" className="section-heading mb-3">
@@ -154,7 +162,10 @@ export default async function CrmPage({
           )}
         </section>
 
-        <aside aria-labelledby="crm-followups">
+        <aside className="space-y-8">
+          <DecisionsExpected pipeline={pipeline} today={today} />
+
+          <section aria-labelledby="crm-followups">
           <h2 id="crm-followups" className="section-heading mb-3">
             Follow-up queue
           </h2>
@@ -187,6 +198,7 @@ export default async function CrmPage({
               ))}
             </ul>
           )}
+          </section>
         </aside>
       </div>
     </div>

@@ -66,7 +66,7 @@ export default async function SearchPage({
         description={
           query
             ? `${filtered.length} ${filtered.length === 1 ? "result" : "results"} you have access to.`
-            : "Search across tasks, projects, programs, channels, messages, people, meetings, events, documents, risks, issues, and relationships."
+            : "Search across tasks, projects, programs, channels, messages, people, meetings, events, documents, risks, issues, opportunities, and relationships."
         }
       />
 

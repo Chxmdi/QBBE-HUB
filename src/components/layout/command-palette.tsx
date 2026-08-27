@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Banknote,
   BarChart3,
   Building2,
   CalendarDays,
@@ -36,6 +37,7 @@ const typeIcons: Record<string, React.ReactNode> = {
   document: <Paperclip className="size-4" aria-hidden />,
   risk: <ShieldAlert className="size-4" aria-hidden />,
   issue: <AlertTriangle className="size-4" aria-hidden />,
+  opportunity: <Banknote className="size-4" aria-hidden />,
   crm: <Building2 className="size-4" aria-hidden />,
   report: <BarChart3 className="size-4" aria-hidden />,
 };
