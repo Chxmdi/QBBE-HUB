@@ -21,6 +21,8 @@ import { TASK_SELECT, getPickerOptions } from "@/features/tasks/services/task.qu
 import { requireStaff } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
+import { RaidLogPanel } from "@/features/risks/components/raid-log";
+import { getRaidLog } from "@/features/risks/services/risk.queries";
 import type {
   ActivityEvent,
   Milestone,
@@ -57,12 +59,14 @@ export default async function ProjectDetailPage({
   if (!projectRow) notFound();
   const project = projectRow as unknown as Project;
 
+
   const [
     { data: milestones },
     { data: tasks },
     { data: updates },
     { data: activity },
     options,
+    raidLog,
   ] = await Promise.all([
     supabase
       .from("milestone")
@@ -95,6 +99,7 @@ export default async function ProjectDetailPage({
       .order("created_at", { ascending: false })
       .limit(15),
     getPickerOptions(),
+    getRaidLog(id),
   ]);
 
   const taskList = (tasks ?? []) as unknown as Task[];
@@ -178,6 +183,12 @@ export default async function ProjectDetailPage({
             label: "Updates",
             href: `/projects/${project.id}?tab=updates`,
             count: (updates ?? []).length,
+          },
+          {
+            id: "risks",
+            label: "Risks & issues",
+            href: `/projects/${project.id}?tab=risks`,
+            count: raidLog.openCount,
           },
           {
             id: "activity",
@@ -403,6 +414,15 @@ export default async function ProjectDetailPage({
           </section>
         ) : null}
       </div>
+
+      {tab === "risks" ? (
+          <RaidLogPanel
+            log={raidLog}
+            projectId={project.id}
+            people={options.people}
+            canManage={session.isStaff}
+          />
+        ) : null}
 
       <Suspense fallback={null}>
         <TaskDrawer people={options.people} isStaff={session.isStaff} />

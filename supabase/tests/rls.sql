@@ -61,6 +61,9 @@ declare
   v_guest uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5';
   v_admin_org uuid;
   v_admin_rule uuid;
+  v_other_risk uuid;
+  v_other_issue uuid;
+  v_risk uuid;
   n int;
   v_private uuid;
   v_private_message uuid;
@@ -114,6 +117,12 @@ begin
   insert into crm_organization (organization_id, name, created_by)
   values (v_other_org, 'Private CRM organization', v_owner)
   returning id into v_other_crm;
+  insert into risk (organization_id, project_id, title, likelihood, impact, created_by)
+  values (v_other_org, v_other_project, 'Private risk', 'high', 'high', v_owner)
+  returning id into v_other_risk;
+  insert into issue (organization_id, project_id, title, severity, created_by)
+  values (v_other_org, v_other_project, 'Private issue', 'critical', v_owner)
+  returning id into v_other_issue;
 
   perform tests.authenticate(v_vol);
   begin
@@ -136,6 +145,10 @@ begin
     perform tests.ok(n = 0, 'volunteer cannot read another organization task');
     select count(*) into n from label where id = v_other_label;
     perform tests.ok(n = 0, 'volunteer cannot read another organization label');
+    select count(*) into n from risk where id = v_other_risk;
+    perform tests.ok(n = 0, 'volunteer cannot read another organization risk');
+    select count(*) into n from issue where id = v_other_issue;
+    perform tests.ok(n = 0, 'volunteer cannot read another organization issue');
   end;
   reset role;
 
@@ -560,6 +573,57 @@ begin
   select count(*) into n from crm_organization where id = v_other_crm;
   perform tests.ok(n = 0, 'admin cannot read another organization CRM record');
 
+  select count(*) into n from risk where id = v_other_risk;
+  perform tests.ok(n = 0, 'admin cannot read another organization risk');
+
+  select count(*) into n from issue where id = v_other_issue;
+  perform tests.ok(n = 0, 'admin cannot read another organization issue');
+
+  reset role;
+
+  -- The RAID log follows the project: staff who can manage a project can log
+  -- against it, and the score is derived rather than supplied.
+  perform tests.authenticate(v_staff);
+  set local role authenticated;
+
+  insert into risk (organization_id, project_id, title, likelihood, impact, created_by)
+  values (
+    (select organization_id from project where id = v_project),
+    v_project, 'RLS fixture risk', 'high', 'high', v_staff
+  )
+  returning id into v_risk;
+
+  select score into n from risk where id = v_risk;
+  perform tests.ok(n = 9, 'risk score is derived from likelihood and impact');
+
+  select count(*) into n from risk where id = v_risk;
+  perform tests.ok(n = 1, 'staff can read a risk on a project they manage');
+
+  reset role;
+
+  -- A volunteer shares the organization but not project management rights.
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    update risk set title = 'Volunteer edit' where id = v_risk;
+    select count(*) into n from risk
+      where id = v_risk and title = 'Volunteer edit';
+    perform tests.ok(n = 0, 'volunteer cannot rewrite a risk they do not manage');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'volunteer cannot rewrite a risk (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    select count(*) into n from risk where id = v_risk;
+    perform tests.ok(n = 0, 'guest cannot read a project risk');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot read a project risk (privilege denied)');
+  end;
   reset role;
 
   -- ---------------------------------------------------------------------

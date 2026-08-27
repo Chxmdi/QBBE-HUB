@@ -92,3 +92,11 @@ $$;
 
 revoke all on function public.rate_limit_hit(text, int, int) from public, anon, authenticated;
 grant execute on function public.rate_limit_hit(text, int, int) to service_role;
+
+-- The linter reports "RLS enabled, no policy" for this table. That is the
+-- design, not an omission: deny-by-default with no policy means no signed-in
+-- role can reach these rows at all, and only the service role — which bypasses
+-- RLS — reads or writes them. Adding a policy here would widen access, not
+-- tighten it.
+comment on column rate_limit_counter.bucket is
+  'action:subject, e.g. "message:create:<user-id>". Service-role only; deliberately has no RLS policy.';
