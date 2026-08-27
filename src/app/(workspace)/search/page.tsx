@@ -7,22 +7,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
+import {
+  searchTypeLabel,
+  searchTypeOrder,
+} from "@/features/search/result-types";
 import type { SearchResult } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Search" };
 export const dynamic = "force-dynamic";
-
-const TYPE_LABELS: Record<string, string> = {
-  task: "Tasks",
-  project: "Projects",
-  program: "Programs",
-  channel: "Channels",
-  message: "Messages",
-  person: "People",
-  meeting: "Meetings",
-  event: "Events",
-  crm: "Relationships",
-};
 
 /**
  * Dedicated search results view with type filters (§10.16, P1-SRC-03).
@@ -53,9 +45,11 @@ export default async function SearchPage({
     ? results.filter((r) => r.result_type === typeFilter)
     : results;
 
+  // Sorted by the shared priority rather than alphabetically, so the chips
+  // and the headings below tell the same story in the same order.
   const availableTypes = Array.from(
     new Set(results.map((r) => r.result_type)),
-  ).sort();
+  ).sort((a, b) => searchTypeOrder(a) - searchTypeOrder(b));
 
   const grouped = new Map<string, SearchResult[]>();
   for (const result of filtered) {
@@ -72,7 +66,7 @@ export default async function SearchPage({
         description={
           query
             ? `${filtered.length} ${filtered.length === 1 ? "result" : "results"} you have access to.`
-            : "Search across tasks, projects, channels, messages, people, meetings, events, and relationships."
+            : "Search across tasks, projects, programs, channels, messages, people, meetings, events, documents, risks, issues, and relationships."
         }
       />
 
@@ -122,7 +116,7 @@ export default async function SearchPage({
                     : "border-line bg-surface text-muted hover:text-ink",
                 )}
               >
-                {TYPE_LABELS[type] ?? type} ({count})
+                {searchTypeLabel(type)} ({count})
               </Link>
             );
           })}
@@ -159,7 +153,7 @@ export default async function SearchPage({
           {Array.from(grouped.entries()).map(([type, items]) => (
             <section key={type} aria-labelledby={`results-${type}`}>
               <h2 id={`results-${type}`} className="section-heading mb-2">
-                {TYPE_LABELS[type] ?? type}
+                {searchTypeLabel(type)}
                 <span className="meta ml-2 font-normal">{items.length}</span>
               </h2>
               <ul className="card divide-y divide-line">
@@ -180,7 +174,7 @@ export default async function SearchPage({
                         ) : null}
                       </span>
                       {/* Result type is always communicated (§10.16) */}
-                      <Badge tone="neutral">{TYPE_LABELS[type] ?? type}</Badge>
+                      <Badge tone="neutral">{searchTypeLabel(type, "singular")}</Badge>
                     </Link>
                   </li>
                 ))}

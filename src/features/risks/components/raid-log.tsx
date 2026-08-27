@@ -13,7 +13,7 @@ import {
 import { createIssue, createRisk } from "@/features/risks/services/risk.commands";
 import type { IssueRow, RaidLog, RiskRow } from "@/features/risks/services/risk.queries";
 import { IssueControls, RiskControls } from "./raid-controls";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 /**
  * The project's risk and issue log on one screen.
@@ -41,6 +41,12 @@ const SEVERITY_TONE = {
   critical: "danger",
 } as const;
 
+/**
+ * How a deep-linked row announces itself. Colour alone would fail WCAG 1.4.1,
+ * so the ring carries the same message as the tint.
+ */
+const HIGHLIGHT = "bg-accent/15 ring-1 ring-brand/40";
+
 const OPTION = (values: readonly string[]) =>
   values.map((value) => ({
     value,
@@ -52,15 +58,25 @@ export function RaidLogPanel({
   projectId,
   people,
   canManage,
+  highlightRiskId = null,
+  highlightIssueId = null,
 }: {
   log: RaidLog;
   projectId: string;
   /** Picker options, in the shape the rest of the project page already uses. */
   people: { id: string; label: string }[];
   canManage: boolean;
+  /** Deep-linked from search; the row is anchored and marked. */
+  highlightRiskId?: string | null;
+  highlightIssueId?: string | null;
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const peopleOptions = people.map((p) => ({ value: p.id, label: p.label }));
+
+  // A search result pointing at a settled risk must not land on a collapsed
+  // section: that looks like the link went nowhere.
+  const settledRiskLinked = log.settledRisks.some((r) => r.id === highlightRiskId);
+  const settledIssueLinked = log.settledIssues.some((i) => i.id === highlightIssueId);
 
   return (
     <div className="space-y-10">
@@ -144,19 +160,27 @@ export function RaidLogPanel({
                 today={today}
                 people={peopleOptions}
                 canManage={canManage}
+                highlighted={risk.id === highlightRiskId}
               />
             ))}
           </ul>
         )}
 
         {log.settledRisks.length > 0 ? (
-          <details className="card mt-3 px-4 py-3">
+          <details className="card mt-3 px-4 py-3" open={settledRiskLinked}>
             <summary className="cursor-pointer text-[13.5px] font-medium">
               Settled risks ({log.settledRisks.length})
             </summary>
             <ul className="mt-2 divide-y divide-line">
               {log.settledRisks.map((risk) => (
-                <li key={risk.id} className="py-2.5">
+                <li
+                  key={risk.id}
+                  id={`risk-${risk.id}`}
+                  className={cn(
+                    "py-2.5",
+                    risk.id === highlightRiskId && HIGHLIGHT,
+                  )}
+                >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="min-w-0 flex-1 text-[13.5px]">{risk.title}</span>
                     <Badge tone="neutral">{risk.status}</Badge>
@@ -224,19 +248,27 @@ export function RaidLogPanel({
                 issue={issue}
                 people={peopleOptions}
                 canManage={canManage}
+                highlighted={issue.id === highlightIssueId}
               />
             ))}
           </ul>
         )}
 
         {log.settledIssues.length > 0 ? (
-          <details className="card mt-3 px-4 py-3">
+          <details className="card mt-3 px-4 py-3" open={settledIssueLinked}>
             <summary className="cursor-pointer text-[13.5px] font-medium">
               Resolved issues ({log.settledIssues.length})
             </summary>
             <ul className="mt-2 divide-y divide-line">
               {log.settledIssues.map((issue) => (
-                <li key={issue.id} className="py-2.5">
+                <li
+                  key={issue.id}
+                  id={`issue-${issue.id}`}
+                  className={cn(
+                    "py-2.5",
+                    issue.id === highlightIssueId && HIGHLIGHT,
+                  )}
+                >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="min-w-0 flex-1 text-[13.5px]">{issue.title}</span>
                     <Badge tone="neutral">{issue.status}</Badge>
@@ -259,17 +291,22 @@ function RiskItem({
   today,
   people,
   canManage,
+  highlighted,
 }: {
   risk: RiskRow;
   today: string;
   people: { value: string; label: string }[];
   canManage: boolean;
+  highlighted: boolean;
 }) {
   const band = riskBand(risk.score);
   const dueForReview = riskNeedsReview(risk, today);
 
   return (
-    <li className="px-4 py-3">
+    <li
+      id={`risk-${risk.id}`}
+      className={cn("px-4 py-3", highlighted && HIGHLIGHT)}
+    >
       <div className="flex flex-wrap items-start gap-2">
         <span className="min-w-0 flex-1 text-[13.5px] font-medium">{risk.title}</span>
         <Badge tone={BAND_TONE[band]}>{RISK_BAND_LABELS[band]}</Badge>
@@ -309,13 +346,18 @@ function IssueItem({
   issue,
   people,
   canManage,
+  highlighted,
 }: {
   issue: IssueRow;
   people: { value: string; label: string }[];
   canManage: boolean;
+  highlighted: boolean;
 }) {
   return (
-    <li className="px-4 py-3">
+    <li
+      id={`issue-${issue.id}`}
+      className={cn("px-4 py-3", highlighted && HIGHLIGHT)}
+    >
       <div className="flex flex-wrap items-start gap-2">
         <span className="min-w-0 flex-1 text-[13.5px] font-medium">{issue.title}</span>
         <Badge tone={SEVERITY_TONE[issue.severity]}>{issue.severity}</Badge>

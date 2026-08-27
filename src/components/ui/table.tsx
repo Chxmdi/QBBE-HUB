@@ -105,13 +105,17 @@ export function TableRow({
   children,
   selected,
   className,
+  id,
 }: {
   children: React.ReactNode;
   selected?: boolean;
   className?: string;
+  /** Anchor for deep links, so a search result can scroll to this row. */
+  id?: string;
 }) {
   return (
     <tr
+      id={id}
       aria-selected={selected}
       className={cn(
         "border-b border-line transition-colors last:border-b-0",

@@ -31,6 +31,8 @@ production email **done** on stubs.
 | 12 VMS boundary | P0-VOL-01 | **Gated** on VMS contract | Connect probes `VMS_API_URL` and refuses if unreachable; disconnect clears org `vms_id`s only |
 | 13 P1 slices | P1-TSK-06/07/08, P1-ANN-07, P1-PRJ-06/07, P1-CAL-03, P1-UX-08, P1-WF | Implemented in-product | workflows fire on task status + announcement publish; deps/checklists/recurrence/templates/saved views |
 | 14 Hardening | Part IV §16.9, §17.2 | In product + operator leftover | jobs bypass session middleware; deactivated users land on `/account-inactive`; invite-only signup; CSP/HSTS; staff-gated portfolio routes |
+| 15 RAID log | P1-PRJ (risks & issues) | Implemented | `risk`/`issue` tables with a generated 1–9 score; settle-without-a-reason blocked by CHECK **and** Zod; escalation keeps the issue pointing at the risk; RLS allow+deny for staff/volunteer/guest |
+| 16 Search coverage | P0-CMD-01, P1-SRC-03, P0-UX-06 | Implemented | `global_search` covers 12 record types including risks, issues and documents; results round-robin so no type is starved by the limit; deep links land on the row and highlight it; drift test ties SQL branches to UI labels; RLS assertions prove search is not a side door |
 
 ## Deliberately not first-release (P2)
 

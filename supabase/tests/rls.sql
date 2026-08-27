@@ -627,6 +627,48 @@ begin
   reset role;
 
   -- ---------------------------------------------------------------------
+  -- Global search must not become a side door. It is SECURITY INVOKER, so
+  -- every branch inherits the caller's policies — but that is a property of
+  -- one keyword in the definition, and a future edit could quietly drop it.
+  -- These assertions fail loudly if it ever does.
+  -- ---------------------------------------------------------------------
+  perform tests.authenticate(v_staff);
+  begin
+    set local role authenticated;
+
+    select count(*) into n
+    from global_search('RLS fixture risk', 60)
+    where result_type = 'risk';
+    perform tests.ok(n = 1, 'staff finds a risk on their project through search');
+
+    select count(*) into n
+    from global_search('RLS fixture risk', 60)
+    where result_type = 'risk'
+      and href = '/projects/' || v_project || '?tab=risks&risk=' || v_risk;
+    perform tests.ok(n = 1, 'the risk search result deep-links to the RAID tab');
+
+    -- Another organization's records stay invisible even to a staff member.
+    select count(*) into n from global_search('Private risk', 60);
+    perform tests.ok(n = 0, 'search does not reach another organization risk');
+    select count(*) into n from global_search('Private issue', 60);
+    perform tests.ok(n = 0, 'search does not reach another organization issue');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_guest);
+  begin
+    set local role authenticated;
+    select count(*) into n
+    from global_search('RLS fixture risk', 60)
+    where result_type = 'risk';
+    perform tests.ok(n = 0, 'guest cannot find a project risk through search');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'guest cannot search risks (privilege denied)');
+  end;
+  reset role;
+
+  -- ---------------------------------------------------------------------
   -- Guest: the most restricted role. A guest belongs to the organization,
   -- so directory-level reads are expected; everything operational is not.
   -- ---------------------------------------------------------------------

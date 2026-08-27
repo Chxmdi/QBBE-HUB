@@ -69,6 +69,15 @@ Two gates exist specifically to catch drift that only shows up at runtime:
 
 - Migrations are append-only once applied to a shared environment. Fix
   forward with a new migration; never edit an applied file.
+- If a migration is applied through the Supabase management API rather than
+  `supabase db push`, the API records **its own** timestamp, not the one in the
+  filename. Rename the repo file to the recorded version before committing —
+  otherwise the next `db push` sees an unapplied migration and tries to create
+  objects that already exist. Check with:
+
+  ```sql
+  select version, name from supabase_migrations.schema_migrations order by version;
+  ```
 - Ship policies/indexes in the same migration as the tables they protect.
 - `supabase db push` in CI/CD or manually by an admin — no undocumented
   dashboard edits in production.

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { CheckCircle2, Circle } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
+import { DeepLinkScroll } from "@/components/shared/deep-link-scroll";
 import { LinkTabs } from "@/components/shared/link-tabs";
 import { HealthBadge } from "@/components/shared/status-badges";
 import { CloseProjectDialog } from "@/features/projects/components/close-project-dialog";
@@ -39,12 +40,18 @@ export default async function ProjectDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; risk?: string; issue?: string }>;
 }) {
   const session = await requireStaff();
   const { id } = await params;
-  const { tab: tabParam } = await searchParams;
-  const tab = tabParam ?? "overview";
+  const { tab: tabParam, risk: riskParam, issue: issueParam } = await searchParams;
+  const highlightRiskId = riskParam ?? null;
+  const highlightIssueId = issueParam ?? null;
+  // A search result carries ?tab=risks with it, but a link that has lost the
+  // tab still knows which record it means — honour it rather than opening the
+  // overview and looking broken.
+  const tab =
+    tabParam ?? (highlightRiskId || highlightIssueId ? "risks" : "overview");
   const supabase = await createSupabaseServerClient();
 
   const { data: projectRow } = await supabase
@@ -416,13 +423,26 @@ export default async function ProjectDetailPage({
       </div>
 
       {tab === "risks" ? (
+        <>
           <RaidLogPanel
             log={raidLog}
             projectId={project.id}
             people={options.people}
             canManage={session.isStaff}
+            highlightRiskId={highlightRiskId}
+            highlightIssueId={highlightIssueId}
           />
-        ) : null}
+          <DeepLinkScroll
+            targetId={
+              highlightRiskId
+                ? `risk-${highlightRiskId}`
+                : highlightIssueId
+                  ? `issue-${highlightIssueId}`
+                  : null
+            }
+          />
+        </>
+      ) : null}
 
       <Suspense fallback={null}>
         <TaskDrawer people={options.people} isStaff={session.isStaff} />

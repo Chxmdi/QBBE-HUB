@@ -7,14 +7,20 @@ import {
   type DocumentRow,
 } from "@/features/documents/components/document-list";
 import { DocumentUploadDialog } from "@/features/documents/components/document-upload-dialog";
+import { DeepLinkScroll } from "@/components/shared/deep-link-scroll";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Documents" };
 export const dynamic = "force-dynamic";
 
-export default async function DocumentsPage() {
+export default async function DocumentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ document?: string }>;
+}) {
   const session = await requireSession();
+  const { document: highlightId = null } = await searchParams;
   const supabase = await createSupabaseServerClient();
 
   const [{ data: documents }, { data: projects }, { data: programs }] =
@@ -59,7 +65,16 @@ export default async function DocumentsPage() {
           description="Upload a file or link a QBBE-controlled Drive document, then attach it to the program or project it supports."
         />
       ) : (
-        <DocumentList documents={rows} canManage={session.isStaff} />
+        <>
+          <DocumentList
+            documents={rows}
+            canManage={session.isStaff}
+            highlightId={highlightId}
+          />
+          <DeepLinkScroll
+            targetId={highlightId ? `document-${highlightId}` : null}
+          />
+        </>
       )}
     </div>
   );

@@ -69,9 +69,12 @@ function formatSize(bytes: number | null): string {
 export function DocumentList({
   documents,
   canManage,
+  highlightId = null,
 }: {
   documents: DocumentRow[];
   canManage: boolean;
+  /** Deep-linked from search: this row is anchored and marked. */
+  highlightId?: string | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -148,7 +151,13 @@ export function DocumentList({
       </TableHead>
       <tbody>
         {sorted.map((doc) => (
-          <TableRow key={doc.id}>
+          <TableRow
+            key={doc.id}
+            id={`document-${doc.id}`}
+            // A tint rather than aria-selected: this is a static table, not a
+            // grid, and nothing here is selectable.
+            className={doc.id === highlightId ? "bg-brand-soft/40" : undefined}
+          >
             <TableCell>
               <button
                 type="button"

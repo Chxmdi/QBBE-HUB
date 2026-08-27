@@ -3,20 +3,25 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  AlertTriangle,
   BarChart3,
   Building2,
   CalendarDays,
+  CalendarRange,
   FileText,
   FolderKanban,
   Hash,
   Layers,
   MessageSquare,
+  Paperclip,
   Search,
+  ShieldAlert,
   User,
 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { visibleNav } from "@/config/navigation";
 import { cn } from "@/lib/utils";
+import { searchTypeLabel } from "@/features/search/result-types";
 import type { SearchResult } from "@/types/entities";
 
 const typeIcons: Record<string, React.ReactNode> = {
@@ -27,6 +32,10 @@ const typeIcons: Record<string, React.ReactNode> = {
   message: <MessageSquare className="size-4" aria-hidden />,
   person: <User className="size-4" aria-hidden />,
   meeting: <CalendarDays className="size-4" aria-hidden />,
+  event: <CalendarRange className="size-4" aria-hidden />,
+  document: <Paperclip className="size-4" aria-hidden />,
+  risk: <ShieldAlert className="size-4" aria-hidden />,
+  issue: <AlertTriangle className="size-4" aria-hidden />,
   crm: <Building2 className="size-4" aria-hidden />,
   report: <BarChart3 className="size-4" aria-hidden />,
 };
@@ -72,7 +81,7 @@ export function CommandPalette({
       })),
       ...remoteResults.map((r) => ({
         label: r.title,
-        sub: r.result_type,
+        sub: searchTypeLabel(r.result_type, "singular"),
         href: r.href,
         icon: typeIcons[r.result_type] ?? (
           <Search className="size-4" aria-hidden />
@@ -153,7 +162,7 @@ export function CommandPalette({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Search tasks, projects, channels, messages, people…"
+          placeholder="Search tasks, projects, people, documents, risks…"
           aria-label="Search"
           role="combobox"
           aria-controls="command-palette-results"
@@ -203,9 +212,9 @@ export function CommandPalette({
               >
                 <span className="text-muted">{item.icon}</span>
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {item.sub ? (
-                  <span className="meta capitalize">{item.sub}</span>
-                ) : null}
+                {/* Labels arrive already cased; `capitalize` would turn
+                    "Go to" into "Go To". */}
+                {item.sub ? <span className="meta">{item.sub}</span> : null}
               </button>
             </li>
           ))
