@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { dailyDigest } from "@/features/jobs/services/handlers/daily-digest";
 import { retryFailedEmails } from "@/features/jobs/services/handlers/retry-failed-emails";
@@ -284,26 +286,50 @@ describe("isoWeekKey", () => {
 });
 
 describe("the registry", () => {
-  it("registers a handler for every scheduled job", () => {
-    // These names must match `job_definition` in the database; the runner
-    // refuses anything absent from either side.
-    expect(JOB_NAMES.sort()).toEqual(
-      [
-        "announcement-nudge",
-        "daily-digest",
-        "drain-notifications",
-        "due-date-reminders",
-        "gmail-watch-renew",
-        "google-sync",
-        "purge-job-history",
-        "retry-failed-emails",
-        "scheduled-announcements",
-        "stale-project-sweep",
-        "vms-sync",
-      ].sort(),
-    );
+  /**
+   * The names registered in SQL, read out of the migrations.
+   *
+   * This used to be a hand-written list, which only ever caught one direction:
+   * a new handler without a definition. The direction that actually breaks
+   * production is the other one — a `job_definition` row with no handler is a
+   * cron entry firing into nothing every few minutes, and a hand-written list
+   * cannot see it. Reading the migrations catches both.
+   */
+  function registeredJobNames(): string[] {
+    const dir = "supabase/migrations";
+    const names = new Set<string>();
+
+    for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql"))) {
+      const sql = readFileSync(join(dir, file), "utf8");
+      let from = sql.indexOf("insert into job_definition");
+      while (from !== -1) {
+        // The value tuples run until `on conflict` or the statement's end,
+        // whichever comes first.
+        const conflict = sql.indexOf("on conflict", from);
+        const semicolon = sql.indexOf(";", from);
+        const end = Math.min(
+          conflict === -1 ? semicolon : conflict,
+          semicolon === -1 ? sql.length : semicolon,
+        );
+        for (const match of sql.slice(from, end).matchAll(/\(\s*'([a-z0-9-]+)'/g)) {
+          names.add(match[1]);
+        }
+        from = sql.indexOf("insert into job_definition", end);
+      }
+    }
+    return [...names].sort();
+  }
+
+  it("has a handler for every job registered in the migrations", () => {
+    // The runner refuses a name absent from either side, so a mismatch here is
+    // a job that silently never runs or a schedule that fires into nothing.
+    expect(JOB_NAMES.sort()).toEqual(registeredJobNames());
     for (const name of JOB_NAMES) {
       expect(typeof JOB_HANDLERS[name]).toBe("function");
     }
+  });
+
+  it("finds the definitions at all, so the check above cannot pass vacuously", () => {
+    expect(registeredJobNames().length).toBeGreaterThan(5);
   });
 });

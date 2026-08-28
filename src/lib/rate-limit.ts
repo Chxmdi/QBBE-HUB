@@ -43,6 +43,9 @@ export const RATE_LIMITS = {
   "announcement:publish": { limit: 20, windowSeconds: 3600 },
   "document:upload": { limit: 60, windowSeconds: 3600 },
   "report:generate": { limit: 30, windowSeconds: 3600 },
+  // Tighter than the rest: each one copies sensitive data out of the reach of
+  // row-level security, and nobody legitimately needs a dozen an hour.
+  "export:request": { limit: 10, windowSeconds: 3600 },
   "job:run": { limit: 240, windowSeconds: 60 },
 } as const;
 

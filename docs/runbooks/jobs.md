@@ -198,3 +198,27 @@ The handler tests run the real handlers against an in-memory double
 (`tests/support/fake-supabase.ts`) that reproduces unique-index violations,
 visibility timeouts, and archiving. The database-level half of each guarantee is
 verified directly against Postgres, as above.
+
+## Data exports
+
+Two jobs back Admin → Exports:
+
+| Job | Schedule | What it does |
+|---|---|---|
+| `run-exports` | every 5 minutes | Claims queued exports, builds them, writes them to the private `exports` bucket. |
+| `expire-exports` | 03:17 daily | Deletes the file behind any export past its date and marks the row expired. |
+
+`run-exports` claims a row by updating `queued` → `running` with `.eq("status",
+"queued")`, so two overlapping runs cannot build the same export twice — the
+second update matches nothing. A run killed mid-build leaves a row in
+`running`; anything there for more than 30 minutes is put back on the next
+pass.
+
+`expire-exports` deletes the file **before** marking the row, so a failure
+between the two leaves a row that is retried next pass against an object that
+is already gone — which Storage treats as success. The other order would leave
+files nothing points at.
+
+The record outlives the file deliberately. After an incident the question is
+who took a copy and how often it was fetched, and that answer has to survive
+the copy being deleted.

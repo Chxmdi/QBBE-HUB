@@ -72,6 +72,7 @@ declare
   v_approval uuid;
   v_report uuid;
   v_version uuid;
+  v_export uuid;
   n int;
   v_private uuid;
   v_private_message uuid;
@@ -846,6 +847,92 @@ begin
     when insufficient_privilege then
       perform tests.ok(true, 'a volunteer cannot read report versions (privilege denied)');
   end;
+  reset role;
+
+  -- ---------------------------------------------------------------------
+  -- Data exports. An export is a copy of the organization's most sensitive
+  -- records sitting outside every policy that normally protects them, so the
+  -- rules about who may make one, and who may see that one was made, are
+  -- worth asserting rather than assuming.
+  -- ---------------------------------------------------------------------
+  perform tests.authenticate(v_staff);
+  set local role authenticated;
+
+  insert into export_job (organization_id, kind, requested_by)
+  values (v_org, 'crm_contacts', v_staff)
+  returning id into v_export;
+
+  select count(*) into n from export_job where id = v_export;
+  perform tests.ok(n = 1, 'staff can request an operational export');
+
+  -- The whole organization, and anything about a named person, are an
+  -- administrator's to ask for.
+  begin
+    insert into export_job (organization_id, kind, requested_by)
+    values (v_org, 'organization_data', v_staff);
+    perform tests.ok(false, 'staff should not be able to export everything');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'staff cannot export the whole organization');
+  end;
+
+  begin
+    insert into export_job (organization_id, kind, requested_by, subject_user_id)
+    values (v_org, 'person_data', v_staff, v_vol);
+    perform tests.ok(false, 'staff should not be able to export a person');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'staff cannot export everything about a person');
+  end;
+
+  -- Requesting one in somebody else's name would break the audit trail.
+  begin
+    insert into export_job (organization_id, kind, requested_by)
+    values (v_org, 'crm_contacts', v_admin);
+    perform tests.ok(false, 'staff should not be able to request as someone else');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'an export records who really asked for it');
+  end;
+
+  -- Nobody hand-edits an export: no update policy exists, so the update
+  -- matches nothing rather than moving the row.
+  begin
+    update export_job set expires_at = now() + interval '10 years'
+    where id = v_export;
+    select count(*) into n from export_job
+      where id = v_export and expires_at > now() + interval '1 year';
+    perform tests.ok(n = 0, 'nobody can extend an export''s life by hand');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'nobody can edit an export (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from export_job where id = v_export;
+    perform tests.ok(n = 0, 'a volunteer cannot see another person''s export');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'a volunteer cannot see exports (privilege denied)');
+  end;
+  reset role;
+
+  -- The subject of a person export can see that it happened. Being told what
+  -- was extracted about you is the point of the right, not a courtesy.
+  perform tests.authenticate(v_admin);
+  set local role authenticated;
+  insert into export_job (organization_id, kind, requested_by, subject_user_id)
+  values (v_org, 'person_data', v_admin, v_vol)
+  returning id into v_export;
+  reset role;
+
+  perform tests.authenticate(v_vol);
+  set local role authenticated;
+  select count(*) into n from export_job where id = v_export;
+  perform tests.ok(n = 1, 'the subject of a person export can see it was made');
   reset role;
 
   -- ---------------------------------------------------------------------
