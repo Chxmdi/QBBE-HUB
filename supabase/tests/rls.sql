@@ -70,6 +70,8 @@ declare
   v_opportunity uuid;
   v_request uuid;
   v_approval uuid;
+  v_report uuid;
+  v_version uuid;
   n int;
   v_private uuid;
   v_private_message uuid;
@@ -779,6 +781,71 @@ begin
   select count(*) into n from approval_request
     where id = v_approval and decision = 'approved';
   perform tests.ok(n = 1, 'the named approver can answer their approval');
+  reset role;
+
+  -- ---------------------------------------------------------------------
+  -- Report versions are append-only, and that is enforced by the *absence* of
+  -- an update policy rather than by any statement. An absence is exactly what
+  -- a later tidy-up removes without noticing, so it is asserted here: a
+  -- version that could be edited after approval would let the figures behind
+  -- a signed-off funder report change silently.
+  -- ---------------------------------------------------------------------
+  perform tests.authenticate(v_staff);
+  set local role authenticated;
+
+  insert into report_instance (organization_id, report_type, title, snapshot, generated_by)
+  values (v_org, 'project', 'RLS fixture report',
+          '{"metrics":{"tasks_completed":10}}'::jsonb, v_staff)
+  returning id into v_report;
+
+  insert into report_version (organization_id, report_id, version_number,
+                              snapshot, generated_by)
+  values (v_org, v_report, 1, '{"metrics":{"tasks_completed":10}}'::jsonb, v_staff)
+  returning id into v_version;
+
+  select count(*) into n from report_version where id = v_version;
+  perform tests.ok(n = 1, 'staff can record and read a report version');
+
+  begin
+    update report_version set snapshot = '{"metrics":{"tasks_completed":999}}'::jsonb
+    where id = v_version;
+    select count(*) into n from report_version
+      where id = v_version and snapshot -> 'metrics' ->> 'tasks_completed' = '999';
+    perform tests.ok(n = 0, 'nobody can rewrite a report version');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'nobody can rewrite a report version (privilege denied)');
+  end;
+
+  begin
+    delete from report_version where id = v_version;
+    select count(*) into n from report_version where id = v_version;
+    perform tests.ok(n = 1, 'nobody can delete a report version');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'nobody can delete a report version (privilege denied)');
+  end;
+
+  -- Sign-off is an administrator's job, matching the rule on report_instance.
+  begin
+    insert into report_approval (organization_id, report_version_id, decision, decided_by)
+    values (v_org, v_version, 'approved', v_staff);
+    perform tests.ok(false, 'staff should not be able to sign off a report');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'staff cannot sign off a report');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from report_version;
+    perform tests.ok(n = 0, 'a volunteer cannot read report versions');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'a volunteer cannot read report versions (privilege denied)');
+  end;
   reset role;
 
   -- ---------------------------------------------------------------------

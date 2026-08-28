@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getReportSnapshot } from "@/features/reports/services/report.queries";
 
 function csvEscape(value: unknown): string {
   const str = value === null || value === undefined ? "" : String(value);
@@ -28,10 +29,16 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const snapshot = report.snapshot as Record<string, unknown>;
+  // The approved version if there is one, so an export cannot quietly differ
+  // from what was signed off. Falls back to the report's own snapshot for
+  // anything generated before versioning existed.
+  const chosen = await getReportSnapshot(id);
+  const snapshot = (chosen?.snapshot ?? report.snapshot) as Record<string, unknown>;
   const rows: string[] = [];
   rows.push(`# ${report.title}`);
-  rows.push(`# Exported from snapshot generated ${report.created_at}`);
+  rows.push(
+    `# Exported from version ${chosen?.version ?? 1}, generated ${report.created_at}`,
+  );
   rows.push("");
 
   const metrics = (snapshot.metrics ?? {}) as Record<string, number>;

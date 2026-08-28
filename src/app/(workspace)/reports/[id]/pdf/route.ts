@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getReportSnapshot } from "@/features/reports/services/report.queries";
 import { buildSimplePdf, type PdfSection } from "@/lib/simple-pdf";
 
 function list(
@@ -36,7 +37,9 @@ export async function GET(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const snapshot = report.snapshot as Record<string, unknown>;
+  // Same rule as the screen and the CSV: the approved version wins.
+  const chosen = await getReportSnapshot(id);
+  const snapshot = (chosen?.snapshot ?? report.snapshot) as Record<string, unknown>;
   const metrics = (snapshot.metrics ?? {}) as Record<string, number>;
   const sections: PdfSection[] = [
     {

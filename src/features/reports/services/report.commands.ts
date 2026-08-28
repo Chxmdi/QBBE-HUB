@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { buildReportSnapshot } from "@/features/reports/services/report.snapshot";
 
 const generateSchema = z.object({
   reportType: z.enum(["program_quarterly", "project"]),
@@ -32,164 +33,17 @@ export async function generateReport(input: unknown): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { reportType, programId, projectId, periodStart, periodEnd } = parsed.data;
-  if (reportType === "program_quarterly" && !programId) {
-    return { ok: false, error: "Pick a program for a quarterly report." };
-  }
-  if (reportType === "project" && !projectId) {
-    return { ok: false, error: "Pick a project for a project report." };
-  }
 
   const supabase = await createSupabaseServerClient();
-  const periodEndExclusive = new Date(
-    new Date(periodEnd).getTime() + 86400_000,
-  ).toISOString();
-
-  let title = "";
-  const snapshot: Record<string, unknown> = {
-    generated_at: new Date().toISOString(),
-    period_start: periodStart,
-    period_end: periodEnd,
-  };
-
-  if (reportType === "program_quarterly") {
-    const [{ data: program }, { data: projects }, { data: tasks }, { data: meetings }, { data: decisions }, { data: events }, { data: updates }] =
-      await Promise.all([
-        supabase
-          .from("program")
-          .select("name, description, lead:lead_id(full_name)")
-          .eq("id", programId!)
-          .maybeSingle(),
-        supabase
-          .from("project")
-          .select("id, name, stage, health, outcome, target_date")
-          .eq("program_id", programId!)
-          .is("archived_at", null),
-        supabase
-          .from("task")
-          .select("id, title, status, completed_at, due_at")
-          .eq("program_id", programId!)
-          .is("archived_at", null),
-        supabase
-          .from("meeting")
-          .select("id, title, starts_at, status")
-          .eq("program_id", programId!)
-          .gte("starts_at", periodStart)
-          .lt("starts_at", periodEndExclusive),
-        supabase
-          .from("decision")
-          .select("id, title, decided_at")
-          .gte("decided_at", periodStart)
-          .lt("decided_at", periodEndExclusive),
-        supabase
-          .from("event")
-          .select("id, name, starts_at, status")
-          .eq("program_id", programId!)
-          .gte("starts_at", periodStart)
-          .lt("starts_at", periodEndExclusive),
-        supabase
-          .from("project_status_update")
-          .select("id, health, progress_summary, created_at, project_id")
-          .gte("created_at", periodStart)
-          .lt("created_at", periodEndExclusive)
-          .limit(50),
-      ]);
-
-    if (!program) return { ok: false, error: "Program not found." };
-    title = `${program.name} — Quarterly report (${periodStart} → ${periodEnd})`;
-
-    const completedInPeriod = (tasks ?? []).filter(
-      (t) =>
-        t.completed_at &&
-        t.completed_at >= periodStart &&
-        t.completed_at < periodEndExclusive,
-    );
-    const projectIds = new Set((projects ?? []).map((p) => p.id));
-    Object.assign(snapshot, {
-      program: {
-        name: program.name,
-        description: program.description,
-        lead: (program.lead as unknown as { full_name: string } | null)?.full_name ?? null,
-      },
-      metrics: {
-        projects_total: (projects ?? []).length,
-        projects_active: (projects ?? []).filter((p) => p.stage === "active").length,
-        tasks_total: (tasks ?? []).length,
-        tasks_completed_in_period: completedInPeriod.length,
-        meetings_held: (meetings ?? []).length,
-        events_in_period: (events ?? []).length,
-      },
-      projects: projects ?? [],
-      delivered_work: completedInPeriod.map((t) => ({
-        title: t.title,
-        completed_at: t.completed_at,
-      })),
-      meetings: meetings ?? [],
-      decisions: (decisions ?? []).slice(0, 30),
-      events: events ?? [],
-      status_updates: (updates ?? []).filter((u) => projectIds.has(u.project_id)),
-    });
-  } else {
-    const [{ data: project }, { data: tasks }, { data: milestones }, { data: updates }, { data: decisions }] =
-      await Promise.all([
-        supabase
-          .from("project")
-          .select(
-            "name, outcome, stage, health, health_reason, start_date, target_date, owner:owner_id(full_name)",
-          )
-          .eq("id", projectId!)
-          .maybeSingle(),
-        supabase
-          .from("task")
-          .select("id, title, status, completed_at, due_at, blocked_reason")
-          .eq("project_id", projectId!)
-          .is("archived_at", null),
-        supabase
-          .from("milestone")
-          .select("id, name, due_date, completed_at")
-          .eq("project_id", projectId!),
-        supabase
-          .from("project_status_update")
-          .select("id, health, progress_summary, next_steps, blockers, created_at")
-          .eq("project_id", projectId!)
-          .order("created_at", { ascending: false })
-          .limit(10),
-        supabase
-          .from("decision")
-          .select("id, title, decided_at")
-          .eq("project_id", projectId!)
-          .limit(30),
-      ]);
-
-    if (!project) return { ok: false, error: "Project not found." };
-    title = `${project.name} — Project report (${periodStart} → ${periodEnd})`;
-
-    Object.assign(snapshot, {
-      project: {
-        name: project.name,
-        outcome: project.outcome,
-        stage: project.stage,
-        health: project.health,
-        health_reason: project.health_reason,
-        owner: (project.owner as unknown as { full_name: string } | null)?.full_name ?? null,
-        start_date: project.start_date,
-        target_date: project.target_date,
-      },
-      metrics: {
-        tasks_total: (tasks ?? []).length,
-        tasks_completed: (tasks ?? []).filter((t) => t.status === "completed").length,
-        tasks_blocked: (tasks ?? []).filter((t) => t.status === "blocked").length,
-        milestones_total: (milestones ?? []).length,
-        milestones_completed: (milestones ?? []).filter((m) => m.completed_at).length,
-      },
-      milestones: milestones ?? [],
-      blockers: (tasks ?? [])
-        .filter((t) => t.status === "blocked")
-        .map((t) => ({ title: t.title, reason: t.blocked_reason })),
-      status_updates: updates ?? [],
-      decisions: decisions ?? [],
-      tasks: tasks ?? [],
-    });
-  }
+  const built = await buildReportSnapshot(supabase, {
+    reportType,
+    programId,
+    projectId,
+    periodStart,
+    periodEnd,
+  });
+  if (!built.ok) return { ok: false, error: built.error };
+  const { title, snapshot } = built;
 
   const { data: report, error } = await supabase
     .from("report_instance")
@@ -209,6 +63,17 @@ export async function generateReport(input: unknown): Promise<ActionResult> {
 
   if (error || !report) return { ok: false, error: "Could not save the report." };
 
+  // Version 1. The report row keeps a copy of the latest snapshot, but the
+  // version is the record that cannot be rewritten.
+  const { error: versionError } = await supabase.rpc("record_report_version", {
+    p_report_id: report.id,
+    p_snapshot: snapshot,
+    p_note: "First generation.",
+  });
+  if (versionError) {
+    return { ok: false, error: "The report was saved but its version was not recorded." };
+  }
+
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
     actor_id: session.userId,
@@ -223,30 +88,137 @@ export async function generateReport(input: unknown): Promise<ActionResult> {
   return { ok: true, id: report.id as string };
 }
 
-export async function approveReport(reportId: string): Promise<ActionResult> {
+/**
+ * Recomputes a report and appends a new version.
+ *
+ * The report keeps its identity — same title, same period, same place in the
+ * list — and gains a second set of numbers. Approval is cleared by the
+ * database as it does so, because a report whose figures have moved is not
+ * still the report somebody signed.
+ */
+export async function regenerateReport(reportId: string): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+
+  const limited = await enforceRateLimit("report:generate", session.userId);
+  if (limited) return limited;
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
+  const { data: report } = await supabase
     .from("report_instance")
-    .update({
-      status: "approved",
-      approved_by: session.userId,
-      approved_at: new Date().toISOString(),
-    })
-    .eq("id", reportId);
-  if (error) return { ok: false, error: "Could not approve the report." };
+    .select("id, report_type, program_id, project_id, period_start, period_end")
+    .eq("id", reportId)
+    .maybeSingle();
+
+  if (!report) return { ok: false, error: "That report is not available to you." };
+  if (!report.period_start || !report.period_end) {
+    return { ok: false, error: "That report has no period, so it cannot be rebuilt." };
+  }
+
+  const built = await buildReportSnapshot(supabase, {
+    reportType: report.report_type as "program_quarterly" | "project",
+    programId: report.program_id,
+    projectId: report.project_id,
+    periodStart: report.period_start as string,
+    periodEnd: report.period_end as string,
+  });
+  if (!built.ok) return { ok: false, error: built.error };
+
+  const { data: versionId, error } = await supabase.rpc("record_report_version", {
+    p_report_id: reportId,
+    p_snapshot: built.snapshot,
+    p_note: "Regenerated from live data.",
+  });
+
+  if (error || !versionId) {
+    return { ok: false, error: "Could not record a new version of this report." };
+  }
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "reporting",
-    action: "report_approved",
+    action: "report_regenerated",
     object_type: "report_instance",
     object_id: reportId,
   });
 
   revalidatePath(`/reports/${reportId}`);
   revalidatePath("/reports");
-  return { ok: true };
+  return { ok: true, id: versionId as string };
+}
+
+/**
+ * Signing off, or refusing, one version of a report.
+ *
+ * The decision is recorded against a version rather than the report, so the
+ * approval says what was approved. `decide_report_version` writes the approval
+ * and moves the report together, and refuses a version that has already been
+ * superseded.
+ */
+async function decideLatestVersion(
+  reportId: string,
+  decision: "approved" | "rejected",
+  note?: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  if (decision === "rejected" && !note?.trim()) {
+    return { ok: false, error: "Say why you are sending it back." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: latest } = await supabase
+    .from("report_version")
+    .select("id")
+    .eq("report_id", reportId)
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!latest) {
+    return { ok: false, error: "That report has no version to decide on." };
+  }
+
+  const { error } = await supabase.rpc("decide_report_version", {
+    p_version_id: latest.id,
+    p_decision: decision,
+    p_note: note?.trim() || null,
+  });
+
+  if (error) {
+    // The likeliest cause is a second decision on the same version, which the
+    // unique index refuses — and which means somebody already answered.
+    return {
+      ok: false,
+      error:
+        error.code === "23505"
+          ? "This version has already been decided. Regenerate it to decide again."
+          : "Could not record that decision.",
+    };
+  }
+
+  await supabase.from("audit_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    event_type: "reporting",
+    action: decision === "approved" ? "report_approved" : "report_rejected",
+    object_type: "report_version",
+    object_id: latest.id,
+  });
+
+  revalidatePath(`/reports/${reportId}`);
+  revalidatePath("/reports");
+  return { ok: true, id: latest.id as string };
+}
+
+export async function approveReport(reportId: string): Promise<ActionResult> {
+  return decideLatestVersion(reportId, "approved");
+}
+
+export async function rejectReport(
+  reportId: string,
+  note: string,
+): Promise<ActionResult> {
+  return decideLatestVersion(reportId, "rejected", note);
 }

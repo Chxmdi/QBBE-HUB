@@ -4,7 +4,12 @@ import { notFound, redirect } from "next/navigation";
 import { Download, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
-import { ApproveReportButton } from "@/features/reports/components/approve-report-button";
+import { ReportDecisionControls } from "@/features/reports/components/report-decision-controls";
+import { VersionHistory } from "@/features/reports/components/version-history";
+import {
+  getReportVersions,
+  versionToShow,
+} from "@/features/reports/services/report.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, formatDateTime } from "@/lib/utils";
@@ -72,6 +77,11 @@ export default async function ReportDetailPage({
     .maybeSingle();
 
   if (!reportRow) notFound();
+
+  // The approved version if there is one, otherwise the latest. Without this,
+  // regenerating a report would silently change what a funder was sent.
+  const versions = await getReportVersions(id);
+  const shown = versionToShow(versions);
   const report = reportRow as unknown as {
     id: string;
     title: string;
@@ -83,7 +93,9 @@ export default async function ReportDetailPage({
     generator: { full_name: string } | null;
     approver: { full_name: string } | null;
   };
-  const snapshot = report.snapshot;
+  // report_instance.snapshot mirrors the latest version and is the fallback
+  // for any report generated before versioning existed.
+  const snapshot = (shown?.snapshot ?? report.snapshot) as Snapshot;
   const metrics = (snapshot.metrics ?? {}) as Record<string, number>;
   const generator = report.generator;
   const approver = report.approver;
@@ -167,9 +179,11 @@ export default async function ReportDetailPage({
               PDF
             </a>
             <PrintHint />
-            {session.isAdmin && report.status !== "approved" ? (
-              <ApproveReportButton reportId={report.id as string} />
-            ) : null}
+            <ReportDecisionControls
+              reportId={report.id as string}
+              canDecide={session.isAdmin}
+              isApproved={report.status === "approved"}
+            />
           </div>
         }
       />
@@ -184,9 +198,16 @@ export default async function ReportDetailPage({
       <SnapshotList title="Decisions" rows={decisions} />
       <SnapshotList title="Events" rows={events} />
 
+      <VersionHistory
+        versions={versions}
+        shownVersion={shown?.version_number ?? null}
+      />
+
       <p className="meta mt-8">
-        Snapshot content is frozen at generation time (RPT-001); later changes
-        to live records do not alter this report.
+        Each version is frozen at the moment it was generated (RPT-001), and an
+        approved report shows the version that was approved. Regenerating adds
+        a version rather than replacing one, so a sign-off always names the
+        figures it was given.
       </p>
     </div>
   );
