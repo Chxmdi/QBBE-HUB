@@ -5,6 +5,9 @@ import { PageHeader } from "@/components/shared/page-header";
 import { HealthBadge, StageBadge } from "@/components/shared/status-badges";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
+import { OutcomesPanel } from "@/features/outcomes/components/outcomes-panel";
+import { getProgramOutcomes } from "@/features/outcomes/services/outcome.queries";
+import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireStaff } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/utils";
@@ -18,7 +21,7 @@ export default async function ProgramDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireStaff();
+  const session = await requireStaff();
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
 
@@ -32,7 +35,7 @@ export default async function ProgramDetailPage({
 
   if (!program) notFound();
 
-  const [{ data: projects }, { data: events }, { data: activity }] =
+  const [{ data: projects }, { data: events }, { data: activity }, outcomes, options] =
     await Promise.all([
       supabase
         .from("project")
@@ -56,6 +59,8 @@ export default async function ProgramDetailPage({
         .eq("program_id", id)
         .order("created_at", { ascending: false })
         .limit(12),
+      getProgramOutcomes(id),
+      getPickerOptions(),
     ]);
 
   const lead = program.lead as unknown as {
@@ -86,6 +91,21 @@ export default async function ProgramDetailPage({
           ) : undefined
         }
       />
+
+      {/* Outputs and outcomes come first: they are what the program is for,
+          and what a funder asks about. */}
+      <div className="mb-10">
+        <OutcomesPanel
+          outcomes={outcomes}
+          programId={id}
+          people={options.people}
+          projects={(projects ?? []).map((p) => ({
+            id: p.id as string,
+            label: p.name as string,
+          }))}
+          canManage={session.isStaff}
+        />
+      </div>
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_360px]">
         <section aria-labelledby="program-projects">

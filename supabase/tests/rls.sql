@@ -73,6 +73,9 @@ declare
   v_report uuid;
   v_version uuid;
   v_export uuid;
+  v_prog uuid;
+  v_operation uuid;
+  v_metric uuid;
   n int;
   v_private uuid;
   v_private_message uuid;
@@ -933,6 +936,79 @@ begin
   set local role authenticated;
   select count(*) into n from export_job where id = v_export;
   perform tests.ok(n = 1, 'the subject of a person export can see it was made');
+  reset role;
+
+  -- ---------------------------------------------------------------------
+  -- Delivery and outcomes. Volunteers run these sessions, so they can read the
+  -- record; only staff write it. A delivery record a volunteer cannot see is a
+  -- record they cannot correct, and the numbers in it end up in a funder
+  -- report with their name on the session.
+  -- ---------------------------------------------------------------------
+  perform tests.authenticate(v_staff);
+  set local role authenticated;
+
+  insert into program (organization_id, name, slug, created_by)
+  values (v_org, 'RLS fixture programme', 'rls-fixture-programme', v_staff)
+  returning id into v_prog;
+
+  insert into program_operation (organization_id, program_id, title, occurred_on,
+                                 status, attendee_count, duration_hours, created_by)
+  values (v_org, v_prog, 'RLS fixture session', current_date,
+          'delivered', 24, 2.5, v_staff)
+  returning id into v_operation;
+
+  select contact_hours into n from program_operation where id = v_operation;
+  perform tests.ok(n = 60, 'contact hours are derived from attendance and duration');
+
+  insert into outcome_metric (organization_id, program_id, name, direction,
+                              baseline, target, created_by)
+  values (v_org, v_prog, 'RLS fixture measure', 'increase', 4, 8, v_staff)
+  returning id into v_metric;
+
+  insert into outcome_measurement (organization_id, metric_id, measured_on, value,
+                                   recorded_by)
+  values (v_org, v_metric, current_date, 6, v_staff);
+
+  select count(*) into n from outcome_measurement where metric_id = v_metric;
+  perform tests.ok(n = 1, 'staff can record a measurement');
+  reset role;
+
+  perform tests.authenticate(v_vol);
+  set local role authenticated;
+
+  select count(*) into n from program_operation where id = v_operation;
+  perform tests.ok(n = 1, 'a volunteer can read what was delivered');
+
+  select count(*) into n from outcome_metric where id = v_metric;
+  perform tests.ok(n = 1, 'a volunteer can read the outcome measures');
+
+  begin
+    insert into program_operation (organization_id, program_id, title, occurred_on)
+    values (v_org, v_prog, 'Volunteer session', current_date);
+    perform tests.ok(false, 'a volunteer should not be able to record delivery');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'a volunteer cannot record delivery');
+  end;
+
+  begin
+    update program_operation set attendee_count = 999 where id = v_operation;
+    select count(*) into n from program_operation
+      where id = v_operation and attendee_count = 999;
+    perform tests.ok(n = 0, 'a volunteer cannot change an attendance figure');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'a volunteer cannot change attendance (privilege denied)');
+  end;
+
+  begin
+    insert into outcome_measurement (organization_id, metric_id, measured_on, value)
+    values (v_org, v_metric, current_date - 1, 99);
+    perform tests.ok(false, 'a volunteer should not be able to record a measurement');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'a volunteer cannot record a measurement');
+  end;
   reset role;
 
   -- ---------------------------------------------------------------------
