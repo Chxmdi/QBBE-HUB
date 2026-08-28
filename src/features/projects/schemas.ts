@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 
 export const createMilestoneSchema = z.object({
   projectId: z.string().uuid(),
-  name: z.string().trim().min(1, "A milestone needs a name.").max(200),
+  name: requiredText("A milestone needs a name.", 200),
   dueDate: z.string().optional(),
 });
 

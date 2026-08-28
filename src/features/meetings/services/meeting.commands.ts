@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -12,10 +13,10 @@ import {
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const createMeetingSchema = z.object({
-  title: z.string().trim().min(1, "A meeting needs a title.").max(200),
+  title: requiredText("A meeting needs a title.", 200),
   purpose: z.string().trim().max(2000).optional(),
   projectId: z.string().uuid().optional(),
-  startsAt: z.string().min(1, "Pick a start time."),
+  startsAt: requiredText("Pick a start time."),
   durationMinutes: z.coerce.number().int().min(15).max(480).default(60),
   location: z.string().trim().max(300).optional(),
   meetingLink: z.string().trim().url().max(500).optional().or(z.literal("")),
@@ -76,9 +77,9 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
 
 const updateMeetingSchema = z.object({
   meetingId: z.string().uuid(),
-  title: z.string().trim().min(1, "A meeting needs a title.").max(200),
+  title: requiredText("A meeting needs a title.", 200),
   purpose: z.string().trim().max(2000).optional(),
-  startsAt: z.string().min(1, "Pick a start time."),
+  startsAt: requiredText("Pick a start time."),
   durationMinutes: z.coerce.number().int().min(15).max(480),
   location: z.string().trim().max(300).optional(),
 });
@@ -184,7 +185,7 @@ export async function cancelMeeting(input: unknown): Promise<ActionResult> {
 
 const agendaSchema = z.object({
   meetingId: z.string().uuid(),
-  title: z.string().trim().min(1, "Agenda items need a title.").max(300),
+  title: requiredText("Agenda items need a title.", 300),
   kind: z.enum(["information", "discussion", "decision"]).default("discussion"),
   timeBoxMinutes: z.coerce.number().int().min(1).max(240).optional(),
 });
@@ -232,7 +233,7 @@ export async function addAgendaItem(input: unknown): Promise<ActionResult> {
 
 const actionSchema = z.object({
   meetingId: z.string().uuid(),
-  title: z.string().trim().min(1, "Actions need a description.").max(300),
+  title: requiredText("Actions need a description.", 300),
   ownerId: z.string().uuid().optional(),
   dueAt: z.string().optional(),
 });
@@ -304,7 +305,7 @@ export async function addMeetingAction(input: unknown): Promise<ActionResult> {
 
 const decisionSchema = z.object({
   meetingId: z.string().uuid(),
-  title: z.string().trim().min(1, "Decisions need a statement.").max(300),
+  title: requiredText("Decisions need a statement.", 300),
   detail: z.string().trim().max(2000).optional(),
 });
 

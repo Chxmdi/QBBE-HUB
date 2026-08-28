@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
 
 const linkSchema = z.object({
-  title: z.string().trim().min(1, "Give the resource a title.").max(200),
+  title: requiredText("Give the resource a title.", 200),
   url: z.string().trim().url("Enter a valid URL."),
   description: z.string().trim().max(2000).optional(),
   projectId: z.string().uuid().optional(),

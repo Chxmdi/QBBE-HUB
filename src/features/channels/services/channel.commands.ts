@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const createChannelSchema = z.object({
-  name: z.string().trim().min(1, "A channel needs a name.").max(80),
+  name: requiredText("A channel needs a name.", 80),
   purpose: z.string().trim().max(500).optional(),
   privacy: z.enum(["public", "private"]).default("public"),
   type: z

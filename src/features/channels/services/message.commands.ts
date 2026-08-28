@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { mentionRecipientIds } from "@/features/channels/mention-recipients";
@@ -12,7 +13,7 @@ const sendMessageSchema = z.object({
   channelId: z.string().uuid().optional(),
   conversationId: z.string().uuid().optional(),
   threadRootId: z.string().uuid().optional(),
-  body: z.string().trim().min(1, "Message cannot be empty.").max(10000),
+  body: requiredText("Message cannot be empty.", 10000),
 });
 
 /**
@@ -216,7 +217,7 @@ export async function toggleSavedMessage(
 
 const editSchema = z.object({
   messageId: z.string().uuid(),
-  body: z.string().trim().min(1, "Message cannot be empty.").max(10000),
+  body: requiredText("Message cannot be empty.", 10000),
 });
 
 /**

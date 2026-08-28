@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -13,12 +14,12 @@ import { fireWorkflows } from "@/features/admin/services/workflow.runtime";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const createEventSchema = z.object({
-  name: z.string().trim().min(1, "An event needs a name.").max(200),
+  name: requiredText("An event needs a name.", 200),
   description: z.string().trim().max(5000).optional(),
   programId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
   eventType: z.string().trim().max(60).optional(),
-  startsAt: z.string().min(1, "Pick a start time."),
+  startsAt: requiredText("Pick a start time."),
   endsAt: z.string().optional(),
   location: z.string().trim().max(300).optional(),
   volunteerNeed: z.coerce.number().int().min(0).max(500).optional(),
@@ -126,10 +127,10 @@ export async function createEvent(input: unknown): Promise<ActionResult> {
 
 const updateEventSchema = z.object({
   eventId: z.string().uuid(),
-  name: z.string().trim().min(1, "An event needs a name.").max(200),
+  name: requiredText("An event needs a name.", 200),
   description: z.string().trim().max(5000).optional(),
   eventType: z.string().trim().max(60).optional(),
-  startsAt: z.string().min(1, "Pick a start time."),
+  startsAt: requiredText("Pick a start time."),
   endsAt: z.string().optional(),
   location: z.string().trim().max(300).optional(),
   volunteerNeed: z.coerce.number().int().min(0).max(500).optional(),

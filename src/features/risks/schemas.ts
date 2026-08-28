@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 
 /**
  * The risk and issue log.
@@ -74,7 +75,7 @@ const settledIssueMessage = "Record how it was resolved.";
 
 export const createRiskSchema = z.object({
   projectId: z.string().uuid(),
-  title: z.string().trim().min(1, "A risk needs a title.").max(300),
+  title: requiredText("A risk needs a title.", 300),
   description: z.string().trim().max(5000).optional(),
   likelihood: z.enum(RISK_LIKELIHOODS).default("medium"),
   impact: z.enum(RISK_IMPACTS).default("medium"),
@@ -108,7 +109,7 @@ export const updateRiskSchema = z
 export const createIssueSchema = z.object({
   projectId: z.string().uuid(),
   riskId: z.string().uuid().optional(),
-  title: z.string().trim().min(1, "An issue needs a title.").max(300),
+  title: requiredText("An issue needs a title.", 300),
   description: z.string().trim().max(5000).optional(),
   severity: z.enum(ISSUE_SEVERITIES).default("medium"),
   ownerId: z.string().uuid().optional(),

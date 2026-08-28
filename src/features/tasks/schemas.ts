@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import type { TaskStatus } from "@/types/entities";
 
 /** Canonical statuses (P0-TSK-02). Shared by board, list, and commands. */
@@ -30,7 +31,7 @@ const BULK_STATUS_ENUM = [
 ] as const;
 
 export const createTaskSchema = z.object({
-  title: z.string().trim().min(1, "A task needs a title.").max(300),
+  title: requiredText("A task needs a title.", 300),
   description: z.string().trim().max(5000).optional(),
   projectId: z.string().uuid().optional(),
   milestoneId: z.string().uuid().optional(),
@@ -60,7 +61,7 @@ export const bulkSchema = z.object({
 
 export const checklistItemSchema = z.object({
   taskId: z.string().uuid(),
-  title: z.string().trim().min(1, "A checklist item needs a title.").max(300),
+  title: requiredText("A checklist item needs a title.", 300),
 });
 
 export const taskDependencySchema = z.object({

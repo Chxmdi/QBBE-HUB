@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const saveViewSchema = z.object({
-  name: z.string().trim().min(1, "Name the view.").max(80),
+  name: requiredText("Name the view.", 80),
   path: z.string().trim().min(1).max(120).default("/my-work"),
   query: z.record(z.string()).default({}),
 });

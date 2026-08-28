@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const profileSchema = z.object({
-  fullName: z.string().trim().min(1, "Tell us your name.").max(120),
+  fullName: requiredText("Tell us your name.", 120),
   title: z.string().trim().max(120).optional(),
   timezone: z.string().trim().max(80).optional(),
 });

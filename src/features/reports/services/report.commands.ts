@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -11,8 +12,8 @@ const generateSchema = z.object({
   reportType: z.enum(["program_quarterly", "project"]),
   programId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
-  periodStart: z.string().min(1, "Pick a period start."),
-  periodEnd: z.string().min(1, "Pick a period end."),
+  periodStart: requiredText("Pick a period start."),
+  periodEnd: requiredText("Pick a period end."),
 });
 
 /**

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 
 /**
  * The funding and partnership pipeline.
@@ -177,14 +178,7 @@ function settlementRules<T extends z.ZodTypeAny>(schema: T) {
 }
 
 const baseFields = {
-  // `required_error` as well as `min(1)`: the form dialog drops empty values,
-  // so a blank field arrives missing, and Zod's own "Required" would be shown
-  // instead of the sentence written for the person.
-  title: z
-    .string({ required_error: "An opportunity needs a title." })
-    .trim()
-    .min(1, "An opportunity needs a title.")
-    .max(300),
+  title: requiredText("An opportunity needs a title.", 300),
   description: z.string().trim().max(5000).optional(),
   kind: z.enum(OPPORTUNITY_KINDS).default("grant"),
   stage: z.enum(OPPORTUNITY_STAGES).default("identified"),

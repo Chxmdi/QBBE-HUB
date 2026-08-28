@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 
 /**
  * Intake: proposing work, and asking a named person to decide.
@@ -84,25 +85,12 @@ export function requestIsStale(
   return daysWaiting(request.created_at, now) >= STALE_AFTER_DAYS;
 }
 
-/**
- * `required_error` as well as `min(1)`, deliberately. The form dialog drops
- * empty values before submitting, so a field left blank arrives *missing*
- * rather than empty — and without this, Zod answers "Required" and the
- * sentence written for the person is never seen.
- */
 export const createProjectRequestSchema = z.object({
-  title: z
-    .string({ required_error: "Give the proposal a name." })
-    .trim()
-    .min(1, "Give the proposal a name.")
-    .max(300),
-  summary: z
-    .string({
-      required_error: "Say what you are proposing — a title on its own is not a request.",
-    })
-    .trim()
-    .min(1, "Say what you are proposing — a title on its own is not a request.")
-    .max(5000),
+  title: requiredText("Give the proposal a name.", 300),
+  summary: requiredText(
+    "Say what you are proposing — a title on its own is not a request.",
+    5000,
+  ),
   rationale: z.string().trim().max(5000).optional(),
   beneficiaries: z.string().trim().max(2000).optional(),
   programId: z.string().uuid().nullable().optional(),

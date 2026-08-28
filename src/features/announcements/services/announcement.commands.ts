@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -31,8 +32,8 @@ export async function acknowledgeAnnouncement(
 }
 
 const publishSchema = z.object({
-  title: z.string().trim().min(1, "Announcements need a title.").max(200),
-  body: z.string().trim().min(1, "Announcements need content.").max(10000),
+  title: requiredText("Announcements need a title.", 200),
+  body: requiredText("Announcements need content.", 10000),
   priority: z.enum(["normal", "important", "critical"]).default("normal"),
   requiresAck: z.boolean().default(false),
   ackDeadline: z.string().optional(),

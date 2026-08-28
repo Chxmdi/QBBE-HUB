@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const createProjectSchema = z.object({
-  name: z.string().trim().min(1, "A project needs a name.").max(200),
+  name: requiredText("A project needs a name.", 200),
   outcome: z.string().trim().max(2000).optional(),
   programId: z.string().uuid().optional(),
   ownerId: z.string().uuid().optional(),
@@ -99,7 +100,7 @@ export async function createProject(input: unknown): Promise<ActionResult> {
 const statusUpdateSchema = z.object({
   projectId: z.string().uuid(),
   health: z.enum(["on_track", "at_risk", "off_track", "paused"]),
-  progressSummary: z.string().trim().min(1, "Progress summary is required.").max(5000),
+  progressSummary: requiredText("Progress summary is required.", 5000),
   nextSteps: z.string().trim().max(5000).optional(),
   blockers: z.string().trim().max(5000).optional(),
   decisionsNeeded: z.string().trim().max(5000).optional(),
@@ -295,7 +296,7 @@ export async function getUnresolvedWork(
 
 const closeSchema = z.object({
   projectId: z.string().uuid(),
-  results: z.string().trim().min(1, "Describe what the project delivered.").max(5000),
+  results: requiredText("Describe what the project delivered.", 5000),
   lessons: z.string().trim().max(5000).optional(),
   archiveOpenTasks: z.boolean().default(false),
 });
@@ -380,7 +381,7 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
 }
 
 const createProgramSchema = z.object({
-  name: z.string().trim().min(1, "A program needs a name.").max(200),
+  name: requiredText("A program needs a name.", 200),
   description: z.string().trim().max(2000).optional(),
   leadId: z.string().uuid().optional(),
 });

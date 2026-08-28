@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const orgSchema = z.object({
-  name: z.string().trim().min(1, "Organizations need a name.").max(200),
+  name: requiredText("Organizations need a name.", 200),
   category: z.enum([
     "funder", "sponsor", "school", "university", "community",
     "government", "vendor", "media", "donor", "association",
@@ -96,7 +97,7 @@ export async function createCrmOrganization(input: unknown): Promise<ActionResul
 
 const contactSchema = z.object({
   crmOrganizationId: z.string().uuid(),
-  fullName: z.string().trim().min(1, "Contacts need a name.").max(200),
+  fullName: requiredText("Contacts need a name.", 200),
   roleTitle: z.string().trim().max(200).optional(),
   email: z.string().trim().email().max(300).optional().or(z.literal("")),
   phone: z.string().trim().max(50).optional(),
@@ -131,7 +132,7 @@ const interactionSchema = z.object({
   crmOrganizationId: z.string().uuid(),
   contactId: z.string().uuid().optional(),
   interactionType: z.enum(["meeting", "call", "email", "message", "note", "other"]),
-  summary: z.string().trim().min(1, "Describe the interaction.").max(5000),
+  summary: requiredText("Describe the interaction.", 5000),
   nextSteps: z.string().trim().max(2000).optional(),
 });
 
@@ -162,8 +163,8 @@ export async function recordInteraction(input: unknown): Promise<ActionResult> {
 
 const followUpSchema = z.object({
   crmOrganizationId: z.string().uuid(),
-  title: z.string().trim().min(1, "Follow-ups need a description.").max(300),
-  dueAt: z.string().min(1, "Pick a due date."),
+  title: requiredText("Follow-ups need a description.", 300),
+  dueAt: requiredText("Pick a due date."),
 });
 
 export async function createFollowUp(input: unknown): Promise<ActionResult> {
