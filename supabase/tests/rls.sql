@@ -68,6 +68,8 @@ declare
   v_org uuid;
   v_crm uuid;
   v_opportunity uuid;
+  v_request uuid;
+  v_approval uuid;
   n int;
   v_private uuid;
   v_private_message uuid;
@@ -685,6 +687,98 @@ begin
     when insufficient_privilege or check_violation then
       perform tests.ok(true, 'guest cannot record an opportunity (privilege denied)');
   end;
+  reset role;
+
+  -- ---------------------------------------------------------------------
+  -- Intake. Anyone may propose work; only staff run the queue; and only the
+  -- person named on an approval can answer it. That last one is the whole
+  -- point of naming an approver rather than notifying a group, so it gets an
+  -- explicit allow and an explicit deny.
+  -- ---------------------------------------------------------------------
+  perform tests.authenticate(v_vol);
+  set local role authenticated;
+
+  insert into project_request (organization_id, title, summary, requested_by)
+  values (v_org, 'Volunteer proposal', 'A Saturday club', v_vol)
+  returning id into v_request;
+
+  -- The insert above is the allow case; reading it back is what proves it,
+  -- because tests.ok(true) after an insert asserts nothing the script would
+  -- not already have died on.
+  select count(*) into n from project_request where id = v_request;
+  perform tests.ok(n = 1, 'a volunteer can propose work and read it back');
+
+  reset role;
+
+  -- Somebody else's request is not a volunteer's business.
+  perform tests.authenticate(v_staff);
+  set local role authenticated;
+  insert into project_request (organization_id, title, summary, requested_by)
+  values (v_org, 'Staff proposal', 'Something else', v_staff);
+  reset role;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from project_request where requested_by = v_staff;
+    perform tests.ok(n = 0, 'a volunteer cannot read another person''s request');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'a volunteer cannot read another request (privilege denied)');
+  end;
+  reset role;
+
+  -- Proposing as somebody else is refused.
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    insert into project_request (organization_id, title, summary, requested_by)
+    values (v_org, 'Impersonated', 'Not mine to file', v_staff);
+    perform tests.ok(false, 'a volunteer should not file a request as someone else');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'a volunteer cannot file a request as someone else');
+  end;
+  reset role;
+
+  -- Staff run the queue.
+  perform tests.authenticate(v_staff);
+  set local role authenticated;
+  select count(*) into n from project_request where id = v_request;
+  perform tests.ok(n = 1, 'staff can read the intake queue');
+
+  insert into approval_request (organization_id, project_request_id, requested_by,
+                                approver_id, note)
+  values (v_org, v_request, v_staff, v_admin, 'Worth a look?')
+  returning id into v_approval;
+
+  select count(*) into n from approval_request
+    where id = v_approval and decision = 'pending';
+  perform tests.ok(n = 1, 'staff can ask a named person to decide');
+  reset role;
+
+  -- The named approver answers it; nobody else can.
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    update approval_request set decision = 'approved', decided_by = v_vol,
+      decided_at = now() where id = v_approval;
+    select count(*) into n from approval_request
+      where id = v_approval and decision = 'approved';
+    perform tests.ok(n = 0, 'only the named approver can answer an approval');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'only the named approver can answer (privilege denied)');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_admin);
+  set local role authenticated;
+  update approval_request set decision = 'approved', decided_by = v_admin,
+    decided_at = now() where id = v_approval;
+  select count(*) into n from approval_request
+    where id = v_approval and decision = 'approved';
+  perform tests.ok(n = 1, 'the named approver can answer their approval');
   reset role;
 
   -- ---------------------------------------------------------------------

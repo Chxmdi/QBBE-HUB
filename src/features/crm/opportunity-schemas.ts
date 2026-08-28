@@ -177,7 +177,14 @@ function settlementRules<T extends z.ZodTypeAny>(schema: T) {
 }
 
 const baseFields = {
-  title: z.string().trim().min(1, "An opportunity needs a title.").max(300),
+  // `required_error` as well as `min(1)`: the form dialog drops empty values,
+  // so a blank field arrives missing, and Zod's own "Required" would be shown
+  // instead of the sentence written for the person.
+  title: z
+    .string({ required_error: "An opportunity needs a title." })
+    .trim()
+    .min(1, "An opportunity needs a title.")
+    .max(300),
   description: z.string().trim().max(5000).optional(),
   kind: z.enum(OPPORTUNITY_KINDS).default("grant"),
   stage: z.enum(OPPORTUNITY_STAGES).default("identified"),
@@ -203,7 +210,9 @@ export const createOpportunitySchema = settlementRules(
     crmOrganizationId: z.string().uuid(),
     // Required, unlike the rest of the CRM: a bid nobody owns is a bid nobody
     // submits, and the column is NOT NULL for the same reason.
-    ownerId: z.string().uuid({ message: "Every opportunity needs an owner." }),
+    ownerId: z
+      .string({ required_error: "Every opportunity needs an owner." })
+      .uuid({ message: "Every opportunity needs an owner." }),
     ...baseFields,
   }),
 );

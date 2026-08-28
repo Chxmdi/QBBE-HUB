@@ -84,6 +84,10 @@ means they saw something rather than counting zero — and that block
 deliberately has no exception handler, because an admin denied their own
 administration surface is a failure, not a differently-worded pass.
 
+Two rules the matrix now pins that are easy to lose in a refactor: only the
+person named on an `approval_request` can answer it, and a volunteer cannot
+file a `project_request` in somebody else's name.
+
 **Recipe when you add a table:** ship indexes and RLS in the same migration as
 the table, then add one allow and one deny assertion here in the same pull
 request. Coverage status lives in `docs/spec-coverage.md`.

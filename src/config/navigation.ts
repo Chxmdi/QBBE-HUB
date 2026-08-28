@@ -4,6 +4,7 @@ import {
   Building2,
   CalendarDays,
   CalendarRange,
+  ClipboardCheck,
   ClipboardList,
   FolderKanban,
   FolderOpen,
@@ -45,6 +46,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Home", href: "/", icon: Home, access: "member" },
       { label: "My Work", href: "/my-work", icon: ClipboardList, access: "member" },
       { label: "Board", href: "/board", icon: KanbanSquare, access: "member" },
+      // Member-level on purpose: intake that only staff can reach is not
+      // intake. Policies decide whether you see the queue or only your own.
+      { label: "Requests", href: "/requests", icon: ClipboardCheck, access: "member" },
       { label: "Projects", href: "/projects", icon: FolderKanban, access: "staff" },
       { label: "Programs", href: "/programs", icon: Layers, access: "staff" },
     ],
