@@ -76,6 +76,7 @@ declare
   v_prog uuid;
   v_operation uuid;
   v_metric uuid;
+  v_policy uuid;
   n int;
   v_private uuid;
   v_private_message uuid;
@@ -1008,6 +1009,69 @@ begin
   exception
     when insufficient_privilege then
       perform tests.ok(true, 'a volunteer cannot record a measurement');
+  end;
+  reset role;
+
+  -- ---------------------------------------------------------------------
+  -- Retention. Deciding what the organization stops keeping is an
+  -- administrator's call; staff can see the decision but not make it, and the
+  -- floor holds whoever is asking.
+  -- ---------------------------------------------------------------------
+  perform tests.authenticate(v_admin);
+  set local role authenticated;
+
+  insert into retention_policy (organization_id, subject_key, retain_days, created_by)
+  values (v_admin_org, 'activity_event', 365, v_admin)
+  returning id into v_policy;
+
+  select count(*) into n from retention_policy
+    where id = v_policy and enabled = false;
+  perform tests.ok(n = 1, 'a new retention policy is created switched off');
+
+  -- The floor is a trigger, so it applies to an administrator too.
+  begin
+    insert into retention_policy (organization_id, subject_key, retain_days)
+    values (v_admin_org, 'audit_event', 30);
+    perform tests.ok(false, 'the audit trail floor should have refused 30 days');
+  exception
+    when check_violation then
+      perform tests.ok(true, 'nobody can set the audit trail below its floor');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_staff);
+  begin
+    set local role authenticated;
+    insert into retention_policy (organization_id, subject_key, retain_days)
+    values (v_org, 'notification', 180);
+    perform tests.ok(false, 'staff should not be able to set a retention policy');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'staff cannot set a retention policy');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    select count(*) into n from retention_policy;
+    perform tests.ok(n = 0, 'a volunteer cannot read retention policies');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'a volunteer cannot read retention policies (privilege denied)');
+  end;
+  reset role;
+
+  -- The run log is written by the job runner alone.
+  perform tests.authenticate(v_admin);
+  begin
+    set local role authenticated;
+    insert into retention_run (organization_id, subject_key, action, cutoff, affected)
+    values (v_admin_org, 'activity_event', 'delete', now(), 999);
+    perform tests.ok(false, 'nobody should be able to write the retention log');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'nobody can write the retention log by hand');
   end;
   reset role;
 

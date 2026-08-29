@@ -1,5 +1,6 @@
 import type { JobHandler } from "../runner";
 import { announcementNudge } from "./announcement-nudge";
+import { applyRetention } from "./apply-retention";
 import { dailyDigest } from "./daily-digest";
 import { drainNotifications } from "./drain-notifications";
 import { dueDateReminders } from "./due-date-reminders";
@@ -43,6 +44,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
 
   // Housekeeping
   "purge-job-history": purgeJobHistory,
+  "apply-retention": applyRetention,
 };
 
 export const JOB_NAMES = Object.keys(JOB_HANDLERS);

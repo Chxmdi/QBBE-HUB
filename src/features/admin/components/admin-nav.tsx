@@ -14,6 +14,7 @@ const ADMIN_SECTIONS = [
   { href: "/admin/jobs", label: "Jobs" },
   { href: "/admin/email", label: "Email" },
   { href: "/admin/exports", label: "Exports" },
+  { href: "/admin/retention", label: "Retention" },
 ];
 
 export function AdminNav() {
