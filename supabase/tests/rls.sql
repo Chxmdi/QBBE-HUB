@@ -93,6 +93,10 @@ declare
   v_other_task uuid;
   v_other_label uuid;
   v_other_crm uuid;
+  v_other_channel uuid;
+  v_other_message uuid;
+  v_other_announcement uuid;
+  v_other_document uuid;
   v_project uuid;
   v_job_run uuid;
   v_title text;
@@ -131,6 +135,26 @@ begin
   insert into crm_organization (organization_id, name, created_by)
   values (v_other_org, 'Private CRM organization', v_owner)
   returning id into v_other_crm;
+
+  -- The communication and document surfaces were scoped later than the rest,
+  -- so they get the same isolation fixtures the core records already had.
+  insert into channel (organization_id, name, slug, privacy, created_by)
+  values (v_other_org, 'Private announcements', 'private-ann-'
+          || substr(gen_random_uuid()::text, 1, 8), 'public', v_owner)
+  returning id into v_other_channel;
+  insert into message (organization_id, channel_id, author_id, body)
+  values (v_other_org, v_other_channel, v_owner, 'Private announcement body')
+  returning id into v_other_message;
+  insert into announcement (organization_id, message_id, title, created_by)
+  values (v_other_org, v_other_message, 'Private announcement', v_owner)
+  returning id into v_other_announcement;
+  insert into document (organization_id, title, kind, url, visibility, created_by)
+  values (v_other_org, 'Private document', 'link', 'https://example.org/private',
+          'organization', v_owner)
+  returning id into v_other_document;
+  insert into email_delivery (organization_id, recipient, subject, dedupe_key)
+  values (v_other_org, 'private@example.org', 'Private subject',
+          'rls-fixture-' || substr(gen_random_uuid()::text, 1, 8));
   insert into risk (organization_id, project_id, title, likelihood, impact, created_by)
   values (v_other_org, v_other_project, 'Private risk', 'high', 'high', v_owner)
   returning id into v_other_risk;
@@ -595,6 +619,24 @@ begin
 
   select count(*) into n from issue where id = v_other_issue;
   perform tests.ok(n = 0, 'admin cannot read another organization issue');
+
+  -- These four tables kept the unscoped membership helpers until 2026-09-01.
+  -- An admin of any organization could read every one of them, and no
+  -- assertion here said otherwise, which is why it went unnoticed for weeks.
+  select count(*) into n from announcement where id = v_other_announcement;
+  perform tests.ok(n = 0, 'admin cannot read another organization announcement');
+
+  select count(*) into n from document where id = v_other_document;
+  perform tests.ok(n = 0, 'admin cannot read another organization document');
+
+  select count(*) into n from channel where id = v_other_channel;
+  perform tests.ok(n = 0, 'admin cannot read another organization channel');
+
+  select count(*) into n from message where id = v_other_message;
+  perform tests.ok(n = 0, 'admin cannot read another organization message');
+
+  select count(*) into n from email_delivery where organization_id = v_other_org;
+  perform tests.ok(n = 0, 'admin cannot read another organization email ledger');
 
   reset role;
 
