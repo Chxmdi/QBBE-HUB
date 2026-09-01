@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { KanbanSquare } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { TaskBoard } from "@/features/tasks/components/board";
 import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
@@ -43,7 +45,19 @@ export default async function BoardPage({
           />
         }
       />
-      <TaskBoard tasks={tasks} />
+      {tasks.length === 0 ? (
+        <EmptyState
+          icon={<KanbanSquare />}
+          title={
+            projectName
+              ? "No tasks on this project board yet"
+              : "No tasks on the board yet"
+          }
+          description="Cards appear here as soon as tasks exist. Create one with New task above, or from a project, meeting, or message."
+        />
+      ) : (
+        <TaskBoard tasks={tasks} />
+      )}
       <Suspense fallback={null}>
         <TaskDrawer people={options.people} isStaff={session.isStaff} />
       </Suspense>

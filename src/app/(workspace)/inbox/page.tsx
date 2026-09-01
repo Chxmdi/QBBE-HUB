@@ -147,8 +147,13 @@ export default async function InboxPage({
                     !notification.read_at && "bg-brand-soft/30",
                   )}
                 >
+                  {/* aria-label is ignored on a bare span, so read/unread was
+                      carried by the dot's colour alone. */}
+                  {!notification.read_at ? (
+                    <span className="sr-only">Unread. </span>
+                  ) : null}
                   <span
-                    aria-label={notification.read_at ? "Read" : "Unread"}
+                    aria-hidden
                     className={cn(
                       "mt-1.5 size-2 shrink-0 rounded-full",
                       notification.read_at ? "bg-transparent" : "bg-brand",

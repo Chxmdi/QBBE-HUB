@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Plus, X } from "lucide-react";
@@ -125,13 +126,15 @@ export function Sidebar({
                       {item.label}
                       {badge > 0 ? (
                         <span
-                          aria-label={`${badge} items`}
                           className={cn(
                             "ml-auto rounded-full px-1.5 py-0.5 text-[10.5px] leading-none font-semibold",
                             active ? "bg-white/25 text-white" : "bg-accent/90 text-[#221219]",
                           )}
                         >
                           {badge > 99 ? "99+" : badge}
+                          {/* aria-label is ignored on a bare span; a bare
+                              number also reads as part of the link text. */}
+                          <span className="sr-only"> open items</span>
                         </span>
                       ) : null}
                     </Link>
@@ -172,10 +175,13 @@ export function Sidebar({
                       </span>
                       <span className="truncate">{channel.slug}</span>
                       {channel.unread ? (
-                        <span
-                          className="ml-auto size-1.5 rounded-full bg-accent"
-                          aria-label="Unread messages"
-                        />
+                        <>
+                          <span className="sr-only">Unread messages</span>
+                          <span
+                            aria-hidden
+                            className="ml-auto size-1.5 rounded-full bg-accent"
+                          />
+                        </>
                       ) : null}
                     </Link>
                   </li>
@@ -271,18 +277,84 @@ export function Sidebar({
       </aside>
       {/* Mobile drawer */}
       {mobileOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            type="button"
-            aria-label="Close navigation"
-            onClick={onMobileClose}
-            className="absolute inset-0 bg-ink/50"
-          />
-          <aside className="absolute inset-y-0 left-0 w-72 bg-[#221219] shadow-(--shadow-pop)">
-            {nav}
-          </aside>
-        </div>
+        <MobileNavDrawer onClose={onMobileClose}>{nav}</MobileNavDrawer>
       ) : null}
     </>
+  );
+}
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+/**
+ * The mobile navigation covers the page like a modal, so it has to behave
+ * like one: it was previously a plain overlay a keyboard user could tab
+ * straight out of, with no way to dismiss it and no way back to the trigger.
+ */
+function MobileNavDrawer({
+  onClose,
+  children,
+}: {
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const panelRef = React.useRef<HTMLElement>(null);
+
+  React.useEffect(() => {
+    const panel = panelRef.current;
+    const returnTo = document.activeElement as HTMLElement | null;
+    panel?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panel) return;
+      const stops = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (stops.length === 0) return;
+      const first = stops[0];
+      const last = stops[stops.length - 1];
+      const active = document.activeElement;
+      // Wrap at both ends, and pull focus back in if it escaped the panel.
+      if (e.shiftKey && (active === first || !panel.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      // Focus goes back to whatever opened the drawer, not to the page top.
+      returnTo?.focus();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 lg:hidden">
+      {/* A click-catcher, not a control: the panel's own close button and
+          Escape are the accessible ways out, so keep it out of the trap. */}
+      <button
+        type="button"
+        aria-hidden
+        tabIndex={-1}
+        onClick={onClose}
+        className="absolute inset-0 bg-ink/50"
+      />
+      <aside
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation"
+        className="absolute inset-y-0 left-0 w-72 bg-[#221219] shadow-(--shadow-pop)"
+      >
+        {children}
+      </aside>
+    </div>
   );
 }

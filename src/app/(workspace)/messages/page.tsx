@@ -129,10 +129,12 @@ export default async function MessagesPage() {
                   ) : null}
                 </span>
                 {conversation.unread ? (
-                  <span
-                    aria-label="Unread messages"
-                    className="size-2 rounded-full bg-brand"
-                  />
+                  <>
+                    {/* aria-label is ignored on a bare span, so unread was
+                        carried by the dot's colour alone. */}
+                    <span className="sr-only">Unread messages</span>
+                    <span aria-hidden className="size-2 rounded-full bg-brand" />
+                  </>
                 ) : null}
                 {conversation.lastMessage ? (
                   <span className="meta whitespace-nowrap">

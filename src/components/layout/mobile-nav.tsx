@@ -57,11 +57,11 @@ export function MobileNav({
                 <tab.icon className="size-5" aria-hidden />
                 {tab.label}
                 {tab.badge > 0 ? (
-                  <span
-                    aria-label={`${tab.badge} items`}
-                    className="absolute top-1 right-[22%] min-w-4 rounded-full bg-brand px-1 text-[9.5px] leading-4 font-semibold text-white"
-                  >
+                  <span className="absolute top-1 right-[22%] min-w-4 rounded-full bg-brand px-1 text-[9.5px] leading-4 font-semibold text-white">
                     {tab.badge > 9 ? "9+" : tab.badge}
+                    {/* aria-label is ignored on a bare span; a bare number
+                        also reads as part of the tab label. */}
+                    <span className="sr-only"> open items</span>
                   </span>
                 ) : null}
               </Link>
