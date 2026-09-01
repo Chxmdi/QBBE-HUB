@@ -47,3 +47,7 @@ supabase/.branches
 /playwright-report
 /blob-report
 .env.local
+
+# Scratch worktrees created for parallel agent runs. Transient, and nested
+# git worktrees must never be committed into the repository they check out.
+.claude/worktrees/
