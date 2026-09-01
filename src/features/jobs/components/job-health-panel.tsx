@@ -7,6 +7,7 @@ import type {
   JobRunSummary,
   QueueHealth,
 } from "@/features/jobs/services/jobs.queries";
+import { runLabel, runOutcome, runTone } from "@/features/jobs/services/run-health";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 
 /**
@@ -15,20 +16,11 @@ import { formatDateTime, relativeTime } from "@/lib/utils";
  * It answers, in order: is anything broken, is anything stuck, and is every
  * job still on its schedule. Failures come first because that is the reason
  * anyone opens this page.
+ *
+ * "Broken" includes a run that returned normally having dropped part of its
+ * batch — see `run-health.ts` — so a green badge here means the work happened,
+ * not merely that the process finished.
  */
-
-function runTone(run: JobRunSummary | null): "success" | "danger" | "info" | "neutral" {
-  if (!run) return "neutral";
-  if (run.status === "failed") return "danger";
-  if (run.status === "running") return "info";
-  return "success";
-}
-
-function runLabel(run: JobRunSummary | null): string {
-  if (!run) return "Never run";
-  if (run.status === "running") return "Running";
-  return run.status === "failed" ? "Failed" : "Succeeded";
-}
 
 function duration(ms: number | null): string {
   if (ms === null) return "—";
@@ -78,7 +70,7 @@ export function JobHealthPanel({
         </h2>
         {recentFailures.length === 0 ? (
           <p className="card px-4 py-6 text-center text-[13px] text-muted">
-            No failed runs recorded. Failures appear here with the error that
+            No run has dropped work. Failures appear here with the error that
             caused them.
           </p>
         ) : (
@@ -87,7 +79,9 @@ export function JobHealthPanel({
               <li key={failure.id} className="px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[13.5px] font-medium">{failure.jobName}</span>
-                  <Badge tone="danger">failed</Badge>
+                  <Badge tone={runTone(runOutcome(failure))}>
+                    {runLabel(runOutcome(failure), failure)}
+                  </Badge>
                   <span className="meta ml-auto whitespace-nowrap">
                     {relativeTime(failure.startedAt)}
                   </span>
@@ -215,12 +209,17 @@ export function JobHealthPanel({
                       <span className="meta font-mono">{job.schedule}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={runTone(job.lastRun)}>{runLabel(job.lastRun)}</Badge>
+                      <Badge tone={runTone(runOutcome(job.lastRun))}>
+                        {runLabel(runOutcome(job.lastRun), job.lastRun)}
+                      </Badge>
                       {job.lastRun ? (
                         <span className="meta mt-1 block">
                           {relativeTime(job.lastRun.startedAt)} ·{" "}
-                          {job.lastRun.processedCount} processed ·{" "}
-                          {duration(job.lastRun.durationMs)}
+                          {job.lastRun.processedCount} processed
+                          {job.lastRun.failedCount > 0
+                            ? `, ${job.lastRun.failedCount} failed`
+                            : ""}{" "}
+                          · {duration(job.lastRun.durationMs)}
                         </span>
                       ) : null}
                     </td>

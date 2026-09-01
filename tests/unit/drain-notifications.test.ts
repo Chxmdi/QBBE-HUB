@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { drainNotifications } from "@/features/jobs/services/handlers/drain-notifications";
-import type { JobDefinition } from "@/features/jobs/services/runner";
+import { PartialJobFailure, type JobDefinition } from "@/features/jobs/services/runner";
 import { FakeSupabase, asClient, type Row } from "../support/fake-supabase";
 
 /**
@@ -310,6 +310,109 @@ describe("preferences are honoured and recorded", () => {
     expect(row.status).toBe("suppressed");
     expect(row.suppressed_reason).toBe("preference:email_assignments");
     expect(db.queue("notifications")).toHaveLength(0);
+  });
+});
+
+describe("one message's trouble is not the whole batch's", () => {
+  it("carries on past a message the database refuses", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db, { title: "First" });
+    raiseNotification(db, { title: "Poison" });
+    raiseNotification(db, { title: "Third" });
+
+    // The ledger write for the middle message fails, so preparing it throws.
+    db.fail(
+      (op) =>
+        op.kind === "insert" && op.name === "email_delivery" && op.args.subject === "Poison",
+    );
+
+    const result = await run(db);
+
+    expect(sends.map((send) => send.subject)).toEqual(["First", "Third"]);
+    expect(result.processed).toBe(2);
+    expect(result.failed).toBe(1);
+    // Only the one that failed is still owed: the others were acknowledged.
+    expect(db.queue("notifications")).toHaveLength(1);
+  });
+
+  it("reports what it delivered when the queue itself goes away", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db, { title: "First" });
+    raiseNotification(db, { title: "Second" });
+    raiseNotification(db, { title: "Third" });
+
+    // Acknowledging the second message fails. Every later ack would fail the
+    // same way, so the run stops — but two emails have already gone out, and
+    // a run recorded as `0 processed` would read as though none had.
+    let acks = 0;
+    db.fail((op) => op.kind === "rpc" && op.name === "job_queue_delete" && ++acks === 2);
+
+    const failure = await run(db).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(PartialJobFailure);
+    expect((failure as PartialJobFailure).result.processed).toBe(2);
+    expect(sends).toHaveLength(2);
+    // The third was never started, so it keeps its place on the queue.
+    expect(db.queue("notifications")).toHaveLength(2);
+  });
+});
+
+describe("a message that fails every time is taken out of circulation", () => {
+  it("archives it once it has been delivered past the attempt limit", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db, { title: "Poison" });
+    raiseNotification(db, { title: "Real work" });
+
+    // It has already come back max_attempts times without ever reaching a
+    // delivery row, so no per-delivery attempt counter has ever counted it.
+    db.queue("notifications")[0].readCt = DEFINITION.max_attempts;
+
+    const result = await run(db);
+
+    expect(db.archive("notifications")).toHaveLength(1);
+    expect(result.metadata?.poisoned).toBe(1);
+    // The work behind it still gets done, which is the point.
+    expect(sends.map((send) => send.subject)).toEqual(["Real work"]);
+    expect(db.queue("notifications")).toHaveLength(0);
+  });
+});
+
+describe("a batch cannot outlive its visibility timeout", () => {
+  it("stops starting sends once the budget is spent", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(START);
+
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    for (let index = 0; index < 5; index += 1) {
+      raiseNotification(db, { title: `Slow ${index}` });
+    }
+
+    // A provider taking 15 seconds a message: five of them would run past the
+    // 120-second visibility timeout and be re-delivered while still in flight.
+    const slow = vi.fn(async () => {
+      vi.advanceTimersByTime(15_000);
+      return { ok: true } as const;
+    });
+    stubProvider(() => {
+      void slow();
+      return { ok: true };
+    });
+
+    const result = await run(db);
+
+    expect(sends.length).toBeLessThan(5);
+    expect(result.metadata?.unstarted).toBe(5 - sends.length);
+    // Not lost — the untouched messages are still queued for the next tick.
+    expect(db.queue("notifications")).toHaveLength(5 - sends.length);
+
+    vi.useRealTimers();
   });
 });
 

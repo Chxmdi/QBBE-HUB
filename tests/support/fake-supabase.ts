@@ -12,6 +12,9 @@
  *     read count, so an unacknowledged message comes back;
  *   - archiving moves a message to a dead-letter table rather than deleting it.
  *
+ * It also breaks on demand (`fail`), because a batch's failure policy is only
+ * observable when something goes wrong in the middle of one.
+ *
  * The database-level counterparts of those three behaviours are verified
  * directly against the live Postgres; this double is what lets the control flow
  * around them be tested deterministically, in CI, with no network.
@@ -42,6 +45,15 @@ interface QueueMessage {
 
 type Filter = (row: Row) => boolean;
 
+/** One database call, as a fault matcher sees it. */
+export interface Operation {
+  kind: "rpc" | "select" | "insert" | "update" | "delete";
+  /** The rpc's name, or the table's. */
+  name: string;
+  /** The rpc's arguments, or the row being written. */
+  args: Row;
+}
+
 /** Unique indexes, by table, as the column tuples they cover. */
 const UNIQUE_INDEXES: Record<string, string[][]> = {
   email_delivery: [["dedupe_key"]],
@@ -70,6 +82,7 @@ export class FakeSupabase {
 
   private nextMsgId = 1;
   private clockMs: number;
+  private faults: { match: (op: Operation) => boolean; error: PostgrestError }[] = [];
 
   constructor(now: Date = new Date()) {
     this.clockMs = now.getTime();
@@ -124,6 +137,24 @@ export class FakeSupabase {
     return msgId;
   }
 
+  /**
+   * Makes matching calls fail the way a database that briefly went away does.
+   *
+   * A batch only reveals its failure policy when something breaks part-way
+   * through it, and nothing in a purely in-memory double ever breaks. This is
+   * how a test puts one fault in the middle of an otherwise healthy batch.
+   */
+  fail(
+    match: (op: Operation) => boolean,
+    error: PostgrestError = { code: "08006", message: "connection reset" },
+  ): void {
+    this.faults.push({ match, error });
+  }
+
+  faultFor(op: Operation): PostgrestError | null {
+    return this.faults.find((fault) => fault.match(op))?.error ?? null;
+  }
+
   violatesUnique(table: string, candidate: Row): boolean {
     const indexes = UNIQUE_INDEXES[table];
     if (!indexes) return false;
@@ -141,6 +172,9 @@ export class FakeSupabase {
 
   async rpc(name: string, args: Row = {}): Promise<Result<unknown>> {
     this.rpcCalls.push({ name, args });
+
+    const fault = this.faultFor({ kind: "rpc", name, args });
+    if (fault) return { data: null, error: fault };
 
     switch (name) {
       case "job_queue_send":
@@ -395,6 +429,13 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
 
   private run(): Result<Row[] | Row | null> {
     const store = this.db.rows(this.table);
+
+    const fault = this.db.faultFor({
+      kind: this.mode,
+      name: this.table,
+      args: Array.isArray(this.payload) ? (this.payload[0] ?? {}) : this.payload,
+    });
+    if (fault) return { data: null, error: fault };
 
     if (this.mode === "insert") {
       const candidates = Array.isArray(this.payload) ? this.payload : [this.payload];

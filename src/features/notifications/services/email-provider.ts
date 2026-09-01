@@ -68,11 +68,21 @@ export function isRetryableStatus(status: number): boolean {
   return status >= 500;
 }
 
+/**
+ * A single send has to be bounded, because the drain loop's safety depends on
+ * it: the pgmq visibility timeout is what stops two workers holding the same
+ * message, and an un-timed fetch makes the worst-case batch unbounded, so no
+ * visibility timeout can be long enough. An abort is transient by nature and
+ * lands in the retryable branch below.
+ */
+const PROVIDER_TIMEOUT_MS = 12_000;
+
 async function sendViaResend(email: OutboundEmail, apiKey: string): Promise<SendResult> {
   let response: Response;
   try {
     response = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
