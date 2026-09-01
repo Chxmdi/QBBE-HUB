@@ -50,7 +50,7 @@ an implementation ledger and does not replace the governing specification.
 | Background jobs and automation | 🟡 Partial | Cron routes and admin-defined workflows for task changes, announcements, project health, completed meetings, and newly assigned event roles exist. Assignment workflows can notify the assigned member, event owner, admins, or a selected team; duplicate assignments do not rerun workflows. Email retry scheduling is bounded; scheduled-announcement fan-out and hourly due/overdue/acknowledgement reminders are idempotent; integration failures surface actionable health states; workers record redacted, per-organization execution results visible to admins. Durable queues and audit trails for no-op executions are still absent. |
 | Security and RLS | 🟡 Partial | Migrations enable RLS; scope identity, programs/projects/tasks, CRM/reporting/integrations, meetings/events, activity, and audit data to the current organization; sign private-document URLs; and make private-message, task-child, and meeting-child records inherit parent visibility. The local allow/deny suite exercises blocked and permitted access, including cross-organization data, and passes. A full security review of the remaining communication, notification, document, and feature-flag policies plus production-database validation remain required. |
 | Observability | 🟡 Partial | Structured console logging and an optional Sentry-compatible DSN exist. Production monitoring, alert routing and operational validation remain unverified. |
-| CI/CD and branch strategy | 🟡 Partial | CI enforces lockfile install, lint, type-check, unit, production build, public E2E, high-severity dependency audit, and a migrated local-Supabase RLS/security-advisor job. Branch protection, preview-deployment, integration-test enforcement and visible `main` branch configuration remain outside this repository. |
+| CI/CD and branch strategy | 🟡 Partial | CI enforces lockfile install, lint, type-check, unit, production build, public E2E, high-severity dependency audit, and a migrated local-Supabase RLS/security-advisor job. `main` now exists and CI runs on every push to it. Branch protection, the default-branch setting, preview deployments and integration-test enforcement are repository settings and remain outside this codebase. |
 | Dependency security | ✅ Complete in code | Next.js and its matching ESLint configuration are upgraded to 16.3.1; the Next 16 proxy/flat-config migration is applied, and `npm audit --audit-level=high` reports 0 vulnerabilities. |
 | Deployment, backup and recovery rehearsal | ❌ Missing | Runbooks exist but there is no evidence of QBBE-owned accounts, deployed environments, backups, a staged rehearsal or a tested rollback. |
 
@@ -66,8 +66,8 @@ an implementation ledger and does not replace the governing specification.
 4. Start local Supabase and run the RLS allow/deny suite; then add database,
    integration, authenticated multi-role and multi-user realtime coverage to
    CI.
-5. Create and protect `main`, configure preview deployments and require all
-   checks before production deployment.
+5. Protect `main` and make it the repository default branch, configure preview
+   deployments and require all checks before production deployment.
 
 Until those items are completed and verified with real QBBE-owned production
 accounts, the application must not be represented as deployment ready.
