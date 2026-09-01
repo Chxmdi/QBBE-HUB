@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import {
   Bookmark,
   CalendarPlus,
@@ -72,6 +72,10 @@ export function MessageItem({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  // Each message mounts its own copy of the three dialogs below, so fixed
+  // field ids repeated once per message in the channel and every duplicated
+  // label resolved to the first message's control.
+  const fieldId = useId();
   const [showEmoji, setShowEmoji] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.body);
@@ -434,8 +438,8 @@ export function MessageItem({
             </p>
           ) : (
             <div>
-              <Label htmlFor="agenda-meeting">Meeting</Label>
-              <Select id="agenda-meeting" name="meetingId" required>
+              <Label htmlFor={`${fieldId}-meeting`}>Meeting</Label>
+              <Select id={`${fieldId}-meeting`} name="meetingId" required>
                 {meetings.map((meeting) => (
                   <option key={meeting.id} value={meeting.id}>
                     {meeting.title} · {formatDateTime(meeting.starts_at)}
@@ -467,11 +471,11 @@ export function MessageItem({
             {message.body.length > 160 ? "…" : ""}”
           </p>
           <div>
-            <Label htmlFor="decision-detail">
+            <Label htmlFor={`${fieldId}-detail`}>
               Context <span className="font-normal text-muted">(optional)</span>
             </Label>
             <Textarea
-              id="decision-detail"
+              id={`${fieldId}-detail`}
               name="detail"
               rows={3}
               placeholder="Why was this decided, and what does it affect?"
@@ -496,9 +500,9 @@ export function MessageItem({
       >
         <form onSubmit={handlePinSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="pin-title">Resource title</Label>
+            <Label htmlFor={`${fieldId}-title`}>Resource title</Label>
             <Input
-              id="pin-title"
+              id={`${fieldId}-title`}
               name="title"
               required
               maxLength={200}

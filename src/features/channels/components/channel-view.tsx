@@ -74,7 +74,9 @@ export function Composer({
           {error} <button type="button" onClick={submit} className="font-medium underline">Retry</button>
         </p>
       ) : null}
-      <div className="flex items-end gap-2 rounded-(--radius-md) border border-line bg-canvas px-3 py-2 focus-within:border-brand">
+      {/* The textarea suppresses its own outline so the box reads as one
+          control, so the box has to carry the focus ring itself. */}
+      <div className="flex items-end gap-2 rounded-(--radius-md) border border-line bg-canvas px-3 py-2 focus-within:border-brand focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-(--color-brand)">
         <textarea
           ref={textareaRef}
           value={body}
@@ -299,7 +301,14 @@ export function ChannelView({
             Reconnecting to live updates… messages you send are still saved.
           </p>
         ) : null}
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto py-3">
+        {/* role="log" is the chat transcript pattern: new arrivals are read
+            out, and the history above them is not re-announced. */}
+        <div
+          ref={scrollRef}
+          role="log"
+          aria-label="Messages"
+          className="min-h-0 flex-1 overflow-y-auto py-3"
+        >
           {hasOlder ? (
             <div className="mb-2 flex justify-center">
               <button

@@ -116,7 +116,10 @@ export function TableRow({
   return (
     <tr
       id={id}
-      aria-selected={selected}
+      // aria-selected is prohibited on a plain table row (it belongs to grid
+      // rows), so selection is exposed by the row's own checkbox instead and
+      // this attribute exists only for styling.
+      data-selected={selected ? "true" : undefined}
       className={cn(
         "border-b border-line transition-colors last:border-b-0",
         selected ? "bg-brand-soft/50" : "hover:bg-surface-soft/60",

@@ -169,6 +169,12 @@ export function CommandPalette({
           role="combobox"
           aria-controls="command-palette-results"
           aria-expanded={items.length > 0}
+          aria-autocomplete="list"
+          // Focus stays in the input while the arrows move the highlight, so
+          // without this a screen reader never hears which result is active.
+          aria-activedescendant={
+            items[activeIndex] ? `command-palette-option-${activeIndex}` : undefined
+          }
           className="h-12 flex-1 bg-transparent text-[14.5px] outline-none placeholder:text-muted/60"
         />
         {loading && query.length >= 2 ? (
@@ -182,8 +188,10 @@ export function CommandPalette({
         role="listbox"
         className="max-h-[50vh] overflow-y-auto py-1.5"
       >
+        {/* A listbox may only own options, so the escape hatch and the empty
+            message are presentational and named by their own button/text. */}
         {query.length >= 2 ? (
-          <li>
+          <li role="presentation">
             <button
               type="button"
               onClick={() => go(`/search?q=${encodeURIComponent(query)}`)}
@@ -195,14 +203,22 @@ export function CommandPalette({
           </li>
         ) : null}
         {items.length === 0 ? (
-          <li className="px-4 py-8 text-center text-[13.5px] text-muted">
+          <li
+            role="presentation"
+            className="px-4 py-8 text-center text-[13.5px] text-muted"
+          >
             {query.length >= 2
               ? "No matching records you have access to."
               : "Type to search, or pick a destination."}
           </li>
         ) : (
           items.map((item, i) => (
-            <li key={`${item.href}-${i}`} role="option" aria-selected={i === activeIndex}>
+            <li
+              key={`${item.href}-${i}`}
+              id={`command-palette-option-${i}`}
+              role="option"
+              aria-selected={i === activeIndex}
+            >
               <button
                 type="button"
                 onClick={() => go(item.href)}

@@ -5,7 +5,6 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/input";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import { startConversation } from "@/features/channels/services/message.commands";
 
@@ -46,13 +45,24 @@ export function StartConversationDialog({ people }: { people: Option[] }) {
       </Button>
       <Dialog open={open} onClose={() => setOpen(false)} title="Start a conversation">
         <div className="space-y-3">
-          <Label>Choose participants</Label>
+          {/* A <label> with no control names nothing; the checkbox list needs
+              a group that carries the name instead. */}
+          <p
+            id="conversation-participants"
+            className="mb-1.5 block text-[13px] font-medium text-ink"
+          >
+            Choose participants
+          </p>
           {people.length === 0 ? (
             <p className="text-[13.5px] text-muted">
               No other active members yet — invite teammates from Admin.
             </p>
           ) : (
-            <ul className="max-h-72 space-y-1 overflow-y-auto">
+            <ul
+              role="group"
+              aria-labelledby="conversation-participants"
+              className="max-h-72 space-y-1 overflow-y-auto"
+            >
               {people.map((person) => (
                 <li key={person.id}>
                   <label className="flex cursor-pointer items-center gap-2.5 rounded-(--radius-sm) px-2 py-1.5 text-[13.5px] hover:bg-surface-soft">

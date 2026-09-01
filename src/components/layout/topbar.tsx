@@ -28,14 +28,35 @@ const ACTIONABLE_CATEGORIES = new Set([
   "due_date",
 ]);
 
-function useClickOutside(onClose: () => void) {
+/**
+ * Dismissal for the topbar dropdowns. Pointer users get click-outside;
+ * Escape is what a keyboard user has, and without it the only way out of an
+ * open menu was to tab through every item in it.
+ */
+function useDismissable(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    function handler(e: MouseEvent) {
+    function onPointerDown(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape" || !ref.current) return;
+      // Read the open trigger before closing: React has not re-rendered yet,
+      // so aria-expanded still marks it. Focus goes back there rather than
+      // being dropped at the top of the page.
+      const trigger = ref.current.querySelector<HTMLButtonElement>(
+        'button[aria-expanded="true"]',
+      );
+      if (!trigger) return;
+      onClose();
+      trigger.focus();
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [onClose]);
   return ref;
 }
@@ -65,7 +86,7 @@ export function Topbar({
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [badge, setBadge] = useState(unreadCount);
   const router = useRouter();
-  const menuRef = useClickOutside(() => setOpenMenu(null));
+  const menuRef = useDismissable(() => setOpenMenu(null));
 
   function toggleTheme() {
     const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
@@ -232,13 +253,19 @@ export function Topbar({
                                 )}
                               >
                                 <span className="flex items-start gap-2">
+                                  {/* aria-label is ignored on a bare span, so
+                                      unread was conveyed by the dot's colour
+                                      alone. */}
                                   {!n.read_at ? (
-                                    <span
-                                      aria-label="Unread"
-                                      className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand"
-                                    />
+                                    <>
+                                      <span className="sr-only">Unread. </span>
+                                      <span
+                                        aria-hidden
+                                        className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand"
+                                      />
+                                    </>
                                   ) : (
-                                    <span className="mt-1.5 size-1.5 shrink-0" />
+                                    <span aria-hidden className="mt-1.5 size-1.5 shrink-0" />
                                   )}
                                   <span className="min-w-0">
                                     <span className="block truncate font-medium">

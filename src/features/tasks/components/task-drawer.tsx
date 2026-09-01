@@ -251,14 +251,17 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
               />
             </div>
             <div>
-              <Label htmlFor="drawer-status-text">Current status</Label>
-              <p
-                id="drawer-status-text"
-                className="flex h-9.5 items-center text-[13.5px] text-muted"
-              >
-                {TASK_STATUS_META[task.status].label}
-                {saving ? " · saving…" : ""}
-              </p>
+              {/* Read-only, so it is a description list rather than a label:
+                  <label for> only binds to a form control. */}
+              <dl>
+                <dt className="mb-1.5 block text-[13px] font-medium text-ink">
+                  Current status
+                </dt>
+                <dd className="flex h-9.5 items-center text-[13.5px] text-muted">
+                  {TASK_STATUS_META[task.status].label}
+                  {saving ? " · saving…" : ""}
+                </dd>
+              </dl>
             </div>
           </div>
 

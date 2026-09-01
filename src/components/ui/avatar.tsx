@@ -49,8 +49,12 @@ export function Avatar({
     );
   }
   return (
+    // The <img> branch above names itself through alt, so a silent fallback
+    // meant "assigned to Dara" read as "assigned to" for anyone without a
+    // photo. Both branches expose the same name.
     <span
-      aria-hidden
+      role="img"
+      aria-label={name}
       title={name}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full font-semibold",

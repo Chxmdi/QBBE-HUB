@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -44,6 +44,11 @@ export function EntityFormDialog({
   extraValues?: Record<string, string>;
 }) {
   const router = useRouter();
+  // Every dialog on the page is mounted at once, so a fixed `field-<name>`
+  // id collided whenever two of them shared a field name — "Name", "Title",
+  // "Description" — and each duplicated label then pointed at the first
+  // dialog's control. Instance-scoped ids keep every label on its own input.
+  const instanceId = useId();
   const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -78,7 +83,8 @@ export function EntityFormDialog({
       <Dialog open={open} onClose={() => setOpen(false)} title={title}>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {fields.map((field) => {
-            const id = `field-${field.name}`;
+            const id = `${instanceId}-${field.name}`;
+            const hintId = field.hint ? `${id}-hint` : undefined;
             const span = field.colSpan === 1 ? "" : "sm:col-span-2";
             return (
               <div key={field.name} className={span}>
@@ -95,9 +101,16 @@ export function EntityFormDialog({
                     required={field.required}
                     placeholder={field.placeholder}
                     defaultValue={field.defaultValue}
+                    aria-describedby={hintId}
                   />
                 ) : field.type === "select" ? (
-                  <Select id={id} name={field.name} defaultValue={field.defaultValue ?? ""} required={field.required}>
+                  <Select
+                    id={id}
+                    name={field.name}
+                    defaultValue={field.defaultValue ?? ""}
+                    required={field.required}
+                    aria-describedby={hintId}
+                  >
                     {!field.required ? <option value="">—</option> : null}
                     {(field.options ?? []).map((option) => (
                       <option key={option.value} value={option.value}>
@@ -113,10 +126,13 @@ export function EntityFormDialog({
                     required={field.required}
                     placeholder={field.placeholder}
                     defaultValue={field.defaultValue}
+                    aria-describedby={hintId}
                   />
                 )}
                 {field.hint ? (
-                  <p className="mt-1 text-[12.5px] text-muted">{field.hint}</p>
+                  <p id={hintId} className="mt-1 text-[12.5px] text-muted">
+                    {field.hint}
+                  </p>
                 ) : null}
               </div>
             );

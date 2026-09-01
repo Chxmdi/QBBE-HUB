@@ -1,10 +1,17 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+/**
+ * `focus:outline-none` used to sit here, and because Tailwind utilities win
+ * over the `@layer base` rule in globals.css it silently removed the app-wide
+ * focus ring from every field — leaving a 1px border tint as the only focus
+ * cue, well under the 3:1 that A11Y-003/UI-007 ask for. The ring is kept for
+ * keyboard focus only so pointer users still get the quiet border treatment.
+ */
 const fieldClasses =
   "w-full rounded-(--radius-sm) border border-line bg-surface px-3 text-sm text-ink " +
   "placeholder:text-muted/70 transition-colors duration-(--duration-fast) " +
-  "focus:border-brand focus:outline-none disabled:cursor-not-allowed disabled:opacity-60";
+  "focus:border-brand disabled:cursor-not-allowed disabled:opacity-60";
 
 export function Input({
   className,

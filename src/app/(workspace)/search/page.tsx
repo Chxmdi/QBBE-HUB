@@ -77,7 +77,7 @@ export default async function SearchPage({
           defaultValue={query}
           placeholder="Search everything…"
           aria-label="Search query"
-          className="h-9.5 w-full max-w-md rounded-(--radius-sm) border border-line bg-surface px-3 text-sm placeholder:text-muted/70 focus:border-brand focus:outline-none"
+          className="h-9.5 w-full max-w-md rounded-(--radius-sm) border border-line bg-surface px-3 text-sm placeholder:text-muted/70 focus:border-brand"
         />
         <button
           type="submit"

@@ -22,6 +22,7 @@ export function Dialog({
   className?: string;
 }) {
   const ref = React.useRef<HTMLDialogElement>(null);
+  const titleId = React.useId();
 
   React.useEffect(() => {
     const dialog = ref.current;
@@ -38,6 +39,9 @@ export function Dialog({
         // Click on the backdrop closes.
         if (e.target === ref.current) onClose();
       }}
+      // Without this the modal has no accessible name: a screen reader
+      // announces "dialog" and nothing else on open.
+      aria-labelledby={titleId}
       className={cn(
         "m-auto w-[min(560px,calc(100vw-2rem))] rounded-(--radius-md) border border-line bg-surface p-0 text-ink shadow-(--shadow-pop)",
         "backdrop:bg-ink/40 dark:backdrop:bg-black/60",
@@ -45,7 +49,9 @@ export function Dialog({
       )}
     >
       <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-        <h2 className="text-[15px] font-semibold">{title}</h2>
+        <h2 id={titleId} className="text-[15px] font-semibold">
+          {title}
+        </h2>
         <button
           type="button"
           onClick={onClose}
