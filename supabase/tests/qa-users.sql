@@ -7,6 +7,12 @@
 -- The bootstrap trigger provisions the first user as Primary Owner.
 
 create schema if not exists tests;
+
+-- Supabase already installs pgcrypto into `extensions`, so this is a no-op
+-- there rather than a guarantee. The helper below therefore carries
+-- `extensions` on its search_path: on Supabase that is where crypt() and
+-- gen_salt() live, and on a vanilla Postgres the extension lands in `public`,
+-- which is on the path already.
 create extension if not exists pgcrypto;
 
 -- Helper: insert a confirmed auth user + identity if missing.
@@ -18,7 +24,7 @@ create or replace function tests.ensure_auth_user(
 ) returns void
 language plpgsql
 security definer
-set search_path = tests, public, auth
+set search_path = tests, public, auth, extensions
 as $$
 begin
   if exists (select 1 from auth.users where id = p_id or email = p_email) then
