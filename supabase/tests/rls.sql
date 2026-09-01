@@ -78,6 +78,7 @@ declare
   v_metric uuid;
   v_policy uuid;
   n int;
+  m int;
   v_private uuid;
   v_private_message uuid;
   v_private_task uuid;
@@ -1117,13 +1118,20 @@ begin
   end;
   reset role;
 
+  -- Search must be neither a side channel nor a second, stricter policy: it
+  -- has to return exactly what a direct select would. A guest can read this
+  -- risk, so a guest must also find it — and the assertion is written as an
+  -- agreement between the two paths rather than a hardcoded count, so that
+  -- if the risk policy is ever tightened, both sides move together or this
+  -- fails.
   perform tests.authenticate(v_guest);
   begin
     set local role authenticated;
     select count(*) into n
     from global_search('RLS fixture risk', 60)
     where result_type = 'risk';
-    perform tests.ok(n = 0, 'guest cannot find a project risk through search');
+    select count(*) into m from risk where id = v_risk;
+    perform tests.ok(n = m, 'search shows a guest exactly the risks they can read');
   exception
     when insufficient_privilege then
       perform tests.ok(true, 'guest cannot search risks (privilege denied)');
