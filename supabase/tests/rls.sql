@@ -631,14 +631,27 @@ begin
   end;
   reset role;
 
+  -- A guest is a read-only member, so the risk register is visible to them:
+  -- risks inherit project visibility by design, and the project itself is
+  -- readable by any active member. The boundary that matters for a guest is
+  -- the write, so pin both halves rather than assuming the read is blocked.
+  -- Contrast the funding pipeline below, which is staff-and-above outright.
+  perform tests.authenticate(v_guest);
+  set local role authenticated;
+  select count(*) into n from risk where id = v_risk;
+  perform tests.ok(n = 1, 'guest reads a project risk, as a read-only member');
+  reset role;
+
   perform tests.authenticate(v_guest);
   begin
     set local role authenticated;
-    select count(*) into n from risk where id = v_risk;
-    perform tests.ok(n = 0, 'guest cannot read a project risk');
+    update risk set title = 'Guest edit' where id = v_risk;
+    select count(*) into n from risk
+      where id = v_risk and title = 'Guest edit';
+    perform tests.ok(n = 0, 'guest cannot rewrite a project risk');
   exception
     when insufficient_privilege then
-      perform tests.ok(true, 'guest cannot read a project risk (privilege denied)');
+      perform tests.ok(true, 'guest cannot rewrite a project risk (privilege denied)');
   end;
   reset role;
 
