@@ -61,7 +61,11 @@ path to production that skips it.
 Two gates exist specifically to catch drift that only shows up at runtime:
 
 - **Migration filenames are unique and ordered** — a duplicate version prefix
-  makes `supabase db push` order ambiguous.
+  makes `supabase db push` order ambiguous, and which of the two applies first
+  can differ between a laptop and CI. Enforced by
+  `tests/unit/migration-filenames.test.ts`, which also pins the naming pattern
+  and checks that lexical order matches numeric order. Until 2026-09-01 this
+  paragraph described a gate that did not exist.
 - **Every registered job has a handler** — a `job_definition` row without a
   handler is a schedule firing into nothing; a handler without a row never runs.
 

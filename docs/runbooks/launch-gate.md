@@ -16,7 +16,7 @@ integrations are tested.
 | Privacy / retention | `privacy.md` | Review |
 | Channel history volume | `CHANNEL_HISTORY_PAGE_SIZE` + Load older | In product |
 | Honest integrations | Email/Gmail/VMS stay **Not connected** until a live send/sync/API succeeds | In product |
-| Cron jobs | `/api/jobs/*` skip session middleware; `vercel.json` crons; `CRON_JOB_SECRET` | In product |
+| Cron jobs | `/api/jobs/*` skip session middleware; pg_cron calls them via `app.configure_job_runner`; `CRON_JOB_SECRET` | In product |
 | Invite-only signup | `signup_allowed` RPC after the first organization exists | In product |
 | Coverage matrix | `docs/spec-coverage.md` | In product |
 

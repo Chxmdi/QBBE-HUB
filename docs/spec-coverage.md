@@ -25,9 +25,9 @@ production email **done** on stubs.
 | 6 Admin identity | P0-ADM-01, AUTH-007 | Implemented | transferOwnership; reactivate; invite honesty when email unset |
 | 7 People / teams | P0-PPL-02, P0-PPL-03, P0-UX-06 | Implemented | team commands + Admin UI; `/people?person=` highlight |
 | 8 Volunteer home | P0-VOL-02 | Implemented | Home hides portfolio/CRM CTAs; qa-matrix volunteer assertions; RLS CRM deny |
-| 9 Notification email | P0-NOT-03, NTF, JOB | Implemented locally via Mailpit | dedupe unit tests; job `GET/POST /api/jobs/notification-email` (cron auth, not a user session) |
+| 9 Notification email | P0-NOT-03, NTF, JOB | Implemented locally via Mailpit | dedupe unit tests; job `POST /api/jobs/drain-notifications` (cron auth, not a user session) |
 | 10 Report PDF | P0-RPT-04, RPT-003 | Implemented | `/reports/[id]/pdf`; volunteer/staff-without-access 404 via RLS |
-| 11 Gmail inbox | P0-INB-01, P0-GML-01, GML-001–006 | **Gated** on Google credentials | OAuth + first metadata sync on connect; cron `/api/jobs/gmail-sync`; UI stays Not connected without secrets |
+| 11 Gmail inbox | P0-INB-01, P0-GML-01, GML-001–006 | **Gated** on Google credentials | OAuth + first metadata sync on connect; cron `/api/jobs/google-sync`; UI stays Not connected without secrets |
 | 12 VMS boundary | P0-VOL-01 | **Gated** on VMS contract | Connect probes `VMS_API_URL` and refuses if unreachable; disconnect clears org `vms_id`s only |
 | 13 P1 slices | P1-TSK-06/07/08, P1-ANN-07, P1-PRJ-06/07, P1-CAL-03, P1-UX-08, P1-WF | Implemented in-product | workflows fire on task status + announcement publish; deps/checklists/recurrence/templates/saved views |
 | 14 Hardening | Part IV §16.9, §17.2 | In product + operator leftover | jobs bypass session middleware; deactivated users land on `/account-inactive`; invite-only signup; CSP/HSTS; staff-gated portfolio routes |

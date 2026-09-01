@@ -16,11 +16,11 @@ an implementation ledger and does not replace the governing specification.
 | --- | --- |
 | `npm run lint` | Pass |
 | `npm run typecheck` | Pass |
-| `npm test` | Pass — 18 files / 95 tests |
+| `npm test` | Pass — 32 files / 318 tests (CI job **Verify**, green on `main`) |
 | Production build | Pass |
-| Public Playwright accessibility/responsive suite | Pass — 5 tests |
-| Authenticated production QA matrix | Pass — 10 tests across all workspace routes, themes, widths, 200% zoom, keyboard flows, data states, and role gates |
-| Database/RLS suite | Pass — local Supabase Postgres applied migrations through `20260818081647`; all allow/deny cases passed, including inaccessible-versus-attended private meeting children and cross-organization core identity, program, project, milestone, task, label, and CRM records. CI now enforces the same matrix and fails on local database-advisor security errors. |
+| Public Playwright accessibility/responsive suite | Pass — 6 tests (CI job **Verify**) |
+| Authenticated production QA matrix | **Not verified** — 10 tests exist (`tests/e2e/qa-matrix.spec.ts`) but the suite is not wired into CI and needs a seeded QA database, so nothing in this repository records when it last passed or against what. An earlier revision of this table recorded it as "Pass"; that had no artifact behind it. Treat as unverified until a dated run exists. It signs in as `qa-owner` and makes one volunteer check, so it does not exercise the five-role matrix — `supabase/tests/rls.sql` does that. |
+| Database/RLS suite | Pass — CI applies all 55 migrations (through `20260828200241`) to a local Supabase Postgres; all allow/deny cases passed, including inaccessible-versus-attended private meeting children and cross-organization core identity, program, project, milestone, task, label, and CRM records. CI now enforces the same matrix and fails on local database-advisor security errors. |
 | Supabase local security advisor | Pass — `supabase db advisors --local --type security --fail-on error` returns no issues after the test helpers' search paths were fixed. Full performance-advisor warnings remain to be assessed separately. |
 | Dependency audit | Pass — `npm audit --audit-level=high` reports 0 vulnerabilities after the Next.js 16.3.1 upgrade |
 
@@ -47,7 +47,7 @@ an implementation ledger and does not replace the governing specification.
 | Google Drive integration | 🟡 Partial | Per-user OAuth uses the read-only Drive metadata scope; initial and scheduled sync now use a paginated persisted change-feed cursor, safely reconcile removals, and rebuild after token expiry. Drive resources remain idempotent document links without copying file contents. Real-account validation remains required; write access is deliberately out of scope for this read-only integration. |
 | Volunteer Management System integration | 🟡 Partial | The scheduled VMS worker maps normalized identities and availability into explicitly linked **active organization members** only, with actionable connection-health states on errors. Assignment sync, provider-specific reconciliation, and real-account validation remain required. |
 | Production transactional email and digests | 🟡 Partial | Critical delivery has bounded retries through a Resend-compatible HTTP provider when configured (or Mailpit locally). A daily digest cron honors user preferences and records per-notification delivery rows. Real provider-account validation and delivery observability remain required. |
-| Background jobs and automation | 🟡 Partial | Cron routes and admin-defined workflows for task changes, announcements, project health, completed meetings, and newly assigned event roles exist. Assignment workflows can notify the assigned member, event owner, admins, or a selected team; duplicate assignments do not rerun workflows. Email retry scheduling is bounded; scheduled-announcement fan-out and hourly due/overdue/acknowledgement reminders are idempotent; integration failures surface actionable health states; workers record redacted, per-organization execution results visible to admins. Durable queues and audit trails for no-op executions are still absent. |
+| Background jobs and automation | 🟡 Partial | Cron routes and admin-defined workflows for task changes, announcements, project health, completed meetings, and newly assigned event roles exist. Assignment workflows can notify the assigned member, event owner, admins, or a selected team; duplicate assignments do not rerun workflows. Email retry scheduling is bounded; scheduled-announcement fan-out and hourly due/overdue/acknowledgement reminders are idempotent; integration failures surface actionable health states; workers record redacted, per-organization execution results visible to admins. Durable queues landed on 2026-08-19, the day after this audit was taken: pgmq backs every job, with `job_definition`, `job_run` and pg_cron dispatch (`20260819165607_jobs.sql`). Audit trails for no-op executions remain absent. |
 | Security and RLS | 🟡 Partial | Migrations enable RLS; scope identity, programs/projects/tasks, CRM/reporting/integrations, meetings/events, activity, and audit data to the current organization; sign private-document URLs; and make private-message, task-child, and meeting-child records inherit parent visibility. The 164-assertion allow/deny suite exercises blocked and permitted access, including cross-organization data, and passes in CI against a migrated database — first verified on 2026-09-01. Before that date the claim was untrue: the suite's fixture bootstrap aborted on a `gen_salt` resolution error, so no assertion had ever executed, and the CI job that runs it had never been triggered because `main` did not exist. A full security review of the remaining communication, notification, document, and feature-flag policies plus production-database validation remain required. |
 | Observability | 🟡 Partial | Structured console logging and an optional Sentry-compatible DSN exist. Production monitoring, alert routing and operational validation remain unverified. |
 | CI/CD and branch strategy | 🟡 Partial | CI enforces lockfile install, lint, type-check, unit, production build, public E2E, high-severity dependency audit, and a migrated local-Supabase RLS/security-advisor job. `main` now exists and CI runs on every push to it. Branch protection, the default-branch setting, preview deployments and integration-test enforcement are repository settings and remain outside this codebase. |
@@ -61,11 +61,12 @@ an implementation ledger and does not replace the governing specification.
 2. Provide QBBE-controlled Supabase, Vercel, Google OAuth, VMS and email
    provider configuration to perform real integration and staging validation.
 3. Implement the partial and missing rows above, beginning with production
-   email validation/observability, VMS assignment synchronization, durable
-   background processing, and expanded multi-user/realtime test coverage.
-4. Start local Supabase and run the RLS allow/deny suite; then add database,
-   integration, authenticated multi-role and multi-user realtime coverage to
-   CI.
+   email validation/observability, VMS assignment synchronization, and expanded
+   multi-user/realtime test coverage. (Durable background processing is done —
+   see the jobs row.)
+4. Add integration, authenticated multi-role and multi-user realtime coverage
+   to CI. (The RLS allow/deny suite is done — it runs in the `database-security`
+   job, green since 2026-09-01.)
 5. Protect `main` and make it the repository default branch, configure preview
    deployments and require all checks before production deployment.
 

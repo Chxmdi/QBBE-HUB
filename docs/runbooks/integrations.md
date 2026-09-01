@@ -10,12 +10,14 @@ Local Mailpit from `supabase start` (UI `:54324`, SMTP `:54325`) is enough to
 complete the pipeline. Call:
 
 ```
-POST /api/jobs/notification-email
-Authorization: Bearer $CRON_JOB_SECRET
+POST /api/jobs/drain-notifications
+x-job-secret: $CRON_JOB_SECRET
 ```
 
-Set `CRON_JOB_SECRET` (and `CRON_SECRET` to the same value on Vercel so
-platform cron sends the bearer header). Job routes skip login middleware.
+The header is `x-job-secret`, not `Authorization: Bearer` — the route reads
+only the former, so a bearer request is refused before the job name is even
+looked at. Set `CRON_JOB_SECRET`; there is no second secret. Job routes skip
+login middleware.
 Admin invitations always say **Invite recorded — email not sent** until a
 production mail client is actually wired (`transactionalEmailIsLive()`).
 
@@ -91,8 +93,8 @@ from `integration_connection`. Failures must set an actionable non-connected sta
 
 ## Scheduled reminders
 
-The hourly `/api/jobs/reminders` cron uses the same `CRON_JOB_SECRET` as the
-other workers. It creates idempotent in-app/email-eligible notifications for
+The daily `/api/jobs/due-date-reminders` job (12:00 UTC) uses the same
+`CRON_JOB_SECRET` as the other workers. It creates idempotent in-app/email-eligible notifications for
 assigned tasks and CRM follow-ups due today or overdue, plus daily reminders
 for past-deadline announcements that still require acknowledgement. Keys are
 scoped to the record, recipient, and day where repeat reminders are intended,
