@@ -10,7 +10,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * visibility timeout lapses.
  */
 
-export type QueueName = "notifications" | "integrations" | "exports";
+/**
+ * The queues, as a value rather than only a type, so a test can check this list
+ * against the queues the migrations actually create. A name here with no queue
+ * behind it is a handler whose every read fails.
+ */
+export const QUEUE_NAMES = ["notifications", "integrations", "exports"] as const;
+
+export type QueueName = (typeof QUEUE_NAMES)[number];
 
 export interface QueueMessage<T = Record<string, unknown>> {
   msgId: number;

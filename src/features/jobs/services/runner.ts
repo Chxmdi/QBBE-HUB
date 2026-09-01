@@ -5,11 +5,14 @@ import { JOB_HANDLERS } from "./handlers";
 /**
  * Executes one scheduled job and records what happened.
  *
- * Two invariants hold here so that Admin → Jobs can be trusted:
+ * Three invariants hold here so that Admin → Jobs can be trusted:
  *   - every execution writes exactly one `job_run` row, whatever the outcome;
  *   - a job name absent from `job_definition`, or disabled there, does not run,
  *     so an old cron entry or a stray HTTP call cannot execute code the
- *     organization has switched off.
+ *     organization has switched off;
+ *   - the counts on that row describe the work, not the process: a handler
+ *     that fails half-way records what it finished (`PartialJobFailure`), and
+ *     a handler that returns with `failed > 0` is not shown as a clean run.
  *
  * Concurrency is safe without a lock. Queue-backed jobs are protected by the
  * pgmq visibility timeout, and sweep jobs write only deduplicated rows, so two
@@ -51,6 +54,25 @@ export class DisabledJobError extends Error {
   constructor(name: string) {
     super(`The job "${name}" is disabled.`);
     this.name = "DisabledJobError";
+  }
+}
+
+/**
+ * Thrown by a handler that got part-way through a batch and cannot continue.
+ *
+ * A plain throw tells the runner nothing but "it broke", so a run that
+ * delivered twenty messages and then lost the queue would be recorded as
+ * `0 processed` — which in Admin → Jobs reads as an empty tick rather than as
+ * most of a batch having landed. Carrying the counts keeps the ledger honest
+ * about what actually happened before the failure.
+ */
+export class PartialJobFailure extends Error {
+  readonly result: JobResult;
+
+  constructor(message: string, result: JobResult) {
+    super(message);
+    this.name = "PartialJobFailure";
+    this.result = result;
   }
 }
 
@@ -142,12 +164,22 @@ export async function runJob(jobName: string): Promise<RunOutcome> {
     const durationMs = Date.now() - startedAt;
     const message = cause instanceof Error ? cause.message : String(cause);
 
+    // A handler that died still did whatever it had already done. When it can
+    // say how much, record that; when it cannot, the run counts as one failure
+    // rather than as a row of zeros that reads like a quiet, healthy tick.
+    const partial = cause instanceof PartialJobFailure ? cause.result : null;
+    const processed = partial?.processed ?? 0;
+    const failed = Math.max(partial?.failed ?? 0, 1);
+
     await db
       .from("job_run")
       .update({
         status: "failed",
         finished_at: new Date().toISOString(),
         duration_ms: durationMs,
+        processed_count: processed,
+        failed_count: failed,
+        metadata: partial?.metadata ?? {},
         error: message.slice(0, 2000),
       })
       .eq("id", runId);
@@ -157,8 +189,9 @@ export async function runJob(jobName: string): Promise<RunOutcome> {
       runId,
       status: "failed",
       durationMs,
-      processed: 0,
-      failed: 1,
+      processed,
+      failed,
+      metadata: partial?.metadata,
       error: message,
     };
   }

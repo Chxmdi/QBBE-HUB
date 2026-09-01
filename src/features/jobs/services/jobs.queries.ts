@@ -160,9 +160,14 @@ export async function getJobHealth(): Promise<{
   const latestByJob = new Map<string, RunRow>();
   const failuresByJob = new Map<string, number>();
 
+  // A run that returned normally having dropped part of its batch counts as a
+  // failure here. The column answers "did the work happen", and a handler that
+  // reports its own per-item failures would otherwise never reach this page.
+  const droppedWork = (row: RunRow) => row.status === "failed" || row.failed_count > 0;
+
   for (const row of runRows) {
     if (!latestByJob.has(row.job_name)) latestByJob.set(row.job_name, row);
-    if (row.status === "failed" && row.started_at >= since) {
+    if (droppedWork(row) && row.started_at >= since) {
       failuresByJob.set(row.job_name, (failuresByJob.get(row.job_name) ?? 0) + 1);
     }
   }
@@ -185,7 +190,7 @@ export async function getJobHealth(): Promise<{
   );
 
   const recentFailures = runRows
-    .filter((row) => row.status === "failed")
+    .filter(droppedWork)
     .slice(0, 10)
     .map((row) => ({ ...toSummary(row), jobName: row.job_name }));
 
