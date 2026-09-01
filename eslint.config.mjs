@@ -8,12 +8,17 @@ const eslintConfig = [
   ...nextTypeScript,
   {
     ignores: [
-      "node_modules/**",
-      ".next/**",
-      "out/**",
+      "**/node_modules/**",
+      // Globbed rather than anchored: build output is generated in any
+      // worktree too, and linting a minified bundle fails the gate on code
+      // nobody wrote.
+      "**/.next/**",
+      "**/out/**",
       "coverage/**",
       "next-env.d.ts",
       "supabase/.temp/**",
+      // Agent worktrees and local tool state; never source.
+      ".claude/**",
     ],
   },
 ];
