@@ -1321,9 +1321,19 @@ begin
   -- of the SECURITY DEFINER helpers that policies delegate to — the second is
   -- what the first pass missed.
   -- -----------------------------------------------------------------------
+  -- Two policies are exempt, named individually rather than by pattern.
+  -- `job_run` and `job_definition` are platform tables with no
+  -- organization_id: a job definition is the schedule itself, not one
+  -- organization's copy of it, so there is nothing to scope to without a
+  -- schema change and a decision about whether the job runtime is per-tenant
+  -- at all. Their rows carry job names, timings and counts, not organization
+  -- data; `background_job_run`, which does carry per-organization results, is
+  -- scoped. Listing them by name means a third exemption cannot appear by
+  -- accident — someone has to come here and add it on purpose.
   select count(*) into n
   from pg_policies
   where schemaname = 'public'
+    and policyname not in ('job_run_admin_read', 'job_definition_admin_read')
     and (coalesce(qual, '') ~ 'app\.is_(member|staff|admin)\(\)'
       or coalesce(with_check, '') ~ 'app\.is_(member|staff|admin)\(\)');
   perform tests.ok(n = 0,
