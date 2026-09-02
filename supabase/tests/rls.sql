@@ -1307,6 +1307,38 @@ begin
     'signup is invite-only after an organization exists'
   );
 
+  -- -----------------------------------------------------------------------
+  -- The unscoped membership helpers must not reappear.
+  --
+  -- Every individual assertion above tests one table. This tests the shape of
+  -- the whole system: that no policy and no helper still asks "a member of
+  -- some organization" where it means "a member of this row's organization".
+  --
+  -- It is here because the audit that found the original gap was done by hand,
+  -- and a hand audit is a snapshot. The catalogue knows the answer exactly, so
+  -- the check belongs in the suite rather than in someone's memory of having
+  -- looked once. Both surfaces are covered: policy expressions, and the bodies
+  -- of the SECURITY DEFINER helpers that policies delegate to — the second is
+  -- what the first pass missed.
+  -- -----------------------------------------------------------------------
+  select count(*) into n
+  from pg_policies
+  where schemaname = 'public'
+    and (coalesce(qual, '') ~ 'app\.is_(member|staff|admin)\(\)'
+      or coalesce(with_check, '') ~ 'app\.is_(member|staff|admin)\(\)');
+  perform tests.ok(n = 0,
+    'no policy tests membership in any organization rather than this one');
+
+  select count(*) into n
+  from pg_proc pr
+  join pg_namespace ns on ns.oid = pr.pronamespace
+  where ns.nspname = 'app'
+    and pr.prokind = 'f'
+    and pr.proname not in ('is_member', 'is_staff', 'is_admin')
+    and pg_get_functiondef(pr.oid) ~ 'app\.is_(member|staff|admin)\(\)';
+  perform tests.ok(n = 0,
+    'no helper function carries an unscoped copy of the membership test');
+
   perform tests.ok(true, 'RLS matrix complete');
 end;
 $$;
