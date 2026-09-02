@@ -183,10 +183,10 @@ Service-role only; there is deliberately no PostgREST route for either.
 
 | Guarantee | How it is checked |
 |---|---|
-| Trigger enqueues on notification insert | Live SQL against Postgres |
-| Duplicate dedupe key rejected | Live SQL — unique index raises 23505 |
-| Unacknowledged message returns after the visibility timeout | Live SQL against pgmq |
-| Archive moves a message to the dead-letter table | Live SQL against pgmq |
+| Trigger enqueues on notification insert | Hand-run SQL, once — **not repeated** |
+| Duplicate dedupe key rejected | Hand-run SQL, once — **not repeated** |
+| Unacknowledged message returns after the visibility timeout | Hand-run SQL, once — **not repeated** |
+| Archive moves a message to the dead-letter table | Hand-run SQL, once — **not repeated** |
 | Crash mid-send delivers exactly once on recovery | `tests/unit/drain-notifications.test.ts` |
 | Five failures dead-letter and mark the row failed | `tests/unit/drain-notifications.test.ts` |
 | Quiet hours defer and later release | `tests/unit/drain-notifications.test.ts` |
@@ -196,8 +196,19 @@ Service-role only; there is deliberately no PostgREST route for either.
 
 The handler tests run the real handlers against an in-memory double
 (`tests/support/fake-supabase.ts`) that reproduces unique-index violations,
-visibility timeouts, and archiving. The database-level half of each guarantee is
-verified directly against Postgres, as above.
+visibility timeouts, and archiving. Those rows run in CI on every push.
+
+The first four do not. They were checked by hand against Postgres once, and
+nothing re-runs them: `supabase/tests/` holds only the fixture and the RLS
+matrix, and neither touches pgmq. They are listed here in the same table and
+the same voice as the automated rows, which is misleading, so they are marked.
+
+This distinction is not pedantry. The RLS matrix carried an unqualified
+"passes" in the audit for weeks while its fixture aborted before the first
+assertion; the claim survived because nothing re-ran it and nobody expected to
+have to. A one-time hand check ages into a belief. Treat these four as
+statements about 2026-08-19, not about the code as it stands, until they are
+written as assertions that run.
 
 ## Data exports
 

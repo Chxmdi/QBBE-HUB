@@ -6,9 +6,12 @@ announcements with acknowledgment, meetings and agendas, events, calendar and
 master schedule, unified inbox, relationship CRM, reporting, people and
 access administration — one product, one data model, one permission system.
 
-Built from the **QBBE Hub Master Product, UI/UX & Development Specification
-v1.0** as a feature-first modular monolith. The governing implementation and
-deployment goal is versioned in [`docs/master-spec.md`](docs/master-spec.md).
+Built as a feature-first modular monolith against the **QBBE Hub Master
+Product, UI/UX & Development Specification v1.0**, which is held outside this
+repository. What is versioned here is the build brief derived from it —
+[`docs/master-spec.md`](docs/master-spec.md) — so the spec identifiers quoted
+in the runbooks cannot be resolved from the repository alone. That file's
+header explains the consequence for anyone auditing coverage.
 
 ## Stack
 

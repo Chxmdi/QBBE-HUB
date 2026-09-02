@@ -1107,6 +1107,15 @@ begin
   end;
   reset role;
 
+  -- Staff read the policies they cannot set. The coverage note claims
+  -- "admins set policies, staff see them, volunteers see neither", and only
+  -- two thirds of that sentence was ever tested.
+  perform tests.authenticate(v_staff);
+  set local role authenticated;
+  select count(*) into n from retention_policy where organization_id = v_org;
+  perform tests.ok(n >= 1, 'staff can read a retention policy they cannot set');
+  reset role;
+
   perform tests.authenticate(v_vol);
   begin
     set local role authenticated;

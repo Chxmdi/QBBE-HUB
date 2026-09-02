@@ -1,6 +1,22 @@
 # QBBE Hub Master Product, UI/UX & Development Specification
 
-> Source: the governing specification supplied for the production-readiness effort on 2026-08-18. This repository copy is the working source of truth for future implementation and audit work.
+> **What this file is.** The build brief handed to the implementation effort on
+> 2026-08-18 — not the specification it refers to. Its own opening line points
+> at the "QBBE Hub Master Product, UI/UX & Development Specification", and that
+> document is not in this repository.
+>
+> This matters for anyone auditing coverage. The identifiers cited throughout
+> the runbooks and `spec-coverage.md` — `P0-CRM-07`, `CICD-001`, `AUTH-006`,
+> `§16.1`, `§17.2` and the rest — do not resolve to anything here: grepping
+> this file for any of them returns nothing. They were carried over from the
+> specification proper. Until that document is added, "spec coverage" cannot be
+> checked by a reader of this repository alone, and a claim that some
+> requirement is met has to be read as a claim about intent rather than one
+> that anybody can verify.
+>
+> This file remains the working statement of the goal, which is a genuinely
+> useful thing to have versioned. It is simply not the numbered specification
+> its citations imply.
 
 **Goal: Complete QBBE Hub to Production-Ready, Deployment-Perfect State**
 

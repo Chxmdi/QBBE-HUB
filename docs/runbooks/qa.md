@@ -6,7 +6,7 @@ Two suites, split by what they need.
 
 Covers the routes that render without a database round-trip, across the full
 §16.1 matrix: six widths (1440/1280/1024/768/390/320), both themes,
-horizontal-overflow detection, axe (WCAG 2.2 A + AA), keyboard traversal,
+horizontal-overflow detection, axe (WCAG 2.2 A + AA — the tag set is `wcag2a/2aa`, `wcag21a/21aa`, `wcag22a/22aa`, which catches the 2.2 criteria axe can decide automatically (target size, focus appearance); the rest of 2.2 AA, such as accessible authentication and consistent help, still needs a human pass), keyboard traversal,
 focus visibility, reduced motion, unauthenticated redirects, and the
 `/api/jobs/*` secret guard.
 

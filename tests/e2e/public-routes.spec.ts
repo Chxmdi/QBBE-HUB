@@ -83,7 +83,7 @@ test("auth routes have no critical or serious a11y violations", async ({
       await page.reload();
 
       const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
         .analyze();
 
       for (const v of results.violations) {

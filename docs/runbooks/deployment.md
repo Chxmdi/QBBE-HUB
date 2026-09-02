@@ -109,7 +109,9 @@ Two Playwright suites:
 
 The public suite covers the auth routes across six widths, both themes,
 axe-core WCAG 2.2 A/AA rules, keyboard traversal, focus visibility, reduced
-motion, and unauthenticated redirects. It runs on every pull request.
+motion, and unauthenticated redirects. Automated rules decide only part of
+WCAG 2.2 AA; criteria such as accessible authentication and consistent help
+are not machine-checkable and remain a human review step. It runs on every pull request.
 
 The authenticated suite covers all 18 workspace routes at the same widths and
 themes, plus 200% zoom, the command palette, the task drawer and deep links,

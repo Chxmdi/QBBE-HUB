@@ -4,6 +4,22 @@ This matrix is the honest record of what the product implements. Update it in
 the **same PR** as the slice (working agreement). Do not mark Gmail / VMS /
 production email **done** on stubs.
 
+**Two cautions for anyone reading a row as proof.**
+
+The **Spec IDs** column does not resolve. Those identifiers come from the
+specification named in the title, which is not in this repository —
+`docs/master-spec.md` is the build brief derived from it, and grepping it for
+`P0-`, `RPT-`, `CICD-` or any `§` reference returns nothing. So a Spec ID here
+names an intent, and no reader of this repository can check the row against the
+requirement it claims to satisfy.
+
+Some cited unit tests assert the **text of a migration file** rather than the
+behaviour of a database — `readFileSync` on the SQL, then `toContain`. Those
+are useful drift guards, and they pass whether or not the migration was ever
+applied. They are not evidence that a constraint is enforced. The evidence for
+enforcement is `supabase/tests/rls.sql`, which runs against a migrated database
+in CI, and the row's assertion counts refer to that.
+
 ## How to add a table (Unit 1 recipe)
 
 1. Create the table, indexes, and RLS policies in the **same** migration.
@@ -37,7 +53,7 @@ production email **done** on stubs.
 | 18 Report versions | RPT-001, RPT-004 | Implemented | `report_version` is append-only — SELECT and INSERT policies, no UPDATE or DELETE — so an approved report's figures cannot change; `report_approval` records one decision per version, rejections needing a reason; regenerating appends a version and clears the sign-off; the screen, CSV and PDF all render the approved version if there is one; existing reports backfilled as version 1 |
 | 19 Data exports | Privacy / subject access | Implemented | `export_job` runs on the existing job runtime (`run-exports` every 5 min, `expire-exports` nightly); files live in a bucket with **no** storage policies, reachable only through a 2-minute signed URL minted after an explicit check; exports expire after 7 days and the file is deleted while the record survives; staff may export operational sets, only an admin the whole organization or a named person; the subject of a person export can see it was made; every request and download is an audit event |
 | 20 Outputs and outcomes | Impact reporting | Implemented | `program_operation` (one delivery, with a derived `contact_hours`; a cancelled session explains itself and carries no attendance, a delivered one must be counted) and `outcome_metric`/`outcome_measurement` (baseline, target and a direction the database refuses to contradict; one reading per metric per day). Totals count delivered sessions only. Members read, staff write. 22 unit tests, 10 RLS assertions |
-| 21 Retention | Privacy / data minimisation | Implemented | `retention_subject` is a whitelist with a per-type floor (audit trail: 6 years) enforced by trigger, because a CHECK cannot read another table; `retention_policy` is created **disabled** and shows what it would remove, counted by the same code the job runs; `apply-retention` sweeps nightly in batches and writes a `retention_run` row whatever happens; the run log has no write policy. Admins set policies, staff see them, volunteers see neither. 15 unit tests, 9 RLS assertions |
+| 21 Retention | Privacy / data minimisation | Implemented | `retention_subject` is a whitelist with a per-type floor (audit trail: 6 years) enforced by trigger, because a CHECK cannot read another table; `retention_policy` is created **disabled** and shows what it would remove, counted by the same code the job runs; `apply-retention` sweeps nightly in batches and writes a `retention_run` row whatever happens; the run log has no write policy. Admins set policies, staff see them, volunteers see neither — all three now asserted. 15 unit tests, 9 RLS assertions |
 | 22 Search coverage | P0-CMD-01, P1-SRC-03, P0-UX-06 | Implemented | `global_search` covers 13 record types including risks, issues, documents and opportunities; results round-robin so no type is starved by the limit; deep links land on the row and highlight it; drift test ties SQL branches to UI labels; RLS assertions prove search is not a side door |
 
 ## Deliberately not first-release (P2)
