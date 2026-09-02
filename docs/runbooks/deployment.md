@@ -22,8 +22,16 @@ recovery emails (ENV-002).
      `https://<domain>/auth/callback` to redirect URLs.
    - Enable email confirmation.
    - **Restrict signup**: either disable public signup once the Primary
-     Owner exists, or restrict to invited emails. The app also enforces
-     invite-only via `signup_allowed` after the first organization exists.
+     Owner exists, or restrict to invited emails. The database also enforces
+     this: `app.handle_new_user` refuses any sign-up without a live invitation
+     once an organization exists, and the refusal aborts the account creation.
+     Until 2026-09-02 this line claimed the enforcement came from
+     `signup_allowed`. It did not. That function was called only from the
+     sign-up form — a check in the visitor's own browser — while the trigger
+     that grants the membership never consulted it and defaulted to an active
+     **staff** account. Anyone could obtain one with a single API call using the
+     publishable key. Provider-side signup restriction is still worth setting;
+     it is defence in depth rather than the only line.
 4. Create the Vercel project from this repository. Set env vars:
    `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
    `NEXT_PUBLIC_SUPABASE_ANON_KEY` (plus optional integrations per

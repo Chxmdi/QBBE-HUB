@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { sanitizeJobError } from "@/lib/job-observability";
+import { reportError } from "@/lib/observability";
 import { JOB_HANDLERS } from "./handlers";
 
 /**
@@ -151,6 +153,23 @@ export async function runJob(jobName: string): Promise<RunOutcome> {
       })
       .eq("id", runId);
 
+    // A run that finishes having dropped work is the quietest failure the
+    // runtime produces: the process exited cleanly, the row says "succeeded",
+    // and some messages are simply gone. It is reported for the same reason
+    // `run-health` draws it as partial rather than green — a count of failures
+    // nobody is told about is indistinguishable from no failures at all.
+    if (result.failed > 0) {
+      reportError(`${jobName} completed with ${result.failed} failed of ${result.processed + result.failed}`, {
+        source: "job",
+        jobName,
+        runId,
+        durationMs,
+        processed: result.processed,
+        failed: result.failed,
+        outcome: "partial",
+      });
+    }
+
     return {
       jobName,
       runId,
@@ -183,6 +202,23 @@ export async function runJob(jobName: string): Promise<RunOutcome> {
         error: message.slice(0, 2000),
       })
       .eq("id", runId);
+
+    // Recording the failure and reporting it are different things. The row
+    // above is durable and answers "what happened" once somebody asks; this
+    // is what causes anybody to ask. A scheduled job has no user watching it
+    // fail, so nothing else will raise its hand.
+    //
+    // Sanitized first: an external monitor is more exposed than the
+    // admin-visible ledger, so the redaction that protects the ledger has to
+    // apply here at least as strictly.
+    reportError(sanitizeJobError(message) ?? `${jobName} failed`, {
+      source: "job",
+      jobName,
+      runId,
+      durationMs,
+      processed,
+      failed,
+    });
 
     return {
       jobName,

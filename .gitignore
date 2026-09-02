@@ -51,3 +51,7 @@ supabase/.branches
 # Scratch worktrees created for parallel agent runs. Transient, and nested
 # git worktrees must never be committed into the repository they check out.
 .claude/worktrees/
+
+# The governing specification, staged for the coverage audit only.
+# NOT committed: this repository is public and the spec is an internal document.
+docs/audit/.spec-source.md

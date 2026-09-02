@@ -60,25 +60,38 @@ begin
 end;
 $$;
 
+-- The first account bootstraps the workspace and becomes Primary Owner; it is
+-- the one sign-up that needs no invitation, and it has to run before the
+-- invitations below because they need an organization to belong to.
 select tests.ensure_auth_user(
   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1',
   'qa-owner@example.com',
   'QA Owner'
 );
+-- Every fixture user after the owner needs a live invitation, because sign-up
+-- is invite-only and the trigger now enforces that rather than trusting the
+-- browser. This is not fixture bookkeeping: it means the suite exercises the
+-- real admission path instead of a side door the product does not have.
+insert into invitation (organization_id, email, intended_role, invited_by, expires_at)
+select o.id, v.email, v.role::org_role,
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', now() + interval '30 days'
+from organization o
+cross join (values
+  ('qa-staff@example.com', 'staff'),
+  ('qa-volunteer@example.com', 'volunteer'),
+  ('qa-admin@example.com', 'admin'),
+  ('qa-guest@example.com', 'guest')
+) as v(email, role)
+where not exists (
+  select 1 from invitation i where i.email = v.email and i.accepted_at is null
+)
+limit 4;
+
 select tests.ensure_auth_user(
   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
   'qa-staff@example.com',
   'QA Staff'
 );
--- Invitation so the bootstrap trigger assigns volunteer rather than staff.
-insert into invitation (organization_id, email, intended_role, invited_by, expires_at)
-select o.id, 'qa-volunteer@example.com', 'volunteer',
-       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', now() + interval '30 days'
-from organization o
-where not exists (
-  select 1 from invitation i where i.email = 'qa-volunteer@example.com' and i.accepted_at is null
-)
-limit 1;
 
 select tests.ensure_auth_user(
   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3',
