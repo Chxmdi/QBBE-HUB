@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { AttendeeList } from "@/features/meetings/components/attendee-list";
 import { CancelMeetingButton } from "@/features/meetings/components/cancel-meeting-button";
 import { CompleteMeetingButton } from "@/features/meetings/components/complete-meeting-button";
 import { MeetingNotesForm } from "@/features/meetings/components/meeting-notes-form";
@@ -52,6 +53,7 @@ export default async function MeetingDetailPage({
   const meeting = meetingRow as unknown as {
     id: string;
     title: string;
+    organizer_id: string;
     purpose: string | null;
     starts_at: string;
     ends_at: string | null;
@@ -65,7 +67,7 @@ export default async function MeetingDetailPage({
     project: { id: string; name: string } | null;
   };
 
-  const [{ data: agenda }, { data: actions }, { data: decisions }, options] =
+  const [{ data: agenda }, { data: actions }, { data: decisions }, options, { data: attendeeRows }] =
     await Promise.all([
       supabase
         .from("agenda_item")
@@ -87,7 +89,31 @@ export default async function MeetingDetailPage({
         .eq("meeting_id", id)
         .order("decided_at"),
       getPickerOptions(),
+      supabase
+        .from("meeting_attendee")
+        .select("user_id, user:user_id(id, full_name, avatar_url)")
+        .eq("meeting_id", id),
     ]);
+
+  type AttendeeRow = {
+    user_id: string;
+    user: { id: string; full_name: string; avatar_url: string | null } | null;
+  };
+  const attendees = ((attendeeRows ?? []) as unknown as AttendeeRow[])
+    .map((row) => ({
+      userId: row.user_id,
+      name: row.user?.full_name ?? "Unknown person",
+      avatarUrl: row.user?.avatar_url ?? null,
+      isOrganizer: row.user_id === meeting.organizer_id,
+    }))
+    // Organizer first, then alphabetical — a list people scan for a name.
+    .sort((a, b) =>
+      a.isOrganizer === b.isOrganizer
+        ? a.name.localeCompare(b.name)
+        : a.isOrganizer
+          ? -1
+          : 1,
+    );
 
   const organizer = meeting.organizer;
   const project = meeting.project;
@@ -174,6 +200,20 @@ export default async function MeetingDetailPage({
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_380px]">
         <div className="space-y-8">
           {/* Agenda builder (P0-AGD-01/02) */}
+          <section aria-labelledby="attendees-heading">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 id="attendees-heading" className="section-heading">
+                Attendees
+              </h2>
+            </div>
+            <AttendeeList
+              meetingId={meeting.id}
+              attendees={attendees}
+              people={options.people.map((p) => ({ id: p.id, label: p.label }))}
+              canManage={session.isStaff && isActive}
+            />
+          </section>
+
           <section aria-labelledby="agenda-heading">
             <div className="mb-3 flex items-center justify-between">
               <h2 id="agenda-heading" className="section-heading">

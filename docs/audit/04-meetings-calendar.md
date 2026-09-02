@@ -56,7 +56,7 @@ stub, not DOM (`:167`). The calendar page is likewise bounded — `:50-63` deriv
 every query carries `.gte/.lte` plus a `.limit()`.
 
 ### P0-MTG-01 — Meeting creation
-**Verdict:** Partial
+**Verdict:** Partial *(attendees closed 2026-09-02; the context links remain)*
 **Requirement:** A meeting links to program/project/event/relationship and stores organizer,
 attendees, time, timezone, location/link, purpose and channel.
 **Evidence:** `supabase/migrations/0003_operations.sql:14-33` — `meeting` has
@@ -146,7 +146,7 @@ agenda item and there is no "create action from this agenda item" control on
 the link is always null in practice. The source-meeting link is real.
 
 ### P0-MTG-03 — Meeting summary
-**Verdict:** Partial
+**Verdict:** Partial *(attendees added 2026-09-02; agenda and unresolved items remain)*
 **Requirement:** A completed meeting produces a summary covering attendees, agenda,
 decisions, actions with owners and due dates, unresolved items, and source links.
 **Evidence:** `completeMeeting` (`src/features/meetings/services/meeting.commands.ts:380-474`)
@@ -487,3 +487,39 @@ Verdicts resting on signed-in UI behaviour are code-read, not executed: per
 `tests/e2e/qa-matrix.spec.ts` is not in CI, so no screen in this domain has a recorded
 passing run against a live database. Nothing here was verified against Google, Supabase
 Cloud or a browser.
+
+
+---
+
+## Follow-up: attendee management, 2026-09-02
+
+The finding this audit led with — that `meeting_attendee` had no writer beyond
+the organizer's self-insert, leaving the attendee branch of
+`app.can_read_meeting` unreachable — is fixed.
+
+`addMeetingAttendee` and `removeMeetingAttendee`
+(`src/features/meetings/services/meeting.commands.ts`) plus an attendee section
+on the meeting detail page
+(`src/features/meetings/components/attendee-list.tsx`). No migration was
+needed: `meeting_attendee_staff_write` has permitted exactly this since the
+August scoping pass. The database was ready the whole time; nothing called it.
+
+Removing the organizer is refused, because attendance is what grants read — it
+would leave a meeting its own convener could not open unless they happened to
+be staff.
+
+`completeMeeting` now lists attendees, which closes one of the four elements
+P0-MTG-03 was missing. The composition moved to
+`meeting.summary.ts` so it can be tested without a database; five tests pin the
+content.
+
+**A correction to this document.** The original entry implied the attendee
+read-path was untested. It was not: five assertions covering "attendee can read
+their meeting", its attendees, agenda, decisions and actions have passed since
+the policy was written. That makes the finding sharper rather than weaker — the
+policy was proven correct in *both* directions and the feature still did not
+exist, because no test of a policy can tell you whether any code reaches it.
+
+The one assertion genuinely missing is now added: an attendee may read the
+guest list but may not edit it. Since attendance grants read, an invitee able
+to delete attendees could revoke another person's access to the meeting.

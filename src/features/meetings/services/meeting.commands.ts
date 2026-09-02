@@ -11,6 +11,7 @@ import {
   updateGoogleMeetingEvent,
 } from "@/features/calendar/services/google-calendar-write";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { composeMeetingSummary } from "./meeting.summary";
 
 const createMeetingSchema = z.object({
   title: requiredText("A meeting needs a title.", 200),
@@ -73,6 +74,81 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
 
   revalidatePath("/meetings");
   return { ok: true, id: meeting.id as string };
+}
+
+const attendeeSchema = z.object({
+  meetingId: z.string().uuid(),
+  userId: z.string().uuid({ message: "Choose a person to invite." }),
+});
+
+/**
+ * Invite someone to a meeting.
+ *
+ * `meeting_attendee` and its policies have existed since the first operations
+ * migration, and `app.can_read_meeting` grants read to staff, the organizer,
+ * *or an attendee* — a branch covered by ten allow/deny assertions. Nothing
+ * ever wrote a row through it: the only insert in the codebase was the
+ * organizer adding themselves at creation. So the attendee branch was
+ * unreachable in production, and a non-staff invitee could never see a meeting
+ * they had been invited to, because they could never become an invitee.
+ *
+ * Authorization is `meeting_attendee_staff_write` (`app.can_manage_meeting`,
+ * which resolves to organization staff). The session check here is for the
+ * error message; RLS is what actually decides.
+ */
+export async function addMeetingAttendee(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const parsed = attendeeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  // Inviting someone already invited is not an error worth showing anybody.
+  const { error } = await supabase
+    .from("meeting_attendee")
+    .upsert(
+      { meeting_id: parsed.data.meetingId, user_id: parsed.data.userId },
+      { onConflict: "meeting_id,user_id", ignoreDuplicates: true },
+    );
+  if (error) return { ok: false, error: "Could not add that person to the meeting." };
+
+  revalidatePath(`/meetings/${parsed.data.meetingId}`);
+  return { ok: true, id: parsed.data.meetingId };
+}
+
+export async function removeMeetingAttendee(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const parsed = attendeeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: meeting } = await supabase
+    .from("meeting")
+    .select("organizer_id")
+    .eq("id", parsed.data.meetingId)
+    .maybeSingle();
+
+  // Removing the organizer would leave a meeting whose own convener cannot
+  // read it unless they happen to be staff — and would silently strip the
+  // notes and decisions from their view of it.
+  if (meeting?.organizer_id === parsed.data.userId) {
+    return { ok: false, error: "The organizer cannot be removed from their own meeting." };
+  }
+
+  const { error } = await supabase
+    .from("meeting_attendee")
+    .delete()
+    .eq("meeting_id", parsed.data.meetingId)
+    .eq("user_id", parsed.data.userId);
+  if (error) return { ok: false, error: "Could not remove that person from the meeting." };
+
+  revalidatePath(`/meetings/${parsed.data.meetingId}`);
+  return { ok: true, id: parsed.data.meetingId };
 }
 
 const updateMeetingSchema = z.object({
@@ -391,11 +467,15 @@ export async function completeMeeting(meetingId: string): Promise<ActionResult> 
   if (meeting.status === "cancelled") return { ok: false, error: "Cancelled meetings cannot be completed." };
   if (meeting.status === "completed") return { ok: true, id: meeting.id };
 
-  const [{ data: decisions }, { data: actions }] = await Promise.all([
+  const [{ data: decisions }, { data: actions }, { data: attendees }] = await Promise.all([
     supabase.from("decision").select("title").eq("meeting_id", meetingId),
     supabase
       .from("meeting_action")
       .select("title, due_at, owner:owner_id(full_name)")
+      .eq("meeting_id", meetingId),
+    supabase
+      .from("meeting_attendee")
+      .select("user:user_id(full_name)")
       .eq("meeting_id", meetingId),
   ]);
 
@@ -423,22 +503,20 @@ export async function completeMeeting(meetingId: string): Promise<ActionResult> 
       due_at: string | null;
       owner: { full_name: string } | null;
     };
-    const lines = [
-      `Meeting summary — ${meeting.title}`,
-      "",
-      decisions && decisions.length > 0
-        ? `Decisions:\n${decisions.map((d) => `• ${d.title}`).join("\n")}`
-        : "Decisions: none recorded",
-      "",
-      actions && actions.length > 0
-        ? `Actions:\n${((actions ?? []) as unknown as ActionRow[])
-            .map(
-              (a) =>
-                `• ${a.title}${a.owner ? ` — ${a.owner.full_name}` : ""}${a.due_at ? ` (due ${a.due_at})` : ""}`,
-            )
-            .join("\n")}`
-        : "Actions: none recorded",
-    ].join("\n");
+    type AttendeeRow = { user: { full_name: string } | null };
+
+    const lines = composeMeetingSummary({
+      title: meeting.title,
+      attendees: ((attendees ?? []) as unknown as AttendeeRow[]).map((a) => ({
+        fullName: a.user?.full_name ?? null,
+      })),
+      decisions: (decisions ?? []).map((d) => ({ title: d.title as string })),
+      actions: ((actions ?? []) as unknown as ActionRow[]).map((a) => ({
+        title: a.title,
+        dueAt: a.due_at,
+        ownerName: a.owner?.full_name ?? null,
+      })),
+    });
 
     const { error: postError } = await supabase.from("message").insert({
       organization_id: session.organizationId,

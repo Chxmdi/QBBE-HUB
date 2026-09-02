@@ -378,6 +378,29 @@ begin
   end;
   reset role;
 
+  -- Reading a meeting does not confer managing its guest list. Attendee writes
+  -- are staff-only (`app.can_manage_meeting`), so an invitee cannot drop
+  -- another attendee — which, because attendance is what grants read, would
+  -- otherwise be a way to revoke someone else's access to the meeting.
+  --
+  -- Untested until now, and worth having for a reason the read assertions
+  -- above illustrate: those have passed since the policy was written, while
+  -- nothing in the product could create an attendee row at all. A policy
+  -- proven correct in both directions is still not a feature.
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    delete from meeting_attendee
+      where meeting_id = v_private_meeting and user_id = v_owner;
+    select count(*) into n from meeting_attendee
+      where meeting_id = v_private_meeting and user_id = v_owner;
+    perform tests.ok(n = 1, 'an attendee cannot remove another attendee');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'an attendee cannot remove another attendee (denied)');
+  end;
+  reset role;
+
   -- Private channel: create as owner (bypass RLS as postgres for setup).
   insert into channel (
     organization_id, name, slug, type, privacy, owner_id, created_by
