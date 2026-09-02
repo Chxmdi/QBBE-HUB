@@ -135,15 +135,27 @@ $$;
 -- pattern this one should have followed.
 -- ---------------------------------------------------------------------------
 
+-- The live name is "documents read for entitled members", set by
+-- 0009_production_hardening. `0006_documents.sql` created a differently-named
+-- policy that 0009 replaced, and reading 0006 rather than the catalogue is how
+-- the first draft of this migration came to drop a name that no longer exists
+-- — which would have added a second SELECT policy while leaving the unscoped
+-- one in place. Permissive policies OR together, so that changes nothing at
+-- all. CI caught it. The catalogue is the authority on what is deployed; a
+-- migration file is only the authority on what someone once intended.
 drop policy if exists "documents read for active members" on storage.objects;
-create policy "documents read for active members" on storage.objects
+drop policy if exists "documents read for entitled members" on storage.objects;
+create policy "documents read for entitled members" on storage.objects
   for select to authenticated
   using (
     bucket_id = 'documents'
     and exists (
       select 1 from document d
       where d.storage_path = storage.objects.name
-        and app.is_org_member(d.organization_id)
+        and (
+          app.is_org_staff(d.organization_id)
+          or (d.visibility = 'organization' and app.is_org_member(d.organization_id))
+        )
     )
   );
 
@@ -171,5 +183,6 @@ create policy "documents delete for staff" on storage.objects
 -- The exposure is bounded and worth stating plainly: an active member of any
 -- organization can add an object to this bucket. They cannot read it back,
 -- cannot delete it, and cannot attach it to a document they do not own, so it
--- is storage consumption rather than data access. Recorded rather than left
--- for the next reader to rediscover.
+-- is storage consumption rather than data access. It is named in the standing
+-- assertion's exemption list so the omission is a recorded decision rather
+-- than a silent hole.
