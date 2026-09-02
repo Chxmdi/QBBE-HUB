@@ -1,6 +1,6 @@
 # Audit 02 — Work management (tasks, projects, programs, milestones, dashboards, Gantt)
 
-<!-- progress: 5 of 35 assessed -->
+<!-- progress: 6 of 35 assessed -->
 
 Families assessed: `P0-TSK-*` (5), `P1-TSK-*` (4), `P0-PRJ-*` (5), `P1-PRJ-*` (3),
 `P0-DASH-*` (4), `P1-DASH-*` (3), `P0-GNT-*` (1), `P1-GNT-*` (2), `WORK-*` (8) — **35 requirement IDs**.
@@ -41,3 +41,13 @@ Families assessed: `P0-TSK-*` (5), `P1-TSK-*` (4), `P0-PRJ-*` (5), `P1-PRJ-*` (3
 **Verdict:** Complete
 **Requirement:** Authorized users can bulk reassign, reprioritize, reschedule, label, archive or move selected tasks with confirmation.
 **Evidence:** `src/features/tasks/components/task-list.tsx:87-121` renders the selection bar (Status, Reassign, Priority, Reschedule, Archive); a confirmation `Dialog` at `:221-301` gates every action. Server side: `bulkUpdateTasks` (`task.commands.ts:252-325`) validated by `bulkSchema` (`schemas.ts:53-60`, capped at 200 ids), writes one `activity_event` per row and dedupes assignment notifications. Authorization is delegated to RLS on the `update`. Note: "label" is not offered (see P0-TSK-01) and "move" is achieved through the drawer's project select rather than in bulk — I read the requirement's verb list as illustrative, but flag it.
+
+### P1-TSK-06 — Dependencies
+**Verdict:** Partial
+**Requirement:** Tasks/milestones can block one another; circular dependencies are rejected; impacted due dates are visibly flagged.
+**Evidence:** `task_dependency` exists (`supabase/migrations/0001_core.sql:195-201`, with a `no_self_dependency` check). It is genuinely wired up — contrary to a "schema only" reading: `src/features/tasks/services/checklist.commands.ts:48-92` implements `addTaskDependency`/`removeTaskDependency`, the drawer loads blockers (`src/features/tasks/components/task-drawer.tsx:70-73`), and `TaskExtras` both lists "Blocked by …" and offers a staff-only picker to add one (`src/features/tasks/components/task-extras.tsx:80-118`).
+**Gap:** Three real defects.
+1. **Cycle detection is only one hop deep.** `circularDependencyError` (`src/features/tasks/schemas.ts:84-100`) rejects self-dependency and the exact reverse pair only. A→B, B→C, C→A is accepted. The pre-check query (`checklist.commands.ts:54-61`) fetches only rows touching the two tasks involved, so it *cannot* see a longer chain, and there is no DB trigger or recursive CTE guarding it. The unit test only covers the two-node case.
+2. **Milestones cannot block anything.** There is no `milestone_dependency` table and no milestone-to-task blocking column; `milestone` (`0001_core.sql:151`) has no dependency edge at all.
+3. **No due-date impact flagging.** Nothing compares a blocker's `due_at` against the blocked task's; `blocked_reason` is free text typed by a human, and adding a dependency does not set status `blocked` or surface a date conflict anywhere.
+Also note `removeTaskDependency` exists as a server action but no component calls it — dependencies cannot be removed from the UI.
