@@ -104,7 +104,7 @@ practice — every domain added recently shipped with RLS assertions.
 `tests/unit/migration-filenames.test.ts` now gates version-prefix uniqueness and ordering.
 
 ### DONE-008 — Observability exists for external integration and background job failure paths
-**Verdict:** Partial
+**Verdict:** Complete *(was Partial; closed 2026-09-02 — see the note at the end of this entry)*
 **Requirement:** When an integration or background job fails, that failure is observable.
 **Evidence:** Every job execution writes exactly one `job_run` row whatever the outcome, with
 duration, processed and failed counts and a redacted error
@@ -117,7 +117,21 @@ boundaries (`src/app/error.tsx:23`, `src/app/(workspace)/error.tsx:21`). No serv
 route handler, no integration client and nothing in the job runtime reports to the
 configured `ERROR_MONITORING_DSN`. So a nightly job that fails at 03:00 is durably recorded
 and entirely silent: it is discoverable, not observable. Someone has to think to go and look.
-This is the single clearest gap in the family.
+This was the single clearest gap in the family.
+
+**Closed.** `reportError` is now called from three failure paths, chosen so that
+every handler is covered without touching each one: `recordJobRun`
+(`src/lib/job-observability.ts`) reports whenever an integration records a
+failed run, and `runJob` (`src/features/jobs/services/runner.ts`) reports both
+when a handler throws and when a run *returns cleanly having dropped work* —
+the quietest case, where the process exits fine and the row says "succeeded".
+Errors are passed through `sanitizeJobError` first: an external monitor is more
+exposed than the admin-visible ledger, so the redaction protecting the ledger
+has to apply at least as strictly. The integration alert is emitted after the
+ledger insert and carries `ledgerWritten`, so a run whose failure could not even
+be recorded still raises its hand — that being the run most worth hearing about.
+Pinned by 5 tests in `src/lib/job-failure-reporting.test.ts`, verified to fail
+without the change.
 
 ### DONE-009 — Feature documentation/runbook updated when knowledge would otherwise live only in a developer's head
 **Verdict:** Complete
@@ -146,8 +160,8 @@ this criterion asks for — the opposite of a placeholder integration.
 
 | Verdict | Count |
 |---|---|
-| Complete | 4 — DONE-002, 007, 009, 010 |
-| Partial | 6 — DONE-001, 003, 004, 005, 006, 008 |
+| Complete | 5 — DONE-002, 007, 008, 009, 010 |
+| Partial | 5 — DONE-001, 003, 004, 005, 006 |
 | Missing | 0 |
 
 **No criterion is unmet outright**, and the two structural ones — authorization
@@ -156,10 +170,10 @@ flows — are met with strong evidence.
 
 The three findings a maintainer should see first:
 
-1. **DONE-008 is the clearest gap.** Background job and integration failures are
-   recorded but never reported. Four `reportError` call sites, all in React error
-   boundaries; nothing server-side, nothing in the job runtime. A failure at 03:00
-   waits for someone to open the admin page.
+1. **DONE-008 was the clearest gap and is now closed.** Background job and
+   integration failures were recorded but never reported — a failure at 03:00
+   waited for someone to open the admin page. Three failure paths now report,
+   including the run that succeeds having silently dropped work.
 2. **DONE-001, 004 and 006 all fail on the same fact:** the authenticated QA
    matrix is not in CI. Every signed-in screen — nearly the whole product — has no
    automated coverage against a real database in a browser. Three separate criteria
