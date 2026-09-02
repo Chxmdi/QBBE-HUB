@@ -234,3 +234,77 @@ Also note `removeTaskDependency` exists as a server action but no component call
 **Verdict:** Complete
 **Requirement:** Task/project drawers preserve list context and support deep linking, so a shared URL opens the same record directly.
 **Evidence:** The task drawer is keyed entirely off the `task` URL parameter (`src/features/tasks/components/task-drawer.tsx:38`) and loads on mount, so pasting `…?task=<id>` opens that record cold (`:95-99,51-93`). Closing deletes **only** the `task` param and keeps every other filter (`:101-109`), and opening does the same in reverse from both views (`task-list.tsx:53-57`, `board.tsx:32-35`) using `router.replace(..., { scroll: false })` so list position and filter state survive. There is an explicit "copy link" affordance (`task-drawer.tsx:139-143,154-162`), the drawer is mounted on all three list surfaces (`board/page.tsx:62`, `my-work/page.tsx:118`, `projects/[id]/page.tsx:448`), and notification links use the same shape (`src/features/tasks/services/task.commands.ts:182`). Access is re-checked on open rather than assumed — an RLS-filtered record renders a neutral "isn't available to you" state (`task-drawer.tsx:77-82,168-177`). Projects are full routes (`/projects/<id>`) rather than drawers, which deep-link directly by construction.
+
+---
+
+## Summary
+
+**35 of 35 requirements assessed.**
+
+| Verdict | Count | IDs |
+|---|---|---|
+| Complete | 6 | P0-TSK-03, P0-TSK-05, P1-TSK-08, P0-PRJ-02, WORK-003, WORK-008 |
+| Partial | 25 | P0-TSK-01, P0-TSK-02, P0-TSK-04, P1-TSK-06, P1-TSK-07, P1-TSK-09, P0-DASH-01, P0-DASH-02, P0-DASH-03, P0-DASH-04, P1-DASH-05, P1-DASH-07, P0-GNT-01, P0-PRJ-01, P0-PRJ-03, P0-PRJ-04, P0-PRJ-05, P1-PRJ-06, P1-PRJ-07, P1-PRJ-08, WORK-001, WORK-002, WORK-004, WORK-005, WORK-007 |
+| Missing | 4 | P1-DASH-06, P1-GNT-02, P1-GNT-03, WORK-006 |
+| Not applicable | 0 | — |
+| Unverifiable | 0 | — |
+
+Nothing in this domain needed a live browser to settle; every verdict rests on code
+that could be read here. The cross-cutting caveat from
+`docs/audit/09-definition-of-complete.md` still applies to the six Completes —
+none of them is exercised by a CI-run end-to-end test, since the authenticated
+Playwright matrix does not run in CI, so "Complete" here means the code
+demonstrably does the thing, not that a pipeline proves it every commit.
+
+### The three findings I would put in front of a maintainer first
+
+1. **Saved views are write-only, and the four biggest KPIs are computed and thrown
+   away.** `saved_view` can be written but is read by nothing — `grep -rn
+   "saved_view" src/` matches only `workflow.commands.ts`, so a user names a view
+   and can never open it again (P1-DASH-07). Separately, `dashboard.queries.ts`
+   runs three `count: "exact"` queries for `activeProjects`, `openTasks`,
+   `dueThisWeek` and `overdue` on every home-page load and the page renders none
+   of them (P0-DASH-04). Both are small fixes with visible payoff.
+2. **Overdue is computed in two different time zones on the same screen.**
+   `myWorkBucket` runs server-side against the host clock (UTC in production)
+   while `dueLabel` runs client-side against the browser's zone
+   (`src/lib/utils.ts:61-101`). For a Montreal user after 19:00 local, My Work
+   files a task under "Overdue" whose own row reads "Due today". `user_profile.timezone`
+   exists and is used only for the dashboard greeting (WORK-004).
+3. **Dependency cycle detection is one hop deep, and recurrence can duplicate
+   work.** `circularDependencyError` only rejects self-links and the exact reverse
+   pair, and its pre-check query cannot see a longer chain, so A→B→C→A is accepted
+   with no database guard behind it (P1-TSK-06). Recurrence spawns the next
+   occurrence inline on completion with no idempotency key and no prior-status
+   check, so re-completing a completed task creates a duplicate (P1-TSK-07,
+   WORK-006).
+
+### Where the code is better than `docs/spec-coverage.md` would suggest
+
+- **The Master Schedule is a real timeline, not a placeholder.** Server-prepared
+  bounded window, percentage-positioned health-coloured bars, working today
+  marker, staff-gated (`src/app/(workspace)/schedule/page.tsx`). Its gaps are
+  milestones, dependencies and program bars — not existence.
+- **Task dependencies are wired end-to-end**, not schema-only: server actions, a
+  staff-gated picker in the drawer, and a "Blocked by …" list
+  (`checklist.commands.ts:48-92`, `task-extras.tsx:80-118`). The defect is the
+  depth of cycle detection, not absence of the feature.
+- **Project approval is a single idempotent transaction.** `approve_project_request`
+  creates the project, settles the request and closes any pending approval in one
+  RPC, deliberately safe against a double-click
+  (`supabase/migrations/20260828124912_intake_requests.sql:222-283`).
+- **Health discipline genuinely cannot be bypassed** through the UI:
+  `publishStatusUpdate` is the only writer of `project.health` after creation, and
+  it enforces the reason rule server-side as well as in the form.
+
+### One note on `task_read`
+
+`task_read` is `app.is_org_staff(organization_id) or (app.is_org_member(...) and
+assignee_id = auth.uid())` (`supabase/migrations/20260818081240_scope_task_and_activity_policies_to_organization.sql:5-9`),
+so a volunteer sees only tasks assigned to them. Checked against the spec, that is
+**correct, not a finding** — the spec repeatedly scopes volunteers to "assigned
+work" (§ role matrix, and P0-VOL-02 "volunteer sees assigned tasks/events …
+portfolio complexity is hidden"). The asymmetry that *is* worth a look runs the
+other way: staff get org-wide task read, whereas the spec's staff role is
+"create and execute work **within granted programs/projects/channels**". Nothing
+narrows a staff member's task visibility to their memberships.

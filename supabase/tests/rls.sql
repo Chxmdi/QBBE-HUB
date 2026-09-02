@@ -1339,10 +1339,15 @@ begin
   -- data; `background_job_run`, which does carry per-organization results, is
   -- scoped. Listing them by name means a third exemption cannot appear by
   -- accident — someone has to come here and add it on purpose.
+  -- Not restricted to `public`: the first version of this check was, and that
+  -- is exactly how three `storage.objects` policies kept the unscoped role
+  -- tests through two scoping migrations. A guard that cannot see a schema
+  -- reports it as clean, which is worse than not having the guard.
   select count(*) into n
   from pg_policies
-  where schemaname = 'public'
-    and policyname not in ('job_run_admin_read', 'job_definition_admin_read')
+  where schemaname in ('public', 'storage')
+    and policyname not in ('job_run_admin_read', 'job_definition_admin_read',
+                           'documents upload for active members')
     and (coalesce(qual, '') ~ 'app\.is_(member|staff|admin)\(\)'
       or coalesce(with_check, '') ~ 'app\.is_(member|staff|admin)\(\)');
   perform tests.ok(n = 0,
@@ -1357,6 +1362,39 @@ begin
     and pg_get_functiondef(pr.oid) ~ 'app\.is_(member|staff|admin)\(\)';
   perform tests.ok(n = 0,
     'no helper function carries an unscoped copy of the membership test');
+
+  -- -----------------------------------------------------------------------
+  -- Sign-up is invite-only where it counts.
+  --
+  -- `signup_allowed` returning false was already asserted below, and that
+  -- assertion passed for weeks while an uninvited stranger could still obtain
+  -- an active staff membership — because the predicate was consulted only by a
+  -- client component, and the trigger that grants the membership never asked
+  -- it. Testing that a rule is *computable* is not testing that it is
+  -- *enforced*, and the gap between those two is where this one lived.
+  -- -----------------------------------------------------------------------
+  begin
+    insert into auth.users (
+      instance_id, id, aud, role, email, encrypted_password,
+      email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+      created_at, updated_at, confirmation_token, email_change,
+      email_change_token_new, recovery_token
+    ) values (
+      '00000000-0000-0000-0000-000000000000',
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa99',
+      'authenticated', 'authenticated', 'gatecrasher@example.com',
+      'x', now(), '{}'::jsonb, '{}'::jsonb,
+      now(), now(), '', '', '', ''
+    );
+    perform tests.ok(false, 'an uninvited stranger must not be able to sign up');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'an uninvited sign-up is refused by the database');
+  end;
+
+  select count(*) into n from organization_membership
+    where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa99';
+  perform tests.ok(n = 0, 'a refused sign-up leaves no membership behind');
 
   perform tests.ok(true, 'RLS matrix complete');
 end;
