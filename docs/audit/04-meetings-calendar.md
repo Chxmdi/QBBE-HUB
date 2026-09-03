@@ -285,7 +285,7 @@ prefix as well as color (`week-view.tsx:31-38, 107-109, 126-128`), satisfying th
 (`week-view.tsx:65-66`).
 
 ### CAL-002 — Explicit time zone / DST safety
-**Verdict:** Partial
+**Verdict:** Complete *(closed 2026-09-03 — see the follow-up at the end)*
 **Requirement:** Scheduled date/times store an explicit time zone or a workspace-default
 interpretation, and DST changes must not silently move them.
 **Evidence:** Storage is DST-safe: every schedule column is `timestamptz`
@@ -587,3 +587,42 @@ This was not in the original audit entry, which recorded only the missing
 command and UI. It surfaced while reading the live policy to check what the
 command would be permitted to do — the audit read the migration that created
 the policy, and the hole is in what that policy *permits*, not in what it says.
+
+
+## Follow-up: scheduled times are read in the organization's zone, 2026-09-03
+
+CAL-002 closed. `src/lib/time.ts` reads a `datetime-local` value as wall-clock
+time in a named zone and renders instants back the same way, using `Intl` —
+which already knows every zone's DST history — rather than adding a dependency.
+
+The bug in one line: `new Date("2026-01-15T14:00")` has no offset to work from,
+so it resolves in the *runtime's* zone. On the production server that is UTC,
+so somebody in Montreal typing 14:00 stored 19:00's instant five hours early.
+
+It was invisible because display had the mirror-image defect. `formatDateTime`
+called date-fns with no zone, so the wrong instant rendered back as 14:00 and
+the two errors cancelled for anyone who never left the page. They stopped
+cancelling the moment a value left that loop — the ISO instant handed to Google
+Calendar, and the day-bucketing on the calendar grid.
+
+That symmetry is why both halves had to move together. Correcting input alone
+would have made every existing meeting appear to jump by the server's offset.
+
+`session.timeZone` now carries `organization.timezone`, and the formatters
+default to that column's own default rather than to the runtime's zone, so all
+54 call sites were corrected by one change.
+
+**Two things beyond the original finding.** The edit forms rendered
+`new Date(starts_at).toISOString().slice(0, 16)` into the `datetime-local`
+field — the UTC wall time — so opening a meeting and saving it unchanged would
+silently reschedule it. And a sweep for the same pattern found announcements:
+`publishAt` and `ack_deadline` were parsed the same naive way. That one is
+worse than the meeting case, because `publishAt` drives the scheduled fan-out
+job — an announcement set for 09:00 would have gone out at 05:00 local — and
+`ack_deadline` is what the overdue reminder job compares against.
+
+Eleven tests cover the conversion, including both Toronto DST boundaries: the
+half-hour before spring-forward, the half-hour after, and the ambiguous hour in
+November where a wall time occurs twice. The last asserts only that a real
+instant comes back, since either is defensible and silently producing an
+Invalid Date is not.

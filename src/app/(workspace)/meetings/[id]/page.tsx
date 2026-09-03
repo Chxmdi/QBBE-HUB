@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { instantToWallTime } from "@/lib/time";
 import { AgendaTriage } from "@/features/meetings/components/agenda-triage";
 import { AttendeeList } from "@/features/meetings/components/attendee-list";
 import { CancelMeetingButton } from "@/features/meetings/components/cancel-meeting-button";
@@ -167,7 +168,7 @@ export default async function MeetingDetailPage({
                 fields={[
                   { name: "title", label: "Title", type: "text", required: true, defaultValue: meeting.title },
                   { name: "purpose", label: "Purpose", type: "textarea", defaultValue: meeting.purpose ?? "" },
-                  { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1, defaultValue: new Date(meeting.starts_at).toISOString().slice(0, 16) },
+                  { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1, defaultValue: instantToWallTime(meeting.starts_at, session.timeZone) },
                   { name: "durationMinutes", label: "Duration (minutes)", type: "number", required: true, colSpan: 1, defaultValue: String(Math.max(15, Math.round(((meeting.ends_at ? new Date(meeting.ends_at).getTime() : new Date(meeting.starts_at).getTime() + 3_600_000) - new Date(meeting.starts_at).getTime()) / 60_000))) },
                   { name: "location", label: "Location", type: "text", defaultValue: meeting.location ?? "" },
                 ]}

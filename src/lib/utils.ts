@@ -1,4 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
+import { DEFAULT_TIME_ZONE, formatInZone } from "@/lib/time";
 import {
   differenceInCalendarDays,
   format,
@@ -30,31 +31,61 @@ export function relativeTime(iso: string): string {
   }
 }
 
-export function formatDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    return format(parseISO(iso), "MMM d, yyyy");
-  } catch {
-    return "—";
-  }
+/**
+ * These render in the organization's zone, not the runtime's.
+ *
+ * They used to call date-fns `format` with no zone, which resolves in whatever
+ * zone the process is in — UTC on the server. That was invisible only because
+ * the scheduling path had the mirror-image defect and the two cancelled out.
+ * With input now read as wall time in the organization's zone, display has to
+ * move with it or every existing meeting would appear to jump by the server's
+ * offset.
+ *
+ * The zone is a parameter so a caller holding the real `organization.timezone`
+ * can pass it; the default matches that column's own default, which is a
+ * better fallback than the server's zone under any circumstances.
+ */
+export function formatDate(
+  iso: string | null | undefined,
+  timeZone: string = DEFAULT_TIME_ZONE,
+): string {
+  return formatInZone(iso, timeZone, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-export function formatDateTime(iso: string | null | undefined): string {
+export function formatDateTime(
+  iso: string | null | undefined,
+  timeZone: string = DEFAULT_TIME_ZONE,
+): string {
   if (!iso) return "—";
-  try {
-    return format(parseISO(iso), "EEE, MMM d · h:mm a");
-  } catch {
-    return "—";
-  }
+  const day = formatInZone(iso, timeZone, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  if (day === "—") return "—";
+  const time = formatInZone(iso, timeZone, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${day} · ${time}`;
 }
 
-export function formatTime(iso: string | null | undefined): string {
+export function formatTime(
+  iso: string | null | undefined,
+  timeZone: string = DEFAULT_TIME_ZONE,
+): string {
   if (!iso) return "";
-  try {
-    return format(parseISO(iso), "h:mm a");
-  } catch {
-    return "";
-  }
+  const shown = formatInZone(iso, timeZone, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return shown === "—" ? "" : shown;
 }
 
 /** Human due-date label with overdue awareness. */

@@ -11,6 +11,7 @@ import {
   updateGoogleMeetingEvent,
 } from "@/features/calendar/services/google-calendar-write";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { wallTimeToInstant } from "@/lib/time";
 import { composeMeetingSummary } from "./meeting.summary";
 
 const createMeetingSchema = z.object({
@@ -33,8 +34,11 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   const { title, purpose, projectId, startsAt, durationMinutes, location, meetingLink } =
     parsed.data;
 
-  const starts = new Date(startsAt);
-  if (Number.isNaN(starts.getTime())) {
+  // Read as wall-clock time in the organization's zone. A `datetime-local`
+  // value carries no offset, so `new Date()` would resolve it in the server's
+  // zone — UTC in production — and store an instant hours from what was typed.
+  const starts = wallTimeToInstant(startsAt, session.timeZone);
+  if (!starts) {
     return { ok: false, error: "Invalid start time." };
   }
   const ends = new Date(starts.getTime() + durationMinutes * 60_000);
@@ -174,8 +178,8 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
   const parsed = updateMeetingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const data = parsed.data;
-  const starts = new Date(data.startsAt);
-  if (Number.isNaN(starts.getTime())) return { ok: false, error: "Invalid start time." };
+  const starts = wallTimeToInstant(data.startsAt, session.timeZone);
+  if (!starts) return { ok: false, error: "Invalid start time." };
   const ends = new Date(starts.getTime() + data.durationMinutes * 60_000);
   const supabase = await createSupabaseServerClient();
   const { data: existing } = await supabase.from("meeting")

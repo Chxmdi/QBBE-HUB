@@ -1,5 +1,6 @@
 "use server";
 
+import { wallTimeToInstant } from "@/lib/time";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
@@ -57,8 +58,24 @@ export async function publishAnnouncement(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { title, body, priority, requiresAck, ackDeadline, publishAt } = parsed.data;
-  const publishAtIso = publishAt ? new Date(publishAt).toISOString() : new Date().toISOString();
+  // Both fields come from `datetime-local`, which carries no offset, so they
+  // are read as wall-clock time in the organization's zone. Parsing them with
+  // a bare `new Date()` resolved them in the server's zone — UTC in production
+  // — and an announcement scheduled for 09:00 would have gone out at 05:00
+  // local. The acknowledgement deadline had the same defect, which matters
+  // because it is what the overdue reminder job compares against.
+  const scheduledFor = publishAt ? wallTimeToInstant(publishAt, session.timeZone) : null;
+  if (publishAt && !scheduledFor) {
+    return { ok: false, error: "Invalid publish time." };
+  }
+  const publishAtIso = (scheduledFor ?? new Date()).toISOString();
   const isScheduled = new Date(publishAtIso).getTime() > Date.now() + 30_000;
+
+  const ackDeadlineInstant =
+    requiresAck && ackDeadline ? wallTimeToInstant(ackDeadline, session.timeZone) : null;
+  if (requiresAck && ackDeadline && !ackDeadlineInstant) {
+    return { ok: false, error: "Invalid acknowledgement deadline." };
+  }
 
   const supabase = await createSupabaseServerClient();
   const { data: channel } = await supabase
@@ -96,7 +113,7 @@ export async function publishAnnouncement(
       title,
       priority,
       requires_ack: requiresAck,
-      ack_deadline: requiresAck && ackDeadline ? ackDeadline : null,
+      ack_deadline: ackDeadlineInstant ? ackDeadlineInstant.toISOString() : null,
       publish_at: publishAtIso,
       created_by: session.userId,
     })
