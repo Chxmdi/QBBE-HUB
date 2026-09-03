@@ -332,7 +332,7 @@ indexes meetings and events but not `decision`), which breaks the §10.11 accept
 criterion that decisions "remain searchable".
 
 ### CAL-005 — Provider-agnostic meeting links
-**Verdict:** Partial
+**Verdict:** Complete *(closed 2026-09-03 — see the follow-up at the end)*
 **Requirement:** External meeting links are provider-agnostic fields; the Hub must not
 require a specific conferencing vendor.
 **Evidence:** The field is agnostic by design — `meeting.meeting_link text` with the
@@ -523,3 +523,29 @@ exist, because no test of a policy can tell you whether any code reaches it.
 The one assertion genuinely missing is now added: an attendee may read the
 guest list but may not edit it. Since attendance grants read, an invitee able
 to delete attendees could revoke another person's access to the meeting.
+
+
+## Follow-up: the Calendar sync no longer overwrites the meeting link, 2026-09-03
+
+CAL-005 closed. `createMeeting` and `updateMeeting` no longer write
+`meeting_link` from Google's response.
+
+The field was always provider-agnostic — text, validated only as a URL, hinted
+"any provider". The integration is what broke the requirement: Google returns
+`htmlLink`, the Calendar *event page* rather than a conferencing URL, and both
+paths assigned it over whatever the organizer had typed. Paste a Zoom link with
+Calendar connected and it was gone; "Join meeting" then opened Google. A field
+the integration silently rewrites is not provider-agnostic however it is typed.
+
+The Calendar URL was never homeless — `calendar_event_link.html_link` has
+stored it all along — so removing the overwrite loses nothing. It is now shown
+beside the organizer's link as "View in Google Calendar", which is the honest
+arrangement: two different destinations, the event page and the room, rather
+than one field pretending to be both.
+
+Guarded by two source-level assertions in
+`src/features/calendar/tests/google-calendar-write.test.ts`, verified to fail
+when the overwrite is reintroduced. They read the source deliberately: the
+defect *was* a write that should not exist, there is no runtime state to
+inspect, and a behavioural test would need a live Google connection — which is
+precisely why nothing caught this for as long as it stood.

@@ -66,8 +66,14 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   // Calendar sync is additive: local operations stay available if Google is
   // unavailable, and the connection carries an actionable recovery state.
   try {
-    const googleLink = await createGoogleMeetingEvent({ organizationId: session.organizationId, userId: session.userId, meetingId: meeting.id, title, purpose: purpose || null, startsAt: starts.toISOString(), endsAt: ends.toISOString(), location: location || null });
-    if (googleLink) await supabase.from("meeting").update({ meeting_link: googleLink }).eq("id", meeting.id);
+    // Deliberately does not touch `meeting_link`. Google returns `htmlLink`,
+    // which is the Calendar event page — not a conferencing URL — and this
+    // used to overwrite whatever the organizer had typed. Paste a Zoom link
+    // with Calendar connected and it was gone, with "Join meeting" quietly
+    // sending everybody to Google instead. CAL-005 requires the field stay
+    // provider-agnostic, and a field the integration silently rewrites is not.
+    // The Calendar URL already has its own home in `calendar_event_link`.
+    await createGoogleMeetingEvent({ organizationId: session.organizationId, userId: session.userId, meetingId: meeting.id, title, purpose: purpose || null, startsAt: starts.toISOString(), endsAt: ends.toISOString(), location: location || null });
   } catch (calendarError) {
     await supabase.from("integration_connection").update({ status: "error", last_error: calendarError instanceof Error ? calendarError.message : "Calendar sync failed." }).eq("organization_id", session.organizationId).eq("user_id", session.userId).eq("provider", "google_calendar");
   }
@@ -187,14 +193,15 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
   }).eq("id", data.meetingId);
   if (error) return { ok: false, error: "Could not update the meeting." };
   try {
-    const googleLink = await updateGoogleMeetingEvent({
+    // Same reasoning as create: the Calendar event is updated, the organizer's
+    // own meeting link is left alone.
+    await updateGoogleMeetingEvent({
       // An admin may reschedule someone else's meeting; the linked Calendar
       // event and OAuth connection belong to the meeting organizer.
       organizationId: session.organizationId, userId: existing.organizer_id, meetingId: data.meetingId,
       title: data.title, purpose: data.purpose || null, startsAt: starts.toISOString(),
       endsAt: ends.toISOString(), location: data.location || null,
     });
-    if (googleLink) await supabase.from("meeting").update({ meeting_link: googleLink }).eq("id", data.meetingId);
   } catch (calendarError) {
     await supabase.from("integration_connection").update({
       status: "degraded",

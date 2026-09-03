@@ -67,7 +67,7 @@ export default async function MeetingDetailPage({
     project: { id: string; name: string } | null;
   };
 
-  const [{ data: agenda }, { data: actions }, { data: decisions }, options, { data: attendeeRows }] =
+  const [{ data: agenda }, { data: actions }, { data: decisions }, options, { data: attendeeRows }, { data: calendarLink }] =
     await Promise.all([
       supabase
         .from("agenda_item")
@@ -93,6 +93,11 @@ export default async function MeetingDetailPage({
         .from("meeting_attendee")
         .select("user_id, user:user_id(id, full_name, avatar_url)")
         .eq("meeting_id", id),
+      supabase
+        .from("calendar_event_link")
+        .select("html_link")
+        .eq("meeting_id", id)
+        .maybeSingle(),
     ]);
 
   type AttendeeRow = {
@@ -193,6 +198,19 @@ export default async function MeetingDetailPage({
             className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
           >
             Join meeting <ExternalLink className="size-3.5" aria-hidden />
+          </a>
+        ) : null}
+        {/* Shown beside the organizer's own link rather than replacing it. The
+            Calendar URL is a different destination — the event page, not the
+            room — and conflating the two is what CAL-005 warns against. */}
+        {calendarLink?.html_link ? (
+          <a
+            href={calendarLink.html_link as string}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-brand-fg hover:underline"
+          >
+            View in Google Calendar <ExternalLink className="size-3.5" aria-hidden />
           </a>
         ) : null}
       </div>
