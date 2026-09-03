@@ -93,7 +93,7 @@ append-only and the spec's "drag reorder with button alternatives"
 displayed** — it is selected at `meetings/[id]/page.tsx:73` and then unused.
 
 ### P0-AGD-02 — Agenda submissions and triage
-**Verdict:** Partial
+**Verdict:** Complete *(closed 2026-09-03 — see the follow-up at the end)*
 **Requirement:** Invitees can propose agenda items; the organizer can accept, merge,
 defer, reorder or decline them.
 **Evidence:** The proposal half works. RLS lets any user who can read the meeting insert
@@ -549,3 +549,41 @@ when the overwrite is reintroduced. They read the source deliberately: the
 defect *was* a write that should not exist, there is no runtime state to
 inspect, and a behavioural test would need a live Google connection — which is
 precisely why nothing caught this for as long as it stood.
+
+
+## Follow-up: agenda triage, 2026-09-03
+
+P0-AGD-02 closed. `triageAgendaItem` and `moveAgendaItem`
+(`src/features/meetings/services/meeting.commands.ts`) with controls on each
+row of the agenda (`src/features/meetings/components/agenda-triage.tsx`).
+Accept, defer, decline, mark done, and move up or down — the requirement's own
+verb list, less "merge", which is a different feature and is recorded here as
+still absent rather than quietly counted.
+
+Two things had to change in the database first, and finding the second is the
+reason this took a migration rather than a component.
+
+`status` was `text` with its permitted values written in a trailing comment.
+A comment documents an intention; it does not refuse anything. There is now a
+check constraint, asserted by a test that runs **as staff** on purpose — as
+superuser `auth.uid()` is null, the trigger below would refuse first, and the
+assertion would prove the trigger twice rather than the constraint once.
+
+More seriously, `agenda_staff_update` permits an update when the caller can
+manage the meeting **or proposed the item**. That second branch is there so
+somebody can reword their own proposal, which is worth keeping — but RLS grants
+rows, not columns, so it also let a proposer set their own item's status. A
+volunteer could propose an item and accept it. That is not triage; it is a
+queue anybody can promote themselves out of, and the requirement is explicit
+that the organizer decides.
+
+A trigger now refuses a status change from anyone who cannot manage the
+meeting, while leaving every other column editable by whoever proposed the
+item. Four assertions cover it: the proposer cannot accept their own item, the
+refusal leaves the status untouched, the proposer can still reword, and staff
+can triage.
+
+This was not in the original audit entry, which recorded only the missing
+command and UI. It surfaced while reading the live policy to check what the
+command would be permitted to do — the audit read the migration that created
+the policy, and the hole is in what that policy *permits*, not in what it says.

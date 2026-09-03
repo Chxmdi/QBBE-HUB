@@ -85,6 +85,8 @@ declare
   v_private_label uuid;
   v_private_meeting uuid;
   v_private_agenda uuid;
+  v_proposed_agenda uuid;
+  v_text text;
   v_other_org uuid;
   v_other_team uuid;
   v_other_program uuid;
@@ -377,6 +379,79 @@ begin
     perform tests.ok(n = 1, 'attendee can read actions for an accessible meeting');
   end;
   reset role;
+
+  -- -----------------------------------------------------------------------
+  -- Triage is the organizer's, and the database is what says so.
+  --
+  -- `agenda_staff_update` permits an update when the caller can manage the
+  -- meeting OR proposed the item. The second branch exists so somebody can fix
+  -- the wording of their own proposal — but RLS grants rows, not columns, so
+  -- on its own it also let a proposer accept their own item. A queue anybody
+  -- can promote themselves out of is not a triage process.
+  --
+  -- A trigger closes it: the status may move only at the hand of someone who
+  -- can manage the meeting. Editing the wording still belongs to the proposer,
+  -- which is the half worth keeping, so both are asserted.
+  -- -----------------------------------------------------------------------
+  insert into agenda_item (meeting_id, title, status, proposed_by)
+  values (v_private_meeting, 'Volunteer proposal', 'proposed', v_vol)
+  returning id into v_proposed_agenda;
+
+  insert into meeting_attendee (meeting_id, user_id) values (v_private_meeting, v_vol)
+  on conflict do nothing;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    update agenda_item set status = 'accepted' where id = v_proposed_agenda;
+    perform tests.ok(false, 'a proposer must not be able to accept their own item');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'a proposer cannot accept their own agenda item');
+  end;
+  reset role;
+
+  select status into v_text from agenda_item where id = v_proposed_agenda;
+  perform tests.ok(v_text = 'proposed', 'the refused triage left the status alone');
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    update agenda_item set title = 'Volunteer proposal, reworded'
+      where id = v_proposed_agenda;
+    select count(*) into n from agenda_item
+      where id = v_proposed_agenda and title = 'Volunteer proposal, reworded';
+    perform tests.ok(n = 1, 'a proposer can still reword their own item');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_staff);
+  begin
+    set local role authenticated;
+    update agenda_item set status = 'accepted' where id = v_proposed_agenda;
+    select count(*) into n from agenda_item
+      where id = v_proposed_agenda and status = 'accepted';
+    perform tests.ok(n = 1, 'staff can triage a proposed agenda item');
+  end;
+  reset role;
+
+  -- Run as staff on purpose. As superuser `auth.uid()` is null, so the trigger
+  -- would refuse first and this would prove the trigger twice over rather than
+  -- proving the constraint once — the values were documented in a comment and
+  -- enforced by nothing until now.
+  perform tests.authenticate(v_staff);
+  begin
+    set local role authenticated;
+    update agenda_item set status = 'maybe-later' where id = v_proposed_agenda;
+    perform tests.ok(false, 'an unknown agenda status must be refused');
+  exception
+    when check_violation then
+      perform tests.ok(true, 'an unknown agenda status is refused by the database');
+  end;
+  reset role;
+
+  delete from meeting_attendee
+    where meeting_id = v_private_meeting and user_id = v_vol;
 
   -- Reading a meeting does not confer managing its guest list. Attendee writes
   -- are staff-only (`app.can_manage_meeting`), so an invitee cannot drop

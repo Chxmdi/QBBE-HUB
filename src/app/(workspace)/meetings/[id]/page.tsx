@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { AgendaTriage } from "@/features/meetings/components/agenda-triage";
 import { AttendeeList } from "@/features/meetings/components/attendee-list";
 import { CancelMeetingButton } from "@/features/meetings/components/cancel-meeting-button";
 import { CompleteMeetingButton } from "@/features/meetings/components/complete-meeting-button";
@@ -24,6 +25,22 @@ import type { AgendaItem, Decision, MeetingAction } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Meeting" };
 export const dynamic = "force-dynamic";
+
+/**
+ * Every state except "accepted" earns a badge. An accepted item is simply on
+ * the agenda, which the list itself already says; labelling it would put a
+ * marker on almost every row and leave the ones that need attention no easier
+ * to find.
+ */
+const AGENDA_STATUS_BADGE: Record<
+  string,
+  { label: string; tone: "warning" | "neutral" | "danger" | "success" }
+> = {
+  proposed: { label: "Proposed", tone: "warning" },
+  deferred: { label: "Deferred", tone: "neutral" },
+  declined: { label: "Declined", tone: "danger" },
+  done: { label: "Done", tone: "success" },
+};
 
 const KIND_TONES = {
   information: "info",
@@ -291,8 +308,19 @@ export default async function MeetingDetailPage({
                       </span>
                     ) : null}
                     <Badge tone={KIND_TONES[item.kind]}>{item.kind}</Badge>
-                    {item.status === "proposed" ? (
-                      <Badge tone="warning">Proposed</Badge>
+                    {AGENDA_STATUS_BADGE[item.status] ? (
+                      <Badge tone={AGENDA_STATUS_BADGE[item.status].tone}>
+                        {AGENDA_STATUS_BADGE[item.status].label}
+                      </Badge>
+                    ) : null}
+                    {session.isStaff && isActive ? (
+                      <AgendaTriage
+                        agendaItemId={item.id}
+                        status={item.status}
+                        title={item.title}
+                        canMoveUp={index > 0}
+                        canMoveDown={index < (agenda ?? []).length - 1}
+                      />
                     ) : null}
                   </li>
                 ))}

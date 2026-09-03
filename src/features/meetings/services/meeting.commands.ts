@@ -314,6 +314,115 @@ export async function addAgendaItem(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * The organizer's half of P0-AGD-02.
+ *
+ * `status` values are constrained in the database, and a trigger refuses a
+ * status change from anyone who cannot manage the meeting — including the
+ * person who proposed the item, who can still edit its wording. The zod enum
+ * here exists so a mistyped value is a readable message rather than a
+ * constraint violation; the database is what actually decides.
+ */
+const AGENDA_DECISIONS = ["accepted", "deferred", "declined", "done"] as const;
+
+const triageSchema = z.object({
+  agendaItemId: z.string().uuid(),
+  decision: z.enum(AGENDA_DECISIONS, {
+    errorMap: () => ({ message: "Choose accept, defer, decline or done." }),
+  }),
+});
+
+export async function triageAgendaItem(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const parsed = triageSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: item } = await supabase
+    .from("agenda_item")
+    .select("meeting_id, meeting:meeting_id(status)")
+    .eq("id", parsed.data.agendaItemId)
+    .maybeSingle();
+  if (!item) return { ok: false, error: "Agenda item not found." };
+
+  const meetingStatus = (item as unknown as { meeting: { status: string } | null }).meeting
+    ?.status;
+  if (meetingStatus === "cancelled") {
+    return { ok: false, error: "A cancelled meeting's agenda cannot be triaged." };
+  }
+
+  const { error } = await supabase
+    .from("agenda_item")
+    .update({ status: parsed.data.decision })
+    .eq("id", parsed.data.agendaItemId);
+  if (error) return { ok: false, error: "Could not update the agenda item." };
+
+  revalidatePath(`/meetings/${item.meeting_id as string}`);
+  return { ok: true, id: parsed.data.agendaItemId };
+}
+
+const reorderSchema = z.object({
+  agendaItemId: z.string().uuid(),
+  direction: z.enum(["up", "down"]),
+});
+
+/**
+ * Reorder, the other half of the requirement's verb list.
+ *
+ * `sort_key` is a float precisely so an item can be slotted between two others
+ * without renumbering the rest, so a move swaps this item's key with its
+ * neighbour's rather than rewriting the column.
+ */
+export async function moveAgendaItem(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const parsed = reorderSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: item } = await supabase
+    .from("agenda_item")
+    .select("id, meeting_id, sort_key")
+    .eq("id", parsed.data.agendaItemId)
+    .maybeSingle();
+  if (!item) return { ok: false, error: "Agenda item not found." };
+
+  const goingUp = parsed.data.direction === "up";
+  const { data: neighbour } = await supabase
+    .from("agenda_item")
+    .select("id, sort_key")
+    .eq("meeting_id", item.meeting_id as string)
+    [goingUp ? "lt" : "gt"]("sort_key", item.sort_key as number)
+    .order("sort_key", { ascending: !goingUp })
+    .limit(1)
+    .maybeSingle();
+
+  // Already at the end it was heading for. Not an error worth a message.
+  if (!neighbour) return { ok: true, id: parsed.data.agendaItemId };
+
+  const [{ error: firstError }, { error: secondError }] = await Promise.all([
+    supabase
+      .from("agenda_item")
+      .update({ sort_key: neighbour.sort_key as number })
+      .eq("id", item.id as string),
+    supabase
+      .from("agenda_item")
+      .update({ sort_key: item.sort_key as number })
+      .eq("id", neighbour.id as string),
+  ]);
+  if (firstError || secondError) {
+    return { ok: false, error: "Could not reorder the agenda." };
+  }
+
+  revalidatePath(`/meetings/${item.meeting_id as string}`);
+  return { ok: true, id: parsed.data.agendaItemId };
+}
+
 const actionSchema = z.object({
   meetingId: z.string().uuid(),
   title: requiredText("Actions need a description.", 300),
