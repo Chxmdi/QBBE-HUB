@@ -397,9 +397,6 @@ begin
   values (v_private_meeting, 'Volunteer proposal', 'proposed', v_vol)
   returning id into v_proposed_agenda;
 
-  insert into meeting_attendee (meeting_id, user_id) values (v_private_meeting, v_vol)
-  on conflict do nothing;
-
   perform tests.authenticate(v_vol);
   begin
     set local role authenticated;
@@ -450,9 +447,11 @@ begin
   end;
   reset role;
 
-  delete from meeting_attendee
-    where meeting_id = v_private_meeting and user_id = v_vol;
-
+  -- v_vol stays on the attendee list here on purpose: the guest-list assertion
+  -- below needs them able to read the meeting in order to prove they cannot
+  -- edit who else is on it. An earlier draft tidied the row away and turned
+  -- that test into a check that someone who cannot see a meeting cannot change
+  -- it — true, and not the thing it claims to prove.
   -- Reading a meeting does not confer managing its guest list. Attendee writes
   -- are staff-only (`app.can_manage_meeting`), so an invitee cannot drop
   -- another attendee — which, because attendance is what grants read, would
