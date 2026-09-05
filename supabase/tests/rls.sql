@@ -82,6 +82,7 @@ declare
   v_private uuid;
   v_private_message uuid;
   v_private_task uuid;
+  v_recurring_parent uuid;
   v_private_label uuid;
   v_private_meeting uuid;
   v_private_agenda uuid;
@@ -1492,6 +1493,59 @@ begin
   select count(*) into n from organization_membership
     where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa99';
   perform tests.ok(n = 0, 'a refused sign-up leaves no membership behind');
+
+  -- -----------------------------------------------------------------------
+  -- A completed recurring task spawns one successor, not two.
+  --
+  -- The next occurrence is created inline on completion, and nothing stopped
+  -- that running twice: no prior-status check, and an insert carrying no key.
+  -- A double-click or a client retry produced a duplicate indistinguishable
+  -- from real work — same title, same assignee, same due date.
+  --
+  -- The command now checks the prior status, but a check cannot win a race:
+  -- two requests can both read "not completed" before either writes. So the
+  -- rule is the shape of the data. A second successor is not detected and
+  -- rejected; it cannot be recorded in the first place.
+  -- -----------------------------------------------------------------------
+  insert into task (organization_id, title, status, created_by, requester_id)
+  select o.id, 'Recurring original', 'completed', v_owner, v_owner
+  from organization o limit 1
+  returning id into v_recurring_parent;
+
+  insert into task (organization_id, title, status, created_by, requester_id,
+                    recurrence_parent_id)
+  select o.id, 'Recurring successor', 'not_started', v_owner, v_owner,
+         v_recurring_parent
+  from organization o limit 1;
+
+  begin
+    insert into task (organization_id, title, status, created_by, requester_id,
+                      recurrence_parent_id)
+    select o.id, 'Recurring duplicate', 'not_started', v_owner, v_owner,
+           v_recurring_parent
+    from organization o limit 1;
+    perform tests.ok(false, 'a task must not be able to spawn two successors');
+  exception
+    when unique_violation then
+      perform tests.ok(true, 'a completed task can spawn only one successor');
+  end;
+
+  select count(*) into n from task where recurrence_parent_id = v_recurring_parent;
+  perform tests.ok(n = 1, 'the refused duplicate left exactly one successor');
+
+  -- Ordinary tasks all leave the column null, so the index has to be partial
+  -- or the second non-recurring task ever created would collide with the first.
+  select count(*) into n from task
+    where recurrence_parent_id is null and organization_id = v_org;
+  perform tests.ok(n > 1, 'many tasks can have no predecessor at once');
+
+  begin
+    update task set recurrence_parent_id = id where id = v_recurring_parent;
+    perform tests.ok(false, 'a task must not be its own successor');
+  exception
+    when check_violation then
+      perform tests.ok(true, 'a task cannot be its own successor');
+  end;
 
   perform tests.ok(true, 'RLS matrix complete');
 end;
