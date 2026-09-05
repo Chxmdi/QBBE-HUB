@@ -56,7 +56,7 @@ stub, not DOM (`:167`). The calendar page is likewise bounded — `:50-63` deriv
 every query carries `.gte/.lte` plus a `.limit()`.
 
 ### P0-MTG-01 — Meeting creation
-**Verdict:** Partial
+**Verdict:** Partial *(attendees closed 2026-09-02; the context links remain)*
 **Requirement:** A meeting links to program/project/event/relationship and stores organizer,
 attendees, time, timezone, location/link, purpose and channel.
 **Evidence:** `supabase/migrations/0003_operations.sql:14-33` — `meeting` has
@@ -93,7 +93,7 @@ append-only and the spec's "drag reorder with button alternatives"
 displayed** — it is selected at `meetings/[id]/page.tsx:73` and then unused.
 
 ### P0-AGD-02 — Agenda submissions and triage
-**Verdict:** Partial
+**Verdict:** Complete *(closed 2026-09-03 — see the follow-up at the end)*
 **Requirement:** Invitees can propose agenda items; the organizer can accept, merge,
 defer, reorder or decline them.
 **Evidence:** The proposal half works. RLS lets any user who can read the meeting insert
@@ -146,7 +146,7 @@ agenda item and there is no "create action from this agenda item" control on
 the link is always null in practice. The source-meeting link is real.
 
 ### P0-MTG-03 — Meeting summary
-**Verdict:** Partial
+**Verdict:** Partial *(attendees added 2026-09-02; agenda and unresolved items remain)*
 **Requirement:** A completed meeting produces a summary covering attendees, agenda,
 decisions, actions with owners and due dates, unresolved items, and source links.
 **Evidence:** `completeMeeting` (`src/features/meetings/services/meeting.commands.ts:380-474`)
@@ -285,7 +285,7 @@ prefix as well as color (`week-view.tsx:31-38, 107-109, 126-128`), satisfying th
 (`week-view.tsx:65-66`).
 
 ### CAL-002 — Explicit time zone / DST safety
-**Verdict:** Partial
+**Verdict:** Complete *(closed 2026-09-03 — see the follow-up at the end)*
 **Requirement:** Scheduled date/times store an explicit time zone or a workspace-default
 interpretation, and DST changes must not silently move them.
 **Evidence:** Storage is DST-safe: every schedule column is `timestamptz`
@@ -332,7 +332,7 @@ indexes meetings and events but not `decision`), which breaks the §10.11 accept
 criterion that decisions "remain searchable".
 
 ### CAL-005 — Provider-agnostic meeting links
-**Verdict:** Partial
+**Verdict:** Complete *(closed 2026-09-03 — see the follow-up at the end)*
 **Requirement:** External meeting links are provider-agnostic fields; the Hub must not
 require a specific conferencing vendor.
 **Evidence:** The field is agnostic by design — `meeting.meeting_link text` with the
@@ -487,3 +487,142 @@ Verdicts resting on signed-in UI behaviour are code-read, not executed: per
 `tests/e2e/qa-matrix.spec.ts` is not in CI, so no screen in this domain has a recorded
 passing run against a live database. Nothing here was verified against Google, Supabase
 Cloud or a browser.
+
+
+---
+
+## Follow-up: attendee management, 2026-09-02
+
+The finding this audit led with — that `meeting_attendee` had no writer beyond
+the organizer's self-insert, leaving the attendee branch of
+`app.can_read_meeting` unreachable — is fixed.
+
+`addMeetingAttendee` and `removeMeetingAttendee`
+(`src/features/meetings/services/meeting.commands.ts`) plus an attendee section
+on the meeting detail page
+(`src/features/meetings/components/attendee-list.tsx`). No migration was
+needed: `meeting_attendee_staff_write` has permitted exactly this since the
+August scoping pass. The database was ready the whole time; nothing called it.
+
+Removing the organizer is refused, because attendance is what grants read — it
+would leave a meeting its own convener could not open unless they happened to
+be staff.
+
+`completeMeeting` now lists attendees, which closes one of the four elements
+P0-MTG-03 was missing. The composition moved to
+`meeting.summary.ts` so it can be tested without a database; five tests pin the
+content.
+
+**A correction to this document.** The original entry implied the attendee
+read-path was untested. It was not: five assertions covering "attendee can read
+their meeting", its attendees, agenda, decisions and actions have passed since
+the policy was written. That makes the finding sharper rather than weaker — the
+policy was proven correct in *both* directions and the feature still did not
+exist, because no test of a policy can tell you whether any code reaches it.
+
+The one assertion genuinely missing is now added: an attendee may read the
+guest list but may not edit it. Since attendance grants read, an invitee able
+to delete attendees could revoke another person's access to the meeting.
+
+
+## Follow-up: the Calendar sync no longer overwrites the meeting link, 2026-09-03
+
+CAL-005 closed. `createMeeting` and `updateMeeting` no longer write
+`meeting_link` from Google's response.
+
+The field was always provider-agnostic — text, validated only as a URL, hinted
+"any provider". The integration is what broke the requirement: Google returns
+`htmlLink`, the Calendar *event page* rather than a conferencing URL, and both
+paths assigned it over whatever the organizer had typed. Paste a Zoom link with
+Calendar connected and it was gone; "Join meeting" then opened Google. A field
+the integration silently rewrites is not provider-agnostic however it is typed.
+
+The Calendar URL was never homeless — `calendar_event_link.html_link` has
+stored it all along — so removing the overwrite loses nothing. It is now shown
+beside the organizer's link as "View in Google Calendar", which is the honest
+arrangement: two different destinations, the event page and the room, rather
+than one field pretending to be both.
+
+Guarded by two source-level assertions in
+`src/features/calendar/tests/google-calendar-write.test.ts`, verified to fail
+when the overwrite is reintroduced. They read the source deliberately: the
+defect *was* a write that should not exist, there is no runtime state to
+inspect, and a behavioural test would need a live Google connection — which is
+precisely why nothing caught this for as long as it stood.
+
+
+## Follow-up: agenda triage, 2026-09-03
+
+P0-AGD-02 closed. `triageAgendaItem` and `moveAgendaItem`
+(`src/features/meetings/services/meeting.commands.ts`) with controls on each
+row of the agenda (`src/features/meetings/components/agenda-triage.tsx`).
+Accept, defer, decline, mark done, and move up or down — the requirement's own
+verb list, less "merge", which is a different feature and is recorded here as
+still absent rather than quietly counted.
+
+Two things had to change in the database first, and finding the second is the
+reason this took a migration rather than a component.
+
+`status` was `text` with its permitted values written in a trailing comment.
+A comment documents an intention; it does not refuse anything. There is now a
+check constraint, asserted by a test that runs **as staff** on purpose — as
+superuser `auth.uid()` is null, the trigger below would refuse first, and the
+assertion would prove the trigger twice rather than the constraint once.
+
+More seriously, `agenda_staff_update` permits an update when the caller can
+manage the meeting **or proposed the item**. That second branch is there so
+somebody can reword their own proposal, which is worth keeping — but RLS grants
+rows, not columns, so it also let a proposer set their own item's status. A
+volunteer could propose an item and accept it. That is not triage; it is a
+queue anybody can promote themselves out of, and the requirement is explicit
+that the organizer decides.
+
+A trigger now refuses a status change from anyone who cannot manage the
+meeting, while leaving every other column editable by whoever proposed the
+item. Four assertions cover it: the proposer cannot accept their own item, the
+refusal leaves the status untouched, the proposer can still reword, and staff
+can triage.
+
+This was not in the original audit entry, which recorded only the missing
+command and UI. It surfaced while reading the live policy to check what the
+command would be permitted to do — the audit read the migration that created
+the policy, and the hole is in what that policy *permits*, not in what it says.
+
+
+## Follow-up: scheduled times are read in the organization's zone, 2026-09-03
+
+CAL-002 closed. `src/lib/time.ts` reads a `datetime-local` value as wall-clock
+time in a named zone and renders instants back the same way, using `Intl` —
+which already knows every zone's DST history — rather than adding a dependency.
+
+The bug in one line: `new Date("2026-01-15T14:00")` has no offset to work from,
+so it resolves in the *runtime's* zone. On the production server that is UTC,
+so somebody in Montreal typing 14:00 stored 19:00's instant five hours early.
+
+It was invisible because display had the mirror-image defect. `formatDateTime`
+called date-fns with no zone, so the wrong instant rendered back as 14:00 and
+the two errors cancelled for anyone who never left the page. They stopped
+cancelling the moment a value left that loop — the ISO instant handed to Google
+Calendar, and the day-bucketing on the calendar grid.
+
+That symmetry is why both halves had to move together. Correcting input alone
+would have made every existing meeting appear to jump by the server's offset.
+
+`session.timeZone` now carries `organization.timezone`, and the formatters
+default to that column's own default rather than to the runtime's zone, so all
+54 call sites were corrected by one change.
+
+**Two things beyond the original finding.** The edit forms rendered
+`new Date(starts_at).toISOString().slice(0, 16)` into the `datetime-local`
+field — the UTC wall time — so opening a meeting and saving it unchanged would
+silently reschedule it. And a sweep for the same pattern found announcements:
+`publishAt` and `ack_deadline` were parsed the same naive way. That one is
+worse than the meeting case, because `publishAt` drives the scheduled fan-out
+job — an announcement set for 09:00 would have gone out at 05:00 local — and
+`ack_deadline` is what the overdue reminder job compares against.
+
+Eleven tests cover the conversion, including both Toronto DST boundaries: the
+half-hour before spring-forward, the half-hour after, and the ambiguous hour in
+November where a wall time occurs twice. The last asserts only that a real
+instant comes back, since either is defensible and silently producing an
+Invalid Date is not.

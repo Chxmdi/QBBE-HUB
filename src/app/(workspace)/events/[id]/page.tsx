@@ -1,3 +1,4 @@
+import { instantToWallTime } from "@/lib/time";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -101,8 +102,8 @@ export default async function EventDetailPage({
                     { name: "description", label: "Description", type: "textarea", defaultValue: event.description ?? "" },
                     { name: "eventType", label: "Event type", type: "text", defaultValue: event.event_type ?? "", colSpan: 1 },
                     { name: "volunteerNeed", label: "Volunteers needed", type: "number", defaultValue: event.volunteer_need ? String(event.volunteer_need) : "", colSpan: 1 },
-                    { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1, defaultValue: new Date(event.starts_at).toISOString().slice(0, 16) },
-                    { name: "endsAt", label: "Ends", type: "datetime-local", required: true, colSpan: 1, defaultValue: new Date(event.ends_at ?? new Date(new Date(event.starts_at).getTime() + 60 * 60_000)).toISOString().slice(0, 16) },
+                    { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1, defaultValue: instantToWallTime(event.starts_at, session.timeZone) },
+                    { name: "endsAt", label: "Ends", type: "datetime-local", required: true, colSpan: 1, defaultValue: instantToWallTime(event.ends_at ?? new Date(new Date(event.starts_at).getTime() + 60 * 60_000).toISOString(), session.timeZone) },
                     { name: "location", label: "Location", type: "text", defaultValue: event.location ?? "" },
                   ]}
                 />

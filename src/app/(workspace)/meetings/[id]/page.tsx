@@ -6,6 +6,9 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { instantToWallTime } from "@/lib/time";
+import { AgendaTriage } from "@/features/meetings/components/agenda-triage";
+import { AttendeeList } from "@/features/meetings/components/attendee-list";
 import { CancelMeetingButton } from "@/features/meetings/components/cancel-meeting-button";
 import { CompleteMeetingButton } from "@/features/meetings/components/complete-meeting-button";
 import { MeetingNotesForm } from "@/features/meetings/components/meeting-notes-form";
@@ -23,6 +26,22 @@ import type { AgendaItem, Decision, MeetingAction } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Meeting" };
 export const dynamic = "force-dynamic";
+
+/**
+ * Every state except "accepted" earns a badge. An accepted item is simply on
+ * the agenda, which the list itself already says; labelling it would put a
+ * marker on almost every row and leave the ones that need attention no easier
+ * to find.
+ */
+const AGENDA_STATUS_BADGE: Record<
+  string,
+  { label: string; tone: "warning" | "neutral" | "danger" | "success" }
+> = {
+  proposed: { label: "Proposed", tone: "warning" },
+  deferred: { label: "Deferred", tone: "neutral" },
+  declined: { label: "Declined", tone: "danger" },
+  done: { label: "Done", tone: "success" },
+};
 
 const KIND_TONES = {
   information: "info",
@@ -52,6 +71,7 @@ export default async function MeetingDetailPage({
   const meeting = meetingRow as unknown as {
     id: string;
     title: string;
+    organizer_id: string;
     purpose: string | null;
     starts_at: string;
     ends_at: string | null;
@@ -65,7 +85,7 @@ export default async function MeetingDetailPage({
     project: { id: string; name: string } | null;
   };
 
-  const [{ data: agenda }, { data: actions }, { data: decisions }, options] =
+  const [{ data: agenda }, { data: actions }, { data: decisions }, options, { data: attendeeRows }, { data: calendarLink }] =
     await Promise.all([
       supabase
         .from("agenda_item")
@@ -87,7 +107,36 @@ export default async function MeetingDetailPage({
         .eq("meeting_id", id)
         .order("decided_at"),
       getPickerOptions(),
+      supabase
+        .from("meeting_attendee")
+        .select("user_id, user:user_id(id, full_name, avatar_url)")
+        .eq("meeting_id", id),
+      supabase
+        .from("calendar_event_link")
+        .select("html_link")
+        .eq("meeting_id", id)
+        .maybeSingle(),
     ]);
+
+  type AttendeeRow = {
+    user_id: string;
+    user: { id: string; full_name: string; avatar_url: string | null } | null;
+  };
+  const attendees = ((attendeeRows ?? []) as unknown as AttendeeRow[])
+    .map((row) => ({
+      userId: row.user_id,
+      name: row.user?.full_name ?? "Unknown person",
+      avatarUrl: row.user?.avatar_url ?? null,
+      isOrganizer: row.user_id === meeting.organizer_id,
+    }))
+    // Organizer first, then alphabetical — a list people scan for a name.
+    .sort((a, b) =>
+      a.isOrganizer === b.isOrganizer
+        ? a.name.localeCompare(b.name)
+        : a.isOrganizer
+          ? -1
+          : 1,
+    );
 
   const organizer = meeting.organizer;
   const project = meeting.project;
@@ -119,7 +168,7 @@ export default async function MeetingDetailPage({
                 fields={[
                   { name: "title", label: "Title", type: "text", required: true, defaultValue: meeting.title },
                   { name: "purpose", label: "Purpose", type: "textarea", defaultValue: meeting.purpose ?? "" },
-                  { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1, defaultValue: new Date(meeting.starts_at).toISOString().slice(0, 16) },
+                  { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1, defaultValue: instantToWallTime(meeting.starts_at, session.timeZone) },
                   { name: "durationMinutes", label: "Duration (minutes)", type: "number", required: true, colSpan: 1, defaultValue: String(Math.max(15, Math.round(((meeting.ends_at ? new Date(meeting.ends_at).getTime() : new Date(meeting.starts_at).getTime() + 3_600_000) - new Date(meeting.starts_at).getTime()) / 60_000))) },
                   { name: "location", label: "Location", type: "text", defaultValue: meeting.location ?? "" },
                 ]}
@@ -169,11 +218,38 @@ export default async function MeetingDetailPage({
             Join meeting <ExternalLink className="size-3.5" aria-hidden />
           </a>
         ) : null}
+        {/* Shown beside the organizer's own link rather than replacing it. The
+            Calendar URL is a different destination — the event page, not the
+            room — and conflating the two is what CAL-005 warns against. */}
+        {calendarLink?.html_link ? (
+          <a
+            href={calendarLink.html_link as string}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-brand-fg hover:underline"
+          >
+            View in Google Calendar <ExternalLink className="size-3.5" aria-hidden />
+          </a>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_380px]">
         <div className="space-y-8">
           {/* Agenda builder (P0-AGD-01/02) */}
+          <section aria-labelledby="attendees-heading">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 id="attendees-heading" className="section-heading">
+                Attendees
+              </h2>
+            </div>
+            <AttendeeList
+              meetingId={meeting.id}
+              attendees={attendees}
+              people={options.people.map((p) => ({ id: p.id, label: p.label }))}
+              canManage={session.isStaff && isActive}
+            />
+          </section>
+
           <section aria-labelledby="agenda-heading">
             <div className="mb-3 flex items-center justify-between">
               <h2 id="agenda-heading" className="section-heading">
@@ -233,8 +309,19 @@ export default async function MeetingDetailPage({
                       </span>
                     ) : null}
                     <Badge tone={KIND_TONES[item.kind]}>{item.kind}</Badge>
-                    {item.status === "proposed" ? (
-                      <Badge tone="warning">Proposed</Badge>
+                    {AGENDA_STATUS_BADGE[item.status] ? (
+                      <Badge tone={AGENDA_STATUS_BADGE[item.status].tone}>
+                        {AGENDA_STATUS_BADGE[item.status].label}
+                      </Badge>
+                    ) : null}
+                    {session.isStaff && isActive ? (
+                      <AgendaTriage
+                        agendaItemId={item.id}
+                        status={item.status}
+                        title={item.title}
+                        canMoveUp={index > 0}
+                        canMoveDown={index < (agenda ?? []).length - 1}
+                      />
                     ) : null}
                   </li>
                 ))}

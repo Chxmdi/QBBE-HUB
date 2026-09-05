@@ -82,9 +82,12 @@ declare
   v_private uuid;
   v_private_message uuid;
   v_private_task uuid;
+  v_recurring_parent uuid;
   v_private_label uuid;
   v_private_meeting uuid;
   v_private_agenda uuid;
+  v_proposed_agenda uuid;
+  v_text text;
   v_other_org uuid;
   v_other_team uuid;
   v_other_program uuid;
@@ -375,6 +378,101 @@ begin
     perform tests.ok(n = 1, 'attendee can read decisions for an accessible meeting');
     select count(*) into n from meeting_action where meeting_id = v_private_meeting;
     perform tests.ok(n = 1, 'attendee can read actions for an accessible meeting');
+  end;
+  reset role;
+
+  -- -----------------------------------------------------------------------
+  -- Triage is the organizer's, and the database is what says so.
+  --
+  -- `agenda_staff_update` permits an update when the caller can manage the
+  -- meeting OR proposed the item. The second branch exists so somebody can fix
+  -- the wording of their own proposal — but RLS grants rows, not columns, so
+  -- on its own it also let a proposer accept their own item. A queue anybody
+  -- can promote themselves out of is not a triage process.
+  --
+  -- A trigger closes it: the status may move only at the hand of someone who
+  -- can manage the meeting. Editing the wording still belongs to the proposer,
+  -- which is the half worth keeping, so both are asserted.
+  -- -----------------------------------------------------------------------
+  insert into agenda_item (meeting_id, title, status, proposed_by)
+  values (v_private_meeting, 'Volunteer proposal', 'proposed', v_vol)
+  returning id into v_proposed_agenda;
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    update agenda_item set status = 'accepted' where id = v_proposed_agenda;
+    perform tests.ok(false, 'a proposer must not be able to accept their own item');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'a proposer cannot accept their own agenda item');
+  end;
+  reset role;
+
+  select status into v_text from agenda_item where id = v_proposed_agenda;
+  perform tests.ok(v_text = 'proposed', 'the refused triage left the status alone');
+
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    update agenda_item set title = 'Volunteer proposal, reworded'
+      where id = v_proposed_agenda;
+    select count(*) into n from agenda_item
+      where id = v_proposed_agenda and title = 'Volunteer proposal, reworded';
+    perform tests.ok(n = 1, 'a proposer can still reword their own item');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_staff);
+  begin
+    set local role authenticated;
+    update agenda_item set status = 'accepted' where id = v_proposed_agenda;
+    select count(*) into n from agenda_item
+      where id = v_proposed_agenda and status = 'accepted';
+    perform tests.ok(n = 1, 'staff can triage a proposed agenda item');
+  end;
+  reset role;
+
+  -- Run as staff on purpose. As superuser `auth.uid()` is null, so the trigger
+  -- would refuse first and this would prove the trigger twice over rather than
+  -- proving the constraint once — the values were documented in a comment and
+  -- enforced by nothing until now.
+  perform tests.authenticate(v_staff);
+  begin
+    set local role authenticated;
+    update agenda_item set status = 'maybe-later' where id = v_proposed_agenda;
+    perform tests.ok(false, 'an unknown agenda status must be refused');
+  exception
+    when check_violation then
+      perform tests.ok(true, 'an unknown agenda status is refused by the database');
+  end;
+  reset role;
+
+  -- v_vol stays on the attendee list here on purpose: the guest-list assertion
+  -- below needs them able to read the meeting in order to prove they cannot
+  -- edit who else is on it. An earlier draft tidied the row away and turned
+  -- that test into a check that someone who cannot see a meeting cannot change
+  -- it — true, and not the thing it claims to prove.
+  -- Reading a meeting does not confer managing its guest list. Attendee writes
+  -- are staff-only (`app.can_manage_meeting`), so an invitee cannot drop
+  -- another attendee — which, because attendance is what grants read, would
+  -- otherwise be a way to revoke someone else's access to the meeting.
+  --
+  -- Untested until now, and worth having for a reason the read assertions
+  -- above illustrate: those have passed since the policy was written, while
+  -- nothing in the product could create an attendee row at all. A policy
+  -- proven correct in both directions is still not a feature.
+  perform tests.authenticate(v_vol);
+  begin
+    set local role authenticated;
+    delete from meeting_attendee
+      where meeting_id = v_private_meeting and user_id = v_owner;
+    select count(*) into n from meeting_attendee
+      where meeting_id = v_private_meeting and user_id = v_owner;
+    perform tests.ok(n = 1, 'an attendee cannot remove another attendee');
+  exception
+    when insufficient_privilege then
+      perform tests.ok(true, 'an attendee cannot remove another attendee (denied)');
   end;
   reset role;
 
@@ -1373,6 +1471,14 @@ begin
   -- it. Testing that a rule is *computable* is not testing that it is
   -- *enforced*, and the gap between those two is where this one lived.
   -- -----------------------------------------------------------------------
+  -- As the owner, not as `anon`. `tests.clear_auth()` above leaves the session
+  -- unauthenticated, and `anon` has no INSERT on `auth.users` — which fails
+  -- with 42501, the same `insufficient_privilege` the trigger raises. The
+  -- assertion would then pass whether or not the trigger existed, proving only
+  -- that anon cannot write to auth.users, which was never in question. Run as
+  -- the owner, a refusal can only have come from `app.handle_new_user`.
+  reset role;
+
   begin
     insert into auth.users (
       instance_id, id, aud, role, email, encrypted_password,
@@ -1395,6 +1501,76 @@ begin
   select count(*) into n from organization_membership
     where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa99';
   perform tests.ok(n = 0, 'a refused sign-up leaves no membership behind');
+
+  -- -----------------------------------------------------------------------
+  -- A completed recurring task spawns one successor, not two.
+  --
+  -- The next occurrence is created inline on completion, and nothing stopped
+  -- that running twice: no prior-status check, and an insert carrying no key.
+  -- A double-click or a client retry produced a duplicate indistinguishable
+  -- from real work — same title, same assignee, same due date.
+  --
+  -- The command now checks the prior status, but a check cannot win a race:
+  -- two requests can both read "not completed" before either writes. So the
+  -- rule is the shape of the data. A second successor is not detected and
+  -- rejected; it cannot be recorded in the first place.
+  -- -----------------------------------------------------------------------
+  -- This is a constraint test, not an access test, so it runs unauthenticated
+  -- as the owner. The role matters more than it looks: `tests.clear_auth()`
+  -- above leaves the session as `anon`, and the first version of this block
+  -- sourced its organization with `select o.id from organization limit 1`.
+  -- Under `anon` that returns no rows, so every insert below inserted nothing
+  -- and the duplicate was "accepted" because it was never attempted. A test
+  -- that inserts zero rows passes its own setup and fails its assertion, which
+  -- reads exactly like the constraint being absent.
+  reset role;
+
+  -- Check the guarantee is actually present first. A missing index shows up
+  -- below as "the duplicate was accepted", which reads like a logic error in
+  -- the test rather than an absent constraint, and sends the reader to the
+  -- wrong place entirely.
+  select count(*) into n from pg_indexes
+    where schemaname = 'public' and indexname = 'uq_one_successor_per_recurring_task';
+  perform tests.ok(n = 1, 'the one-successor index exists');
+
+  insert into task (organization_id, title, status, created_by, requester_id)
+  values (v_org, 'Recurring original', 'completed', v_owner, v_owner)
+  returning id into v_recurring_parent;
+  perform tests.ok(v_recurring_parent is not null,
+    'the recurring original was actually inserted');
+
+  insert into task (organization_id, title, status, created_by, requester_id,
+                    recurrence_parent_id)
+  values (v_org, 'Recurring successor', 'not_started', v_owner, v_owner,
+          v_recurring_parent);
+
+  begin
+    insert into task (organization_id, title, status, created_by, requester_id,
+                      recurrence_parent_id)
+    values (v_org, 'Recurring duplicate', 'not_started', v_owner, v_owner,
+            v_recurring_parent);
+    perform tests.ok(false, 'a task must not be able to spawn two successors');
+  exception
+    when unique_violation then
+      perform tests.ok(true, 'a completed task can spawn only one successor');
+  end;
+
+  select count(*) into n from task where recurrence_parent_id = v_recurring_parent;
+  perform tests.ok(n = 1, 'the refused duplicate left exactly one successor');
+
+  -- Ordinary tasks all leave the column null, so the index has to be partial
+  -- or the second non-recurring task ever created would collide with the first.
+  select count(*) into n from task
+    where recurrence_parent_id is null and organization_id = v_org;
+  perform tests.ok(n > 1, 'many tasks can have no predecessor at once');
+
+  begin
+    update task set recurrence_parent_id = id where id = v_recurring_parent;
+    perform tests.ok(false, 'a task must not be its own successor');
+  exception
+    when check_violation then
+      perform tests.ok(true, 'a task cannot be its own successor');
+  end;
 
   perform tests.ok(true, 'RLS matrix complete');
 end;

@@ -1,5 +1,6 @@
 "use server";
 
+import { wallTimeToInstant } from "@/lib/time";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
@@ -25,13 +26,20 @@ const createEventSchema = z.object({
   volunteerNeed: z.coerce.number().int().min(0).max(500).optional(),
 });
 
-function eventSchedule(startsAt: string, endsAt?: string) {
-  const starts = new Date(startsAt);
-  if (Number.isNaN(starts.getTime())) return null;
+/**
+ * Both ends are read as wall-clock time in the organization's zone. They have
+ * to use the same zone as each other and as the meeting path, or an event
+ * spanning a DST boundary would silently gain or lose an hour of duration.
+ */
+function eventSchedule(startsAt: string, endsAt: string | undefined, timeZone: string) {
+  const starts = wallTimeToInstant(startsAt, timeZone);
+  if (!starts) return null;
   // Google Calendar requires an end. Keep prior optional Hub input ergonomic
   // while making the persisted event and its linked Calendar record explicit.
-  const ends = endsAt ? new Date(endsAt) : new Date(starts.getTime() + 60 * 60_000);
-  if (Number.isNaN(ends.getTime()) || ends.getTime() <= starts.getTime()) return null;
+  const ends = endsAt
+    ? wallTimeToInstant(endsAt, timeZone)
+    : new Date(starts.getTime() + 60 * 60_000);
+  if (!ends || ends.getTime() <= starts.getTime()) return null;
   return { starts, ends };
 }
 
@@ -61,7 +69,7 @@ export async function createEvent(input: unknown): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const data = parsed.data;
-  const schedule = eventSchedule(data.startsAt, data.endsAt);
+  const schedule = eventSchedule(data.startsAt, data.endsAt, session.timeZone);
   if (!schedule) return { ok: false, error: "End time must be after the event starts." };
   const { starts, ends } = schedule;
 
@@ -144,7 +152,7 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
   const parsed = updateEventSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const data = parsed.data;
-  const schedule = eventSchedule(data.startsAt, data.endsAt);
+  const schedule = eventSchedule(data.startsAt, data.endsAt, session.timeZone);
   if (!schedule) return { ok: false, error: "End time must be after the event starts." };
 
   const supabase = await createSupabaseServerClient();

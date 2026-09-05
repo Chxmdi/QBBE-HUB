@@ -1,5 +1,6 @@
 "use server";
 
+import { reportError } from "@/lib/observability";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -117,6 +118,17 @@ export async function updateTaskStatus(
   }
 
   const supabase = await createSupabaseServerClient();
+  // Read the prior status before writing. Completing an already-completed task
+  // is not a state change, and treating it as one is what spawned duplicate
+  // recurrences. The unique index is the actual guarantee; this is so the
+  // ordinary case never has to rely on catching a constraint violation.
+  const { data: before } = await supabase
+    .from("task")
+    .select("status")
+    .eq("id", taskId)
+    .maybeSingle();
+  const wasAlreadyCompleted = before?.status === "completed";
+
   const { data: updated, error } = await supabase
     .from("task")
     .update({
@@ -132,7 +144,7 @@ export async function updateTaskStatus(
     return { ok: false, error: "Could not update the task status." };
   }
 
-  if (status === "completed") {
+  if (status === "completed" && !wasAlreadyCompleted) {
     const { data: source } = await supabase
       .from("task")
       .select("title, description, project_id, program_id, assignee_id, priority, due_at, recurrence_rule")
@@ -141,7 +153,12 @@ export async function updateTaskStatus(
     if (source?.recurrence_rule && source.due_at) {
       const { nextOccurrence } = await import("@/features/tasks/recurrence");
       const nextDue = nextOccurrence(source.recurrence_rule as string, source.due_at as string);
-      await supabase.from("task").insert({
+      // `recurrence_parent_id` is uniquely indexed, so a concurrent second
+      // completion loses the race rather than creating a twin. The error is
+      // swallowed on purpose: the successor exists either way, which is the
+      // outcome the caller wanted, and reporting a failure for a task that was
+      // completed successfully would be a worse lie than saying nothing.
+      const { error: spawnError } = await supabase.from("task").insert({
         organization_id: session.organizationId,
         program_id: source.program_id,
         project_id: source.project_id,
@@ -155,7 +172,17 @@ export async function updateTaskStatus(
         status: "not_started",
         recurrence_rule: source.recurrence_rule,
         recurrence_anchor: nextDue,
+        recurrence_parent_id: taskId,
       });
+      // 23505 is the unique violation — the successor already exists. Anything
+      // else is a real failure and should be visible rather than silent.
+      if (spawnError && spawnError.code !== "23505") {
+        reportError(spawnError, {
+          source: "recurrence",
+          taskId,
+          message: "could not spawn the next occurrence",
+        });
+      }
     }
   }
 

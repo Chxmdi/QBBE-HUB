@@ -11,6 +11,8 @@ import {
   updateGoogleMeetingEvent,
 } from "@/features/calendar/services/google-calendar-write";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { wallTimeToInstant } from "@/lib/time";
+import { composeMeetingSummary } from "./meeting.summary";
 
 const createMeetingSchema = z.object({
   title: requiredText("A meeting needs a title.", 200),
@@ -32,8 +34,11 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   const { title, purpose, projectId, startsAt, durationMinutes, location, meetingLink } =
     parsed.data;
 
-  const starts = new Date(startsAt);
-  if (Number.isNaN(starts.getTime())) {
+  // Read as wall-clock time in the organization's zone. A `datetime-local`
+  // value carries no offset, so `new Date()` would resolve it in the server's
+  // zone — UTC in production — and store an instant hours from what was typed.
+  const starts = wallTimeToInstant(startsAt, session.timeZone);
+  if (!starts) {
     return { ok: false, error: "Invalid start time." };
   }
   const ends = new Date(starts.getTime() + durationMinutes * 60_000);
@@ -65,14 +70,95 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   // Calendar sync is additive: local operations stay available if Google is
   // unavailable, and the connection carries an actionable recovery state.
   try {
-    const googleLink = await createGoogleMeetingEvent({ organizationId: session.organizationId, userId: session.userId, meetingId: meeting.id, title, purpose: purpose || null, startsAt: starts.toISOString(), endsAt: ends.toISOString(), location: location || null });
-    if (googleLink) await supabase.from("meeting").update({ meeting_link: googleLink }).eq("id", meeting.id);
+    // Deliberately does not touch `meeting_link`. Google returns `htmlLink`,
+    // which is the Calendar event page — not a conferencing URL — and this
+    // used to overwrite whatever the organizer had typed. Paste a Zoom link
+    // with Calendar connected and it was gone, with "Join meeting" quietly
+    // sending everybody to Google instead. CAL-005 requires the field stay
+    // provider-agnostic, and a field the integration silently rewrites is not.
+    // The Calendar URL already has its own home in `calendar_event_link`.
+    await createGoogleMeetingEvent({ organizationId: session.organizationId, userId: session.userId, meetingId: meeting.id, title, purpose: purpose || null, startsAt: starts.toISOString(), endsAt: ends.toISOString(), location: location || null });
   } catch (calendarError) {
     await supabase.from("integration_connection").update({ status: "error", last_error: calendarError instanceof Error ? calendarError.message : "Calendar sync failed." }).eq("organization_id", session.organizationId).eq("user_id", session.userId).eq("provider", "google_calendar");
   }
 
   revalidatePath("/meetings");
   return { ok: true, id: meeting.id as string };
+}
+
+const attendeeSchema = z.object({
+  meetingId: z.string().uuid(),
+  userId: z.string().uuid({ message: "Choose a person to invite." }),
+});
+
+/**
+ * Invite someone to a meeting.
+ *
+ * `meeting_attendee` and its policies have existed since the first operations
+ * migration, and `app.can_read_meeting` grants read to staff, the organizer,
+ * *or an attendee* — a branch covered by ten allow/deny assertions. Nothing
+ * ever wrote a row through it: the only insert in the codebase was the
+ * organizer adding themselves at creation. So the attendee branch was
+ * unreachable in production, and a non-staff invitee could never see a meeting
+ * they had been invited to, because they could never become an invitee.
+ *
+ * Authorization is `meeting_attendee_staff_write` (`app.can_manage_meeting`,
+ * which resolves to organization staff). The session check here is for the
+ * error message; RLS is what actually decides.
+ */
+export async function addMeetingAttendee(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const parsed = attendeeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  // Inviting someone already invited is not an error worth showing anybody.
+  const { error } = await supabase
+    .from("meeting_attendee")
+    .upsert(
+      { meeting_id: parsed.data.meetingId, user_id: parsed.data.userId },
+      { onConflict: "meeting_id,user_id", ignoreDuplicates: true },
+    );
+  if (error) return { ok: false, error: "Could not add that person to the meeting." };
+
+  revalidatePath(`/meetings/${parsed.data.meetingId}`);
+  return { ok: true, id: parsed.data.meetingId };
+}
+
+export async function removeMeetingAttendee(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const parsed = attendeeSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: meeting } = await supabase
+    .from("meeting")
+    .select("organizer_id")
+    .eq("id", parsed.data.meetingId)
+    .maybeSingle();
+
+  // Removing the organizer would leave a meeting whose own convener cannot
+  // read it unless they happen to be staff — and would silently strip the
+  // notes and decisions from their view of it.
+  if (meeting?.organizer_id === parsed.data.userId) {
+    return { ok: false, error: "The organizer cannot be removed from their own meeting." };
+  }
+
+  const { error } = await supabase
+    .from("meeting_attendee")
+    .delete()
+    .eq("meeting_id", parsed.data.meetingId)
+    .eq("user_id", parsed.data.userId);
+  if (error) return { ok: false, error: "Could not remove that person from the meeting." };
+
+  revalidatePath(`/meetings/${parsed.data.meetingId}`);
+  return { ok: true, id: parsed.data.meetingId };
 }
 
 const updateMeetingSchema = z.object({
@@ -92,8 +178,8 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
   const parsed = updateMeetingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const data = parsed.data;
-  const starts = new Date(data.startsAt);
-  if (Number.isNaN(starts.getTime())) return { ok: false, error: "Invalid start time." };
+  const starts = wallTimeToInstant(data.startsAt, session.timeZone);
+  if (!starts) return { ok: false, error: "Invalid start time." };
   const ends = new Date(starts.getTime() + data.durationMinutes * 60_000);
   const supabase = await createSupabaseServerClient();
   const { data: existing } = await supabase.from("meeting")
@@ -111,14 +197,15 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
   }).eq("id", data.meetingId);
   if (error) return { ok: false, error: "Could not update the meeting." };
   try {
-    const googleLink = await updateGoogleMeetingEvent({
+    // Same reasoning as create: the Calendar event is updated, the organizer's
+    // own meeting link is left alone.
+    await updateGoogleMeetingEvent({
       // An admin may reschedule someone else's meeting; the linked Calendar
       // event and OAuth connection belong to the meeting organizer.
       organizationId: session.organizationId, userId: existing.organizer_id, meetingId: data.meetingId,
       title: data.title, purpose: data.purpose || null, startsAt: starts.toISOString(),
       endsAt: ends.toISOString(), location: data.location || null,
     });
-    if (googleLink) await supabase.from("meeting").update({ meeting_link: googleLink }).eq("id", data.meetingId);
   } catch (calendarError) {
     await supabase.from("integration_connection").update({
       status: "degraded",
@@ -229,6 +316,115 @@ export async function addAgendaItem(input: unknown): Promise<ActionResult> {
 
   revalidatePath(`/meetings/${meetingId}`);
   return { ok: true };
+}
+
+/**
+ * The organizer's half of P0-AGD-02.
+ *
+ * `status` values are constrained in the database, and a trigger refuses a
+ * status change from anyone who cannot manage the meeting — including the
+ * person who proposed the item, who can still edit its wording. The zod enum
+ * here exists so a mistyped value is a readable message rather than a
+ * constraint violation; the database is what actually decides.
+ */
+const AGENDA_DECISIONS = ["accepted", "deferred", "declined", "done"] as const;
+
+const triageSchema = z.object({
+  agendaItemId: z.string().uuid(),
+  decision: z.enum(AGENDA_DECISIONS, {
+    errorMap: () => ({ message: "Choose accept, defer, decline or done." }),
+  }),
+});
+
+export async function triageAgendaItem(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const parsed = triageSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: item } = await supabase
+    .from("agenda_item")
+    .select("meeting_id, meeting:meeting_id(status)")
+    .eq("id", parsed.data.agendaItemId)
+    .maybeSingle();
+  if (!item) return { ok: false, error: "Agenda item not found." };
+
+  const meetingStatus = (item as unknown as { meeting: { status: string } | null }).meeting
+    ?.status;
+  if (meetingStatus === "cancelled") {
+    return { ok: false, error: "A cancelled meeting's agenda cannot be triaged." };
+  }
+
+  const { error } = await supabase
+    .from("agenda_item")
+    .update({ status: parsed.data.decision })
+    .eq("id", parsed.data.agendaItemId);
+  if (error) return { ok: false, error: "Could not update the agenda item." };
+
+  revalidatePath(`/meetings/${item.meeting_id as string}`);
+  return { ok: true, id: parsed.data.agendaItemId };
+}
+
+const reorderSchema = z.object({
+  agendaItemId: z.string().uuid(),
+  direction: z.enum(["up", "down"]),
+});
+
+/**
+ * Reorder, the other half of the requirement's verb list.
+ *
+ * `sort_key` is a float precisely so an item can be slotted between two others
+ * without renumbering the rest, so a move swaps this item's key with its
+ * neighbour's rather than rewriting the column.
+ */
+export async function moveAgendaItem(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const parsed = reorderSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: item } = await supabase
+    .from("agenda_item")
+    .select("id, meeting_id, sort_key")
+    .eq("id", parsed.data.agendaItemId)
+    .maybeSingle();
+  if (!item) return { ok: false, error: "Agenda item not found." };
+
+  const goingUp = parsed.data.direction === "up";
+  const { data: neighbour } = await supabase
+    .from("agenda_item")
+    .select("id, sort_key")
+    .eq("meeting_id", item.meeting_id as string)
+    [goingUp ? "lt" : "gt"]("sort_key", item.sort_key as number)
+    .order("sort_key", { ascending: !goingUp })
+    .limit(1)
+    .maybeSingle();
+
+  // Already at the end it was heading for. Not an error worth a message.
+  if (!neighbour) return { ok: true, id: parsed.data.agendaItemId };
+
+  const [{ error: firstError }, { error: secondError }] = await Promise.all([
+    supabase
+      .from("agenda_item")
+      .update({ sort_key: neighbour.sort_key as number })
+      .eq("id", item.id as string),
+    supabase
+      .from("agenda_item")
+      .update({ sort_key: item.sort_key as number })
+      .eq("id", neighbour.id as string),
+  ]);
+  if (firstError || secondError) {
+    return { ok: false, error: "Could not reorder the agenda." };
+  }
+
+  revalidatePath(`/meetings/${item.meeting_id as string}`);
+  return { ok: true, id: parsed.data.agendaItemId };
 }
 
 const actionSchema = z.object({
@@ -391,11 +587,15 @@ export async function completeMeeting(meetingId: string): Promise<ActionResult> 
   if (meeting.status === "cancelled") return { ok: false, error: "Cancelled meetings cannot be completed." };
   if (meeting.status === "completed") return { ok: true, id: meeting.id };
 
-  const [{ data: decisions }, { data: actions }] = await Promise.all([
+  const [{ data: decisions }, { data: actions }, { data: attendees }] = await Promise.all([
     supabase.from("decision").select("title").eq("meeting_id", meetingId),
     supabase
       .from("meeting_action")
       .select("title, due_at, owner:owner_id(full_name)")
+      .eq("meeting_id", meetingId),
+    supabase
+      .from("meeting_attendee")
+      .select("user:user_id(full_name)")
       .eq("meeting_id", meetingId),
   ]);
 
@@ -423,22 +623,20 @@ export async function completeMeeting(meetingId: string): Promise<ActionResult> 
       due_at: string | null;
       owner: { full_name: string } | null;
     };
-    const lines = [
-      `Meeting summary — ${meeting.title}`,
-      "",
-      decisions && decisions.length > 0
-        ? `Decisions:\n${decisions.map((d) => `• ${d.title}`).join("\n")}`
-        : "Decisions: none recorded",
-      "",
-      actions && actions.length > 0
-        ? `Actions:\n${((actions ?? []) as unknown as ActionRow[])
-            .map(
-              (a) =>
-                `• ${a.title}${a.owner ? ` — ${a.owner.full_name}` : ""}${a.due_at ? ` (due ${a.due_at})` : ""}`,
-            )
-            .join("\n")}`
-        : "Actions: none recorded",
-    ].join("\n");
+    type AttendeeRow = { user: { full_name: string } | null };
+
+    const lines = composeMeetingSummary({
+      title: meeting.title,
+      attendees: ((attendees ?? []) as unknown as AttendeeRow[]).map((a) => ({
+        fullName: a.user?.full_name ?? null,
+      })),
+      decisions: (decisions ?? []).map((d) => ({ title: d.title as string })),
+      actions: ((actions ?? []) as unknown as ActionRow[]).map((a) => ({
+        title: a.title,
+        dueAt: a.due_at,
+        ownerName: a.owner?.full_name ?? null,
+      })),
+    });
 
     const { error: postError } = await supabase.from("message").insert({
       organization_id: session.organizationId,

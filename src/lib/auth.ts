@@ -1,3 +1,4 @@
+import { DEFAULT_TIME_ZONE } from "@/lib/time";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -9,6 +10,12 @@ export interface SessionContext {
   profile: Profile;
   role: OrgRole;
   organizationId: string;
+  /**
+   * The organization's zone, used to read and render scheduled times.
+   * Carried on the session because a `datetime-local` value means nothing
+   * without it, and every scheduling path needs the same answer.
+   */
+  timeZone: string;
   isAdmin: boolean;
   isStaff: boolean;
 }
@@ -28,7 +35,7 @@ export const getSessionContext = cache(
 
     const { data: membership } = await supabase
       .from("organization_membership")
-      .select("organization_id, role, status, user_profile:user_id(*)")
+      .select("organization_id, role, status, user_profile:user_id(*), organization:organization_id(timezone)")
       .eq("user_id", user.id)
       .eq("status", "active")
       .maybeSingle();
@@ -44,6 +51,9 @@ export const getSessionContext = cache(
       profile,
       role,
       organizationId: membership.organization_id as string,
+      timeZone:
+        (membership.organization as unknown as { timezone: string | null } | null)
+          ?.timezone ?? DEFAULT_TIME_ZONE,
       isAdmin: role === "owner" || role === "admin",
       isStaff: role === "owner" || role === "admin" || role === "staff",
     };
