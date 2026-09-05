@@ -1507,6 +1507,14 @@ begin
   -- rule is the shape of the data. A second successor is not detected and
   -- rejected; it cannot be recorded in the first place.
   -- -----------------------------------------------------------------------
+  -- Check the guarantee is actually present first. A missing index shows up
+  -- below as "the duplicate was accepted", which reads like a logic error in
+  -- the test rather than an absent constraint, and sends the reader to the
+  -- wrong place entirely.
+  select count(*) into n from pg_indexes
+    where schemaname = 'public' and indexname = 'uq_one_successor_per_recurring_task';
+  perform tests.ok(n = 1, 'the one-successor index exists');
+
   insert into task (organization_id, title, status, created_by, requester_id)
   select o.id, 'Recurring original', 'completed', v_owner, v_owner
   from organization o limit 1

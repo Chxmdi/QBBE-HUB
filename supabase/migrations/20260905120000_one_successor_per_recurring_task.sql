@@ -31,10 +31,6 @@ alter table task
   add column if not exists recurrence_parent_id uuid
   references task (id) on delete set null;
 
-comment on column task.recurrence_parent_id is
-  'The completed occurrence this task was spawned from. Unique, so a task can '
-  'never produce two successors.';
-
 -- The guarantee. Partial, because every non-recurring task leaves this null
 -- and nulls must not collide with each other.
 create unique index if not exists uq_one_successor_per_recurring_task
