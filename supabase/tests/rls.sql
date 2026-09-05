@@ -1471,6 +1471,14 @@ begin
   -- it. Testing that a rule is *computable* is not testing that it is
   -- *enforced*, and the gap between those two is where this one lived.
   -- -----------------------------------------------------------------------
+  -- As the owner, not as `anon`. `tests.clear_auth()` above leaves the session
+  -- unauthenticated, and `anon` has no INSERT on `auth.users` — which fails
+  -- with 42501, the same `insufficient_privilege` the trigger raises. The
+  -- assertion would then pass whether or not the trigger existed, proving only
+  -- that anon cannot write to auth.users, which was never in question. Run as
+  -- the owner, a refusal can only have come from `app.handle_new_user`.
+  reset role;
+
   begin
     insert into auth.users (
       instance_id, id, aud, role, email, encrypted_password,
@@ -1507,6 +1515,16 @@ begin
   -- rule is the shape of the data. A second successor is not detected and
   -- rejected; it cannot be recorded in the first place.
   -- -----------------------------------------------------------------------
+  -- This is a constraint test, not an access test, so it runs unauthenticated
+  -- as the owner. The role matters more than it looks: `tests.clear_auth()`
+  -- above leaves the session as `anon`, and the first version of this block
+  -- sourced its organization with `select o.id from organization limit 1`.
+  -- Under `anon` that returns no rows, so every insert below inserted nothing
+  -- and the duplicate was "accepted" because it was never attempted. A test
+  -- that inserts zero rows passes its own setup and fails its assertion, which
+  -- reads exactly like the constraint being absent.
+  reset role;
+
   -- Check the guarantee is actually present first. A missing index shows up
   -- below as "the duplicate was accepted", which reads like a logic error in
   -- the test rather than an absent constraint, and sends the reader to the
@@ -1516,22 +1534,21 @@ begin
   perform tests.ok(n = 1, 'the one-successor index exists');
 
   insert into task (organization_id, title, status, created_by, requester_id)
-  select o.id, 'Recurring original', 'completed', v_owner, v_owner
-  from organization o limit 1
+  values (v_org, 'Recurring original', 'completed', v_owner, v_owner)
   returning id into v_recurring_parent;
+  perform tests.ok(v_recurring_parent is not null,
+    'the recurring original was actually inserted');
 
   insert into task (organization_id, title, status, created_by, requester_id,
                     recurrence_parent_id)
-  select o.id, 'Recurring successor', 'not_started', v_owner, v_owner,
-         v_recurring_parent
-  from organization o limit 1;
+  values (v_org, 'Recurring successor', 'not_started', v_owner, v_owner,
+          v_recurring_parent);
 
   begin
     insert into task (organization_id, title, status, created_by, requester_id,
                       recurrence_parent_id)
-    select o.id, 'Recurring duplicate', 'not_started', v_owner, v_owner,
-           v_recurring_parent
-    from organization o limit 1;
+    values (v_org, 'Recurring duplicate', 'not_started', v_owner, v_owner,
+            v_recurring_parent);
     perform tests.ok(false, 'a task must not be able to spawn two successors');
   exception
     when unique_violation then
