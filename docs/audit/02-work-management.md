@@ -207,7 +207,7 @@ Also note `removeTaskDependency` exists as a server action but no component call
 **Evidence:** Both views call the identical server action `updateTaskStatus` (`src/features/tasks/components/board.tsx:9,47,54` and `src/features/tasks/components/task-list.tsx:210` via `StatusSelect`), which writes one `task` row (`src/features/tasks/services/task.commands.ts:119-128`). Cross-view propagation is real rather than assumed: that action ends with `revalidatePath("/", "layout")` (`:187`), which invalidates the whole App Router layout tree, and both pages are `export const dynamic = "force-dynamic"` (`src/app/(workspace)/board/page.tsx:16`, `src/app/(workspace)/my-work/page.tsx:23`) fetching through the shared `TASK_SELECT` (`src/features/tasks/services/task.queries.ts:4-9`). There is no board-local store or duplicate table.
 
 ### WORK-004 — My Work queries assignments across programs/projects and groups by urgency
-**Verdict:** Partial
+**Verdict:** Complete *(closed 2026-09-05 — see the follow-up at the end)*
 **Requirement:** My Work queries assignments across all programs/projects and groups by urgency; overdue logic uses the workspace/user time zone consistently.
 **Evidence:** The first half holds. `getMyTasksFiltered` (`src/features/tasks/services/task.queries.ts:50-71`) filters only on `assignee_id`, archived state and open status — no program or project scope — so it genuinely spans the portfolio, and the page buckets into overdue / today / this week / later via `myWorkBucket` (`src/app/(workspace)/my-work/page.tsx:25-30,57-67`), which is unit-tested (`tests/unit/utils.test.ts:12-27`).
 **Gap:** **The time-zone half is not met, and the inconsistency is observable.** `myWorkBucket` (`src/lib/utils.ts:91-101`) calls `differenceInCalendarDays(date, new Date())` with no time zone, and it runs in a **server** component, so "today" is the deploy host's clock — UTC in production. `dueLabel` (`src/lib/utils.ts:61-78`) does the same arithmetic but runs in the **client** component `task-list.tsx`, so it uses the viewer's browser zone. For a Montreal user (UTC−4/−5) after 19:00 local, the server is already on the next UTC day: the same task is filed under "Overdue" by the server grouping while its own row label reads "Due today". `user_profile.timezone` exists and is loaded into the session, but is used only for the dashboard greeting (`src/app/(workspace)/page.tsx:36-46,76`) — never for due-date logic. The dashboard's own boundaries are UTC too (`src/features/dashboard/services/dashboard.queries.ts:73-74`). There is no workspace-default time zone setting.
@@ -308,3 +308,26 @@ portfolio complexity is hidden"). The asymmetry that *is* worth a look runs the
 other way: staff get org-wide task read, whereas the spec's staff role is
 "create and execute work **within granted programs/projects/channels**". Nothing
 narrows a staff member's task visibility to their memberships.
+
+
+## Follow-up: overdue is one answer again, 2026-09-05
+
+WORK-004 closed. `myWorkBucket` and `dueLabel` both call `zonedDueInfo`
+(`src/lib/time.ts`), so the grouping in a server component and the row label in
+a client component reach the same verdict instead of asking two different
+clocks. A Montreal user after 19:00 no longer sees a task filed under "Overdue"
+whose own label reads "Due today".
+
+**Correcting this exposed something the audit had not noticed, and my first
+attempt got it wrong.** `task.due_at` is a `date` column, not `timestamptz`. A
+bare "2026-09-05" is already a calendar date with no zone attached, so passing
+it through `new Date()` reads it as UTC midnight — the evening of the 4th in
+Toronto — and every task due date would have moved a day earlier. Three
+existing tests failed on exactly that, which is the only reason it was caught
+before the commit.
+
+`calendarDateInZone` now returns a bare date unchanged and converts only real
+instants. The distinction is the point: `task.due_at` (a date) and
+`meeting.starts_at` (a timestamptz) are both `string` in TypeScript and want
+opposite treatment. Five tests pin it, including a due date on its own day
+viewed from an evening where the server's UTC clock has already rolled over.

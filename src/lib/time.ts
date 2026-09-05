@@ -105,3 +105,77 @@ export function formatInZone(
     return "—";
   }
 }
+
+/**
+ * The calendar date (YYYY-MM-DD) a value falls on in `timeZone`.
+ *
+ * A bare `YYYY-MM-DD` is returned unchanged, and that distinction matters:
+ * `task.due_at` is a `date` column, so "2026-09-05" already *is* a calendar
+ * date with no zone attached. Passing it through `new Date()` would read it as
+ * UTC midnight, which in Toronto is the evening of the 4th — moving every task
+ * due date a day earlier. Only genuine instants (`timestamptz` values such as
+ * `meeting.starts_at`) need converting.
+ */
+export function calendarDateInZone(
+  iso: string | Date,
+  timeZone: string = DEFAULT_TIME_ZONE,
+): string | null {
+  if (typeof iso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(iso.trim())) {
+    return iso.trim();
+  }
+  const instant = typeof iso === "string" ? new Date(iso) : iso;
+  if (Number.isNaN(instant.getTime())) return null;
+  try {
+    // en-CA formats as YYYY-MM-DD, which sorts and subtracts cleanly.
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(instant);
+  } catch {
+    return null;
+  }
+}
+
+export interface ZonedDueInfo {
+  /** Whole calendar days from today to the due date, negative when overdue. */
+  days: number;
+  /** True when the date falls later in the current Monday-start week. */
+  withinThisWeek: boolean;
+}
+
+/**
+ * Due-date arithmetic done in one zone, wherever it runs.
+ *
+ * "Overdue" is a question about calendar days, not elapsed hours, so it has to
+ * be answered in a specific zone or the answer changes with the answerer. This
+ * previously ran twice against two different clocks — the grouping in a server
+ * component against the host's UTC, the row label in a client component
+ * against the browser's — so a Montreal user after 19:00 saw a task filed under
+ * "Overdue" whose own label read "Due today". Both now ask this.
+ */
+export function zonedDueInfo(
+  iso: string | null | undefined,
+  timeZone: string = DEFAULT_TIME_ZONE,
+  now: Date = new Date(),
+): ZonedDueInfo | null {
+  if (!iso) return null;
+  const due = calendarDateInZone(iso, timeZone);
+  const today = calendarDateInZone(now, timeZone);
+  if (!due || !today) return null;
+
+  const days = Math.round(
+    (Date.parse(`${due}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000,
+  );
+
+  // Monday-start week, matching the previous `isThisWeek({ weekStartsOn: 1 })`.
+  const weekdayName = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+  }).format(now);
+  const mondayIndex = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(weekdayName);
+  const daysLeftInWeek = mondayIndex < 0 ? 6 : 6 - mondayIndex;
+
+  return { days, withinThisWeek: days > 0 && days <= daysLeftInWeek };
+}

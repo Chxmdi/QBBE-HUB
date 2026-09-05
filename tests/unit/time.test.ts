@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  calendarDateInZone,
   instantToWallTime,
   wallTimeToInstant,
   formatInZone,
+  zonedDueInfo,
 } from "@/lib/time";
 
 /**
@@ -95,5 +97,55 @@ describe("display uses the organization's zone", () => {
   it("returns a dash rather than throwing on a bad value", () => {
     expect(formatInZone(null)).toBe("—");
     expect(formatInZone("not a date")).toBe("—");
+  });
+});
+
+describe("a date column is not an instant", () => {
+  /**
+   * `task.due_at` is a `date`, so "2026-09-05" is already a calendar date with
+   * no zone attached. Reading it through `new Date()` gives UTC midnight,
+   * which in Toronto is the evening of the 4th — every task due date a day
+   * early. `meeting.starts_at` is a `timestamptz` and genuinely does need
+   * converting. The two look alike in TypeScript and must not be treated alike.
+   */
+  it("leaves a bare calendar date exactly as written", () => {
+    expect(calendarDateInZone("2026-09-05", "America/Toronto")).toBe("2026-09-05");
+    expect(calendarDateInZone("2026-01-01", "Pacific/Auckland")).toBe("2026-01-01");
+  });
+
+  it("still converts a real instant", () => {
+    // 00:30 UTC is the previous evening in Toronto.
+    expect(calendarDateInZone("2026-09-05T00:30:00.000Z", "America/Toronto"))
+      .toBe("2026-09-04");
+  });
+
+  it("does not report a date-only due date as overdue on its own day", () => {
+    const info = zonedDueInfo(
+      "2026-09-05",
+      "America/Toronto",
+      new Date("2026-09-05T02:00:00.000Z"), // 22:00 on the 4th in Toronto
+    );
+    // The server's UTC clock already says the 5th; Toronto does not. The due
+    // date is the 5th, so from Toronto's point of view it is tomorrow.
+    expect(info?.days).toBe(1);
+  });
+});
+
+describe("overdue is the same answer wherever it is computed", () => {
+  it("agrees between a UTC server evening and the organization's zone", () => {
+    // The bug this replaces: after 19:00 in Montreal the server is on the next
+    // UTC day, so a server-side grouping said "overdue" while the client-side
+    // label said "due today". Pinned to one zone, one answer.
+    const evening = new Date("2026-09-05T23:30:00.000Z"); // 19:30 Toronto
+    expect(zonedDueInfo("2026-09-05", "America/Toronto", evening)?.days).toBe(0);
+    expect(zonedDueInfo("2026-09-04", "America/Toronto", evening)?.days).toBe(-1);
+  });
+
+  it("counts the rest of a Monday-start week", () => {
+    const wednesday = new Date("2026-09-02T16:00:00.000Z"); // Wed noon Toronto
+    expect(zonedDueInfo("2026-09-04", "America/Toronto", wednesday)?.withinThisWeek).toBe(true);
+    // Sunday closes the week; the following Monday does not belong to it.
+    expect(zonedDueInfo("2026-09-06", "America/Toronto", wednesday)?.withinThisWeek).toBe(true);
+    expect(zonedDueInfo("2026-09-07", "America/Toronto", wednesday)?.withinThisWeek).toBe(false);
   });
 });
