@@ -306,6 +306,7 @@ function OpportunityItem({
         stage={opportunity.stage}
         currency={opportunity.currency}
         outcomeNote={opportunity.outcome_note}
+        today={today}
       />
     </li>
   );

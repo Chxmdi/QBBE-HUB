@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
+import { calendarDateInZone } from "@/lib/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
@@ -112,6 +113,12 @@ export async function createOpportunity(input: unknown): Promise<ActionResult> {
   return { ok: true, id: created.id as string };
 }
 
+/** Today in the workspace's zone — the date a decision is recorded against. */
+function workspaceToday(timeZone: string): string {
+  const now = new Date();
+  return calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
+}
+
 export async function updateOpportunity(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = updateOpportunitySchema.safeParse(input);
@@ -160,7 +167,7 @@ export async function updateOpportunity(input: unknown): Promise<ActionResult> {
     // hold either on an open row — and a stale figure in a total is worse
     // than a missing one.
     patch.decided_at = settling
-      ? fields.decidedAt || new Date().toISOString().slice(0, 10)
+      ? fields.decidedAt || workspaceToday(session.timeZone)
       : null;
     if (!settling) patch.amount_awarded = null;
   }

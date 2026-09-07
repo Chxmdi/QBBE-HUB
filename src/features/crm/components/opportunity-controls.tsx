@@ -26,11 +26,15 @@ export function OpportunityControls({
   stage,
   currency,
   outcomeNote,
+  today,
 }: {
   opportunityId: string;
   stage: OpportunityStage;
   currency: string;
   outcomeNote: string | null;
+  /** The workspace's calendar date, passed down rather than read from the
+   * browser's clock — the server records the decision against the same one. */
+  today: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -41,7 +45,6 @@ export function OpportunityControls({
   const settling = SETTLED_STAGES.includes(nextStage);
   const awarding = nextStage === "awarded";
   const refusing = settling && !awarding;
-  const today = new Date().toISOString().slice(0, 10);
 
   if (!open) {
     return (

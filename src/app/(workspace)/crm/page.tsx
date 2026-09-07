@@ -16,6 +16,7 @@ import {
 } from "@/features/crm/components/pipeline-summary";
 import { getPipeline } from "@/features/crm/services/opportunity.queries";
 import { requireSession } from "@/lib/auth";
+import { calendarDateInZone } from "@/lib/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
 import type { CrmFollowUp, CrmOrganization } from "@/types/entities";
@@ -29,6 +30,13 @@ export default async function CrmPage({
   searchParams: Promise<{ create?: string }>;
 }) {
   const session = await requireSession();
+  // Whether a follow-up is overdue is a shared judgement, so it is answered in
+  // the workspace's zone — and answered once, because the pipeline query and
+  // the row labels below both read it. Two derivations from the server's UTC
+  // clock is how a row came to read "Overdue" under a heading that disagreed.
+  const now = new Date();
+  const today =
+    calendarDateInZone(now, session.timeZone) ?? now.toISOString().slice(0, 10);
   if (!session.isStaff) redirect("/");
   const params = await searchParams;
   const supabase = await createSupabaseServerClient();
@@ -49,12 +57,11 @@ export default async function CrmPage({
       .eq("status", "open")
       .order("due_at")
       .limit(20),
-    getPipeline(new Date().toISOString().slice(0, 10)),
+    getPipeline(today),
   ]);
 
   const orgList = (organizations ?? []) as unknown as CrmOrganization[];
   const followUpList = (followUps ?? []) as unknown as CrmFollowUp[];
-  const today = new Date().toISOString().slice(0, 10);
   const organizationOptions = orgList.map((organization) => ({
     value: organization.id,
     label: organization.name,

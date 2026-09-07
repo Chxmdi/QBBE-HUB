@@ -70,7 +70,10 @@ export function RaidLogPanel({
   highlightRiskId?: string | null;
   highlightIssueId?: string | null;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  // The date the log was built against, not a fresh one. Deriving it here from
+  // the browser's clock is what let a row read "due for review" while the count
+  // above it disagreed.
+  const today = log.today;
   const peopleOptions = people.map((p) => ({ value: p.id, label: p.label }));
 
   // A search result pointing at a settled risk must not land on a collapsed

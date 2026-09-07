@@ -1,3 +1,9 @@
+import {
+  DEFAULT_TIME_ZONE,
+  addCalendarDays,
+  calendarDateInZone,
+  startOfDayInstant,
+} from "@/lib/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   ActivityEvent,
@@ -68,11 +74,29 @@ const OPEN_STATUSES = [
  * All dashboard metrics are computed from live, RLS-scoped data (WORK-001):
  * every count reflects only records the viewer may access.
  */
-export async function getDashboardData(userId: string): Promise<DashboardData> {
+export async function getDashboardData(
+  userId: string,
+  timeZone: string = DEFAULT_TIME_ZONE,
+): Promise<DashboardData> {
   const supabase = await createSupabaseServerClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const weekOut = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10);
-  const monthAgo = new Date(Date.now() - 30 * 86400_000).toISOString();
+
+  // "Today" is a question about the organization's calendar, not the server's.
+  // This previously read `new Date().toISOString().slice(0, 10)` — the host's
+  // UTC date — and after 20:00 in Montreal the host is already on tomorrow, so
+  // every panel below rolled over five hours early: "Due today" showed
+  // tomorrow's work and the overdue count swallowed today's.
+  const now = new Date();
+  const today = calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
+  const weekOut = addCalendarDays(today, 7) ?? today;
+  const monthAgo = new Date(now.getTime() - 30 * 86400_000).toISOString();
+
+  // `due_at` is a `date`, so the strings above compare against it directly.
+  // `starts_at` is a `timestamptz` and needs the instants the local day spans —
+  // which are not 24 hours apart on the two days a year the offset changes.
+  const dayStart = startOfDayInstant(today, timeZone) ?? now;
+  const dayEnd =
+    startOfDayInstant(addCalendarDays(today, 1) ?? today, timeZone) ??
+    new Date(now.getTime() + 86400_000);
 
   const [
     programsRes,
@@ -208,8 +232,8 @@ export async function getDashboardData(userId: string): Promise<DashboardData> {
       .select(
         "id, program_id, project_id, title, purpose, organizer_id, starts_at, ends_at, location, meeting_link, status, notes, channel_id, project:project_id(id, name)",
       )
-      .gte("starts_at", `${today}T00:00:00Z`)
-      .lt("starts_at", new Date(Date.now() + 86400_000).toISOString())
+      .gte("starts_at", dayStart.toISOString())
+      .lt("starts_at", dayEnd.toISOString())
       .neq("status", "cancelled")
       .order("starts_at")
       .limit(4),

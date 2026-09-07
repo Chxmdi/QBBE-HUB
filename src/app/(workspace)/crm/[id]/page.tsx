@@ -15,6 +15,7 @@ import { OpportunityPipeline } from "@/features/crm/components/opportunity-pipel
 import { getOpportunitiesForCrmOrganization } from "@/features/crm/services/opportunity.queries";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
+import { calendarDateInZone } from "@/lib/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
 import type { CrmContact, CrmFollowUp, CrmInteraction } from "@/types/entities";
@@ -33,7 +34,12 @@ export default async function CrmDetailPage({
   if (!session.isStaff) redirect("/");
   const { id } = await params;
   const { opportunity: highlightId = null } = await searchParams;
-  const today = new Date().toISOString().slice(0, 10);
+  // The workspace's calendar date, not the server's: this drives both the
+  // opportunity query below and the dated labels the page renders.
+  const nowInstant = new Date();
+  const today =
+    calendarDateInZone(nowInstant, session.timeZone) ??
+    nowInstant.toISOString().slice(0, 10);
   const supabase = await createSupabaseServerClient();
 
   const { data: org } = await supabase

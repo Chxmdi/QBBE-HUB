@@ -4,6 +4,8 @@ import {
   instantToWallTime,
   wallTimeToInstant,
   formatInZone,
+  addCalendarDays,
+  startOfDayInstant,
   zonedDueInfo,
 } from "@/lib/time";
 
@@ -147,5 +149,70 @@ describe("overdue is the same answer wherever it is computed", () => {
     // Sunday closes the week; the following Monday does not belong to it.
     expect(zonedDueInfo("2026-09-06", "America/Toronto", wednesday)?.withinThisWeek).toBe(true);
     expect(zonedDueInfo("2026-09-07", "America/Toronto", wednesday)?.withinThisWeek).toBe(false);
+  });
+});
+
+describe("a local day is a calendar question and an instant question at once", () => {
+  /**
+   * The dashboard had both halves wrong. It derived "today" as
+   * `new Date().toISOString().slice(0, 10)` — the server's UTC date — and then
+   * used that one string for two different jobs: comparing against `due_at`,
+   * a `date` column, and bounding `starts_at`, a `timestamptz`. The first needs
+   * a calendar date in the organization's zone; the second needs the instant
+   * that date begins there. UTC midnight is neither.
+   */
+  it("adds days without letting a zone into the answer", () => {
+    expect(addCalendarDays("2026-09-05", 7)).toBe("2026-09-12");
+    expect(addCalendarDays("2026-09-05", 1)).toBe("2026-09-06");
+    // Across Toronto's spring-forward, which a millisecond-arithmetic version
+    // gets wrong: those seven days contain only 167 hours.
+    expect(addCalendarDays("2026-03-05", 7)).toBe("2026-03-12");
+    // And across a year boundary and a leap day.
+    expect(addCalendarDays("2026-12-28", 7)).toBe("2027-01-04");
+    expect(addCalendarDays("2028-02-28", 1)).toBe("2028-02-29");
+  });
+
+  it("refuses a value that is not a calendar date", () => {
+    expect(addCalendarDays("2026-09-05T00:00:00Z", 1)).toBeNull();
+    expect(addCalendarDays("not a date", 1)).toBeNull();
+  });
+
+  it("starts the day at local midnight, not UTC midnight", () => {
+    // The bug in one line: 2026-09-05T00:00:00Z is 20:00 on the 4th in Toronto,
+    // so a window opening there sweeps in the previous evening.
+    const start = startOfDayInstant("2026-09-05", "America/Toronto");
+    expect(start?.toISOString()).toBe("2026-09-05T04:00:00.000Z");
+    expect(start?.toISOString()).not.toBe("2026-09-05T00:00:00.000Z");
+  });
+
+  it("gives a winter day the other offset", () => {
+    expect(startOfDayInstant("2026-01-15", "America/Toronto")?.toISOString())
+      .toBe("2026-01-15T05:00:00.000Z");
+  });
+
+  it("bounds a day that is not 24 hours long", () => {
+    // Toronto springs forward on 2026-03-08: that local day is 23 hours. A
+    // window built as "start + 24h" would reach into the 9th.
+    const start = startOfDayInstant("2026-03-08", "America/Toronto")!;
+    const end = startOfDayInstant(addCalendarDays("2026-03-08", 1)!, "America/Toronto")!;
+    expect((end.getTime() - start.getTime()) / 3_600_000).toBe(23);
+
+    // And the November day that is 25 hours long.
+    const fallStart = startOfDayInstant("2026-11-01", "America/Toronto")!;
+    const fallEnd = startOfDayInstant(addCalendarDays("2026-11-01", 1)!, "America/Toronto")!;
+    expect((fallEnd.getTime() - fallStart.getTime()) / 3_600_000).toBe(25);
+  });
+
+  it("puts an evening meeting inside today rather than tomorrow", () => {
+    // 23:30 Toronto on 5 September is 03:30 UTC on the 6th. The old lower bound
+    // (`2026-09-05T00:00:00Z`) plus a rolling `now + 24h` upper bound made the
+    // window span up to 48 hours; a real day window contains this and excludes
+    // the same clock time a day later.
+    const start = startOfDayInstant("2026-09-05", "America/Toronto")!;
+    const end = startOfDayInstant("2026-09-06", "America/Toronto")!;
+    const tonight = new Date("2026-09-06T03:30:00.000Z");
+    const tomorrowNight = new Date("2026-09-07T03:30:00.000Z");
+    expect(tonight >= start && tonight < end).toBe(true);
+    expect(tomorrowNight >= start && tomorrowNight < end).toBe(false);
   });
 });

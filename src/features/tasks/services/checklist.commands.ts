@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { calendarDateInZone } from "@/lib/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
@@ -99,7 +100,7 @@ const recurrenceSchema = z.object({
 });
 
 export async function setTaskRecurrence(input: unknown): Promise<ActionResult> {
-  await requireSession();
+  const session = await requireSession();
   const parsed = recurrenceSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid recurrence." };
   const supabase = await createSupabaseServerClient();
@@ -107,7 +108,13 @@ export async function setTaskRecurrence(input: unknown): Promise<ActionResult> {
     .from("task")
     .update({
       recurrence_rule: parsed.data.recurrenceRule || null,
-      recurrence_anchor: parsed.data.recurrenceRule ? new Date().toISOString().slice(0, 10) : null,
+      // The anchor every future occurrence is counted from, so it has to be
+      // the workspace's date. Anchored a day late, a weekly task lands on the
+      // wrong weekday for as long as the series lives.
+      recurrence_anchor: parsed.data.recurrenceRule
+        ? (calendarDateInZone(new Date(), session.timeZone) ??
+           new Date().toISOString().slice(0, 10))
+        : null,
     })
     .eq("id", parsed.data.taskId);
   if (error) return { ok: false, error: "Could not set recurrence." };

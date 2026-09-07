@@ -27,6 +27,7 @@ import {
 } from "@/features/dashboard/components/charts";
 import { getDashboardData } from "@/features/dashboard/services/dashboard.queries";
 import { requireSession } from "@/lib/auth";
+import { DEFAULT_TIME_ZONE, calendarDateInZone } from "@/lib/time";
 import { formatDate, formatTime, relativeTime } from "@/lib/utils";
 import type { ProjectHealth, Task } from "@/types/entities";
 
@@ -75,9 +76,23 @@ function AttentionTask({ task, reason }: { task: Task; reason: string }) {
 
 export default async function HomePage() {
   const session = await requireSession();
-  const data = await getDashboardData(session.userId);
+  const data = await getDashboardData(session.userId, session.timeZone);
+  const todayInZone =
+    calendarDateInZone(new Date(), session.timeZone) ??
+    new Date().toISOString().slice(0, 10);
   const firstName = session.profile.full_name.split(" ")[0] || "there";
-  const timezone = session.profile.timezone ?? "America/Toronto";
+  // Two zones, deliberately, because the page answers two kinds of question.
+  //
+  // `timezone` is the viewer's own: a greeting depends on whether it is morning
+  // where the reader is sitting, and nobody else's opinion of that matters.
+  //
+  // `session.timeZone` is the workspace's, and overdue is answered in it.
+  // Whether a task is late is a shared operational judgement, so two colleagues
+  // in different zones must get the same answer — and the query above already
+  // buckets by the workspace zone. Formatting the label with the viewer's would
+  // put the row's text at odds with the group it was filed under, which is the
+  // defect this page had against UTC, reintroduced between people.
+  const timezone = session.profile.timezone ?? DEFAULT_TIME_ZONE;
   const { kpis, attention, healthCounts, statusBreakdown } = data;
 
   const activeTotal = Object.values(healthCounts).reduce((a, b) => a + b, 0);
@@ -269,15 +284,21 @@ export default async function HomePage() {
                           {task.project?.name ?? "Task"}
                         </span>
                       </span>
+                      {/*
+                        The same calendar date the query filtered on. Deriving
+                        it again here from the server's UTC clock is how a task
+                        came to sit under a "Due today" query while its own
+                        label read "Overdue".
+                      */}
                       <span
                         className={
-                          task.due_at && task.due_at < new Date().toISOString().slice(0, 10)
+                          task.due_at && task.due_at < todayInZone
                             ? "text-[12.5px] font-medium whitespace-nowrap text-danger-fg"
                             : "text-[12.5px] font-medium whitespace-nowrap text-warning-fg"
                         }
                       >
-                        {task.due_at && task.due_at < new Date().toISOString().slice(0, 10)
-                          ? `Overdue · ${formatDate(task.due_at)}`
+                        {task.due_at && task.due_at < todayInZone
+                          ? `Overdue · ${formatDate(task.due_at, session.timeZone)}`
                           : "Due today"}
                       </span>
                     </Link>
