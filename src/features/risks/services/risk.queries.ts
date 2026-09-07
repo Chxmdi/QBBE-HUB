@@ -1,3 +1,4 @@
+import { DEFAULT_TIME_ZONE, calendarDateInZone } from "@/lib/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   SETTLED_ISSUE_STATUSES,
@@ -49,11 +50,24 @@ export interface RaidLog {
   /** Open items whose review date has arrived — the reason to open this tab. */
   needingReview: number;
   openCount: number;
+  /**
+   * The calendar date this log was built against, in the workspace's zone.
+   *
+   * Carried with the data rather than recomputed by the panel. "Is this risk
+   * due for review" was previously answered twice — once here for the count,
+   * once in the component for the row marker — from two independently derived
+   * dates. They agreed only because both were wrong in the same way.
+   */
+  today: string;
 }
 
-export async function getRaidLog(projectId: string): Promise<RaidLog> {
+export async function getRaidLog(
+  projectId: string,
+  timeZone: string = DEFAULT_TIME_ZONE,
+): Promise<RaidLog> {
   const supabase = await createSupabaseServerClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
 
   const [risks, issues] = await Promise.all([
     supabase
@@ -86,6 +100,7 @@ export async function getRaidLog(projectId: string): Promise<RaidLog> {
     settledRisks,
     openIssues,
     settledIssues,
+    today,
     needingReview: openRisks.filter((r) => riskNeedsReview(r, today)).length,
     openCount: openRisks.length + openIssues.length,
   };

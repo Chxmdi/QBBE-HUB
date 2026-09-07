@@ -106,7 +106,7 @@ export default async function ProjectDetailPage({
       .order("created_at", { ascending: false })
       .limit(15),
     getPickerOptions(),
-    getRaidLog(id),
+    getRaidLog(id, session.timeZone),
   ]);
 
   const taskList = (tasks ?? []) as unknown as Task[];
