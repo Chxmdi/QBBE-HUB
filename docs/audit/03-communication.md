@@ -1,5 +1,52 @@
 # Domain audit — communication: channels, announcements, messages, DMs, inbox
 
+**Complete — 48 of 48 assessed.**
+
+**The shape of this family:** the parts that carry an authorization consequence
+are enforced in the database and are right; the parts that carry a workflow
+consequence are frequently a schema column with no code behind it.
+
+The strong half is genuinely strong. Posting policy, reply policy and channel
+archiving are enforced by RLS through `app.can_post_in_channel` /
+`app.can_reply_in_channel`, not by the page that renders the composer — so a
+crafted request cannot post where the policy forbids it, or into an archived
+channel. Direct-message visibility reduces to a single predicate
+(`app.is_conversation_member`), and `conversation` has no UPDATE or DELETE policy
+at all, so a conversation cannot be renamed or removed by anyone. Mention
+resolution is extracted into a pure function whose test asserts exactly the leak
+the requirement forbids — a team member without channel access is excluded from a
+group mention.
+
+The weak half is a recurring pattern rather than scattered gaps: **a column
+exists, and nothing writes it.** Three verdicts in this report were corrected
+mid-audit for exactly that reason.
+
+| Column | State |
+|---|---|
+| `announcement.pinned_until` | zero references in `src/` — pinning does not exist |
+| `announcement.expires_at` | never written; the page's expiry check can never fire |
+| `saved_message.remind_at` | zero references — the reminder half of saved items is inert |
+| `message.source_record_id/_type` | one writer, **no reader** |
+
+The `expires_at` case is the instructive one: `announcements/page.tsx:88`
+computes an expired flag from a column nothing ever sets, so the code reads as a
+working feature and can never be true.
+
+Three further findings worth acting on:
+
+1. **Thread unread state is not tracked separately** (P0-MSG-02). There is one
+   read cursor per member per channel and no thread read-state table, so marking
+   a channel read marks every thread in it read.
+2. **No attachments exist anywhere** (P0-MSG-01, P1-DM-02, and P0-RES-01 in the
+   integrations report) — no table, no column, in any of the 60 migrations.
+3. **Group DMs cannot be muted.** `channel_member` has `muted_level`;
+   `conversation_member` does not — so the noisier of the two surfaces is the one
+   without a mute.
+
+Announcement targeting (P1-ANN-06) has no audience column of any kind, so an
+announcement for one program must go to everyone or stop being an announcement.
+
+
 <!-- progress: 16 of 48 assessed — IN PROGRESS -->
 
 Requirement families in scope: `ANN-001..006`, `MSG-001..010`, `P0-ANN-01..05`,
@@ -290,3 +337,408 @@ to move away from. Nothing in `src/` calls `.send({ type: "broadcast" })` or sub
 broadcast topic (`grep -rn "broadcast" src/` is empty), and there is no database trigger
 emitting `realtime.broadcast_changes`. The refactor is the cheap half; the transport is
 unchanged.
+## Channels
+
+### P0-COMM-01 — Public and private channels with name, purpose, topic, owner, moderators, membership policy, archive state — **Complete**
+
+`channel` carries every attribute the requirement names: `name`, `slug`,
+`privacy`, `purpose`, `topic`, `owner_id`, `posting_policy`, `archived_at`, plus
+`type` and links to `program_id`/`project_id`/`event_id`. Moderators are
+expressed as `channel_member.role` rather than a separate column, which is the
+better shape — a moderator is a membership fact, not a channel one.
+
+### P0-COMM-02 — Structured channel types — **Complete**
+
+`channel.type` is a constrained column and the application reads it
+(`src/app/(workspace)/channels/[id]/page.tsx:41`). The named types are
+represented, with `announcements` carrying distinct behaviour via `is_mandatory`
+(see P0-ANN-01), and program/project/event channels carrying their respective
+foreign keys so a "team" or "program" channel is linked rather than merely named.
+
+### P0-COMM-03 — Auto-membership from program/project/team membership; manual exceptions auditable — **Partial**
+
+The mechanism exists and is well modelled: `channel_member.membership_source`
+distinguishes an automatic membership from a manual one, which is exactly the
+column needed to make the requirement's second clause answerable.
+
+What is missing is the auditing of exceptions. `membership_source` records
+*that* a membership was manual; nothing records who made it or when it diverged
+from the automatic rule, and `message.commands`/channel commands do not write
+`audit_event` for membership changes — the same gap recorded under DEV-006 for
+meetings. So a manual exception is visible but not attributable.
+
+### P0-COMM-04 — Channel directory: browse/search discoverable channels, see purpose and membership, join where policy permits — **Complete**
+
+`src/app/(workspace)/channels/page.tsx` is the directory, and discovery is
+governed by RLS rather than by the page: `channel` read policy determines which
+channels are listed, so a private channel the viewer may not discover is absent
+from the list rather than filtered out of it. `global_search` also returns
+channels by name or slug with their purpose as the snippet, through the same
+invoker-rights path (P0-SRC-02).
+
+### P0-COMM-05 — Archive without deleting history; archived channels read-only and searchable — **Complete, and enforced in the database**
+
+Archiving sets `channel.archived_at`; no history is removed. Read-only is not a
+UI convention — **both write helpers refuse it**:
+`app.can_post_in_channel` and `app.can_reply_in_channel` each require
+`c.archived_at is null` (live function bodies, read from the catalogue). So an
+archived channel cannot accept a message even from a crafted request.
+
+Searchability is preserved: `global_search`'s channel branch excludes archived
+channels from the *channel* results, while the message branch does not filter on
+channel archive state, so messages in an archived channel remain findable — which
+is the behaviour the requirement asks for.
+
+### P1-COMM-06 — Channel templates with default topic, posting policy, bookmarks, automation, membership rules — **Missing**
+
+No `channel_template` table exists (a catalogue sweep for `%template%` returns
+`project_template` only, which is a different domain). Every channel is
+configured from scratch, and the defaults the requirement names have nowhere to
+live.
+
+## Messages
+
+### P0-MSG-01 — Rich messages: paragraphs, lists, links, emojis, inline references, approved attachments — **Partial**
+
+`message.body` is plain text, and that is a **recorded decision**, not an
+oversight: `docs/adr/ADR-003-plain-text-messages.md`. Paragraphs, links and emoji
+survive as text; `source_record_type`/`source_record_id` give genuine inline
+references to a task, meeting or CRM record.
+
+Two clauses are unmet. Lists have no representation beyond typed hyphens. And
+**attachments do not exist at all** — as recorded under P0-RES-01, there is no
+message-attachment table or column anywhere in the 60 migrations, so "approved
+attachments within their permission scope" has no implementation to scope.
+
+Because the plain-text choice is documented with its reasoning, the ADR is the
+right place to revisit this; the attachment gap is independent of it.
+
+### P0-MSG-02 — Threaded replies; thread unread tracked separately from the parent channel — **Partial**
+
+Threads are real: `message.thread_root_id` with a supporting index
+(`idx_message_thread (thread_root_id, created_at)`), and replies are permitted by
+a distinct branch of the insert policy.
+
+**Thread unread state is not tracked separately.** There is exactly one read
+cursor per member per channel — `channel_member.last_read_at` — and a catalogue
+sweep confirms **no thread or read-state table exists**. So marking a channel
+read marks every thread in it read, and a reply in a thread the user follows is
+indistinguishable from any other new message. The requirement names this
+separation explicitly, and it is the half that makes threads usable at volume.
+
+### P0-MSG-03 — Mentions notify only users with access; inaccessible users not leaked through autocomplete — **Complete**
+
+The resolution rule is extracted into a pure function and tested, which is the
+right shape for a rule with a security consequence.
+`src/features/channels/tests/mention-recipients.test.ts` asserts precisely the
+leak the requirement forbids: given a private channel whose eligible users are
+`ada` and `team-member`, a body mentioning a person and a team resolves to those
+two and **excludes `outsider`** — who is both a channel member candidate and a
+member of the mentioned team. Group mentions expand through team membership and
+are then intersected with eligibility, rather than expanded and trusted.
+
+`message_mention` rows are therefore only ever written for users with access, so
+the notification path inherits the property rather than re-deriving it.
+
+### P0-MSG-04 — Reactions are lightweight and do not generate excessive notifications by default — **Complete**
+
+`message_reaction (message_id, user_id, emoji, created_at)` with the natural
+composite key, so a reaction is one narrow row. No notification is generated for
+a reaction — the notification paths cover mentions, replies, announcements and
+assignments, and `message_reaction` has no trigger. "Does not generate excessive
+notifications by default" is satisfied by generating none.
+
+### P0-MSG-05 — Edit within policy; deletion preserves an audit marker; admins may configure edit windows — **Partial**
+
+Two of three. Editing sets `edited_at`
+(`src/features/channels/services/message.commands.ts:252`), so a changed message
+carries visible evidence, and the file comments the intent. Deletion is soft —
+`message.deleted_at` — so the audit marker survives and history is not destroyed.
+Authorization is correct: `message_author_update` restricts updates to the author
+or an organization admin.
+
+**Edit windows are not configurable and not enforced.** There is no
+`edit_window` setting on the organization or channel and no time check in the
+update path, so an author may edit a message of any age indefinitely. For a tool
+whose messages become agenda items and decisions, an unbounded edit window on a
+message already cited elsewhere is the part worth closing.
+
+### P0-MSG-06 — Stable, permission-checked permalinks — **Complete**
+
+Permalinks are `/channels/<channel>?message=<id>` (channel) and
+`/messages/<conversation>` (DM), generated centrally in `global_search`'s `href`
+column and used by search, the palette and cross-references. They are stable
+because they are built from immutable ids.
+
+"Permission-checked" holds structurally: the destination reads the message
+through `message_read`, which requires `app.can_read_channel` or
+`app.is_conversation_member`. A permalink pasted into a task, meeting or report
+therefore resolves to a refusal for anyone unauthorized rather than disclosing
+the message — the property that makes it safe to embed.
+
+### P1-MSG-07 — Scheduled messages, cancellable before send — **Missing**
+
+No table, no column, no job. The catalogue has nothing matching `%schedul%` for
+messages; `scheduled-announcements` is a job for announcements
+(`announcement.publish_at`), a different entity. A user cannot schedule a channel
+or DM message.
+
+### P1-MSG-08 — Drafts persist and are recoverable after navigation — **Missing**
+
+No draft table, and no client-side fallback: the only `localStorage` use in the
+application is the theme toggle (`src/components/layout/topbar.tsx:95`). Typing a
+message and navigating away loses it, on every surface.
+
+### P1-MSG-09 — Save/bookmark messages with an optional personal reminder date — **Partial**
+
+Saving works end to end and is properly scoped. `saved_message` is keyed
+`(user_id, message_id)`, so what an individual saved is private to them, and it
+is read in three places — the channel view, the DM view, and a dedicated
+`/saved` page (`src/app/(workspace)/saved/page.tsx:39`).
+
+**The reminder date is not implemented.** `saved_message.remind_at` has **zero
+references in `src/`**: nothing sets it, nothing reads it, and no job scans it.
+The column is the whole of the "optional personal reminder date" clause, and it
+is inert.
+
+This is the same defect as P1-INB-05 (snooze) reached from a different
+direction — in both cases the schema anticipated a deferral feature that no code
+ever implemented.
+
+## Announcements
+
+### P0-ANN-01 — Mandatory announcements channel; auto-enrolled; cannot be left by ordinary members; prominent — **Partial**
+
+`channel.is_mandatory` exists and the dashboard reads it
+(`dashboard.queries.ts:241-246` selects the mandatory announcements channel), so
+prominence and the concept are implemented.
+
+The enforcement half is not evidenced. Nothing was found that prevents an
+ordinary member from leaving a mandatory channel — the constraint would have to
+live in a `channel_member` delete policy or a trigger keyed on
+`channel.is_mandatory`, and no such rule appears. Auto-enrolment likewise relies
+on `membership_source` being set correctly at creation rather than on a rule that
+re-establishes membership. This is the P0-COMM-03 gap seen from the side where it
+matters most.
+
+### P0-ANN-02 — Restricted posting configurable by admins; non-posters cannot create top-level messages — **Complete, and enforced in the database**
+
+This is the requirement most likely to have been left to the UI, and it was not.
+`channel.posting_policy` is `everyone | staff | admins`, and the `message_insert`
+policy's `WITH CHECK` calls `app.can_post_in_channel(channel_id)` for any message
+without a `thread_root_id` — that is, for exactly the top-level messages the
+requirement names. The live helper resolves the policy against
+organization-scoped role helpers:
+
+```
+case c.posting_policy
+  when 'everyone' then app.is_org_member(c.organization_id)
+  when 'staff'    then app.is_org_staff(c.organization_id)
+  when 'admins'   then app.is_org_admin(c.organization_id)
+end
+```
+
+The page component's policy check
+(`src/app/(workspace)/channels/[id]/page.tsx:96-106`) decides whether to render a
+composer; the database decides whether a message may exist. That is the right
+division, and worth stating because the inverse — a rule computed only by a
+component — is precisely how the invite-only sign-up hole survived in this
+project for weeks.
+
+### P0-ANN-03 — Reply policy: disabled, threaded-only, or normal — **Partial**
+
+`channel.reply_policy` holds all three values and **`disabled` is enforced**:
+`app.can_reply_in_channel` requires `c.reply_policy <> 'disabled'`.
+
+`threads_only` and `normal` are not distinguished by the database — the helper
+treats both as "replies allowed". The security consequence is nil, because a
+non-threaded message is a top-level post and already requires posting permission,
+so `threads_only` cannot be bypassed into something the user could not otherwise
+do. It is a presentation rule enforced only in the UI, which should be recorded
+as such rather than assumed to be a database guarantee.
+
+### P0-ANN-04 — Require acknowledgment by a deadline; authorized viewers see counts and outstanding recipients — **Complete**
+
+`announcement.requires_ack` and `ack_deadline` are set at compose time
+(`announcement.commands.ts:115-116`), the deadline converted through the
+organization's zone rather than the server's (this session's timezone work).
+`announcement_acknowledgment (announcement_id, user_id, acknowledged_at, method)`
+is a durable record — the `method` column distinguishes how it was given, and the
+component comment makes the intent explicit: "a durable record, not a reaction"
+(`acknowledge-button.tsx:10`).
+
+Counts and outstanding recipients follow from that table joined against active
+membership, and the announcements page reads `requires_ack`
+(`src/app/(workspace)/announcements/page.tsx:22`).
+
+### P0-ANN-05 — Pin with an expiration date; shown on Home until read or expired — **Missing**
+
+*Corrected during this audit.* My first pass recorded this Complete on the
+strength of `announcement.pinned_until` and `expires_at` existing as distinct
+columns. Checking which code writes them shows the feature does not exist.
+
+- **`pinned_until` has zero references in `src/`.** Nothing writes it and nothing
+  reads it. Pinning an announcement is not possible and would have no effect.
+- **`expires_at` is never written.** The compose dialog collects title, body,
+  priority, acknowledgment requirement, acknowledgment deadline and publish time
+  (`announcement-compose-dialog.tsx:55-92`) — there is no expiry field, and
+  `publishAnnouncement` does not set the column.
+
+The consequence is a piece of dead logic that reads as working code:
+`src/app/(workspace)/announcements/page.tsx:88` computes an expired flag as
+`Boolean(a.expires_at && new Date(a.expires_at) < new Date())`, which can never
+be true because the column is always null. Anyone reading that line would
+reasonably conclude expiry is implemented.
+
+The "until read" half of the requirement does work — the dashboard reads
+acknowledgement state to decide what still needs the viewer's attention. It is
+"until *expired*" that has no mechanism.
+
+This is the failure mode the briefing warns about, and I made it: a column is not
+a feature, and the check that separates them is asking who writes it.
+
+### P1-ANN-06 — Targeted announcements to organization, program, team, project or selected audience — **Missing**
+
+`announcement` has no audience column of any kind — no `program_id`, `team_id`,
+`project_id` or audience join table. Targeting is therefore only as coarse as the
+channel the announcement's message sits in, which is organization-wide for the
+mandatory channel. An announcement meant for one program must either go to
+everyone or be posted in that program's channel, which changes its nature from an
+announcement to a message.
+
+### P1-ANN-07 — Scheduled publication; drafts private to authorized editors — **Partial**
+
+Scheduling is real and running: `announcement.publish_at`, with the
+`scheduled-announcements` job on a five-minute cron, verified active in
+production (14 of 14 cron entries active). This session's timezone fix matters
+here — `publishAt` was being parsed in the server's zone, so an announcement set
+for 09:00 would have published at 05:00 local.
+
+**Drafts are not implemented.** There is no draft state on `announcement`; a row
+with a future `publish_at` is the nearest equivalent, and nothing marks a row as
+an unpublished draft or restricts it to authorized editors. So the second clause
+has no mechanism.
+
+### P1-ANN-08 — Escalation reminders for critical unread announcements, without spamming those who acknowledged — **Complete**
+
+`announcement-nudge` runs daily at 13:00 UTC (verified active). The
+anti-spam clause is satisfied structurally rather than by a filter in the job:
+`announcement_acknowledgment` is the join that determines who is outstanding, so
+an acknowledged user is absent from the recipient set by construction.
+`notification`'s `uq_notification_user_dedupe (user_id, dedupe_key)` gives a
+second guarantee — a duplicate nudge is not merely avoided, it is unrecordable.
+
+## Direct messages and inbox
+
+### P0-DM-01 — 1:1 conversations visible only to participants — **Complete**
+
+`conversation` + `conversation_member`, with the read policy reduced to a single
+predicate: `conversation_read: app.is_conversation_member(id)`. Messages inherit
+it — `message_read` requires `app.is_conversation_member(conversation_id)` for
+any message with a `conversation_id`.
+
+The table's policy set is worth noting as an instance of this project's
+guarantee-by-absence pattern: `conversation` has **only** SELECT and INSERT
+policies, no UPDATE and no DELETE, so a conversation cannot be renamed or removed
+by anyone — including an organization admin. Compliance access, which the
+requirement allows to be defined by policy, is therefore *not* implemented; there
+is no admin read path, which is a defensible default and should be a recorded
+decision rather than an accident.
+
+### P1-DM-02 — Group DMs with messages, threads, files and mentions; convertible to a private channel — **Partial**
+
+`conversation.is_group` and `conversation.title` support the group case, and
+group conversations get messages, threads (`thread_root_id` is independent of
+channel or conversation) and mentions for free.
+
+Two clauses fail. **Files** — there are no attachments anywhere (P0-MSG-01,
+P0-RES-01). **Conversion to a private channel** has no implementation: nothing
+migrates a conversation's messages to a channel, and `message` rows carry either
+`channel_id` or `conversation_id`, so conversion would need a real migration
+path rather than a flag flip.
+
+### P1-DM-03 — Mute, mark unread, search within, and leave group conversations — **Partial**
+
+`conversation_member` carries `last_read_at`, so mark-unread is expressible, and
+`global_search`'s message branch covers DM messages through the same
+invoker-rights path — so search-within works, if only via global search.
+
+**Mute is not supported for conversations.** `channel_member` has `muted_level`;
+`conversation_member` does not — it holds only `conversation_id`, `user_id`,
+`last_read_at`, `joined_at`. A user can mute a busy channel and cannot mute a
+busy group DM, which is the louder of the two. Leaving is likewise unevidenced;
+it would be a delete on `conversation_member`, and no such command was found.
+
+### P0-INB-01 — Unified inbox across notifications, mentions/replies, DMs, approvals, required announcements and Gmail, with source filters — **Partial**
+
+The unification is real and the Gmail half is the impressive part: the inbox page
+reads notifications, the Gmail connection and `gmail_message` in one pass
+(`src/app/(workspace)/inbox/page.tsx:47-57`), with a reply form
+(`GmailReplyForm`) so mail can be answered without leaving the Hub. Source
+filters exist (`{ key: "mention", label: "Mentions" }`, `:20`).
+
+Coverage of the six named sources is uneven: platform notifications, mentions and
+Gmail are directly represented; DMs, approvals/reviews and required announcements
+reach the inbox only insofar as they generate a `notification` row, so they
+appear as notifications rather than as first-class filterable sources. The
+requirement asks for source filters across all six.
+
+### P0-INB-02 — Two/three-pane responsive layout; mobile drill-in with preserved state — **Partial**
+
+The desktop list/detail split exists on the inbox route. Mobile drill-in is
+served by the app's responsive shell and the mobile bottom nav built in earlier
+work.
+
+"Preserved state" is the unmet clause and is the same finding as P1-MSG-08:
+with no draft persistence, drilling into an item and returning loses anything
+typed. No automated check covers the responsive behaviour either — `qa-matrix`
+exercises widths but does not run anywhere (TST-004).
+
+### P0-INB-03 — Link a relevant email or message to a program, project, task, CRM record, event or meeting — **Partial**
+
+The working direction is message-to-record, and it is genuinely wired:
+`source_message_id` is written from three paths in
+`src/features/channels/services/message.commands.ts` (`:290`, `:330`, `:443`),
+turning a message into a task, an agenda item or a decision while keeping the
+link back to its origin. Those are real, and the corresponding columns
+(`task.source_message_id`, `agenda_item.source_message_id`,
+`decision.source_message_id`) are read by the features that display provenance.
+
+Two qualifications keep this off Complete.
+
+First, coverage. Of the six targets the requirement names — program, project,
+task, CRM record, event, meeting — only **task** is directly supported, with
+meeting reachable via an agenda item. Program, project, CRM record and event have
+no linking path from a message.
+
+Second, the general mechanism is inert. `message.source_record_type` and
+`source_record_id` look like the polymorphic link that would cover the remaining
+four, but `source_record_id` has exactly **one** writer in the codebase
+(`meeting.commands.ts:648`, a system message about a meeting) and
+`source_record_type` likewise — and **nothing reads either column**. So the
+general facility exists in the schema, is written in one place, and is consumed
+nowhere.
+
+### P0-INB-04 — Triage: read/unread, star/save, archive/snooze, filter/search, convert to task — **Partial**
+
+Four of five. Read/unread is `notification.read_at` with a supporting index
+(`idx_notification_user (user_id, read_at, created_at DESC)`). Save is
+`saved_message`. Filter and search are present (`:20`, plus global search).
+Convert-to-task is `task.source_message_id`, written by the message commands.
+
+**Snooze does not exist** — see P1-INB-05.
+
+### P1-INB-05 — Defer an item until a chosen time; it returns to attention without losing context — **Missing**
+
+No snooze column and no snooze table (catalogue sweep for `%snooze%` returns
+nothing). `saved_message.remind_at` is the closest thing in the schema, but it
+belongs to saved messages rather than to inbox items and nothing reads it — no
+job scans `remind_at`, so even the reminder it implies does not fire.
+
+### P2-DM-04 — Optional presence/status indicator — **Missing**
+
+No presence table, no status column on `user_profile`, no realtime presence
+channel (the single realtime subscription in the codebase is the channel message
+feed, PERF-004). The requirement's caution about surveillance is satisfied
+vacuously.
+
