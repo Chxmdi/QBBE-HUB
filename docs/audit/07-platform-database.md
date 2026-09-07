@@ -1,11 +1,11 @@
 # Requirement coverage audit — 07 platform, database, jobs, CI, environment, tests
 
-**Complete — 58 of 58 assessed.**
+**Complete — 59 of 59 assessed** (ENV-002 added after it was found to have been cited but never assessed).
 
 | Verdict | Count |
 |---|---|
 | Complete | 26 |
-| Partial | 21 |
+| Partial | 22 |
 | Missing | 9 |
 | Unverifiable here | 1 |
 | Not applicable | 1 |
@@ -581,6 +581,53 @@ staging, no migration has ever been rehearsed before being applied to the live
 database, and "verify against production inside a transaction that always rolls
 back" — the technique this project has had to invent and use repeatedly — is a
 workaround for its absence.
+
+### ENV-002 (P0) — QBBE must own the Git organization/repository, hosting project, Supabase organization/project, Google Cloud project, email provider account, domain/DNS, monitoring accounts and recovery email addresses — **Partial, and the verifiable half fails**
+
+*Assessed late.* This ID was cited in passing in the identity report
+(`01-identity-access.md:50`, quoting the backup-recovery runbook's "keep >=2
+trusted admins at all times (ENV-002)") and never given a verdict; the citation
+was mistaken for an assessment when this audit's scope was partitioned. It is
+recorded here in full.
+
+Most of the requirement is about account ownership and cannot be settled from
+this container — who holds the Google Cloud project, the email provider account,
+the domain and DNS, the monitoring accounts and the recovery addresses is not
+visible from the code. Those are **unverifiable here**, and the way to settle
+them is an ownership inventory naming the owning entity and two named
+administrators for each.
+
+Two are verifiable, and both point the same way.
+
+**The Git repository is owned by an individual, not by QBBE.**
+`GET /repos/Chxmdi/QBBE-HUB` reports `owner.type: "User"` — a personal GitHub
+account, not an organization. The requirement's first clause is therefore not
+met. The consequence is the one it exists to prevent: QBBE does not control its
+own source repository, and cannot add or remove collaborators, transfer it, or
+recover it independently of that individual.
+
+**The Supabase project sits in an organization holding unrelated personal
+projects.** `list_projects` returns `qbbe-hub` alongside `Fonder`,
+`claims-engine`, `prepos-ai`, `gridsight`, `ojoro-festival-2027` and a project
+named for a personal email address, all under one organization id. That is the
+signature of a personal Supabase account rather than a QBBE-owned organization.
+This is inference from project naming rather than a direct read of the
+organization's ownership, so it should be confirmed — but it is strong enough to
+act on.
+
+Moving both is straightforward while the project is small and gets harder with
+every integration bound to them: a GitHub organization transfer preserves history
+and issues, and a Supabase project transfer preserves the database.
+
+**One related observation, outside this requirement's wording but arising from
+it.** The repository is **public** (`private: false`). That is why
+`docs/audit/.spec-source.md` is gitignored, and it also means these audit reports
+are published. They are written as engineering assessments, not exploit notes,
+but several name real, currently-open weaknesses — that `main` requires no status
+check, that a preview deployment writes to the production database, that the
+storage upload policy is unscoped. Whether that should be public is a decision
+for QBBE rather than a finding against this requirement, and it is worth making
+deliberately.
 
 ### ENV-003 (P0) — Secrets in environment-specific secret management; only public values use NEXT_PUBLIC — **Complete**
 
