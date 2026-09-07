@@ -276,6 +276,8 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
   private limitValue: number | null = null;
   private orderBy: { column: string; ascending: boolean } | null = null;
   private singleMode: "one" | "maybe" | null = null;
+  private onConflict: string[] | null = null;
+  private ignoreDuplicates = false;
 
   constructor(
     private readonly db: FakeSupabase,
@@ -295,6 +297,25 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
   insert(payload: Row | Row[]) {
     this.mode = "insert";
     this.payload = payload;
+    return this;
+  }
+
+  /**
+   * `upsert(..., { onConflict, ignoreDuplicates: true })` — the one form the
+   * application uses, for notification dedupe. Rows colliding on the named
+   * columns are skipped rather than inserted, and are absent from the returned
+   * set, which is what lets a caller count what it actually created.
+   */
+  upsert(
+    payload: Row | Row[],
+    options?: { onConflict?: string; ignoreDuplicates?: boolean },
+  ) {
+    this.mode = "insert";
+    this.payload = payload;
+    this.onConflict = options?.onConflict
+      ? options.onConflict.split(",").map((column) => column.trim())
+      : null;
+    this.ignoreDuplicates = options?.ignoreDuplicates ?? false;
     return this;
   }
 
@@ -438,7 +459,22 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
     if (fault) return { data: null, error: fault };
 
     if (this.mode === "insert") {
-      const candidates = Array.isArray(this.payload) ? this.payload : [this.payload];
+      let candidates = Array.isArray(this.payload) ? this.payload : [this.payload];
+
+      if (this.onConflict && this.ignoreDuplicates) {
+        // Skip rows colliding on the conflict target, both against what is
+        // stored and against earlier rows in this same statement.
+        const keyOf = (row: Row) =>
+          this.onConflict!.map((column) => String(row[column])).join("\u0000");
+        const seen = new Set<string>(store.map(keyOf));
+        candidates = candidates.filter((candidate) => {
+          const key = keyOf(candidate);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }
+
       // Postgres applies the whole statement or none of it.
       for (const candidate of candidates) {
         if (this.db.violatesUnique(this.table, candidate)) {
