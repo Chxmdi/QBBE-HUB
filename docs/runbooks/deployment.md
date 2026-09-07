@@ -54,17 +54,51 @@ recovery emails (ENV-002).
 
 ## Branches and gates (CICD-001)
 
-`main` is the release branch and the only one production deploys from. It must
-be protected in GitHub settings — Settings → Branches → Add rule for `main`:
+`main` is the release branch and the only one production deploys from.
 
-- Require a pull request before merging (at least one approval).
-- Require status checks to pass: **Verify** and **Database security**.
-- Require branches to be up to date before merging.
-- Do not allow force pushes or deletions.
+**Current state: the protection is not applied.** As of the 2026-09 requirement
+audit, `main` is marked protected but
+`required_status_checks.enforcement_level` is `"off"` with zero contexts and
+zero rulesets — so **no status check is required to merge**, and a pull request
+with `Verify` and `Database security` both red can be merged. Three merges have
+landed on `main` with zero reviews. This section previously described the
+settings as though they were in place; they are not, and the sentence "there is
+no path to production that skips it" was false.
+
+Apply it with:
+
+```sh
+GITHUB_TOKEN=<token with administration: write> scripts/protect-main.sh
+```
+
+The script is re-runnable, updates in place, and prints the live rules
+afterwards so the result is verified rather than assumed. It sets:
+
+- A pull request required before merging.
+- Status checks required to pass: **Verify** and **Database security**.
+- No force pushes, no deletion of `main`.
+
+Two deliberate departures from the specification's wording, both recorded here
+rather than left as surprises:
+
+- `required_approving_review_count` is **0**, not 1. CICD-001 asks for review
+  before merge, but with effectively one human maintainer, requiring an approval
+  nobody can give makes `main` unmergeable rather than protected. Raise it to 1
+  as soon as a second maintainer exists; that single change completes CICD-001.
+- Branches are **not** required to be up to date before merging
+  (`strict_required_status_checks_policy: false`). Strict mode is more correct —
+  it tests the actual merge result — and on a low-traffic repository it mostly
+  produces rebase churn. Turn it on if two people start landing work in parallel.
+
+The ruleset carries **no bypass actors**, so it applies to administrators too.
+That is intentional: the audit found the admin bypass had been used to merge
+three times, and an escape hatch nobody records using is how the previous gap
+persisted. If an emergency merge is genuinely needed, add a bypass actor
+deliberately and remove it afterwards.
 
 Work happens on short-lived branches off `main` and returns through a pull
-request. CI runs on every pull request and on every push to `main`; there is no
-path to production that skips it.
+request. CI runs on every pull request and on every push to `main` — and once
+the script above has been run, there is no path to production that skips it.
 
 Two gates exist specifically to catch drift that only shows up at runtime:
 
