@@ -179,3 +179,35 @@ export function zonedDueInfo(
 
   return { days, withinThisWeek: days > 0 && days <= daysLeftInWeek };
 }
+
+/**
+ * Adds whole days to a calendar date, staying a calendar date.
+ *
+ * Deliberately zone-free. "Seven days after 2026-09-05" is 2026-09-12 in every
+ * zone — it is a question about the calendar, not about elapsed time. Computing
+ * it as `Date.now() + 7 * 86400_000` and then reading the local date back is
+ * what introduces a zone into an answer that does not have one, and lands a day
+ * out whenever those seven days contain a DST transition.
+ */
+export function addCalendarDays(date: string, days: number): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
+  if (!match) return null;
+  const [, y, m, d] = match;
+  const shifted = Date.UTC(Number(y), Number(m) - 1, Number(d)) + days * 86_400_000;
+  return Number.isNaN(shifted) ? null : new Date(shifted).toISOString().slice(0, 10);
+}
+
+/**
+ * The instant a calendar date begins in `timeZone`.
+ *
+ * Needed wherever a `timestamptz` column is filtered by a local day. Comparing
+ * such a column against `${date}T00:00:00Z` asks for UTC midnight, which in
+ * Toronto is the previous evening — so a "today" window built that way starts
+ * four or five hours early and carries yesterday's late entries into it.
+ */
+export function startOfDayInstant(
+  date: string,
+  timeZone: string = DEFAULT_TIME_ZONE,
+): Date | null {
+  return wallTimeToInstant(`${date}T00:00`, timeZone);
+}
