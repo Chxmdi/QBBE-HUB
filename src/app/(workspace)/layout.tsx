@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/layout/workspace-shell";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requiresAdministratorMfa } from "@/features/auth/mfa";
 
 const OPEN_STATUSES = [
   "not_started", "ready", "in_progress", "waiting", "blocked", "in_review",
@@ -14,6 +15,21 @@ export default async function WorkspaceLayout({
 }) {
   const session = await requireSession();
   const supabase = await createSupabaseServerClient();
+
+  // Administrators must complete the second factor before the workspace
+  // renders. The database independently applies the same requirement to its
+  // privileged authorization helpers, so direct API calls cannot bypass this
+  // navigation guard.
+  if (session.isAdmin) {
+    const { data: assurance, error: assuranceError } =
+      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (
+      assuranceError ||
+      requiresAdministratorMfa(session.isAdmin, assurance.currentLevel)
+    ) {
+      redirect("/mfa");
+    }
+  }
 
   // First run lands in onboarding rather than an unexplained dashboard
   // (§10.18).

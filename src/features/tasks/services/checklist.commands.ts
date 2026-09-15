@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { readAll } from "@/lib/supabase/read-all";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
@@ -48,18 +49,16 @@ export async function toggleChecklistItem(
 }
 
 export async function addTaskDependency(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  await requireSession();
   const parsed = taskDependencySchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Pick two valid tasks." };
   const { blockingTaskId, blockedTaskId } = parsed.data;
   const supabase = await createSupabaseServerClient();
-  const { data: existing } = await supabase
+  const { data: existing, error: readError } = await readAll(supabase
     .from("task_dependency")
     .select("blocking_task_id, blocked_task_id")
-    .or(
-      `blocking_task_id.eq.${blockingTaskId},blocked_task_id.eq.${blockingTaskId},blocking_task_id.eq.${blockedTaskId},blocked_task_id.eq.${blockedTaskId}`,
-    );
+    .order("blocked_task_id"), "blocking_task_id");
+  if (readError) return { ok: false, error: "Could not check dependencies. Please retry." };
   const cycle = circularDependencyError(
     blockingTaskId,
     blockedTaskId,
@@ -72,6 +71,7 @@ export async function addTaskDependency(input: unknown): Promise<ActionResult> {
     blocked_task_id: blockedTaskId,
   });
   if (error?.code === "23505") return { ok: true };
+  if (error?.code === "23514") return { ok: false, error: "That dependency would create a cycle." };
   if (error) return { ok: false, error: "Could not save the dependency." };
   revalidatePath("/", "layout");
   return { ok: true };
@@ -81,8 +81,7 @@ export async function removeTaskDependency(
   blockingTaskId: string,
   blockedTaskId: string,
 ): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  await requireSession();
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("task_dependency")

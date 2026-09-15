@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
  */
 const ADMIN_SECTIONS = [
   { href: "/admin", label: "Workspace" },
+  { href: "/admin/access", label: "Access impact" },
   { href: "/admin/jobs", label: "Jobs" },
   { href: "/admin/email", label: "Email" },
   { href: "/admin/exports", label: "Exports" },

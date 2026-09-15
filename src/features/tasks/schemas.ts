@@ -38,6 +38,9 @@ export const createTaskSchema = z.object({
   assigneeId: z.string().uuid().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
   dueAt: z.string().optional(),
+  completionCriteria: z.string().trim().max(2000).optional(),
+  reviewerId: z.string().uuid().optional(),
+  approverId: z.string().uuid().optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -80,7 +83,7 @@ export function blockedReasonError(
   return null;
 }
 
-/** Rejects a self-dependency or an A→B plus B→A pair (P1-TSK-06). */
+/** Reject a new edge whenever the target can already reach its source. */
 export function circularDependencyError(
   blockingTaskId: string,
   blockedTaskId: string,
@@ -89,13 +92,20 @@ export function circularDependencyError(
   if (blockingTaskId === blockedTaskId) {
     return "A task cannot depend on itself.";
   }
-  const wouldCycle = existing.some(
-    (row) =>
-      row.blocking_task_id === blockedTaskId &&
-      row.blocked_task_id === blockingTaskId,
-  );
-  if (wouldCycle) {
-    return "That dependency would create a cycle.";
+  const visited = new Set<string>();
+  const pending = [blockedTaskId];
+  const outgoing = new Map<string, string[]>();
+  for (const edge of existing) {
+    const targets = outgoing.get(edge.blocking_task_id) ?? [];
+    targets.push(edge.blocked_task_id);
+    outgoing.set(edge.blocking_task_id, targets);
+  }
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (id === blockingTaskId) return "That dependency would create a cycle.";
+    if (visited.has(id)) continue;
+    visited.add(id);
+    pending.push(...outgoing.get(id) ?? []);
   }
   return null;
 }

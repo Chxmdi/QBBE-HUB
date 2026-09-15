@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -12,6 +13,7 @@ jobs:
   verify:
     name: Verify
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -40,8 +42,8 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
 
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Accessibility & responsive QA (public routes)
         run: |
@@ -55,12 +57,21 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
 
+      - name: Preserve browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-browser-failures
+          path: test-results/
+          retention-days: 7
+
       - name: Dependency audit (high+)
         run: npm audit --audit-level=high
 
   database-security:
     name: Database security
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -85,6 +96,38 @@ jobs:
 
       - name: Database security advisor
         run: supabase db advisors --local --type security --fail-on error
+
+      - name: Configure synthetic local Auth for browser checks
+        run: |
+          supabase status -o json > "$RUNNER_TEMP/supabase-status.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const status = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/supabase-status.json`, 'utf8'));
+          if (!status.API_URL || !status.ANON_KEY) throw new Error('Local Supabase configuration missing');
+          fs.appendFileSync(process.env.GITHUB_ENV,
+            `NEXT_PUBLIC_SUPABASE_URL=${status.API_URL}\nNEXT_PUBLIC_SUPABASE_ANON_KEY=${status.ANON_KEY}\n`);
+          fs.unlinkSync(`${process.env.RUNNER_TEMP}/supabase-status.json`);
+          NODE
+
+      - name: Build authenticated test app
+        run: npm run build
+
+      - name: Install authenticated test browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Authenticated lifecycle and access checks
+        run: |
+          npx next start -p 3000 -H 127.0.0.1 &
+          npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
+          npx playwright test hello-hub access-impact --project=chromium
+
+      - name: Preserve authenticated failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-browser-failures
+          path: test-results/
+          retention-days: 7
 
       - name: Stop local Supabase
         if: always()

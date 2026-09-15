@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readAll, type PagedQuery } from "@/lib/supabase/read-all";
 
 /**
  * What each kind of export actually contains.
@@ -15,6 +16,7 @@ export interface BuildRequest {
   organizationId: string;
   subjectUserId: string | null;
   params: Record<string, unknown>;
+  requestedBy?: string;
 }
 
 export interface ExportSection {
@@ -30,9 +32,10 @@ export interface BuiltExport {
 async function section(
   db: SupabaseClient,
   name: string,
-  query: PromiseLike<{ data: unknown; error: { message: string } | null }>,
+  query: PagedQuery<unknown>,
+  orderColumn = "id",
 ): Promise<ExportSection> {
-  const { data, error } = await query;
+  const { data, error } = await readAll(query, orderColumn);
   if (error) throw new Error(`could not read ${name}: ${error.message}`);
   return { name, rows: (data ?? []) as Record<string, unknown>[] };
 }
@@ -45,11 +48,8 @@ async function organizationData(
   return Promise.all([
     section(db, "people", db
       .from("user_profile")
-      .select("id, full_name, email, title, timezone, created_at")
-      .in("id",
-        (await db.from("organization_membership")
-          .select("user_id").eq("organization_id", organizationId)
-        ).data?.map((m) => m.user_id) ?? [])),
+      .select("id, full_name, email, title, timezone, created_at, organization_membership!inner(organization_id)")
+      .eq("organization_membership.organization_id", organizationId)),
     section(db, "programs", db
       .from("program")
       .select("id, name, description, status, created_at")
@@ -97,17 +97,22 @@ async function personData(
   { organizationId, subjectUserId }: BuildRequest,
 ): Promise<ExportSection[]> {
   if (!subjectUserId) throw new Error("a person export needs a subject");
+  const { data: membership, error } = await db.from("organization_membership")
+    .select("user_id").eq("organization_id", organizationId)
+    .eq("user_id", subjectUserId).maybeSingle();
+  if (error) throw new Error(`could not verify export subject: ${error.message}`);
+  if (!membership) throw new Error("export subject does not belong to this organization");
 
   return Promise.all([
     section(db, "profile", db
       .from("user_profile")
-      .select("id, full_name, email, title, timezone, phone, created_at")
+      .select("id, full_name, email, title, timezone, created_at")
       .eq("id", subjectUserId)),
     section(db, "membership", db
       .from("organization_membership")
       .select("organization_id, role, status, created_at")
       .eq("user_id", subjectUserId)
-      .eq("organization_id", organizationId)),
+      .eq("organization_id", organizationId), "user_id"),
     section(db, "tasks_assigned", db
       .from("task")
       .select("id, title, status, due_at, completed_at, created_at")
@@ -116,6 +121,7 @@ async function personData(
     section(db, "messages_written", db
       .from("message")
       .select("id, channel_id, body, created_at")
+      .eq("organization_id", organizationId)
       .eq("author_id", subjectUserId)
       .is("deleted_at", null)),
     section(db, "notifications", db
@@ -126,11 +132,12 @@ async function personData(
     section(db, "notification_preferences", db
       .from("notification_preference")
       .select("*")
-      .eq("user_id", subjectUserId)),
+      .eq("user_id", subjectUserId), "user_id"),
     section(db, "email_deliveries", db
       .from("email_delivery")
       .select("id, subject, status, created_at, sent_at")
-      .eq("user_id", subjectUserId)),
+      .eq("organization_id", organizationId)
+      .eq("recipient_user_id", subjectUserId)),
   ]);
 }
 
@@ -156,17 +163,40 @@ async function crmContacts(
 
 async function taskHistory(
   db: SupabaseClient,
-  { organizationId }: BuildRequest,
+  { organizationId, requestedBy }: BuildRequest,
 ): Promise<ExportSection[]> {
-  return [
-    await section(db, "tasks", db
-      .from("task")
-      .select(
-        "id, title, description, status, priority, due_at, completed_at, " +
-          "project_id, program_id, assignee_id, created_at",
-      )
-      .eq("organization_id", organizationId)),
-  ];
+  const tasks = await section(db, "tasks", db
+    .from("task")
+    .select(
+      "id, title, description, status, priority, due_at, completed_at, " +
+        "project_id, program_id, assignee_id, created_at",
+    )
+    .eq("organization_id", organizationId));
+  if (!requestedBy) return [tasks];
+  const visible: Record<string, unknown>[] = [];
+  for (const row of tasks.rows) {
+    const projectId = row.project_id as string | null;
+    const programId = row.program_id as string | null;
+    if (projectId) {
+      const { data } = await db.rpc("actor_has_project_capability", {
+        p_user: requestedBy,
+        p_project: projectId,
+        p_capability: "read",
+      });
+      if (data === true) visible.push(row);
+      continue;
+    }
+    if (programId) {
+      const { data } = await db.rpc("actor_has_program_capability", {
+        p_user: requestedBy,
+        p_program: programId,
+        p_capability: "read",
+      });
+      if (data === true) visible.push(row);
+      continue;
+    }
+  }
+  return [{ name: "tasks", rows: visible }];
 }
 
 async function reportBundle(

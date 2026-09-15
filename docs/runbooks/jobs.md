@@ -50,6 +50,7 @@ Set the matching value in the application environment:
 | `EMAIL_PROVIDER_API_KEY` | Resend API key. Absent means the log transport (see below). |
 | `EMAIL_FROM_ADDRESS` | A verified sender on a QBBE-controlled domain. |
 | `NEXT_PUBLIC_APP_URL` | The origin used to build absolute links inside email. |
+| `CLAMAV_SOCKET` | Private Unix socket used by the document-scanning job. Required on its QBBE-controlled job host. |
 
 Until `configure_job_runner` has been run, every job records a `failed` run
 saying so — at most once an hour, so the message stays visible without burying
@@ -75,6 +76,7 @@ All times are UTC, because pg_cron evaluates in UTC.
 | `google-sync` | every 15 min | Pulls Gmail metadata, Calendar overlay and Drive links for every connected account. |
 | `gmail-watch-renew` | 07:00 | Renews Gmail push subscriptions a day before they lapse. |
 | `vms-sync` | 08:00 | Refreshes volunteer availability from the Volunteer Management System. |
+| `scan-documents` | every minute | Scans pending private uploads; only a clean ClamAV verdict releases a download. |
 | `purge-job-history` | 06:00 | Trims `job_run` and `email_delivery` past retention. |
 
 The digest runs hourly rather than at a fixed time on purpose: each recipient's
@@ -83,11 +85,16 @@ theirs, so 8am stays 8am across a daylight-saving change and across zones.
 
 ## Delivery guarantees
 
-pgmq is **at-least-once**. Exactly-once *effects* come from the handlers:
+pgmq is **at-least-once**. Handlers suppress completed duplicates and make
+provider retries as safe as their transports allow:
 
 - Every message resolves to a `dedupe_key`. `email_delivery` has a unique index
-  on it, so a re-delivered message finds the existing row and continues it
-  rather than sending a second copy.
+  on it, so completed deliveries are not sent again and concurrent workers
+  cannot both claim the same pending row.
+- Resend receives the stable delivery id as its idempotency key, covering the
+  ambiguous case where the provider accepted mail but the ledger update was
+  lost. Resend retains those keys for 24 hours. SMTP has no equivalent
+  guarantee and may duplicate mail after an ambiguous transport failure.
 - Nothing is acknowledged before its outcome is written. A worker killed
   mid-send leaves the message on the queue with the ledger row still `sending`;
   the visibility timeout re-delivers it and the attempt resumes.

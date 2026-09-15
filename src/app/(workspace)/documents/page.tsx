@@ -28,7 +28,7 @@ export default async function DocumentsPage({
       supabase
         .from("document")
         .select(
-          "id, title, description, kind, mime_type, size_bytes, visibility, created_at, " +
+          "id, title, description, kind, mime_type, size_bytes, scan_status, visibility, created_at, " +
             "owner:owner_id(full_name), project:project_id(id, name), program:program_id(id, name)",
         )
         .is("archived_at", null)

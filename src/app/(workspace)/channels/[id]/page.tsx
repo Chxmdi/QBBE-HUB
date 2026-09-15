@@ -56,7 +56,7 @@ export default async function ChannelPage({
   ] = await Promise.all([
     supabase
       .from("channel_member")
-      .select("role")
+      .select("role, membership_source")
       .eq("channel_id", id)
       .eq("user_id", session.userId)
       .maybeSingle(),
@@ -165,7 +165,12 @@ export default async function ChannelPage({
             />
           </>
         ) : null}
-        {isMember && !channel.is_mandatory ? (
+        {isMember && membership?.membership_source !== "manual" ? (
+          <Badge tone="neutral">
+            {membership?.membership_source === "team" ? "Team access" : "Managed access"}
+          </Badge>
+        ) : null}
+        {isMember && !channel.is_mandatory && membership?.membership_source === "manual" ? (
           <LeaveChannelButton channelId={channel.id} />
         ) : null}
       </header>

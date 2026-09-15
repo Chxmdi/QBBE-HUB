@@ -47,6 +47,7 @@ export function MemberRoleSelect({
         className="h-8 w-32 text-[12.5px]"
       >
         <option value="admin">Admin</option>
+        <option value="leadership_viewer">Leadership viewer</option>
         <option value="staff">Staff</option>
         <option value="volunteer">Volunteer</option>
         <option value="guest">Guest</option>

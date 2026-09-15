@@ -38,6 +38,8 @@ export const getSessionContext = cache(
       .select("organization_id, role, status, user_profile:user_id(*), organization:organization_id(timezone)")
       .eq("user_id", user.id)
       .eq("status", "active")
+      .order("joined_at", { ascending: true })
+      .limit(1)
       .maybeSingle();
 
     if (!membership) return null;
@@ -73,7 +75,11 @@ export async function requireSession(): Promise<SessionContext> {
   redirect("/account-inactive");
 }
 
-/** Route gate for staff-and-above surfaces (portfolio, CRM, reports). */
+/**
+ * Route gate for organization-wide staff surfaces (CRM administration).
+ * Record pages should use `requireSession` and let RLS plus capability
+ * helpers decide visibility so assigned volunteers are not bounced home.
+ */
 export async function requireStaff(): Promise<SessionContext> {
   const session = await requireSession();
   if (!session.isStaff) redirect("/");

@@ -1,3 +1,4 @@
+import { readAll } from "@/lib/supabase/read-all";
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -51,47 +52,51 @@ export async function buildReportSnapshot(
   };
 
   if (reportType === "program_quarterly") {
-    const [{ data: program }, { data: projects }, { data: tasks }, { data: meetings }, { data: decisions }, { data: events }, { data: updates }] =
-      await Promise.all([
+    const results = await Promise.all([
         supabase
           .from("program")
           .select("name, description, lead:lead_id(full_name)")
           .eq("id", programId!)
           .maybeSingle(),
-        supabase
+        readAll(supabase
           .from("project")
           .select("id, name, stage, health, outcome, target_date")
           .eq("program_id", programId!)
-          .is("archived_at", null),
-        supabase
+          .is("archived_at", null)),
+        readAll(supabase
           .from("task")
           .select("id, title, status, completed_at, due_at")
           .eq("program_id", programId!)
-          .is("archived_at", null),
-        supabase
+          .is("archived_at", null)),
+        readAll(supabase
           .from("meeting")
           .select("id, title, starts_at, status")
           .eq("program_id", programId!)
           .gte("starts_at", periodStart)
-          .lt("starts_at", periodEndExclusive),
-        supabase
+          .lt("starts_at", periodEndExclusive)),
+        readAll(supabase
           .from("decision")
-          .select("id, title, decided_at")
+          .select("id, title, decided_at, project:project_id!inner(program_id)")
+          .eq("project.program_id", programId!)
           .gte("decided_at", periodStart)
-          .lt("decided_at", periodEndExclusive),
-        supabase
+          .lt("decided_at", periodEndExclusive)),
+        readAll(supabase
           .from("event")
           .select("id, name, starts_at, status")
           .eq("program_id", programId!)
           .gte("starts_at", periodStart)
-          .lt("starts_at", periodEndExclusive),
-        supabase
+          .lt("starts_at", periodEndExclusive)),
+        readAll(supabase
           .from("project_status_update")
-          .select("id, health, progress_summary, created_at, project_id")
+          .select("id, health, progress_summary, created_at, project_id, project:project_id!inner(program_id)")
+          .eq("project.program_id", programId!)
           .gte("created_at", periodStart)
-          .lt("created_at", periodEndExclusive)
-          .limit(50),
+          .lt("created_at", periodEndExclusive)),
       ]);
+    if (results.some(result => result.error)) {
+      return { ok: false, error: "Could not read all report data. Please retry." };
+    }
+    const [{ data: program }, { data: projects }, { data: tasks }, { data: meetings }, { data: decisions }, { data: events }, { data: updates }] = results;
 
     if (!program) return { ok: false, error: "Program not found." };
     title = `${program.name} — Quarterly report (${periodStart} → ${periodEnd})`;
@@ -123,13 +128,12 @@ export async function buildReportSnapshot(
         completed_at: t.completed_at,
       })),
       meetings: meetings ?? [],
-      decisions: (decisions ?? []).slice(0, 30),
+      decisions: decisions ?? [],
       events: events ?? [],
       status_updates: (updates ?? []).filter((u) => projectIds.has(u.project_id)),
     });
   } else {
-    const [{ data: project }, { data: tasks }, { data: milestones }, { data: updates }, { data: decisions }] =
-      await Promise.all([
+    const results = await Promise.all([
         supabase
           .from("project")
           .select(
@@ -137,27 +141,29 @@ export async function buildReportSnapshot(
           )
           .eq("id", projectId!)
           .maybeSingle(),
-        supabase
+        readAll(supabase
           .from("task")
           .select("id, title, status, completed_at, due_at, blocked_reason")
           .eq("project_id", projectId!)
-          .is("archived_at", null),
-        supabase
+          .is("archived_at", null)),
+        readAll(supabase
           .from("milestone")
           .select("id, name, due_date, completed_at")
-          .eq("project_id", projectId!),
-        supabase
+          .eq("project_id", projectId!)),
+        readAll(supabase
           .from("project_status_update")
           .select("id, health, progress_summary, next_steps, blockers, created_at")
           .eq("project_id", projectId!)
-          .order("created_at", { ascending: false })
-          .limit(10),
-        supabase
+          .order("created_at", { ascending: false })),
+        readAll(supabase
           .from("decision")
           .select("id, title, decided_at")
-          .eq("project_id", projectId!)
-          .limit(30),
+          .eq("project_id", projectId!)),
       ]);
+    if (results.some(result => result.error)) {
+      return { ok: false, error: "Could not read all report data. Please retry." };
+    }
+    const [{ data: project }, { data: tasks }, { data: milestones }, { data: updates }, { data: decisions }] = results;
 
     if (!project) return { ok: false, error: "Project not found." };
     title = `${project.name} — Project report (${periodStart} → ${periodEnd})`;

@@ -19,11 +19,15 @@ export default defineConfig({
     // (Cursor Cloud sandbox). GitHub Actions and local `npx playwright
     // install` put browsers in ~/.cache/ms-playwright; a hardcoded
     // /opt/pw-browsers path makes CI fail to launch.
-    launchOptions: process.env.QA_CHROME_PATH
-      ? { executablePath: process.env.QA_CHROME_PATH }
-      : undefined,
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "chromium", use: {
+      ...devices["Desktop Chrome"],
+      launchOptions: process.env.QA_CHROME_PATH
+        ? { executablePath: process.env.QA_CHROME_PATH }
+        : undefined,
+    } },
+    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    { name: "webkit", use: { ...devices["Desktop Safari"] } },
   ],
 });

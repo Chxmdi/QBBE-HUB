@@ -86,10 +86,13 @@ export function DocumentUploadDialog({
     setProgress(null);
 
     if (!result.ok) {
+      // Registration can fail after Storage accepted the bytes. The matching
+      // policy permits owners to remove only their own unregistered uploads.
+      await supabase.storage.from("documents").remove([path]);
       setError(result.error ?? "Could not save the document record.");
       return;
     }
-    toast("Document uploaded.");
+    toast("Document uploaded. Downloads become available after the security check.");
     setOpen(false);
     router.refresh();
   }
@@ -178,8 +181,8 @@ export function DocumentUploadDialog({
               <Label htmlFor="doc-file">File</Label>
               <Input id="doc-file" name="file" type="file" required />
               <FieldHint>
-                Up to 25 MB. Files are stored privately and served through
-                short-lived links.
+                Up to 25 MB. Files stay private and unavailable for download until
+                their security check passes.
               </FieldHint>
             </div>
             <div>

@@ -35,6 +35,8 @@ const STATUS_TONE = {
   approved: "success",
   declined: "danger",
   withdrawn: "neutral",
+  deferred: "warning",
+  returned: "warning",
 } as const;
 
 const HIGHLIGHT = "bg-accent/15 ring-1 ring-brand/40";

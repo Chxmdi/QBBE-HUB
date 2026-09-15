@@ -20,11 +20,14 @@ export const SEARCH_RESULT_TYPES = [
   "channel",
   "meeting",
   "event",
+  "agenda",
+  "contact",
   "document",
   "risk",
   "issue",
   "opportunity",
   "crm",
+  "comment",
   "message",
 ] as const;
 
@@ -45,11 +48,14 @@ export const SEARCH_TYPE_LABELS: Record<
   channel: { singular: "Channel", plural: "Channels" },
   meeting: { singular: "Meeting", plural: "Meetings" },
   event: { singular: "Event", plural: "Events" },
+  agenda: { singular: "Agenda item", plural: "Agenda items" },
+  contact: { singular: "Contact", plural: "Contacts" },
   document: { singular: "Document", plural: "Documents" },
   risk: { singular: "Risk", plural: "Risks" },
   issue: { singular: "Issue", plural: "Issues" },
   opportunity: { singular: "Opportunity", plural: "Opportunities" },
   crm: { singular: "Relationship", plural: "Relationships" },
+  comment: { singular: "Comment", plural: "Comments" },
   message: { singular: "Message", plural: "Messages" },
 };
 

@@ -100,3 +100,12 @@ for past-deadline announcements that still require acknowledgement. Keys are
 scoped to the record, recipient, and day where repeat reminders are intended,
 so retries and overlapping cron invocations cannot duplicate alerts. Execution
 results are recorded in Admin → background jobs.
+
+## Workstream 6 live gate
+
+`scripts/verify-integrations.sh` refuses to run until QBBE-owned
+`QBBE_SENDER_DOMAIN`, `QBBE_GOOGLE_CLIENT_ID`, `QBBE_VMS_BASE_URL` and
+`QBBE_TEST_RECIPIENT` are set. Do not substitute personal accounts. When those
+values exist, prove INT-EMAIL, INT-GMAIL, INT-CALENDAR, INT-DRIVE and INT-VMS
+against authorized recipients and record the dated run in
+`docs/acceptance-matrix.md`.

@@ -25,6 +25,7 @@ import { emailApiKey, emailFromAddress } from "@/lib/env";
 import { sendSmtpMail } from "@/lib/smtp";
 
 export interface OutboundEmail {
+  idempotencyKey?: string;
   to: string;
   subject: string;
   text: string;
@@ -86,6 +87,7 @@ async function sendViaResend(email: OutboundEmail, apiKey: string): Promise<Send
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        ...(email.idempotencyKey ? { "Idempotency-Key": email.idempotencyKey } : {}),
       },
       body: JSON.stringify({
         from: emailFromAddress(),

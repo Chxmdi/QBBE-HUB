@@ -6,10 +6,11 @@ import { HealthBadge } from "@/components/shared/status-badges";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProgramCreateDialog } from "@/features/programs/components/program-create-dialog";
+import { summarizeProjectHealth } from "@/features/dashboard/health";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
-import { requireStaff } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Project, ProjectHealth } from "@/types/entities";
+import type { Project } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Programs" };
 export const dynamic = "force-dynamic";
@@ -25,21 +26,22 @@ interface ProgramRow {
 export default async function ProgramsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ create?: string }>;
+  searchParams: Promise<{ create?: string; status?: string }>;
 }) {
-  await requireStaff();
+  await requireSession();
   const params = await searchParams;
+  const archived = params.status === "archived";
   const supabase = await createSupabaseServerClient();
 
   const [{ data: programs }, { data: projects }, options] = await Promise.all([
     supabase
       .from("program")
       .select("id, name, description, status, lead:lead_id(id, full_name, avatar_url)")
-      .neq("status", "archived")
+      .filter("status", archived ? "eq" : "neq", "archived")
       .order("name"),
     supabase
       .from("project")
-      .select("id, name, program_id, stage, health")
+      .select("id, name, program_id, stage, health, archived_at")
       .is("archived_at", null),
     getPickerOptions(),
   ]);
@@ -60,11 +62,15 @@ export default async function ProgramsPage({
         }
       />
 
+      <nav aria-label="Program archive" className="mb-6 flex gap-4 text-sm">
+        <Link href="/programs" aria-current={!archived ? "page" : undefined} className="hover:underline">Current programs</Link>
+        <Link href="/programs?status=archived" aria-current={archived ? "page" : undefined} className="hover:underline">Archived programs</Link>
+      </nav>
       {programList.length === 0 ? (
         <EmptyState
           icon={<Layers />}
-          title="No programs yet"
-          description="Create a program to group related projects, events, and channels."
+          title={archived ? "No archived programs" : "No programs yet"}
+          description={archived ? "Archived programs will appear here for review and restoration." : "Create a program to group related projects, events, and channels."}
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -73,15 +79,7 @@ export default async function ProgramsPage({
               (p) => p.program_id === program.id,
             );
             const active = programProjects.filter((p) => p.stage === "active");
-            const worstHealth: ProjectHealth = active.some(
-              (p) => p.health === "off_track",
-            )
-              ? "off_track"
-              : active.some((p) => p.health === "at_risk")
-                ? "at_risk"
-                : active.length > 0
-                  ? "on_track"
-                  : "unknown";
+            const { health: worstHealth } = summarizeProjectHealth(programProjects);
             return (
               <Link
                 key={program.id}

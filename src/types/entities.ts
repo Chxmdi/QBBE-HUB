@@ -5,7 +5,13 @@
  * the UI consumes.
  */
 
-export type OrgRole = "owner" | "admin" | "staff" | "volunteer" | "guest";
+export type OrgRole =
+  | "owner"
+  | "admin"
+  | "leadership_viewer"
+  | "staff"
+  | "volunteer"
+  | "guest";
 
 export type ProjectStage =
   | "proposed"

@@ -51,17 +51,7 @@ export async function requestExport(input: unknown): Promise<ActionResult> {
     };
   }
 
-  // An export is a copy of sensitive data leaving the safety of row-level
-  // security, so it is an audit event whether or not it is ever downloaded.
-  await supabase.from("audit_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    event_type: "data_export",
-    action: "export_requested",
-    object_type: "export_job",
-    object_id: created.id,
-    metadata: { kind, subject_user_id: subjectUserId ?? null },
-  });
+  // The export_request_audited trigger records this in the insert transaction.
 
   revalidatePath("/admin");
   return { ok: true, id: created.id as string };

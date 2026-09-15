@@ -1,0 +1,55 @@
+name: Deploy Netlify
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: QBBE environment to publish
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netlify-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    # Re-run every gate against this workflow's exact commit, with no hosted secrets.
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check environment readiness
+        env:
+          RELEASE_ENABLED: ${{ vars.RELEASE_ENABLED }}
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: |
+          test "$RELEASE_ENABLED" = true || { echo 'Release is disabled. Complete the environment release checklist first.'; exit 1; }
+          test -n "$NETLIFY_SITE_ID" || { echo 'Missing environment site ID'; exit 1; }
+          test -n "$NETLIFY_AUTH_TOKEN" || { echo 'Missing environment deployment token'; exit 1; }
+      - name: Build and publish to the selected QBBE site
+        env:
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        # Each environment has a separate site. Its production context contains
+        # that environment's build/runtime settings, including public Auth keys.
+        run: npx --yes netlify-cli@27.5.0 deploy --prod --context production --message "$GITHUB_SHA"

@@ -49,8 +49,8 @@ export const NAV_GROUPS: NavGroup[] = [
       // Member-level on purpose: intake that only staff can reach is not
       // intake. Policies decide whether you see the queue or only your own.
       { label: "Requests", href: "/requests", icon: ClipboardCheck, access: "member" },
-      { label: "Projects", href: "/projects", icon: FolderKanban, access: "staff" },
-      { label: "Programs", href: "/programs", icon: Layers, access: "staff" },
+      { label: "Projects", href: "/projects", icon: FolderKanban, access: "member" },
+      { label: "Programs", href: "/programs", icon: Layers, access: "member" },
     ],
   },
   {
@@ -72,7 +72,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Organization",
     items: [
       { label: "Calendar", href: "/calendar", icon: CalendarDays, access: "member" },
-      { label: "Master Schedule", href: "/schedule", icon: CalendarRange, access: "staff" },
+      { label: "Master Schedule", href: "/schedule", icon: CalendarRange, access: "member" },
       { label: "Meetings", href: "/meetings", icon: Presentation, access: "member" },
       { label: "Events", href: "/events", icon: Building2, access: "member" },
       { label: "Relationships", href: "/crm", icon: Handshake, access: "staff" },

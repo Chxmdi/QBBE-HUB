@@ -6,6 +6,7 @@ import { Suspense, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
 function SignInFormInner() {
   const router = useRouter();
@@ -33,7 +34,7 @@ function SignInFormInner() {
       );
       return;
     }
-    router.push(searchParams.get("next") ?? "/");
+    router.push(safeRedirectPath(searchParams.get("next")));
     router.refresh();
   }
 
@@ -69,6 +70,9 @@ function SignInFormInner() {
       <Button type="submit" loading={loading} className="w-full">
         Sign in
       </Button>
+      <p className="text-center text-sm">
+        <Link href="/forgot-password" className="text-brand-fg hover:underline">Forgot your password?</Link>
+      </p>
       <p className="text-center text-[13px] text-muted">
         New to QBBE Hub?{" "}
         <Link href="/sign-up" className="font-medium text-brand-fg hover:underline">

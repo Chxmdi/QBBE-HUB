@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
+import { hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
@@ -11,13 +12,15 @@ import {
 
 export async function createMilestone(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = createMilestoneSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
   const { projectId, name, dueDate } = parsed.data;
   const supabase = await createSupabaseServerClient();
+  if (!(await hasProjectCapability(supabase, projectId, "manage"))) {
+    return { ok: false, error: "You cannot add milestones to this project." };
+  }
 
   const { data: row, error } = await supabase
     .from("milestone")
@@ -53,7 +56,6 @@ export async function completeMilestone(
   completed: boolean,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const supabase = await createSupabaseServerClient();
 
   const { data: current } = await supabase
@@ -62,6 +64,9 @@ export async function completeMilestone(
     .eq("id", milestoneId)
     .maybeSingle();
   if (!current) return { ok: false, error: "Milestone not found." };
+  if (!(await hasProjectCapability(supabase, current.project_id as string, "manage"))) {
+    return { ok: false, error: "You cannot update this milestone." };
+  }
 
   if (completed && current.completed_at) {
     return { ok: true, id: milestoneId };
@@ -89,12 +94,20 @@ export async function completeMilestone(
 }
 
 export async function updateMilestone(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  await requireSession();
   const parsed = updateMilestoneSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
   const { milestoneId, name, dueDate } = parsed.data;
   const supabase = await createSupabaseServerClient();
+  const { data: existing } = await supabase
+    .from("milestone")
+    .select("project_id")
+    .eq("id", milestoneId)
+    .maybeSingle();
+  if (!existing) return { ok: false, error: "Milestone not found." };
+  if (!(await hasProjectCapability(supabase, existing.project_id as string, "manage"))) {
+    return { ok: false, error: "You cannot update this milestone." };
+  }
   const patch: Record<string, unknown> = {};
   if (name !== undefined) patch.name = name;
   if (dueDate !== undefined) patch.due_date = dueDate;

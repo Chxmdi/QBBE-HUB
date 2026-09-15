@@ -10,11 +10,13 @@ export function TeamMemberControls({
   userId,
   isMember,
   label,
+  isOwner = false,
 }: {
   teamId: string;
   userId: string;
   isMember: boolean;
   label: string;
+  isOwner?: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -33,8 +35,15 @@ export function TeamMemberControls({
 
   return (
     <span className="inline-flex items-center gap-2">
-      <Button variant="secondary" type="button" onClick={toggle} className="h-8 text-[12.5px]">
-        {isMember ? `Remove ${label}` : `Add ${label}`}
+      <Button
+        variant="secondary"
+        type="button"
+        onClick={toggle}
+        disabled={isOwner}
+        title={isOwner ? "Transfer team ownership before removing this person." : undefined}
+        className="h-8 text-[12.5px]"
+      >
+        {isOwner ? "Team owner" : isMember ? `Remove ${label}` : `Add ${label}`}
       </Button>
       {error ? <span className="text-[12px] text-danger-fg">{error}</span> : null}
     </span>

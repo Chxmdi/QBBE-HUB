@@ -17,7 +17,7 @@ export async function getMyTasks(userId: string): Promise<Task[]> {
   const { data } = await supabase
     .from("task")
     .select(TASK_SELECT)
-    .eq("assignee_id", userId)
+    .or(`assignee_id.eq.${userId},reviewer_id.eq.${userId}`)
     .is("archived_at", null)
     .in("status", OPEN_STATUSES)
     .order("due_at", { ascending: true, nullsFirst: false })
@@ -55,7 +55,7 @@ export async function getMyTasksFiltered(
   let query = supabase
     .from("task")
     .select(TASK_SELECT)
-    .eq("assignee_id", userId)
+    .or(`assignee_id.eq.${userId},reviewer_id.eq.${userId}`)
     .is("archived_at", null)
     .order("due_at", { ascending: true, nullsFirst: false })
     .limit(300);

@@ -70,6 +70,7 @@ export async function runExports({ db, definition, now }: JobContext): Promise<J
         organizationId: row.organization_id,
         subjectUserId: row.subject_user_id,
         params: row.params ?? {},
+        requestedBy: row.requested_by,
       });
 
       const body = serializeExport(built, {

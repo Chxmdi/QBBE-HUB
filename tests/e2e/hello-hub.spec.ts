@@ -1,19 +1,46 @@
 import { expect, test } from "@playwright/test";
+import { signIn } from "./auth";
 
 /**
- * Opt-in smoke: staff creates a project + milestone (Unit 2).
- * Not part of default CI (`npx playwright test public-routes` only).
+ * Authenticated smoke: owner creates a project + milestone (Unit 2).
+ * CI runs against its migrated, synthetic local Supabase database.
  */
 test.use({
   video: { mode: "on", size: { width: 1280, height: 720 } },
 });
 
+test("owner edits, archives and restores a program", async ({ page }) => {
+  test.setTimeout(180_000);
+  await signIn(page, "owner");
+  await page.goto("/programs?create=1");
+  const name = `Program lifecycle ${Date.now()}`;
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  await page.getByRole("button", { name: "Create program", exact: true }).click();
+  await page.getByRole("link").filter({ has: page.getByRole("heading", { name, exact: true }) }).click();
+  await expect(page).toHaveURL(/\/programs\/[0-9a-f-]+$/, { timeout: 60_000 });
+  await page.getByRole("button", { name: "Edit program" }).click();
+  let programDialog = page.getByRole("dialog", { name: "Edit program" });
+  await programDialog.getByLabel("Description", { exact: true }).fill("Revised program purpose");
+  await programDialog.getByLabel("Status", { exact: true }).selectOption("archived");
+  await programDialog.getByRole("button", { name: "Save program" }).click();
+  await expect(programDialog).not.toBeVisible({ timeout: 30_000 });
+  await page.goto("/programs");
+  await expect(page.getByRole("heading", { name, exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "Archived programs", exact: true }).click();
+  await page.getByRole("link").filter({ has: page.getByRole("heading", { name, exact: true }) }).click();
+  await expect(page.getByText("Revised program purpose", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit program" }).click();
+  programDialog = page.getByRole("dialog", { name: "Edit program" });
+  await programDialog.getByLabel("Status", { exact: true }).selectOption("active");
+  await programDialog.getByRole("button", { name: "Save program" }).click();
+  await expect(programDialog).not.toBeVisible({ timeout: 30_000 });
+  await page.goto("/programs");
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+});
+
 test("owner creates a project and a milestone", async ({ page }) => {
-  test.setTimeout(90_000);
-  await page.goto("/sign-in");
-  await page.getByLabel("Email").fill("qa-owner@example.com");
-  await page.getByLabel("Password").fill("QaTest!2026");
-  await page.getByRole("button", { name: "Sign in" }).click();
+  test.setTimeout(180_000);
+  await signIn(page, "owner");
 
   const onboarding = page.getByRole("heading", { name: "Your profile" });
   const workspace = page.getByRole("link", { name: "Projects" });
@@ -36,20 +63,43 @@ test("owner creates a project and a milestone", async ({ page }) => {
   const name = `Hello Hub ${Date.now()}`;
   await page.locator("#project-name").fill(name);
   await page.getByRole("button", { name: "Create project" }).click();
+  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/, { timeout: 60_000 });
   const detailHeading = page.getByRole("heading", { name });
-  const listLink = page.getByRole("link", { name, exact: true });
-  await expect(detailHeading.or(listLink).first()).toBeVisible({ timeout: 20_000 });
-  if (!(await detailHeading.isVisible())) {
-    await listLink.click();
-  }
-  await expect(detailHeading).toBeVisible();
+  await expect(detailHeading).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole("button", { name: "Add milestone" }).click();
-  await expect(page.getByRole("heading", { name: "Add milestone" })).toBeVisible();
-  await page.locator("#field-name").fill("Pilot kickoff");
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  const milestoneDialog = page.getByRole("dialog", { name: "Add milestone" });
+  await expect(milestoneDialog).toBeVisible();
+  await milestoneDialog.getByLabel("Name", { exact: true }).fill("Pilot kickoff");
+  await milestoneDialog.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByText("Pilot kickoff", { exact: true })).toBeVisible({
     timeout: 15_000,
   });
   await expect(page.getByRole("button", { name: "Complete" })).toBeVisible();
+});
+
+test("a new upload stays visibly unavailable until its security check passes", async ({ page }) => {
+  await signIn(page, "volunteer");
+  await page.goto("/documents");
+
+  const title = `Pending upload ${Date.now()}`;
+  await page.getByRole("button", { name: "Add resource" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add a resource" });
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: "security-check.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("harmless browser fixture"),
+  });
+  await dialog.getByLabel("Title").fill(title);
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(page.getByText("Document uploaded. Downloads become available after the security check."))
+    .toBeVisible();
+
+  // Verify the persisted server-rendered state, including the RLS-protected
+  // pending record, rather than racing the client refresh after the action.
+  await page.reload();
+
+  const row = page.getByRole("row").filter({ hasText: title });
+  await expect(row.getByText("Security check pending", { exact: true })).toBeVisible();
+  await expect(row.getByTitle("Security check pending")).toBeDisabled();
 });

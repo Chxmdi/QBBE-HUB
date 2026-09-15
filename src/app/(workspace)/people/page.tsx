@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 const ROLE_LABELS: Record<OrgRole, string> = {
   owner: "Primary Owner",
   admin: "Workspace Admin",
+  leadership_viewer: "Leadership Viewer",
   staff: "Staff",
   volunteer: "Volunteer",
   guest: "Guest",
@@ -23,6 +24,7 @@ const ROLE_LABELS: Record<OrgRole, string> = {
 const ROLE_TONES: Record<OrgRole, "brand" | "accent" | "info" | "neutral"> = {
   owner: "brand",
   admin: "accent",
+  leadership_viewer: "info",
   staff: "info",
   volunteer: "neutral",
   guest: "neutral",

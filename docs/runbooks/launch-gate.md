@@ -1,53 +1,35 @@
-# Launch-gate evidence (Part IV §17.2)
+# Launch gates
 
-Tick with evidence, not aspiration. This file is the checklist for a
-**staging/pilot** cut after Units 0–8; Units 9–12 stay gated until live
-integrations are tested.
+The approved seven-workstream plan supersedes earlier pilot exemptions. The
+finish line is verified staging with all PRD v2 P0/P1 and retained integrations
+accepted. Production publishing is a separate release decision.
 
-| Gate | Evidence in this repo | Status |
-|---|---|---|
-| Lint / typecheck / unit / production build / high-severity dependency audit | `.github/workflows/ci.yml` job `verify` | CI |
-| Public a11y + responsive (auth routes) | `npm run test:a11y` → `tests/e2e/public-routes.spec.ts` | CI |
-| Authenticated 18-screen matrix + `/messages` | `npm run test:qa` — needs seeded QA DB | Opt-in |
-| RLS allow **and** deny + database-security advisor | `npm run test:db` and `supabase db advisors --local --type security --fail-on error` | CI + local Supabase |
-| Error monitoring | `ERROR_MONITORING_DSN` parsed as a Sentry DSN and posted to `/store/` | Config |
-| MFA for owner/admin | Supabase Auth setting + `deployment.md` step 7 | Operator |
-| Backups | `backup-recovery.md`; first restore drill still pending | Operator |
-| Privacy / retention | `privacy.md` | Review |
-| Channel history volume | `CHANNEL_HISTORY_PAGE_SIZE` + Load older | In product |
-| Honest integrations | Email/Gmail/VMS stay **Not connected** until a live send/sync/API succeeds | In product |
-| Cron jobs | `/api/jobs/*` skip session middleware; pg_cron calls them via `app.configure_job_runner`; `CRON_JOB_SECRET` | In product |
-| Invite-only signup | `signup_allowed` RPC after the first organization exists | In product |
-| Coverage matrix | `docs/spec-coverage.md` | In product |
+Authoritative live records:
 
-## Production-account evidence (operator-owned)
+- [Acceptance matrix](../acceptance-matrix.md): every PRD criterion and integration.
+- [Execution journal](../execution-journal.md): active feature, prompts and next action.
+- [Readiness report](../readiness-report.md): release evidence and blockers.
 
-Do not mark a production cut ready until every row has a dated artifact or
-operator confirmation. Configuration values belong only in the deployment
-secret manager; never record them in this repository or this checklist.
+No checklist entry is verified merely because it has a CI job or runbook.
+Require a passing run and artifact at the candidate commit. Missing QBBE input
+blocks dependent verification; independent implementation continues.
 
-| Requirement | Evidence required | Current state |
-|---|---|---|
-| Production Supabase | Project ref, migrated schema, MFA/redirect settings, least-privilege keys | Not verified |
-| Vercel production and preview deployments | Linked project, protected environment variables, preview URL | Not verified |
-| Google OAuth and Pub/Sub | QBBE-owned consent screen, redirect URI, scope review, authenticated push rehearsal | Not verified |
-| Volunteer Management System | QBBE endpoint credential, successful identity/assignment reconciliation | Not verified |
-| Transactional email | Verified QBBE sender domain, send/reply receipt, webhook/alert evidence | Not verified |
-| Error monitoring and alert routing | Production DSN, test exception, on-call alert receipt | Not verified |
-| Backups and recovery | Scheduled backup plus documented successful restore drill | Not verified |
-| Staging rehearsal | Owner, admin, staff, volunteer, and guest workflow results | Not verified |
+Required gates: lint, types, unit/build/dependency checks; migrated RLS/Auth tests;
+complete authenticated browser workflows across scoped roles; Chromium, Firefox,
+WebKit and actual Safari/mobile; keyboard, themes, zoom and screen-reader checks;
+concurrency/reconnect/retry; measured performance; live Google/VMS/email;
+Netlify staging compatibility and protected deployment; encrypted database/file
+backups, isolated restore, independent alerts and named operational sign-off.
 
-## Commands (developer)
+Verified transactional email is mandatory for pilot use under the approved plan.
+Disabled external integrations must be disclosed for any separate pilot decision
+and do not satisfy full deployment readiness. Supabase MFA settings alone do not
+prove application/API/database enforcement. Invite-only admission must be enforced
+by the database Auth trigger, not only the browser's signup_allowed check.
 
-```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
-npm run test:a11y    # after build + next start
-npm run test:db      # after supabase start
-```
+Use only QBBE-owned free infrastructure. Keep production publishing disabled.
 
-Production email, Gmail, and VMS are **not** launch-blocking for the internal
-pilot described in spec §16.1, provided the UI does not claim they are
-connected.
+Workstreams 1–5 now have implementation in the working tree. Workstreams 6–7
+remain blocked on QBBE credentials, staging projects, Drive custody and a
+named operator. `scripts/verify-integrations.sh` and `scripts/protect-main.sh`
+are the starting operator commands; they do not themselves certify readiness.

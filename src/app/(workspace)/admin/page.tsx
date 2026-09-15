@@ -13,6 +13,7 @@ import { InviteUserDialog } from "@/features/admin/components/invite-user-dialog
 import { TransferOwnershipButton } from "@/features/admin/components/transfer-ownership-button";
 import { IntegrationActions } from "@/features/admin/components/integration-actions";
 import { TeamMemberControls } from "@/features/admin/components/team-member-controls";
+import { TeamOwnerControl } from "@/features/admin/components/team-owner-control";
 import { createTeam } from "@/features/admin/services/team.commands";
 import { createWorkflowRule } from "@/features/admin/services/workflow.commands";
 import { integrationHealthLabel, integrationHealthTone } from "@/features/admin/services/integration-health";
@@ -136,7 +137,7 @@ export default async function AdminPage() {
       supabase
         .from("integration_connection")
         .select("provider, status, last_sync_at, last_error"),
-      supabase.from("team").select("id, name, description").order("name"),
+      supabase.from("team").select("id, name, description, owner_id").order("name"),
       supabase.from("team_member").select("team_id, user_id"),
       supabase
         .from("workflow_rule")
@@ -167,7 +168,12 @@ export default async function AdminPage() {
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
   );
   const vmsConfigured = Boolean(process.env.VMS_API_URL);
-  const teamList = (teams ?? []) as { id: string; name: string; description: string | null }[];
+  const teamList = (teams ?? []) as {
+    id: string;
+    name: string;
+    description: string | null;
+    owner_id: string;
+  }[];
   const teamMemberList = (teamMembers ?? []) as { team_id: string; user_id: string }[];
   const ruleList = (rules ?? []) as {
     id: string;
@@ -402,6 +408,19 @@ export default async function AdminPage() {
               fields={[
                 { name: "name", label: "Name", type: "text", required: true },
                 { name: "description", label: "Description", type: "textarea" },
+                {
+                  name: "ownerId",
+                  label: "Owner",
+                  type: "select",
+                  required: true,
+                  defaultValue: session.userId,
+                  options: memberList
+                    .filter((member) => member.status === "active" && member.user_profile)
+                    .map((member) => ({
+                      value: member.user_id,
+                      label: member.user_profile!.full_name,
+                    })),
+                },
               ]}
             />
           </div>
@@ -420,6 +439,17 @@ export default async function AdminPage() {
                     {team.description ? (
                       <p className="meta mb-2">{team.description}</p>
                     ) : null}
+                    <TeamOwnerControl
+                      key={`${team.id}:${team.owner_id}`}
+                      teamId={team.id}
+                      currentOwnerId={team.owner_id}
+                      members={memberList
+                        .filter((member) => member.status === "active" && member.user_profile)
+                        .map((member) => ({
+                          id: member.user_id,
+                          name: member.user_profile!.full_name,
+                        }))}
+                    />
                     <ul className="mt-2 space-y-1.5">
                       {memberList
                         .filter((m) => m.status === "active" && m.user_profile)
@@ -433,6 +463,7 @@ export default async function AdminPage() {
                                 userId={m.user_id}
                                 isMember={isMember}
                                 label={isMember ? "member" : m.user_profile!.full_name.split(" ")[0] ?? "person"}
+                                isOwner={team.owner_id === m.user_id}
                               />
                             </li>
                           );

@@ -69,6 +69,8 @@ export async function registerUploadedDocument(
   input: unknown,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const limited = await enforceRateLimit("document:upload", session.userId);
+  if (limited) return limited;
   const parsed = fileSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -123,12 +125,15 @@ export async function getDocumentDownloadUrl(
 
   const { data: doc } = await supabase
     .from("document")
-    .select("kind, url, storage_path, title")
+    .select("kind, url, storage_path, title, scan_status")
     .eq("id", documentId)
     .maybeSingle();
 
   if (!doc) return { ok: false, error: "Document not found or not accessible." };
   if (doc.kind === "link") return { ok: true, url: doc.url as string };
+  if (doc.scan_status !== "clean") {
+    return { ok: false, error: "This file is still being checked or has been quarantined." };
+  }
 
   const { data: signed, error } = await supabase.storage
     .from("documents")
