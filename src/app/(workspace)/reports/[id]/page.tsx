@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { Download, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +63,6 @@ export default async function ReportDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await requireSession();
-  if (!session.isStaff) redirect("/");
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
 

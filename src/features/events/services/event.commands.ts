@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
+import { hasProgramCapability, hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   createGoogleEventRecord,
@@ -63,7 +64,6 @@ async function markCalendarDegraded(
 
 export async function createEvent(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = createEventSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -74,6 +74,17 @@ export async function createEvent(input: unknown): Promise<ActionResult> {
   const { starts, ends } = schedule;
 
   const supabase = await createSupabaseServerClient();
+  if (data.projectId) {
+    if (!(await hasProjectCapability(supabase, data.projectId, "collaborate"))) {
+      return { ok: false, error: "You cannot create an event on this project." };
+    }
+  } else if (data.programId) {
+    if (!(await hasProgramCapability(supabase, data.programId, "collaborate"))) {
+      return { ok: false, error: "You cannot create an event on this program." };
+    }
+  } else if (!session.isAdmin) {
+    return { ok: false, error: "Link the event to work you can access, or ask an administrator." };
+  }
   const { data: event, error } = await supabase
     .from("event")
     .insert({
@@ -148,7 +159,6 @@ const updateEventSchema = z.object({
  * record when connected. Imported overlay events are never mutated here. */
 export async function updateEvent(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = updateEventSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const data = parsed.data;
@@ -214,7 +224,6 @@ const assignSchema = z.object({
 /** Distinct per-area event ownership (P0-EVT-02). */
 export async function assignEventRole(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = assignSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
   const { eventId, userId, role } = parsed.data;
@@ -275,7 +284,6 @@ const statusSchema = z.object({
 
 export async function updateEventStatus(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = statusSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
   const supabase = await createSupabaseServerClient();

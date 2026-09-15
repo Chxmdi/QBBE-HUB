@@ -19,15 +19,10 @@ import { PartialJobFailure, type JobContext, type JobResult } from "../runner";
 /**
  * Drains the notifications queue.
  *
- * Delivery is exactly-once by construction. Every message resolves to a
- * `dedupe_key`, and `email_delivery` carries a unique index on it. The first
- * thing this handler does is claim that key; a re-delivered message therefore
- * finds the existing row and continues it rather than sending a second copy.
- *
- * Nothing is acknowledged before the outcome is written. A worker killed
- * mid-send leaves its message on the queue with the ledger row still marked
- * `sending`; the visibility timeout re-delivers it, the claim recognises the
- * in-flight row, and the attempt continues from where it stopped.
+ * Completed ledger rows suppress repeats. Resend also receives a stable
+ * delivery key so retries within its 24-hour deduplication window do not
+ * duplicate a send whose acknowledgement was lost. SMTP cannot promise this.
+ * Database failures leave the queue message available for retry.
  *
  * A batch is not all-or-nothing. One message's failure is confined to that
  * message: the rest of the batch still runs and the failed one returns on the
@@ -63,11 +58,12 @@ async function existingDelivery(
   db: SupabaseClient,
   dedupeKey: string,
 ): Promise<DeliveryRow | null> {
-  const { data } = await db
+  const { data, error } = await db
     .from("email_delivery")
     .select("id, status, attempt, recipient, subject, body_text, body_html")
     .eq("dedupe_key", dedupeKey)
     .maybeSingle();
+  if (error) throw new Error(`could not load delivery: ${error.message}`);
   return (data as DeliveryRow | null) ?? null;
 }
 
@@ -103,13 +99,15 @@ async function prepareNotification(
   now: Date,
   orgNames: Map<string, string>,
 ): Promise<Prepared> {
-  const { data: notificationRow } = await db
+  const { data: notificationRow, error: notificationError } = await db
     .from("notification")
     .select(
       "id, user_id, organization_id, category, title, body, link, urgency, dedupe_key",
     )
     .eq("id", notificationId)
     .maybeSingle();
+
+  if (notificationError) throw new Error(`could not load notification: ${notificationError.message}`);
 
   // The notification was deleted between enqueue and drain. Nothing to send.
   if (!notificationRow) return { outcome: "done" };
@@ -133,7 +131,7 @@ async function prepareNotification(
   const existing = await existingDelivery(db, dedupeKey);
   if (existing && TERMINAL_STATUSES.has(existing.status)) return { outcome: "done" };
 
-  const [{ data: profileRow }, { data: prefRow }] = await Promise.all([
+  const [profileResult, preferenceResult, membershipResult] = await Promise.all([
     db
       .from("user_profile")
       .select("full_name, email")
@@ -146,7 +144,35 @@ async function prepareNotification(
       )
       .eq("user_id", notification.user_id)
       .maybeSingle(),
+    db
+      .from("organization_membership")
+      .select("status")
+      .eq("organization_id", notification.organization_id)
+      .eq("user_id", notification.user_id)
+      .maybeSingle(),
   ]);
+
+  for (const result of [profileResult, preferenceResult, membershipResult]) {
+    if (result.error) throw new Error(`could not check recipient: ${result.error.message}`);
+  }
+  const { data: profileRow } = profileResult;
+  const { data: prefRow } = preferenceResult;
+  const { data: membership } = membershipResult;
+
+  if (!membership || membership.status !== "active") {
+    await recordSuppression(db, {
+      dedupeKey,
+      existingId: existing?.id ?? null,
+      organizationId: notification.organization_id,
+      notificationId: notification.id,
+      recipientUserId: notification.user_id,
+      recipient: (profileRow?.email as string | undefined) ?? "unknown",
+      subject: notification.title,
+      category: notification.category,
+      reason: "recipient_access_revoked",
+    });
+    return { outcome: "done" };
+  }
 
   const recipientName = (profileRow?.full_name as string | undefined) || "there";
   const recipientEmail = (profileRow?.email as string | undefined) ?? null;
@@ -206,6 +232,8 @@ async function prepareNotification(
       scheduledFor: scheduledFor.toISOString(),
       lastError: null,
       attempt: existing?.attempt ?? 0,
+      expectedStatus: existing?.status,
+      expectedAttempt: existing?.attempt,
     });
     if (!held) return { outcome: "done" };
     return { outcome: "deferred", delaySeconds: decision.delaySeconds };
@@ -225,6 +253,8 @@ async function prepareNotification(
     scheduledFor: null,
     lastError: null,
     attempt,
+    expectedStatus: existing?.status,
+    expectedAttempt: existing?.attempt,
   });
 
   // Lost the race to a concurrent worker that already finished this key.
@@ -258,6 +288,8 @@ interface UpsertInput {
   scheduledFor: string | null;
   lastError: string | null;
   attempt: number;
+  expectedStatus?: string;
+  expectedAttempt?: number;
 }
 
 /**
@@ -286,13 +318,19 @@ async function upsertDelivery(
   };
 
   if (input.existingId) {
-    const { data } = await db
+    let claim = db
       .from("email_delivery")
       .update(payload)
       .eq("id", input.existingId)
-      .not("status", "in", "(sent,bounced,suppressed)")
-      .select("id")
-      .maybeSingle();
+      .not("status", "in", "(sent,bounced,suppressed)");
+    if (input.expectedStatus !== undefined) {
+      claim = claim.eq("status", input.expectedStatus);
+    }
+    if (input.expectedAttempt !== undefined) {
+      claim = claim.eq("attempt", input.expectedAttempt);
+    }
+    const { data, error } = await claim.select("id").maybeSingle();
+    if (error) throw new Error(`could not update delivery: ${error.message}`);
     return (data as { id: string } | null) ?? null;
   }
 
@@ -304,11 +342,9 @@ async function upsertDelivery(
 
   if (error) {
     if (error.code === UNIQUE_VIOLATION) {
-      // Another worker inserted this key first. Re-read and continue only if
-      // it has not reached a terminal state.
-      const row = await existingDelivery(db, input.dedupeKey);
-      if (!row || TERMINAL_STATUSES.has(row.status)) return null;
-      return { id: row.id };
+      // Another worker owns the claim. It may still be sending, so joining it
+      // here would duplicate the provider request.
+      return null;
     }
     throw new Error(`could not record delivery: ${error.message}`);
   }
@@ -344,7 +380,8 @@ async function recordSuppression(
   };
 
   if (input.existingId) {
-    await db.from("email_delivery").update(payload).eq("id", input.existingId);
+    const { error } = await db.from("email_delivery").update(payload).eq("id", input.existingId);
+    if (error) throw new Error(`could not record suppression: ${error.message}`);
     return;
   }
   const { error } = await db.from("email_delivery").insert(payload);
@@ -358,20 +395,42 @@ async function prepareExistingDelivery(
   db: SupabaseClient,
   deliveryId: string,
 ): Promise<Prepared> {
-  const { data } = await db
+  const { data, error } = await db
     .from("email_delivery")
-    .select("id, status, attempt, recipient, subject, body_text, body_html")
+    .select("id, status, attempt, recipient, subject, body_text, body_html, organization_id, recipient_user_id")
     .eq("id", deliveryId)
     .maybeSingle();
 
-  const row = data as DeliveryRow | null;
+  if (error) throw new Error(`could not load delivery: ${error.message}`);
+  const row = data as (DeliveryRow & { organization_id: string; recipient_user_id: string | null }) | null;
   if (!row || TERMINAL_STATUSES.has(row.status)) return { outcome: "done" };
 
+  const { data: membership, error: membershipError } = await db
+    .from("organization_membership")
+    .select("status")
+    .eq("organization_id", row.organization_id)
+    .eq("user_id", row.recipient_user_id ?? "00000000-0000-0000-0000-000000000000")
+    .maybeSingle();
+  if (membershipError) throw new Error(`could not check recipient: ${membershipError.message}`);
+  if (!row.recipient_user_id || membership?.status !== "active") {
+    const { error: suppressionError } = await db.from("email_delivery")
+      .update({ status: "suppressed", suppressed_reason: "recipient_access_revoked" })
+      .eq("id", row.id);
+    if (suppressionError) throw new Error(`could not suppress delivery: ${suppressionError.message}`);
+    return { outcome: "done" };
+  }
+
   const attempt = row.attempt + 1;
-  await db
+  const { data: claimed, error: claimError } = await db
     .from("email_delivery")
     .update({ status: "sending", attempt })
-    .eq("id", row.id);
+    .eq("id", row.id)
+    .eq("status", row.status)
+    .eq("attempt", row.attempt)
+    .select("id")
+    .maybeSingle();
+  if (claimError) throw new Error(`could not claim delivery: ${claimError.message}`);
+  if (!claimed) return { outcome: "done" };
 
   return {
     outcome: "ready",
@@ -438,13 +497,14 @@ async function handleMessage(
 
   try {
     const sent = await sendEmail({
+      idempotencyKey: `delivery/${delivery.id}`,
       to: delivery.recipient,
       subject: email.subject,
       text: email.text,
       html: email.html,
     });
 
-    await db
+    const { error: ledgerError } = await db
       .from("email_delivery")
       .update({
         status: "sent",
@@ -455,6 +515,7 @@ async function handleMessage(
       })
       .eq("id", delivery.id);
 
+    if (ledgerError) throw new Error(`could not record sent delivery: ${ledgerError.message}`);
     return { disposition: { kind: "ack" }, outcome: "processed" };
   } catch (cause) {
     const retryable = cause instanceof EmailSendError ? cause.retryable : true;

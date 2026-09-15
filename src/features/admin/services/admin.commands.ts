@@ -9,7 +9,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 
 const inviteSchema = z.object({
   email: z.string().trim().email("Enter a valid email."),
-  intendedRole: z.enum(["admin", "staff", "volunteer", "guest"]).default("staff"),
+  intendedRole: z.enum(["admin", "leadership_viewer", "staff", "volunteer", "guest"]).default("staff"),
 });
 
 /**
@@ -65,7 +65,7 @@ export async function inviteUser(input: unknown): Promise<InviteResult> {
 
 const roleSchema = z.object({
   membershipId: z.string().uuid(),
-  role: z.enum(["admin", "staff", "volunteer", "guest"]),
+  role: z.enum(["admin", "leadership_viewer", "staff", "volunteer", "guest"]),
 });
 
 export async function changeMemberRole(input: unknown): Promise<ActionResult> {
@@ -86,21 +86,13 @@ export async function changeMemberRole(input: unknown): Promise<ActionResult> {
     return { ok: false, error: "The Primary Owner role can only change via ownership transfer." };
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("organization_membership")
     .update({ role })
-    .eq("id", membershipId);
-  if (error) return { ok: false, error: "Could not change the role." };
-
-  await supabase.from("audit_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    event_type: "access",
-    action: "role_changed",
-    object_type: "organization_membership",
-    object_id: membershipId,
-    metadata: { from: membership.role, to: role },
-  });
+    .eq("id", membershipId)
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) return { ok: false, error: "Could not change the role." };
 
   revalidatePath("/admin");
   revalidatePath("/people");
@@ -128,14 +120,16 @@ export async function setMemberActive(
     return { ok: false, error: "You cannot deactivate your own account." };
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("organization_membership")
     .update({
       status: active ? "active" : "deactivated",
       deactivated_at: active ? null : new Date().toISOString(),
     })
-    .eq("id", membershipId);
-  if (error) return { ok: false, error: "Could not update the account." };
+    .eq("id", membershipId)
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) return { ok: false, error: "Could not update the account." };
 
   if (!active) {
     try {
@@ -146,15 +140,6 @@ export async function setMemberActive(
       // Service role is optional; the account-inactive page still blocks the UI.
     }
   }
-
-  await supabase.from("audit_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    event_type: "access",
-    action: active ? "user_reactivated" : "user_deactivated",
-    object_type: "organization_membership",
-    object_id: membershipId,
-  });
 
   revalidatePath("/admin");
   revalidatePath("/people");
@@ -194,41 +179,10 @@ export async function transferOwnership(targetMembershipId: string): Promise<Act
     return { ok: false, error: "You already hold Primary Owner." };
   }
 
-  const { data: current } = await supabase
-    .from("organization_membership")
-    .select("id")
-    .eq("user_id", session.userId)
-    .eq("status", "active")
-    .maybeSingle();
-  if (!current) return { ok: false, error: "Your membership was not found." };
-
-  const demote = await supabase
-    .from("organization_membership")
-    .update({ role: "admin" })
-    .eq("id", current.id);
-  if (demote.error) return { ok: false, error: "Could not demote the current owner." };
-
-  const promote = await supabase
-    .from("organization_membership")
-    .update({ role: "owner" })
-    .eq("id", targetMembershipId);
-  if (promote.error) {
-    await supabase
-      .from("organization_membership")
-      .update({ role: "owner" })
-      .eq("id", current.id);
-    return { ok: false, error: "Could not promote the new owner." };
-  }
-
-  await supabase.from("audit_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    event_type: "access",
-    action: "ownership_transferred",
-    object_type: "organization_membership",
-    object_id: targetMembershipId,
-    metadata: { from: session.userId, to: target.user_id },
+  const { error } = await supabase.rpc("transfer_organization_ownership", {
+    p_target_membership: targetMembershipId,
   });
+  if (error) return { ok: false, error: "Could not transfer ownership." };
 
   revalidatePath("/admin");
   revalidatePath("/people");

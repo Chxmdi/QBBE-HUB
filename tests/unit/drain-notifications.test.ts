@@ -56,6 +56,7 @@ function stubProvider(
 }
 
 function seedWorkspace(db: FakeSupabase, preferences: Row = {}) {
+  db.seed("organization_membership", [{ organization_id: ORG, user_id: USER, status: "active" }]);
   db.seed("organization", [{ id: ORG, name: "QBBE" }]);
   db.seed("user_profile", [
     { id: USER, full_name: "Amara Blake", email: "amara@example.org" },
@@ -442,5 +443,75 @@ describe("malformed work does not jam the queue", () => {
     expect(sends).toHaveLength(0);
     expect(db.queue("notifications")).toHaveLength(0);
     expect(deliveries(db)).toHaveLength(0);
+  });
+});
+
+describe("recipient access is checked at delivery time", () => {
+  it("suppresses an assignment after deactivation", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db);
+    db.rows("organization_membership")[0].status = "inactive";
+    await run(db);
+    expect(sends).toHaveLength(0);
+    expect(deliveries(db)[0].suppressed_reason).toBe("recipient_access_revoked");
+  });
+
+  for (const status of ["active", "inactive", "missing"]) {
+    it(`checks ${status} membership for a prebuilt digest`, async () => {
+      const db = new FakeSupabase(START);
+      seedWorkspace(db);
+      db.seed("organization_membership", status === "missing" ? [] : [
+        { organization_id: ORG, user_id: USER, status },
+      ]);
+      db.seed("email_delivery", [{ id: "digest-1", organization_id: ORG,
+        recipient_user_id: USER, recipient: "amara@example.org", subject: "Digest",
+        body_text: "Private work", body_html: "Private work", status: "queued", attempt: 0 }]);
+      db.enqueueRaw("notifications", { delivery_id: "digest-1" });
+      await run(db);
+      expect(sends).toHaveLength(status === "active" ? 1 : 0);
+      expect(deliveries(db)[0].status).toBe(status === "active" ? "sent" : "suppressed");
+    });
+  }
+
+  it("retries a failed membership lookup without sending or suppressing", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db);
+    db.fail((op) => op.name === "organization_membership" && op.kind === "select");
+    const result = await run(db);
+    expect(result.failed).toBe(1);
+    expect(sends).toHaveLength(0);
+    expect(deliveries(db)).toHaveLength(0);
+    expect(db.queue("notifications")).toHaveLength(1);
+  });
+});
+
+describe("delivery persistence failures", () => {
+  it("retains a send whose ledger acknowledgement failed and reuses its provider key", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db);
+    db.fail((op) => op.name === "email_delivery" && op.kind === "update" && op.args.status === "sent");
+    const first = await run(db);
+    expect(first.failed).toBe(1);
+    expect(db.queue("notifications")).toHaveLength(1);
+    const firstRequest = vi.mocked(fetch).mock.calls[0][1];
+    const key = (firstRequest?.headers as Record<string, string>)["Idempotency-Key"];
+    expect(key).toBe(`delivery/${deliveries(db)[0].id}`);
+    db.advance(121);
+    await run(db);
+    const secondRequest = vi.mocked(fetch).mock.calls[1][1];
+    expect((secondRequest?.headers as Record<string, string>)["Idempotency-Key"]).toBe(key);
+  });
+
+  it("does not acknowledge a notification lookup outage as deletion", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db);
+    db.fail((op) => op.name === "notification" && op.kind === "select");
+    expect((await run(db)).failed).toBe(1);
+    expect(sends).toHaveLength(0);
+    expect(db.queue("notifications")).toHaveLength(1);
   });
 });

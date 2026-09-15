@@ -79,7 +79,6 @@ export function ChannelCreateDialog({ defaultOpen = false }: { defaultOpen?: boo
               <Label htmlFor="channel-type">Type</Label>
               <Select id="channel-type" name="type" defaultValue="custom">
                 <option value="custom">General</option>
-                <option value="team">Team</option>
                 <option value="program">Program</option>
                 <option value="project">Project</option>
                 <option value="event">Event</option>

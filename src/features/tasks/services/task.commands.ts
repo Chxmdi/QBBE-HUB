@@ -34,7 +34,7 @@ export async function createTask(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { title, description, projectId, milestoneId, assigneeId, priority, dueAt } =
+  const { title, description, projectId, milestoneId, assigneeId, priority, dueAt, completionCriteria, reviewerId, approverId } =
     parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -62,6 +62,9 @@ export async function createTask(input: unknown): Promise<ActionResult> {
       assignee_id: assigneeId ?? null,
       requester_id: session.userId,
       due_at: dueAt || null,
+      completion_criteria: completionCriteria || null,
+      reviewer_id: reviewerId ?? null,
+      approver_id: approverId ?? null,
       created_by: session.userId,
       status: "not_started",
     })

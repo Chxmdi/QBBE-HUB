@@ -1,3 +1,4 @@
+import { summarizeProjectHealth } from "../health";
 import {
   DEFAULT_TIME_ZONE,
   addCalendarDays,
@@ -21,7 +22,7 @@ export interface ProgramHealthRow {
   name: string;
   completionPercent: number;
   totalTasks: number;
-  statusLabel: "On track" | "Needs attention" | "At risk" | "No projects";
+  statusLabel: "On track" | "Off track" | "At risk" | "No projects" | "Not assessed";
   tone: "good" | "attention" | "risk" | "neutral";
 }
 
@@ -248,7 +249,7 @@ export async function getDashboardData(
       .limit(4),
     supabase
       .from("program")
-      .select("id, name")
+      .select("id, name, projects:project(health, stage, archived_at)")
       .eq("status", "active")
       .order("name")
       .limit(8),
@@ -292,39 +293,21 @@ export async function getDashboardData(
     else donutInProgress += 1;
   }
 
-  // Program health: completion % of the program's tasks, downgraded by
-  // blocked work. Explainable, documented signal (WORK-007).
+  // Completion and owner-assessed health are separate signals (PRD §16.1).
   const programHealth: ProgramHealthRow[] = (
-    (programsRes2.data ?? []) as { id: string; name: string }[]
+    (programsRes2.data ?? []) as { id: string; name: string; projects: { health: string; stage: string; archived_at: string | null }[] }[]
   ).map((program) => {
     const tasks = (programTasksRes.data ?? []).filter(
       (t) => t.program_id === program.id,
     );
     const completed = tasks.filter((t) => t.status === "completed").length;
-    const blocked = tasks.filter((t) => t.status === "blocked").length;
     const percent = tasks.length > 0 ? (completed / tasks.length) * 100 : 0;
-    const statusLabel =
-      tasks.length === 0
-        ? "No projects"
-        : blocked > 0 || percent < 35
-          ? "At risk"
-          : percent < 60
-            ? "Needs attention"
-            : "On track";
     return {
       id: program.id,
       name: program.name,
       completionPercent: percent,
       totalTasks: tasks.length,
-      statusLabel,
-      tone:
-        statusLabel === "On track"
-          ? "good"
-          : statusLabel === "Needs attention"
-            ? "attention"
-            : statusLabel === "At risk"
-              ? "risk"
-              : "neutral",
+      ...summarizeProjectHealth(program.projects ?? []),
     };
   });
 

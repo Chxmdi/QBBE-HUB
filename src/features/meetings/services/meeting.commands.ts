@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
+import { hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   createGoogleMeetingEvent,
@@ -26,7 +27,6 @@ const createMeetingSchema = z.object({
 
 export async function createMeeting(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = createMeetingSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -44,6 +44,13 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   const ends = new Date(starts.getTime() + durationMinutes * 60_000);
 
   const supabase = await createSupabaseServerClient();
+  if (projectId) {
+    if (!(await hasProjectCapability(supabase, projectId, "collaborate"))) {
+      return { ok: false, error: "You cannot schedule a meeting on this project." };
+    }
+  } else if (!session.isAdmin) {
+    return { ok: false, error: "Link the meeting to a project you can access, or ask an administrator." };
+  }
   const { data: meeting, error } = await supabase
     .from("meeting")
     .insert({
@@ -107,8 +114,7 @@ const attendeeSchema = z.object({
  * error message; RLS is what actually decides.
  */
 export async function addMeetingAttendee(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  await requireSession();
   const parsed = attendeeSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -129,8 +135,7 @@ export async function addMeetingAttendee(input: unknown): Promise<ActionResult> 
 }
 
 export async function removeMeetingAttendee(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  await requireSession();
   const parsed = attendeeSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -174,7 +179,6 @@ const updateMeetingSchema = z.object({
  * Google event without touching attendee-managed Calendar fields. */
 export async function updateMeeting(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = updateMeetingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   const data = parsed.data;
@@ -224,7 +228,6 @@ const cancelMeetingSchema = z.object({ meetingId: z.string().uuid() });
  * the link for recovery and marks the organizer's Calendar connection degraded. */
 export async function cancelMeeting(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = cancelMeetingSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid meeting." };
 
@@ -337,8 +340,7 @@ const triageSchema = z.object({
 });
 
 export async function triageAgendaItem(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  await requireSession();
   const parsed = triageSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -381,8 +383,7 @@ const reorderSchema = z.object({
  * neighbour's rather than rewriting the column.
  */
 export async function moveAgendaItem(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  await requireSession();
   const parsed = reorderSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -437,7 +438,6 @@ const actionSchema = z.object({
 /** Meeting action → assigned task with source links (CAL-004, P0-MTG-02). */
 export async function addMeetingAction(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = actionSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -456,47 +456,16 @@ export async function addMeetingAction(input: unknown): Promise<ActionResult> {
   }
 
   const assignee = ownerId ?? session.userId;
-  const { data: task, error: taskError } = await supabase
-    .from("task")
-    .insert({
-      organization_id: session.organizationId,
-      project_id: meeting.project_id,
-      title,
-      description: `Action from meeting “${meeting.title}”.`,
-      assignee_id: assignee,
-      requester_id: session.userId,
-      due_at: dueAt || null,
-      created_by: session.userId,
-    })
-    .select("id")
-    .single();
-  if (taskError || !task) return { ok: false, error: "Could not create the action task." };
-
-  const { error: actionError } = await supabase.from("meeting_action").insert({
-    meeting_id: meetingId,
-    task_id: task.id,
-    title,
-    owner_id: assignee,
-    due_at: dueAt || null,
+  const { data: taskId, error } = await supabase.rpc("create_meeting_action", {
+    p_meeting: meetingId,
+    p_title: title,
+    p_owner: assignee,
+    p_due: dueAt || null,
   });
-  if (actionError) return { ok: false, error: "Task created, but linking failed." };
-
-  if (assignee !== session.userId) {
-    await supabase.from("notification").insert({
-      user_id: assignee,
-      organization_id: session.organizationId,
-      category: "assignment",
-      title: `Meeting action assigned: ${title}`,
-      body: `From “${meeting.title}”`,
-      source_type: "task",
-      source_id: task.id,
-      link: "/my-work",
-      dedupe_key: `assign:${task.id}:${assignee}`,
-    });
-  }
+  if (error || !taskId) return { ok: false, error: "Could not create the meeting action. No changes were saved." };
 
   revalidatePath(`/meetings/${meetingId}`);
-  return { ok: true, id: task.id as string };
+  return { ok: true, id: taskId as string };
 }
 
 const decisionSchema = z.object({
@@ -507,7 +476,6 @@ const decisionSchema = z.object({
 
 export async function recordDecision(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = decisionSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -545,8 +513,7 @@ const notesSchema = z.object({
 });
 
 export async function saveMeetingNotes(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  await requireSession();
   const parsed = notesSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
   const supabase = await createSupabaseServerClient();
@@ -575,7 +542,6 @@ export async function saveMeetingNotes(input: unknown): Promise<ActionResult> {
  */
 export async function completeMeeting(meetingId: string): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const supabase = await createSupabaseServerClient();
 
   const { data: meeting } = await supabase
@@ -585,9 +551,8 @@ export async function completeMeeting(meetingId: string): Promise<ActionResult> 
     .maybeSingle();
   if (!meeting) return { ok: false, error: "Meeting not found." };
   if (meeting.status === "cancelled") return { ok: false, error: "Cancelled meetings cannot be completed." };
-  if (meeting.status === "completed") return { ok: true, id: meeting.id };
 
-  const [{ data: decisions }, { data: actions }, { data: attendees }] = await Promise.all([
+  const [decisionsResult, actionsResult, attendeesResult] = await Promise.all([
     supabase.from("decision").select("title").eq("meeting_id", meetingId),
     supabase
       .from("meeting_action")
@@ -599,60 +564,33 @@ export async function completeMeeting(meetingId: string): Promise<ActionResult> 
       .eq("meeting_id", meetingId),
   ]);
 
-  await supabase
-    .from("meeting")
-    .update({ status: "completed" })
-    .eq("id", meetingId);
-
-  // Resolve a channel: explicit link, or the linked project's channel.
-  let channelId = meeting.channel_id as string | null;
-  if (!channelId && meeting.project_id) {
-    const { data: projectChannel } = await supabase
-      .from("channel")
-      .select("id")
-      .eq("project_id", meeting.project_id)
-      .is("archived_at", null)
-      .limit(1)
-      .maybeSingle();
-    channelId = (projectChannel?.id as string | undefined) ?? null;
+  if ([decisionsResult, actionsResult, attendeesResult].some((result) => result.error)) {
+    return { ok: false, error: "Could not load the meeting summary. Try again." };
   }
+  const { data: decisions } = decisionsResult;
+  const { data: actions } = actionsResult;
+  const { data: attendees } = attendeesResult;
+  type ActionRow = { title: string; due_at: string | null; owner: { full_name: string } | null };
+  type AttendeeRow = { user: { full_name: string } | null };
+  const lines = composeMeetingSummary({
+    title: meeting.title,
+    attendees: ((attendees ?? []) as unknown as AttendeeRow[]).map((a) => ({
+      fullName: a.user?.full_name ?? null,
+    })),
+    decisions: (decisions ?? []).map((d) => ({ title: d.title as string })),
+    actions: ((actions ?? []) as unknown as ActionRow[]).map((a) => ({
+      title: a.title,
+      dueAt: a.due_at,
+      ownerName: a.owner?.full_name ?? null,
+    })),
+  });
 
-  if (channelId && !meeting.summary_posted_at) {
-    type ActionRow = {
-      title: string;
-      due_at: string | null;
-      owner: { full_name: string } | null;
-    };
-    type AttendeeRow = { user: { full_name: string } | null };
-
-    const lines = composeMeetingSummary({
-      title: meeting.title,
-      attendees: ((attendees ?? []) as unknown as AttendeeRow[]).map((a) => ({
-        fullName: a.user?.full_name ?? null,
-      })),
-      decisions: (decisions ?? []).map((d) => ({ title: d.title as string })),
-      actions: ((actions ?? []) as unknown as ActionRow[]).map((a) => ({
-        title: a.title,
-        dueAt: a.due_at,
-        ownerName: a.owner?.full_name ?? null,
-      })),
-    });
-
-    const { error: postError } = await supabase.from("message").insert({
-      organization_id: session.organizationId,
-      channel_id: channelId,
-      author_id: session.userId,
-      body: lines,
-      is_system: true,
-      source_record_type: "meeting",
-      source_record_id: meetingId,
-    });
-    if (!postError) {
-      await supabase
-        .from("meeting")
-        .update({ summary_posted_at: new Date().toISOString() })
-        .eq("id", meetingId);
-    }
+  const { data: completedId, error: completionError } = await supabase.rpc("complete_meeting", {
+    p_meeting: meetingId,
+    p_summary: lines,
+  });
+  if (completionError || !completedId) {
+    return { ok: false, error: "Could not complete the meeting and post its summary. Try again." };
   }
 
   const { fireWorkflows } = await import("@/features/admin/services/workflow.runtime");

@@ -19,9 +19,11 @@ import { StatusUpdateForm } from "@/features/projects/components/status-update-f
 import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
 import { TaskRow } from "@/features/tasks/components/task-row";
 import { TASK_SELECT, getPickerOptions } from "@/features/tasks/services/task.queries";
-import { requireStaff } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
+import { hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
+import { RecordComments } from "@/features/comments/components/record-comments";
 import { RaidLogPanel } from "@/features/risks/components/raid-log";
 import { getRaidLog } from "@/features/risks/services/risk.queries";
 import type {
@@ -42,7 +44,7 @@ export default async function ProjectDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string; risk?: string; issue?: string }>;
 }) {
-  const session = await requireStaff();
+  const session = await requireSession();
   const { id } = await params;
   const { tab: tabParam, risk: riskParam, issue: issueParam } = await searchParams;
   const highlightRiskId = riskParam ?? null;
@@ -65,6 +67,10 @@ export default async function ProjectDetailPage({
 
   if (!projectRow) notFound();
   const project = projectRow as unknown as Project;
+  const [canManage, canCollaborate] = await Promise.all([
+    hasProjectCapability(supabase, id, "manage"),
+    hasProjectCapability(supabase, id, "collaborate"),
+  ]);
 
 
   const [
@@ -74,6 +80,7 @@ export default async function ProjectDetailPage({
     { data: activity },
     options,
     raidLog,
+    { data: comments },
   ] = await Promise.all([
     supabase
       .from("milestone")
@@ -107,6 +114,13 @@ export default async function ProjectDetailPage({
       .limit(15),
     getPickerOptions(),
     getRaidLog(id, session.timeZone),
+    supabase
+      .from("record_comment")
+      .select("id, body, author_id, created_at, resolved_at, deleted_at")
+      .eq("parent_type", "project")
+      .eq("parent_id", id)
+      .order("created_at", { ascending: true })
+      .limit(50),
   ]);
 
   const taskList = (tasks ?? []) as unknown as Task[];
@@ -127,14 +141,18 @@ export default async function ProjectDetailPage({
         title={project.name}
         description={project.outcome ?? undefined}
         actions={
-          session.isStaff ? (
+          canManage || canCollaborate ? (
             <>
-              <StageSelect projectId={project.id} stage={project.stage} />
-              {project.stage !== "completed" && project.stage !== "archived" ? (
-                <CloseProjectDialog
-                  projectId={project.id}
-                  projectName={project.name}
-                />
+              {canManage ? (
+                <>
+                  <StageSelect projectId={project.id} stage={project.stage} />
+                  {project.stage !== "completed" && project.stage !== "archived" ? (
+                    <CloseProjectDialog
+                      projectId={project.id}
+                      projectName={project.name}
+                    />
+                  ) : null}
+                </>
               ) : null}
               <TaskCreateDialog
                 projects={[{ id: project.id, label: project.name }]}
@@ -258,7 +276,7 @@ export default async function ProjectDetailPage({
                 Status updates
               </h2>
             </div>
-            {session.isStaff ? (
+            {canManage ? (
               <div className="mb-4">
                 <StatusUpdateForm projectId={project.id} />
               </div>
@@ -320,7 +338,7 @@ export default async function ProjectDetailPage({
               <h2 id="project-milestones" className="section-heading">
                 Milestones
               </h2>
-              {session.isStaff ? (
+              {canManage ? (
                 <EntityFormDialog
                   triggerLabel="Add milestone"
                   triggerVariant="secondary"
@@ -354,7 +372,7 @@ export default async function ProjectDetailPage({
                     <span className="meta whitespace-nowrap">
                       {formatDate(m.due_date)}
                     </span>
-                    {session.isStaff ? (
+                    {canManage ? (
                       <CompleteMilestoneButton
                         milestoneId={m.id}
                         completed={Boolean(m.completed_at)}
@@ -428,7 +446,7 @@ export default async function ProjectDetailPage({
             log={raidLog}
             projectId={project.id}
             people={options.people}
-            canManage={session.isStaff}
+            canManage={canManage}
             highlightRiskId={highlightRiskId}
             highlightIssueId={highlightIssueId}
           />
@@ -444,8 +462,20 @@ export default async function ProjectDetailPage({
         </>
       ) : null}
 
+      <RecordComments
+        parentType="project"
+        parentId={project.id}
+        comments={(comments ?? []) as {
+          id: string;
+          body: string;
+          author_id: string;
+          created_at: string;
+          resolved_at: string | null;
+          deleted_at: string | null;
+        }[]}
+      />
       <Suspense fallback={null}>
-        <TaskDrawer people={options.people} isStaff={session.isStaff} />
+        <TaskDrawer people={options.people} isStaff={canCollaborate || canManage} />
       </Suspense>
     </div>
   );

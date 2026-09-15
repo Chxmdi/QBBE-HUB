@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { BarChart3 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
@@ -16,8 +15,7 @@ export const metadata: Metadata = { title: "Reports" };
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
-  const session = await requireSession();
-  if (!session.isStaff) redirect("/");
+  await requireSession();
   const supabase = await createSupabaseServerClient();
 
   const [{ data: reports }, { data: programs }, { data: projects }] =

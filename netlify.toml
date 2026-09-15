@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Runtime secrets belong in Netlify's environment settings, separately for
+# staging and production. Production publishing must be gated by CI.

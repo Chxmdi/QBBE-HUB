@@ -38,6 +38,7 @@ export interface DocumentRow {
   kind: "file" | "link";
   mime_type: string | null;
   size_bytes: number | null;
+  scan_status: "pending" | "clean" | "quarantined" | "rejected";
   visibility: string;
   created_at: string;
   owner: { full_name: string } | null;
@@ -150,95 +151,120 @@ export function DocumentList({
         </TableHeader>
       </TableHead>
       <tbody>
-        {sorted.map((doc) => (
-          <TableRow
-            key={doc.id}
-            id={`document-${doc.id}`}
-            // A tint rather than aria-selected: this is a static table, not a
-            // grid, and nothing here is selectable.
-            className={doc.id === highlightId ? "bg-brand-soft/40" : undefined}
-          >
-            <TableCell>
-              <button
-                type="button"
-                onClick={() => open(doc)}
-                disabled={busyId === doc.id}
-                className="flex items-start gap-2.5 text-left hover:text-brand-fg disabled:opacity-60"
-              >
-                <span className="mt-0.5 text-muted">
-                  <DocumentIcon doc={doc} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block font-medium">{doc.title}</span>
-                  {doc.description ? (
-                    <span className="meta block max-w-md truncate">
-                      {doc.description}
-                    </span>
-                  ) : null}
-                  <span className="meta">
-                    {doc.kind === "link" ? "External link" : formatSize(doc.size_bytes)}
+        {sorted.map((doc) => {
+          const fileUnavailable = doc.kind === "file" && doc.scan_status !== "clean";
+          const scanLabel = doc.kind !== "file"
+            ? null
+            : doc.scan_status === "pending"
+              ? "Security check pending"
+              : doc.scan_status === "quarantined"
+                ? "Quarantined"
+                : doc.scan_status === "rejected"
+                  ? "Rejected"
+                  : null;
+          return (
+            <TableRow
+              key={doc.id}
+              id={`document-${doc.id}`}
+              // A tint rather than aria-selected: this is a static table, not a
+              // grid, and nothing here is selectable.
+              className={doc.id === highlightId ? "bg-brand-soft/40" : undefined}
+            >
+              <TableCell>
+                <button
+                  type="button"
+                  onClick={() => open(doc)}
+                  disabled={busyId === doc.id || fileUnavailable}
+                  title={scanLabel ?? undefined}
+                  aria-describedby={scanLabel ? `document-scan-${doc.id}` : undefined}
+                  className="flex items-start gap-2.5 text-left hover:text-brand-fg disabled:opacity-60"
+                >
+                  <span className="mt-0.5 text-muted">
+                    <DocumentIcon doc={doc} />
                   </span>
-                </span>
-              </button>
-            </TableCell>
-            <TableCell className="text-muted">
-              {doc.project ? (
-                <Link
-                  href={`/projects/${doc.project.id}`}
-                  className="hover:text-brand-fg hover:underline"
-                >
-                  {doc.project.name}
-                </Link>
-              ) : doc.program ? (
-                <Link
-                  href={`/programs/${doc.program.id}`}
-                  className="hover:text-brand-fg hover:underline"
-                >
-                  {doc.program.name}
-                </Link>
-              ) : (
-                "General"
-              )}
-            </TableCell>
-            <TableCell className="text-muted">
-              {doc.owner?.full_name ?? "—"}
-            </TableCell>
-            <TableCell>
-              <Badge tone={doc.visibility === "staff" ? "accent" : "neutral"}>
-                {doc.visibility === "staff" ? "Staff only" : "All members"}
-              </Badge>
-            </TableCell>
-            <TableCell className="whitespace-nowrap text-muted">
-              {formatDate(doc.created_at)}
-            </TableCell>
-            <TableCell>
-              <Menu
-                label={`Actions for ${doc.title}`}
-                items={[
-                  {
-                    label: doc.kind === "link" ? "Open link" : "Download",
-                    onSelect: () => open(doc),
-                    icon:
-                      doc.kind === "link" ? (
-                        <ExternalLink className="size-4" aria-hidden />
-                      ) : (
-                        <Download className="size-4" aria-hidden />
-                      ),
-                  },
-                  ...(canManage
-                    ? [
-                        {
-                          label: "Archive",
-                          onSelect: () => archive(doc),
-                          destructive: true,
-                        },
-                      ]
-                    : []),
-                ]}
-              />
-            </TableCell>
-          </TableRow>
-        ))}
+                  <span className="min-w-0">
+                    <span className="block font-medium">{doc.title}</span>
+                    {doc.description ? (
+                      <span className="meta block max-w-md truncate">
+                        {doc.description}
+                      </span>
+                    ) : null}
+                    <span className="meta">
+                      {doc.kind === "link" ? "External link" : formatSize(doc.size_bytes)}
+                    </span>
+                  </span>
+                </button>
+              </TableCell>
+              <TableCell className="text-muted">
+                {doc.project ? (
+                  <Link
+                    href={`/projects/${doc.project.id}`}
+                    className="hover:text-brand-fg hover:underline"
+                  >
+                    {doc.project.name}
+                  </Link>
+                ) : doc.program ? (
+                  <Link
+                    href={`/programs/${doc.program.id}`}
+                    className="hover:text-brand-fg hover:underline"
+                  >
+                    {doc.program.name}
+                  </Link>
+                ) : (
+                  "General"
+                )}
+              </TableCell>
+              <TableCell className="text-muted">
+                {doc.owner?.full_name ?? "—"}
+              </TableCell>
+              <TableCell>
+                <Badge tone={doc.visibility === "staff" ? "accent" : "neutral"}>
+                  {doc.visibility === "staff" ? "Staff only" : "All members"}
+                </Badge>
+                {scanLabel ? (
+                  <span id={`document-scan-${doc.id}`}>
+                    <Badge
+                      tone={doc.scan_status === "pending" ? "warning" : "danger"}
+                      className="ml-1"
+                    >
+                      {scanLabel}
+                    </Badge>
+                  </span>
+                ) : null}
+              </TableCell>
+              <TableCell className="whitespace-nowrap text-muted">
+                {formatDate(doc.created_at)}
+              </TableCell>
+              <TableCell>
+                <Menu
+                  label={`Actions for ${doc.title}`}
+                  items={[
+                    {
+                      label: doc.kind === "link" ? "Open link" : "Download",
+                      onSelect: () => open(doc),
+                      disabled: fileUnavailable,
+                      icon:
+                        doc.kind === "link" ? (
+                          <ExternalLink className="size-4" aria-hidden />
+                        ) : (
+                          <Download className="size-4" aria-hidden />
+                        ),
+                    },
+                    ...(canManage
+                      ? [
+                          {
+                            label: "Archive",
+                            onSelect: () => archive(doc),
+                            destructive: true,
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </tbody>
     </DataTable>
   );

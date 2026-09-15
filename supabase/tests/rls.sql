@@ -20,7 +20,11 @@ begin
 end;
 $$;
 
-create or replace function tests.authenticate(uid uuid)
+-- Drop the earlier one-argument helper as well so repeated local runs do not
+-- leave an overload that makes tests.authenticate(uuid) ambiguous.
+drop function if exists tests.authenticate(uuid);
+drop function if exists tests.authenticate(uuid, text);
+create function tests.authenticate(uid uuid, assurance_level text default 'aal2')
 returns void
 language plpgsql
 set search_path = tests, public, auth
@@ -31,7 +35,12 @@ begin
   perform set_config('request.jwt.claim.role', 'authenticated', true);
   perform set_config(
     'request.jwt.claims',
-    json_build_object('sub', uid::text, 'role', 'authenticated', 'email', '')::text,
+    json_build_object(
+      'sub', uid::text,
+      'role', 'authenticated',
+      'email', '',
+      'aal', assurance_level
+    )::text,
     true
   );
 end;
@@ -55,6 +64,7 @@ grant execute on all functions in schema tests to anon, authenticated, postgres;
 do $$
 declare
   v_owner uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1';
+  v_program_edit uuid;
   v_staff uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2';
   v_vol uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3';
   v_admin uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4';
@@ -73,6 +83,9 @@ declare
   v_report uuid;
   v_version uuid;
   v_export uuid;
+  v_cycle_a uuid;
+  v_cycle_b uuid;
+  v_cycle_c uuid;
   v_prog uuid;
   v_operation uuid;
   v_metric uuid;
@@ -120,8 +133,18 @@ begin
   insert into organization (name, slug)
   values ('RLS Isolated Organization', 'rls-isolated-' || substr(gen_random_uuid()::text, 1, 8))
   returning id into v_other_org;
-  insert into team (organization_id, name) values (v_other_org, 'Private team')
+  insert into organization_membership (organization_id, user_id, role, status)
+  values (v_other_org, v_owner, 'owner', 'active');
+  insert into team (organization_id, name, owner_id)
+  values (v_other_org, 'Private team', v_owner)
   returning id into v_other_team;
+  insert into channel (
+    organization_id, name, slug, type, privacy, owner_id, team_id, created_by
+  ) values (
+    v_other_org, 'Private team',
+    'private-team-' || substr(gen_random_uuid()::text, 1, 8),
+    'team', 'private', v_owner, v_other_team, v_owner
+  );
   insert into program (organization_id, name, slug, created_by)
   values (v_other_org, 'Private program', 'private-program-' || substr(gen_random_uuid()::text, 1, 8), v_owner)
   returning id into v_other_program;
@@ -423,13 +446,21 @@ begin
   end;
   reset role;
 
+  -- Global staff status no longer grants management of unrelated meetings.
+  perform tests.authenticate(v_staff);
+  update agenda_item set status = 'accepted' where id = v_proposed_agenda;
+  get diagnostics n = row_count;
+  perform tests.ok(n = 0, 'unassigned staff cannot triage another organizer''s agenda');
+  reset role;
+  update meeting set organizer_id = v_staff where id = v_private_meeting;
+
   perform tests.authenticate(v_staff);
   begin
     set local role authenticated;
     update agenda_item set status = 'accepted' where id = v_proposed_agenda;
     select count(*) into n from agenda_item
       where id = v_proposed_agenda and status = 'accepted';
-    perform tests.ok(n = 1, 'staff can triage a proposed agenda item');
+    perform tests.ok(n = 1, 'staff organizer can triage a proposed agenda item');
   end;
   reset role;
 
@@ -740,6 +771,16 @@ begin
 
   -- The RAID log follows the project: staff who can manage a project can log
   -- against it, and the score is derived rather than supplied.
+  -- The scoped-access cutover deliberately removed organization-wide staff
+  -- management. Give this fixture only the project authority its assertions
+  -- describe, instead of relying on the legacy staff role.
+  insert into project_access_grant (
+    organization_id, project_id, user_id, role, source, created_by
+  )
+  select organization_id, id, v_staff, 'project_manager', 'direct', v_owner
+  from project
+  where id = v_project;
+
   perform tests.authenticate(v_staff);
   set local role authenticated;
 
@@ -772,15 +813,19 @@ begin
   end;
   reset role;
 
-  -- A guest is a read-only member, so the risk register is visible to them:
-  -- risks inherit project visibility by design, and the project itself is
-  -- readable by any active member. The boundary that matters for a guest is
-  -- the write, so pin both halves rather than assuming the read is blocked.
-  -- Contrast the funding pipeline below, which is staff-and-above outright.
+  -- A guest may read a specifically shared project without gaining write
+  -- authority. Risks inherit that explicit project visibility.
+  insert into project_access_grant (
+    organization_id, project_id, user_id, role, source, created_by
+  )
+  select organization_id, id, v_guest, 'read_only', 'direct', v_owner
+  from project
+  where id = v_project;
+
   perform tests.authenticate(v_guest);
   set local role authenticated;
   select count(*) into n from risk where id = v_risk;
-  perform tests.ok(n = 1, 'guest reads a project risk, as a read-only member');
+  perform tests.ok(n = 1, 'guest reads a risk on an explicitly shared project');
   reset role;
 
   perform tests.authenticate(v_guest);
@@ -952,8 +997,8 @@ begin
   perform tests.authenticate(v_staff);
   set local role authenticated;
 
-  insert into report_instance (organization_id, report_type, title, snapshot, generated_by)
-  values (v_org, 'project', 'RLS fixture report',
+  insert into report_instance (organization_id, project_id, report_type, title, snapshot, generated_by)
+  values (v_org, v_project, 'project', 'RLS fixture report',
           '{"metrics":{"tasks_completed":10}}'::jsonb, v_staff)
   returning id into v_report;
 
@@ -1099,12 +1144,23 @@ begin
   -- record they cannot correct, and the numbers in it end up in a funder
   -- report with their name on the session.
   -- ---------------------------------------------------------------------
+  insert into program (organization_id, name, slug, created_by)
+  values (
+    v_org,
+    'RLS fixture programme',
+    'rls-fixture-programme-' || substr(gen_random_uuid()::text, 1, 8),
+    v_owner
+  )
+  returning id into v_prog;
+
+  insert into program_access_grant (
+    organization_id, program_id, user_id, role, source, created_by
+  ) values
+    (v_org, v_prog, v_staff, 'lead', 'direct', v_owner),
+    (v_org, v_prog, v_vol, 'contributor', 'direct', v_owner);
+
   perform tests.authenticate(v_staff);
   set local role authenticated;
-
-  insert into program (organization_id, name, slug, created_by)
-  values (v_org, 'RLS fixture programme', 'rls-fixture-programme', v_staff)
-  returning id into v_prog;
 
   insert into program_operation (organization_id, program_id, title, occurred_on,
                                  status, attendee_count, duration_hours, created_by)
@@ -1174,6 +1230,8 @@ begin
   perform tests.authenticate(v_admin);
   set local role authenticated;
 
+  -- The outer transaction restores an existing fixture policy after this test.
+  delete from retention_policy where organization_id = v_admin_org and subject_key = 'activity_event';
   insert into retention_policy (organization_id, subject_key, retain_days, created_by)
   values (v_admin_org, 'activity_event', 365, v_admin)
   returning id into v_policy;
@@ -1250,7 +1308,7 @@ begin
 
     select count(*) into n
     from global_search('RLS fixture risk', 60)
-    where result_type = 'risk';
+    where result_type = 'risk' and id = v_risk;
     perform tests.ok(n = 1, 'staff finds a risk on their project through search');
 
     select count(*) into n
@@ -1278,7 +1336,7 @@ begin
     set local role authenticated;
     select count(*) into n
     from global_search('RLS fixture risk', 60)
-    where result_type = 'risk';
+    where result_type = 'risk' and id = v_risk;
     select count(*) into m from risk where id = v_risk;
     perform tests.ok(n = m, 'search shows a guest exactly the risks they can read');
   exception
@@ -1314,14 +1372,17 @@ begin
   end;
   reset role;
 
+  -- This guest has an explicit read-only grant on v_project. Scoped access
+  -- follows that grant into its report instead of denying reports solely from
+  -- the organization-level guest label.
   perform tests.authenticate(v_guest);
   begin
     set local role authenticated;
-    select count(*) into n from report_instance;
-    perform tests.ok(n = 0, 'guest cannot read report snapshots');
+    select count(*) into n from report_instance where id = v_report;
+    perform tests.ok(n = 1, 'read-only project member can read its report snapshot');
   exception
     when insufficient_privilege then
-      perform tests.ok(true, 'guest cannot read report snapshots (privilege denied)');
+      perform tests.ok(false, 'read-only project member must be able to read its report snapshot');
   end;
   reset role;
 
@@ -1572,6 +1633,65 @@ begin
       perform tests.ok(true, 'a task cannot be its own successor');
   end;
 
+  perform tests.authenticate(v_staff);
+  insert into export_job (organization_id, kind, requested_by)
+    values (v_org, 'task_history', v_staff) returning id into v_export;
+  perform tests.ok(v_export is not null, 'staff can submit an export request');
+  reset role;
+  select count(*) into n from audit_event
+    where object_id = v_export and action = 'export_requested';
+  perform tests.ok(n = 1, 'export request and audit record are created atomically');
+  perform tests.authenticate(v_staff);
+  begin
+    insert into export_job (organization_id, kind, requested_by, status, storage_path, completed_at)
+      values (v_org, 'task_history', v_staff, 'ready', 'foreign/file.json', now());
+    perform tests.ok(false, 'client cannot forge a completed export');
+  exception when insufficient_privilege then
+    perform tests.ok(true, 'client cannot forge a completed export');
+  end;
+  begin
+    insert into export_job (organization_id, kind, requested_by, expires_at)
+      values (v_org, 'task_history', v_staff, now() + interval '100 years');
+    perform tests.ok(false, 'client cannot choose export retention');
+  exception when insufficient_privilege then
+    perform tests.ok(true, 'client cannot choose export retention');
+  end;
+  reset role;
+  insert into task (organization_id, title, created_by) values (v_org, 'Cycle A', v_owner) returning id into v_cycle_a;
+  insert into task (organization_id, title, created_by) values (v_org, 'Cycle B', v_owner) returning id into v_cycle_b;
+  insert into task (organization_id, title, created_by) values (v_org, 'Cycle C', v_owner) returning id into v_cycle_c;
+  insert into task_dependency values (v_cycle_a, v_cycle_b, now()), (v_cycle_b, v_cycle_c, now());
+  begin
+    insert into task_dependency values (v_cycle_c, v_cycle_a, now());
+    perform tests.ok(false, 'database must reject multi-step dependency cycles');
+  exception when check_violation then
+    perform tests.ok(true, 'database rejects multi-step dependency cycles');
+  end;
+  reset role;
+  insert into program (organization_id, name, slug, created_by)
+    values (v_org, 'Editable program', 'edit-' || gen_random_uuid()::text, v_owner)
+    returning id into v_program_edit;
+  insert into program_access_grant (
+    organization_id, program_id, user_id, role, source, created_by
+  ) values (
+    v_org, v_program_edit, v_staff, 'lead', 'direct', v_owner
+  );
+  perform tests.authenticate(v_staff);
+  update program set status = 'archived' where id = v_program_edit;
+  perform tests.ok((select archived_at is not null from program where id = v_program_edit),
+    'program archive sets its timestamp');
+  update program set status = 'active' where id = v_program_edit;
+  perform tests.ok((select archived_at is null from program where id = v_program_edit),
+    'program restoration clears its timestamp');
+  reset role;
+  select count(*) into n from audit_event where object_id = v_program_edit
+    and actor_id = v_staff and action in ('archived', 'restored');
+  perform tests.ok(n = 2, 'program archive and restoration retain accountable history');
+  perform tests.authenticate(v_vol);
+  update program set name = 'Unauthorized edit' where id = v_program_edit;
+  get diagnostics n = row_count;
+  perform tests.ok(n = 0, 'volunteer cannot edit an unassigned program');
+  reset role;
   perform tests.ok(true, 'RLS matrix complete');
 end;
 $$;

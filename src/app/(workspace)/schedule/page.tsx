@@ -10,7 +10,7 @@ import { CalendarRange } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { HealthBadge } from "@/components/shared/status-badges";
 import { EmptyState } from "@/components/ui/empty-state";
-import { requireStaff } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types/entities";
@@ -38,7 +38,7 @@ const HEALTH_BAR_TEXT: Record<string, string> = {
  * unbounded multi-year DOM timeline (CAL-006).
  */
 export default async function SchedulePage() {
-  await requireStaff();
+  await requireSession();
   const supabase = await createSupabaseServerClient();
 
   const windowStart = startOfMonth(addMonths(new Date(), -1));

@@ -300,7 +300,7 @@ describe("the registry", () => {
     const names = new Set<string>();
 
     for (const file of readdirSync(dir).filter((f) => f.endsWith(".sql"))) {
-      const sql = readFileSync(join(dir, file), "utf8");
+      const sql = readFileSync(join(dir, file), "utf8").replaceAll("insert into public.job_definition", "insert into job_definition");
       let from = sql.indexOf("insert into job_definition");
       while (from !== -1) {
         // The value tuples run until `on conflict` or the statement's end,

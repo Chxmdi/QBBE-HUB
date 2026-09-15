@@ -10,7 +10,30 @@ import AxeBuilder from "@axe-core/playwright";
 const ROUTES = [
   { path: "/sign-in", name: "sign-in" },
   { path: "/sign-up", name: "sign-up" },
+  { path: "/forgot-password", name: "forgot-password" },
 ];
+
+test("recovery requests give an account-neutral confirmation", async ({ page }) => {
+  await page.route("**/auth/v1/recover**", async route => {
+    expect(route.request().postDataJSON().email).toBe("person@example.com");
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.goto("/forgot-password");
+  await page.getByLabel("Email", { exact: true }).fill("person@example.com");
+  await page.getByRole("button", { name: "Send recovery link" }).click();
+  await expect(page.getByRole("status")).toContainText("If this address belongs to an account");
+});
+
+test("recovery failures leave a retryable form", async ({ page }) => {
+  await page.route("**/auth/v1/recover**", route => route.fulfill({
+    status: 429, contentType: "application/json", body: JSON.stringify({ msg: "Rate limited" }),
+  }));
+  await page.goto("/forgot-password");
+  await page.getByLabel("Email", { exact: true }).fill("person@example.com");
+  await page.getByRole("button", { name: "Send recovery link" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("try again");
+  await expect(page.getByRole("button", { name: "Send recovery link" })).toBeEnabled();
+});
 
 const WIDTHS = [
   { w: 1440, h: 900, name: "1440" },
@@ -55,7 +78,7 @@ test("auth routes render at every width in both themes", async ({ page }) => {
         }
 
         // The submit control must stay reachable at every width.
-        const submit = page.getByRole("button", { name: /Sign in|Create account/ });
+        const submit = page.getByRole("button", { name: /Sign in|Create account|Send recovery link/ });
         await expect(submit, `${route.name} @${size.name}`).toBeVisible();
         const box = await submit.boundingBox();
         if (box && box.height < 36) {

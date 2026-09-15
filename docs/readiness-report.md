@@ -1,0 +1,36 @@
+# Deployment readiness report
+
+Verdict: **NOT READY**. Full implementation remains in progress; external
+verification is blocked. No staging release candidate has been certified.
+
+| Release item | Current evidence |
+|---|---|
+| Candidate | Uncommitted work on implement/prd-v2-release; no frozen release SHA |
+| Staging | No QBBE staging deployment provisioned in this session |
+| Production | No publishing authorized by this plan; keep release disabled |
+| Code checks | Node 22 lint, typecheck, 419 unit tests, and production build pass on the current working tree |
+| Database | Clean local reset applied the complete migration chain; the full database/RLS suite passes and the security advisor reports no errors |
+| Browsers | Public Chromium/Firefox and prior authenticated Chromium scenarios passed; MFA browser verification is active; local WebKit protocol failure remains |
+| Full acceptance | See acceptance-matrix.md; no overall acceptance certification |
+| Operations | Document quarantine is enforced in code/RLS, but a QBBE-controlled ClamAV host, restore/backup/alert custody, and operator sign-off are not established |
+
+## External inputs
+
+- QBBE provider account-owner email, existing sender domain and secure provider access.
+- Actual VMS contract, QBBE Google configuration and authorized test recipients.
+- Named product/privacy owner, operator, recovery custodian and alert recipients.
+- Isolated restore environment and named Safari/mobile acceptance operator.
+
+Do not put credentials, backup data or recovery keys in this report. Continue
+independent work while inputs are missing. A disabled integration is not full
+readiness, even if a separate explicitly labelled pilot could proceed.
+
+## Final gate
+
+Require every mandatory acceptance row verified at the frozen release commit;
+complete lint/types/unit/build/dependency/database/browser/concurrency checks;
+document p95 interaction ≤2 seconds and realtime ≤5 seconds on the agreed
+50-user fixture; prove encrypted database/file restore within 24-hour RPO and
+one-business-day RTO; obtain named operator sign-off. Attach staging URL,
+environment inventory, administrator guide, recovery guide and production
+release procedure. Missing evidence leaves readiness blocked.

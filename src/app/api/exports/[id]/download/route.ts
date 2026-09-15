@@ -69,11 +69,19 @@ export async function GET(
 
   const service = createSupabaseServiceClient();
 
+  if (row.organization_id !== session.organizationId ||
+      row.storage_path !== `${row.organization_id}/${row.id}.json`) {
+    return NextResponse.json({ error: "Invalid export file." }, { status: 403 });
+  }
+
   // Step 3, before step 4. One statement, so two people downloading at the
   // same moment cannot lose a count between them.
-  await service.rpc("count_export_download", { p_export_id: id });
+  const { error: countError } = await service.rpc("count_export_download", { p_export_id: id });
+  if (countError) {
+    return NextResponse.json({ error: "Could not record download." }, { status: 503 });
+  }
 
-  await service.from("audit_event").insert({
+  const { error: auditError } = await service.from("audit_event").insert({
     organization_id: row.organization_id,
     actor_id: session.userId,
     event_type: "data_export",
@@ -81,6 +89,9 @@ export async function GET(
     object_type: "export_job",
     object_id: id,
   });
+  if (auditError) {
+    return NextResponse.json({ error: "Could not audit download." }, { status: 503 });
+  }
 
   const { data: signed, error } = await service.storage
     .from("exports")

@@ -1,0 +1,100 @@
+import { createHmac } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { expect, type Page } from "@playwright/test";
+
+type QaAccount = "owner" | "volunteer";
+
+// The authenticated suite uses one worker. Keep the test enrollment secret in
+// that worker so later owner sessions can pass the normal challenge screen.
+const totpSecrets = new Map<QaAccount, string>();
+const ownerTotpPath = join(process.cwd(), "test-results", ".qa-owner-totp");
+
+async function rememberOwnerTotp(secret: string) {
+  totpSecrets.set("owner", secret);
+  await mkdir(dirname(ownerTotpPath), { recursive: true });
+  await writeFile(ownerTotpPath, secret, { mode: 0o600 });
+}
+
+async function recalledOwnerTotp(): Promise<string | undefined> {
+  const remembered = totpSecrets.get("owner");
+  if (remembered) return remembered;
+  try {
+    const secret = (await readFile(ownerTotpPath, "utf8")).trim();
+    if (secret) totpSecrets.set("owner", secret);
+    return secret || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeBase32(value: string): Buffer {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const character of value.toUpperCase().replace(/=|\s/g, "")) {
+    const index = alphabet.indexOf(character);
+    if (index < 0) throw new Error("Authenticator setup returned an invalid secret");
+    bits += index.toString(2).padStart(5, "0");
+  }
+  const bytes: number[] = [];
+  for (let offset = 0; offset + 8 <= bits.length; offset += 8) {
+    bytes.push(Number.parseInt(bits.slice(offset, offset + 8), 2));
+  }
+  return Buffer.from(bytes);
+}
+
+function currentTotp(secret: string): string {
+  const counter = Math.floor(Date.now() / 30_000);
+  const message = Buffer.alloc(8);
+  message.writeBigUInt64BE(BigInt(counter));
+  const digest = createHmac("sha1", decodeBase32(secret)).update(message).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const binary =
+    ((digest[offset] & 0x7f) << 24) |
+    ((digest[offset + 1] & 0xff) << 16) |
+    ((digest[offset + 2] & 0xff) << 8) |
+    (digest[offset + 3] & 0xff);
+  return (binary % 1_000_000).toString().padStart(6, "0");
+}
+
+async function completeOwnerMfa(page: Page) {
+  const codeInput = page.getByLabel("Six-digit code", { exact: true });
+  await expect(codeInput).toBeVisible({ timeout: 20_000 });
+
+  const secretInput = page.getByLabel("Can’t scan the QR code?", { exact: true });
+  if (await secretInput.isVisible()) {
+    await rememberOwnerTotp(await secretInput.inputValue());
+  }
+  const secret = await recalledOwnerTotp();
+  if (!secret) {
+    throw new Error("The QA owner already has an MFA factor whose test secret is unavailable");
+  }
+
+  // Avoid submitting a code at the edge of its 30-second validity window.
+  const secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
+  if (secondsRemaining <= 2) await page.waitForTimeout((secondsRemaining + 1) * 1000);
+  await codeInput.fill(currentTotp(secret));
+  await page
+    .getByRole("button", { name: /^(Enable MFA|Verify and continue)$/ })
+    .click();
+}
+
+/** Sign into the synthetic local account, including the owner's real MFA UI. */
+export async function signIn(page: Page, account: QaAccount) {
+  await page.goto("/sign-in");
+  await page.getByLabel("Email", { exact: true }).fill(`qa-${account}@example.com`);
+  await page.getByLabel("Password", { exact: true }).fill("QaTest!2026");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+
+  if (account === "owner") {
+    const mfaHeading = page.getByRole("heading", {
+      name: "Protect your administrator account",
+      exact: true,
+    });
+    const workspace = page.getByRole("link", { name: "Projects", exact: true });
+    await expect(mfaHeading.or(workspace).first()).toBeVisible({ timeout: 20_000 });
+    if (await mfaHeading.isVisible()) await completeOwnerMfa(page);
+  }
+
+  await page.waitForURL((url) => url.pathname === "/", { timeout: 60_000 });
+}

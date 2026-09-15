@@ -22,6 +22,8 @@ interface ProjectRow {
   name: string;
   owner_id: string | null;
   updated_at: string;
+  reporting_cadence?: string;
+  last_status_update_at?: string | null;
 }
 
 /** ISO week key, e.g. 2026-W34 — stable across a Monday-to-Sunday run window. */
@@ -45,7 +47,7 @@ export async function staleProjectSweep({
 
   const { data: projectRows, error } = await db
     .from("project")
-    .select("id, organization_id, name, owner_id, updated_at")
+    .select("id, organization_id, name, owner_id, updated_at, reporting_cadence, last_status_update_at")
     .in("stage", ACTIVE_STAGES)
     .is("archived_at", null)
     .not("owner_id", "is", null)
@@ -76,9 +78,16 @@ export async function staleProjectSweep({
 
   const week = isoWeekKey(now);
   const drafts: NotificationDraft[] = projects
-    .filter(
-      (project) => !recentlyActive.has(project.id) && project.updated_at < cutoff,
-    )
+    .filter((project) => {
+      const days = project.reporting_cadence === "weekly"
+        ? 7
+        : project.reporting_cadence === "monthly"
+          ? 30
+          : STALE_DAYS;
+      const projectCutoff = new Date(now.getTime() - days * 86_400_000).toISOString();
+      const lastUpdate = project.last_status_update_at ?? project.updated_at;
+      return !recentlyActive.has(project.id) && lastUpdate < projectCutoff;
+    })
     .map((project) => ({
       user_id: project.owner_id!,
       organization_id: project.organization_id,

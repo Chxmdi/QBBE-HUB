@@ -40,6 +40,8 @@ export const RATE_LIMITS = {
   "message:create": { limit: 120, windowSeconds: 60 },
   "task:create": { limit: 120, windowSeconds: 60 },
   "invitation:create": { limit: 30, windowSeconds: 3600 },
+  "access-grant:program": { limit: 120, windowSeconds: 3600 },
+  "access-grant:project": { limit: 120, windowSeconds: 3600 },
   "announcement:publish": { limit: 20, windowSeconds: 3600 },
   "document:upload": { limit: 60, windowSeconds: 3600 },
   "report:generate": { limit: 30, windowSeconds: 3600 },

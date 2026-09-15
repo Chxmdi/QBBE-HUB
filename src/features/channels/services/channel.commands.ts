@@ -13,7 +13,7 @@ const createChannelSchema = z.object({
   purpose: z.string().trim().max(500).optional(),
   privacy: z.enum(["public", "private"]).default("public"),
   type: z
-    .enum(["organization", "team", "program", "project", "event", "operations", "leadership", "custom"])
+    .enum(["organization", "program", "project", "event", "operations", "leadership", "custom"])
     .default("custom"),
   projectId: z.string().uuid().optional(),
   programId: z.string().uuid().optional(),
@@ -60,11 +60,9 @@ export async function createChannel(input: unknown): Promise<ActionResult> {
     };
   }
 
-  await supabase.from("channel_member").insert({
-    channel_id: channel.id,
-    user_id: session.userId,
-    role: "manager",
-    membership_source: "manual",
+  await supabase.rpc("add_channel_member", {
+    p_channel_id: channel.id,
+    p_user_id: session.userId,
   });
 
   await supabase.from("audit_event").insert({
@@ -82,12 +80,12 @@ export async function createChannel(input: unknown): Promise<ActionResult> {
 }
 
 export async function joinChannel(channelId: string): Promise<ActionResult> {
-  const session = await requireSession();
+  await requireSession();
+  const parsed = z.string().uuid().safeParse(channelId);
+  if (!parsed.success) return { ok: false, error: "Invalid channel." };
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("channel_member").insert({
-    channel_id: channelId,
-    user_id: session.userId,
-    membership_source: "manual",
+  const { error } = await supabase.rpc("join_channel", {
+    p_channel_id: parsed.data,
   });
   if (error && error.code !== "23505") {
     return { ok: false, error: "Could not join this channel." };
@@ -98,7 +96,7 @@ export async function joinChannel(channelId: string): Promise<ActionResult> {
 }
 
 export async function leaveChannel(channelId: string): Promise<ActionResult> {
-  const session = await requireSession();
+  await requireSession();
   const supabase = await createSupabaseServerClient();
   const { data: channel } = await supabase
     .from("channel")
@@ -109,11 +107,9 @@ export async function leaveChannel(channelId: string): Promise<ActionResult> {
     return { ok: false, error: "You cannot leave a mandatory channel." };
   }
   // RLS also blocks leaving mandatory channels (P0-ANN-01).
-  const { error } = await supabase
-    .from("channel_member")
-    .delete()
-    .eq("channel_id", channelId)
-    .eq("user_id", session.userId);
+  const { error } = await supabase.rpc("leave_channel", {
+    p_channel_id: channelId,
+  });
   if (error) return { ok: false, error: "You cannot leave this channel." };
   revalidatePath("/channels");
   return { ok: true };
@@ -157,23 +153,13 @@ export async function addChannelMember(
   if (!session.isAdmin && channel.owner_id !== session.userId) {
     return { ok: false, error: "Only the channel owner or an admin can add members." };
   }
-  const { error } = await supabase.from("channel_member").insert({
-    channel_id: channelId,
-    user_id: userId,
-    membership_source: "manual",
+  const { error } = await supabase.rpc("add_channel_member", {
+    p_channel_id: channelId,
+    p_user_id: userId,
   });
   if (error && error.code !== "23505") {
     return { ok: false, error: "Could not add that member." };
   }
-  await supabase.from("audit_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    event_type: "communication",
-    action: "channel_member_added",
-    object_type: "channel",
-    object_id: channelId,
-    metadata: { user_id: userId },
-  });
   revalidatePath(`/channels/${channelId}`);
   return { ok: true };
 }

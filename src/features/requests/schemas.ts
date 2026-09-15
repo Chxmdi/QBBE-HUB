@@ -20,6 +20,8 @@ export const PROJECT_REQUEST_STATUSES = [
   "approved",
   "declined",
   "withdrawn",
+  "deferred",
+  "returned",
 ] as const;
 
 export const APPROVAL_DECISIONS = [
@@ -36,6 +38,8 @@ export type ApprovalDecision = (typeof APPROVAL_DECISIONS)[number];
 export const OPEN_REQUEST_STATUSES: ProjectRequestStatus[] = [
   "submitted",
   "in_review",
+  "deferred",
+  "returned",
 ];
 
 /** Statuses that refuse a request, and therefore owe an explanation. */
@@ -54,6 +58,8 @@ export const REQUEST_STATUS_LABELS: Record<ProjectRequestStatus, string> = {
   approved: "Approved",
   declined: "Declined",
   withdrawn: "Withdrawn",
+  deferred: "Deferred",
+  returned: "Returned for clarification",
 };
 
 export const DECISION_LABELS: Record<ApprovalDecision, string> = {

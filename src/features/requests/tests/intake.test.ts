@@ -36,7 +36,7 @@ describe("request statuses", () => {
   });
 
   it("uses the same statuses the enum declares", () => {
-    const sql = migration("_intake_requests.sql");
+    const sql = `${migration("_intake_requests.sql")}\n${migration("_prd_workstream_completion.sql")}`;
     for (const status of PROJECT_REQUEST_STATUSES) {
       expect(sql).toContain(`'${status}'`);
     }

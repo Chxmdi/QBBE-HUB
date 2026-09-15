@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
+import { hasProgramCapability, hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -13,50 +14,82 @@ const createProjectSchema = z.object({
   outcome: z.string().trim().max(2000).optional(),
   programId: z.string().uuid().optional(),
   ownerId: z.string().uuid().optional(),
+  sponsorId: z.string().uuid().optional(),
   startDate: z.string().optional(),
   targetDate: z.string().optional(),
+  priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
+  health: z.enum(["on_track", "at_risk", "off_track", "paused", "unknown"]).default("unknown"),
+  healthReason: z.string().trim().max(2000).optional(),
+  reportingCadence: z.enum(["none", "weekly", "monthly"]).default("none"),
   stage: z
     .enum(["proposed", "approved", "planning", "active"])
     .default("planning"),
+}).superRefine((value, ctx) => {
+  if (value.stage === "active") {
+    if (!value.programId || !value.outcome || !value.targetDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "An active project needs a program, outcome and target date.",
+      });
+    }
+  }
+  if ((value.health === "at_risk" || value.health === "off_track") && !value.healthReason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Adverse health requires a reason.",
+    });
+  }
 });
 
 export async function createProject(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = createProjectSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { name, outcome, programId, ownerId, startDate, targetDate, stage } =
-    parsed.data;
+  const {
+    name, outcome, programId, ownerId, sponsorId, startDate, targetDate, stage,
+    priority, health, healthReason, reportingCadence,
+  } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
-  const { data: project, error } = await supabase
+  if (programId) {
+    if (!(await hasProgramCapability(supabase, programId, "manage"))) {
+      return { ok: false, error: "You cannot create a project in this program." };
+    }
+  } else if (!session.isAdmin) {
+    return { ok: false, error: "Independent projects can only be created by an administrator." };
+  }
+  const projectId = crypto.randomUUID();
+  const { error } = await supabase
     .from("project")
     .insert({
+      id: projectId,
       organization_id: session.organizationId,
       program_id: programId ?? null,
       name,
       outcome: outcome || null,
       owner_id: ownerId ?? session.userId,
+      sponsor_id: sponsorId ?? null,
       stage,
-      health: "unknown",
+      health,
+      health_reason: healthReason || null,
+      priority,
+      reporting_cadence: reportingCadence,
       start_date: startDate || null,
       target_date: targetDate || null,
       created_by: session.userId,
-    })
-    .select("id")
-    .single();
+    });
 
-  if (error || !project) return { ok: false, error: "Could not create the project." };
+  if (error) return { ok: false, error: "Could not create the project." };
 
   await supabase.from("project_membership").insert({
-    project_id: project.id,
+    project_id: projectId,
     user_id: ownerId ?? session.userId,
     role: "manager",
   });
 
-  const channelSlug = `project-${slugify(name) || project.id.slice(0, 8)}`;
+  const channelSlug = `project-${slugify(name) || projectId.slice(0, 8)}`;
   const { data: channel } = await supabase
     .from("channel")
     .insert({
@@ -66,7 +99,7 @@ export async function createProject(input: unknown): Promise<ActionResult> {
       type: "project",
       privacy: "public",
       purpose: `Project conversation for ${name}.`,
-      project_id: project.id,
+      project_id: projectId,
       program_id: programId ?? null,
       owner_id: ownerId ?? session.userId,
       created_by: session.userId,
@@ -74,11 +107,9 @@ export async function createProject(input: unknown): Promise<ActionResult> {
     .select("id")
     .maybeSingle();
   if (channel) {
-    await supabase.from("channel_member").insert({
-      channel_id: channel.id,
-      user_id: ownerId ?? session.userId,
-      role: "manager",
-      membership_source: "project",
+    await supabase.rpc("add_channel_member", {
+      p_channel_id: channel.id,
+      p_user_id: ownerId ?? session.userId,
     });
   }
 
@@ -87,14 +118,14 @@ export async function createProject(input: unknown): Promise<ActionResult> {
     actor_id: session.userId,
     verb: "created",
     source_type: "project",
-    source_id: project.id,
-    project_id: project.id,
+    source_id: projectId,
+    project_id: projectId,
     program_id: programId ?? null,
     summary: `created project “${name}”`,
   });
 
   revalidatePath("/projects");
-  return { ok: true, id: project.id as string };
+  return { ok: true, id: projectId };
 }
 
 const statusUpdateSchema = z.object({
@@ -196,17 +227,22 @@ const stageSchema = z.object({
 
 export async function updateProjectStage(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = stageSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
   const { projectId, stage } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
+  if (!(await hasProjectCapability(supabase, projectId, "manage"))) {
+    return { ok: false, error: "You cannot change this project's stage." };
+  }
+  if (stage === "completed") {
+    return { ok: false, error: "Use close project so unresolved work is recorded." };
+  }
   const { data: project, error } = await supabase
     .from("project")
     .update({
       stage,
-      completed_at: stage === "completed" ? new Date().toISOString() : null,
+      completed_at: null,
       archived_at: stage === "archived" ? new Date().toISOString() : null,
     })
     .eq("id", projectId)
@@ -308,7 +344,6 @@ const closeSchema = z.object({
  */
 export async function closeProject(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
   const parsed = closeSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -316,6 +351,16 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
   const { projectId, results, lessons, archiveOpenTasks } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
+  if (!(await hasProjectCapability(supabase, projectId, "manage"))) {
+    return { ok: false, error: "You cannot close this project." };
+  }
+  const unresolved = await getUnresolvedWork(projectId);
+  if (unresolved.openMilestones > 0 || unresolved.blockedTasks > 0) {
+    return {
+      ok: false,
+      error: "Close or reassign open milestones and blocked work before completing the project.",
+    };
+  }
 
   // Final update is required before closure.
   const { error: updateError } = await supabase
@@ -388,7 +433,7 @@ const createProgramSchema = z.object({
 
 export async function createProgram(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  if (!session.isAdmin) return { ok: false, error: "Administrator access is required to create a program." };
   const parsed = createProgramSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -400,24 +445,24 @@ export async function createProgram(input: unknown): Promise<ActionResult> {
     .trim()
     .replace(/[\s_-]+/g, "-")
     .slice(0, 60);
+  const programId = crypto.randomUUID();
 
   const supabase = await createSupabaseServerClient();
-  const { data: program, error } = await supabase
+  const { error } = await supabase
     .from("program")
     .insert({
+      id: programId,
       organization_id: session.organizationId,
       name,
       slug: `${slug}-${Date.now().toString(36).slice(-4)}`,
       description: description || null,
       lead_id: leadId ?? session.userId,
       created_by: session.userId,
-    })
-    .select("id")
-    .single();
+    });
 
-  if (error || !program) return { ok: false, error: "Could not create the program." };
+  if (error) return { ok: false, error: "Could not create the program." };
 
-  const channelSlug = `program-${slug || program.id.slice(0, 8)}`;
+  const channelSlug = `program-${slug || programId.slice(0, 8)}`;
   const { data: channel } = await supabase
     .from("channel")
     .insert({
@@ -427,22 +472,66 @@ export async function createProgram(input: unknown): Promise<ActionResult> {
       type: "program",
       privacy: "public",
       purpose: `Program conversation for ${name}.`,
-      program_id: program.id,
+      program_id: programId,
       owner_id: leadId ?? session.userId,
       created_by: session.userId,
     })
     .select("id")
     .maybeSingle();
   if (channel) {
-    await supabase.from("channel_member").insert({
-      channel_id: channel.id,
-      user_id: leadId ?? session.userId,
-      role: "manager",
-      membership_source: "program",
+    await supabase.rpc("add_channel_member", {
+      p_channel_id: channel.id,
+      p_user_id: leadId ?? session.userId,
     });
   }
 
   revalidatePath("/programs");
   revalidatePath("/channels");
-  return { ok: true, id: program.id as string };
+  return { ok: true, id: programId };
+}
+
+const updateProjectSchema = z.object({
+  projectId: z.string().uuid(),
+  name: requiredText("A project needs a name.", 200),
+  outcome: z.string().trim().max(2000).optional(),
+  programId: z.string().uuid().optional(),
+  ownerId: z.string().uuid().optional(),
+  sponsorId: z.string().uuid().optional(),
+  startDate: z.string().optional(),
+  targetDate: z.string().optional(),
+  priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
+  health: z.enum(["on_track", "at_risk", "off_track", "paused", "unknown"]).default("unknown"),
+  healthReason: z.string().trim().max(2000).optional(),
+  reportingCadence: z.enum(["none", "weekly", "monthly"]).default("none"),
+});
+
+export async function updateProject(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  const parsed = updateProjectSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+  const db = await createSupabaseServerClient();
+  if (!(await hasProjectCapability(db, parsed.data.projectId, "manage"))) {
+    return { ok: false, error: "You cannot edit this project." };
+  }
+  const { projectId, name, outcome, programId, ownerId, sponsorId, startDate,
+    targetDate, priority, health, healthReason, reportingCadence } = parsed.data;
+  const { data, error } = await db.from("project").update({
+    name,
+    outcome: outcome || null,
+    program_id: programId ?? null,
+    owner_id: ownerId ?? session.userId,
+    sponsor_id: sponsorId ?? null,
+    start_date: startDate || null,
+    target_date: targetDate || null,
+    priority,
+    health,
+    health_reason: healthReason || null,
+    reporting_cadence: reportingCadence,
+  }).eq("id", projectId).select("id").maybeSingle();
+  if (error || !data) return { ok: false, error: "Could not save the project." };
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/projects");
+  return { ok: true, id: projectId };
 }

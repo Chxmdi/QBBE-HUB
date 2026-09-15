@@ -61,12 +61,14 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
             <Label htmlFor="invite-role">Role</Label>
             <Select id="invite-role" name="intendedRole" defaultValue="staff" required>
               <option value="admin">Workspace Admin</option>
+              <option value="leadership_viewer">Leadership viewer</option>
               <option value="staff">Staff</option>
               <option value="volunteer">Volunteer</option>
               <option value="guest">Read-only guest</option>
             </Select>
             <p className="mt-1 text-[12.5px] text-muted">
               When this person signs up with the invited email, the role is applied automatically.
+              Leadership viewers receive portfolio read access without operational write access.
             </p>
           </div>
           {error ? <p role="alert" className="text-[13px] text-danger-fg">{error}</p> : null}

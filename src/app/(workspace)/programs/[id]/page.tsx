@@ -6,9 +6,11 @@ import { HealthBadge, StageBadge } from "@/components/shared/status-badges";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { OutcomesPanel } from "@/features/outcomes/components/outcomes-panel";
+import { ProgramEditDialog } from "@/features/programs/components/program-edit-dialog";
 import { getProgramOutcomes } from "@/features/outcomes/services/outcome.queries";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
-import { requireStaff } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
+import { hasProgramCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/utils";
 import type { ActivityEvent, EventRecord, Project } from "@/types/entities";
@@ -21,14 +23,15 @@ export default async function ProgramDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireStaff();
+  await requireSession();
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
+  const canManage = await hasProgramCapability(supabase, id, "manage");
 
   const { data: program } = await supabase
     .from("program")
     .select(
-      "id, name, description, status, created_at, lead:lead_id(id, full_name, avatar_url, title)",
+      "id, name, description, status, color, important_links, created_at, lead:lead_id(id, full_name, avatar_url, title)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -80,7 +83,9 @@ export default async function ProgramDetailPage({
         title={program.name}
         description={program.description ?? undefined}
         actions={
-          lead ? (
+          <div className="flex flex-wrap items-center gap-4">
+          {canManage ? <ProgramEditDialog program={program} /> : null}
+          {lead ? (
             <span className="flex items-center gap-2 text-[13.5px]">
               <Avatar name={lead.full_name} src={lead.avatar_url} size="md" />
               <span>
@@ -88,7 +93,8 @@ export default async function ProgramDetailPage({
                 <span className="meta">Program lead</span>
               </span>
             </span>
-          ) : undefined
+          ) : null}
+          </div>
         }
       />
 
@@ -103,7 +109,7 @@ export default async function ProgramDetailPage({
             id: p.id as string,
             label: p.name as string,
           }))}
-          canManage={session.isStaff}
+          canManage={canManage}
         />
       </div>
 
