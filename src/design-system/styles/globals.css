@@ -3,102 +3,97 @@
 /*
  * QBBE Hub design tokens — the single source for brand color, surfaces,
  * typography, spacing, radius, shadow, and motion. (UI-001, UI-003)
- * Values follow Part II Appendix A and Part III §4 of the master spec.
- * Do not hard-code brand colors in feature components.
+ *
+ * The application brand now follows the approved bilingual QBBE mark:
+ * royal indigo-blue + warm gold + white. Feature components should continue
+ * using semantic tokens rather than hard-coded brand values.
  */
 
 @theme {
-  /* Brand */
-  --color-brand: #8f1538; /* QBBE Crimson — primary actions, active nav */
-  --color-brand-strong: #651128; /* Deep Crimson — pressed states */
-  --color-brand-soft: #f7e9ee; /* tinted selection surfaces (light) */
-  --color-accent: #c8a64d; /* Warm Gold — sparing premium accent */
+  /* Core QBBE brand */
+  --color-brand: #2a3c90; /* sampled from the approved QBBE logo */
+  --color-brand-strong: #1d2e70;
+  --color-brand-soft: #eef1fb;
+  --color-accent: #e8b36d; /* gold rule/accent in the approved mark */
 
-  /* Semantic status — never rely on color alone (A11Y-004).
-     Base tokens are FILL colors (white text sits on them at >= 4.5:1). */
+  /* Supporting brand steps for restrained visual hierarchy. */
+  --color-brand-mid: #465eb4;
+  --color-brand-light: #7185d2;
+  --color-gold-soft: #fff5e7;
+
+  /* Semantic status — never rely on color alone (A11Y-004). */
   --color-success: #17834c;
   --color-warning: #b86a11;
   --color-danger: #c33b4a;
-  --color-info: #3f6fe5;
+  --color-info: #4565b4;
 
-  /*
-   * Foreground variants for colored TEXT, kept separate from the fills.
-   * The Part II §2.2 status values land at 3.5-4.5:1 as small text on the
-   * warm light surfaces, just under WCAG AA, so these are darkened per
-   * Appendix A ("token values may be adjusted after contrast testing").
-   * Fills above keep the exact brand values. Verified >= 4.5:1 against
-   * surface, canvas, and soft surface in both themes (A11Y-001) — see
-   * tests/unit/contrast.test.ts.
-   */
-  --color-brand-fg: #8f1538;
-  --color-accent-fg: #6d4a12;
+  /* Accessible text variants for color-on-surface usage. */
+  --color-brand-fg: #2a3c90;
+  --color-accent-fg: #80501c;
   --color-success-fg: #12693d;
   --color-warning-fg: #96560d;
   --color-danger-fg: #b83343;
-  --color-info-fg: #2454bf;
+  --color-info-fg: #304e9c;
 
-  /* Light theme neutrals (default) */
-  --color-canvas: #f7f5f2; /* warm app background */
-  --color-surface: #ffffff; /* cards, panels, drawers, inputs */
-  --color-surface-soft: #f1eeea; /* table headers, quiet zones */
-  --color-ink: #1b191d; /* primary text */
-  --color-muted: #6c6870; /* secondary text and metadata */
-  --color-line: #e5dfda; /* 1px low-contrast borders */
+  /* Light theme neutrals. */
+  --color-canvas: #f7f8fc;
+  --color-surface: #ffffff;
+  --color-surface-soft: #eef1f7;
+  --color-ink: #192240;
+  --color-muted: #5b6e7f;
+  --color-line: #dfe4ef;
 
-  /* Typography */
-  --font-sans: var(--font-app, ui-sans-serif), system-ui, -apple-system,
-    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Typography — friendly operational sans + editorial display face. */
+  --font-sans: var(--font-app, "Avenir Next", Avenir, ui-sans-serif), system-ui,
+    -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: Georgia, "Times New Roman", serif;
 
-  /* Radius (Part II §3.3) */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  /* Radius */
+  --radius-sm: 9px;
+  --radius-md: 13px;
+  --radius-lg: 18px;
 
-  /* Motion (120–180ms ease-out) */
+  /* Motion */
   --ease-app: cubic-bezier(0.2, 0, 0, 1);
   --duration-fast: 120ms;
   --duration-base: 160ms;
 
-  /* Shadows — subtle, short; menus/drawers/drag only */
-  --shadow-pop: 0 4px 16px rgb(27 25 29 / 0.1), 0 1px 3px rgb(27 25 29 / 0.08);
-  --shadow-raise: 0 1px 2px rgb(27 25 29 / 0.05);
+  /* Shadows — blue-neutral rather than black-heavy. */
+  --shadow-pop: 0 10px 28px rgb(25 34 64 / 0.12), 0 2px 6px rgb(25 34 64 / 0.08);
+  --shadow-raise: 0 2px 5px rgb(25 34 64 / 0.07);
 
-  /* Chart palette — validated with the dataviz six-checks validator against
-     the light surface. Status charts pair every color with a text label. */
-  --color-chart-good: #116639; /* completed */
-  --color-chart-todo: #c8811c; /* not started / ready */
-  --color-chart-progress: #3f6fe5; /* in progress / review */
-  --color-chart-overdue: #c33b4a; /* overdue */
-  --color-chart-primary: #8f1538; /* single-series magnitude */
+  /* Chart palette — status is still reinforced with labels. */
+  --color-chart-good: #116639;
+  --color-chart-todo: #c8811c;
+  --color-chart-progress: #4565b4;
+  --color-chart-overdue: #c33b4a;
+  --color-chart-primary: #2a3c90;
 }
 
-/* Dark theme — a complete theme, not an inversion filter (Part II §2.3). */
+/* Dark theme — designed independently, never as an inversion filter. */
 .dark {
-  --color-canvas: #17151a;
-  --color-surface: #211e24;
-  --color-surface-soft: #2b2730;
-  --color-ink: #f7f3f5;
-  --color-muted: #bdb6bf;
-  --color-line: #35313b;
-  --color-brand-soft: #3a1523;
+  --color-canvas: #10172f;
+  --color-surface: #17213f;
+  --color-surface-soft: #202c4d;
+  --color-ink: #f7f8fc;
+  --color-muted: #b8c1d7;
+  --color-line: #31405f;
+  --color-brand-soft: #222e5c;
 
-  /* Lightened foregrounds so colored text stays legible on charcoal. */
-  --color-brand-fg: #e0839a;
-  --color-accent-fg: #e8c467;
-  --color-success-fg: #3fbf7f;
-  --color-warning-fg: #e0983d;
-  --color-danger-fg: #ef7a85;
-  --color-info-fg: #8baeff;
-  --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.35);
-  --shadow-raise: 0 1px 2px rgb(0 0 0 / 0.3);
+  --color-brand-fg: #aebbff;
+  --color-accent-fg: #ffd39a;
+  --color-success-fg: #55c88a;
+  --color-warning-fg: #f3ad5d;
+  --color-danger-fg: #f58a96;
+  --color-info-fg: #9cb9ff;
+  --shadow-pop: 0 10px 28px rgb(0 0 0 / 0.45), 0 2px 6px rgb(0 0 0 / 0.35);
+  --shadow-raise: 0 2px 5px rgb(0 0 0 / 0.28);
 
-  /* Dark mode selects its own chart steps, validated against the dark
-     surface — not an automatic flip. */
-  --color-chart-good: #2fa06a;
-  --color-chart-todo: #c8811c;
-  --color-chart-progress: #5b84ea;
-  --color-chart-overdue: #d25a66;
-  --color-chart-primary: #d0748d;
+  --color-chart-good: #55c88a;
+  --color-chart-todo: #e8b36d;
+  --color-chart-progress: #8ea7ff;
+  --color-chart-overdue: #e97984;
+  --color-chart-primary: #9caeff;
 }
 
 @layer base {
@@ -115,7 +110,6 @@
     line-height: 1.55;
   }
 
-  /* Visible focus for keyboard users everywhere. (UI-007, A11Y-003) */
   :focus-visible {
     outline: 2px solid var(--color-brand);
     outline-offset: 2px;
@@ -125,7 +119,6 @@
     outline-color: var(--color-accent);
   }
 
-  /* Reduced motion removes non-essential animation. (P0-UX-04, A11Y-006) */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -144,33 +137,87 @@
 }
 
 @layer utilities {
-  /* Editorial page title — used once per major page. */
+  /*
+   * Major headings use an editorial display face and a deep blue gradient.
+   * Gold stays in the underline/accent, rather than becoming low-contrast body
+   * text. This keeps the interface more expressive without hurting legibility.
+   */
   .page-title {
-    @apply text-[26px] font-semibold tracking-[-0.02em] md:text-[32px];
-    line-height: 1.15;
+    @apply text-[28px] font-bold tracking-[-0.03em] md:text-[34px];
+    font-family: var(--font-display);
+    line-height: 1.08;
+    color: var(--color-brand);
+    background: linear-gradient(90deg, #1d2e70 0%, #2a3c90 48%, #465eb4 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
+  .dark .page-title {
+    background: linear-gradient(90deg, #d8ddff 0%, #aebbff 48%, #ffd39a 100%);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
   .section-heading {
-    @apply text-[17px] font-semibold tracking-[-0.01em];
+    @apply text-[18px] font-bold tracking-[-0.015em] text-brand-fg;
+    font-family: var(--font-display);
   }
+
   .eyebrow {
-    @apply text-[11px] font-medium uppercase tracking-[0.08em] text-muted;
+    @apply text-[11px] font-bold uppercase tracking-[0.1em] text-brand-fg;
   }
+
   .meta {
     @apply text-[12.5px] text-muted;
   }
+
   .card {
     @apply rounded-(--radius-md) border border-line bg-surface;
+    box-shadow: 0 1px 0 rgb(42 60 144 / 0.03);
   }
+
   .interactive-row {
     @apply transition-colors duration-(--duration-fast) hover:bg-surface-soft;
   }
+
+  /* Shared brand treatments for the shell and high-value operational cards. */
+  .qbbe-sidebar {
+    background:
+      radial-gradient(110% 78% at 6% 100%, rgb(113 133 210 / 0.24), transparent 62%),
+      radial-gradient(95% 74% at 88% 100%, rgb(232 179 109 / 0.18), transparent 62%),
+      linear-gradient(180deg, #2d4397 0%, #2a3c90 36%, #223477 72%, #19285f 100%);
+  }
+
+  .qbbe-brand-rule {
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #e8b36d 0%, #f3c88e 52%, transparent 100%);
+  }
+
+  .qbbe-kpi-card {
+    position: relative;
+    overflow: hidden;
+  }
+  .qbbe-kpi-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    background: linear-gradient(180deg, var(--color-brand), var(--color-brand-mid));
+  }
+
+  .qbbe-primary-action {
+    background: linear-gradient(115deg, #2a3c90 0%, #465eb4 100%);
+    color: #fff;
+    box-shadow: 0 4px 12px rgb(42 60 144 / 0.2);
+  }
+  .qbbe-primary-action:hover {
+    background: linear-gradient(115deg, #1d2e70 0%, #354ca0 100%);
+  }
 }
 
-/*
- * Compact display density for heavy operational screens (P1-UX-07).
- * Tightens row and cell padding only — type size and hit targets on
- * interactive controls are left alone so accessibility does not regress.
- */
 [data-density="compact"] .interactive-row,
 [data-density="compact"] table td,
 [data-density="compact"] table th {
@@ -184,7 +231,6 @@
   padding-bottom: 0.375rem;
 }
 
-/* Overlay entrance motion — 120-180ms, disabled by reduced-motion above. */
 @keyframes toast-in {
   from {
     opacity: 0;
@@ -207,7 +253,6 @@
   }
 }
 
-/* Print styles for report export (PDF via print). */
 @media print {
   .no-print {
     display: none !important;
