@@ -1,0 +1,57 @@
+name: Temporary Review Preview
+
+on:
+  push:
+    branches:
+      - codex/chi-55-tasks-ui
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qbbe-review-preview-chi55
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify preview credentials exist
+        env:
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: |
+          test -n "$NETLIFY_SITE_ID" || { echo 'Missing staging NETLIFY_SITE_ID'; exit 1; }
+          test -n "$NETLIFY_AUTH_TOKEN" || { echo 'Missing staging NETLIFY_AUTH_TOKEN'; exit 1; }
+
+      - name: Deploy isolated draft preview
+        id: deploy
+        env:
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: |
+          set -o pipefail
+          npx --yes netlify-cli@27.5.0 deploy \
+            --context deploy-preview \
+            --alias chi-55-review \
+            --message "QBBE Hub CHI-55 review $GITHUB_SHA" \
+            2>&1 | tee /tmp/netlify-preview.log
+          echo '### QBBE Hub review preview' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          grep -Eo 'https://[^ ]+\.netlify\.app[^ ]*' /tmp/netlify-preview.log | sort -u | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Safety note
+        run: |
+          echo 'This is a Netlify draft/alias deploy only. No production publish command is used.'
