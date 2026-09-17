@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 /**
@@ -122,25 +122,89 @@ test("auth routes have no critical or serious a11y violations", async ({
   expect(violations, violations.join("\n")).toEqual([]);
 });
 
+/**
+ * Describes where focus currently sits. Browser chrome and the document
+ * itself come back as "" so the caller can ignore them: they are not page
+ * content and each engine treats them differently.
+ */
+async function focusedDescriptor(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    if (!el || el === document.body || el === document.documentElement) return "";
+    return el.id || `${el.tagName.toLowerCase()}:${el.textContent?.trim() ?? ""}`;
+  });
+}
+
+/** The page elements Tab visits, in order, with repeats and chrome removed. */
+async function tabOrder(page: Page, presses: number): Promise<string[]> {
+  const stops: string[] = [];
+  for (let i = 0; i < presses; i++) {
+    await page.keyboard.press("Tab");
+    const stop = await focusedDescriptor(page);
+    if (stop && stop !== stops[stops.length - 1]) stops.push(stop);
+  }
+  return stops;
+}
+
+/**
+ * Tabs forward until `target` holds focus. Engines disagree on how many
+ * presses it takes to enter the document — WebKit spends one on the body
+ * first — so the count is not something a test can hard-code.
+ */
+async function tabTo(page: Page, target: Locator, limit = 6): Promise<void> {
+  for (let i = 0; i < limit; i++) {
+    await page.keyboard.press("Tab");
+    if (await target.evaluate((el) => el === document.activeElement)) return;
+  }
+  throw new Error(`focus never reached the target within ${limit} Tab presses`);
+}
+
 test("sign-in is fully keyboard operable", async ({ page }) => {
   await page.goto("/sign-in");
 
-  await page.keyboard.press("Tab");
-  await expect(page.getByLabel("Email")).toBeFocused();
+  // What matters for WCAG 2.4.3 is the order focus moves through the form and
+  // that nothing intercepts it on the way in — not how many keystrokes each
+  // engine spends getting there. WebKit burns the first Tab on the document
+  // body and omits links from the tab ring entirely (its default is form
+  // controls only); both are browser preferences, not properties of this page.
+  const stops = await tabOrder(page, 6);
+  expect(stops.slice(0, 3)).toEqual(["email", "password", "button:Sign in"]);
+
+  // Every field must accept typed input in the order the keyboard reaches it.
+  await page.reload();
+  await tabTo(page, page.getByLabel("Email"));
   await page.keyboard.type("someone@example.com");
 
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("Password")).toBeFocused();
   await page.keyboard.type("placeholder");
 
+  await expect(page.getByLabel("Email")).toHaveValue("someone@example.com");
+  await expect(page.getByLabel("Password")).toHaveValue("placeholder");
+
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("button", { name: "Sign in" })).toBeFocused();
+  const submit = page.getByRole("button", { name: "Sign in" });
+  await expect(submit).toBeFocused();
 
   // Focus must be visibly indicated, never removed for aesthetics.
-  const outline = await page
-    .getByRole("button", { name: "Sign in" })
-    .evaluate((el) => getComputedStyle(el).outlineStyle);
+  const outline = await submit.evaluate((el) => getComputedStyle(el).outlineStyle);
   expect(outline).not.toBe("none");
+
+  // The recovery and sign-up links sit outside WebKit's default tab ring, so
+  // assert they stay reachable the way assistive technology reaches them
+  // rather than asserting they are tab stops.
+  const links = await page.getByRole("link").all();
+  expect(links.length).toBeGreaterThan(0);
+  for (const link of links) {
+    const reachable = await link.evaluate((el) => {
+      (el as HTMLElement).focus();
+      return {
+        tabIndex: (el as HTMLElement).tabIndex,
+        focused: document.activeElement === el,
+      };
+    });
+    expect(reachable).toEqual({ tabIndex: 0, focused: true });
+  }
 });
 
 test("the job endpoint refuses anyone without the shared secret", async ({
