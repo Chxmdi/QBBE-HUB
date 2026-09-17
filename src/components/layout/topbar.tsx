@@ -19,7 +19,6 @@ import { cn, relativeTime } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types/entities";
 
-/** Categories that ask something of the reader, vs. pure information. */
 const ACTIONABLE_CATEGORIES = new Set([
   "assignment",
   "mention",
@@ -28,11 +27,6 @@ const ACTIONABLE_CATEGORIES = new Set([
   "due_date",
 ]);
 
-/**
- * Dismissal for the topbar dropdowns. Pointer users get click-outside;
- * Escape is what a keyboard user has, and without it the only way out of an
- * open menu was to tab through every item in it.
- */
 function useDismissable(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -41,9 +35,6 @@ function useDismissable(onClose: () => void) {
     }
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape" || !ref.current) return;
-      // Read the open trigger before closing: React has not re-rendered yet,
-      // so aria-expanded still marks it. Focus goes back there rather than
-      // being dropped at the top of the page.
       const trigger = ref.current.querySelector<HTMLButtonElement>(
         'button[aria-expanded="true"]',
       );
@@ -141,12 +132,12 @@ export function Topbar({
   ];
 
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-line bg-canvas/90 px-3 backdrop-blur md:px-5">
+    <header className="sticky top-0 z-40 flex h-16 items-center gap-2 border-b border-line bg-surface/92 px-3 shadow-[0_1px_0_rgb(42_60_144_/_0.03)] backdrop-blur md:px-5">
       <button
         type="button"
         onClick={onOpenNav}
         aria-label="Open navigation"
-        className="rounded-(--radius-sm) p-2 text-muted hover:bg-surface-soft hover:text-ink lg:hidden"
+        className="rounded-(--radius-sm) p-2 text-brand-fg transition-colors hover:bg-brand-soft lg:hidden"
       >
         <Menu className="size-5" aria-hidden />
       </button>
@@ -154,24 +145,27 @@ export function Topbar({
       <button
         type="button"
         onClick={onOpenPalette}
-        className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-(--radius-sm) border border-line bg-surface px-3 text-left text-[13.5px] text-muted transition-colors hover:border-brand/40 md:max-w-md"
+        className="group relative flex h-10 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-(--radius-sm) border border-line bg-surface px-3 text-left text-[13.5px] text-muted transition-colors hover:border-brand/35 hover:bg-brand-soft/35 md:max-w-md"
       >
-        <Search className="size-4" aria-hidden />
+        <span
+          aria-hidden
+          className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-gradient-to-b from-brand via-brand-mid to-accent"
+        />
+        <Search className="ml-1 size-4 text-brand-fg" aria-hidden />
         <span className="flex-1 truncate">Search or jump to…</span>
-        <kbd className="hidden rounded border border-line bg-surface-soft px-1.5 py-0.5 text-[11px] md:inline">
+        <kbd className="hidden rounded border border-line bg-surface-soft px-1.5 py-0.5 text-[11px] text-muted md:inline">
           ⌘K
         </kbd>
       </button>
 
       <div className="ml-auto flex items-center gap-1" ref={menuRef}>
-        {/* Quick create (P0-QC-01) */}
         <div className="relative">
           <button
             type="button"
             onClick={() => setOpenMenu(openMenu === "create" ? null : "create")}
             aria-label="Quick create"
             aria-expanded={openMenu === "create"}
-            className="flex size-9 items-center justify-center rounded-(--radius-sm) bg-brand text-white transition-colors hover:bg-brand-strong"
+            className="qbbe-primary-action flex size-9 items-center justify-center rounded-(--radius-sm) transition-transform active:scale-[0.97]"
           >
             <Plus className="size-4.5" aria-hidden />
           </button>
@@ -182,7 +176,7 @@ export function Topbar({
                   key={l.href}
                   href={l.href}
                   onClick={() => setOpenMenu(null)}
-                  className="block px-3 py-1.5 text-[13.5px] hover:bg-surface-soft"
+                  className="block px-3 py-1.5 text-[13.5px] hover:bg-brand-soft/60"
                 >
                   New {l.label.toLowerCase()}
                 </Link>
@@ -191,18 +185,17 @@ export function Topbar({
           ) : null}
         </div>
 
-        {/* Notifications */}
         <div className="relative">
           <button
             type="button"
             onClick={openNotifications}
             aria-label={`Notifications${badge > 0 ? ` (${badge} unread)` : ""}`}
             aria-expanded={openMenu === "notifications"}
-            className="relative flex size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-surface-soft hover:text-ink"
+            className="relative flex size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-brand-soft/60 hover:text-brand-fg"
           >
             <Bell className="size-4.5" aria-hidden />
             {badge > 0 ? (
-              <span className="absolute top-1.5 right-1.5 flex size-4 items-center justify-center rounded-full bg-brand text-[9.5px] font-semibold text-white">
+              <span className="absolute top-1 right-1 flex min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9.5px] font-bold text-[#253460] shadow-[0_1px_3px_rgb(25_34_64_/_0.18)]">
                 {badge > 9 ? "9+" : badge}
               </span>
             ) : null}
@@ -210,11 +203,11 @@ export function Topbar({
           {openMenu === "notifications" ? (
             <div className="absolute right-0 mt-2 w-80 rounded-(--radius-md) border border-line bg-surface shadow-(--shadow-pop)">
               <div className="flex items-center justify-between border-b border-line px-3.5 py-2.5">
-                <p className="text-[13px] font-semibold">Notifications</p>
+                <p className="section-heading text-[15px]">Notifications</p>
                 <button
                   type="button"
                   onClick={markAllRead}
-                  className="text-[12px] font-medium text-brand-fg hover:underline"
+                  className="text-[12px] font-semibold text-brand-fg hover:underline"
                 >
                   Mark all read
                 </button>
@@ -225,7 +218,6 @@ export function Topbar({
                     You&apos;re all caught up.
                   </li>
                 ) : (
-                  // Grouped actionable vs informational (§10.16).
                   (["actionable", "informational"] as const).map((band) => {
                     const items = notifications.filter((n) =>
                       band === "actionable"
@@ -235,7 +227,7 @@ export function Topbar({
                     if (items.length === 0) return null;
                     return (
                       <li key={band}>
-                        <p className="px-3.5 pt-2 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-muted uppercase">
+                        <p className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.08em] text-brand-fg uppercase">
                           {band === "actionable" ? "Needs you" : "For information"}
                         </p>
                         <ul>
@@ -249,26 +241,23 @@ export function Topbar({
                                 }}
                                 className={cn(
                                   "w-full px-3.5 py-2 text-left text-[13px] hover:bg-surface-soft",
-                                  !n.read_at && "bg-brand-soft/40",
+                                  !n.read_at && "bg-brand-soft/45",
                                 )}
                               >
                                 <span className="flex items-start gap-2">
-                                  {/* aria-label is ignored on a bare span, so
-                                      unread was conveyed by the dot's colour
-                                      alone. */}
                                   {!n.read_at ? (
                                     <>
                                       <span className="sr-only">Unread. </span>
                                       <span
                                         aria-hidden
-                                        className="mt-1.5 size-1.5 shrink-0 rounded-full bg-brand"
+                                        className="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent"
                                       />
                                     </>
                                   ) : (
                                     <span aria-hidden className="mt-1.5 size-1.5 shrink-0" />
                                   )}
                                   <span className="min-w-0">
-                                    <span className="block truncate font-medium">
+                                    <span className="block truncate font-semibold">
                                       {n.title}
                                     </span>
                                     {n.body ? (
@@ -293,7 +282,7 @@ export function Topbar({
               <Link
                 href="/inbox"
                 onClick={() => setOpenMenu(null)}
-                className="block border-t border-line px-3.5 py-2 text-center text-[12.5px] font-medium text-brand-fg hover:underline"
+                className="block border-t border-line px-3.5 py-2 text-center text-[12.5px] font-semibold text-brand-fg hover:bg-brand-soft/45"
               >
                 Open Inbox
               </Link>
@@ -301,7 +290,6 @@ export function Topbar({
           ) : null}
         </div>
 
-        {/* Display density for dense operational screens (P1-UX-07) */}
         <button
           type="button"
           onClick={async () => {
@@ -311,7 +299,7 @@ export function Topbar({
           }}
           aria-label={`Switch to ${density === "compact" ? "comfortable" : "compact"} density`}
           title={`${density === "compact" ? "Comfortable" : "Compact"} density`}
-          className="hidden size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-surface-soft hover:text-ink md:flex"
+          className="hidden size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-brand-soft/60 hover:text-brand-fg md:flex"
         >
           {density === "compact" ? (
             <Rows3 className="size-4.5" aria-hidden />
@@ -324,39 +312,38 @@ export function Topbar({
           type="button"
           onClick={toggleTheme}
           aria-label="Toggle color theme"
-          className="flex size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-surface-soft hover:text-ink"
+          className="flex size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-brand-soft/60 hover:text-brand-fg"
         >
           <Sun className="hidden size-4.5 dark:block" aria-hidden />
           <Moon className="block size-4.5 dark:hidden" aria-hidden />
         </button>
 
-        {/* Profile */}
         <div className="relative">
           <button
             type="button"
             onClick={() => setOpenMenu(openMenu === "profile" ? null : "profile")}
             aria-label="Account menu"
             aria-expanded={openMenu === "profile"}
-            className="ml-1 flex items-center rounded-full"
+            className="ml-1 flex items-center rounded-full ring-2 ring-transparent transition-shadow hover:ring-accent/35"
           >
             <Avatar name={name} src={avatarUrl} size="md" />
           </button>
           {openMenu === "profile" ? (
             <div className="absolute right-0 mt-2 w-48 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)">
-              <p className="truncate px-3 py-2 text-[13px] font-medium">
+              <p className="truncate border-b border-line px-3 py-2 text-[13px] font-bold text-brand-fg">
                 {name}
               </p>
               <Link
                 href="/settings"
                 onClick={() => setOpenMenu(null)}
-                className="block px-3 py-1.5 text-[13.5px] text-ink hover:bg-surface-soft"
+                className="block px-3 py-1.5 text-[13.5px] text-ink hover:bg-brand-soft/55"
               >
                 Account settings
               </Link>
               <Link
                 href="/settings/notifications"
                 onClick={() => setOpenMenu(null)}
-                className="block px-3 py-1.5 text-[13.5px] text-ink hover:bg-surface-soft"
+                className="block px-3 py-1.5 text-[13.5px] text-ink hover:bg-brand-soft/55"
               >
                 Email preferences
               </Link>
