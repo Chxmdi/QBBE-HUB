@@ -27,7 +27,10 @@ function whitelistedSubjects(): string[] {
     sql.indexOf("insert into retention_subject"),
     sql.indexOf("on conflict (key)"),
   );
-  return [...block.matchAll(/\(\s*'([a-z_]+)',\n/g)].map((m) => m[1]).sort();
+  // \r?\n, not \n: the migration is stored with LF, but a Windows checkout
+  // rewrites it to CRLF, and a bare \n then matches nothing — leaving both
+  // checks below to fail on a maintainer's machine and nowhere else.
+  return [...block.matchAll(/\(\s*'([a-z_]+)',\r?\n/g)].map((m) => m[1]).sort();
 }
 
 describe("the whitelist and the handlers are the same list", () => {
