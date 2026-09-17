@@ -1,0 +1,109 @@
+name: Canonical Work Item
+description: Create an implementation, verification, bug, security, infrastructure, or operations issue linked to a QBBE Hub Epic.
+title: "[WORK] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every work item must trace to a parent Epic and, where applicable, PRD/acceptance IDs. Implementation is not Done until required verification passes.
+  - type: input
+    id: parent_epic
+    attributes:
+      label: Parent Epic
+      description: GitHub Epic issue number, e.g. #12.
+      placeholder: "#12"
+    validations:
+      required: true
+  - type: input
+    id: prd_ids
+    attributes:
+      label: PRD / Acceptance IDs
+      description: Comma-separated IDs. Use N/A only for maintenance work with no product requirement.
+      placeholder: "P0-TSK-06, P0-TSK-07"
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What outcome does this Issue achieve?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why this work exists and what evidence/gap led to it.
+    validations:
+      required: true
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Requirements
+      description: Exact product/technical behavior required. Include failure behavior and authorization expectations.
+    validations:
+      required: true
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Technical Implementation
+      description: Components, modules, routes, APIs, schema/migrations, jobs, permissions, configuration, observability and security affected.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Use explicit GitHub references. State Blocked by, Blocks, and external dependencies.
+      placeholder: "Blocked by #24\nBlocks #50\nExternal: QBBE Google credentials"
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: Concrete implementation and verification steps.
+    validations:
+      required: true
+  - type: textarea
+    id: edge_cases
+    attributes:
+      label: Edge Cases / Failure Scenarios
+      description: Unusual, concurrent, invalid, unavailable-provider and permission-denied cases.
+    validations:
+      required: true
+  - type: textarea
+    id: testing
+    attributes:
+      label: Testing Requirements
+      description: Unit, integration, database/RLS, API, browser/E2E, accessibility, security, performance, concurrency and regression tests as applicable.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Objectively verifiable conditions required to consider this Issue accepted.
+    validations:
+      required: true
+  - type: textarea
+    id: success
+    attributes:
+      label: Success Criteria
+      description: Observable evidence proving the intended outcome works.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of Done
+      description: Include implementation, validation, security, documentation and evidence requirements.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Verification Evidence
+      description: Fill during execution with exact commit, environment, command/scenario, result and artifact. Never invent results.
+    validations:
+      required: false

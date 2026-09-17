@@ -1,0 +1,67 @@
+name: Canonical Epic
+description: Create a top-level QBBE Hub Epic that owns a coherent production outcome.
+title: "EPIC — "
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What capability or outcome does this Epic deliver?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why It Matters
+      description: Product, security, operational or technical reason.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope / PRD IDs
+      description: Exact requirement families and boundaries included.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Blocking Epics/Issues and external dependencies.
+    validations:
+      required: true
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: Deliverables / Child Issues
+      description: Link child Issues as they are created.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Conditions required to consider the Epic complete.
+    validations:
+      required: true
+  - type: textarea
+    id: success
+    attributes:
+      label: Success Criteria
+      description: Evidence that the Epic achieved its purpose.
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks
+      description: Technical, product, security, integration and project risks.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: How completion will actually be proven. Code written or PR merged is not sufficient.
+    validations:
+      required: true
