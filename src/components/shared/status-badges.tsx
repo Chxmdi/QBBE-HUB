@@ -10,6 +10,7 @@ import {
   OctagonAlert,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { TASK_STATUSES, TASK_STATUS_LABELS } from "@/features/tasks/schemas";
 import type {
   ProjectHealth,
   ProjectStage,
@@ -22,19 +23,34 @@ import type {
  * color with text/icon — never color alone (A11Y-004).
  */
 
+// Labels come from the schema module so the server can name a status without
+// importing this file's icons; tone is presentation and stays here.
+const taskStatusTones: Record<
+  TaskStatus,
+  "neutral" | "info" | "warning" | "danger" | "success" | "brand"
+> = {
+  not_started: "neutral",
+  ready: "info",
+  in_progress: "brand",
+  waiting: "warning",
+  blocked: "danger",
+  in_review: "info",
+  completed: "success",
+  cancelled: "neutral",
+};
+
 export const TASK_STATUS_META: Record<
   TaskStatus,
   { label: string; tone: "neutral" | "info" | "warning" | "danger" | "success" | "brand" }
-> = {
-  not_started: { label: "Not started", tone: "neutral" },
-  ready: { label: "Ready", tone: "info" },
-  in_progress: { label: "In progress", tone: "brand" },
-  waiting: { label: "Waiting", tone: "warning" },
-  blocked: { label: "Blocked", tone: "danger" },
-  in_review: { label: "In review", tone: "info" },
-  completed: { label: "Completed", tone: "success" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
-};
+> = Object.fromEntries(
+  TASK_STATUSES.map((status) => [
+    status,
+    { label: TASK_STATUS_LABELS[status], tone: taskStatusTones[status] },
+  ]),
+) as Record<
+  TaskStatus,
+  { label: string; tone: "neutral" | "info" | "warning" | "danger" | "success" | "brand" }
+>;
 
 const taskStatusIcons: Record<TaskStatus, React.ReactNode> = {
   not_started: <CircleDashed className="size-3" aria-hidden />,

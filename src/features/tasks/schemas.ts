@@ -14,6 +14,22 @@ export const TASK_STATUSES = [
   "cancelled",
 ] as const satisfies readonly TaskStatus[];
 
+/**
+ * Status display text. It lives here, beside the canonical statuses and free
+ * of React, so the server can name a status in a history entry without
+ * importing the badge component that renders one.
+ */
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  not_started: "Not started",
+  ready: "Ready",
+  in_progress: "In progress",
+  waiting: "Waiting",
+  blocked: "Blocked",
+  in_review: "In review",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
 export const BOARD_COLUMNS: TaskStatus[] = [...TASK_STATUSES];
 
 export const BULK_STATUSES = TASK_STATUSES.filter(
@@ -41,6 +57,10 @@ export const createTaskSchema = z.object({
   completionCriteria: z.string().trim().max(2000).optional(),
   reviewerId: z.string().uuid().optional(),
   approverId: z.string().uuid().optional(),
+  // A task does not always start at "not started" — work is often recorded
+  // once it is already under way (P0-TSK-01). Blocked is excluded because it
+  // needs a reason, which the create form does not collect.
+  status: z.enum(BULK_STATUS_ENUM).optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -51,6 +71,39 @@ export const updateTaskSchema = z.object({
   priority: z.enum(["low", "medium", "high", "critical"]).optional(),
   dueAt: z.string().nullable().optional(),
   projectId: z.string().uuid().nullable().optional(),
+  // Fields the create form could already set but nothing could afterwards
+  // correct (P0-TSK-01, P0-TSK-02, P0-TSK-04).
+  milestoneId: z.string().uuid().nullable().optional(),
+  completionCriteria: z.string().trim().max(2000).nullable().optional(),
+  reviewerId: z.string().uuid().nullable().optional(),
+  approverId: z.string().uuid().nullable().optional(),
+  blockedById: z.string().uuid().nullable().optional(),
+});
+
+/**
+ * Task roles beyond the accountable owner (P0-TSK-02). The owner stays a
+ * column on the task because a task has exactly one; these are the many.
+ */
+export const TASK_ROLES = [
+  "contributor",
+  "reviewer",
+  "approver",
+  "follower",
+] as const;
+
+export type TaskRole = (typeof TASK_ROLES)[number];
+
+export const TASK_ROLE_LABELS: Record<TaskRole, string> = {
+  contributor: "Contributor",
+  reviewer: "Reviewer",
+  approver: "Approver",
+  follower: "Follower",
+};
+
+export const taskRoleSchema = z.object({
+  taskId: z.string().uuid(),
+  userId: z.string().uuid(),
+  role: z.enum(TASK_ROLES),
 });
 
 export const bulkSchema = z.object({
