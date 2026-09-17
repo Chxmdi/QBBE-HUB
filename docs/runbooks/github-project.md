@@ -22,7 +22,19 @@ Run:
 PROJECT_NUMBER=<number> PROJECT_OWNER=Chxmdi ./scripts/bootstrap-github-project.sh
 ```
 
-The script creates/validates the custom fields and adds Issues #11–#59 plus PRs #9/#10.
+The script creates/validates the custom fields, then enumerates every Issue and
+pull request in the repository and adds each one. It is idempotent, so re-running
+it after new work is filed is the intended way to reconcile the board.
+
+It reports what it actually did and exits non-zero if any field or item failed,
+naming each one. A clean run is the only run that prints a success line.
+
+`gh` must be authenticated with the `project` scope. The default `repo` scope is
+not sufficient and every Project call fails without it:
+
+```bash
+gh auth refresh -s project
+```
 
 ## Built-in Status options
 
@@ -58,8 +70,8 @@ Create these Project views:
 
 ## Verification checklist
 
-- #11–#59 visible in the Project
-- PR #9 and PR #10 visible
+- every canonical Issue is visible in the Project
+- every pull request is visible, including PR #9 and PR #10
 - new test Issue/PR is auto-added by workflow
 - all required fields exist
 - Status options match exactly
