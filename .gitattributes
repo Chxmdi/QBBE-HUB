@@ -1,0 +1,18 @@
+# The repository stores text with LF. Without this, Git on Windows checks
+# files out as CRLF, and anything that parses repository files byte-for-byte
+# — the retention migration check, the design-token contrast check — sees
+# content that CI's Linux runners never produce. Failures of that kind are
+# invisible in CI and land on whoever is on Windows.
+* text=auto eol=lf
+
+# Binaries must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.zip binary
