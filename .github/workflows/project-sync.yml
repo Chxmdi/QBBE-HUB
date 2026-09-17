@@ -1,0 +1,34 @@
+name: Sync GitHub Project
+
+on:
+  issues:
+    types: [opened, reopened, transferred]
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  add-to-project:
+    if: ${{ vars.QBBE_PROJECT_URL != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add issue or pull request to canonical QBBE Project
+        uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: ${{ vars.QBBE_PROJECT_URL }}
+          github-token: ${{ secrets.QBBE_PROJECT_PAT }}
+
+  configuration-guard:
+    if: ${{ vars.QBBE_PROJECT_URL == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail with actionable configuration message
+        run: |
+          echo 'QBBE_PROJECT_URL is not configured.'
+          echo 'Set the repository variable to the canonical GitHub Project URL and add QBBE_PROJECT_PAT with Projects write permission.'
+          exit 1
