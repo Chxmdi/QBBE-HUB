@@ -84,6 +84,7 @@ export default async function MyWorkPage({
             <TaskCreateDialog
               projects={options.projects}
               people={options.people}
+              milestones={options.milestones}
               defaultOpen={params.create === "task"}
             />
           </div>

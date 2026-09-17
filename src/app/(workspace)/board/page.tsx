@@ -41,6 +41,7 @@ export default async function BoardPage({
           <TaskCreateDialog
             projects={options.projects}
             people={options.people}
+            milestones={options.milestones}
             defaultProjectId={params.project}
           />
         }

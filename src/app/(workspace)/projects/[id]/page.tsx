@@ -157,6 +157,7 @@ export default async function ProjectDetailPage({
               <TaskCreateDialog
                 projects={[{ id: project.id, label: project.name }]}
                 people={options.people}
+                milestones={options.milestones}
                 defaultProjectId={project.id}
                 triggerLabel="Add task"
               />
