@@ -1,12 +1,17 @@
-const QBBE_LOGO_URL =
-  "https://qbbe.ca/wp-content/uploads/2020/07/qbbe-logo-final-e1593874237921.jpg";
+/**
+ * Served from `public/`, not from qbbe.ca. The mark is identical — the file
+ * was taken from the public site — but hosting it here keeps the sign-in
+ * shell, the sidebar and onboarding from depending on a third-party request
+ * that is outside this project's control, and keeps the accessibility suite
+ * from reaching the public internet on every CI run.
+ */
+const QBBE_LOGO_URL = "/qbbe-logo.jpg";
 
 /**
  * Approved bilingual QBBE brand mark.
  *
- * The public QBBE site currently hosts the exact mark supplied for this UI
- * refresh. Keeping the image in this tiny component lets the shell use the
- * real organization identity while the rest of the application continues to
+ * Keeping the image in this tiny component lets the shell use the real
+ * organization identity while the rest of the application continues to
  * consume centralized design tokens.
  */
 export function QbbeLogo({ collapsed = false }: { collapsed?: boolean }) {
