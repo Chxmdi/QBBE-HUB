@@ -126,6 +126,25 @@ begin
     and object_id = v_admin_membership
     and actor_id = v_owner;
   perform tests.ok(n = 1, 'successful transfer records one attributable ownership event');
+
+  -- Deactivation ends access without erasing the person. An administrator who
+  -- cannot read the profile of somebody they just deactivated cannot see who
+  -- they deactivated, cannot reactivate them, and loses the name from every
+  -- record that person left behind.
+  update organization_membership set status = 'deactivated' where id = v_guest_membership;
+  perform tests.authenticate(v_staff);
+  set local role authenticated;
+  select count(*) into n from user_profile where id = v_guest;
+  perform tests.ok(n = 1, 'a colleague can still read the profile of a deactivated member');
+  reset role;
+
+  -- And the boundary still holds: belonging to no shared organization is
+  -- still the thing that decides it.
+  perform tests.authenticate(v_guest);
+  set local role authenticated;
+  select count(*) into n from user_profile where id = v_staff;
+  perform tests.ok(n = 0, 'a deactivated member can no longer read their colleagues');
+  reset role;
 end;
 $$;
 
