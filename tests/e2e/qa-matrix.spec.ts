@@ -1,14 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { signIn } from "./auth";
 
 /**
  * Visual QA + accessibility matrix (Part II §16.1):
  * themes, widths, content stress, keyboard, and data states.
  *
- * Runs against a seeded QA database. Not part of the CI unit suite.
+ * Runs against a seeded QA database (`npm run db:seed`). Not part of the CI
+ * unit suite; see docs/runbooks/qa.md.
  */
-
-const OWNER = { email: "qa-owner@example.com", password: "QaTest!2026" };
 
 const ROUTES = [
   { path: "/", name: "home" },
@@ -41,14 +41,6 @@ const WIDTHS = [
   { w: 320, h: 640, name: "320-narrow" },
 ];
 
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByLabel("Email").fill(OWNER.email);
-  await page.getByLabel("Password").fill(OWNER.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL("**/", { timeout: 30_000 });
-}
-
 async function setTheme(page: Page, theme: "light" | "dark") {
   await page.evaluate((t) => {
     localStorage.setItem("qbbe-theme", t);
@@ -71,7 +63,7 @@ test.describe("QA matrix", () => {
   test.setTimeout(10 * 60_000);
 
   test.beforeEach(async ({ page }) => {
-    await signIn(page);
+    await signIn(page, "owner");
   });
 
   test("every route renders in both themes without horizontal overflow", async ({
@@ -227,11 +219,7 @@ test.describe("QA matrix", () => {
 
 test.describe("authorization", () => {
   test("volunteer cannot reach staff-only surfaces", async ({ page }) => {
-    await page.goto("/sign-in");
-    await page.getByLabel("Email").fill("qa-volunteer@example.com");
-    await page.getByLabel("Password").fill("QaTest!2026");
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL("**/", { timeout: 30_000 });
+    await signIn(page, "volunteer");
 
     // CRM and Reports are staff-only: the route must redirect, not render.
     for (const path of ["/crm", "/reports", "/admin", "/programs", "/projects", "/schedule"]) {
