@@ -61,6 +61,24 @@ test("volunteer cannot access the administrator access inventory", async ({ page
 });
 
 /**
+ * Every staff-only entry in config/navigation.ts, opened by address rather than
+ * by link. Hiding a link decides what a volunteer is shown, not what they can
+ * reach, and Reports enforced only the hiding: typing the address produced the
+ * page, with a Generate report button on it.
+ */
+test("staff-only surfaces are closed to a volunteer who types the address", async ({
+  page,
+}) => {
+  await signIn(page, "volunteer");
+  for (const path of ["/crm", "/reports"]) {
+    await page.goto(path);
+    await expect(page, `${path} must not render for a volunteer`).toHaveURL(/\/$/);
+  }
+  await expect(page.getByRole("heading", { name: "Reports", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Generate report" })).toHaveCount(0);
+});
+
+/**
  * Acceptance evidence for #24 (P0-AUTH-02/03): a scoped grant is what opens a
  * record, and removing it closes the record again. Both halves are read from a
  * second person's own session, so what is proved is the database's answer, not

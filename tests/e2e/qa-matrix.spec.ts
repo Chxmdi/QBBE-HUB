@@ -221,13 +221,30 @@ test.describe("authorization", () => {
   test("volunteer cannot reach staff-only surfaces", async ({ page }) => {
     await signIn(page, "volunteer");
 
-    // CRM and Reports are staff-only: the route must redirect, not render.
-    for (const path of ["/crm", "/reports", "/admin", "/programs", "/projects", "/schedule"]) {
+    // Staff-only and admin-only: the route must redirect, not render.
+    for (const path of ["/crm", "/reports", "/admin"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(page.url(), `${path} must not render for a volunteer`).not.toContain(
         path,
       );
+    }
+
+    // Programs, projects and the schedule are not staff-only, and this test
+    // used to insist they were. Since #24 they are scoped instead: everyone
+    // reaches the page, and the database decides what is on it. Redirecting
+    // would be the wrong answer — the right one is a page holding nothing the
+    // volunteer was not granted.
+    for (const path of ["/programs", "/projects", "/schedule"]) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      expect(page.url(), `${path} is scoped, not forbidden`).toContain(path);
+      for (const seeded of ["Fall Community Workshop Series", "Tutor Recruitment Drive"]) {
+        await expect(
+          page.getByText(seeded, { exact: true }),
+          `${path} must not show ${seeded} to a volunteer with no grant`,
+        ).toHaveCount(0);
+      }
     }
 
     // Staff-only navigation is absent from the sidebar.
