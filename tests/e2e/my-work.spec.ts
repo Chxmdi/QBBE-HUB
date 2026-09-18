@@ -33,6 +33,9 @@ async function createTask(
   }
   await dialog.getByRole("button", { name: "Create task", exact: true }).click();
   await expect(dialog).not.toBeVisible({ timeout: 30_000 });
+  // The address must stop saying "open the create dialog" before anything
+  // reloads, or the reload reopens an empty form over the saved task.
+  await expect(page).not.toHaveURL(/create=task/, { timeout: 30_000 });
 }
 
 test("a created task carries its full detail and keeps it across a reload", async ({

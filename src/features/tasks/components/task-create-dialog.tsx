@@ -81,7 +81,12 @@ export function TaskCreateDialog({
     const url = new URL(window.location.href);
     if (!url.searchParams.has("create")) return;
     url.searchParams.delete("create");
-    router.replace(`${url.pathname}${url.search}`, { scroll: false });
+    // replaceState, not router.replace: dropping a parameter that only decided
+    // whether this dialog started open needs no server round trip, and a
+    // navigation still in flight would leave the parameter in the address if
+    // the page were reloaded in the meantime — which is the exact refresh this
+    // is meant to survive.
+    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
   }
 
   return (
