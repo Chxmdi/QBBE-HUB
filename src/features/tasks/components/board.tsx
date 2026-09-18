@@ -221,7 +221,11 @@ export function TaskBoard({
                             )}
                           </span>
                         </div>
-                        <StatusSelect taskId={task.id} status={task.status} />
+                        <StatusSelect
+                          taskId={task.id}
+                          status={task.status}
+                          onSelect={(next) => moveTask(task.id, next)}
+                        />
                       </article>
                     );
                   })}
