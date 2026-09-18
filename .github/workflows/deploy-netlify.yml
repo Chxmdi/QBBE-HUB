@@ -37,15 +37,27 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Check environment readiness
+      - name: Check environment readiness and hosting isolation
         env:
           RELEASE_ENABLED: ${{ vars.RELEASE_ENABLED }}
           NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
         run: |
           test "$RELEASE_ENABLED" = true || { echo 'Release is disabled. Complete the environment release checklist first.'; exit 1; }
           test -n "$NETLIFY_SITE_ID" || { echo 'Missing environment site ID'; exit 1; }
           test -n "$NETLIFY_AUTH_TOKEN" || { echo 'Missing environment deployment token'; exit 1; }
+
+          case "$TARGET_ENVIRONMENT" in
+            staging) expected_site_id='2169b17a-8dc3-49de-a466-4281e1285de2' ;;
+            production) expected_site_id='a34499c8-0d84-47d5-bfb2-502c2b9b9071' ;;
+            *) echo "Unsupported environment: $TARGET_ENVIRONMENT"; exit 1 ;;
+          esac
+
+          test "$NETLIFY_SITE_ID" = "$expected_site_id" || {
+            echo "Refusing deployment: $TARGET_ENVIRONMENT is bound to the wrong Netlify site ID."
+            exit 1
+          }
       - name: Build and publish to the selected QBBE site
         env:
           NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
