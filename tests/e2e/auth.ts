@@ -7,8 +7,13 @@ type QaAccount = "owner" | "volunteer";
 
 // The authenticated suite uses one worker. Keep the test enrollment secret in
 // that worker so later owner sessions can pass the normal challenge screen.
+//
+// It is kept outside test-results because Playwright empties that directory at
+// the start of every run. Enrollment happens once per database; a local rerun
+// against the same database then meets the challenge screen with no secret,
+// and the whole authenticated suite fails before it tests anything.
 const totpSecrets = new Map<QaAccount, string>();
-const ownerTotpPath = join(process.cwd(), "test-results", ".qa-owner-totp");
+const ownerTotpPath = join(process.cwd(), "playwright", ".auth", "qa-owner-totp");
 
 async function rememberOwnerTotp(secret: string) {
   totpSecrets.set("owner", secret);
@@ -97,4 +102,24 @@ export async function signIn(page: Page, account: QaAccount) {
   }
 
   await page.waitForURL((url) => url.pathname === "/", { timeout: 60_000 });
+}
+
+/**
+ * End the session the way signing out does, for tests that hand the same
+ * browser to a second person. The sign-out route only answers POST, so
+ * navigating to it would leave the first session intact — and a test that
+ * silently stays signed in as an administrator proves nothing about the
+ * second account.
+ */
+export async function signOut(page: Page) {
+  await page.context().clearCookies();
+  await page.goto("/sign-in");
+  await page.evaluate(() => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch {
+      // Storage can be unavailable; the cookie clear is what ends the session.
+    }
+  });
 }
