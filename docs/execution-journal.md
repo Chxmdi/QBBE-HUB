@@ -141,6 +141,95 @@ restart the audit or treat an earlier summary as evidence of completion.
   run, so the owner's test TOTP secret now lives in `playwright/.auth`. A
   `supabase db reset` removes the enrolled factor, so delete that file too.
 
+## Current feature: identity lifecycle, the QA matrix and a repeatable local database
+
+Issues #68, #67 and #23, on `68-rls-fixtures-and-qa-matrix` off `31696ad`.
+
+### What was wrong before
+
+`rls.sql` was the only file in the database suite without a transaction, so its
+fixtures committed. Every local run left another organization and another two
+projects behind. During #66 that residue was mistaken for a product defect: the
+assignee picker listed QA Owner seven times because the owner had been added to
+each leaked organization.
+
+Rolling it back exposed what the leakage had been hiding. On a genuinely clean
+database the suite stopped at 148 of its 311 assertions, because
+`admin-mfa.sql` read whichever program happened to exist in the organization —
+one `rls.sql` had committed on some earlier run. The suite had been depending
+on its own pollution and would have failed for anyone starting fresh.
+
+The QA matrix had never run against current code. The blocker was the fixture:
+`seed.sql` fills a workspace that must already exist, only the bootstrap
+trigger creates one, and nothing bridged the two. Once it could run, `seed.sql`
+itself turned out to be broken — it sets an at-risk project's health and adds
+the reason afterwards, but a migration since added a trigger requiring the
+reason on insert. Nobody had noticed because the seed had never been run.
+
+### Three product defects, all found in a browser
+
+1. **Password recovery dead-ended.** `/auth/callback` writes the session cookie
+   for the host the browser is on, then redirected using `request.url`'s
+   origin — the server's own name for itself, `localhost` against `127.0.0.1`.
+   The browser followed to a different origin, sent no cookie, and was told its
+   recovery session had expired. Anywhere the public hostname differs from what
+   the server reports, recovery and email confirmation both fail, silently and
+   in a way that reads as an expiry problem. Fixed in `1300bb7`.
+
+2. **Deactivation was one-way and erased the person.** `app.can_read_profile`
+   required the subject's membership to be active, so deactivating someone made
+   their profile unreadable to everyone including the owner. The administration
+   page drops member rows whose profile join came back empty, so the row
+   vanished — and the Reactivate button with it. Fixed in `6a1aee6`.
+
+3. **A volunteer could open `/reports`.** `config/navigation.ts` marks it
+   staff-only and the sidebar honours that, but the page called only
+   `requireSession()`. No report data was exposed — row-level security held and
+   the page was empty — but a staff surface and a Generate report button were
+   offered to somebody the product had already excluded. Fixed in `f067361`,
+   with the regression guard in `access-impact.spec.ts` because the
+   authenticated CI job runs that and does not run the matrix.
+
+### What was found and was not a defect
+
+- Staff cannot create a task belonging to no project and no programme; that is
+  `app.can_create_scoped_task` working as designed.
+- The QA matrix required `/programs`, `/projects` and `/schedule` to redirect
+  for a volunteer. That predates #24: those pages are scoped, not forbidden.
+  The assertion now checks the page opens holding nothing the volunteer was
+  granted.
+- Three identity tests failing together on "You're doing that too quickly" was
+  the invitation limiter, not the suite. It now resets its own bucket.
+
+### Evidence
+
+Commit `f69fb11`. Local Supabase reset from the full migration chain, seeded
+through `npm run db:seed`.
+
+- Database chain: 313 assertions, exit 0. Two consecutive runs leave identical
+  row counts — 1 organization, 0 programs, 0 projects, 0 tasks.
+- Unit: 445 passed, 51 files.
+- Chromium: `identity-lifecycle` 4 passed; `hello-hub`, `access-impact`,
+  `my-work`, `qa-matrix` 22 passed. 26 authenticated checks, 0 failed. Server
+  confirmed answering after each run, because a reaped server produces a page
+  of `ERR_CONNECTION_REFUSED` that reads as failure.
+- Lint clean apart from the pre-existing `no-img-element` warning; typecheck
+  clean.
+
+Statuses stay at `awaiting verification`. Hosted Auth, live email, realtime
+reconnect and the Firefox/WebKit/performance runs are not covered here and stay
+with #55 and #50.
+
+### Not done
+
+#52 and #55 need QBBE-owned provider accounts, which no commit produces.
+`provider-custody.md` and `staging-provisioning.md` prepare them: the register
+to fill in, and the ordered procedure with what you should see at each step.
+One correction recorded there — the deploy workflow takes no commit input, so a
+frozen commit is a matter of operator timing rather than something the workflow
+enforces. Tagging would fix it but the publish condition would then skip, which
+belongs with #51.
+
 ## Delegation
 
 User authorized agents where they improve speed without reducing accuracy.

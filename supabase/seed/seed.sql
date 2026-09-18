@@ -1,4 +1,5 @@
 -- Development/test seed data ONLY. Never run against production (§6.2).
+-- Safe to run more than once: it stops early if the workspace is already seeded.
 -- Assumes at least one auth user already exists (sign up through the app
 -- first — the bootstrap trigger provisions the organization and mandatory
 -- channels). This script then fills the workspace with realistic synthetic
@@ -25,6 +26,14 @@ begin
     raise exception 'Sign up through the app first so the bootstrap trigger can provision the workspace.';
   end if;
 
+  -- Running this twice would not fail loudly; it would quietly double every
+  -- record and leave the QA matrix matching two of everything. One marker
+  -- program decides whether the workspace has already been filled.
+  if exists (select 1 from program where organization_id = v_org and slug = 'family-first') then
+    raise notice 'Seed data is already present for this organization; nothing to do.';
+    return;
+  end if;
+
   -- Programs
   insert into program (organization_id, name, slug, description, lead_id, created_by)
   values (v_org, 'Family First', 'family-first', 'Family and community education support services.', v_user, v_user)
@@ -39,12 +48,12 @@ begin
   values (v_org, v_program, 'Fall Community Workshop Series', 'Deliver six community workshops with 80% attendance satisfaction.', v_user, 'active', 'on_track', current_date - 30, current_date + 60, v_user)
   returning id into v_project;
 
-  insert into project (organization_id, program_id, name, outcome, owner_id, stage, health, start_date, target_date, created_by)
-  values (v_org, v_program2, 'Tutor Recruitment Drive', 'Recruit and onboard 25 qualified volunteer tutors before the winter term.', v_user, 'active', 'at_risk', current_date - 14, current_date + 30, v_user)
+  -- The reason goes in the insert, not an update after it: an active project
+  -- may not be recorded as at risk without one, and the trigger that enforces
+  -- that fires on the insert.
+  insert into project (organization_id, program_id, name, outcome, owner_id, stage, health, health_reason, start_date, target_date, created_by)
+  values (v_org, v_program2, 'Tutor Recruitment Drive', 'Recruit and onboard 25 qualified volunteer tutors before the winter term.', v_user, 'active', 'at_risk', 'Applications are below target; outreach expansion planned.', current_date - 14, current_date + 30, v_user)
   returning id into v_project2;
-
-  update project set health_reason = 'Applications are below target; outreach expansion planned.'
-    where id = v_project2;
 
   insert into project_membership (project_id, user_id, role)
   values (v_project, v_user, 'manager'), (v_project2, v_user, 'manager');

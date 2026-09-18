@@ -4,6 +4,7 @@
 --     | docker exec -i supabase_db_workspace psql -U postgres -d postgres -v ON_ERROR_STOP=1
 --
 -- Recipe: new table → policies in the same migration → one allow + one deny here.
+-- All test mutations are rolled back.
 
 create schema if not exists tests;
 
@@ -60,6 +61,13 @@ $$;
 
 grant usage on schema tests to anon, authenticated, postgres;
 grant execute on all functions in schema tests to anon, authenticated, postgres;
+
+-- Everything below is fixture data, so it is rolled back the way every other
+-- file in this suite rolls its own back. The helpers above stay outside the
+-- transaction on purpose: later files in the chain call tests.ok and
+-- tests.authenticate, and rolling those away would take the rest of the suite
+-- with them.
+begin;
 
 do $$
 declare
@@ -1695,3 +1703,5 @@ begin
   perform tests.ok(true, 'RLS matrix complete');
 end;
 $$;
+
+rollback;

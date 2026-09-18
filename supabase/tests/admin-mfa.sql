@@ -1,6 +1,6 @@
 -- Admin policies must require AAL2 without taking ordinary member access away
 -- from the AAL1 session that needs to reach the MFA challenge.
--- Run after qa-users.sql and rls.sql. All test mutations are rolled back.
+-- Run after qa-users.sql. All test mutations are rolled back.
 begin;
 
 do $$
@@ -21,11 +21,12 @@ begin
   from organization_membership
   where user_id = v_guest and organization_id = v_org;
 
-  select id into strict v_program
-  from program
-  where organization_id = v_org
-  order by created_at
-  limit 1;
+  -- Its own program, rather than whichever one happens to be lying around:
+  -- this file used to read a row that rls.sql committed, so it only passed on
+  -- a database some earlier run had already dirtied.
+  insert into program (organization_id, name, slug, created_by)
+  values (v_org, 'Admin MFA fixture program', 'admin-mfa-' || gen_random_uuid()::text, v_admin)
+  returning id into v_program;
 
   perform tests.authenticate(v_admin, 'aal1');
   set local role authenticated;

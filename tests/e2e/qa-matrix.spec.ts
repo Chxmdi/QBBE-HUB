@@ -1,14 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { signIn } from "./auth";
 
 /**
  * Visual QA + accessibility matrix (Part II §16.1):
  * themes, widths, content stress, keyboard, and data states.
  *
- * Runs against a seeded QA database. Not part of the CI unit suite.
+ * Runs against a seeded QA database (`npm run db:seed`). Not part of the CI
+ * unit suite; see docs/runbooks/qa.md.
  */
-
-const OWNER = { email: "qa-owner@example.com", password: "QaTest!2026" };
 
 const ROUTES = [
   { path: "/", name: "home" },
@@ -41,14 +41,6 @@ const WIDTHS = [
   { w: 320, h: 640, name: "320-narrow" },
 ];
 
-async function signIn(page: Page) {
-  await page.goto("/sign-in");
-  await page.getByLabel("Email").fill(OWNER.email);
-  await page.getByLabel("Password").fill(OWNER.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL("**/", { timeout: 30_000 });
-}
-
 async function setTheme(page: Page, theme: "light" | "dark") {
   await page.evaluate((t) => {
     localStorage.setItem("qbbe-theme", t);
@@ -71,7 +63,7 @@ test.describe("QA matrix", () => {
   test.setTimeout(10 * 60_000);
 
   test.beforeEach(async ({ page }) => {
-    await signIn(page);
+    await signIn(page, "owner");
   });
 
   test("every route renders in both themes without horizontal overflow", async ({
@@ -227,19 +219,32 @@ test.describe("QA matrix", () => {
 
 test.describe("authorization", () => {
   test("volunteer cannot reach staff-only surfaces", async ({ page }) => {
-    await page.goto("/sign-in");
-    await page.getByLabel("Email").fill("qa-volunteer@example.com");
-    await page.getByLabel("Password").fill("QaTest!2026");
-    await page.getByRole("button", { name: "Sign in" }).click();
-    await page.waitForURL("**/", { timeout: 30_000 });
+    await signIn(page, "volunteer");
 
-    // CRM and Reports are staff-only: the route must redirect, not render.
-    for (const path of ["/crm", "/reports", "/admin", "/programs", "/projects", "/schedule"]) {
+    // Staff-only and admin-only: the route must redirect, not render.
+    for (const path of ["/crm", "/reports", "/admin"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(page.url(), `${path} must not render for a volunteer`).not.toContain(
         path,
       );
+    }
+
+    // Programs, projects and the schedule are not staff-only, and this test
+    // used to insist they were. Since #24 they are scoped instead: everyone
+    // reaches the page, and the database decides what is on it. Redirecting
+    // would be the wrong answer — the right one is a page holding nothing the
+    // volunteer was not granted.
+    for (const path of ["/programs", "/projects", "/schedule"]) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      expect(page.url(), `${path} is scoped, not forbidden`).toContain(path);
+      for (const seeded of ["Fall Community Workshop Series", "Tutor Recruitment Drive"]) {
+        await expect(
+          page.getByText(seeded, { exact: true }),
+          `${path} must not show ${seeded} to a volunteer with no grant`,
+        ).toHaveCount(0);
+      }
     }
 
     // Staff-only navigation is absent from the sidebar.

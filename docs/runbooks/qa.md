@@ -18,34 +18,61 @@ npm run test:a11y
 
 This runs on every pull request via `.github/workflows/ci.yml`.
 
-## 2. Authenticated QA matrix — needs network access to Supabase
+## 2. Authenticated QA matrix — needs a seeded database, run by hand
 
 `tests/e2e/qa-matrix.spec.ts` covers all 18 authenticated routes at every
 width in both themes, axe on each, 200% zoom, the command palette, the task
 drawer and its deep links, URL-shareable filters, empty/permission states,
 and volunteer-vs-staff authorization boundaries.
 
-It needs a reachable Supabase project and a seeded QA database, so it does
-**not** run in the default sandbox (egress policy blocks `*.supabase.co`
-there) and is not wired into CI.
+It needs a database with QA users and workspace content in it, which a plain
+`supabase db reset` does not produce. The seed is deliberately not run by the
+reset: `supabase/seed/seed.sql` fills a workspace that must already exist, and
+only the bootstrap trigger creates one — when the first user signs up. So
+`[db.seed]` stays `enabled = false` in `supabase/config.toml`, and the sign-up
+step happens first.
 
-To run it:
+`npm run db:seed` does both halves in the right order: it inserts the five QA
+fixture users (the first of which bootstraps the organization), then loads the
+workspace seed. It is safe to run repeatedly — it stops early if the workspace
+already holds the seed data rather than doubling every record.
+
+To run the matrix against the local stack:
 
 ```bash
-# 1. Point at a NON-PRODUCTION Supabase project
-cp .env.example .env.local   # fill in the staging project's URL + anon key
-
-# 2. Apply migrations to that project
-supabase link --project-ref <staging-ref> && supabase db push
-
-# 3. Seed QA fixtures (creates three users across owner/staff/volunteer)
-#    See supabase/seed/seed.sql, plus the QA users block below.
-
-# 4. Build, serve, and run
+npx supabase start            # or `npx supabase db reset --local` for a clean one
+npm run db:seed               # QA users, then workspace content
+cp .env.example .env.local    # local Supabase URL and anon key
 npm run build
 npx next start -p 3000 -H 127.0.0.1 &
 npm run test:qa
 ```
+
+The matrix is not wired into CI. The authenticated CI job runs `hello-hub`,
+`access-impact` and `my-work`, which cover the task surfaces behaviourally;
+the matrix covers presentation — every route at six widths in both themes,
+with axe on each — which is slower and changes for reasons unrelated to the
+code under review. Run it by hand before a release, and after any change to
+layout, theme tokens or a shared navigation surface.
+
+### Reruns and the invitation rate limit
+
+`identity-lifecycle.spec.ts` creates a real invitation per scenario, and the
+Hub allows 30 an hour per person. Run the suite a few times inside one hour and
+the owner meets "You're doing that too quickly. Try again in about 13 minutes"
+where an invitation should be, and every test that opens with an invitation
+fails together — the limiter working, looking exactly like a broken test.
+
+The spec clears its own bucket in `beforeAll` through `tests/e2e/db.ts`, so it
+gives the same answer on the fourth run of the hour as on the first. If you add
+a suite that creates invitations, do the same rather than waiting the window
+out. The limiter's own behaviour is covered by `tests/unit/rate-limit.test.ts`;
+here it is a fixture, not the thing under test.
+
+To run it against a hosted non-production project instead, point `.env.local`
+at that project, apply migrations with `supabase link --project-ref <ref> &&
+supabase db push`, and load the same two SQL files through its SQL editor.
+Never against production: the first sign-up there becomes Primary Owner.
 
 ### QA test users
 

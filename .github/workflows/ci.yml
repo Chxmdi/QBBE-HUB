@@ -109,6 +109,15 @@ jobs:
           fs.unlinkSync(`${process.env.RUNNER_TEMP}/supabase-status.json`);
           NODE
 
+      - name: Seed the workspace the browser checks read
+        # The suite above rolls its fixtures back, as every database test
+        # should. That leaves a migrated but empty workspace, and the access
+        # inventory has programmes and projects to show only if some exist —
+        # it used to read whatever rls.sql had committed. This is the same
+        # seeding path docs/runbooks/qa.md documents for running these suites
+        # locally, so CI and a developer machine now start from one fixture.
+        run: npm run db:seed
+
       - name: Build authenticated test app
         run: npm run build
 
@@ -119,7 +128,7 @@ jobs:
         run: |
           npx next start -p 3000 -H 127.0.0.1 &
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
-          npx playwright test hello-hub access-impact my-work --project=chromium
+          npx playwright test hello-hub access-impact my-work identity-lifecycle --project=chromium
 
       - name: Preserve authenticated failure evidence
         if: failure()

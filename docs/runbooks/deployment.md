@@ -147,13 +147,14 @@ Two gates exist specifically to catch drift that only shows up at runtime:
 
 ## QA matrix (Part II §16.1)
 
-Two Playwright suites:
+The Playwright suites, by what each one needs:
 
 | Suite | Command | Needs |
 |---|---|---|
 | `tests/e2e/public-routes.spec.ts` | `npm run test:a11y` | a built app only — runs in CI |
 | `tests/e2e/hello-hub.spec.ts` | `npx playwright test hello-hub` | migrated local Supabase; CI authenticated smoke |
-| `tests/e2e/qa-matrix.spec.ts` | `npm run test:qa` | a built app **plus** network access to the Supabase project and a seeded QA database |
+| `tests/e2e/qa-matrix.spec.ts` | `npm run test:qa` | a built app **plus** a seeded database (`npm run db:seed`) |
+| `tests/e2e/identity-lifecycle.spec.ts` | `npx playwright test identity-lifecycle` | the same, plus the local mail catcher for the recovery email |
 
 The public suite covers the auth routes across six widths, both themes,
 axe-core WCAG 2.2 A/AA rules, keyboard traversal, focus visibility, reduced
@@ -170,9 +171,10 @@ authorization boundaries. Run it against a preview deployment or locally:
 QA_BASE_URL=https://<preview>.netlify.app npm run test:qa
 ```
 
-It needs a QA database with seeded fixtures and three accounts (owner, staff,
-volunteer). **Never point it at production** — it writes data. Reset any QA
-database afterwards.
+It needs a seeded QA database and the five role accounts. `npm run db:seed`
+produces one from a clean local reset; `docs/runbooks/qa.md` has the full path
+and explains why the seed cannot run during the reset itself. **Never point it
+at production** — it writes data. Reset any QA database afterwards.
 
 Colour-contrast regressions are additionally guarded by
 `tests/unit/contrast.test.ts`, which runs in the normal unit suite without a
