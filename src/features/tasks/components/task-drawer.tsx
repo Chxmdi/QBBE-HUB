@@ -58,6 +58,7 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
   const [peopleTasks, setPeopleTasks] = useState<{ id: string; title: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [historyFailed, setHistoryFailed] = useState(false);
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -73,7 +74,7 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
       { data: depRows },
       { data: taskOptions },
       { data: roleRows },
-      { data: historyRows },
+      { data: historyRows, error: historyError },
     ] = await Promise.all([
       supabase.from("task").select(DETAIL_SELECT + ", recurrence_rule").eq("id", id).maybeSingle(),
       supabase
@@ -109,6 +110,7 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
         .limit(50),
     ]);
     setLoading(false);
+    setHistoryFailed(Boolean(historyError));
     if (!taskRow) {
       // RLS filtered it out, or it does not exist — same message either way.
       setNotFound(true);
@@ -432,7 +434,7 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
             </form>
           </section>
 
-          <TaskHistory entries={history} />
+          <TaskHistory entries={history} failed={historyFailed} />
         </div>
       ) : null}
     </Drawer>

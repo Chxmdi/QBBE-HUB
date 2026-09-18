@@ -49,6 +49,14 @@ create trigger validate_task_blocker_scope
 -- This widens the policy by exactly one case: a task-sourced row is readable by
 -- whoever can already read that task. It grants nothing that reading the task
 -- did not already grant.
+--
+-- The policy is evaluated as the querying role, so that role needs execute on
+-- the helper it calls. The program and project helpers were granted long ago;
+-- the task helper never was, because until now no policy the client reads
+-- through called it by that name. Without this grant every authenticated read
+-- of activity_event fails outright.
+grant execute on function app.has_task_capability(uuid, text) to authenticated;
+
 drop policy if exists activity_read on public.activity_event;
 create policy activity_read on public.activity_event for select to authenticated
   using (

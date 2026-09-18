@@ -21,13 +21,26 @@ export interface TaskHistoryEntry {
  * re-reading the task, so the history keeps saying what it said at the time —
  * including the former owner of a task that has since been reassigned.
  */
-export function TaskHistory({ entries }: { entries: TaskHistoryEntry[] }) {
+export function TaskHistory({
+  entries,
+  failed = false,
+}: {
+  entries: TaskHistoryEntry[];
+  failed?: boolean;
+}) {
   return (
     <section aria-labelledby="drawer-history">
       <h3 id="drawer-history" className="section-heading mb-2">
         History
       </h3>
-      {entries.length === 0 ? (
+      {failed ? (
+        // "No recorded changes yet" would be a claim about the record. This is
+        // a claim about the request, which is the only thing that is known.
+        <p role="alert" className="text-[13px] text-danger-fg">
+          The history could not be loaded. Nothing has been changed or lost —
+          reopen this task to try again.
+        </p>
+      ) : entries.length === 0 ? (
         <p className="text-[13px] text-muted">
           No recorded changes yet. Owner, due date, status, priority and project
           changes appear here with who made them.
