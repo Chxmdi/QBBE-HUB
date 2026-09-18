@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { signIn, signOut } from "./auth";
+import { sql } from "./db";
 
 /**
  * P0-AUTH-01 / P0-AUTH-04: the identity lifecycle against the real backend —
@@ -99,6 +100,22 @@ async function latestMessageTo(page: Page, email: string) {
 }
 
 test.describe("identity lifecycle", () => {
+  /**
+   * The Hub allows 30 invitations an hour per person
+   * (RATE_LIMITS["invitation:create"]), and the counter lives in Postgres so
+   * that serverless instances share it. That makes it state this file inherits
+   * rather than creates: run the suite a few times inside one hour and the
+   * owner is met with "You're doing that too quickly. Try again in about 13
+   * minutes." where an invitation should be, and every test that opens with an
+   * invitation fails together.
+   *
+   * The limiter has its own unit tests. Here it is a fixture to reset, so this
+   * file gives the same answer on the fourth run of the hour as on the first.
+   */
+  test.beforeAll(() => {
+    sql("delete from rate_limit_counter where bucket like 'invitation:create:%';");
+  });
+
   test("an invitation admits the person and the role it names", async ({ page }) => {
     const email = uniqueEmail("qa-invited");
     await signIn(page, "owner");

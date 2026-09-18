@@ -57,12 +57,17 @@ layout, theme tokens or a shared navigation surface.
 
 ### Reruns and the invitation rate limit
 
-`identity-lifecycle.spec.ts` creates a real invitation per scenario, and
-invitations are rate-limited. Running the spec several times in a row locally
-exhausts the allowance and the next run fails with "You're doing that too
-quickly. Try again in about N minutes" in the invite dialog — which looks like
-a broken test and is the limiter working. Either wait out the window or reset
-the database. CI is unaffected: it builds a fresh database per run.
+`identity-lifecycle.spec.ts` creates a real invitation per scenario, and the
+Hub allows 30 an hour per person. Run the suite a few times inside one hour and
+the owner meets "You're doing that too quickly. Try again in about 13 minutes"
+where an invitation should be, and every test that opens with an invitation
+fails together — the limiter working, looking exactly like a broken test.
+
+The spec clears its own bucket in `beforeAll` through `tests/e2e/db.ts`, so it
+gives the same answer on the fourth run of the hour as on the first. If you add
+a suite that creates invitations, do the same rather than waiting the window
+out. The limiter's own behaviour is covered by `tests/unit/rate-limit.test.ts`;
+here it is a fixture, not the thing under test.
 
 To run it against a hosted non-production project instead, point `.env.local`
 at that project, apply migrations with `supabase link --project-ref <ref> &&
