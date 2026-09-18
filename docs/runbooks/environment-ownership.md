@@ -43,7 +43,8 @@ Before #52 may close:
 
 ## Provider custody register
 
-For every production-critical provider record:
+The register itself is `provider-custody.md`, with a row per provider ready to
+fill in. For every production-critical provider record:
 - provider/service
 - QBBE organizational owner
 - named primary custodian
@@ -69,3 +70,9 @@ Before release, prove all of the following:
 - QBBE custodians can access/recover each production-critical provider account
 
 A created resource or written runbook is not sufficient acceptance evidence. Provider/admin views and an actual isolation test are required.
+
+## Standing staging up
+
+`staging-provisioning.md` is the ordered procedure for provisioning the staging
+environment and deploying one frozen commit to it, with the smoke checks that
+prove a staging write cannot reach production.
