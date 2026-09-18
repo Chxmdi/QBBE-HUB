@@ -14,6 +14,10 @@ import { TASK_STATUS_META } from "@/components/shared/status-badges";
 import { addTaskComment, updateTask } from "@/features/tasks/services/task.commands";
 import { StatusSelect } from "@/features/tasks/components/status-select";
 import { TaskExtras } from "@/features/tasks/components/task-extras";
+import { TaskRoles, type TaskRoleHolder } from "@/features/tasks/components/task-roles";
+import { TaskHistory, type TaskHistoryEntry } from "@/features/tasks/components/task-history";
+import type { TaskRole } from "@/features/tasks/schemas";
+import type { TaskFieldChange } from "@/features/tasks/services/task.history";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { relativeTime } from "@/lib/utils";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
@@ -21,10 +25,18 @@ import type { Task, TaskComment } from "@/types/entities";
 
 const DETAIL_SELECT =
   "id, program_id, project_id, milestone_id, title, description, status, priority, " +
-  "assignee_id, reviewer_id, start_at, due_at, blocked_reason, sort_key, completed_at, " +
+  "assignee_id, reviewer_id, approver_id, completion_criteria, blocked_by_id, " +
+  "start_at, due_at, blocked_reason, sort_key, completed_at, " +
   "created_at, archived_at, " +
   "assignee:assignee_id(id, full_name, email, avatar_url, title, timezone), " +
   "project:project_id(id, name)";
+
+type TaskDetail = Task & {
+  recurrence_rule?: string | null;
+  approver_id?: string | null;
+  completion_criteria?: string | null;
+  blocked_by_id?: string | null;
+};
 
 /**
  * Task drawer (WORK-008): opens from `?task=<id>` on any list so a shared
@@ -37,13 +49,16 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
   const { toast } = useToast();
   const taskId = searchParams.get("task");
 
-  const [task, setTask] = useState<Task | null>(null);
+  const [task, setTask] = useState<TaskDetail | null>(null);
+  const [roles, setRoles] = useState<TaskRoleHolder[]>([]);
+  const [history, setHistory] = useState<TaskHistoryEntry[]>([]);
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [checklist, setChecklist] = useState<{ id: string; title: string; completed_at: string | null }[]>([]);
   const [blockers, setBlockers] = useState<{ blocking_task_id: string; title: string }[]>([]);
   const [peopleTasks, setPeopleTasks] = useState<{ id: string; title: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
+  const [historyFailed, setHistoryFailed] = useState(false);
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -52,7 +67,15 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
     setLoading(true);
     setNotFound(false);
     const supabase = createSupabaseBrowserClient();
-    const [{ data: taskRow }, { data: commentRows }, { data: checkRows }, { data: depRows }, { data: taskOptions }] = await Promise.all([
+    const [
+      { data: taskRow },
+      { data: commentRows },
+      { data: checkRows },
+      { data: depRows },
+      { data: taskOptions },
+      { data: roleRows },
+      { data: historyRows, error: historyError },
+    ] = await Promise.all([
       supabase.from("task").select(DETAIL_SELECT + ", recurrence_rule").eq("id", id).maybeSingle(),
       supabase
         .from("task_comment")
@@ -72,15 +95,29 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
         .select("blocking_task_id, blocking:blocking_task_id(title)")
         .eq("blocked_task_id", id),
       supabase.from("task").select("id, title").is("archived_at", null).limit(50),
+      supabase
+        .from("task_assignment")
+        .select("user_id, role, user_profile:user_id(id, full_name, avatar_url)")
+        .eq("task_id", id),
+      supabase
+        .from("activity_event")
+        .select(
+          "id, verb, summary, metadata, created_at, actor:actor_id(id, full_name, avatar_url)",
+        )
+        .eq("source_type", "task")
+        .eq("source_id", id)
+        .order("created_at", { ascending: false })
+        .limit(50),
     ]);
     setLoading(false);
+    setHistoryFailed(Boolean(historyError));
     if (!taskRow) {
       // RLS filtered it out, or it does not exist — same message either way.
       setNotFound(true);
       setTask(null);
       return;
     }
-    setTask(taskRow as unknown as Task);
+    setTask(taskRow as unknown as TaskDetail);
     setComments((commentRows ?? []) as unknown as TaskComment[]);
     setChecklist((checkRows ?? []) as { id: string; title: string; completed_at: string | null }[]);
     setBlockers(
@@ -90,6 +127,40 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
       })),
     );
     setPeopleTasks((taskOptions ?? []) as { id: string; title: string }[]);
+
+    type RoleRow = {
+      user_id: string;
+      role: TaskRole;
+      user_profile: { full_name: string; avatar_url: string | null } | null;
+    };
+    setRoles(
+      ((roleRows ?? []) as unknown as RoleRow[]).map((row) => ({
+        userId: row.user_id,
+        role: row.role,
+        fullName: row.user_profile?.full_name ?? "Unknown",
+        avatarUrl: row.user_profile?.avatar_url ?? null,
+      })),
+    );
+
+    type HistoryRow = {
+      id: string;
+      verb: string;
+      summary: string;
+      created_at: string;
+      metadata: { changes?: TaskFieldChange[] } | null;
+      actor: { full_name: string; avatar_url: string | null } | null;
+    };
+    setHistory(
+      ((historyRows ?? []) as unknown as HistoryRow[]).map((row) => ({
+        id: row.id,
+        verb: row.verb,
+        summary: row.summary,
+        createdAt: row.created_at,
+        actorName: row.actor?.full_name ?? null,
+        actorAvatar: row.actor?.avatar_url ?? null,
+        changes: row.metadata?.changes ?? [],
+      })),
+    );
   }, []);
 
   useEffect(() => {
@@ -190,9 +261,30 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
           </div>
 
           {task.blocked_reason ? (
-            <p className="rounded-(--radius-sm) bg-danger/10 px-3 py-2 text-[13px] text-danger-fg">
-              <span className="font-medium">Blocked:</span> {task.blocked_reason}
-            </p>
+            <div className="space-y-2 rounded-(--radius-sm) bg-danger/10 px-3 py-2">
+              <p className="text-[13px] text-danger-fg">
+                <span className="font-medium">Blocked:</span> {task.blocked_reason}
+              </p>
+              {/* P0-TSK-04: a blocked task may also name the person whose
+                  action is needed, which is usually the whole answer. */}
+              <div>
+                <Label htmlFor="drawer-blocked-by">Waiting on</Label>
+                <Select
+                  id="drawer-blocked-by"
+                  defaultValue={task.blocked_by_id ?? ""}
+                  onChange={(e) =>
+                    void handleFieldSave({ blockedById: e.target.value || null })
+                  }
+                >
+                  <option value="">Nobody in particular</option>
+                  {people.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
           ) : null}
 
           <div>
@@ -205,6 +297,21 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
               onBlur={(e) => {
                 if (e.target.value !== (task.description ?? "")) {
                   void handleFieldSave({ description: e.target.value || null });
+                }
+              }}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="drawer-criteria">Completion criteria</Label>
+            <Textarea
+              id="drawer-criteria"
+              defaultValue={task.completion_criteria ?? ""}
+              rows={2}
+              placeholder="What has to be true before this counts as done…"
+              onBlur={(e) => {
+                if (e.target.value !== (task.completion_criteria ?? "")) {
+                  void handleFieldSave({ completionCriteria: e.target.value || null });
                 }
               }}
             />
@@ -274,6 +381,13 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
             peopleTasks={peopleTasks}
           />
 
+          <TaskRoles
+            taskId={task.id}
+            people={people}
+            holders={roles}
+            onChanged={() => load(task.id)}
+          />
+
           <section aria-labelledby="drawer-comments">
             <h3 id="drawer-comments" className="section-heading mb-2">
               Comments
@@ -319,6 +433,8 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
               </Button>
             </form>
           </section>
+
+          <TaskHistory entries={history} failed={historyFailed} />
         </div>
       ) : null}
     </Drawer>

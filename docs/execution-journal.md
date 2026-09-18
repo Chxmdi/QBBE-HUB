@@ -89,6 +89,58 @@ restart the audit or treat an earlier summary as evidence of completion.
   excluded because their health check timed out. Full Storage verification remains
   a Workstream 3 dependency; live Auth/MFA and realtime remain staging gates.
 
+## Current feature: task roles, task history, My Work and the shared board/list filters
+
+- Branch: `30-my-work-boardlist-and-task-filtering-on-the-real-backend`, worktree
+  at `C:/Users/ookel/qbbe-hub-issue-30`, based on `origin/main` f7ddb15.
+  Closes #24, #29 and #30 in one pull request.
+- Reproduced gap: naming a reviewer, approver, contributor or follower on a task
+  conferred no capability at all, so a review queue could not return a row and a
+  task role was decoration. Fixed at the authorization boundary first
+  (`20260917230500`), with 15 new allow/deny assertions.
+- Activity events recorded only that a task was "updated", with empty metadata.
+  They now record which field moved and from what, with labels resolved when the
+  change is written, so the history keeps saying what it said at the time.
+- My Work and the board now read one filter contract covering all nine
+  dimensions plus search, shareable through the URL. A query failure is reported
+  as a failure rather than rendered as an empty workload, and due dates group in
+  the organization's zone rather than the server's.
+- Three defects were found by the browser checks, not by inspection: the board's
+  keyboard status control bypassed the board's own move handler, so a card moved
+  by keyboard neither moved nor was announced; creating a task left `create=task`
+  in the address, so a refresh reopened an empty form over saved work; and the
+  new activity policy called `app.has_task_capability`, which — unlike its
+  program and project siblings — had never been granted to `authenticated`, so
+  every authenticated read of `activity_event` failed and the drawer reported
+  that failure as "No recorded changes yet".
+- Verified at cf75086, environment: local Supabase (migrations through `20260917233000`) plus the production build on 127.0.0.1:3100, Chromium. `npm run lint` (1 pre-existing
+  warning), `npx tsc --noEmit`, `npm test` (441 pass), `npm run build`, a clean
+  `supabase db reset` over the whole migration chain, the full `test:db` chain
+  (311 PASS, 0 errors), `supabase db advisors --local --type security
+  --fail-on error` (no issues), and `playwright test my-work access-impact
+  --project=chromium` (8 pass) including a grant/revoke round trip read from the
+  second person's own session.
+- CI is green on the same commit (https://github.com/Chxmdi/QBBE-HUB/actions/runs/35296542545): lint, typecheck, unit tests, the
+  production build, the public-route accessibility pass on Chromium, Firefox
+  and WebKit, a clean database reset with the whole `test:db` chain and the
+  security advisor, and 11 authenticated Chromium checks. That run landed at
+  01:25 UTC, inside the window in which dated assertions built from the
+  runner's own clock had been failing.
+- Two further defects were found by CI rather than locally, and one of those
+  only on its second run: dated unit assertions built from the runner's own
+  clock rather than the organization's zone, which fail between 00:00 and
+  04:00 UTC; a milestone name that now appears both in the Milestones section
+  and in the task dialog's picker, which made an older assertion ambiguous;
+  and a race in which `router.replace` had not yet removed `create=task` from
+  the address when the page reloaded. The last passed locally and on one CI
+  run before failing on the next, so timing-sensitive changes here are now
+  checked by running the suite twice through.
+- Not covered here: realtime revocation over a hosted socket and hosted Auth
+  evidence, which need a staging deployment and remain tracked in #55.
+- Note for local reruns: Playwright empties `test-results` at the start of every
+  run, so the owner's test TOTP secret now lives in `playwright/.auth`. A
+  `supabase db reset` removes the enrolled factor, so delete that file too.
+
 ## Delegation
 
 User authorized agents where they improve speed without reducing accuracy.

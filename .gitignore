@@ -45,6 +45,7 @@ supabase/.branches
 # playwright
 /test-results
 /playwright-report
+/playwright/.auth
 /blob-report
 .env.local
 

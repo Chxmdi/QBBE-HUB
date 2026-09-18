@@ -11,8 +11,18 @@ import {
   blockedReasonError,
   bulkSchema,
   createTaskSchema,
+  taskRoleSchema,
   updateTaskSchema,
+  TASK_ROLE_LABELS,
 } from "@/features/tasks/schemas";
+import {
+  TRACKED_TASK_FIELDS,
+  diffTaskFields,
+  summarizeChanges,
+  type LabelLookup,
+  type TaskFieldChange,
+  type TaskFieldValues,
+} from "@/features/tasks/services/task.history";
 
 /**
  * Task commands — durable server mutations (WORK-002). Validation happens
@@ -25,6 +35,79 @@ export interface ActionResult {
   id?: string;
 }
 
+type ServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+
+/**
+ * Resolve display text for the id-valued fields in a diff.
+ *
+ * Labels are stored on the event rather than joined on read, so a history entry
+ * still reads correctly after a person is deactivated or a project renamed, and
+ * so rendering it never depends on the reader being able to see those records.
+ */
+async function resolveChangeLabels(
+  supabase: ServerClient,
+  changes: TaskFieldChange[],
+): Promise<LabelLookup> {
+  const people = new Set<string>();
+  const projects = new Set<string>();
+  for (const change of changes) {
+    const ids = [change.from, change.to].filter((v): v is string => v !== null);
+    if (change.field === "assignee_id") ids.forEach((id) => people.add(id));
+    if (change.field === "project_id") ids.forEach((id) => projects.add(id));
+  }
+  if (people.size === 0 && projects.size === 0) return {};
+
+  const [{ data: profiles }, { data: projectRows }] = await Promise.all([
+    people.size
+      ? supabase.from("user_profile").select("id, full_name").in("id", [...people])
+      : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
+    projects.size
+      ? supabase.from("project").select("id, name").in("id", [...projects])
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+  ]);
+
+  const labels: LabelLookup = {};
+  for (const row of profiles ?? []) labels[row.id as string] = row.full_name as string;
+  for (const row of projectRows ?? []) labels[row.id as string] = row.name as string;
+  return labels;
+}
+
+/**
+ * Write one activity event describing what actually changed (P0-TSK-05).
+ * The event carries the actor and timestamp as before; `metadata.changes` is
+ * what makes it answerable rather than merely present.
+ */
+async function recordTaskChanges(
+  supabase: ServerClient,
+  session: { organizationId: string; userId: string },
+  taskId: string,
+  before: TaskFieldValues,
+  after: TaskFieldValues,
+  context: {
+    title: string;
+    projectId: string | null;
+    programId: string | null;
+    verb?: string;
+  },
+): Promise<void> {
+  const bare = diffTaskFields(before, after);
+  const changes = bare.length
+    ? diffTaskFields(before, after, await resolveChangeLabels(supabase, bare))
+    : bare;
+
+  await supabase.from("activity_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    verb: context.verb ?? "updated",
+    source_type: "task",
+    source_id: taskId,
+    project_id: context.projectId,
+    program_id: context.programId,
+    summary: summarizeChanges(context.title, changes),
+    metadata: { changes },
+  });
+}
+
 export async function createTask(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
 
@@ -34,8 +117,10 @@ export async function createTask(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { title, description, projectId, milestoneId, assigneeId, priority, dueAt, completionCriteria, reviewerId, approverId } =
-    parsed.data;
+  const {
+    title, description, projectId, milestoneId, assigneeId, priority, dueAt,
+    completionCriteria, reviewerId, approverId, status,
+  } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
 
@@ -66,7 +151,7 @@ export async function createTask(input: unknown): Promise<ActionResult> {
       reviewer_id: reviewerId ?? null,
       approver_id: approverId ?? null,
       created_by: session.userId,
-      status: "not_started",
+      status: status ?? "not_started",
     })
     .select("id")
     .single();
@@ -127,7 +212,7 @@ export async function updateTaskStatus(
   // ordinary case never has to rely on catching a constraint violation.
   const { data: before } = await supabase
     .from("task")
-    .select("status")
+    .select("status, blocked_reason")
     .eq("id", taskId)
     .maybeSingle();
   const wasAlreadyCompleted = before?.status === "completed";
@@ -137,6 +222,9 @@ export async function updateTaskStatus(
     .update({
       status,
       blocked_reason: status === "blocked" ? blockedReason!.trim() : null,
+      // Leaving the blocking person behind on an unblocked task would keep
+      // asking somebody for an action nobody is waiting on any more.
+      ...(status === "blocked" ? {} : { blocked_by_id: null }),
       completed_at: status === "completed" ? new Date().toISOString() : null,
     })
     .eq("id", taskId)
@@ -189,19 +277,19 @@ export async function updateTaskStatus(
     }
   }
 
-  await supabase.from("activity_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    verb: status === "completed" ? "completed" : "updated",
-    source_type: "task",
-    source_id: taskId,
-    project_id: updated.project_id,
-    program_id: updated.program_id,
-    summary:
-      status === "completed"
-        ? `completed “${updated.title}”`
-        : `moved “${updated.title}” to ${status.replace(/_/g, " ")}`,
-  });
+  await recordTaskChanges(
+    supabase,
+    session,
+    taskId,
+    { status: before?.status ?? null },
+    { status },
+    {
+      title: updated.title as string,
+      projectId: (updated.project_id as string | null) ?? null,
+      programId: (updated.program_id as string | null) ?? null,
+      verb: status === "completed" ? "completed" : "updated",
+    },
+  );
 
   const { fireWorkflows } = await import("@/features/admin/services/workflow.runtime");
   await fireWorkflows(supabase, {
@@ -235,12 +323,27 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
   if (fields.priority !== undefined) patch.priority = fields.priority;
   if (fields.dueAt !== undefined) patch.due_at = fields.dueAt || null;
   if (fields.projectId !== undefined) patch.project_id = fields.projectId;
+  if (fields.completionCriteria !== undefined) {
+    patch.completion_criteria = fields.completionCriteria || null;
+  }
+  if (fields.milestoneId !== undefined) patch.milestone_id = fields.milestoneId;
+  if (fields.reviewerId !== undefined) patch.reviewer_id = fields.reviewerId;
+  if (fields.approverId !== undefined) patch.approver_id = fields.approverId;
+  if (fields.blockedById !== undefined) patch.blocked_by_id = fields.blockedById;
+
+  // Read the tracked fields before writing: a history entry has to say what the
+  // value was, and after the update that information is gone (P0-TSK-05).
+  const { data: before } = await supabase
+    .from("task")
+    .select("assignee_id, due_at, status, priority, project_id")
+    .eq("id", taskId)
+    .maybeSingle();
 
   const { data: updated, error } = await supabase
     .from("task")
     .update(patch)
     .eq("id", taskId)
-    .select("id, title, assignee_id, project_id, program_id")
+    .select("id, title, assignee_id, project_id, program_id, due_at, status, priority")
     .maybeSingle();
 
   if (error || !updated) return { ok: false, error: "Could not update the task." };
@@ -259,16 +362,113 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
     });
   }
 
-  await supabase.from("activity_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    verb: "updated",
-    source_type: "task",
-    source_id: taskId,
-    project_id: updated.project_id,
-    program_id: updated.program_id,
-    summary: `updated “${updated.title}”`,
-  });
+  await recordTaskChanges(
+    supabase,
+    session,
+    taskId,
+    before ?? {},
+    {
+      assignee_id: updated.assignee_id,
+      due_at: updated.due_at,
+      status: updated.status,
+      priority: updated.priority,
+      project_id: updated.project_id,
+    },
+    {
+      title: updated.title as string,
+      projectId: (updated.project_id as string | null) ?? null,
+      programId: (updated.program_id as string | null) ?? null,
+    },
+  );
+
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/**
+ * Give somebody a role on a task (P0-TSK-02).
+ *
+ * The role is what confers their capability — the database reads
+ * `task_assignment` when deciding what they may do — so this is an
+ * authorization change, and RLS decides whether the caller may make it.
+ */
+export async function setTaskRole(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  const parsed = taskRoleSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  const { taskId, userId, role } = parsed.data;
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("task_assignment")
+    .upsert({ task_id: taskId, user_id: userId, role }, {
+      onConflict: "task_id,user_id,role",
+    });
+
+  if (error) {
+    // The scope trigger rejects a member of another organization.
+    if (error.code === "23514") {
+      return { ok: false, error: "That person is not an active member of this organization." };
+    }
+    return { ok: false, error: "Could not assign that role." };
+  }
+
+  const { data: task } = await supabase
+    .from("task")
+    .select("id, title, project_id, program_id")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (task) {
+    await supabase.from("activity_event").insert({
+      organization_id: session.organizationId,
+      actor_id: session.userId,
+      verb: "updated",
+      source_type: "task",
+      source_id: taskId,
+      project_id: task.project_id,
+      program_id: task.program_id,
+      summary: `added a ${TASK_ROLE_LABELS[role].toLowerCase()} to “${task.title}”`,
+      metadata: { role, userId },
+    });
+
+    if (userId !== session.userId) {
+      await supabase.from("notification").insert({
+        user_id: userId,
+        organization_id: session.organizationId,
+        category: "assignment",
+        title: `${session.profile.full_name} made you ${
+          role === "approver" ? "an" : "a"
+        } ${TASK_ROLE_LABELS[role].toLowerCase()}`,
+        body: task.title,
+        source_type: "task",
+        source_id: taskId,
+        link: `/my-work?task=${taskId}`,
+        dedupe_key: `role:${taskId}:${userId}:${role}`,
+      });
+    }
+  }
+
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Withdraw a task role. Removing the last one removes the access it carried. */
+export async function removeTaskRole(input: unknown): Promise<ActionResult> {
+  await requireSession();
+  const parsed = taskRoleSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  const { taskId, userId, role } = parsed.data;
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("task_assignment")
+    .delete()
+    .eq("task_id", taskId)
+    .eq("user_id", userId)
+    .eq("role", role);
+
+  if (error) return { ok: false, error: "Could not remove that role." };
 
   revalidatePath("/", "layout");
   return { ok: true };
@@ -307,6 +507,17 @@ export async function bulkUpdateTasks(
   }
 
   const supabase = await createSupabaseServerClient();
+
+  // Prior values for the whole selection, in one read. A bulk change is still a
+  // change to each task, and each one owes its own history entry (P0-TSK-05).
+  const { data: beforeRows } = await supabase
+    .from("task")
+    .select("id, assignee_id, due_at, status, priority, project_id")
+    .in("id", taskIds);
+  const priorById = new Map<string, TaskFieldValues>(
+    (beforeRows ?? []).map((row) => [row.id as string, row as TaskFieldValues]),
+  );
+
   const { data: updated, error } = await supabase
     .from("task")
     .update(patch)
@@ -319,17 +530,47 @@ export async function bulkUpdateTasks(
 
   const rows = updated ?? [];
   if (rows.length > 0) {
+    // Only the tracked fields this action actually wrote. `archived_at` is not
+    // one of them, so archiving keeps its own plain summary below.
+    const after: TaskFieldValues = {};
+    for (const field of TRACKED_TASK_FIELDS) {
+      if (field in patch) after[field] = patch[field];
+    }
+
+    const changesById = new Map<string, TaskFieldChange[]>();
+    for (const row of rows) {
+      changesById.set(
+        row.id as string,
+        diffTaskFields(priorById.get(row.id as string) ?? {}, after),
+      );
+    }
+    const labels = await resolveChangeLabels(
+      supabase,
+      [...changesById.values()].flat(),
+    );
+
     await supabase.from("activity_event").insert(
-      rows.map((row) => ({
-        organization_id: session.organizationId,
-        actor_id: session.userId,
-        verb: action === "archive" ? "archived" : "updated",
-        source_type: "task",
-        source_id: row.id,
-        project_id: row.project_id,
-        program_id: row.program_id,
-        summary: `bulk ${action === "archive" ? "archived" : "updated"} “${row.title}”`,
-      })),
+      rows.map((row) => {
+        const changes = diffTaskFields(
+          priorById.get(row.id as string) ?? {},
+          after,
+          labels,
+        );
+        return {
+          organization_id: session.organizationId,
+          actor_id: session.userId,
+          verb: action === "archive" ? "archived" : "updated",
+          source_type: "task",
+          source_id: row.id,
+          project_id: row.project_id,
+          program_id: row.program_id,
+          summary:
+            action === "archive"
+              ? `archived “${row.title}”`
+              : summarizeChanges(row.title as string, changes),
+          metadata: { changes, bulk: true },
+        };
+      }),
     );
 
     // One deduplicated notification per newly assigned person.

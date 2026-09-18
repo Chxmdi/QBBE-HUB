@@ -72,10 +72,13 @@ test("owner creates a project and a milestone", async ({ page }) => {
   await expect(milestoneDialog).toBeVisible();
   await milestoneDialog.getByLabel("Name", { exact: true }).fill("Pilot kickoff");
   await milestoneDialog.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.getByText("Pilot kickoff", { exact: true })).toBeVisible({
+  // Scoped to the section that owns milestones: the name is also an option in
+  // the task dialog's milestone picker, so an unscoped match is ambiguous.
+  const milestones = page.getByRole("region", { name: "Milestones", exact: true });
+  await expect(milestones.getByText("Pilot kickoff", { exact: true })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByRole("button", { name: "Complete" })).toBeVisible();
+  await expect(milestones.getByRole("button", { name: "Complete" })).toBeVisible();
 });
 
 test("a new upload stays visibly unavailable until its security check passes", async ({ page }) => {

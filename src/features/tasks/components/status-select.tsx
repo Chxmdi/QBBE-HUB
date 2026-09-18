@@ -9,21 +9,32 @@ import type { TaskStatus } from "@/types/entities";
 /**
  * Keyboard-accessible status control — the non-drag alternative required by
  * P0-TSK-03 / A11Y-002. Optimistic with rollback on failure.
+ *
+ * A parent that owns the move itself — the board, where a change also moves a
+ * card between columns and is announced — passes `onSelect` and takes over.
+ * Without that the keyboard path and the drag path were two different code
+ * paths, and only the one nobody can use with a keyboard moved the card.
  */
 export function StatusSelect({
   taskId,
   status,
   className,
+  onSelect,
 }: {
   taskId: string;
   status: TaskStatus;
   className?: string;
+  onSelect?: (next: TaskStatus) => void;
 }) {
   const [value, setValue] = useState<TaskStatus>(status);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   function handleChange(next: TaskStatus) {
+    if (onSelect) {
+      onSelect(next);
+      return;
+    }
     let blockedReason: string | undefined;
     if (next === "blocked") {
       const reason = window.prompt(
@@ -48,7 +59,7 @@ export function StatusSelect({
     <div className={className}>
       <Select
         aria-label="Task status"
-        value={value}
+        value={onSelect ? status : value}
         onChange={(e) => handleChange(e.target.value as TaskStatus)}
         className="h-8 w-36 text-[12.5px]"
       >

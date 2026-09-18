@@ -39,7 +39,13 @@ const COLUMN_DOTS: Record<TaskStatus, string> = {
  * select on every card (A11Y-002). Visual changes here do not alter the
  * existing updateTaskStatus persistence path.
  */
-export function TaskBoard({ tasks }: { tasks: Task[] }) {
+export function TaskBoard({
+  tasks,
+  timeZone,
+}: {
+  tasks: Task[];
+  timeZone?: string;
+}) {
   const [optimisticTasks, applyMove] = useOptimistic(
     tasks,
     (state, move: { id: string; status: TaskStatus }) =>
@@ -48,6 +54,7 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<TaskStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
   const [, startTransition] = useTransition();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -61,6 +68,12 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
   function moveTask(id: string, status: TaskStatus) {
     const task = optimisticTasks.find((t) => t.id === id);
     if (!task || task.status === status) return;
+    // A card sliding to another column is a visual event. Anyone not watching
+    // it — using the status control, or a screen reader — gets no confirmation
+    // that the move happened at all, so the board says so out loud.
+    const announce = () =>
+      setAnnouncement(`${task.title} moved to ${TASK_STATUS_META[status].label}`);
+
     if (status === "blocked") {
       const reason = window.prompt(
         "What is blocking this task? A reason is required.",
@@ -69,14 +82,20 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
       startTransition(async () => {
         applyMove({ id, status });
         const result = await updateTaskStatus(id, status, reason.trim());
-        if (!result.ok) setError(result.error ?? "Move failed.");
+        if (!result.ok) {
+          setError(result.error ?? "Move failed.");
+          setAnnouncement(`${task.title} could not be moved`);
+        } else announce();
       });
       return;
     }
     startTransition(async () => {
       applyMove({ id, status });
       const result = await updateTaskStatus(id, status);
-      if (!result.ok) setError(result.error ?? "Move failed.");
+      if (!result.ok) {
+        setError(result.error ?? "Move failed.");
+        setAnnouncement(`${task.title} could not be moved`);
+      } else announce();
     });
   }
 
@@ -90,6 +109,17 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
           {error}
         </p>
       ) : null}
+
+      {/* Dragging is the pointer affordance; the status control on each card is
+          the keyboard one. Saying so costs a line and saves the discovery. */}
+      <p className="sr-only">
+        Each card has a status control. Use it to move a task between columns
+        without dragging.
+      </p>
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
+
       <div className="-mx-4 overflow-x-auto px-4 pb-4 md:-mx-8 md:px-8">
         <div className="flex min-w-max gap-3.5">
           {BOARD_COLUMNS.map((column) => {
@@ -131,7 +161,7 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
                 </header>
                 <div className="space-y-2.5">
                   {columnTasks.map((task) => {
-                    const due = dueLabel(task.due_at);
+                    const due = dueLabel(task.due_at, timeZone);
                     return (
                       <article
                         key={task.id}
@@ -191,7 +221,11 @@ export function TaskBoard({ tasks }: { tasks: Task[] }) {
                             )}
                           </span>
                         </div>
-                        <StatusSelect taskId={task.id} status={task.status} />
+                        <StatusSelect
+                          taskId={task.id}
+                          status={task.status}
+                          onSelect={(next) => moveTask(task.id, next)}
+                        />
                       </article>
                     );
                   })}

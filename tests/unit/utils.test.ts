@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, format } from "date-fns";
+import { addCalendarDays, calendarDateInZone, DEFAULT_TIME_ZONE } from "@/lib/time";
 import {
   dueLabel,
   initials,
@@ -7,7 +7,12 @@ import {
   slugify,
 } from "@/lib/utils";
 
-const iso = (date: Date) => format(date, "yyyy-MM-dd");
+// These functions answer in the organization's zone, so the dates asked about
+// have to be built in that zone too. Formatting `new Date()` with the runner's
+// own clock instead made every one of these tests fail between 00:00 and 04:00
+// UTC, when Toronto is still on the previous day.
+const today = () => calendarDateInZone(new Date(), DEFAULT_TIME_ZONE)!;
+const daysFromToday = (days: number) => addCalendarDays(today(), days)!;
 
 describe("myWorkBucket", () => {
   it("returns later for unscheduled work", () => {
@@ -15,27 +20,27 @@ describe("myWorkBucket", () => {
   });
 
   it("returns overdue for past due dates", () => {
-    expect(myWorkBucket(iso(addDays(new Date(), -3)))).toBe("overdue");
+    expect(myWorkBucket(daysFromToday(-3))).toBe("overdue");
   });
 
   it("returns today for today's date", () => {
-    expect(myWorkBucket(iso(new Date()))).toBe("today");
+    expect(myWorkBucket(today())).toBe("today");
   });
 
   it("returns later for far-future dates", () => {
-    expect(myWorkBucket(iso(addDays(new Date(), 60)))).toBe("later");
+    expect(myWorkBucket(daysFromToday(60))).toBe("later");
   });
 });
 
 describe("dueLabel", () => {
   it("marks overdue work with danger tone and day count", () => {
-    const result = dueLabel(iso(addDays(new Date(), -2)));
+    const result = dueLabel(daysFromToday(-2));
     expect(result.tone).toBe("danger");
     expect(result.label).toContain("Overdue 2d");
   });
 
   it("marks today as due today with warning tone", () => {
-    const result = dueLabel(iso(new Date()));
+    const result = dueLabel(today());
     expect(result.tone).toBe("warning");
     expect(result.label).toBe("Due today");
   });

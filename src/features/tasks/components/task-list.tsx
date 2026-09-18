@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import Link from "next/link";
 import { Archive, CalendarClock, Flag, UserRound } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -28,9 +27,19 @@ type BulkAction = "status" | "assignee" | "priority" | "due" | "archive";
 export function TaskList({
   groups,
   people,
+  timeZone,
+  showGroupHeadings = true,
 }: {
   groups: { key: string; label: string; tasks: Task[] }[];
   people: Option[];
+  /**
+   * The organization's zone. The page groups rows by due date in this zone,
+   * so the rows have to name their due dates in it too — otherwise a task can
+   * sit under "Overdue" while its own row reads "Due today".
+   */
+  timeZone?: string;
+  /** Off when the caller already titled the section, so it is not said twice. */
+  showGroupHeadings?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -138,17 +147,23 @@ export function TaskList({
         {groups.map((group) => {
           if (group.tasks.length === 0) return null;
           return (
-            <section key={group.key} aria-labelledby={`bucket-${group.key}`}>
-              <h2
-                id={`bucket-${group.key}`}
-                className="section-heading mb-2 flex items-center gap-2"
-              >
-                {group.label}
-                <span className="meta font-normal">{group.tasks.length}</span>
-              </h2>
+            <section
+              key={group.key}
+              aria-label={showGroupHeadings ? undefined : group.label}
+              aria-labelledby={showGroupHeadings ? `bucket-${group.key}` : undefined}
+            >
+              {showGroupHeadings ? (
+                <h2
+                  id={`bucket-${group.key}`}
+                  className="section-heading mb-2 flex items-center gap-2"
+                >
+                  {group.label}
+                  <span className="meta font-normal">{group.tasks.length}</span>
+                </h2>
+              ) : null}
               <div className="card overflow-hidden">
                 {group.tasks.map((task) => {
-                  const due = dueLabel(task.due_at);
+                  const due = dueLabel(task.due_at, timeZone);
                   const isSelected = selected.has(task.id);
                   return (
                     <div
@@ -299,95 +314,6 @@ export function TaskList({
           </div>
         </form>
       </Dialog>
-    </div>
-  );
-}
-
-/** Filter bar whose state lives in the URL so views are shareable. */
-export function TaskFilterBar({
-  projects,
-  activeFilters,
-}: {
-  projects: Option[];
-  activeFilters: { status?: string; priority?: string; project?: string; q?: string };
-}) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  function setFilter(key: string, value: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value) params.set(key, value);
-    else params.delete(key);
-    params.delete("task");
-    const query = params.toString();
-    router.replace(query ? `?${query}` : window.location.pathname, {
-      scroll: false,
-    });
-  }
-
-  const hasFilters = Boolean(
-    activeFilters.status ||
-      activeFilters.priority ||
-      activeFilters.project ||
-      activeFilters.q,
-  );
-
-  return (
-    <div className="mb-5 flex flex-wrap items-center gap-2">
-      <Input
-        type="search"
-        placeholder="Search my tasks…"
-        aria-label="Search my tasks"
-        defaultValue={activeFilters.q ?? ""}
-        onChange={(e) => setFilter("q", e.target.value)}
-        className="h-9 w-full sm:w-56"
-      />
-      <Select
-        aria-label="Filter by status"
-        value={activeFilters.status ?? ""}
-        onChange={(e) => setFilter("status", e.target.value)}
-        className="h-9 w-auto text-[13px]"
-      >
-        <option value="">All open statuses</option>
-        {(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => (
-          <option key={s} value={s}>
-            {TASK_STATUS_META[s].label}
-          </option>
-        ))}
-      </Select>
-      <Select
-        aria-label="Filter by priority"
-        value={activeFilters.priority ?? ""}
-        onChange={(e) => setFilter("priority", e.target.value)}
-        className="h-9 w-auto text-[13px]"
-      >
-        <option value="">Any priority</option>
-        <option value="critical">Critical</option>
-        <option value="high">High</option>
-        <option value="medium">Medium</option>
-        <option value="low">Low</option>
-      </Select>
-      <Select
-        aria-label="Filter by project"
-        value={activeFilters.project ?? ""}
-        onChange={(e) => setFilter("project", e.target.value)}
-        className="h-9 w-auto max-w-48 text-[13px]"
-      >
-        <option value="">Any project</option>
-        {projects.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.label}
-          </option>
-        ))}
-      </Select>
-      {hasFilters ? (
-        <Link
-          href="/my-work"
-          className="text-[13px] font-medium text-brand-fg hover:underline"
-        >
-          Clear filters
-        </Link>
-      ) : null}
     </div>
   );
 }
