@@ -66,8 +66,22 @@ export function TaskCreateDialog({
       setError(result.error ?? "Something went wrong.");
       return;
     }
-    setOpen(false);
+    closeDialog();
     router.refresh();
+  }
+
+  /**
+   * The address that opened this dialog outlives the dialog. Leaving
+   * `create=task` in it means a refresh — or a link someone shares after
+   * creating a task — reopens an empty form over the work that is already
+   * saved.
+   */
+  function closeDialog() {
+    setOpen(false);
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("create")) return;
+    url.searchParams.delete("create");
+    router.replace(`${url.pathname}${url.search}`, { scroll: false });
   }
 
   return (
@@ -76,7 +90,7 @@ export function TaskCreateDialog({
         <Plus className="size-4" aria-hidden />
         {triggerLabel}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Create task">
+      <Dialog open={open} onClose={closeDialog} title="Create task">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="task-title">Title</Label>
@@ -201,7 +215,7 @@ export function TaskCreateDialog({
             </p>
           ) : null}
           <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+            <Button type="button" variant="secondary" onClick={closeDialog}>
               Cancel
             </Button>
             <Button type="submit" loading={saving}>
