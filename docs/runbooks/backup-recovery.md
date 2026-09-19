@@ -45,6 +45,16 @@
   access; follow the documented provider recovery process. Use two named
   administrators where the free plan supports them, otherwise designate a
   separate recovery custodian (ENV-002).
+- **Lost administrator MFA factor**: verify the person's identity out of band
+  and require approval from a second named administrator or the recovery
+  custodian. From a server-only recovery tool or the Supabase dashboard, use
+  the Auth admin factor-deletion operation for the exact user and factor; never
+  expose or copy the service-role key into a browser. Removing a verified factor
+  invalidates the user's Auth sessions. Have the person sign in again, enroll a
+  replacement, add a separately stored backup factor, and confirm privileged
+  access. Preserve the provider `factor_unenrolled` log, the approval and the
+  application's new enrollment/challenge audit events in the incident record.
+  Never remove a factor without the identity check, second approval and evidence.
 
 ## Incident severity
 

@@ -4,7 +4,7 @@ import { wallTimeToInstant } from "@/lib/time";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
-import { requireSession } from "@/lib/auth";
+import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -49,7 +49,9 @@ const publishSchema = z.object({
 export async function publishAnnouncement(
   input: unknown,
 ): Promise<ActionResult> {
-  const session = await requireSession();
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
 
   const limited = await enforceRateLimit("announcement:publish", session.userId);
   if (limited) return limited;

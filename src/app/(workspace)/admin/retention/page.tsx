@@ -6,7 +6,7 @@ import { AdminNav } from "@/features/admin/components/admin-nav";
 import { PolicyEditor } from "@/features/retention/components/policy-editor";
 import { ACTION_LABELS, describeDuration } from "@/features/retention/schemas";
 import { getRetentionOverview } from "@/features/retention/services/retention.queries";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminAal2 } from "@/lib/auth";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Retention" };
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
  * happens.
  */
 export default async function AdminRetentionPage() {
-  const session = await requireAdmin();
+  const session = await requireAdminAal2();
   const now = new Date();
   const { subjects, runs } = await getRetentionOverview(session.organizationId, now);
 

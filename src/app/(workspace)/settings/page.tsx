@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/shared/page-header";
 import { NotificationPreferencesForm } from "@/features/onboarding/components/notification-preferences-form";
+import { MfaSettings } from "@/features/auth/components/mfa-settings";
+import { verifiedTotpFactors } from "@/features/auth/mfa";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -10,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const session = await requireSession();
   const supabase = await createSupabaseServerClient();
-  const [{ data: preference }, { data: memberships }] = await Promise.all([
+  const [{ data: preference }, { data: memberships }, factorResult] = await Promise.all([
     supabase
       .from("notification_preference")
       .select("email_critical, email_digest, quiet_hours_start, quiet_hours_end")
@@ -20,6 +22,9 @@ export default async function SettingsPage() {
       .from("channel_member")
       .select("channel_id, muted_level, channel:channel_id(id, slug, archived_at)")
       .eq("user_id", session.userId),
+    session.isAdmin
+      ? supabase.auth.mfa.listFactors()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   type MembershipRow = {
@@ -51,6 +56,9 @@ export default async function SettingsPage() {
         }}
         channels={channels}
       />
+      {session.isAdmin && factorResult.data ? (
+        <MfaSettings initialFactors={verifiedTotpFactors(factorResult.data.all)} />
+      ) : null}
     </div>
   );
 }

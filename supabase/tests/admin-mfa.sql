@@ -58,6 +58,22 @@ begin
     'AAL2 admin satisfies staff write helpers'
   );
 
+  -- A JWT does not immediately disappear when its final factor is removed.
+  -- The live factor check must close that stale-token window at the database
+  -- boundary rather than trusting the old `aal2` claim until expiry.
+  perform tests.authenticate(v_admin, 'aal2');
+  reset role;
+  delete from auth.mfa_factors where user_id = v_admin;
+  set local role authenticated;
+  update organization_membership set updated_at = updated_at where id = v_guest_membership;
+  get diagnostics n = row_count;
+  perform tests.ok(n = 0, 'stale AAL2 admin without a verified factor cannot mutate membership');
+  reset role;
+  perform tests.ok(
+    not app.is_admin() and not app.is_org_admin(v_org),
+    'stale AAL2 claim without a verified factor does not satisfy admin helpers'
+  );
+
   perform tests.authenticate(v_staff, 'aal1');
   set local role authenticated;
   select count(*) into n from organization_membership where organization_id = v_org;

@@ -2,7 +2,15 @@ import { DEFAULT_TIME_ZONE } from "@/lib/time";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
 import type { OrgRole, Profile } from "@/types/entities";
+
+export const ADMIN_ACCESS_REQUIRED_ERROR = "Admin access required.";
+export const OWNER_ACCESS_REQUIRED_ERROR = "Only the Primary Owner can perform this action.";
+export const ADMIN_MFA_REQUIRED_ERROR =
+  "Complete multi-factor authentication before performing this action.";
+export const ADMIN_MFA_UNAVAILABLE_ERROR =
+  "Could not verify multi-factor authentication. Try again.";
 
 export interface SessionContext {
   userId: string;
@@ -91,4 +99,62 @@ export async function requireAdmin(): Promise<SessionContext> {
   const session = await requireSession();
   if (!session.isAdmin) redirect("/");
   return session;
+}
+
+export type PrivilegedActionAuthorization =
+  | { ok: true; session: SessionContext }
+  | { ok: false; error: string; reason: "role" | "mfa" | "unavailable" };
+
+/**
+ * Authorizes an owner/admin mutation at the Server Action boundary.
+ *
+ * Server Actions are public-facing endpoints, so the workspace layout is only
+ * navigation help and must not be the authorization boundary. RLS and RPC
+ * checks remain authoritative underneath this early, actionable failure.
+ */
+export async function authorizeAdminAction(options?: {
+  ownerOnly?: boolean;
+}): Promise<PrivilegedActionAuthorization> {
+  const session = await requireSession();
+  if (!session.isAdmin || (options?.ownerOnly && session.role !== "owner")) {
+    return {
+      ok: false,
+      error: options?.ownerOnly ? OWNER_ACCESS_REQUIRED_ERROR : ADMIN_ACCESS_REQUIRED_ERROR,
+      reason: "role",
+    };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const [assuranceResult, factorResult] = await Promise.all([
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    supabase.auth.mfa.listFactors(),
+  ]);
+  if (
+    assuranceResult.error ||
+    !assuranceResult.data ||
+    factorResult.error ||
+    !factorResult.data
+  ) {
+    return { ok: false, error: ADMIN_MFA_UNAVAILABLE_ERROR, reason: "unavailable" };
+  }
+  if (
+    requiresAdministratorMfa(
+      session.isAdmin,
+      assuranceResult.data.currentLevel,
+      assuranceResult.data.nextLevel,
+      verifiedTotpFactors(factorResult.data.all).length > 0,
+    )
+  ) {
+    return { ok: false, error: ADMIN_MFA_REQUIRED_ERROR, reason: "mfa" };
+  }
+
+  return { ok: true, session };
+}
+
+/** Route-level equivalent of `authorizeAdminAction`, including stale-AAL handling. */
+export async function requireAdminAal2(): Promise<SessionContext> {
+  const authorization = await authorizeAdminAction();
+  if (authorization.ok) return authorization.session;
+  if (authorization.reason === "role") redirect("/");
+  redirect("/mfa");
 }

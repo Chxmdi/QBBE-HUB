@@ -7,7 +7,7 @@ import {
   programAccessRoleSchema,
   projectAccessRoleSchema,
 } from "@/lib/access-capabilities";
-import { requireSession } from "@/lib/auth";
+import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -24,8 +24,9 @@ const projectGrantSchema = z.object({
 });
 
 export async function setDirectProgramAccess(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   const limited = await enforceRateLimit("access-grant:program", session.userId);
   if (limited) return limited;
   const parsed = programGrantSchema.safeParse(input);
@@ -50,8 +51,9 @@ export async function setDirectProgramAccess(input: unknown): Promise<ActionResu
 }
 
 export async function setDirectProjectAccess(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   const limited = await enforceRateLimit("access-grant:project", session.userId);
   if (limited) return limited;
   const parsed = projectGrantSchema.safeParse(input);

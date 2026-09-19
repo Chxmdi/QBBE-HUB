@@ -8,8 +8,19 @@ export interface TotpFactorOption {
 export function requiresAdministratorMfa(
   isAdmin: boolean,
   currentLevel: string | null | undefined,
+  nextLevel?: string | null,
+  hasVerifiedTotpFactor?: boolean,
 ): boolean {
-  return isAdmin && currentLevel !== "aal2";
+  if (!isAdmin) return false;
+
+  // `aal2 -> aal1` is a stale JWT after the last factor was removed. Treat it
+  // as downgraded immediately instead of waiting for the access token refresh
+  // interval to lapse. Unknown levels also fail closed.
+  return (
+    currentLevel !== "aal2" ||
+    nextLevel !== "aal2" ||
+    hasVerifiedTotpFactor !== true
+  );
 }
 
 export function verifiedTotpFactors(factors: Factor[]): TotpFactorOption[] {

@@ -13,7 +13,7 @@ import {
 } from "@/features/exports/schemas";
 import type { ExportStatus } from "@/features/exports/schemas";
 import { getExports } from "@/features/exports/services/export.queries";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminAal2 } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 
@@ -53,7 +53,7 @@ function formatSize(bytes: number | null): string {
  * was fetched before it expired.
  */
 export default async function AdminExportsPage() {
-  await requireAdmin();
+  await requireAdminAal2();
   const now = new Date();
 
   const supabase = await createSupabaseServerClient();

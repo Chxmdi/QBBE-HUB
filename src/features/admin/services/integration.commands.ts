@@ -1,16 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireSession } from "@/lib/auth";
+import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 export async function disconnectIntegration(
   provider: "gmail" | "google_calendar" | "google_drive" | "volunteer_system",
 ): Promise<ActionResult> {
-  const session = await requireSession();
-  if (provider === "volunteer_system" && !session.isAdmin) {
-    return { ok: false, error: "Admin access required." };
+  let session = await requireSession();
+  if (provider === "volunteer_system") {
+    const authorization = await authorizeAdminAction();
+    if (!authorization.ok) return { ok: false, error: authorization.error };
+    session = authorization.session;
   }
   const supabase = await createSupabaseServerClient();
   const query = supabase
@@ -23,12 +25,14 @@ export async function disconnectIntegration(
     .eq("provider", provider)
     .eq("organization_id", session.organizationId);
 
-  const { error } =
-    provider === "volunteer_system"
-      ? await query.is("user_id", null)
-      : await query.eq("user_id", session.userId);
+  const scopedQuery = provider === "volunteer_system"
+    ? query.is("user_id", null)
+    : query.eq("user_id", session.userId);
+  const { data: disconnected, error } = await scopedQuery
+    .select("id")
+    .maybeSingle();
 
-  if (error) return { ok: false, error: "Could not disconnect." };
+  if (error || !disconnected) return { ok: false, error: "Could not disconnect." };
 
   if (provider === "gmail") {
     await supabase.from("gmail_message").delete().eq("user_id", session.userId);
@@ -72,8 +76,9 @@ export async function disconnectIntegration(
 }
 
 export async function connectVolunteerSystem(): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   if (!process.env.VMS_API_URL) {
     return {
       ok: false,
@@ -148,14 +153,16 @@ export async function linkVmsIdentity(
   userId: string,
   vmsId: string,
 ): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("user_profile")
     .update({ vms_id: vmsId.trim() || null })
-    .eq("id", userId);
-  if (error) return { ok: false, error: "Could not store the VMS id." };
+    .eq("id", userId)
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) return { ok: false, error: "Could not store the VMS id." };
   revalidatePath("/admin");
   revalidatePath("/people");
   return { ok: true };

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth";
+import { authorizeAdminAction } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -22,11 +22,12 @@ export interface InviteResult extends ActionResult {
 }
 
 export async function inviteUser(input: unknown): Promise<InviteResult> {
-  const session = await requireSession();
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
 
   const limited = await enforceRateLimit("invitation:create", session.userId);
   if (limited) return limited;
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
   const parsed = inviteSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -69,8 +70,8 @@ const roleSchema = z.object({
 });
 
 export async function changeMemberRole(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = roleSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid input." };
   const { membershipId, role } = parsed.data;
@@ -103,8 +104,9 @@ export async function setMemberActive(
   membershipId: string,
   active: boolean,
 ): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
 
   const supabase = await createSupabaseServerClient();
   const { data: membership } = await supabase
@@ -147,24 +149,25 @@ export async function setMemberActive(
 }
 
 export async function revokeInvitation(invitationId: string): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
+  const { data: revoked, error } = await supabase
     .from("invitation")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", invitationId)
-    .is("accepted_at", null);
-  if (error) return { ok: false, error: "Could not revoke the invitation." };
+    .is("accepted_at", null)
+    .select("id")
+    .maybeSingle();
+  if (error || !revoked) return { ok: false, error: "Could not revoke the invitation." };
   revalidatePath("/admin");
   return { ok: true };
 }
 
 export async function transferOwnership(targetMembershipId: string): Promise<ActionResult> {
-  const session = await requireSession();
-  if (session.role !== "owner") {
-    return { ok: false, error: "Only the Primary Owner can transfer ownership." };
-  }
+  const authorization = await authorizeAdminAction({ ownerOnly: true });
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   const supabase = await createSupabaseServerClient();
   const { data: target } = await supabase
     .from("organization_membership")

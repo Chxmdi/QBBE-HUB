@@ -9,10 +9,12 @@ import {
   isValidTotpCode,
   mfaErrorMessage,
   normalizeTotpCode,
+  requiresAdministratorMfa,
   unverifiedTotpFactorIds,
   verifiedTotpFactors,
   type TotpFactorOption,
 } from "@/features/auth/mfa";
+import { recordMfaSecurityEvent } from "@/features/auth/services/mfa.commands";
 import { safeRedirectPath } from "@/lib/safe-redirect";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -102,12 +104,28 @@ export function MfaFlow() {
       return;
     }
 
-    if (assurance.currentLevel === "aal2") {
+    const verified = verifiedTotpFactors(data.all);
+    if (
+      !requiresAdministratorMfa(
+        true,
+        assurance.currentLevel,
+        assurance.nextLevel,
+        verified.length > 0,
+      )
+    ) {
       finish();
       return;
     }
 
-    const verified = verifiedTotpFactors(data.all);
+    if (assurance.currentLevel === "aal2" && assurance.nextLevel === "aal1") {
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        setError(mfaErrorMessage(refreshError.message));
+        setPhase("error");
+        return;
+      }
+    }
+
     if (verified.length > 0) {
       setFactors(verified);
       setSelectedFactorId(verified[0].id);
@@ -152,6 +170,9 @@ export function MfaFlow() {
       return;
     }
 
+    await recordMfaSecurityEvent(
+      phase === "setup" ? "mfa_enrollment_completed" : "mfa_challenge_completed",
+    );
     finish();
   }
 
@@ -218,6 +239,10 @@ export function MfaFlow() {
             <h2 className="text-base font-semibold">Enter your security code</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-muted">
               Open your authenticator app and enter the current code for QBBE Hub.
+            </p>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-muted">
+              Lost access to every authenticator? Sign out and contact the QBBE
+              credential custodian. Factor resets require verified operator recovery.
             </p>
             {factors.length > 1 ? (
               <div className="mt-4">

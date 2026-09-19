@@ -25,7 +25,9 @@ restart the audit or treat an earlier summary as evidence of completion.
 
 ## Current feature: scoped-access cutover, MFA and team provenance
 
-- Branch: implement/prd-v2-release; existing implementation is uncommitted.
+- Branch: `11-epic-01-identity-access-security-mfa`, frozen at `ce76227`.
+  The implementation had sat uncommitted through the whole epic; the evidence
+  below is the first that names a commit.
 - Reproduced gap: program/project helpers still grant organization-wide reading
   and staff management. The cutover review surface and typed grant model now
   exist, but the narrower policies have not yet replaced the legacy policies.
@@ -52,11 +54,16 @@ restart the audit or treat an earlier summary as evidence of completion.
   least-privilege capability RPCs. The clean local migration reset and complete
   database suite pass coexistence, revocation, deactivation, unknown-role,
   cross-organization and leadership read-only cases.
-- Added TOTP enrollment/challenge UI and required owner/admin AAL2 at the
-  workspace and database write boundaries. AAL1 administrators retain the read
-  access needed to reach `/mfa`, while administrative and staff-level database
-  mutations fail. Focused MFA unit tests and database allow/deny tests pass;
-  local Auth browser verification is active.
+- Completed TOTP enrollment, challenge and multi-factor management for owners
+  and administrators. Privileged server actions fail closed unless both the
+  session and next refresh are AAL2 and a verified TOTP factor still exists.
+  Migration `20260918214957_enforce_live_admin_mfa_factor.sql` applies the same
+  live-factor rule to database helpers, so a stale AAL2 token cannot mutate
+  after direct factor removal. Security events record enrollment, challenge and
+  removal without secrets. Lost-factor recovery is documented. Focused unit,
+  full database and real local Auth browser checks pass, including interrupted
+  enrollment, expired/replayed codes, direct Data API denial, backup-factor
+  removal and stale-session downgrade.
 - Added a database-enforced membership lifecycle: at most one active owner per
   organization, immutable membership identity, no direct owner promotion or
   demotion, no self-deactivation, transactional audit events and an atomic,
@@ -82,12 +89,51 @@ restart the audit or treat an earlier summary as evidence of completion.
 - Meeting completion now commits its status and channel summary together, and
   meeting action task/link creation is atomic. Notification and digest delivery
   recheck active membership; Resend retries carry a stable provider key.
-- Next independent verification: authenticated browser checks for MFA, meeting
-  completion and document pending/error states. Workstreams 6–7 wait on QBBE
-  credentials and scanner hosting (`scripts/verify-integrations.sh`).
+- Next independent verification: repeat MFA and open-socket revocation checks
+  against the hosted staging candidate at its exact SHA. Meeting completion and
+  document pending/error checks remain separate release work. Workstreams 6–7
+  wait on QBBE credentials and scanner hosting
+  (`scripts/verify-integrations.sh`).
 - Required environment: local Supabase is available with the storage services
   excluded because their health check timed out. Full Storage verification remains
   a Workstream 3 dependency; live Auth/MFA and realtime remain staging gates.
+
+### Evidence
+
+Commit `ce76227`. Clean `supabase db reset` over the whole migration chain
+through `20260918214957`, then `npm run db:seed`, against the production build
+on 127.0.0.1:3000, Chromium.
+
+- Database chain: **315 assertions, exit 0** — not the 313 recorded earlier in
+  this file, because this epic added assertions to `rls.sql` and
+  `admin-mfa.sql`.
+- `supabase db advisors --local --type security --fail-on error`: no issues.
+- Unit: 446 passed, 51 files. Lint clean apart from the pre-existing
+  `no-img-element` warning. Typecheck clean. Production build passed.
+- Chromium: `mfa`, `realtime-revocation`, `hello-hub`, `access-impact`,
+  `my-work`, `identity-lifecycle` — **20 passed, twice consecutively**, and the
+  server was confirmed answering after each run.
+
+One process failure worth recording, because it produced a convincing false
+negative. The first browser run reported 11 failed, 7 passed, 2 not run. Every
+failure was `ERR_CONNECTION_REFUSED`: the server had been started with `&` from
+a shell that was then reaped, so it died partway through and the suite went on
+testing nothing. This file already warned about exactly that — "a reaped server
+produces a page of `ERR_CONNECTION_REFUSED` that reads as failure" — and the
+warning was still not enough to stop it being read as a product defect at
+first. Confirm the server answers *after* the run, not only before it.
+
+`npm run test:db` could not run on Windows at all. npm hands scripts to
+cmd.exe, which has no `sh`, so the `sh -c '... | docker exec ...'` one-liner
+failed with `'$DOCKER' is not recognized`. It is now `scripts/test-db.mjs`,
+following `seed-local.mjs`, which had already solved this for the same reason.
+
+### Not done
+
+Hosted Auth, live email delivery, realtime reconnect over a hosted socket, and
+the Firefox/WebKit/performance runs are not covered here and stay with #55 and
+#50. `SEC-MFA` stays `awaiting verification` for that reason: local Auth is
+real Auth, but it is not the staging candidate.
 
 ## Current feature: task roles, task history, My Work and the shared board/list filters
 

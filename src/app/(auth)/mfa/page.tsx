@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { MfaFlow } from "./mfa-flow";
+import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -12,8 +13,22 @@ export default async function MfaPage() {
   if (!session.isAdmin) redirect("/");
 
   const supabase = await createSupabaseServerClient();
-  const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (data?.currentLevel === "aal2") redirect("/");
+  const [assuranceResult, factorResult] = await Promise.all([
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    supabase.auth.mfa.listFactors(),
+  ]);
+  if (
+    assuranceResult.data &&
+    factorResult.data &&
+    !requiresAdministratorMfa(
+      session.isAdmin,
+      assuranceResult.data.currentLevel,
+      assuranceResult.data.nextLevel,
+      verifiedTotpFactors(factorResult.data.all).length > 0,
+    )
+  ) {
+    redirect("/");
+  }
 
   return (
     <div className="space-y-4">
