@@ -14,8 +14,11 @@ test("owner edits, archives and restores a program", async ({ page }) => {
   await signIn(page, "owner");
   await page.goto("/programs?create=1");
   const name = `Program lifecycle ${Date.now()}`;
-  await page.getByLabel("Name", { exact: true }).fill(name);
-  await page.getByRole("button", { name: "Create program", exact: true }).click();
+  // Scoped to the dialog: /programs also carries the "Save template" form for
+  // administrators, so a page-wide "Name" matches two fields.
+  const createProgram = page.getByRole("dialog", { name: "Create program" });
+  await createProgram.getByLabel("Name", { exact: true }).fill(name);
+  await createProgram.getByRole("button", { name: "Create program", exact: true }).click();
   await page.getByRole("link").filter({ has: page.getByRole("heading", { name, exact: true }) }).click();
   await expect(page).toHaveURL(/\/programs\/[0-9a-f-]+$/, { timeout: 60_000 });
   await page.getByRole("button", { name: "Edit program" }).click();

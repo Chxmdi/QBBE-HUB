@@ -6,6 +6,14 @@ import { HealthBadge } from "@/components/shared/status-badges";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProgramCreateDialog } from "@/features/programs/components/program-create-dialog";
+import { CreateProgramFromTemplateButton } from "@/features/programs/components/create-program-from-template";
+import {
+  createProgramTemplate,
+  listApprovedProgramTemplates,
+  listProgramTemplatesForAdmin,
+} from "@/features/programs/services/program-template.commands";
+import { ProgramTemplateManager } from "@/features/programs/components/program-template-manager";
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { summarizeProjectHealth } from "@/features/dashboard/health";
 import { programAccent } from "@/features/programs/colors";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
@@ -30,7 +38,7 @@ export default async function ProgramsPage({
 }: {
   searchParams: Promise<{ create?: string; status?: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const params = await searchParams;
   const archived = params.status === "archived";
   const supabase = await createSupabaseServerClient();
@@ -48,6 +56,16 @@ export default async function ProgramsPage({
     getPickerOptions(),
   ]);
 
+  const programTemplates = await listApprovedProgramTemplates();
+  // Administrators maintain the structures; everyone else only sees the
+  // approved ones they can build from.
+  const [adminTemplates, { data: projectTemplates }] = session.isAdmin
+    ? await Promise.all([
+        listProgramTemplatesForAdmin(),
+        supabase.from("project_template").select("id, name").order("name"),
+      ])
+    : [[], { data: [] as { id: string; name: string }[] }];
+
   const programList = (programs ?? []) as unknown as ProgramRow[];
   const projectList = (projects ?? []) as unknown as (Project & {
     program_id: string | null;
@@ -60,7 +78,23 @@ export default async function ProgramsPage({
         title="Programs"
         description="Programs organize QBBE's ongoing services; projects deliver their time-bound outcomes."
         actions={
-          <ProgramCreateDialog people={options.people} defaultOpen={params.create === "1"} />
+          <div className="flex flex-wrap items-center gap-2">
+            <CreateProgramFromTemplateButton templates={programTemplates} />
+            {session.isAdmin ? (
+              <EntityFormDialog
+                triggerLabel="Save template"
+                triggerVariant="secondary"
+                title="Program template"
+                submitLabel="Save"
+                action={createProgramTemplate}
+                fields={[
+                  { name: "name", label: "Name", type: "text", required: true },
+                  { name: "description", label: "Description", type: "textarea" },
+                ]}
+              />
+            ) : null}
+            <ProgramCreateDialog people={options.people} defaultOpen={params.create === "1"} />
+          </div>
         }
       />
 
@@ -126,6 +160,23 @@ export default async function ProgramsPage({
           })}
         </div>
       )}
+
+      {session.isAdmin ? (
+        <section aria-labelledby="program-templates" className="mt-10">
+          <h2 id="program-templates" className="section-heading mb-3">
+            Program templates
+          </h2>
+          <p className="mb-3 text-[13px] text-muted">
+            An approved template can be used to create a program with its
+            projects, milestones and standard tasks already in place. Templates
+            carry structure only — no comments, notes or history are copied.
+          </p>
+          <ProgramTemplateManager
+            templates={adminTemplates}
+            projectTemplates={(projectTemplates ?? []) as { id: string; name: string }[]}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }

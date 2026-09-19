@@ -12,8 +12,11 @@ import { sql } from "./db";
 
 async function createProgram(page: import("@playwright/test").Page, name: string) {
   await page.goto("/programs?create=1");
-  await page.getByLabel("Name", { exact: true }).fill(name);
-  await page.getByRole("button", { name: "Create program", exact: true }).click();
+  // Scoped to the dialog: /programs also carries the "Save template" form, so a
+  // page-wide "Name" now matches two fields.
+  const create = page.getByRole("dialog", { name: "Create program" });
+  await create.getByLabel("Name", { exact: true }).fill(name);
+  await create.getByRole("button", { name: "Create program", exact: true }).click();
   await page
     .getByRole("link")
     .filter({ has: page.getByRole("heading", { name, exact: true }) })
@@ -126,4 +129,96 @@ test("a volunteer cannot reach a program they hold nothing on", async ({ page })
   // RLS returns no row, so the page is a not-found rather than a redirect.
   await expect(page.getByRole("button", { name: "Edit program" })).toHaveCount(0);
   await expect(page.getByText("Latest updates", { exact: true })).toHaveCount(0);
+});
+
+test("an approved template builds a program with its projects and milestones", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const projectTemplateName = `Template project ${stamp}`;
+  const programTemplateName = `Template program ${stamp}`;
+
+  await signIn(page, "owner");
+
+  // The project template and its work items are the structure being reused.
+  await page.goto("/projects");
+  await page.getByRole("button", { name: "Save template", exact: true }).click();
+  const projectTemplateDialog = page.getByRole("dialog", { name: "Project template" });
+  await projectTemplateDialog.getByLabel("Name", { exact: true }).fill(projectTemplateName);
+  await projectTemplateDialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(projectTemplateDialog).not.toBeVisible({ timeout: 30_000 });
+
+  // A milestone on the project template, so the expansion has something to date.
+  const projectTemplateId = sql(
+    `select id::text from project_template where name = '${projectTemplateName}' limit 1`,
+  );
+  expect(projectTemplateId).toMatch(/^[0-9a-f-]{36}$/);
+  sql(
+    `insert into project_template_item (project_template_id, kind, name, day_offset, sort_key)
+     values ('${projectTemplateId}', 'milestone', 'Kickoff ${stamp}', 7, 0)`,
+  );
+
+  await page.goto("/programs");
+  await page.getByRole("button", { name: "Save template", exact: true }).click();
+  const programTemplateDialog = page.getByRole("dialog", { name: "Program template" });
+  await programTemplateDialog.getByLabel("Name", { exact: true }).fill(programTemplateName);
+  await programTemplateDialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(programTemplateDialog).not.toBeVisible({ timeout: 30_000 });
+
+  const templateRow = page.getByRole("listitem").filter({ hasText: programTemplateName });
+  await templateRow
+    .getByLabel(`Add a project template to ${programTemplateName}`)
+    .selectOption({ label: projectTemplateName });
+  await expect(templateRow.getByText(projectTemplateName)).toBeVisible({ timeout: 30_000 });
+
+  // Unapproved, it is not offered as something to build from.
+  await expect(templateRow.getByText("Not approved", { exact: true })).toBeVisible();
+  await expect(
+    page.getByLabel("Create program from template").getByRole("option", {
+      name: programTemplateName,
+    }),
+  ).toHaveCount(0);
+
+  await templateRow.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(templateRow.getByText("Approved", { exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // Now it builds a real program, with the project and its dated milestone.
+  await page
+    .getByLabel("Create program from template")
+    .selectOption({ label: programTemplateName });
+  await expect(page).toHaveURL(/\/programs\/[0-9a-f-]+$/, { timeout: 60_000 });
+  await expect(
+    page.getByRole("heading", { name: programTemplateName, exact: true }),
+  ).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("link", { name: projectTemplateName })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  await page.getByRole("link", { name: projectTemplateName }).click();
+  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/, { timeout: 60_000 });
+
+  // Scoped to the Milestones rail: the name also appears in the task dialog's
+  // milestone picker and in the activity feed, so a page-wide match is ambiguous.
+  const milestones = page.getByRole("region", { name: "Milestones" });
+  await expect(milestones.getByText(`Kickoff ${stamp}`, { exact: false })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // The template stored an offset, not a date. Seven days on from the day it
+  // was expanded is the whole point of storing an offset, so check the date
+  // rather than only that a milestone exists.
+  const due = sql(
+    `select to_char(m.due_date, 'YYYY-MM-DD') from milestone m
+     where m.name = 'Kickoff ${stamp}' limit 1`,
+  );
+  // In the organization's zone, not the database's. current_date is UTC, which
+  // between 20:00 and midnight in Toronto has already rolled into tomorrow —
+  // the same clock mistake that made dated assertions fail overnight in #30.
+  const expected = sql(
+    "select to_char((timezone('America/Toronto', now()))::date + 7, 'YYYY-MM-DD')",
+  );
+  expect(due).toBe(expected);
 });

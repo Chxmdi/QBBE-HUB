@@ -89,3 +89,124 @@ begin
 end $$;
 
 rollback;
+
+-- Program templates (#26, P1-PROG-03).
+begin;
+
+do $$
+declare
+  v_owner uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1';
+  v_staff uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2';
+  v_volunteer uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3';
+  v_admin uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4';
+  v_org uuid;
+  v_other_org uuid;
+  v_template uuid;
+  v_project_template uuid;
+  v_foreign_project_template uuid;
+  n integer;
+  failed boolean;
+begin
+  select organization_id into strict v_org
+  from public.organization_membership where user_id = v_owner limit 1;
+
+  insert into public.organization (name, slug)
+  values ('Foreign org', 'foreign-' || substr(gen_random_uuid()::text, 1, 8))
+  returning id into v_other_org;
+
+  insert into public.program_template (organization_id, name, created_by)
+  values (v_org, 'Standard program', v_owner)
+  returning id into v_template;
+
+  insert into public.project_template (organization_id, name, created_by)
+  values (v_org, 'Standard project', v_owner)
+  returning id into v_project_template;
+
+  insert into public.project_template (organization_id, name, created_by)
+  values (v_other_org, 'Foreign project', v_owner)
+  returning id into v_foreign_project_template;
+
+  -- A template may only name project templates from its own organization.
+  failed := false;
+  begin
+    insert into public.program_template_project (program_template_id, project_template_id)
+    values (v_template, v_foreign_project_template);
+  exception when others then
+    failed := true;
+  end;
+  perform tests.ok(failed,
+    'a program template cannot contain a project template from another organization');
+
+  insert into public.program_template_project (program_template_id, project_template_id)
+  values (v_template, v_project_template);
+
+  insert into public.project_template_item (project_template_id, kind, name, day_offset)
+  values (v_project_template, 'milestone', 'Kickoff', 0);
+
+  -- A day offset is relative; a negative one would date work before the program.
+  failed := false;
+  begin
+    insert into public.project_template_item (project_template_id, kind, name, day_offset)
+    values (v_project_template, 'task', 'Impossible', -1);
+  exception when others then
+    failed := true;
+  end;
+  perform tests.ok(failed, 'a template item cannot carry a negative day offset');
+
+  -- An unknown kind would expand into nothing at all.
+  failed := false;
+  begin
+    insert into public.project_template_item (project_template_id, kind, name)
+    values (v_project_template, 'epic', 'Unknown kind');
+  exception when others then
+    failed := true;
+  end;
+  perform tests.ok(failed, 'a template item must be a milestone or a task');
+
+  -- An approval records who and when, or neither.
+  failed := false;
+  begin
+    update public.program_template set approved_at = now() where id = v_template;
+  exception when others then
+    failed := true;
+  end;
+  perform tests.ok(failed, 'a template cannot be approved without recording who approved it');
+
+  update public.program_template
+  set approved_at = now(), approved_by = v_owner
+  where id = v_template;
+
+  -- Members may read templates; only administrators may define them.
+  perform tests.authenticate(v_volunteer);
+  select count(*) into n from public.program_template where id = v_template;
+  perform tests.ok(n = 1, 'a member can read a program template');
+
+  select count(*) into n from public.project_template_item
+  where project_template_id = v_project_template;
+  perform tests.ok(n = 1, 'a member can read a project template''s items');
+
+  update public.program_template set name = 'Renamed by volunteer' where id = v_template;
+  get diagnostics n = row_count;
+  perform tests.ok(n = 0, 'a volunteer cannot edit a program template');
+
+  perform tests.authenticate(v_admin);
+  update public.program_template set name = 'Renamed by admin' where id = v_template;
+  get diagnostics n = row_count;
+  perform tests.ok(n = 1, 'an administrator can edit a program template');
+
+  -- Cross-organization reads stay closed.
+  perform tests.clear_auth();
+  reset role;
+  insert into public.program_template (organization_id, name, created_by)
+  values (v_other_org, 'Foreign program template', v_owner);
+
+  perform tests.authenticate(v_owner);
+  select count(*) into n from public.program_template
+  where organization_id = v_other_org;
+  perform tests.ok(n = 0, 'a program template from another organization is not readable');
+
+  perform tests.clear_auth();
+  reset role;
+end $$;
+
+rollback;
