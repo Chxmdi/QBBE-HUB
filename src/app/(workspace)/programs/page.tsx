@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProgramCreateDialog } from "@/features/programs/components/program-create-dialog";
 import { summarizeProjectHealth } from "@/features/dashboard/health";
+import { programAccent } from "@/features/programs/colors";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -20,6 +21,7 @@ interface ProgramRow {
   name: string;
   description: string | null;
   status: string;
+  color: string | null;
   lead: { id: string; full_name: string; avatar_url: string | null } | null;
 }
 
@@ -36,7 +38,7 @@ export default async function ProgramsPage({
   const [{ data: programs }, { data: projects }, options] = await Promise.all([
     supabase
       .from("program")
-      .select("id, name, description, status, lead:lead_id(id, full_name, avatar_url)")
+      .select("id, name, description, status, color, lead:lead_id(id, full_name, avatar_url)")
       .filter("status", archived ? "eq" : "neq", "archived")
       .order("name"),
     supabase
@@ -84,8 +86,15 @@ export default async function ProgramsPage({
               <Link
                 key={program.id}
                 href={`/programs/${program.id}`}
-                className="card group flex flex-col gap-3 p-5 transition-colors hover:border-brand/40"
+                className="card group relative flex flex-col gap-3 overflow-hidden p-5 transition-colors hover:border-brand/40"
               >
+                {/* Wayfinding only: the name and the health badge carry the
+                    meaning, so this is hidden from assistive technology. */}
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-y-0 left-0 w-1"
+                  style={{ background: programAccent(program.color) }}
+                />
                 <div className="flex items-start justify-between gap-3">
                   <h2 className="text-[16px] font-semibold group-hover:text-brand-fg">
                     {program.name}
