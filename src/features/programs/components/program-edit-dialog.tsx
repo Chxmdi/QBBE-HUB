@@ -7,10 +7,14 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { updateProgram } from "@/features/programs/services/program.commands";
 
-export function ProgramEditDialog({ program }: { program: {
-  id: string; name: string; description: string | null; status: string;
-  color?: string; important_links?: { label: string; url: string }[];
-} }) {
+export function ProgramEditDialog({ program, people }: {
+  program: {
+    id: string; name: string; description: string | null; status: string;
+    color?: string; important_links?: { label: string; url: string }[];
+    lead_id?: string | null;
+  };
+  people: { id: string; label: string }[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -28,6 +32,7 @@ export function ProgramEditDialog({ program }: { program: {
         status: form.get("status"),
         color: form.get("color"),
         importantLinks: form.get("importantLinks"),
+        leadId: form.get("leadId"),
       });
       if (!result.ok) { setError(result.error ?? "Could not save the program."); return; }
       setOpen(false);
@@ -39,7 +44,7 @@ export function ProgramEditDialog({ program }: { program: {
   return <>
     <Button variant="secondary" onClick={() => { setError(null); setOpen(true); }}>Edit program</Button>
     <Dialog open={open} onClose={() => { if (!saving) setOpen(false); }} title="Edit program">
-      <form key={`${program.name}:${program.status}:${program.description}`} onSubmit={submit} className="space-y-4">
+      <form key={`${program.name}:${program.status}:${program.description}:${program.lead_id ?? ""}`} onSubmit={submit} className="space-y-4">
         <div><Label htmlFor="edit-program-name">Name</Label>
           <Input id="edit-program-name" name="name" defaultValue={program.name} required maxLength={200} /></div>
         <div><Label htmlFor="edit-program-description">Description</Label>
@@ -48,6 +53,14 @@ export function ProgramEditDialog({ program }: { program: {
           <Select id="edit-program-status" name="status" defaultValue={program.status}>
             <option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option>
           </Select></div>
+        <div><Label htmlFor="edit-program-lead">Program lead</Label>
+          <Select id="edit-program-lead" name="leadId" defaultValue={program.lead_id ?? ""}>
+            <option value="">No lead</option>
+            {people.map((person) => (
+              <option key={person.id} value={person.id}>{person.label}</option>
+            ))}
+          </Select>
+          <p className="mt-1 text-[12.5px] text-muted">The lead can manage this program and everything in it.</p></div>
         <div><Label htmlFor="edit-program-color">Colour</Label>
           <Select id="edit-program-color" name="color" defaultValue={program.color ?? "neutral"}>
             <option value="neutral">Neutral</option>

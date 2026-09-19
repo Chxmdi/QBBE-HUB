@@ -6,7 +6,16 @@ import { HealthBadge } from "@/components/shared/status-badges";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProgramCreateDialog } from "@/features/programs/components/program-create-dialog";
+import { CreateProgramFromTemplateButton } from "@/features/programs/components/create-program-from-template";
+import {
+  createProgramTemplate,
+  listApprovedProgramTemplates,
+  listProgramTemplatesForAdmin,
+} from "@/features/programs/services/program-template.commands";
+import { ProgramTemplateManager } from "@/features/programs/components/program-template-manager";
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { summarizeProjectHealth } from "@/features/dashboard/health";
+import { programAccent } from "@/features/programs/colors";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -20,6 +29,7 @@ interface ProgramRow {
   name: string;
   description: string | null;
   status: string;
+  color: string | null;
   lead: { id: string; full_name: string; avatar_url: string | null } | null;
 }
 
@@ -28,7 +38,7 @@ export default async function ProgramsPage({
 }: {
   searchParams: Promise<{ create?: string; status?: string }>;
 }) {
-  await requireSession();
+  const session = await requireSession();
   const params = await searchParams;
   const archived = params.status === "archived";
   const supabase = await createSupabaseServerClient();
@@ -36,7 +46,7 @@ export default async function ProgramsPage({
   const [{ data: programs }, { data: projects }, options] = await Promise.all([
     supabase
       .from("program")
-      .select("id, name, description, status, lead:lead_id(id, full_name, avatar_url)")
+      .select("id, name, description, status, color, lead:lead_id(id, full_name, avatar_url)")
       .filter("status", archived ? "eq" : "neq", "archived")
       .order("name"),
     supabase
@@ -45,6 +55,16 @@ export default async function ProgramsPage({
       .is("archived_at", null),
     getPickerOptions(),
   ]);
+
+  const programTemplates = await listApprovedProgramTemplates();
+  // Administrators maintain the structures; everyone else only sees the
+  // approved ones they can build from.
+  const [adminTemplates, { data: projectTemplates }] = session.isAdmin
+    ? await Promise.all([
+        listProgramTemplatesForAdmin(),
+        supabase.from("project_template").select("id, name").order("name"),
+      ])
+    : [[], { data: [] as { id: string; name: string }[] }];
 
   const programList = (programs ?? []) as unknown as ProgramRow[];
   const projectList = (projects ?? []) as unknown as (Project & {
@@ -58,7 +78,23 @@ export default async function ProgramsPage({
         title="Programs"
         description="Programs organize QBBE's ongoing services; projects deliver their time-bound outcomes."
         actions={
-          <ProgramCreateDialog people={options.people} defaultOpen={params.create === "1"} />
+          <div className="flex flex-wrap items-center gap-2">
+            <CreateProgramFromTemplateButton templates={programTemplates} />
+            {session.isAdmin ? (
+              <EntityFormDialog
+                triggerLabel="Save template"
+                triggerVariant="secondary"
+                title="Program template"
+                submitLabel="Save"
+                action={createProgramTemplate}
+                fields={[
+                  { name: "name", label: "Name", type: "text", required: true },
+                  { name: "description", label: "Description", type: "textarea" },
+                ]}
+              />
+            ) : null}
+            <ProgramCreateDialog people={options.people} defaultOpen={params.create === "1"} />
+          </div>
         }
       />
 
@@ -84,8 +120,15 @@ export default async function ProgramsPage({
               <Link
                 key={program.id}
                 href={`/programs/${program.id}`}
-                className="card group flex flex-col gap-3 p-5 transition-colors hover:border-brand/40"
+                className="card group relative flex flex-col gap-3 overflow-hidden p-5 transition-colors hover:border-brand/40"
               >
+                {/* Wayfinding only: the name and the health badge carry the
+                    meaning, so this is hidden from assistive technology. */}
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-y-0 left-0 w-1"
+                  style={{ background: programAccent(program.color) }}
+                />
                 <div className="flex items-start justify-between gap-3">
                   <h2 className="text-[16px] font-semibold group-hover:text-brand-fg">
                     {program.name}
@@ -117,6 +160,23 @@ export default async function ProgramsPage({
           })}
         </div>
       )}
+
+      {session.isAdmin ? (
+        <section aria-labelledby="program-templates" className="mt-10">
+          <h2 id="program-templates" className="section-heading mb-3">
+            Program templates
+          </h2>
+          <p className="mb-3 text-[13px] text-muted">
+            An approved template can be used to create a program with its
+            projects, milestones and standard tasks already in place. Templates
+            carry structure only — no comments, notes or history are copied.
+          </p>
+          <ProgramTemplateManager
+            templates={adminTemplates}
+            projectTemplates={(projectTemplates ?? []) as { id: string; name: string }[]}
+          />
+        </section>
+      ) : null}
     </div>
   );
 }

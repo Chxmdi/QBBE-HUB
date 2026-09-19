@@ -35,6 +35,7 @@ const FILES = [
   "supabase/tests/task-role-capabilities.sql",
   "supabase/tests/team-channel-access.sql",
   "supabase/tests/leftover-scoped-surfaces.sql",
+  "supabase/tests/program-overview.sql",
   "supabase/tests/document-scanning-meetings.sql",
 ];
 
