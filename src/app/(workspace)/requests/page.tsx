@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   ApprovalDecision,
+  RequestClarification,
   RequestDecision,
 } from "@/features/requests/components/request-controls";
 import {
@@ -145,6 +146,7 @@ export default async function RequestsPage({
                   key={request.id}
                   request={request}
                   now={now}
+                  viewerId={session.userId}
                   canDecide={session.isStaff}
                   highlighted={request.id === highlightId}
                 />
@@ -230,16 +232,22 @@ export default async function RequestsPage({
 function RequestItem({
   request,
   now,
+  viewerId,
   canDecide,
   highlighted,
 }: {
   request: ProjectRequestRow;
   now: Date;
+  viewerId: string;
   canDecide: boolean;
   highlighted: boolean;
 }) {
   const waiting = daysWaiting(request.created_at, now);
   const stale = requestIsStale(request, now);
+  // A returned request is waiting on its author, not on the queue, so the
+  // "nobody has answered this" warning would be accusing the wrong person.
+  const handedBack = request.status === "returned" || request.status === "deferred";
+  const mine = request.requester?.id === viewerId;
 
   return (
     <li
@@ -263,7 +271,7 @@ function RequestItem({
         {request.needed_by ? ` · needed by ${formatDate(request.needed_by)}` : ""}
       </p>
 
-      {stale ? (
+      {stale && !handedBack ? (
         <p className="mt-1 text-[13px] text-warning-fg">
           Nobody has answered this in {waiting} days.
         </p>
@@ -275,6 +283,27 @@ function RequestItem({
           <span className="text-muted">Serves: </span>
           {request.beneficiaries}
         </p>
+      ) : null}
+
+      {handedBack && request.decision_note ? (
+        <p className="mt-1 rounded-md bg-warning/10 px-2.5 py-1.5 text-[13px]">
+          <span className="font-medium">
+            {request.status === "returned" ? "Returned" : "Deferred"}
+            {request.decider ? ` by ${request.decider.full_name}` : ""}
+            {request.decided_at ? ` on ${formatDate(request.decided_at)}` : ""}:{" "}
+          </span>
+          {request.decision_note}
+        </p>
+      ) : null}
+
+      {mine && request.status === "returned" ? (
+        <RequestClarification
+          requestId={request.id}
+          summary={request.summary}
+          rationale={request.rationale}
+          beneficiaries={request.beneficiaries}
+          question={request.decision_note}
+        />
       ) : null}
 
       {canDecide ? (

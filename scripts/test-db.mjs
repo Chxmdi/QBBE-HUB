@@ -36,6 +36,7 @@ const FILES = [
   "supabase/tests/team-channel-access.sql",
   "supabase/tests/leftover-scoped-surfaces.sql",
   "supabase/tests/program-overview.sql",
+  "supabase/tests/project-lifecycle.sql",
   "supabase/tests/document-scanning-meetings.sql",
 ];
 

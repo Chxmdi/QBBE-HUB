@@ -23,6 +23,99 @@ Resume the next action below. Confirm existing changes and verification before
 editing. Reconcile intervening work; repeat only invalidated checks. Do not
 restart the audit or treat an earlier summary as evidence of completion.
 
+## Current feature: projects — editing, archive, intake decisions, closure, duplication
+
+Issue #27, on `12-epic-02-programs-projects-milestones-tasks` at `bc0ba39`.
+
+### What was wrong before
+
+Almost all of this was application work against schema that already existed.
+`updateProject` accepted thirteen fields and **nothing in `src/` called it** —
+a project could be created and never edited. The create form sent seven of the
+thirteen, so `description`, `sponsor`, `priority` and `reporting cadence` were
+unreachable by any route. The directory applied `archived_at is null`
+unconditionally, so archiving a project hid it from the only page that could
+restore it. `StageSelect` offered `completed`, which `updateProjectStage`
+refuses, so choosing it produced an inline failure and nothing else.
+`publishStatusUpdate` never wrote `last_status_update_at`, so the stale-project
+sweep fell back to `updated_at` and read any edit as a report. `deferred` and
+`returned` had been in the intake enum since `20260912040000` with no path to
+them. Closure recorded a paragraph and attached no evidence, told nobody, and
+reported `openFollowUps: 0` as a literal. `createProjectFromTemplate` copied
+three columns.
+
+### Four defects, three of them only visible in a browser or a database
+
+1. **Deferring or returning a request could not work at all.** The command set
+   `decided_by` and `decided_at` to null for every status except `declined` and
+   `withdrawn`, and `decided_requests_are_attributable` requires both for
+   anything outside `submitted` and `in_review`. A reviewer choosing "Deferred"
+   got "that decision could not be recorded" and no way to find out why.
+2. **The intake edit policy was wrong in both directions.** Its `USING` froze a
+   request at `status = 'submitted'`, so a returned request could not be
+   clarified — "Returned for clarification" was a label on a dead end. Its
+   `WITH CHECK` tested only ownership, so an author could move their own
+   request to `in_review` and misrepresent where it stood.
+3. **A test fixture could take the whole browser suite down.**
+   `tests.authenticate` synthesizes a verified `auth.mfa_factors` row and left
+   `secret` null. GoTrue scans that column into a non-nullable Go string, so one
+   such row makes every password sign-in for that person fail with "Database
+   error querying schema". One outlived its transaction after an aborted
+   `test:db` run and the volunteer could not sign in until it was deleted. The
+   fixture now writes a dummy base32 secret, which removes the failure mode
+   rather than the symptom.
+4. **`StageSelect` reports success before the server answers.** It sets its own
+   value optimistically and reverts on failure, so a test asserting the select's
+   value proves only that the click landed. The archive check now waits for the
+   close control to disappear, which only happens after the refreshed page comes
+   back from the server.
+
+### A boundary deliberately moved, and one deliberately not
+
+Moved: the intake queue's **write** policy narrows from `app.is_org_staff` to
+`manage` on the program a request names. Approving a request creates a real
+project inside that program, and until now any staff member could do that for a
+program they held nothing on — the last intake surface still on the broad staff
+predicate every sibling moved off in the scoped-access cutover. Reading stays
+with all staff: a request that silently vanishes from the queue is worse than
+one that refuses a decision with a reason. One consequence worth stating:
+`has_program_capability` requires AAL2 before granting an owner or administrator
+anything past `read`, so deciding a program-scoped request now needs a second
+factor — the same bar `createProject` already sets for that program.
+
+Not moved: the project team panel is read-only, for the same reason the
+programme one is. `setDirectProjectAccess` requires `authorizeAdminAction()`
+and a project manager holds `manage`, not that.
+
+### Evidence
+
+Commit `bc0ba39`. Clean `supabase db reset` over the full chain through
+`20260919010000`, then `npm run db:seed`, against the production build on
+127.0.0.1:3000, Chromium.
+
+- Database chain: **363 assertions, exit 0**, across 14 files — 334 across 13
+  before, with `supabase/tests/project-lifecycle.sql` added to the runner by hand.
+- `supabase db advisors --local --type security --fail-on error`: no issues.
+- Unit: 467 passed across 54 files, from 463.
+- Chromium: `projects` 5 passed; the whole authenticated set — `mfa`,
+  `realtime-revocation`, `hello-hub`, `access-impact`, `my-work`,
+  `identity-lifecycle`, `programs`, `projects` — **30 passed, twice
+  consecutively**, with the server confirmed answering after each run.
+- Lint clean apart from the pre-existing `no-img-element` warning; typecheck clean.
+
+Five browser failures were real and were fixed before this was called done:
+four locator or race defects in the new spec, and the null-secret factor above.
+
+### Not done
+
+Milestones keep their existing create/complete commands; `owner_id`,
+`description`, `status`, `evidence` and `sort_key` are still untouched by
+application code and belong to #28. The closing status update still quotes the
+results narrative back into the updates feed, so the sentence appears twice on
+a closed project — deliberate for now, because the feed is read as history.
+Hosted staging evidence stays with #55. The remaining Epic 02 issues are #28
+milestones, #71 task-core defects and #31 advanced task planning.
+
 ## Current feature: programs — lead, overview composition and approved templates
 
 Issue #26, on `12-epic-02-programs-projects-milestones-tasks` off `698c52f`.

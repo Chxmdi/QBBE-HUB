@@ -48,6 +48,40 @@ export const REFUSED_REQUEST_STATUSES: ProjectRequestStatus[] = [
   "withdrawn",
 ];
 
+/**
+ * Statuses that record a decision, mirroring the `decided_requests_are_attributable`
+ * and `open_requests_have_no_decision` constraints on `project_request`.
+ *
+ * Deferring and returning are decisions too: somebody made them, on a day, and
+ * the database refuses the row unless it says who and when. Treating them as
+ * "not settled yet" — which the first version of this code did — produced a
+ * constraint violation the reviewer only saw as "that decision could not be
+ * recorded".
+ */
+export const DECIDED_REQUEST_STATUSES: ProjectRequestStatus[] = [
+  "approved",
+  "declined",
+  "withdrawn",
+  "deferred",
+  "returned",
+];
+
+export function isDecidedRequest(status: ProjectRequestStatus): boolean {
+  return DECIDED_REQUEST_STATUSES.includes(status);
+}
+
+/**
+ * Statuses that hand the request back to somebody, and therefore owe them a
+ * written reason. Deferring without saying until when, or returning without
+ * saying what is missing, leaves the requester with nothing to act on.
+ */
+export const EXPLAINED_REQUEST_STATUSES: ProjectRequestStatus[] = [
+  "declined",
+  "withdrawn",
+  "deferred",
+  "returned",
+];
+
 export function isOpenRequest(status: ProjectRequestStatus): boolean {
   return OPEN_REQUEST_STATUSES.includes(status);
 }
@@ -115,7 +149,7 @@ export const decideProjectRequestSchema = z
   })
   .refine(
     (value) =>
-      !REFUSED_REQUEST_STATUSES.includes(value.status) ||
+      !EXPLAINED_REQUEST_STATUSES.includes(value.status) ||
       Boolean(value.decisionNote),
     {
       message: "Say why — the next person to propose this needs to know.",

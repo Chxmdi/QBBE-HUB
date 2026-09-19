@@ -1,9 +1,13 @@
-export type ImportantLink = { label: string; url: string };
+export type LabelledLink = { label: string; url: string };
 
 const MAX_LINKS = 20;
 
 /**
- * Parse the "Label|https://example.org" lines the program edit dialog collects.
+ * Parse the "Label|https://example.org" lines a textarea collects.
+ *
+ * Used for a program's important links and for the evidence attached to a
+ * closed project — both are "here is where to look", written one per line by
+ * someone who is not going to fill in a repeating form.
  *
  * A line with no separator is both its own label and its own URL, which is what
  * someone pasting a bare address expects. Anything that is not http(s) is
@@ -13,9 +17,9 @@ const MAX_LINKS = 20;
  *
  * Extracted from the command so it can be tested without a database.
  */
-export function parseImportantLinks(input: string | null | undefined): ImportantLink[] {
+export function parseLabelledLinks(input: string | null | undefined): LabelledLink[] {
   if (!input) return [];
-  const links: ImportantLink[] = [];
+  const links: LabelledLink[] = [];
   for (const line of input.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;

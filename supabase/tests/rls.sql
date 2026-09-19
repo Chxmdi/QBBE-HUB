@@ -37,11 +37,18 @@ begin
     select 1 from auth.mfa_factors
     where user_id = uid and factor_type = 'totp' and status = 'verified'
   ) then
+    -- `secret` is written even though nothing here reads it. GoTrue scans the
+    -- column into a non-nullable Go string, so a factor row with a null secret
+    -- makes every password sign-in for that person fail with "Database error
+    -- querying schema" — and if one of these fixtures ever outlives its
+    -- transaction, it takes the local browser suite down with it. A dummy
+    -- base32 value costs nothing and removes that failure mode.
     insert into auth.mfa_factors (
-      id, user_id, friendly_name, factor_type, status, created_at, updated_at
+      id, user_id, friendly_name, factor_type, status, secret,
+      created_at, updated_at
     ) values (
       gen_random_uuid(), uid, 'Database acceptance fixture',
-      'totp', 'verified', now(), now()
+      'totp', 'verified', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', now(), now()
     );
   end if;
 end;

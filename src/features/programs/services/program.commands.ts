@@ -6,7 +6,7 @@ import { requireSession } from "@/lib/auth";
 import { hasProgramCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requiredText } from "@/lib/schema";
-import { parseImportantLinks } from "@/features/programs/links";
+import { parseLabelledLinks } from "@/lib/links";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const editSchema = z.object({
@@ -29,7 +29,7 @@ export async function updateProgram(input: unknown): Promise<ActionResult> {
     return { ok: false, error: "You cannot manage this program." };
   }
   const { id, name, description, status, color, importantLinks, leadId } = parsed.data;
-  const links = parseImportantLinks(importantLinks);
+  const links = parseLabelledLinks(importantLinks);
 
   const patch: Record<string, unknown> = {
     name,
