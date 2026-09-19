@@ -128,7 +128,7 @@ jobs:
         run: |
           npx next start -p 3000 -H 127.0.0.1 &
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
-          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle --project=chromium
+          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs --project=chromium
 
       - name: Preserve authenticated failure evidence
         if: failure()

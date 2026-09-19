@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth";
 import { hasProgramCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requiredText } from "@/lib/schema";
+import { parseImportantLinks } from "@/features/programs/links";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const editSchema = z.object({
@@ -15,6 +16,8 @@ const editSchema = z.object({
   status: z.enum(["active", "paused", "archived"]),
   color: z.enum(["neutral", "blue", "green", "amber", "rose"]).default("neutral"),
   importantLinks: z.string().trim().max(4000).optional(),
+  // Empty string means "no lead"; a <select> cannot submit null.
+  leadId: z.union([z.string().uuid(), z.literal("")]).optional(),
 });
 
 export async function updateProgram(input: unknown): Promise<ActionResult> {
@@ -25,27 +28,40 @@ export async function updateProgram(input: unknown): Promise<ActionResult> {
   if (!(await hasProgramCapability(db, parsed.data.id, "manage"))) {
     return { ok: false, error: "You cannot manage this program." };
   }
-  const { id, name, description, status, color, importantLinks } = parsed.data;
-  let links: { label: string; url: string }[] = [];
-  if (importantLinks) {
-    links = importantLinks
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [label, url] = line.includes("|") ? line.split("|", 2) : [line, line];
-        return { label: label.trim(), url: url.trim() };
-      })
-      .filter((link) => /^https?:\/\//.test(link.url));
+  const { id, name, description, status, color, importantLinks, leadId } = parsed.data;
+  const links = parseImportantLinks(importantLinks);
+
+  const patch: Record<string, unknown> = {
+    name,
+    description: description || null,
+    status,
+    color,
+    important_links: links,
+  };
+
+  // The lead is only touched when the form actually carried the field, so a
+  // caller that does not manage leads cannot blank one by leaving it out.
+  if (leadId !== undefined) {
+    if (leadId) {
+      // A lead holds `manage` on the program through app.has_program_capability,
+      // so naming one grants access. Refuse anybody who is not an active member
+      // of this organization rather than handing capability to a stranger.
+      const { data: member } = await db
+        .from("organization_membership")
+        .select("user_id")
+        .eq("organization_id", session.organizationId)
+        .eq("user_id", leadId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!member) {
+        return { ok: false, error: "Choose an active member of this workspace as the program lead." };
+      }
+    }
+    patch.lead_id = leadId || null;
   }
+
   const { data, error } = await db.from("program")
-    .update({
-      name,
-      description: description || null,
-      status,
-      color,
-      important_links: links,
-    })
+    .update(patch)
     .eq("id", id).eq("organization_id", session.organizationId)
     .select("id").maybeSingle();
   if (error || !data) return { ok: false, error: "Could not save the program. Please try again." };

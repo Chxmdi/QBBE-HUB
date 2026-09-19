@@ -4,9 +4,9 @@ import { spawnSync } from "node:child_process";
  * A direct line to the local database for the browser suites.
  *
  * Shelling out to psql inside the container is the same route
- * scripts/seed-local.mjs takes, and for the same reason: it is the one path
- * that behaves identically on Windows, macOS and Linux. `npm run test:db` does
- * not run on Windows, where npm's shell has no `sh` on the PATH.
+ * scripts/seed-local.mjs and scripts/test-db.mjs take, and for the same reason:
+ * it is the one path that behaves identically on Windows, macOS and Linux,
+ * because npm runs scripts through cmd.exe on Windows and there is no `sh`.
  *
  * This reaches the local container only. It has no way to address a hosted
  * project, and nothing here should ever be pointed at one.

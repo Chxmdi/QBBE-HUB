@@ -23,6 +23,69 @@ Resume the next action below. Confirm existing changes and verification before
 editing. Reconcile intervening work; repeat only invalidated checks. Do not
 restart the audit or treat an earlier summary as evidence of completion.
 
+## Current feature: programs — lead, overview composition and approved templates
+
+Issue #26, on `12-epic-02-programs-projects-milestones-tasks` off `698c52f`.
+
+### What was wrong before
+
+The programme schema was well ahead of the programme code. Migration
+`20260912040000` added `program.color` and `program.important_links` in
+September; both were editable in the dialog and rendered on no page at all. The
+lead could be set once, at creation, and never handed over. The overview showed
+projects, events and an activity feed, and none of the team, health roll-up or
+latest updates that P0-PROG-02 names. Programme templates did not exist in any
+form — only `project_template`, carrying three columns and copying no work.
+
+`docs/audit/02-work-management.md` is not a safe guide to this area: it predates
+that migration and reads as considerably more broken than the product is.
+
+### Three defects, none of them found by inspection
+
+1. **The important-links parser truncated URLs.** `split("|", 2)` keeps the
+   first two fields and drops the rest, so `Report|https://example.org/r?a=1|b=2`
+   stored the address without its tail. Visible only once the parser was pulled
+   out of the command and could be given a case with a separator inside the URL.
+2. **A new dialog broke an existing CI test.** Adding "Save template" to
+   `/programs` put a second `Name` field on the page, and `hello-hub` had a
+   page-wide `getByLabel("Name")`. It would have failed the authenticated CI job
+   rather than the new spec. Both locators are now scoped to their dialog.
+3. **A new dated assertion asked the wrong clock.** It compared against Postgres
+   `current_date`, which is UTC; the application had correctly used the
+   organization's zone. At 01:00 UTC the two differ by a day. The application
+   was right and the test was wrong — the same mistake recorded against #30,
+   reproduced in a fresh test inside the very window that file warns about.
+
+### A boundary deliberately not moved
+
+The team panel is read-only. `setDirectProgramAccess` requires
+`authorizeAdminAction()`, and a programme lead holds `manage`, not that. P0-PROG-02
+asks the overview to show the team, so it shows the team; letting a lead grant
+access to their own programme would be a real widening of authorization and
+belongs in a decision of its own, not in a rendering task.
+
+### Evidence
+
+Commit `42c3232`. Clean `supabase db reset` over the full chain through
+`20260918230000`, then `npm run db:seed`, against the production build on
+127.0.0.1:3000, Chromium.
+
+- Database chain: **334 assertions, exit 0**, across 13 files — 315 across 12
+  before, with `supabase/tests/program-overview.sql` added to the runner by hand.
+- `supabase db advisors --local --type security --fail-on error`: no issues.
+- Unit: 463 passed across 53 files, from 446 across 51.
+- Chromium: `programs` 5 passed; the whole authenticated set —
+  `mfa`, `realtime-revocation`, `hello-hub`, `access-impact`, `my-work`,
+  `identity-lifecycle`, `programs` — **25 passed, twice consecutively**, with
+  the server confirmed answering after each run.
+- Lint clean apart from the pre-existing `no-img-element` warning; typecheck clean.
+
+### Not done
+
+Programme operations are surfaced through `OutcomesPanel` and were not revisited.
+Hosted staging evidence stays with #55. The remaining Epic 02 issues are #27
+projects, #28 milestones, #71 task-core defects and #31 advanced task planning.
+
 ## Current feature: scoped-access cutover, MFA and team provenance
 
 - Branch: `11-epic-01-identity-access-security-mfa`, frozen at `ce76227`.
