@@ -36,10 +36,17 @@ const factors: Factor[] = [
 
 describe("administrator TOTP MFA", () => {
   it("requires an administrator at AAL1 to step up without gating other members", () => {
-    expect(requiresAdministratorMfa(true, "aal1")).toBe(true);
-    expect(requiresAdministratorMfa(true, null)).toBe(true);
-    expect(requiresAdministratorMfa(true, "aal2")).toBe(false);
-    expect(requiresAdministratorMfa(false, "aal1")).toBe(false);
+    expect(requiresAdministratorMfa(true, "aal1", "aal1", false)).toBe(true);
+    expect(requiresAdministratorMfa(true, "aal1", "aal2", true)).toBe(true);
+    expect(requiresAdministratorMfa(true, null, null, false)).toBe(true);
+    expect(requiresAdministratorMfa(true, "aal2", "aal2", true)).toBe(false);
+    expect(requiresAdministratorMfa(false, "aal1", "aal2", false)).toBe(false);
+  });
+
+  it("rejects an AAL2 token whose last factor has been removed", () => {
+    expect(requiresAdministratorMfa(true, "aal2", "aal1", true)).toBe(true);
+    expect(requiresAdministratorMfa(true, "aal2", undefined, true)).toBe(true);
+    expect(requiresAdministratorMfa(true, "aal2", "aal2", false)).toBe(true);
   });
 
   it("uses only verified TOTP factors for a login challenge", () => {

@@ -45,8 +45,10 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
    Drive and rehearse restoration before entering pilot data. Do not enable
    paid backups or Point-in-Time Recovery. See `backup-recovery.md`; automation
    and restore evidence are still pending.
-7. Implement and verify application MFA enrollment/enforcement for the Primary
-   Owner and Workspace Admin accounts (AUTH-006); this remains a release gap.
+7. Enroll at least two named TOTP factors for the Primary Owner and every
+   Workspace Admin, then complete the hosted MFA checks in
+   `staging-provisioning.md`. Application and database enforcement are
+   implemented; hosted evidence at the release SHA remains a release gate.
 8. Wire the scheduler to the deployment. Nothing runs on a schedule until
    this is done, and Admin → Jobs will say so:
 
@@ -155,6 +157,8 @@ The Playwright suites, by what each one needs:
 | `tests/e2e/hello-hub.spec.ts` | `npx playwright test hello-hub` | migrated local Supabase; CI authenticated smoke |
 | `tests/e2e/qa-matrix.spec.ts` | `npm run test:qa` | a built app **plus** a seeded database (`npm run db:seed`) |
 | `tests/e2e/identity-lifecycle.spec.ts` | `npx playwright test identity-lifecycle` | the same, plus the local mail catcher for the recovery email |
+| `tests/e2e/mfa.spec.ts` | `npm run test:e2e:mfa` | the same; destructive only to the synthetic QA Admin's local factors |
+| `tests/e2e/realtime-revocation.spec.ts` | `npm run test:e2e:realtime` | seeded local Supabase with Realtime healthy; creates and removes its own private channel fixture |
 
 The public suite covers the auth routes across six widths, both themes,
 axe-core WCAG 2.2 A/AA rules, keyboard traversal, focus visibility, reduced

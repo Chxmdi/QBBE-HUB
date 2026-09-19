@@ -143,9 +143,16 @@ Against the staging URL, in this order. Each has a visible answer.
 2. **Database connectivity** — sign in as the owner. You should reach the
    workspace. A spinner that never resolves means the app cannot reach Supabase;
    check the URL and anon key in the environment.
-3. **Auth** — sign out, then sign back in. Confirm the authenticator challenge
-   appears for the owner. If it does not, MFA enforcement did not follow the
-   migration chain.
+3. **Auth and MFA** — enroll two named factors for the owner and a disposable
+   administrator. Sign out and back in; confirm a real authenticator challenge.
+   Reject an expired code, accept a current code, and confirm a consumed
+   challenge cannot be replayed. With the disposable administrator, prove an
+   AAL1 Data API/RPC mutation is denied and the same operation at AAL2 succeeds.
+   Remove one factor normally. Then remove the final disposable factor through
+   the provider admin path: the stale AAL2 token must be denied by the database,
+   its next refresh must downgrade to AAL1, and an open workspace route must
+   redirect to `/mfa`. Re-enroll before ending the check. Preserve application
+   audit events and the provider Auth log with the release evidence.
 4. **Recovery** — request a password reset and open the link from the real
    inbox. You should land on the reset form with a working session, on the same
    hostname you started from. Landing on "your recovery session is missing or
@@ -157,6 +164,11 @@ Against the staging URL, in this order. Each has a visible answer.
    query production for that title. **You should see zero rows.** This is the
    check that proves the environments are separate; do not skip it because the
    configuration "looks right".
+7. **Live revocation** — give a disposable member access to a private channel,
+   keep its Realtime message subscription open, and deliver one control message.
+   Revoke the grant and deliver a second marker. The existing socket must not
+   receive the second row; reconnecting must not restore access. Record the two
+   user IDs, channel ID, timestamps and redacted client/server logs.
 
 ## 7. Record the evidence
 

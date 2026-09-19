@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth";
+import { authorizeAdminAction } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
@@ -23,7 +23,9 @@ import {
  * database trigger, which is what actually holds when this code is wrong.
  */
 export async function saveRetentionPolicy(input: unknown): Promise<ActionResult> {
-  const session = await requireAdmin();
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   const parsed = savePolicySchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };

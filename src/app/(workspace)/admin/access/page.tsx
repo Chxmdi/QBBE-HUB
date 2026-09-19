@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminAal2 } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { readAll } from "@/lib/supabase/read-all";
 import { PageHeader } from "@/components/shared/page-header";
@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Access impact" };
 export const dynamic = "force-dynamic";
 
 export default async function AccessImpactPage() {
-  const session = await requireAdmin();
+  const session = await requireAdminAal2();
   const db = await createSupabaseServerClient();
   const [
     members,

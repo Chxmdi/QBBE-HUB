@@ -5,12 +5,12 @@ verification is blocked. No staging release candidate has been certified.
 
 | Release item | Current evidence |
 |---|---|
-| Candidate | Uncommitted work on implement/prd-v2-release; no frozen release SHA |
+| Candidate | Uncommitted work on `11-epic-01-identity-access-security-mfa`; no frozen release SHA |
 | Staging | No QBBE staging deployment provisioned in this session |
 | Production | No publishing authorized by this plan; keep release disabled |
-| Code checks | Node 22 lint, typecheck, 419 unit tests, and production build pass on the current working tree |
-| Database | Clean local reset applied the complete migration chain; the full database/RLS suite passes and the security advisor reports no errors |
-| Browsers | Public Chromium/Firefox and prior authenticated Chromium scenarios passed; MFA browser verification is active; local WebKit protocol failure remains |
+| Code checks | Node 22 lint, typecheck, focused MFA unit tests, and production build pass on the current working tree; final full-suite rerun is pending |
+| Database | Clean local reset applied migrations through `20260918214957`; the full database/RLS suite passes and the security advisor reports no errors |
+| Browsers | Real local Auth MFA checks pass 3/3, including AAL1/AAL2 Data API enforcement and stale sessions; local open-socket Realtime revocation passes. Hosted staging and local WebKit evidence remain outstanding |
 | Full acceptance | See acceptance-matrix.md; no overall acceptance certification |
 | Operations | Document quarantine is enforced in code/RLS, but a QBBE-controlled ClamAV host, restore/backup/alert custody, and operator sign-off are not established |
 

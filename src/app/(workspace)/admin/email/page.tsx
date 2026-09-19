@@ -11,7 +11,7 @@ import {
   isDeliveryStatus,
   type DeliveryStatus,
 } from "@/features/notifications/services/email.queries";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminAal2 } from "@/lib/auth";
 import { cn, formatDateTime, relativeTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Email" };
@@ -41,7 +41,7 @@ export default async function AdminEmailPage({
 }: {
   searchParams: Promise<{ status?: string }>;
 }) {
-  await requireAdmin();
+  await requireAdminAal2();
   const { status: statusParam } = await searchParams;
   const status = isDeliveryStatus(statusParam) ? statusParam : undefined;
 

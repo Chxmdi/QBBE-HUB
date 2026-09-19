@@ -25,12 +25,41 @@ $$;
 -- leave an overload that makes tests.authenticate(uuid) ambiguous.
 drop function if exists tests.authenticate(uuid);
 drop function if exists tests.authenticate(uuid, text);
+
+create or replace function tests.ensure_verified_mfa_factor(uid uuid)
+returns void
+language plpgsql
+security definer
+set search_path = tests, public, auth
+as $$
+begin
+  if not exists (
+    select 1 from auth.mfa_factors
+    where user_id = uid and factor_type = 'totp' and status = 'verified'
+  ) then
+    insert into auth.mfa_factors (
+      id, user_id, friendly_name, factor_type, status, created_at, updated_at
+    ) values (
+      gen_random_uuid(), uid, 'Database acceptance fixture',
+      'totp', 'verified', now(), now()
+    );
+  end if;
+end;
+$$;
+
 create function tests.authenticate(uid uuid, assurance_level text default 'aal2')
 returns void
 language plpgsql
 set search_path = tests, public, auth
 as $$
 begin
+  -- Production authorization now requires both the AAL2 claim and a live
+  -- verified TOTP factor. Database tests synthesize JWT claims, so synthesize
+  -- the matching provider state inside the surrounding rollback transaction.
+  if assurance_level = 'aal2' then
+    perform tests.ensure_verified_mfa_factor(uid);
+  end if;
+
   perform set_config('role', 'authenticated', true);
   perform set_config('request.jwt.claim.sub', uid::text, true);
   perform set_config('request.jwt.claim.role', 'authenticated', true);

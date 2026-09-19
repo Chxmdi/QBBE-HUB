@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
-import { requireSession } from "@/lib/auth";
+import { authorizeAdminAction } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
@@ -26,8 +26,9 @@ const projectAssignmentSchema = z.object({
 });
 
 export async function createTeam(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   const parsed = createTeamSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -58,8 +59,8 @@ export async function addTeamMember(
   teamId: string,
   userId: string,
 ): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = z.object({ teamId: z.string().uuid(), userId: z.string().uuid() })
     .safeParse({ teamId, userId });
   if (!parsed.success) return { ok: false, error: "Invalid team member." };
@@ -86,8 +87,8 @@ export async function removeTeamMember(
   teamId: string,
   userId: string,
 ): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = z.object({ teamId: z.string().uuid(), userId: z.string().uuid() })
     .safeParse({ teamId, userId });
   if (!parsed.success) return { ok: false, error: "Invalid team member." };
@@ -113,8 +114,8 @@ export async function transferTeamOwnership(
   teamId: string,
   ownerId: string,
 ): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = z.object({
     teamId: z.string().uuid(),
     ownerId: z.string().uuid(),
@@ -142,8 +143,9 @@ export async function transferTeamOwnership(
 }
 
 export async function assignTeamToProgram(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   const parsed = programAssignmentSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Choose a valid program and role." };
   const supabase = await createSupabaseServerClient();
@@ -167,8 +169,9 @@ export async function assignTeamToProgram(input: unknown): Promise<ActionResult>
 }
 
 export async function assignTeamToProject(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   const parsed = projectAssignmentSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Choose a valid project and role." };
   const supabase = await createSupabaseServerClient();
@@ -195,8 +198,9 @@ export async function removeTeamAssignment(
   scopeId: string,
   teamId: string,
 ): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   const parsed = z.object({
     scope: z.enum(["program", "project"]),
     scopeId: z.string().uuid(),

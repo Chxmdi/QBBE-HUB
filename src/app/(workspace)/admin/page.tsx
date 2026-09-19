@@ -17,7 +17,7 @@ import { TeamOwnerControl } from "@/features/admin/components/team-owner-control
 import { createTeam } from "@/features/admin/services/team.commands";
 import { createWorkflowRule } from "@/features/admin/services/workflow.commands";
 import { integrationHealthLabel, integrationHealthTone } from "@/features/admin/services/integration-health";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminAal2 } from "@/lib/auth";
 import { transactionalEmailIsLive } from "@/features/notifications/services/email-provider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
@@ -101,7 +101,7 @@ const INTEGRATION_CATALOG = [
 ];
 
 export default async function AdminPage() {
-  const session = await requireAdmin();
+  const session = await requireAdminAal2();
   const supabase = await createSupabaseServerClient();
 
   const [

@@ -3,14 +3,14 @@ import { PageHeader } from "@/components/shared/page-header";
 import { AdminNav } from "@/features/admin/components/admin-nav";
 import { JobHealthPanel } from "@/features/jobs/components/job-health-panel";
 import { getJobHealth } from "@/features/jobs/services/jobs.queries";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminAal2 } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Jobs" };
 export const dynamic = "force-dynamic";
 
 /** Admin → Jobs: the health of the background runtime (JOB-004, §14.2). */
 export default async function AdminJobsPage() {
-  await requireAdmin();
+  await requireAdminAal2();
   const health = await getJobHealth();
 
   return (

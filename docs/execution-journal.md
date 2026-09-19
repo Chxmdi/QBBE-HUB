@@ -25,7 +25,8 @@ restart the audit or treat an earlier summary as evidence of completion.
 
 ## Current feature: scoped-access cutover, MFA and team provenance
 
-- Branch: implement/prd-v2-release; existing implementation is uncommitted.
+- Branch: `11-epic-01-identity-access-security-mfa`; implementation is
+  uncommitted pending the final verification pass and frozen evidence SHA.
 - Reproduced gap: program/project helpers still grant organization-wide reading
   and staff management. The cutover review surface and typed grant model now
   exist, but the narrower policies have not yet replaced the legacy policies.
@@ -52,11 +53,16 @@ restart the audit or treat an earlier summary as evidence of completion.
   least-privilege capability RPCs. The clean local migration reset and complete
   database suite pass coexistence, revocation, deactivation, unknown-role,
   cross-organization and leadership read-only cases.
-- Added TOTP enrollment/challenge UI and required owner/admin AAL2 at the
-  workspace and database write boundaries. AAL1 administrators retain the read
-  access needed to reach `/mfa`, while administrative and staff-level database
-  mutations fail. Focused MFA unit tests and database allow/deny tests pass;
-  local Auth browser verification is active.
+- Completed TOTP enrollment, challenge and multi-factor management for owners
+  and administrators. Privileged server actions fail closed unless both the
+  session and next refresh are AAL2 and a verified TOTP factor still exists.
+  Migration `20260918214957_enforce_live_admin_mfa_factor.sql` applies the same
+  live-factor rule to database helpers, so a stale AAL2 token cannot mutate
+  after direct factor removal. Security events record enrollment, challenge and
+  removal without secrets. Lost-factor recovery is documented. Focused unit,
+  full database and real local Auth browser checks pass, including interrupted
+  enrollment, expired/replayed codes, direct Data API denial, backup-factor
+  removal and stale-session downgrade.
 - Added a database-enforced membership lifecycle: at most one active owner per
   organization, immutable membership identity, no direct owner promotion or
   demotion, no self-deactivation, transactional audit events and an atomic,
@@ -82,9 +88,11 @@ restart the audit or treat an earlier summary as evidence of completion.
 - Meeting completion now commits its status and channel summary together, and
   meeting action task/link creation is atomic. Notification and digest delivery
   recheck active membership; Resend retries carry a stable provider key.
-- Next independent verification: authenticated browser checks for MFA, meeting
-  completion and document pending/error states. Workstreams 6–7 wait on QBBE
-  credentials and scanner hosting (`scripts/verify-integrations.sh`).
+- Next independent verification: repeat MFA and open-socket revocation checks
+  against the hosted staging candidate at its exact SHA. Meeting completion and
+  document pending/error checks remain separate release work. Workstreams 6–7
+  wait on QBBE credentials and scanner hosting
+  (`scripts/verify-integrations.sh`).
 - Required environment: local Supabase is available with the storage services
   excluded because their health check timed out. Full Storage verification remains
   a Workstream 3 dependency; live Auth/MFA and realtime remain staging gates.

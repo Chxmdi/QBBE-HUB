@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
-import { requireSession } from "@/lib/auth";
+import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { hasProgramCapability, hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
@@ -432,8 +432,9 @@ const createProgramSchema = z.object({
 });
 
 export async function createProgram(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Administrator access is required to create a program." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   const parsed = createProgramSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };

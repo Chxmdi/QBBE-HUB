@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/layout/workspace-shell";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { requiresAdministratorMfa } from "@/features/auth/mfa";
+import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
 
 const OPEN_STATUSES = [
   "not_started", "ready", "in_progress", "waiting", "blocked", "in_review",
@@ -21,11 +21,19 @@ export default async function WorkspaceLayout({
   // privileged authorization helpers, so direct API calls cannot bypass this
   // navigation guard.
   if (session.isAdmin) {
-    const { data: assurance, error: assuranceError } =
-      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    const [assuranceResult, factorResult] = await Promise.all([
+      supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+      supabase.auth.mfa.listFactors(),
+    ]);
     if (
-      assuranceError ||
-      requiresAdministratorMfa(session.isAdmin, assurance.currentLevel)
+      assuranceResult.error ||
+      factorResult.error ||
+      requiresAdministratorMfa(
+        session.isAdmin,
+        assuranceResult.data?.currentLevel,
+        assuranceResult.data?.nextLevel,
+        verifiedTotpFactors(factorResult.data?.all ?? []).length > 0,
+      )
     ) {
       redirect("/mfa");
     }

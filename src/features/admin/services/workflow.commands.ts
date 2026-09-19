@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
-import { requireSession } from "@/lib/auth";
+import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
@@ -68,8 +68,9 @@ const workflowSchema = z.object({
 });
 
 export async function createWorkflowRule(input: unknown): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
   const parsed = workflowSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Invalid rule." };
   const supabase = await createSupabaseServerClient();
@@ -107,14 +108,16 @@ export async function setWorkflowRuleEnabled(
   id: string,
   enabled: boolean,
 ): Promise<ActionResult> {
-  const session = await requireSession();
-  if (!session.isAdmin) return { ok: false, error: "Admin access required." };
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("workflow_rule")
     .update({ enabled })
-    .eq("id", id);
-  if (error) return { ok: false, error: "Could not update the rule." };
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) return { ok: false, error: "Could not update the rule." };
   revalidatePath("/admin");
   return { ok: true };
 }
