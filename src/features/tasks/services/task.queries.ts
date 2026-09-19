@@ -105,7 +105,13 @@ export async function getMyWork(
       .from("task")
       .select(select)
       .or(reviewClauses.join(","))
-      .neq("assignee_id", userId)
+      // "Work I judge, not work I do" — but `neq` is NULL-blind. In SQL
+      // `null <> '<uuid>'` is null, not true, so an unassigned task was
+      // dropped from the review queue entirely. That is the case a reviewer
+      // most needs: nobody has picked the work up yet and it is waiting on a
+      // decision. Two `or` parameters are ANDed by PostgREST, so this narrows
+      // the review clauses above rather than widening them.
+      .or(`assignee_id.is.null,assignee_id.neq.${userId}`)
       .is("archived_at", null)
       .order("due_at", { ascending: true, nullsFirst: false })
       .limit(300),

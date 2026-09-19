@@ -184,22 +184,46 @@ test("milestones keep the order somebody arranged, and can be deleted", async ({
   expect(remaining).toBe("2");
 });
 
-test("a volunteer sees a project's milestones without any way to change them", async ({
+test("a read-only member sees a project's milestones without any way to change them", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
 
-  // The seeded project the volunteer holds through a program, so this is a
-  // read-without-write case rather than a no-access case.
-  const projectId = sql(
-    "select id::text from project where name = 'Fall Community Workshop Series' limit 1",
+  // Rewritten under #76. The first version pointed the volunteer at a seeded
+  // project and asserted only that the manage buttons were absent. They were
+  // absent — because `has_project_capability` denied the volunteer read on
+  // that project altogether, so the page rendered nothing and counting zero
+  // buttons proved nothing. A denial test that would pass against a blank
+  // page is not a denial test.
+  //
+  // This builds its own project, puts a milestone on it, and grants the
+  // volunteer read_only, so "can see it" and "cannot change it" are both
+  // claims the assertions can actually fail on.
+  await signIn(page, "owner");
+  const stamp = Date.now();
+  const projectId = await createProject(page, `Read-only milestones ${stamp}`);
+  await addMilestone(page, `Visible to readers ${stamp}`);
+
+  const volunteerId = sql(
+    "select id::text from auth.users where email = 'qa-volunteer@example.com'",
   );
-  expect(projectId).toMatch(/^[0-9a-f-]{36}$/);
+  sql(
+    `insert into project_access_grant
+       (organization_id, project_id, user_id, role, source, created_by)
+     select organization_id, id, '${volunteerId}', 'read_only', 'direct', created_by
+     from project where id = '${projectId}'`,
+  );
 
   await signIn(page, "volunteer");
   await page.goto(`/projects/${projectId}`);
 
+  const rail = page.getByRole("region", { name: "Milestones", exact: true });
+  await expect(rail.getByText(`Visible to readers ${stamp}`)).toBeVisible({
+    timeout: 30_000,
+  });
+
   await expect(page.getByRole("button", { name: "Add milestone" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Complete", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /^Move /, })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Move / })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
 });

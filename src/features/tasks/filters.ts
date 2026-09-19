@@ -99,6 +99,48 @@ export function parseTaskFilters(params: RawParams): TaskFilters {
   return filters;
 }
 
+/**
+ * Filter combinations that can never match anything, in plain English.
+ *
+ * Some of these are honest empties: no task is both Ready and Blocked, so zero
+ * rows is the right answer. The defect was never the count — it was that the
+ * page said "no tasks" for a question that had no answer, which reads as
+ * "nothing is assigned to you" rather than "you asked for something
+ * impossible". Returning nothing and saying nothing are different failures.
+ *
+ * `scopedToUserId` is set on a page that is already limited to one person's
+ * work. There an owner filter naming somebody else is not a contradiction in
+ * the filters themselves, only against the page it was pasted into — which is
+ * exactly how it happens, because saved views and shared links travel between
+ * the board and My Work.
+ */
+export function describeFilterConflicts(
+  filters: TaskFilters,
+  options: { scopedToUserId?: string; statusLabel?: (status: TaskStatus) => string } = {},
+): string[] {
+  const conflicts: string[] = [];
+  const label = options.statusLabel ?? ((status: TaskStatus) => status);
+
+  if (filters.status && filters.status !== "blocked" && filters.blocked === "yes") {
+    conflicts.push(
+      `No task can be both ${label(filters.status)} and blocked — a task has one status at a time.`,
+    );
+  }
+  if (filters.status === "blocked" && filters.blocked === "no") {
+    conflicts.push("No task can be blocked and not blocked at the same time.");
+  }
+  if (
+    options.scopedToUserId &&
+    filters.owner &&
+    filters.owner !== options.scopedToUserId
+  ) {
+    conflicts.push(
+      "This page shows only your own work, so filtering it by another owner can never match. Use the board to see someone else's tasks.",
+    );
+  }
+  return conflicts;
+}
+
 export function hasActiveFilters(filters: TaskFilters): boolean {
   return Object.keys(filters).length > 0;
 }
@@ -173,8 +215,23 @@ export function applyTaskFilters<Q extends FilterableQuery>(
   if (filters.milestone) q = q.eq("milestone_id", filters.milestone) as Q;
   if (filters.label) q = q.eq("task_label.label_id", filters.label) as Q;
 
-  if (filters.blocked === "yes") q = q.eq("status", "blocked") as Q;
-  if (filters.blocked === "no") q = q.neq("status", "blocked") as Q;
+  // "Blocked" is a status, not a separate axis, so these two filters constrain
+  // the same column. The condition is emitted only when it says something the
+  // status filter has not already said. That drops the redundant repetition
+  // and keeps the genuine contradiction: `status=ready&blocked=yes` still
+  // matches nothing, because nothing is the true answer. What was missing was
+  // never a different row set — it was somebody telling the reader that they
+  // asked a question with no possible answer, which `describeFilterConflicts`
+  // and `FilterConflictNotice` now do.
+  if (filters.blocked === "yes" && filters.status !== "blocked") {
+    q = q.eq("status", "blocked") as Q;
+  }
+  if (
+    filters.blocked === "no" &&
+    (filters.status === undefined || filters.status === "blocked")
+  ) {
+    q = q.neq("status", "blocked") as Q;
+  }
 
   if (filters.due) {
     const range = dueWindowRange(filters.due, today);

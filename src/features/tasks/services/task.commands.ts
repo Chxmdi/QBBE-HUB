@@ -50,25 +50,41 @@ async function resolveChangeLabels(
 ): Promise<LabelLookup> {
   const people = new Set<string>();
   const projects = new Set<string>();
+  const milestones = new Set<string>();
   for (const change of changes) {
     const ids = [change.from, change.to].filter((v): v is string => v !== null);
-    if (change.field === "assignee_id") ids.forEach((id) => people.add(id));
+    // Reviewer and approver are people too. Before this they resolved to
+    // nothing, so a history entry read "changed Approver from  to " — the ids
+    // were there in the metadata and neither name was.
+    if (
+      change.field === "assignee_id" ||
+      change.field === "reviewer_id" ||
+      change.field === "approver_id"
+    ) {
+      ids.forEach((id) => people.add(id));
+    }
     if (change.field === "project_id") ids.forEach((id) => projects.add(id));
+    if (change.field === "milestone_id") ids.forEach((id) => milestones.add(id));
   }
-  if (people.size === 0 && projects.size === 0) return {};
+  if (people.size === 0 && projects.size === 0 && milestones.size === 0) return {};
 
-  const [{ data: profiles }, { data: projectRows }] = await Promise.all([
-    people.size
-      ? supabase.from("user_profile").select("id, full_name").in("id", [...people])
-      : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
-    projects.size
-      ? supabase.from("project").select("id, name").in("id", [...projects])
-      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
-  ]);
+  const [{ data: profiles }, { data: projectRows }, { data: milestoneRows }] =
+    await Promise.all([
+      people.size
+        ? supabase.from("user_profile").select("id, full_name").in("id", [...people])
+        : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
+      projects.size
+        ? supabase.from("project").select("id, name").in("id", [...projects])
+        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      milestones.size
+        ? supabase.from("milestone").select("id, name").in("id", [...milestones])
+        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    ]);
 
   const labels: LabelLookup = {};
   for (const row of profiles ?? []) labels[row.id as string] = row.full_name as string;
   for (const row of projectRows ?? []) labels[row.id as string] = row.name as string;
+  for (const row of milestoneRows ?? []) labels[row.id as string] = row.name as string;
   return labels;
 }
 
@@ -152,6 +168,13 @@ export async function createTask(input: unknown): Promise<ActionResult> {
       approver_id: approverId ?? null,
       created_by: session.userId,
       status: status ?? "not_started",
+      // Status and completion time are one fact with two spellings. Recording
+      // work that is already finished is a supported case (P0-TSK-01), but
+      // writing `completed` without the timestamp produces a task that every
+      // report measuring completion by date cannot see — the same split-fact
+      // defect #28 repaired on `milestone`, where every completed milestone
+      // still reported `status = 'planned'`.
+      completed_at: status === "completed" ? new Date().toISOString() : null,
     })
     .select("id")
     .single();
@@ -228,7 +251,7 @@ export async function updateTaskStatus(
       completed_at: status === "completed" ? new Date().toISOString() : null,
     })
     .eq("id", taskId)
-    .select("id, title, project_id, program_id, assignee_id")
+    .select("id, title, project_id, program_id, assignee_id, blocked_reason")
     .maybeSingle();
 
   if (error || !updated) {
@@ -281,8 +304,14 @@ export async function updateTaskStatus(
     supabase,
     session,
     taskId,
-    { status: before?.status ?? null },
-    { status },
+    { status: before?.status ?? null, blocked_reason: before?.blocked_reason ?? null },
+    {
+      status,
+      // Taken from the row that was written rather than from the input, so the
+      // entry records the clearing that happens when a task leaves `blocked`
+      // as well as the reason given when it enters it.
+      blocked_reason: (updated.blocked_reason as string | null) ?? null,
+    },
     {
       title: updated.title as string,
       projectId: (updated.project_id as string | null) ?? null,
@@ -335,7 +364,7 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
   // value was, and after the update that information is gone (P0-TSK-05).
   const { data: before } = await supabase
     .from("task")
-    .select("assignee_id, due_at, status, priority, project_id")
+    .select("assignee_id, due_at, status, priority, project_id, milestone_id, reviewer_id, approver_id, completion_criteria, blocked_reason")
     .eq("id", taskId)
     .maybeSingle();
 
@@ -343,7 +372,10 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
     .from("task")
     .update(patch)
     .eq("id", taskId)
-    .select("id, title, assignee_id, project_id, program_id, due_at, status, priority")
+    // One line on purpose: supabase-js infers the row type by parsing this
+    // string literal, and a concatenation is just `string`, which collapses
+    // every field below into an error type.
+    .select("id, title, assignee_id, project_id, program_id, due_at, status, priority, milestone_id, reviewer_id, approver_id, completion_criteria, blocked_reason")
     .maybeSingle();
 
   if (error || !updated) return { ok: false, error: "Could not update the task." };
@@ -373,6 +405,11 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
       status: updated.status,
       priority: updated.priority,
       project_id: updated.project_id,
+      milestone_id: updated.milestone_id,
+      reviewer_id: updated.reviewer_id,
+      approver_id: updated.approver_id,
+      completion_criteria: updated.completion_criteria,
+      blocked_reason: updated.blocked_reason,
     },
     {
       title: updated.title as string,
@@ -494,6 +531,15 @@ export async function bulkUpdateTasks(
     if (!status) return { ok: false, error: "Pick a status." };
     patch.status = status;
     patch.completed_at = status === "completed" ? new Date().toISOString() : null;
+    // `updateTaskStatus` has always cleared these when a task leaves `blocked`;
+    // this path did not, so a bulk move off `blocked` left the old reason and
+    // the old blocker behind. The list and the board went on printing
+    // "Blocked: waiting on the venue" above a task whose status said
+    // `in_progress` — text describing a blockage that had been declared over.
+    // The bulk schema cannot express `blocked` (it needs a reason, which a
+    // bulk bar does not collect), so leaving is the only direction available.
+    patch.blocked_reason = null;
+    patch.blocked_by_id = null;
   } else if (action === "assignee") {
     if (assigneeId === undefined) return { ok: false, error: "Pick an assignee." };
     patch.assignee_id = assigneeId;
@@ -512,7 +558,7 @@ export async function bulkUpdateTasks(
   // change to each task, and each one owes its own history entry (P0-TSK-05).
   const { data: beforeRows } = await supabase
     .from("task")
-    .select("id, assignee_id, due_at, status, priority, project_id")
+    .select("id, assignee_id, due_at, status, priority, project_id, blocked_reason")
     .in("id", taskIds);
   const priorById = new Map<string, TaskFieldValues>(
     (beforeRows ?? []).map((row) => [row.id as string, row as TaskFieldValues]),

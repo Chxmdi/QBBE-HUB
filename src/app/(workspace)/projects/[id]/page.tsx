@@ -467,7 +467,7 @@ export default async function ProjectDetailPage({
             ) : (
               <div className="card overflow-hidden">
                 {openTasks.map((task) => (
-                  <TaskRow key={task.id} task={task} />
+                  <TaskRow key={task.id} task={task} timeZone={session.timeZone} />
                 ))}
                 {doneTasks.length > 0 ? (
                   <details>
@@ -475,7 +475,12 @@ export default async function ProjectDetailPage({
                       Completed ({doneTasks.length})
                     </summary>
                     {doneTasks.map((task) => (
-                      <TaskRow key={task.id} task={task} showStatusControl={false} />
+                      <TaskRow
+                        key={task.id}
+                        task={task}
+                        timeZone={session.timeZone}
+                        showStatusControl={false}
+                      />
                     ))}
                   </details>
                 ) : null}

@@ -22,6 +22,18 @@ export const TRACKED_TASK_FIELDS = [
   "status",
   "priority",
   "project_id",
+  // The five above are the ones P0-TSK-05 names by hand. These five are
+  // material by the same test and were recording a bare "updated" with empty
+  // metadata: moving a task to a different milestone changes what it counts
+  // towards, changing the reviewer or approver changes who may act on it
+  // (`app.has_task_capability` reads both columns), completion criteria change
+  // what finishing means, and a blocked reason is the explanation the whole
+  // blocked status exists to carry.
+  "milestone_id",
+  "reviewer_id",
+  "approver_id",
+  "completion_criteria",
+  "blocked_reason",
 ] as const;
 
 export type TrackedTaskField = (typeof TRACKED_TASK_FIELDS)[number];
@@ -50,7 +62,39 @@ const FIELD_LABELS: Record<TrackedTaskField, string> = {
   status: "Status",
   priority: "Priority",
   project_id: "Project",
+  milestone_id: "Milestone",
+  reviewer_id: "Reviewer",
+  approver_id: "Approver",
+  completion_criteria: "Completion criteria",
+  blocked_reason: "Blocked reason",
 };
+
+/** Fields whose stored value is an id that has to be resolved to a name. */
+const ID_FIELDS: readonly TrackedTaskField[] = [
+  "assignee_id",
+  "project_id",
+  "milestone_id",
+  "reviewer_id",
+  "approver_id",
+];
+
+/**
+ * Free text long enough to bury the rest of a history line.
+ *
+ * Completion criteria and blocked reasons are paragraphs, not values. Printing
+ * one in full turns "changed Completion criteria from … to …" into the only
+ * thing on the page, so the entry says that it changed and the drawer shows
+ * the current text. The `from`/`to` columns keep the full values either way.
+ */
+const LONG_TEXT_FIELDS: readonly TrackedTaskField[] = [
+  "completion_criteria",
+  "blocked_reason",
+];
+
+function truncate(value: string, max = 60): string {
+  const collapsed = value.replace(/\s+/g, " ").trim();
+  return collapsed.length <= max ? collapsed : `${collapsed.slice(0, max - 1)}…`;
+}
 
 function normalize(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
@@ -67,9 +111,8 @@ function displayValue(
     return TASK_STATUS_LABELS[value as TaskStatus] ?? value;
   }
   if (field === "priority") return value.charAt(0).toUpperCase() + value.slice(1);
-  if (field === "assignee_id" || field === "project_id") {
-    return labels[value] ?? null;
-  }
+  if (ID_FIELDS.includes(field)) return labels[value] ?? null;
+  if (LONG_TEXT_FIELDS.includes(field)) return truncate(value);
   return value;
 }
 

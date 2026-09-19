@@ -162,3 +162,36 @@ export function circularDependencyError(
   }
   return null;
 }
+
+/**
+ * Labels (P0-TSK-08).
+ *
+ * `label` and `task_label` have existed since `0001_core.sql`, with correct
+ * policies on both — `task_label` insert and delete are gated on
+ * `has_task_capability(task_id, 'manage' or 'collaborate')`. Nothing in the
+ * product ever wrote a row to either, so the label filter in the bar had an
+ * empty list and matched nothing no matter what was chosen. These are the
+ * missing write path, not new schema.
+ */
+export const LABEL_COLORS = [
+  "neutral",
+  "brand",
+  "info",
+  "success",
+  "warning",
+  "danger",
+] as const;
+export type LabelColor = (typeof LABEL_COLORS)[number];
+
+export const createLabelSchema = z.object({
+  // The table's unique key is (organization_id, name), so two labels differing
+  // only by surrounding space would be one label to the database and two to
+  // the reader. Trim before it can become that.
+  name: requiredText("A label needs a name.", 40),
+  color: z.enum(LABEL_COLORS).default("neutral"),
+});
+
+export const taskLabelSchema = z.object({
+  taskId: z.string().uuid(),
+  labelId: z.string().uuid(),
+});
