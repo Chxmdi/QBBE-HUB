@@ -6,13 +6,20 @@ GitHub Project is the canonical PM surface. Repository Issues/PRs remain the dur
 
 ## Required repository configuration
 
-Set repository variable:
-- `QBBE_PROJECT_URL` = canonical GitHub Project URL
+`gh` must be authenticated with the `project` scope (see below). Nothing else is
+required.
 
-Set repository secret:
-- `QBBE_PROJECT_PAT` = fine-grained/classic token able to add items to and update the Project
+There is no auto-add workflow. `.github/workflows/project-sync.yml` used to add
+each newly opened Issue and pull request to the Project, and failed by design
+whenever the repository variable `QBBE_PROJECT_URL` was unset — which it never
+was. The result was a required check that was red on every Issue and every pull
+request in the repository's history, which is how people learn to ignore checks.
+It was removed rather than configured, because nothing here depends on the board
+being current within seconds.
 
-`.github/workflows/project-sync.yml` auto-adds newly opened/reopened Issues and PRs to the Project.
+Reconciling the board is a deliberate act: re-run the bootstrap script below. It
+is idempotent, so running it after a batch of work is filed is the intended way
+to catch the board up.
 
 ## Bootstrap existing canonical work
 
@@ -72,7 +79,7 @@ Create these Project views:
 
 - every canonical Issue is visible in the Project
 - every pull request is visible, including PR #9 and PR #10
-- new test Issue/PR is auto-added by workflow
+- a newly filed Issue/PR appears on the board after the bootstrap script is re-run
 - all required fields exist
 - Status options match exactly
 - all nine views exist and filter/group correctly
