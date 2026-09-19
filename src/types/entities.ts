@@ -88,6 +88,10 @@ export interface Project {
   archived_at: string | null;
   owner?: Profile | null;
   program?: Pick<Program, "id" | "name"> | null;
+  sponsor_id?: string | null;
+  sponsor?: { id: string; full_name: string; avatar_url: string | null } | null;
+  priority?: string | null;
+  reporting_cadence?: string | null;
 }
 
 export interface Milestone {

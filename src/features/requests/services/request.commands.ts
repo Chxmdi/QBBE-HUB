@@ -5,13 +5,15 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
-  REFUSED_REQUEST_STATUSES,
   createProjectRequestSchema,
   decideApprovalSchema,
   decideProjectRequestSchema,
+  isDecidedRequest,
+  REQUEST_STATUS_LABELS,
   requestApprovalSchema,
   updateProjectRequestSchema,
 } from "@/features/requests/schemas";
+import type { ProjectRequestStatus } from "@/features/requests/schemas";
 
 /**
  * Intake writes.
@@ -54,6 +56,31 @@ async function notify(
     { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
   );
 }
+
+/**
+ * The minute a decision was taken, used inside notification dedupe keys.
+ *
+ * `notify` upserts on (user_id, dedupe_key) and ignores duplicates, so a key
+ * that names only the request silently swallows every decision after the
+ * first. That was harmless while a request could only be settled once; it
+ * stops being harmless now that a request can be returned, answered, returned
+ * again and finally approved. Including the minute keeps a repeated form
+ * submission quiet without ever losing a real decision.
+ */
+function decisionStamp(at: Date = new Date()): string {
+  return at.toISOString().slice(0, 16);
+}
+
+/** What the requester is told, per decision. */
+const DECISION_NOTICE: Record<ProjectRequestStatus, string | null> = {
+  submitted: null,
+  in_review: "Someone is looking at it",
+  approved: "Approved",
+  declined: "Not going ahead",
+  withdrawn: "Not going ahead",
+  deferred: "Deferred for now",
+  returned: "More information needed",
+};
 
 export async function submitProjectRequest(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
@@ -100,7 +127,7 @@ export async function submitProjectRequest(input: unknown): Promise<ActionResult
 }
 
 export async function updateProjectRequest(input: unknown): Promise<ActionResult> {
-  await requireSession();
+  const session = await requireSession();
   const parsed = updateProjectRequestSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
@@ -122,6 +149,29 @@ export async function updateProjectRequest(input: unknown): Promise<ActionResult
   }
 
   const supabase = await createSupabaseServerClient();
+  const { data: existing } = await supabase
+    .from("project_request")
+    .select("id, title, status, requested_by, decided_by")
+    .eq("id", requestId)
+    .maybeSingle();
+
+  if (!existing) {
+    return { ok: false, error: "That request is not available to you." };
+  }
+
+  // Answering a return puts the request back in the queue. Leaving it at
+  // 'returned' would mean the reviewer who asked for more information is
+  // never told it arrived, and the row would sit in the open queue looking
+  // like it was still waiting on the author. The decision fields are cleared
+  // because `open_requests_have_no_decision` refuses a submitted request that
+  // still carries one.
+  const resubmitting = existing.status === "returned";
+  if (resubmitting) {
+    patch.status = "submitted";
+    patch.decided_by = null;
+    patch.decided_at = null;
+  }
+
   const { data: updated, error } = await supabase
     .from("project_request")
     .update(patch)
@@ -129,12 +179,23 @@ export async function updateProjectRequest(input: unknown): Promise<ActionResult
     .select("id");
 
   if (error || (updated ?? []).length === 0) {
-    // The edit policy only covers your own request while it is untouched, so
-    // "no rows" here means it has already been picked up.
+    // The edit policy covers your own request while it is submitted or
+    // returned, so "no rows" here means it has already been picked up.
     return {
       ok: false,
       error: "That request can no longer be edited — it is already being reviewed.",
     };
+  }
+
+  if (resubmitting) {
+    await notify(supabase, {
+      userId: existing.decided_by as string | null,
+      actorId: session.userId,
+      organizationId: session.organizationId,
+      title: `Answered and back with you: ${existing.title}`,
+      link: `/requests?request=${requestId}`,
+      dedupeKey: `request-resubmitted:${requestId}:${decisionStamp()}`,
+    });
   }
 
   revalidatePath("/requests");
@@ -200,14 +261,19 @@ export async function decideProjectRequest(input: unknown): Promise<ActionResult
     return { ok: true, id: projectId as string };
   }
 
-  const settling = REFUSED_REQUEST_STATUSES.includes(status);
+  // Deferring and returning are decisions, not a return to the untouched
+  // state: `decided_requests_are_attributable` refuses either one without a
+  // named decider and a date, and `open_requests_have_no_decision` refuses
+  // 'submitted' or 'in_review' carrying one.
+  const decided = isDecidedRequest(status);
+  const decidedAt = new Date();
   const { data: updated, error } = await supabase
     .from("project_request")
     .update({
       status,
       decision_note: decisionNote || null,
-      decided_by: settling ? session.userId : null,
-      decided_at: settling ? new Date().toISOString() : null,
+      decided_by: decided ? session.userId : null,
+      decided_at: decided ? decidedAt.toISOString() : null,
     })
     .eq("id", requestId)
     .select("id");
@@ -216,16 +282,30 @@ export async function decideProjectRequest(input: unknown): Promise<ActionResult
     return { ok: false, error: "That decision could not be recorded." };
   }
 
-  if (settling) {
+  const notice = DECISION_NOTICE[status];
+  if (notice) {
     await notify(supabase, {
       userId: existing.requested_by as string,
       actorId: session.userId,
       organizationId: session.organizationId,
-      title: `Not going ahead: ${existing.title}`,
+      title: `${notice}: ${existing.title}`,
       link: `/requests?request=${requestId}`,
-      dedupeKey: `request-decided:${requestId}`,
+      // Returning a request is the one decision that asks the requester to do
+      // something, so it is worth interrupting them for.
+      urgency: status === "returned" ? "high" : "normal",
+      dedupeKey: `request-decided:${requestId}:${status}:${decisionStamp(decidedAt)}`,
     });
   }
+
+  await supabase.from("activity_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    verb: "decided",
+    source_type: "project_request",
+    source_id: requestId,
+    summary: `moved “${existing.title}” to ${REQUEST_STATUS_LABELS[status].toLowerCase()}`,
+    metadata: { status, from: existing.status },
+  });
 
   revalidatePath("/requests");
   return { ok: true, id: requestId };

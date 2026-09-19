@@ -31,10 +31,14 @@ export function ProjectCreateDialog({
     const result = await createProject({
       name: form.get("name"),
       outcome: (form.get("outcome") as string) || undefined,
+      description: (form.get("description") as string) || undefined,
       programId: (form.get("programId") as string) || undefined,
       ownerId: (form.get("ownerId") as string) || undefined,
+      sponsorId: (form.get("sponsorId") as string) || undefined,
       startDate: (form.get("startDate") as string) || undefined,
       targetDate: (form.get("targetDate") as string) || undefined,
+      priority: form.get("priority"),
+      reportingCadence: form.get("reportingCadence"),
       stage: form.get("stage"),
     });
     setSaving(false);
@@ -71,6 +75,15 @@ export function ProjectCreateDialog({
               placeholder="What clear result should this project deliver?"
             />
           </div>
+          <div>
+            <Label htmlFor="project-description">Description</Label>
+            <Textarea
+              id="project-description"
+              name="description"
+              maxLength={5000}
+              placeholder="Background a newcomer would need."
+            />
+          </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="project-program">Program</Label>
@@ -95,12 +108,40 @@ export function ProjectCreateDialog({
               </Select>
             </div>
             <div>
+              <Label htmlFor="project-sponsor">Sponsor</Label>
+              <Select id="project-sponsor" name="sponsorId" defaultValue="">
+                <option value="">No sponsor</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="project-priority">Priority</Label>
+              <Select id="project-priority" name="priority" defaultValue="medium">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </Select>
+            </div>
+            <div>
               <Label htmlFor="project-start">Start date</Label>
               <Input id="project-start" name="startDate" type="date" />
             </div>
             <div>
               <Label htmlFor="project-target">Target date</Label>
               <Input id="project-target" name="targetDate" type="date" />
+            </div>
+            <div>
+              <Label htmlFor="project-cadence">Reporting cadence</Label>
+              <Select id="project-cadence" name="reportingCadence" defaultValue="none">
+                <option value="none">As needed</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </Select>
             </div>
             <div>
               <Label htmlFor="project-stage">Stage</Label>

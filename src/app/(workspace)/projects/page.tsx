@@ -8,7 +8,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ProjectCreateDialog } from "@/features/projects/components/project-create-dialog";
 import { CreateFromTemplateButton } from "@/features/projects/components/create-from-template";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
-import { createProjectTemplate } from "@/features/admin/services/workflow.commands";
+import {
+  createProjectTemplate,
+  listProjectTemplates,
+} from "@/features/admin/services/workflow.commands";
+import { ProjectTemplateManager } from "@/features/projects/components/project-template-manager";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -21,11 +25,16 @@ export const dynamic = "force-dynamic";
 export default async function ProjectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ create?: string; stage?: string }>;
+  searchParams: Promise<{ create?: string; stage?: string; archived?: string }>;
 }) {
   const session = await requireSession();
   const params = await searchParams;
   const supabase = await createSupabaseServerClient();
+
+  // Without this, an archived project is reachable only by someone who already
+  // knows its URL, so restoring one is effectively impossible through the
+  // product. The programs directory already had this; projects did not.
+  const archived = params.archived === "1";
 
   let query = supabase
     .from("project")
@@ -33,17 +42,21 @@ export default async function ProjectsPage({
       "id, program_id, name, outcome, stage, health, health_reason, start_date, target_date, created_at, archived_at, owner_id, description, " +
         "owner:owner_id(id, full_name, email, avatar_url, title, timezone), program:program_id(id, name)",
     )
-    .is("archived_at", null)
     .order("created_at", { ascending: false })
     .limit(100);
+  query = archived
+    ? query.not("archived_at", "is", null)
+    : query.is("archived_at", null);
   if (params.stage) query = query.eq("stage", params.stage);
 
-  const [{ data: projects }, options, { data: programs }, { data: templates }] = await Promise.all([
-    query,
-    getPickerOptions(),
-    supabase.from("program").select("id, name").eq("status", "active").order("name"),
-    supabase.from("project_template").select("id, name").order("name"),
-  ]);
+  const [{ data: projects }, options, { data: programs }, templateStructures] =
+    await Promise.all([
+      query,
+      getPickerOptions(),
+      supabase.from("program").select("id, name").eq("status", "active").order("name"),
+      listProjectTemplates(),
+    ]);
+  const templates = templateStructures.map((t) => ({ id: t.id, name: t.name }));
 
   const projectList = (projects ?? []) as unknown as Project[];
 
@@ -56,9 +69,7 @@ export default async function ProjectsPage({
         actions={
           session.isStaff ? (
             <div className="flex flex-wrap items-center gap-2">
-              <CreateFromTemplateButton
-                templates={(templates ?? []) as { id: string; name: string }[]}
-              />
+              <CreateFromTemplateButton templates={templates} />
               <EntityFormDialog
                 triggerLabel="Save template"
                 triggerVariant="secondary"
@@ -80,11 +91,32 @@ export default async function ProjectsPage({
         }
       />
 
+      <nav aria-label="Project archive" className="mb-6 flex gap-4 text-sm">
+        <Link
+          href="/projects"
+          aria-current={!archived ? "page" : undefined}
+          className="hover:underline"
+        >
+          Current projects
+        </Link>
+        <Link
+          href="/projects?archived=1"
+          aria-current={archived ? "page" : undefined}
+          className="hover:underline"
+        >
+          Archived projects
+        </Link>
+      </nav>
+
       {projectList.length === 0 ? (
         <EmptyState
           icon={<FolderKanban />}
-          title="Your first program starts here"
-          description="A project brings tasks, meetings, communication, and reporting together around one clear outcome with an accountable owner."
+          title={archived ? "No archived projects" : "Your first program starts here"}
+          description={
+            archived
+              ? "Archived projects stay here so they can be reviewed and restored."
+              : "A project brings tasks, meetings, communication, and reporting together around one clear outcome with an accountable owner."
+          }
         />
       ) : (
         <div className="card overflow-hidden">
@@ -149,6 +181,10 @@ export default async function ProjectsPage({
           </div>
         </div>
       )}
+
+      {session.isStaff && !archived ? (
+        <ProjectTemplateManager templates={templateStructures} />
+      ) : null}
     </div>
   );
 }

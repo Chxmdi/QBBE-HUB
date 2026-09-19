@@ -4,11 +4,14 @@ import { describe, expect, it } from "vitest";
 import {
   OPEN_REQUEST_STATUSES,
   PROJECT_REQUEST_STATUSES,
+  DECIDED_REQUEST_STATUSES,
+  EXPLAINED_REQUEST_STATUSES,
   REFUSED_REQUEST_STATUSES,
   STALE_AFTER_DAYS,
   createProjectRequestSchema,
   daysWaiting,
   decideApprovalSchema,
+  isDecidedRequest,
   decideProjectRequestSchema,
   isOpenRequest,
   requestApprovalSchema,
@@ -53,6 +56,30 @@ describe("request statuses", () => {
       expect(constraint).toContain(`'${status}'`);
     }
     expect(constraint).not.toContain("'approved'");
+  });
+
+  it("calls exactly the statuses the database demands a decider for decided", () => {
+    // `decided_requests_are_attributable` exempts submitted and in_review and
+    // requires decided_by/decided_at for everything else. Getting this set
+    // wrong is not a cosmetic error: it writes a row the database refuses.
+    expect([...DECIDED_REQUEST_STATUSES].sort()).toEqual(
+      PROJECT_REQUEST_STATUSES.filter(
+        (status) => status !== "submitted" && status !== "in_review",
+      ).sort(),
+    );
+    expect(isDecidedRequest("deferred")).toBe(true);
+    expect(isDecidedRequest("returned")).toBe(true);
+    expect(isDecidedRequest("in_review")).toBe(false);
+  });
+
+  it("keeps deferred and returned open — they are still somebody's work", () => {
+    expect(isOpenRequest("deferred")).toBe(true);
+    expect(isOpenRequest("returned")).toBe(true);
+    // Which makes them the two statuses that are both open and decided.
+    const both = PROJECT_REQUEST_STATUSES.filter(
+      (status) => isOpenRequest(status) && isDecidedRequest(status),
+    );
+    expect(both.sort()).toEqual(["deferred", "returned"]);
   });
 });
 
@@ -112,6 +139,33 @@ describe("deciding a request", () => {
       decideProjectRequestSchema.safeParse({ requestId: ID, status: "approved" })
         .success,
     ).toBe(true);
+  });
+
+  it("refuses to defer or return without saying why", () => {
+    // A deferral that does not say until when, and a return that does not say
+    // what is missing, both leave the requester with nothing to act on.
+    for (const status of ["deferred", "returned"] as const) {
+      expect(
+        decideProjectRequestSchema.safeParse({ requestId: ID, status }).success,
+      ).toBe(false);
+      expect(
+        decideProjectRequestSchema.safeParse({
+          requestId: ID,
+          status,
+          decisionNote: "The budget line is missing.",
+        }).success,
+      ).toBe(true);
+    }
+  });
+
+  it("asks for a reason on every status that hands the request back", () => {
+    for (const status of PROJECT_REQUEST_STATUSES) {
+      const withoutNote = decideProjectRequestSchema.safeParse({
+        requestId: ID,
+        status,
+      }).success;
+      expect(withoutNote).toBe(!EXPLAINED_REQUEST_STATUSES.includes(status));
+    }
   });
 });
 

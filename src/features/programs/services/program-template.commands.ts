@@ -6,7 +6,7 @@ import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requiredText } from "@/lib/schema";
 import { calendarDateInZone } from "@/lib/time";
-import { planTemplateItems, type TemplateItem } from "@/features/programs/template-plan";
+import { expandProjectTemplate } from "@/features/projects/services/template-expansion";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const createSchema = z.object({
@@ -109,11 +109,6 @@ export async function createProgramFromTemplate(
   const { createProgram, createProject } = await import(
     "@/features/projects/services/project.commands"
   );
-  const { createMilestone } = await import(
-    "@/features/projects/services/milestone.commands"
-  );
-  const { createTask } = await import("@/features/tasks/services/task.commands");
-
   // createProgram also provisions the program channel, so instantiation and
   // ordinary creation produce the same shape of program rather than two.
   const created = await createProgram({
@@ -164,31 +159,11 @@ export async function createProgramFromTemplate(
     });
     if (!project.ok || !project.id) continue;
 
-    const { data: items } = await db
-      .from("project_template_item")
-      .select("kind, name, description, day_offset, sort_key")
-      .eq("project_template_id", projectTemplate.id)
-      .order("sort_key");
-
-    for (const planned of planTemplateItems(
-      (items ?? []) as unknown as TemplateItem[],
+    await expandProjectTemplate({
+      projectTemplateId: projectTemplate.id,
+      projectId: project.id,
       startDate,
-    )) {
-      if (planned.kind === "milestone") {
-        await createMilestone({
-          projectId: project.id,
-          name: planned.name,
-          dueDate: planned.dueDate ?? "",
-        });
-      } else {
-        await createTask({
-          title: planned.name,
-          description: planned.description ?? undefined,
-          projectId: project.id,
-          dueAt: planned.dueDate ?? undefined,
-        });
-      }
-    }
+    });
   }
 
   revalidatePath("/programs");

@@ -8,6 +8,7 @@ import { DeepLinkScroll } from "@/components/shared/deep-link-scroll";
 import { LinkTabs } from "@/components/shared/link-tabs";
 import { HealthBadge } from "@/components/shared/status-badges";
 import { CloseProjectDialog } from "@/features/projects/components/close-project-dialog";
+import { ProjectEditDialog } from "@/features/projects/components/project-edit-dialog";
 import { CompleteMilestoneButton } from "@/features/projects/components/complete-milestone-button";
 import { createMilestone } from "@/features/projects/services/milestone.commands";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
@@ -60,7 +61,9 @@ export default async function ProjectDetailPage({
     .from("project")
     .select(
       "id, program_id, name, outcome, description, stage, health, health_reason, start_date, target_date, created_at, archived_at, owner_id, " +
-        "owner:owner_id(id, full_name, email, avatar_url, title, timezone), program:program_id(id, name)",
+        "sponsor_id, priority, reporting_cadence, " +
+        "owner:owner_id(id, full_name, email, avatar_url, title, timezone), " +
+        "sponsor:sponsor_id(id, full_name, avatar_url), program:program_id(id, name)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -81,6 +84,11 @@ export default async function ProjectDetailPage({
     options,
     raidLog,
     { data: comments },
+    { data: grants },
+    { data: documents },
+    { data: meetings },
+    { data: channel },
+    { data: closure },
   ] = await Promise.all([
     supabase
       .from("milestone")
@@ -121,7 +129,78 @@ export default async function ProjectDetailPage({
       .eq("parent_id", id)
       .order("created_at", { ascending: true })
       .limit(50),
+    // P0-PRJ-03 names team, files, meetings and the project channel. All four
+    // are stored against the project and none of them was read on this page.
+    supabase
+      .from("project_access_grant")
+      .select("user_id, role, source, member:user_id(id, full_name, avatar_url, title)")
+      .eq("project_id", id)
+      .order("role"),
+    supabase
+      .from("document")
+      .select("id, title, created_at")
+      .eq("project_id", id)
+      .order("created_at", { ascending: false })
+      .limit(10),
+    supabase
+      .from("meeting")
+      .select("id, title, starts_at, status")
+      .eq("project_id", id)
+      .order("starts_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("channel")
+      .select("id, name, slug")
+      .eq("project_id", id)
+      .maybeSingle(),
+    // How it ended, and the evidence for it (P1-PRJ-08). Null until closed.
+    supabase
+      .from("project_closure")
+      .select(
+        "id, results, lessons, evidence_links, closed_at, " +
+          "closer:closed_by(id, full_name), " +
+          "evidence:project_closure_document(document:document_id(id, title))",
+      )
+      .eq("project_id", id)
+      .maybeSingle(),
   ]);
+
+  type TeamGrant = {
+    user_id: string;
+    role: string;
+    source: string;
+    member: { full_name: string; avatar_url: string | null; title: string | null } | null;
+  };
+  const teamGrants = (grants ?? []) as unknown as TeamGrant[];
+  const projectDocuments = (documents ?? []) as unknown as {
+    id: string;
+    title: string;
+    created_at: string;
+  }[];
+  const projectMeetings = (meetings ?? []) as unknown as {
+    id: string;
+    title: string;
+    starts_at: string;
+    status: string;
+  }[];
+  const projectChannel = channel as unknown as { id: string; name: string; slug: string } | null;
+  const projectClosure = closure as unknown as {
+    id: string;
+    results: string;
+    lessons: string | null;
+    evidence_links: { label: string; url: string }[];
+    closed_at: string;
+    closer: { id: string; full_name: string } | null;
+    evidence: { document: { id: string; title: string } | null }[];
+  } | null;
+
+  const milestoneList = (milestones ?? []) as unknown as Milestone[];
+  const completedMilestones = milestoneList.filter((m) => m.completed_at).length;
+  // "Progress signals" in P0-PRJ-03 was only an open-task count on a tab badge.
+  // Milestone burn is the signal a reader actually asks for.
+  const nextMilestone = milestoneList
+    .filter((m) => !m.completed_at && m.due_date)
+    .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))[0];
 
   const taskList = (tasks ?? []) as unknown as Task[];
   const openTasks = taskList.filter(
@@ -145,11 +224,17 @@ export default async function ProjectDetailPage({
             <>
               {canManage ? (
                 <>
+                  <ProjectEditDialog
+                    project={project as unknown as Parameters<typeof ProjectEditDialog>[0]["project"]}
+                    programs={options.programs}
+                    people={options.people}
+                  />
                   <StageSelect projectId={project.id} stage={project.stage} />
                   {project.stage !== "completed" && project.stage !== "archived" ? (
                     <CloseProjectDialog
                       projectId={project.id}
                       projectName={project.name}
+                      documents={projectDocuments}
                     />
                   ) : null}
                 </>
@@ -177,6 +262,51 @@ export default async function ProjectDetailPage({
             </span>
           ) : (
             <span className="text-[13.5px] text-warning-fg">Unassigned</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="meta">Progress</span>
+          <span className="text-[13.5px] font-medium">
+            {milestoneList.length > 0
+              ? `${completedMilestones}/${milestoneList.length} milestones`
+              : "No milestones"}
+            {openTasks.length > 0 ? ` · ${openTasks.length} open tasks` : ""}
+          </span>
+        </div>
+        {nextMilestone ? (
+          <div className="flex items-center gap-2">
+            <span className="meta">Next milestone</span>
+            <span className="text-[13.5px] font-medium">
+              {nextMilestone.name} · {formatDate(nextMilestone.due_date)}
+            </span>
+          </div>
+        ) : null}
+        {projectChannel ? (
+          <div className="flex items-center gap-2">
+            <span className="meta">Channel</span>
+            <Link
+              href={`/channels/${projectChannel.id}`}
+              className="text-[13.5px] font-medium hover:text-brand-fg hover:underline"
+            >
+              #{projectChannel.slug}
+            </Link>
+          </div>
+        ) : null}
+        {/* P0-PRJ-02 names a sponsor beside the accountable owner. It is a
+            column on project, not one of the scoped roles. */}
+        <div className="flex items-center gap-2">
+          <span className="meta">Sponsor</span>
+          {project.sponsor ? (
+            <span className="flex items-center gap-1.5 text-[13.5px] font-medium">
+              <Avatar
+                name={project.sponsor.full_name}
+                src={project.sponsor.avatar_url}
+                size="sm"
+              />
+              {project.sponsor.full_name}
+            </span>
+          ) : (
+            <span className="text-[13.5px] text-muted">Not named</span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -217,6 +347,12 @@ export default async function ProjectDetailPage({
             count: raidLog.openCount,
           },
           {
+            id: "team",
+            label: "Team",
+            href: `/projects/${project.id}?tab=team`,
+            count: teamGrants.length,
+          },
+          {
             id: "activity",
             label: "Activity",
             href: `/projects/${project.id}?tab=activity`,
@@ -232,6 +368,78 @@ export default async function ProjectDetailPage({
         }
       >
         <div className="space-y-8">
+          {/* How it ended. Shown first on a closed project, because on a closed
+              project it is the answer to the question the reader came with. */}
+          {projectClosure ? (
+            <section
+              aria-labelledby="project-closure"
+              className={tab === "overview" || tab === "updates" ? "" : "hidden"}
+            >
+              <h2 id="project-closure" className="section-heading mb-3">
+                How it ended
+              </h2>
+              <div className="card space-y-3 p-4">
+                <p className="meta">
+                  Closed {formatDate(projectClosure.closed_at)}
+                  {projectClosure.closer
+                    ? ` by ${projectClosure.closer.full_name}`
+                    : ""}
+                </p>
+                <div>
+                  <h3 className="text-[13px] font-medium text-muted">
+                    What it delivered
+                  </h3>
+                  <p className="mt-0.5 whitespace-pre-line text-[13.5px]">
+                    {projectClosure.results}
+                  </p>
+                </div>
+                {projectClosure.lessons ? (
+                  <div>
+                    <h3 className="text-[13px] font-medium text-muted">
+                      Lessons learned
+                    </h3>
+                    <p className="mt-0.5 whitespace-pre-line text-[13.5px]">
+                      {projectClosure.lessons}
+                    </p>
+                  </div>
+                ) : null}
+                {projectClosure.evidence_links.length > 0 ||
+                projectClosure.evidence.length > 0 ? (
+                  <div>
+                    <h3 className="text-[13px] font-medium text-muted">Evidence</h3>
+                    <ul className="mt-0.5 space-y-0.5 text-[13.5px]">
+                      {projectClosure.evidence_links.map((link) => (
+                        <li key={link.url}>
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-brand-fg hover:underline"
+                          >
+                            {link.label}
+                          </a>
+                        </li>
+                      ))}
+                      {projectClosure.evidence
+                        .map((row) => row.document)
+                        .filter((document) => document !== null)
+                        .map((document) => (
+                          <li key={document.id}>
+                            <Link
+                              href={`/documents?document=${document.id}`}
+                              className="font-medium text-brand-fg hover:underline"
+                            >
+                              {document.title}
+                            </Link>
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
           {/* Tasks */}
           <section
             aria-labelledby="project-tasks"
@@ -325,6 +533,12 @@ export default async function ProjectDetailPage({
                         {update.decisions_needed}
                       </p>
                     ) : null}
+                    {update.help_requested ? (
+                      <p className="mt-1 text-[13px]">
+                        <span className="font-medium">Help requested:</span>{" "}
+                        {update.help_requested}
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ol>
@@ -411,6 +625,110 @@ export default async function ProjectDetailPage({
             )}
           </section>
         </div>
+
+        {tab === "overview" ? (
+          <section aria-labelledby="project-links" className="space-y-8">
+            <div>
+              <h2 id="project-links" className="section-heading mb-3">
+                Files
+              </h2>
+              {projectDocuments.length === 0 ? (
+                <p className="card px-4 py-6 text-center text-[13px] text-muted">
+                  No files linked to this project.
+                </p>
+              ) : (
+                <ul className="card divide-y divide-line">
+                  {projectDocuments.map((document) => (
+                    <li key={document.id} className="px-4 py-2.5">
+                      <Link
+                        href={`/documents?document=${document.id}`}
+                        className="text-[13.5px] font-medium hover:text-brand-fg"
+                      >
+                        {document.title}
+                      </Link>
+                      <p className="meta">{relativeTime(document.created_at)}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <h2 className="section-heading mb-3">Meetings</h2>
+              {projectMeetings.length === 0 ? (
+                <p className="card px-4 py-6 text-center text-[13px] text-muted">
+                  No meetings linked to this project.
+                </p>
+              ) : (
+                <ul className="card divide-y divide-line">
+                  {projectMeetings.map((meeting) => (
+                    <li key={meeting.id} className="px-4 py-2.5">
+                      <Link
+                        href={`/meetings/${meeting.id}`}
+                        className="text-[13.5px] font-medium hover:text-brand-fg"
+                      >
+                        {meeting.title}
+                      </Link>
+                      <p className="meta">{formatDate(meeting.starts_at)}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {/* P0-PRJ-02/03: who is on this project, and how they got here. Like the
+            program team panel this is read-only — granting project access is an
+            AAL2 administrator action, and a project manager holds `manage`. */}
+        {tab === "team" ? (
+          <section aria-labelledby="project-team-tab">
+            <h2 id="project-team-tab" className="section-heading mb-3">
+              Team
+            </h2>
+            {teamGrants.length === 0 ? (
+              <p className="card px-4 py-6 text-center text-[13px] text-muted">
+                Nobody holds explicit access to this project yet. The owner
+                manages it through ownership.
+              </p>
+            ) : (
+              <ul className="card divide-y divide-line">
+                {teamGrants.map((grant) => (
+                  <li
+                    key={`${grant.user_id}:${grant.role}:${grant.source}`}
+                    className="flex items-center gap-2.5 px-4 py-2.5"
+                  >
+                    <Avatar
+                      name={grant.member?.full_name ?? "Unknown"}
+                      src={grant.member?.avatar_url ?? null}
+                      size="sm"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13.5px] font-medium">
+                        {grant.member?.full_name ?? "Unknown member"}
+                      </span>
+                      <span className="meta">
+                        {grant.role.replaceAll("_", " ")}
+                        {grant.source === "direct"
+                          ? ""
+                          : ` · via ${grant.source.replaceAll("_", " ")}`}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canManage ? (
+              <p className="meta mt-2">
+                Access is granted by an administrator in{" "}
+                <Link href="/admin/access" className="hover:underline">
+                  access administration
+                </Link>
+                .
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         {/* Activity gets its own full-width tab */}
         {tab === "activity" ? (
