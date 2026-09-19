@@ -23,6 +23,107 @@ Resume the next action below. Confirm existing changes and verification before
 editing. Reconcile intervening work; repeat only invalidated checks. Do not
 restart the audit or treat an earlier summary as evidence of completion.
 
+## Current feature: milestones — owner, status, evidence and order
+
+Issue #28, on `28-milestones-owner-status-evidence-order` at `37dc714`, stacked
+on #27.
+
+### What was wrong before
+
+`owner_id`, `description`, `status` and `evidence` have been columns on
+`milestone` since `20260912040000`. **Not one line of application code read or
+wrote any of them.** That is not a missing form; it left two problems in the
+data:
+
+1. **Completion had two representations that could disagree.**
+   `completeMilestone` set `completed_at` and never touched `status`, so a
+   completed milestone still reported `status = 'planned'`. Every completed
+   milestone in the database was already inconsistent. Whichever spelling a
+   future reader picked — a report, a roll-up, a filter — half the product
+   would have disagreed with it.
+2. **A milestone could be completed with nothing to show for it.** The issue's
+   definition of done is that completion evidence persists and is visible after
+   a refresh, which is only meaningful if completing requires some.
+
+`sort_key` was a third: stored, selected, ordered by nothing and settable by
+nobody. Every milestone created through the application landed on the default
+`0`, so "ordered milestones" was ordered by `due_date` alone.
+
+### Decisions worth stating
+
+**The trigger, not the application, keeps `status` and `completed_at` in step.**
+Whichever side a caller writes, the other follows. A caller that only knows
+about `completed_at` — every existing one — still leaves the row consistent,
+which is what makes this a repair of the data rather than a new convention that
+the old code quietly violates.
+
+**The evidence constraint is `NOT VALID`.** Rows completed before this are
+grandfathered rather than retro-fitted with invented evidence. `NOT VALID` only
+skips the initial table scan; every insert and update from here on is checked.
+
+**Reopening clears the evidence.** Evidence for a completion that was undone is
+evidence for nothing, and leaving it would satisfy the next completion without
+anybody having looked at it.
+
+**`missed` is checked in the command and deliberately not in the database.**
+The only clock a trigger has is the server's, and `current_date` is UTC. A
+milestone due today in Toronto is already "yesterday" in UTC after 20:00, so a
+database rule would let it be marked missed while it was still due — the exact
+off-by-one recorded against #30 and reproduced once already in this epic.
+
+**Reorder is move-up/move-down, not drag.** The board shipped a drag-only
+reorder in #30 that no keyboard could operate. That is a recorded precedent,
+not a hypothetical.
+
+### A defect in the local server, not in this work
+
+Three browser runs failed part-way through with `ERR_CONNECTION_REFUSED`. The
+cause is not the application: **the local `next start` process crashes**, exit
+code `-1073740791` (`0xC0000409`, Windows fast-fail), after a run of
+`Error: The destination stream closed early` — Playwright aborting streaming
+navigations. Putting the server under a supervisor that records every exit made
+the correlation exact: 3 crashes produced 3 failures, then 1 crash produced 1
+failure, then two runs with 0 crashes passed 34 of 34.
+
+It predates this branch and is not caused by it, but it is worth its own
+investigation: a production server that hard-crashes when clients disconnect
+mid-stream is an availability problem that a process manager would hide rather
+than fix. Nothing here works around it in product code.
+
+One earlier full-suite run took 1.4 hours instead of the usual 4 minutes and
+timed out one identity check; the same spec then passed 4 of 4 in 48 seconds.
+That one was the machine, not the code, and is recorded so the slow run is not
+mistaken for a flake in the suite.
+
+### Evidence
+
+Commit `37dc714`. Clean `supabase db reset` over the full chain through
+`20260919120000`, then `npm run db:seed`, against the production build on
+127.0.0.1:3000, Chromium.
+
+- Database chain: **381 assertions, exit 0**, across 14 files — 363 before.
+- `supabase db advisors --local --type security --fail-on error`: no issues.
+- Unit: 480 passed across 54 files, from 467.
+- Chromium: `milestones` 4 passed; the whole authenticated set — `mfa`,
+  `realtime-revocation`, `hello-hub`, `access-impact`, `my-work`,
+  `identity-lifecycle`, `programs`, `projects`, `milestones` — **34 passed,
+  twice consecutively with zero server crashes**, with the server confirmed
+  answering after each run.
+- Lint clean apart from the pre-existing `no-img-element` warning; typecheck clean.
+
+Three defects in the new spec were found in a browser and fixed: two labels
+matched hidden `<option>` elements rather than the visible value, and adding
+three milestones in a row raced the page refresh, so the third was asserted
+before it rendered.
+
+### Not done
+
+The closing status update still quotes a project's results narrative into the
+updates feed, unchanged from #27. Milestone dependencies belong to #31, not
+here. Hosted staging evidence stays with #55. The remaining Epic 02 issues are
+#71 task-core defects and #31 advanced task planning, after which
+`docs/audit/02-work-management.md` needs correcting.
+
 ## Current feature: projects — editing, archive, intake decisions, closure, duplication
 
 Issue #27, on `12-epic-02-programs-projects-milestones-tasks` at `bc0ba39`.
