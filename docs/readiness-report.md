@@ -5,12 +5,12 @@ verification is blocked. No staging release candidate has been certified.
 
 | Release item | Current evidence |
 |---|---|
-| Candidate | Uncommitted work on `11-epic-01-identity-access-security-mfa`; no frozen release SHA |
+| Candidate | `ce76227` on `11-epic-01-identity-access-security-mfa`. Epic 01 is committed and frozen; it is a verification candidate, not a certified release |
 | Staging | No QBBE staging deployment provisioned in this session |
 | Production | No publishing authorized by this plan; keep release disabled |
-| Code checks | Node 22 lint, typecheck, focused MFA unit tests, and production build pass on the current working tree; final full-suite rerun is pending |
-| Database | Clean local reset applied migrations through `20260918214957`; the full database/RLS suite passes and the security advisor reports no errors |
-| Browsers | Real local Auth MFA checks pass 3/3, including AAL1/AAL2 Data API enforcement and stale sessions; local open-socket Realtime revocation passes. Hosted staging and local WebKit evidence remain outstanding |
+| Code checks | At `ce76227`: lint clean apart from the pre-existing `no-img-element` warning, typecheck clean, `npm test` 446 passed across 51 files, production build passed |
+| Database | Clean local reset applied migrations through `20260918214957`; `npm run test:db` 315 assertions, exit 0; `supabase db advisors --local --type security --fail-on error` reports no issues |
+| Browsers | 20 authenticated Chromium checks passed twice consecutively against real local Auth (`mfa`, `realtime-revocation`, `hello-hub`, `access-impact`, `my-work`, `identity-lifecycle`), with the server confirmed answering after each run. Hosted staging, Firefox and WebKit evidence remain outstanding |
 | Full acceptance | See acceptance-matrix.md; no overall acceptance certification |
 | Operations | Document quarantine is enforced in code/RLS, but a QBBE-controlled ClamAV host, restore/backup/alert custody, and operator sign-off are not established |
 

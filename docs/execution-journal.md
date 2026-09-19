@@ -25,8 +25,9 @@ restart the audit or treat an earlier summary as evidence of completion.
 
 ## Current feature: scoped-access cutover, MFA and team provenance
 
-- Branch: `11-epic-01-identity-access-security-mfa`; implementation is
-  uncommitted pending the final verification pass and frozen evidence SHA.
+- Branch: `11-epic-01-identity-access-security-mfa`, frozen at `ce76227`.
+  The implementation had sat uncommitted through the whole epic; the evidence
+  below is the first that names a commit.
 - Reproduced gap: program/project helpers still grant organization-wide reading
   and staff management. The cutover review surface and typed grant model now
   exist, but the narrower policies have not yet replaced the legacy policies.
@@ -96,6 +97,43 @@ restart the audit or treat an earlier summary as evidence of completion.
 - Required environment: local Supabase is available with the storage services
   excluded because their health check timed out. Full Storage verification remains
   a Workstream 3 dependency; live Auth/MFA and realtime remain staging gates.
+
+### Evidence
+
+Commit `ce76227`. Clean `supabase db reset` over the whole migration chain
+through `20260918214957`, then `npm run db:seed`, against the production build
+on 127.0.0.1:3000, Chromium.
+
+- Database chain: **315 assertions, exit 0** — not the 313 recorded earlier in
+  this file, because this epic added assertions to `rls.sql` and
+  `admin-mfa.sql`.
+- `supabase db advisors --local --type security --fail-on error`: no issues.
+- Unit: 446 passed, 51 files. Lint clean apart from the pre-existing
+  `no-img-element` warning. Typecheck clean. Production build passed.
+- Chromium: `mfa`, `realtime-revocation`, `hello-hub`, `access-impact`,
+  `my-work`, `identity-lifecycle` — **20 passed, twice consecutively**, and the
+  server was confirmed answering after each run.
+
+One process failure worth recording, because it produced a convincing false
+negative. The first browser run reported 11 failed, 7 passed, 2 not run. Every
+failure was `ERR_CONNECTION_REFUSED`: the server had been started with `&` from
+a shell that was then reaped, so it died partway through and the suite went on
+testing nothing. This file already warned about exactly that — "a reaped server
+produces a page of `ERR_CONNECTION_REFUSED` that reads as failure" — and the
+warning was still not enough to stop it being read as a product defect at
+first. Confirm the server answers *after* the run, not only before it.
+
+`npm run test:db` could not run on Windows at all. npm hands scripts to
+cmd.exe, which has no `sh`, so the `sh -c '... | docker exec ...'` one-liner
+failed with `'$DOCKER' is not recognized`. It is now `scripts/test-db.mjs`,
+following `seed-local.mjs`, which had already solved this for the same reason.
+
+### Not done
+
+Hosted Auth, live email delivery, realtime reconnect over a hosted socket, and
+the Firefox/WebKit/performance runs are not covered here and stay with #55 and
+#50. `SEC-MFA` stays `awaiting verification` for that reason: local Auth is
+real Auth, but it is not the staging candidate.
 
 ## Current feature: task roles, task history, My Work and the shared board/list filters
 
