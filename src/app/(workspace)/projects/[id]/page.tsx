@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { CheckCircle2, Circle } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { DeepLinkScroll } from "@/components/shared/deep-link-scroll";
 import { LinkTabs } from "@/components/shared/link-tabs";
 import { HealthBadge } from "@/components/shared/status-badges";
 import { CloseProjectDialog } from "@/features/projects/components/close-project-dialog";
 import { ProjectEditDialog } from "@/features/projects/components/project-edit-dialog";
-import { CompleteMilestoneButton } from "@/features/projects/components/complete-milestone-button";
+import { MilestoneRail } from "@/features/projects/components/milestone-rail";
+import { compareMilestones } from "@/features/projects/schemas";
 import { createMilestone } from "@/features/projects/services/milestone.commands";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { TaskDrawer } from "@/features/tasks/components/task-drawer";
@@ -92,9 +92,15 @@ export default async function ProjectDetailPage({
   ] = await Promise.all([
     supabase
       .from("milestone")
-      .select("id, project_id, name, due_date, completed_at, sort_key")
+      .select(
+        "id, project_id, name, description, status, evidence, owner_id, " +
+          "due_date, completed_at, sort_key, " +
+          "owner:owner_id(id, full_name, email, avatar_url, title, timezone)",
+      )
       .eq("project_id", id)
-      .order("due_date", { ascending: true, nullsFirst: false }),
+      // Ordered in TypeScript by compareMilestones, so the rail, the reorder
+      // buttons and the progress count all read one order rather than three.
+      .order("sort_key", { ascending: true }),
     supabase
       .from("task")
       .select(TASK_SELECT)
@@ -194,7 +200,9 @@ export default async function ProjectDetailPage({
     evidence: { document: { id: string; title: string } | null }[];
   } | null;
 
-  const milestoneList = (milestones ?? []) as unknown as Milestone[];
+  const milestoneList = ((milestones ?? []) as unknown as Milestone[]).sort(
+    compareMilestones,
+  );
   const completedMilestones = milestoneList.filter((m) => m.completed_at).length;
   // "Progress signals" in P0-PRJ-03 was only an open-task count on a tab badge.
   // Milestone burn is the signal a reader actually asks for.
@@ -563,40 +571,27 @@ export default async function ProjectDetailPage({
                   action={createMilestone}
                   fields={[
                     { name: "name", label: "Name", type: "text", required: true },
-                    { name: "dueDate", label: "Target date", type: "date" },
+                    { name: "description", label: "Description", type: "textarea" },
+                    {
+                      name: "ownerId",
+                      label: "Owner",
+                      type: "select",
+                      colSpan: 1,
+                      options: options.people.map((p) => ({
+                        value: p.id,
+                        label: p.label,
+                      })),
+                    },
+                    { name: "dueDate", label: "Target date", type: "date", colSpan: 1 },
                   ]}
                 />
               ) : null}
             </div>
-            {(milestones ?? []).length === 0 ? (
-              <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No milestones defined.
-              </p>
-            ) : (
-              <ul className="card divide-y divide-line">
-                {((milestones ?? []) as Milestone[]).map((m) => (
-                  <li key={m.id} className="flex items-center gap-2.5 px-4 py-2.5">
-                    {m.completed_at ? (
-                      <CheckCircle2 className="size-4 shrink-0 text-success-fg" aria-label="Completed" />
-                    ) : (
-                      <Circle className="size-4 shrink-0 text-muted/50" aria-label="Open" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-[13.5px]">
-                      {m.name}
-                    </span>
-                    <span className="meta whitespace-nowrap">
-                      {formatDate(m.due_date)}
-                    </span>
-                    {canManage ? (
-                      <CompleteMilestoneButton
-                        milestoneId={m.id}
-                        completed={Boolean(m.completed_at)}
-                      />
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <MilestoneRail
+              milestones={milestoneList}
+              people={options.people}
+              canManage={canManage}
+            />
           </section>
 
           {/* Activity */}

@@ -1,3 +1,5 @@
+import type { MilestoneStatus } from "@/features/projects/schemas";
+
 /**
  * Application-level entity types mirroring supabase/migrations. Regenerate
  * richer types from the live schema with `npm run db:types` once a Supabase
@@ -98,6 +100,13 @@ export interface Milestone {
   id: string;
   project_id: string;
   name: string;
+  /** planned | in_progress | completed | missed, kept in step with completed_at. */
+  status: MilestoneStatus;
+  description: string | null;
+  /** What shows it was met. Required to complete, cleared on reopening. */
+  evidence: string | null;
+  owner_id: string | null;
+  owner?: Profile | null;
   due_date: string | null;
   completed_at: string | null;
   sort_key: number;
