@@ -229,7 +229,7 @@ test("the job endpoint refuses anyone without the shared secret", async ({
   expect(get.status()).toBe(405);
 });
 
-test("protected routes redirect unauthenticated visitors", async ({ page }) => {
+test("protected routes redirect unauthenticated visitors", async ({ page, browserName }) => {
   for (const path of [
     "/",
     "/my-work",
@@ -239,7 +239,15 @@ test("protected routes redirect unauthenticated visitors", async ({ page }) => {
     "/settings/notifications",
     "/crm",
   ]) {
-    await page.goto(path);
+    try {
+      await page.goto(path);
+    } catch (error) {
+      const isWebkitInternalError = browserName === "webkit"
+        && error instanceof Error
+        && error.message.includes("WebKit encountered an internal error");
+      if (!isWebkitInternalError) throw error;
+      await page.goto(path);
+    }
     await page.waitForURL("**/sign-in**", { timeout: 15_000 });
     expect(page.url()).toContain("/sign-in");
   }
