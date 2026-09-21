@@ -146,18 +146,26 @@ Artifacts: `supabase/tests/task-core-followups.sql` (17 assertions, registered
 in `scripts/test-db.mjs`), `tests/e2e/task-core.spec.ts` (4 checks, registered
 in `.github/workflows/ci.yml`).
 
-The full authenticated suite is 38 Chromium checks with `task-core` added. **It
-did not pass twice cleanly at this commit, and nothing here claims it did.** The
-best run was 37 of 38; a second was 34 of 38. Every one of the 38 has since
-passed, and no failure in any run was an assertion about product behaviour —
-each was a transport failure matching a logged server exit or a network
-suspension. The `next start` crash (exit `0xC0000409`) fired four times in about
-thirty-five minutes on 2026-09-21, against once the day before; separately,
-Windows suspended the browser's network stack three times, and an earlier run was
-discarded outright when the machine slept mid-suite. The readiness report's
-Browsers row carries the detail. This is worth recording because it is the same
-instability that will sit underneath #31's evidence, and a suite that fails
-differently every run is a poor instrument for proving anything.
+The full authenticated suite is 38 Chromium checks with `task-core` added. **On
+CI it passed 38 of 38 in 3.7 minutes with no crashes.** Locally it did not pass
+twice cleanly, and nothing here claims it did: the best local run was 37 of 38
+and a second was 34 of 38.
+
+The gap between those two records is the point. No failure in any local run was
+an assertion about product behaviour — each was a transport failure matching a
+logged server exit or a network suspension, and every one of the 38 passed
+locally when re-run. The `next start` crash (exit `0xC0000409`) fired four times
+in about thirty-five minutes on 2026-09-21 against once the day before;
+separately, Windows suspended the browser's network stack three times, and an
+earlier run was discarded outright when the machine slept mid-suite. CI has never
+reproduced the crash, and runs the same suite in 3.7 minutes against 17 locally.
+
+So the local machine, not the product, is what the failures measured. That is
+worth recording rather than quietly re-running until green, because the same
+instability will sit underneath #31's evidence, and because a suite that fails
+differently every run is a poor instrument for proving anything. The readiness
+report's Browsers row carries the detail, including a genuinely flaky Firefox
+check in `public-routes.spec.ts` that is unrelated to this work.
 
 ### Not done
 
