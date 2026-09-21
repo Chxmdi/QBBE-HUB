@@ -23,6 +23,74 @@ Resume the next action below. Confirm existing changes and verification before
 editing. Reconcile intervening work; repeat only invalidated checks. Do not
 restart the audit or treat an earlier summary as evidence of completion.
 
+## Current feature: integrating #27, #28 and #76 onto `main`
+
+One pull request from `76-task-core-follow-ups` to `main`, carrying projects
+(#27), milestones (#28) and the task-core follow-ups (#76) together.
+
+### What was wrong before
+
+The Epic 02 stack was merged bottom-up instead of top-down, and stranded its own
+top commit. On 2026-09-21 PR #74 merged
+`28-milestones-owner-status-evidence-order` into the epic branch at 12:00:45.
+PR #77 then merged `76-task-core-follow-ups` into that same milestones branch
+twenty-eight seconds later, at 12:01:13 — after its contents had already been
+taken forward. Nothing carried the task work on. A second gap followed:
+`396aa11`, which records the CI result for #76, was committed at 12:13, twelve
+minutes after PR #77 merged, so it belonged to no merged branch at all.
+
+The effect was that the nine task-core defect fixes sat on a branch that had
+already been merged out, absent from both the epic branch and `main`, while
+issues #27, #28 and #76 stayed open because `Closes #` only fires on a merge
+into the default branch.
+
+### Why one pull request rather than two
+
+The obvious repair is two merges — the task branch into the epic branch, then
+the epic branch into `main`. It is not necessary. `76-task-core-follow-ups`
+already contains the whole #27 and #28 history in its ancestry; the only commits
+the epic branch holds that it lacks are two merge commits and `e403fd5`, whose
+content — deleting `.github/workflows/project-sync.yml` — is already on `main`
+through PR #75.
+
+That was checked rather than assumed. `git merge-tree --write-tree` produces
+tree `ecc1571d` for the task branch merged into the epic branch, and the same
+tree `ecc1571d` for the task branch merged straight into `main`: identical
+content, no conflicts, one CI cycle instead of two. The merged tree also keeps
+`project-sync.yml` deleted, because a deletion on the `main` side against an
+untouched file on the branch side resolves to deleted. The `configuration-guard`
+job that failed on PR #77 therefore does not run here at all.
+
+### Evidence
+
+There is no product code change in this pull request. It moves work already
+verified on its own branches, and adds this entry.
+
+`docs/acceptance-matrix.md` is deliberately untouched. Its rows already record
+acceptance against the exact commits that produced it, and no acceptance claim
+changes by moving those commits onto `main`. Duplicating them here would add
+volume, not evidence.
+
+The evidence of record for the merged content is the CI run on this pull
+request. Relying on it rather than re-running the suite locally is a deliberate
+choice, not a shortcut: at `c748713` CI passed all 38 authenticated Chromium
+checks in 3.7 minutes with no crashes, while this machine crashed `next start`
+four times in roughly thirty-five minutes and never produced two consecutive
+clean full passes. **The standing bar of two clean passes through the browser
+suite is still not met locally, and this entry does not claim otherwise.** The
+reasoning is in the #76 entry below and in the readiness report's Browsers row.
+
+### Not done
+
+- Issue #71 duplicates #76 and stays open. Closing it is a separate decision.
+- The `next start` crash (exit `0xC0000409`) and the Firefox-only flake in
+  `public-routes.spec.ts:27` are recorded here and in the readiness report, and
+  neither is fixed. Both want their own issues before #31 builds on this code,
+  because the first corrupted #76's evidence and will corrupt #31's the same
+  way.
+- #31 — task dependencies, checklists, recurrence and calendar rescheduling —
+  remains the last open issue of Epic 02.
+
 ## Current feature: task core follow-ups — the defects #29 and #30 left
 
 Issue #76, on `76-task-core-follow-ups` at `c748713`, stacked on #28.

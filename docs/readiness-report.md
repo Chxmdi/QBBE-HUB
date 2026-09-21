@@ -5,7 +5,7 @@ verification is blocked. No staging release candidate has been certified.
 
 | Release item | Current evidence |
 |---|---|
-| Candidate | Epic 01 merged to `main` at `698c52f`. Epic 02 in progress at `c748713` on `76-task-core-follow-ups` (stacked on `28-milestones-owner-status-evidence-order`); no certified release |
+| Candidate | Epic 01 merged to `main` at `698c52f`. Epic 02 partly on `main`: #26 landed through PR #72; #27, #28 and #76 are merging onto `main` together in one pull request from `76-task-core-follow-ups`, after PR #74 and PR #77 were merged in the wrong order and left the #76 commits on a branch that had already been merged out. #31 remains open. No certified release |
 | Staging | No QBBE staging deployment provisioned in this session |
 | Production | No publishing authorized by this plan; keep release disabled |
 | Code checks | At `c748713`: lint 0 errors and 1 warning (the pre-existing `no-img-element` in `src/components/layout/qbbe-logo.tsx:31`), typecheck clean, `npm test` 504 passed across 54 files, production build passed |
