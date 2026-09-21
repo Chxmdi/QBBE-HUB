@@ -71,14 +71,40 @@ acceptance against the exact commits that produced it, and no acceptance claim
 changes by moving those commits onto `main`. Duplicating them here would add
 volume, not evidence.
 
-The evidence of record for the merged content is the CI run on this pull
-request. Relying on it rather than re-running the suite locally is a deliberate
-choice, not a shortcut: at `c748713` CI passed all 38 authenticated Chromium
-checks in 3.7 minutes with no crashes, while this machine crashed `next start`
-four times in roughly thirty-five minutes and never produced two consecutive
-clean full passes. **The standing bar of two clean passes through the browser
-suite is still not met locally, and this entry does not claim otherwise.** The
-reasoning is in the #76 entry below and in the readiness report's Browsers row.
+The evidence of record for the merged content is CI, across three runs. They
+matter most for what they prove together, because the code under them is
+identical apart from two Markdown files:
+
+| Commit | Diff from the previous | Result | Failed |
+|---|---|---|---|
+| `8c13f1a` | — | 38 of 38 in 3.7 min | — |
+| `5e093db` | two `.md` files | 36 of 38 | `access-impact:5`, `identity-lifecycle:195` |
+| `c131ee5` | two `.md` files | 37 of 38 | `identity-lifecycle:195` |
+
+A documentation-only diff cannot break a browser test. Three runs spanning
+38 of 38 to 36 of 38 over the same product code therefore exonerate the code,
+and that is the claim this pull request rests on.
+
+**They also correct an earlier claim in this file, which was wrong.** The #76
+entry below said CI had never reproduced the instability and treated that runner
+as the stable instrument. It has now reproduced it twice. The precursor error
+`destination stream closed early` appeared 14, 15 and 18 times across the three
+runs — **including the run that passed everything** — so it is background noise
+on CI rather than the crash signal it was read as.
+
+**The standing bar of two consecutive clean passes through the browser suite is
+met on no machine, local or CI, and this entry does not claim otherwise.**
+
+One failure does not fit the environmental explanation and should not be filed
+under it. `identity-lifecycle.spec.ts:195` failed twice with byte-identical
+symptoms — `net::ERR_ABORTED` at `http://127.0.0.1:3000/sign-in`, thrown from
+`page.goto` in the shared `signOut` helper at `tests/e2e/auth.ts:122` — having
+also failed locally once with `ERR_CONNECTION_REFUSED`. The test for telling a
+defect from an unstable machine, used throughout this file, is that a real bug
+reproduces the same way. This one now has. `signOut` clears cookies immediately
+before that `goto`, which is a plausible race that would abort the navigation
+without anything being wrong with deactivation itself, but it is a hypothesis
+and nothing here has tested it. Tracked in #79.
 
 ### Not done
 
@@ -215,25 +241,34 @@ in `scripts/test-db.mjs`), `tests/e2e/task-core.spec.ts` (4 checks, registered
 in `.github/workflows/ci.yml`).
 
 The full authenticated suite is 38 Chromium checks with `task-core` added. **On
-CI it passed 38 of 38 in 3.7 minutes with no crashes.** Locally it did not pass
+CI it passed 38 of 38 in 3.7 minutes at `8c13f1a`.** Locally it did not pass
 twice cleanly, and nothing here claims it did: the best local run was 37 of 38
 and a second was 34 of 38.
 
-The gap between those two records is the point. No failure in any local run was
-an assertion about product behaviour — each was a transport failure matching a
-logged server exit or a network suspension, and every one of the 38 passed
-locally when re-run. The `next start` crash (exit `0xC0000409`) fired four times
-in about thirty-five minutes on 2026-09-21 against once the day before;
-separately, Windows suspended the browser's network stack three times, and an
-earlier run was discarded outright when the machine slept mid-suite. CI has never
-reproduced the crash, and runs the same suite in 3.7 minutes against 17 locally.
+> **Corrected after this entry was first written.** It originally read that CI
+> had never reproduced the instability, and treated that runner as the stable
+> instrument. That is false. Two later CI runs, on this same product code with
+> only Markdown changed, returned 36 of 38 and 37 of 38. The correction and the
+> three-run comparison are in the integration entry at the top of this file.
+> The 38 of 38 above is real, but it is one sample, not a property of CI.
 
-So the local machine, not the product, is what the failures measured. That is
-worth recording rather than quietly re-running until green, because the same
-instability will sit underneath #31's evidence, and because a suite that fails
-differently every run is a poor instrument for proving anything. The readiness
-report's Browsers row carries the detail, including a genuinely flaky Firefox
-check in `public-routes.spec.ts` that is unrelated to this work.
+No failure in any local run was an assertion about product behaviour — each was
+a transport failure matching a logged server exit or a network suspension, and
+every one of the 38 passed locally when re-run. The `next start` crash (exit
+`0xC0000409`) fired four times in about thirty-five minutes on 2026-09-21
+against once the day before; separately, Windows suspended the browser's network
+stack three times, and an earlier run was discarded outright when the machine
+slept mid-suite.
+
+So the failures measured the environment rather than the product — on both
+machines, not just this one. That is worth recording rather than quietly
+re-running until green, because the same instability will sit underneath #31's
+evidence, and because a suite that fails differently every run is a poor
+instrument for proving anything. The one failure that does **not** fit that
+explanation, `identity-lifecycle.spec.ts:195`, is described in the integration
+entry and tracked in #79. The readiness report's Browsers row carries the
+detail, including a genuinely flaky Firefox check in `public-routes.spec.ts`
+that is unrelated to this work and tracked in #80.
 
 ### Not done
 
