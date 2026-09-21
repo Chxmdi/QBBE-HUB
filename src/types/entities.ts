@@ -112,8 +112,18 @@ export interface Milestone {
   sort_key: number;
 }
 
+/**
+ * Every column of `public.task`, in the order the table declares them.
+ *
+ * This used to list 18 of 29. The missing ones were not obscure: the approver
+ * and the blocking person carry authorization (`app.has_task_capability` reads
+ * both), and the three recurrence columns are the subject of #31. Typing a
+ * query against a type that omits the column you are reading gives no error —
+ * it gives `undefined` at runtime, which is the failure this shape prevents.
+ */
 export interface Task {
   id: string;
+  organization_id: string;
   program_id: string | null;
   project_id: string | null;
   milestone_id: string | null;
@@ -122,14 +132,25 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   assignee_id: string | null;
+  requester_id: string | null;
   reviewer_id: string | null;
+  approver_id: string | null;
   start_at: string | null;
   due_at: string | null;
+  estimate_hours: number | null;
   blocked_reason: string | null;
+  blocked_by_id: string | null;
+  completion_criteria: string | null;
   sort_key: number;
+  source_message_id: string | null;
   completed_at: string | null;
+  created_by: string | null;
   created_at: string;
+  updated_at: string;
   archived_at: string | null;
+  recurrence_rule: string | null;
+  recurrence_anchor: string | null;
+  recurrence_parent_id: string | null;
   assignee?: Profile | null;
   project?: Pick<Project, "id" | "name"> | null;
 }

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Select } from "@/components/ui/input";
 import { TASK_STATUS_META } from "@/components/shared/status-badges";
+import { BlockedReasonDialog } from "@/features/tasks/components/blocked-reason-dialog";
 import { updateTaskStatus } from "@/features/tasks/services/task.commands";
 import type { TaskStatus } from "@/types/entities";
 
@@ -17,32 +18,24 @@ import type { TaskStatus } from "@/types/entities";
  */
 export function StatusSelect({
   taskId,
+  taskTitle = null,
   status,
   className,
   onSelect,
 }: {
   taskId: string;
+  /** Named in the blocked-reason dialog so the question is unambiguous. */
+  taskTitle?: string | null;
   status: TaskStatus;
   className?: string;
   onSelect?: (next: TaskStatus) => void;
 }) {
   const [value, setValue] = useState<TaskStatus>(status);
   const [error, setError] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  const [askingBlocked, setAskingBlocked] = useState(false);
+  const [pending, startTransition] = useTransition();
 
-  function handleChange(next: TaskStatus) {
-    if (onSelect) {
-      onSelect(next);
-      return;
-    }
-    let blockedReason: string | undefined;
-    if (next === "blocked") {
-      const reason = window.prompt(
-        "What is blocking this task? A reason is required.",
-      );
-      if (!reason?.trim()) return;
-      blockedReason = reason.trim();
-    }
+  function apply(next: TaskStatus, blockedReason?: string) {
     const previous = value;
     setValue(next);
     setError(null);
@@ -53,6 +46,21 @@ export function StatusSelect({
         setError(result.error ?? "Update failed.");
       }
     });
+  }
+
+  function handleChange(next: TaskStatus) {
+    if (onSelect) {
+      onSelect(next);
+      return;
+    }
+    // Blocking needs a reason, so the select cannot complete the change on its
+    // own. The value stays where it was until the dialog is answered — moving
+    // it first would show a status the server has not accepted.
+    if (next === "blocked") {
+      setAskingBlocked(true);
+      return;
+    }
+    apply(next);
   }
 
   return (
@@ -74,6 +82,16 @@ export function StatusSelect({
           {error}
         </p>
       ) : null}
+      <BlockedReasonDialog
+        open={askingBlocked}
+        taskTitle={taskTitle}
+        busy={pending}
+        onCancel={() => setAskingBlocked(false)}
+        onConfirm={(reason) => {
+          setAskingBlocked(false);
+          apply("blocked", reason);
+        }}
+      />
     </div>
   );
 }

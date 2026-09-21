@@ -12,12 +12,23 @@ import type { Task } from "@/types/entities";
 /** Dense, scan-friendly task row shared by My Work and project views. */
 export function TaskRow({
   task,
+  timeZone,
   showStatusControl = true,
 }: {
   task: Task;
+  /**
+   * The viewer's zone, required rather than defaulted.
+   *
+   * `dueLabel` falls back to the organization's zone when this is omitted,
+   * which is how this row came to print "Overdue 1d" for a task the board and
+   * the task list both called "Due today" — the WORK-004 defect surviving in
+   * the one component that was missed. A required prop means the next new
+   * caller cannot repeat it.
+   */
+  timeZone: string;
   showStatusControl?: boolean;
 }) {
-  const due = dueLabel(task.due_at);
+  const due = dueLabel(task.due_at, timeZone);
   return (
     <div className="interactive-row flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-3 py-2.5 last:border-b-0">
       <div className="min-w-0 flex-1 basis-52">
@@ -57,7 +68,7 @@ export function TaskRow({
         <Badge tone="neutral">Unassigned</Badge>
       )}
       {showStatusControl ? (
-        <StatusSelect taskId={task.id} status={task.status} />
+        <StatusSelect taskId={task.id} taskTitle={task.title} status={task.status} />
       ) : (
         <TaskStatusBadge status={task.status} />
       )}

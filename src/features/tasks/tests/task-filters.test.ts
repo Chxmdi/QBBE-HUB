@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyTaskFilters,
+  describeFilterConflicts,
   dueWindowRange,
   escapeLikePattern,
   parseTaskFilters,
@@ -151,5 +152,96 @@ describe("applying filters", () => {
     expect(taskSelectFor({ label: UUID_A }, "id, title")).toBe(
       "id, title, task_label!inner(label_id)",
     );
+  });
+});
+
+/**
+ * #76: two filter combinations returned nothing and said nothing about why.
+ *
+ * Returning nothing is the correct answer to "ready and blocked" — no task
+ * holds two statuses. The defect was the silence, so these cover both halves:
+ * the query stops repeating itself, and the contradiction is describable.
+ */
+describe("filter combinations that cannot match", () => {
+  it("keeps a contradiction contradictory rather than quietly widening it", () => {
+    const { query, calls } = recorder();
+    applyTaskFilters(query, { status: "ready", blocked: "yes" }, "2026-09-19");
+    // Both conditions are emitted on purpose. Dropping either one would turn
+    // an impossible question into a plausible answer — a list of Ready tasks
+    // under a notice saying nothing can match, which is worse than an empty
+    // list. Zero rows is right; the notice is what was missing.
+    expect(calls).toContain('eq("status","ready")');
+    expect(calls).toContain('eq("status","blocked")');
+  });
+
+  it("drops the blocked condition when the status filter already said it", () => {
+    const { query, calls } = recorder();
+    applyTaskFilters(query, { status: "blocked", blocked: "yes" }, "2026-09-19");
+    expect(calls.filter((call) => call.startsWith('eq("status"'))).toEqual([
+      'eq("status","blocked")',
+    ]);
+  });
+
+  it("still applies the blocked filter when it is the only status asked for", () => {
+    const { query, calls } = recorder();
+    applyTaskFilters(query, { blocked: "yes" }, "2026-09-19");
+    expect(calls).toContain('eq("status","blocked")');
+  });
+
+  it("keeps blocked-and-not-blocked empty", () => {
+    const { query, calls } = recorder();
+    applyTaskFilters(query, { status: "blocked", blocked: "no" }, "2026-09-19");
+    expect(calls).toContain('eq("status","blocked")');
+    expect(calls).toContain('neq("status","blocked")');
+  });
+
+  it("drops a not-blocked condition any other status already implies", () => {
+    const { query, calls } = recorder();
+    applyTaskFilters(query, { status: "ready", blocked: "no" }, "2026-09-19");
+    // A Ready task is not blocked by definition, so the extra `neq` only made
+    // the query longer.
+    expect(calls).not.toContain('neq("status","blocked")');
+  });
+
+  it("names the contradiction rather than leaving an empty list to explain itself", () => {
+    const conflicts = describeFilterConflicts(
+      { status: "ready", blocked: "yes" },
+      { statusLabel: () => "Ready" },
+    );
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]).toContain("Ready");
+    expect(conflicts[0]).toContain("blocked");
+  });
+
+  it("treats blocked plus the blocked status as agreement, not conflict", () => {
+    expect(describeFilterConflicts({ status: "blocked", blocked: "yes" })).toEqual([]);
+  });
+
+  it("flags an owner filter on a page that only shows one person's work", () => {
+    const conflicts = describeFilterConflicts(
+      { owner: UUID_B },
+      { scopedToUserId: UUID_A },
+    );
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]).toContain("your own work");
+  });
+
+  it("says nothing when the owner filter names the viewer", () => {
+    expect(
+      describeFilterConflicts({ owner: UUID_A }, { scopedToUserId: UUID_A }),
+    ).toEqual([]);
+  });
+
+  it("says nothing about an owner filter on a page that shows everyone", () => {
+    expect(describeFilterConflicts({ owner: UUID_B })).toEqual([]);
+  });
+
+  it("reports an ordinary filter set as fine", () => {
+    expect(
+      describeFilterConflicts(
+        { status: "in_progress", priority: "high", project: UUID_A },
+        { scopedToUserId: UUID_A },
+      ),
+    ).toEqual([]);
   });
 });

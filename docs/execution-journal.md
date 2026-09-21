@@ -23,6 +23,154 @@ Resume the next action below. Confirm existing changes and verification before
 editing. Reconcile intervening work; repeat only invalidated checks. Do not
 restart the audit or treat an earlier summary as evidence of completion.
 
+## Current feature: task core follow-ups — the defects #29 and #30 left
+
+Issue #76, on `76-task-core-follow-ups` at `c748713`, stacked on #28.
+
+### What was wrong before
+
+Nine defects in merged work. They are grouped here by what kind of wrong they
+were, because the kind is what let them survive review.
+
+**Three were wrong data, produced quietly.**
+
+1. The review queue excluded a task with `assignee_id <> me`, meaning "work I
+   judge, not work I do". `assignee_id` is null on an unassigned task, and in
+   SQL `null <> '<uuid>'` is null rather than true, so the row was dropped. A
+   task somebody had been named reviewer of was invisible to them for exactly
+   as long as nobody owned it. Measured against the seeded database: 54 tasks,
+   41 owned by that person, so 13 are not theirs — the old predicate returned
+   **7**, silently losing all six unassigned ones.
+2. `bulkUpdateTasks` never cleared `blocked_reason`. `updateTaskStatus` always
+   did. So a task bulk-moved off `blocked` kept rendering "Blocked: waiting on
+   the venue" above a status that said `in_progress` — text describing a
+   blockage that had been declared over.
+3. `createTask` accepted `status: 'completed'` and wrote no `completed_at`.
+   That is the same split-fact defect #28 had just repaired on `milestone`,
+   reappearing on `task` because the two were written by different hands.
+
+**Two were controls that could not work.**
+
+4. `label` and `task_label` shipped in `0001_core.sql` with correct policies —
+   `task_label` insert and delete are gated on `has_task_capability(task_id,
+   'manage' or 'collaborate')` — the filter bar has offered a label picker
+   since #30, and **nothing in the product ever wrote a row to either table**.
+   The picker was always empty and the filter always matched nothing.
+5. `approver_id` had a column, a command and an RLS grant since
+   `20260912040000` and no control anywhere in the product; `reviewer_id` could
+   be set once at creation and never changed. The drawer selected both columns
+   and rendered neither.
+
+**Two were the page refusing to explain itself.**
+
+6. `status=ready&blocked=yes` returned nothing. That answer is correct — no
+   task holds two statuses. The defect was that the page then said "No tasks",
+   which reads as "there is no work" rather than "you asked a question with no
+   possible answer". The same for `?owner=<someone else>` pasted into My Work,
+   which is scoped to one person by definition.
+7. Task history diffed five fields, so changing the milestone, reviewer,
+   approver, completion criteria or blocked reason recorded a bare "updated"
+   with empty metadata. P0-TSK-05 is about material changes being answerable
+   afterwards, and the approver column is read by `app.has_task_capability`.
+
+**Two were accessibility and correctness slips.**
+
+8. `window.prompt` collected the blocked reason on the board and in the status
+   control. It cannot be labelled, is announced inconsistently, is suppressed
+   by some browsers, and discards what was typed if dismissed.
+9. `task-row.tsx` called `dueLabel` with no time zone while the board and the
+   list both passed the viewer's, so the same task read "Overdue 1d" in the
+   project view and "Due today" everywhere else for anyone outside
+   America/Toronto — the WORK-004 defect surviving in the component that was
+   missed. And `Task` in `src/types/entities.ts` declared 18 of the table's 29
+   columns, omitting the two that carry authorization and the three #31 needs.
+
+### What was implemented
+
+No migration. Every fix is application-side, because in every case the database
+was already right and the code was not.
+
+The blocked-reason dialog is shared by the board and the status control. The
+drawer gained reviewer, approver and a labels section, and asks
+`has_task_capability(task, 'collaborate')` rather than assuming staff — the
+policy lets a task's own assignee tag it, and guessing would have hidden a
+control the server allows. `TaskRow` now requires a `timeZone` prop rather than
+defaulting one, which is what found both of its callers.
+
+### Defects found in a browser rather than by inspection
+
+- **The new dialog had no accessible name.** Every `StatusSelect` on the page
+  renders one, so a fixed `id="blocked-reason"` appeared many times over. The
+  browser binds `<label for>` to the first match, so the visible label belonged
+  to a closed copy and the open field had no name at all — the exact failure
+  the component was written to remove. The id now comes from `useId`. A
+  Playwright accessibility snapshot showed it; reading the component did not.
+- **A denial test from #28 was proving nothing.** "A volunteer sees a project's
+  milestones without any way to change them" asserted only that the manage
+  buttons were absent. They were absent — but because `has_project_capability`
+  denied the volunteer read on that project entirely, so the page was blank.
+  The test would have passed against a 404. It now builds its own project,
+  grants `read_only`, and fails if the milestone is not visible. Checked
+  directly: `has_project_capability(<that project>, 'read')` returns false for
+  the volunteer.
+- **A test of mine asserted the wrong contract.** I first wrote the blocked
+  filter to drop the conflicting condition, which would have shown a list of
+  Ready tasks underneath a notice saying nothing could match. Both conditions
+  are emitted on purpose: zero rows is the true answer, and the notice is what
+  was missing.
+
+### Evidence
+
+Commit `c748713`. Environment: local Supabase over the full migration chain
+through `20260919120000`, `npm run db:seed`, production build on
+127.0.0.1:3000, Chromium.
+
+```
+npm run lint          # clean apart from the pre-existing no-img-element warning
+npm run typecheck     # clean
+npm test              # 504 passed across 54 files (from 480)
+npm run build         # passed
+npm run test:db       # 395 assertions, exit 0, across 15 files (from 381/14)
+npx supabase db advisors --local --type security --fail-on error   # no issues
+npx playwright test task-core --project=chromium        # 4 passed
+npx playwright test milestones --project=chromium       # 4 passed
+```
+
+The review-queue defect was also measured directly against PostgREST rather
+than argued from the code: `assignee_id=neq.<uuid>` returned 7 rows where
+`or=(assignee_id.is.null,assignee_id.neq.<uuid>)` returned 13, against 54 total
+with 41 assigned to that person. That two `or` parameters are ANDed was
+confirmed by the same route before relying on it.
+
+Artifacts: `supabase/tests/task-core-followups.sql` (17 assertions, registered
+in `scripts/test-db.mjs`), `tests/e2e/task-core.spec.ts` (4 checks, registered
+in `.github/workflows/ci.yml`).
+
+The full authenticated suite is 38 Chromium checks with `task-core` added. **It
+did not pass twice cleanly at this commit, and nothing here claims it did.** The
+best run was 37 of 38; a second was 34 of 38. Every one of the 38 has since
+passed, and no failure in any run was an assertion about product behaviour —
+each was a transport failure matching a logged server exit or a network
+suspension. The `next start` crash (exit `0xC0000409`) fired four times in about
+thirty-five minutes on 2026-09-21, against once the day before; separately,
+Windows suspended the browser's network stack three times, and an earlier run was
+discarded outright when the machine slept mid-suite. The readiness report's
+Browsers row carries the detail. This is worth recording because it is the same
+instability that will sit underneath #31's evidence, and a suite that fails
+differently every run is a poor instrument for proving anything.
+
+### Not done
+
+- The `estimate_hours` column is still read by nothing, saved views are still
+  write-only, and dashboard KPIs are still computed and not rendered. Those
+  belong to Epic #14 / #37 and were left alone deliberately.
+- The two reviewer mechanisms — the `reviewer_id` column and the
+  `task_assignment` reviewer role — are both now reachable and both still
+  exist. The database reconciles them (each grants `review`); the product does
+  not explain which one somebody was named through. Collapsing them is a model
+  decision, not a defect fix, and is not made here.
+- Hosted staging certification remains outstanding under #55.
+
 ## Current feature: milestones — owner, status, evidence and order
 
 Issue #28, on `28-milestones-owner-status-evidence-order` at `37dc714`, stacked
