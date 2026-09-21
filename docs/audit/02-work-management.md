@@ -368,3 +368,53 @@ cannot be its own successor.
 than a scheduled job, so a recurring task that is never completed still
 produces nothing. Only `weekly` and `monthly` rules exist — no daily, no
 interval, no end date.
+
+
+## Follow-up: the Tasks verdicts above are stale, 2026-09-21
+
+**Read the `P0-TSK-*` and `P1-TSK-*` sections above as a snapshot of the code
+before 2026-09-12, not as the current state.** The body of this audit was
+written before `supabase/migrations/20260912040000_prd_workstream_completion.sql`
+and before the work merged under #27, #28, #29, #30 and #76. Several of its
+gaps have since been closed, so the document as written describes this area as
+more broken than it is.
+
+This follow-up corrects only what was re-verified. The verdict lines above are
+deliberately left untouched rather than rewritten, so the original assessment
+and the correction can both be read.
+
+### What was re-verified, and what is now wrong
+
+| Claim above | Status | What is there now |
+|---|---|---|
+| P0-TSK-01: "**Contributors:** no table, column or code — entirely absent" | **Withdrawn** | `task_assignment` (`20260912040000_prd_workstream_completion.sql:61-72`) — a `(task_id, user_id, role)` table whose `role` check accepts `contributor`, `reviewer`, `approver`, `follower`, RLS-scoped through `has_task_capability`. |
+| P0-TSK-01: "**Completion criteria** is only free text in `description`" | **Withdrawn** | `task.completion_criteria` is its own column (`20260912040000…:57-59`), alongside a real `approver_id`. |
+| P0-TSK-01: "`label` / `task_label` — tables exist, but no query, command, schema or component references them; labels cannot be created or attached" | **Withdrawn** | Labels are wired end to end: `src/features/tasks/services/label.commands.ts` exports `createLabel`, `attachTaskLabel` and `detachTaskLabel`; `src/features/tasks/components/task-labels.tsx` is the UI; they are selectable in `src/features/tasks/components/task-filter-bar.tsx` and read in `task.queries.ts`. |
+| P1-TSK-09: "Seven of the eleven named dimensions have no filter at all: **program, owner, dates/date range, milestone, label, blocked state, reviewer, and channel-linked activity**" | **Mostly withdrawn** | `src/features/tasks/filters.ts` defines one `TaskFilters` shape covering program, project, owner, status, priority, due window, milestone, label, blocked state and free text. **Two of the named dimensions are still missing: reviewer and channel-linked activity.** |
+| P1-TSK-09: "Owner is structurally impossible here — `getMyTasksFiltered` hard-codes `.eq(\"assignee_id\", userId)` at line 58" | **Withdrawn** | `getMyTasksFiltered` no longer exists. `task.queries.ts` now exports `getScopedTasks` (`:30`) and `getMyWork` (`:69`); owner is an ordinary filter field. |
+| P1-TSK-09: "the board is unfilterable in the product" | **Withdrawn** | `src/app/(workspace)/board/page.tsx` parses the shared filters at `:33` and mounts the same `TaskFilterBar` at `:84`, so board and My Work filter through one definition rather than two. |
+| P1-PRJ-08: project closure | **Superseded** | `supabase/migrations/20260919010000_project_closure_evidence.sql` adds `project_closure` and `project_closure_document` with RLS and a scope-validating trigger. The gap text above predates it. |
+
+### What is still true
+
+Re-checked and unchanged:
+
+- **`estimate_hours` is still dead.** It appears once in the whole application
+  layer, as a type field at `src/types/entities.ts:140`. Nothing reads or
+  writes it.
+- **Attachments are still absent.** There is no task-attachment table and no
+  `task_id` on `document` in any migration; `document` gained scan/quarantine
+  columns in `20260912040000…:166-174`, but no link to a task.
+
+### What this follow-up does not cover
+
+**Only the Tasks family and project closure were re-verified.** The
+`P0-DASH-*`, `P1-DASH-*`, `P0-GNT-*`, `P1-GNT-*`, `WORK-*` and the remaining
+`P0-PRJ-*` / `P1-PRJ-*` sections were **not** re-checked against current code
+and may be stale in the same direction. Do not read this follow-up as a
+statement that they are accurate.
+
+The dependency, recurrence, checklist and calendar gaps described under
+P1-TSK-06, P1-TSK-07 and P1-TSK-08 are the scope of #31, which is open. They
+are expected to be stale next, and this document should get one more pass when
+#31 merges and Epic 02 closes.

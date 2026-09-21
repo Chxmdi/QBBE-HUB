@@ -23,6 +23,60 @@ Resume the next action below. Confirm existing changes and verification before
 editing. Reconcile intervening work; repeat only invalidated checks. Do not
 restart the audit or treat an earlier summary as evidence of completion.
 
+## Current feature: correcting the stale Tasks verdicts in audit 02
+
+`docs/audit/02-work-management.md` asserted gaps that the code has since
+closed. This adds a dated follow-up that withdraws them.
+
+### What was wrong before
+
+The body of that audit was written before
+`supabase/migrations/20260912040000_prd_workstream_completion.sql` and before
+#27, #28, #29, #30 and #76 merged. It still said contributors were "entirely
+absent", that labels "cannot be created or attached", that completion criteria
+was only free text, that seven filter dimensions did not exist, and that the
+board was "unfilterable in the product". All five are false against `main` at
+`5c77f97`. An audit that overstates breakage is as misleading as one that
+understates it, and this one is read as the standing assessment of the area.
+
+### Why a follow-up rather than a rewrite
+
+The document already corrects itself this way — there are dated follow-up
+sections from 2026-09-05 for overdue and for recurring-task duplication. Kept
+that form, so the original assessment and the correction can both be read and
+the change of state stays visible. The verdict lines in the body are
+deliberately untouched.
+
+### Evidence
+
+Each withdrawal was checked against the code rather than inferred from the
+merge. `task_assignment` with its `contributor`/`reviewer`/`approver`/`follower`
+role check is at `20260912040000_prd_workstream_completion.sql:61-72`;
+`task.completion_criteria` at `:57-59`. Labels are wired through
+`src/features/tasks/services/label.commands.ts`,
+`src/features/tasks/components/task-labels.tsx` and `task-filter-bar.tsx`. The
+filter set is one definition in `src/features/tasks/filters.ts`, parsed at
+`src/app/(workspace)/board/page.tsx:33` and mounted at `:84`, which is what
+makes the board filterable. `getMyTasksFiltered`, cited in the stale text, no
+longer exists; `task.queries.ts` exports `getScopedTasks` (`:30`) and
+`getMyWork` (`:69`).
+
+Two claims were re-checked and survive: `estimate_hours` still appears only at
+`src/types/entities.ts:140` and is never read or written, and there is still no
+task-attachment table or `task_id` on `document`.
+
+### Not done
+
+**Only the Tasks family and project closure were re-verified.** The `DASH`,
+`GNT`, `WORK` and remaining `PRJ` sections were not re-checked and may be stale
+in the same direction; the follow-up says so in the document rather than
+leaving the reader to assume a full re-audit. No product code changes here and
+no acceptance claim changes, so `docs/acceptance-matrix.md` is untouched.
+
+The dependency, recurrence and checklist gaps under P1-TSK-06, P1-TSK-07 and
+P1-TSK-08 are #31's scope and are expected to need a further pass when it
+merges.
+
 ## Current feature: integrating #27, #28 and #76 onto `main`
 
 One pull request from `76-task-core-follow-ups` to `main`, carrying projects
