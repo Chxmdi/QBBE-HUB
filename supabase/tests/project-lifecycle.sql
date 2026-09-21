@@ -383,3 +383,168 @@ begin
 end $$;
 
 rollback;
+
+-- Milestones: status, evidence and order (#28, P0-MIL-01).
+begin;
+
+do $$
+declare
+  v_owner uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1';
+  v_staff uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2';
+  v_volunteer uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3';
+  v_org uuid;
+  v_project uuid;
+  v_other_project uuid;
+  v_first uuid;
+  v_second uuid;
+  v_third uuid;
+  v_task uuid;
+  v_status text;
+  v_completed timestamptz;
+  v_sort double precision;
+  n integer;
+  failed boolean;
+begin
+  select organization_id into strict v_org
+  from public.organization_membership where user_id = v_owner limit 1;
+
+  insert into public.project (organization_id, name, owner_id, created_by)
+  values (v_org, 'Milestone project', v_staff, v_owner)
+  returning id into v_project;
+
+  insert into public.project (organization_id, name, owner_id, created_by)
+  values (v_org, 'Other milestone project', v_staff, v_owner)
+  returning id into v_other_project;
+
+  -- Ordering. Every milestone created through the application landed on the
+  -- default 0, so "ordered milestones" ordered by nothing. A new one now goes
+  -- to the end of its own project, counting nobody else's.
+  insert into public.milestone (project_id, name) values (v_project, 'First')
+  returning id into v_first;
+  insert into public.milestone (project_id, name) values (v_project, 'Second')
+  returning id into v_second;
+  insert into public.milestone (project_id, name) values (v_other_project, 'Elsewhere');
+
+  select sort_key into v_sort from public.milestone where id = v_first;
+  perform tests.ok(v_sort = 1, 'the first milestone in a project takes position 1');
+  select sort_key into v_sort from public.milestone where id = v_second;
+  perform tests.ok(v_sort = 2, 'the next milestone goes to the end of its own project');
+  select sort_key into v_sort from public.milestone where name = 'Elsewhere';
+  perform tests.ok(v_sort = 1,
+    'positions are counted per project, not across the organization');
+
+  -- An explicit position is honoured: template expansion and the seed both
+  -- choose their own.
+  insert into public.milestone (project_id, name, sort_key)
+  values (v_project, 'Third', 9)
+  returning id into v_third;
+  select sort_key into v_sort from public.milestone where id = v_third;
+  perform tests.ok(v_sort = 9, 'an explicitly positioned milestone keeps its position');
+
+  -- Completion has two representations. They are now one fact.
+  update public.milestone
+  set completed_at = now(), evidence = 'Signed contract on file.'
+  where id = v_first;
+  select status, completed_at into v_status, v_completed
+  from public.milestone where id = v_first;
+  perform tests.ok(v_status = 'completed',
+    'setting completed_at moves the status to completed');
+
+  update public.milestone set completed_at = null, evidence = null where id = v_first;
+  select status, completed_at into v_status, v_completed
+  from public.milestone where id = v_first;
+  perform tests.ok(v_status = 'planned' and v_completed is null,
+    'clearing completed_at reopens the milestone');
+
+  -- ...and from the other side, so a caller that only knows about `status`
+  -- leaves the row just as consistent.
+  update public.milestone
+  set status = 'completed', evidence = 'Attendance sheet, 48 families.'
+  where id = v_second;
+  select status, completed_at into v_status, v_completed
+  from public.milestone where id = v_second;
+  perform tests.ok(v_completed is not null,
+    'setting the status to completed stamps completed_at');
+
+  update public.milestone set status = 'planned', evidence = null where id = v_second;
+  select completed_at into v_completed from public.milestone where id = v_second;
+  perform tests.ok(v_completed is null,
+    'moving the status off completed clears completed_at');
+
+  -- Completing with nothing to show for it is refused by the database, not
+  -- only by the form. This is the issue's definition of done.
+  failed := false;
+  begin
+    update public.milestone set completed_at = now() where id = v_first;
+  exception when others then
+    failed := true;
+  end;
+  perform tests.ok(failed, 'a milestone cannot be completed without evidence');
+
+  failed := false;
+  begin
+    update public.milestone
+    set completed_at = now(), evidence = '   '
+    where id = v_first;
+  exception when others then
+    failed := true;
+  end;
+  perform tests.ok(failed, 'whitespace is not evidence');
+
+  -- An unknown status would render as nothing anywhere.
+  failed := false;
+  begin
+    update public.milestone set status = 'done' where id = v_first;
+  exception when others then
+    failed := true;
+  end;
+  perform tests.ok(failed, 'a milestone status outside the four is refused');
+
+  -- Deleting a milestone keeps the work and drops only the grouping.
+  insert into public.task (organization_id, project_id, milestone_id, title, created_by)
+  values (v_org, v_project, v_third, 'Work under a milestone', v_owner)
+  returning id into v_task;
+
+  delete from public.milestone where id = v_third;
+  select count(*) into n from public.task where id = v_task and milestone_id is null;
+  perform tests.ok(n = 1,
+    'deleting a milestone keeps its tasks and only removes the grouping');
+
+  -- Reading is project access; writing is managing the project.
+  perform tests.authenticate(v_volunteer);
+  select count(*) into n from public.milestone where project_id = v_project;
+  perform tests.ok(n = 0,
+    'a volunteer cannot read the milestones of a project they cannot see');
+
+  -- An insert the policy refuses raises rather than skipping a row, so this is
+  -- caught rather than counted.
+  failed := false;
+  begin
+    insert into public.milestone (project_id, name) values (v_project, 'Smuggled');
+  exception when others then
+    failed := true;
+  end;
+  perform tests.ok(failed, 'a volunteer cannot add a milestone to a project');
+
+  update public.milestone set name = 'Hijacked' where id = v_first;
+  get diagnostics n = row_count;
+  perform tests.ok(n = 0, 'a volunteer cannot rename a milestone');
+
+  delete from public.milestone where id = v_first;
+  get diagnostics n = row_count;
+  perform tests.ok(n = 0, 'a volunteer cannot delete a milestone');
+
+  perform tests.authenticate(v_staff);
+  update public.milestone set name = 'Renamed by the project owner' where id = v_first;
+  get diagnostics n = row_count;
+  perform tests.ok(n = 1, 'the project owner can rename a milestone');
+
+  delete from public.milestone where id = v_first;
+  get diagnostics n = row_count;
+  perform tests.ok(n = 1, 'the project owner can delete a milestone');
+
+  perform tests.clear_auth();
+  reset role;
+end $$;
+
+rollback;

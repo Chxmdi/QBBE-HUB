@@ -74,7 +74,10 @@ export default async function CalendarPage({
         .limit(300),
       supabase
         .from("milestone")
-        .select("id, name, due_date, project_id")
+        .select(
+          "id, name, due_date, project_id, completed_at, " +
+            "owner:owner_id(full_name)",
+        )
         .gte("due_date", dateStart)
         .lte("due_date", dateEnd)
         .limit(100),
@@ -121,13 +124,22 @@ export default async function CalendarPage({
       href: `/my-work?task=${t.id}`,
       timed: false,
     })),
-    ...(milestonesRes.data ?? []).map((m) => ({
+    ...((milestonesRes.data ?? []) as unknown as {
+      id: string;
+      name: string;
+      due_date: string;
+      project_id: string;
+      completed_at: string | null;
+      owner: { full_name: string } | null;
+    }[]).map((m) => ({
       id: `milestone-${m.id}`,
-      date: parse(m.due_date as string, "yyyy-MM-dd", new Date()),
-      label: m.name as string,
+      date: parse(m.due_date, "yyyy-MM-dd", new Date()),
+      label: m.name,
       kind: "milestone" as const,
       href: `/projects/${m.project_id}`,
       timed: false,
+      owner: m.owner?.full_name ?? null,
+      done: Boolean(m.completed_at),
     })),
     ...(meetingsRes.data ?? []).map((m) => ({
       id: `meeting-${m.id}`,
