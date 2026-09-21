@@ -85,9 +85,9 @@ reasoning is in the #76 entry below and in the readiness report's Browsers row.
 - Issue #71 duplicates #76 and stays open. Closing it is a separate decision.
 - The `next start` crash (exit `0xC0000409`) and the Firefox-only flake in
   `public-routes.spec.ts:27` are recorded here and in the readiness report, and
-  neither is fixed. Both want their own issues before #31 builds on this code,
-  because the first corrupted #76's evidence and will corrupt #31's the same
-  way.
+  neither is fixed. Both now have their own issues — #79 and #80 — and #79
+  should be settled before #31 builds on this code, because it corrupted #76's
+  evidence and will corrupt #31's the same way.
 - #31 — task dependencies, checklists, recurrence and calendar rescheduling —
   remains the last open issue of Epic 02.
 
