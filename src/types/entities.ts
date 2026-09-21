@@ -1,3 +1,5 @@
+import type { MilestoneStatus } from "@/features/projects/schemas";
+
 /**
  * Application-level entity types mirroring supabase/migrations. Regenerate
  * richer types from the live schema with `npm run db:types` once a Supabase
@@ -88,19 +90,40 @@ export interface Project {
   archived_at: string | null;
   owner?: Profile | null;
   program?: Pick<Program, "id" | "name"> | null;
+  sponsor_id?: string | null;
+  sponsor?: { id: string; full_name: string; avatar_url: string | null } | null;
+  priority?: string | null;
+  reporting_cadence?: string | null;
 }
 
 export interface Milestone {
   id: string;
   project_id: string;
   name: string;
+  /** planned | in_progress | completed | missed, kept in step with completed_at. */
+  status: MilestoneStatus;
+  description: string | null;
+  /** What shows it was met. Required to complete, cleared on reopening. */
+  evidence: string | null;
+  owner_id: string | null;
+  owner?: Profile | null;
   due_date: string | null;
   completed_at: string | null;
   sort_key: number;
 }
 
+/**
+ * Every column of `public.task`, in the order the table declares them.
+ *
+ * This used to list 18 of 29. The missing ones were not obscure: the approver
+ * and the blocking person carry authorization (`app.has_task_capability` reads
+ * both), and the three recurrence columns are the subject of #31. Typing a
+ * query against a type that omits the column you are reading gives no error —
+ * it gives `undefined` at runtime, which is the failure this shape prevents.
+ */
 export interface Task {
   id: string;
+  organization_id: string;
   program_id: string | null;
   project_id: string | null;
   milestone_id: string | null;
@@ -109,14 +132,25 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   assignee_id: string | null;
+  requester_id: string | null;
   reviewer_id: string | null;
+  approver_id: string | null;
   start_at: string | null;
   due_at: string | null;
+  estimate_hours: number | null;
   blocked_reason: string | null;
+  blocked_by_id: string | null;
+  completion_criteria: string | null;
   sort_key: number;
+  source_message_id: string | null;
   completed_at: string | null;
+  created_by: string | null;
   created_at: string;
+  updated_at: string;
   archived_at: string | null;
+  recurrence_rule: string | null;
+  recurrence_anchor: string | null;
+  recurrence_parent_id: string | null;
   assignee?: Profile | null;
   project?: Pick<Project, "id" | "name"> | null;
 }

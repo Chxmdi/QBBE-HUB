@@ -222,7 +222,7 @@ export function TaskList({
                       ) : (
                         <Badge tone="neutral">Unassigned</Badge>
                       )}
-                      <StatusSelect taskId={task.id} status={task.status} />
+                      <StatusSelect taskId={task.id} taskTitle={task.title} status={task.status} />
                     </div>
                   );
                 })}

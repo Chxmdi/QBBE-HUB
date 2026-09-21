@@ -16,6 +16,14 @@ export interface CalendarItem {
   kind: "task" | "milestone" | "meeting" | "event" | "follow_up" | "google";
   href: string;
   timed: boolean;
+  /**
+   * Who is accountable, where the record names somebody. Shown in the tooltip
+   * rather than the chip: the chip has room for one line and the name is not
+   * the thing somebody scans a calendar for.
+   */
+  owner?: string | null;
+  /** Already met. Rendered struck through, not hidden — it still happened. */
+  done?: boolean;
 }
 
 export const KIND_STYLES: Record<CalendarItem["kind"], string> = {
@@ -36,6 +44,13 @@ const KIND_PREFIX: Record<CalendarItem["kind"], string> = {
   follow_up: "Follow-up",
   google: "Google",
 };
+
+function calendarItemTitle(item: CalendarItem): string {
+  const parts = [`${KIND_PREFIX[item.kind]}: ${item.label}`];
+  if (item.owner) parts.push(`owner ${item.owner}`);
+  if (item.done) parts.push("completed");
+  return parts.join(" · ");
+}
 
 /**
  * Week view — the primary operational calendar view (§10.9). Timed items
@@ -98,7 +113,7 @@ export function WeekView({
                       <Link
                         key={item.id}
                         href={item.href}
-                        title={`${KIND_PREFIX[item.kind]}: ${item.label}`}
+                        title={calendarItemTitle(item)}
                         className={cn(
                           "block rounded px-1.5 py-1 text-[11px] font-medium hover:opacity-80",
                           KIND_STYLES[item.kind],
@@ -107,7 +122,11 @@ export function WeekView({
                         <span className="block text-[9.5px] tracking-wide uppercase">
                           {KIND_PREFIX[item.kind]}
                         </span>
-                        <span className="line-clamp-2">{item.label}</span>
+                        <span className={cn("line-clamp-2", item.done && "line-through opacity-70")}>
+                          <span className={cn(item.done && "line-through opacity-70")}>
+                        {item.label}
+                      </span>
+                        </span>
                       </Link>
                     ))}
                   </div>
@@ -117,7 +136,7 @@ export function WeekView({
                   <Link
                     key={item.id}
                     href={item.href}
-                    title={`${KIND_PREFIX[item.kind]}: ${item.label}`}
+                    title={calendarItemTitle(item)}
                     className={cn(
                       "block rounded px-1.5 py-1 text-[11px] font-medium hover:opacity-80",
                       KIND_STYLES[item.kind],
@@ -126,7 +145,11 @@ export function WeekView({
                     <span className="block text-[9.5px]">
                       {format(item.date, "h:mm a")} · {KIND_PREFIX[item.kind]}
                     </span>
-                    <span className="line-clamp-2">{item.label}</span>
+                    <span className={cn("line-clamp-2", item.done && "line-through opacity-70")}>
+                      <span className={cn(item.done && "line-through opacity-70")}>
+                        {item.label}
+                      </span>
+                    </span>
                   </Link>
                 ))}
 
@@ -196,7 +219,9 @@ export function AgendaView({ items }: { items: CalendarItem[] }) {
                       {KIND_PREFIX[item.kind]}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-[13.5px]">
-                      {item.label}
+                      <span className={cn(item.done && "line-through opacity-70")}>
+                        {item.label}
+                      </span>
                     </span>
                     {item.timed ? (
                       <span className="meta whitespace-nowrap">

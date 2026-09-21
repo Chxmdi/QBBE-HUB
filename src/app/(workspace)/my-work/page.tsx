@@ -8,13 +8,16 @@ import { ListSkeleton } from "@/components/ui/skeleton";
 import { SaveViewButton } from "@/features/tasks/components/save-view-button";
 import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
 import { TaskDrawer } from "@/features/tasks/components/task-drawer";
+import { FilterConflictNotice } from "@/features/tasks/components/filter-conflict-notice";
 import { TaskFilterBar } from "@/features/tasks/components/task-filter-bar";
 import { TaskList } from "@/features/tasks/components/task-list";
 import {
+  describeFilterConflicts,
   hasActiveFilters,
   parseTaskFilters,
   type TaskFilters,
 } from "@/features/tasks/filters";
+import { TASK_STATUS_LABELS } from "@/features/tasks/schemas";
 import { getMyWork, getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { calendarDateInZone, formatInZone } from "@/lib/time";
@@ -95,6 +98,17 @@ export default async function MyWorkPage({
           showOwner={false}
         />
       </Suspense>
+
+      <FilterConflictNotice
+        conflicts={describeFilterConflicts(filters, {
+          // My Work is one person's list by definition, so an owner filter
+          // naming anybody else arrives from a pasted link or a saved view
+          // built on the board. It is not a mistake in the filters; it is a
+          // filter that cannot apply here.
+          scopedToUserId: session.userId,
+          statusLabel: (status) => TASK_STATUS_LABELS[status],
+        })}
+      />
 
       {work.failed ? (
         <div

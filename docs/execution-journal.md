@@ -23,6 +23,459 @@ Resume the next action below. Confirm existing changes and verification before
 editing. Reconcile intervening work; repeat only invalidated checks. Do not
 restart the audit or treat an earlier summary as evidence of completion.
 
+## Current feature: integrating #27, #28 and #76 onto `main`
+
+One pull request from `76-task-core-follow-ups` to `main`, carrying projects
+(#27), milestones (#28) and the task-core follow-ups (#76) together.
+
+### What was wrong before
+
+The Epic 02 stack was merged bottom-up instead of top-down, and stranded its own
+top commit. On 2026-09-21 PR #74 merged
+`28-milestones-owner-status-evidence-order` into the epic branch at 12:00:45.
+PR #77 then merged `76-task-core-follow-ups` into that same milestones branch
+twenty-eight seconds later, at 12:01:13 — after its contents had already been
+taken forward. Nothing carried the task work on. A second gap followed:
+`396aa11`, which records the CI result for #76, was committed at 12:13, twelve
+minutes after PR #77 merged, so it belonged to no merged branch at all.
+
+The effect was that the nine task-core defect fixes sat on a branch that had
+already been merged out, absent from both the epic branch and `main`, while
+issues #27, #28 and #76 stayed open because `Closes #` only fires on a merge
+into the default branch.
+
+### Why one pull request rather than two
+
+The obvious repair is two merges — the task branch into the epic branch, then
+the epic branch into `main`. It is not necessary. `76-task-core-follow-ups`
+already contains the whole #27 and #28 history in its ancestry; the only commits
+the epic branch holds that it lacks are two merge commits and `e403fd5`, whose
+content — deleting `.github/workflows/project-sync.yml` — is already on `main`
+through PR #75.
+
+That was checked rather than assumed. `git merge-tree --write-tree` produces
+tree `ecc1571d` for the task branch merged into the epic branch, and the same
+tree `ecc1571d` for the task branch merged straight into `main`: identical
+content, no conflicts, one CI cycle instead of two. The merged tree also keeps
+`project-sync.yml` deleted, because a deletion on the `main` side against an
+untouched file on the branch side resolves to deleted. The `configuration-guard`
+job that failed on PR #77 therefore does not run here at all.
+
+### Evidence
+
+There is no product code change in this pull request. It moves work already
+verified on its own branches, and adds this entry.
+
+`docs/acceptance-matrix.md` is deliberately untouched. Its rows already record
+acceptance against the exact commits that produced it, and no acceptance claim
+changes by moving those commits onto `main`. Duplicating them here would add
+volume, not evidence.
+
+The evidence of record for the merged content is CI, across three runs. They
+matter most for what they prove together, because the code under them is
+identical apart from two Markdown files:
+
+| Commit | Diff from the previous | Result | Failed |
+|---|---|---|---|
+| `8c13f1a` | — | 38 of 38 in 3.7 min | — |
+| `5e093db` | two `.md` files | 36 of 38 | `access-impact:5`, `identity-lifecycle:195` |
+| `c131ee5` | two `.md` files | 37 of 38 | `identity-lifecycle:195` |
+
+A documentation-only diff cannot break a browser test. Three runs spanning
+38 of 38 to 36 of 38 over the same product code therefore exonerate the code,
+and that is the claim this pull request rests on.
+
+**They also correct an earlier claim in this file, which was wrong.** The #76
+entry below said CI had never reproduced the instability and treated that runner
+as the stable instrument. It has now reproduced it twice. The precursor error
+`destination stream closed early` appeared 14, 15 and 18 times across the three
+runs — **including the run that passed everything** — so it is background noise
+on CI rather than the crash signal it was read as.
+
+**The standing bar of two consecutive clean passes through the browser suite is
+met on no machine, local or CI, and this entry does not claim otherwise.**
+
+One failure does not fit the environmental explanation and should not be filed
+under it. `identity-lifecycle.spec.ts:195` failed twice with byte-identical
+symptoms — `net::ERR_ABORTED` at `http://127.0.0.1:3000/sign-in`, thrown from
+`page.goto` in the shared `signOut` helper at `tests/e2e/auth.ts:122` — having
+also failed locally once with `ERR_CONNECTION_REFUSED`. The test for telling a
+defect from an unstable machine, used throughout this file, is that a real bug
+reproduces the same way. This one now has. `signOut` clears cookies immediately
+before that `goto`, which is a plausible race that would abort the navigation
+without anything being wrong with deactivation itself, but it is a hypothesis
+and nothing here has tested it. Tracked in #79.
+
+### Not done
+
+- Issue #71 duplicates #76 and stays open. Closing it is a separate decision.
+- The `next start` crash (exit `0xC0000409`) and the Firefox-only flake in
+  `public-routes.spec.ts:27` are recorded here and in the readiness report, and
+  neither is fixed. Both now have their own issues — #79 and #80 — and #79
+  should be settled before #31 builds on this code, because it corrupted #76's
+  evidence and will corrupt #31's the same way.
+- #31 — task dependencies, checklists, recurrence and calendar rescheduling —
+  remains the last open issue of Epic 02.
+
+## Current feature: task core follow-ups — the defects #29 and #30 left
+
+Issue #76, on `76-task-core-follow-ups` at `c748713`, stacked on #28.
+
+### What was wrong before
+
+Nine defects in merged work. They are grouped here by what kind of wrong they
+were, because the kind is what let them survive review.
+
+**Three were wrong data, produced quietly.**
+
+1. The review queue excluded a task with `assignee_id <> me`, meaning "work I
+   judge, not work I do". `assignee_id` is null on an unassigned task, and in
+   SQL `null <> '<uuid>'` is null rather than true, so the row was dropped. A
+   task somebody had been named reviewer of was invisible to them for exactly
+   as long as nobody owned it. Measured against the seeded database: 54 tasks,
+   41 owned by that person, so 13 are not theirs — the old predicate returned
+   **7**, silently losing all six unassigned ones.
+2. `bulkUpdateTasks` never cleared `blocked_reason`. `updateTaskStatus` always
+   did. So a task bulk-moved off `blocked` kept rendering "Blocked: waiting on
+   the venue" above a status that said `in_progress` — text describing a
+   blockage that had been declared over.
+3. `createTask` accepted `status: 'completed'` and wrote no `completed_at`.
+   That is the same split-fact defect #28 had just repaired on `milestone`,
+   reappearing on `task` because the two were written by different hands.
+
+**Two were controls that could not work.**
+
+4. `label` and `task_label` shipped in `0001_core.sql` with correct policies —
+   `task_label` insert and delete are gated on `has_task_capability(task_id,
+   'manage' or 'collaborate')` — the filter bar has offered a label picker
+   since #30, and **nothing in the product ever wrote a row to either table**.
+   The picker was always empty and the filter always matched nothing.
+5. `approver_id` had a column, a command and an RLS grant since
+   `20260912040000` and no control anywhere in the product; `reviewer_id` could
+   be set once at creation and never changed. The drawer selected both columns
+   and rendered neither.
+
+**Two were the page refusing to explain itself.**
+
+6. `status=ready&blocked=yes` returned nothing. That answer is correct — no
+   task holds two statuses. The defect was that the page then said "No tasks",
+   which reads as "there is no work" rather than "you asked a question with no
+   possible answer". The same for `?owner=<someone else>` pasted into My Work,
+   which is scoped to one person by definition.
+7. Task history diffed five fields, so changing the milestone, reviewer,
+   approver, completion criteria or blocked reason recorded a bare "updated"
+   with empty metadata. P0-TSK-05 is about material changes being answerable
+   afterwards, and the approver column is read by `app.has_task_capability`.
+
+**Two were accessibility and correctness slips.**
+
+8. `window.prompt` collected the blocked reason on the board and in the status
+   control. It cannot be labelled, is announced inconsistently, is suppressed
+   by some browsers, and discards what was typed if dismissed.
+9. `task-row.tsx` called `dueLabel` with no time zone while the board and the
+   list both passed the viewer's, so the same task read "Overdue 1d" in the
+   project view and "Due today" everywhere else for anyone outside
+   America/Toronto — the WORK-004 defect surviving in the component that was
+   missed. And `Task` in `src/types/entities.ts` declared 18 of the table's 29
+   columns, omitting the two that carry authorization and the three #31 needs.
+
+### What was implemented
+
+No migration. Every fix is application-side, because in every case the database
+was already right and the code was not.
+
+The blocked-reason dialog is shared by the board and the status control. The
+drawer gained reviewer, approver and a labels section, and asks
+`has_task_capability(task, 'collaborate')` rather than assuming staff — the
+policy lets a task's own assignee tag it, and guessing would have hidden a
+control the server allows. `TaskRow` now requires a `timeZone` prop rather than
+defaulting one, which is what found both of its callers.
+
+### Defects found in a browser rather than by inspection
+
+- **The new dialog had no accessible name.** Every `StatusSelect` on the page
+  renders one, so a fixed `id="blocked-reason"` appeared many times over. The
+  browser binds `<label for>` to the first match, so the visible label belonged
+  to a closed copy and the open field had no name at all — the exact failure
+  the component was written to remove. The id now comes from `useId`. A
+  Playwright accessibility snapshot showed it; reading the component did not.
+- **A denial test from #28 was proving nothing.** "A volunteer sees a project's
+  milestones without any way to change them" asserted only that the manage
+  buttons were absent. They were absent — but because `has_project_capability`
+  denied the volunteer read on that project entirely, so the page was blank.
+  The test would have passed against a 404. It now builds its own project,
+  grants `read_only`, and fails if the milestone is not visible. Checked
+  directly: `has_project_capability(<that project>, 'read')` returns false for
+  the volunteer.
+- **A test of mine asserted the wrong contract.** I first wrote the blocked
+  filter to drop the conflicting condition, which would have shown a list of
+  Ready tasks underneath a notice saying nothing could match. Both conditions
+  are emitted on purpose: zero rows is the true answer, and the notice is what
+  was missing.
+
+### Evidence
+
+Commit `c748713`. Environment: local Supabase over the full migration chain
+through `20260919120000`, `npm run db:seed`, production build on
+127.0.0.1:3000, Chromium.
+
+```
+npm run lint          # clean apart from the pre-existing no-img-element warning
+npm run typecheck     # clean
+npm test              # 504 passed across 54 files (from 480)
+npm run build         # passed
+npm run test:db       # 395 assertions, exit 0, across 15 files (from 381/14)
+npx supabase db advisors --local --type security --fail-on error   # no issues
+npx playwright test task-core --project=chromium        # 4 passed
+npx playwright test milestones --project=chromium       # 4 passed
+```
+
+The review-queue defect was also measured directly against PostgREST rather
+than argued from the code: `assignee_id=neq.<uuid>` returned 7 rows where
+`or=(assignee_id.is.null,assignee_id.neq.<uuid>)` returned 13, against 54 total
+with 41 assigned to that person. That two `or` parameters are ANDed was
+confirmed by the same route before relying on it.
+
+Artifacts: `supabase/tests/task-core-followups.sql` (17 assertions, registered
+in `scripts/test-db.mjs`), `tests/e2e/task-core.spec.ts` (4 checks, registered
+in `.github/workflows/ci.yml`).
+
+The full authenticated suite is 38 Chromium checks with `task-core` added. **On
+CI it passed 38 of 38 in 3.7 minutes at `8c13f1a`.** Locally it did not pass
+twice cleanly, and nothing here claims it did: the best local run was 37 of 38
+and a second was 34 of 38.
+
+> **Corrected after this entry was first written.** It originally read that CI
+> had never reproduced the instability, and treated that runner as the stable
+> instrument. That is false. Two later CI runs, on this same product code with
+> only Markdown changed, returned 36 of 38 and 37 of 38. The correction and the
+> three-run comparison are in the integration entry at the top of this file.
+> The 38 of 38 above is real, but it is one sample, not a property of CI.
+
+No failure in any local run was an assertion about product behaviour — each was
+a transport failure matching a logged server exit or a network suspension, and
+every one of the 38 passed locally when re-run. The `next start` crash (exit
+`0xC0000409`) fired four times in about thirty-five minutes on 2026-09-21
+against once the day before; separately, Windows suspended the browser's network
+stack three times, and an earlier run was discarded outright when the machine
+slept mid-suite.
+
+So the failures measured the environment rather than the product — on both
+machines, not just this one. That is worth recording rather than quietly
+re-running until green, because the same instability will sit underneath #31's
+evidence, and because a suite that fails differently every run is a poor
+instrument for proving anything. The one failure that does **not** fit that
+explanation, `identity-lifecycle.spec.ts:195`, is described in the integration
+entry and tracked in #79. The readiness report's Browsers row carries the
+detail, including a genuinely flaky Firefox check in `public-routes.spec.ts`
+that is unrelated to this work and tracked in #80.
+
+### Not done
+
+- The `estimate_hours` column is still read by nothing, saved views are still
+  write-only, and dashboard KPIs are still computed and not rendered. Those
+  belong to Epic #14 / #37 and were left alone deliberately.
+- The two reviewer mechanisms — the `reviewer_id` column and the
+  `task_assignment` reviewer role — are both now reachable and both still
+  exist. The database reconciles them (each grants `review`); the product does
+  not explain which one somebody was named through. Collapsing them is a model
+  decision, not a defect fix, and is not made here.
+- Hosted staging certification remains outstanding under #55.
+
+## Current feature: milestones — owner, status, evidence and order
+
+Issue #28, on `28-milestones-owner-status-evidence-order` at `37dc714`, stacked
+on #27.
+
+### What was wrong before
+
+`owner_id`, `description`, `status` and `evidence` have been columns on
+`milestone` since `20260912040000`. **Not one line of application code read or
+wrote any of them.** That is not a missing form; it left two problems in the
+data:
+
+1. **Completion had two representations that could disagree.**
+   `completeMilestone` set `completed_at` and never touched `status`, so a
+   completed milestone still reported `status = 'planned'`. Every completed
+   milestone in the database was already inconsistent. Whichever spelling a
+   future reader picked — a report, a roll-up, a filter — half the product
+   would have disagreed with it.
+2. **A milestone could be completed with nothing to show for it.** The issue's
+   definition of done is that completion evidence persists and is visible after
+   a refresh, which is only meaningful if completing requires some.
+
+`sort_key` was a third: stored, selected, ordered by nothing and settable by
+nobody. Every milestone created through the application landed on the default
+`0`, so "ordered milestones" was ordered by `due_date` alone.
+
+### Decisions worth stating
+
+**The trigger, not the application, keeps `status` and `completed_at` in step.**
+Whichever side a caller writes, the other follows. A caller that only knows
+about `completed_at` — every existing one — still leaves the row consistent,
+which is what makes this a repair of the data rather than a new convention that
+the old code quietly violates.
+
+**The evidence constraint is `NOT VALID`.** Rows completed before this are
+grandfathered rather than retro-fitted with invented evidence. `NOT VALID` only
+skips the initial table scan; every insert and update from here on is checked.
+
+**Reopening clears the evidence.** Evidence for a completion that was undone is
+evidence for nothing, and leaving it would satisfy the next completion without
+anybody having looked at it.
+
+**`missed` is checked in the command and deliberately not in the database.**
+The only clock a trigger has is the server's, and `current_date` is UTC. A
+milestone due today in Toronto is already "yesterday" in UTC after 20:00, so a
+database rule would let it be marked missed while it was still due — the exact
+off-by-one recorded against #30 and reproduced once already in this epic.
+
+**Reorder is move-up/move-down, not drag.** The board shipped a drag-only
+reorder in #30 that no keyboard could operate. That is a recorded precedent,
+not a hypothetical.
+
+### A defect in the local server, not in this work
+
+Three browser runs failed part-way through with `ERR_CONNECTION_REFUSED`. The
+cause is not the application: **the local `next start` process crashes**, exit
+code `-1073740791` (`0xC0000409`, Windows fast-fail), after a run of
+`Error: The destination stream closed early` — Playwright aborting streaming
+navigations. Putting the server under a supervisor that records every exit made
+the correlation exact: 3 crashes produced 3 failures, then 1 crash produced 1
+failure, then two runs with 0 crashes passed 34 of 34.
+
+It predates this branch and is not caused by it, but it is worth its own
+investigation: a production server that hard-crashes when clients disconnect
+mid-stream is an availability problem that a process manager would hide rather
+than fix. Nothing here works around it in product code.
+
+One earlier full-suite run took 1.4 hours instead of the usual 4 minutes and
+timed out one identity check; the same spec then passed 4 of 4 in 48 seconds.
+That one was the machine, not the code, and is recorded so the slow run is not
+mistaken for a flake in the suite.
+
+### Evidence
+
+Commit `37dc714`. Clean `supabase db reset` over the full chain through
+`20260919120000`, then `npm run db:seed`, against the production build on
+127.0.0.1:3000, Chromium.
+
+- Database chain: **381 assertions, exit 0**, across 14 files — 363 before.
+- `supabase db advisors --local --type security --fail-on error`: no issues.
+- Unit: 480 passed across 54 files, from 467.
+- Chromium: `milestones` 4 passed; the whole authenticated set — `mfa`,
+  `realtime-revocation`, `hello-hub`, `access-impact`, `my-work`,
+  `identity-lifecycle`, `programs`, `projects`, `milestones` — **34 passed,
+  twice consecutively with zero server crashes**, with the server confirmed
+  answering after each run.
+- Lint clean apart from the pre-existing `no-img-element` warning; typecheck clean.
+
+Three defects in the new spec were found in a browser and fixed: two labels
+matched hidden `<option>` elements rather than the visible value, and adding
+three milestones in a row raced the page refresh, so the third was asserted
+before it rendered.
+
+### Not done
+
+The closing status update still quotes a project's results narrative into the
+updates feed, unchanged from #27. Milestone dependencies belong to #31, not
+here. Hosted staging evidence stays with #55. The remaining Epic 02 issues are
+#71 task-core defects and #31 advanced task planning, after which
+`docs/audit/02-work-management.md` needs correcting.
+
+## Current feature: projects — editing, archive, intake decisions, closure, duplication
+
+Issue #27, on `12-epic-02-programs-projects-milestones-tasks` at `bc0ba39`.
+
+### What was wrong before
+
+Almost all of this was application work against schema that already existed.
+`updateProject` accepted thirteen fields and **nothing in `src/` called it** —
+a project could be created and never edited. The create form sent seven of the
+thirteen, so `description`, `sponsor`, `priority` and `reporting cadence` were
+unreachable by any route. The directory applied `archived_at is null`
+unconditionally, so archiving a project hid it from the only page that could
+restore it. `StageSelect` offered `completed`, which `updateProjectStage`
+refuses, so choosing it produced an inline failure and nothing else.
+`publishStatusUpdate` never wrote `last_status_update_at`, so the stale-project
+sweep fell back to `updated_at` and read any edit as a report. `deferred` and
+`returned` had been in the intake enum since `20260912040000` with no path to
+them. Closure recorded a paragraph and attached no evidence, told nobody, and
+reported `openFollowUps: 0` as a literal. `createProjectFromTemplate` copied
+three columns.
+
+### Four defects, three of them only visible in a browser or a database
+
+1. **Deferring or returning a request could not work at all.** The command set
+   `decided_by` and `decided_at` to null for every status except `declined` and
+   `withdrawn`, and `decided_requests_are_attributable` requires both for
+   anything outside `submitted` and `in_review`. A reviewer choosing "Deferred"
+   got "that decision could not be recorded" and no way to find out why.
+2. **The intake edit policy was wrong in both directions.** Its `USING` froze a
+   request at `status = 'submitted'`, so a returned request could not be
+   clarified — "Returned for clarification" was a label on a dead end. Its
+   `WITH CHECK` tested only ownership, so an author could move their own
+   request to `in_review` and misrepresent where it stood.
+3. **A test fixture could take the whole browser suite down.**
+   `tests.authenticate` synthesizes a verified `auth.mfa_factors` row and left
+   `secret` null. GoTrue scans that column into a non-nullable Go string, so one
+   such row makes every password sign-in for that person fail with "Database
+   error querying schema". One outlived its transaction after an aborted
+   `test:db` run and the volunteer could not sign in until it was deleted. The
+   fixture now writes a dummy base32 secret, which removes the failure mode
+   rather than the symptom.
+4. **`StageSelect` reports success before the server answers.** It sets its own
+   value optimistically and reverts on failure, so a test asserting the select's
+   value proves only that the click landed. The archive check now waits for the
+   close control to disappear, which only happens after the refreshed page comes
+   back from the server.
+
+### A boundary deliberately moved, and one deliberately not
+
+Moved: the intake queue's **write** policy narrows from `app.is_org_staff` to
+`manage` on the program a request names. Approving a request creates a real
+project inside that program, and until now any staff member could do that for a
+program they held nothing on — the last intake surface still on the broad staff
+predicate every sibling moved off in the scoped-access cutover. Reading stays
+with all staff: a request that silently vanishes from the queue is worse than
+one that refuses a decision with a reason. One consequence worth stating:
+`has_program_capability` requires AAL2 before granting an owner or administrator
+anything past `read`, so deciding a program-scoped request now needs a second
+factor — the same bar `createProject` already sets for that program.
+
+Not moved: the project team panel is read-only, for the same reason the
+programme one is. `setDirectProjectAccess` requires `authorizeAdminAction()`
+and a project manager holds `manage`, not that.
+
+### Evidence
+
+Commit `bc0ba39`. Clean `supabase db reset` over the full chain through
+`20260919010000`, then `npm run db:seed`, against the production build on
+127.0.0.1:3000, Chromium.
+
+- Database chain: **363 assertions, exit 0**, across 14 files — 334 across 13
+  before, with `supabase/tests/project-lifecycle.sql` added to the runner by hand.
+- `supabase db advisors --local --type security --fail-on error`: no issues.
+- Unit: 467 passed across 54 files, from 463.
+- Chromium: `projects` 5 passed; the whole authenticated set — `mfa`,
+  `realtime-revocation`, `hello-hub`, `access-impact`, `my-work`,
+  `identity-lifecycle`, `programs`, `projects` — **30 passed, twice
+  consecutively**, with the server confirmed answering after each run.
+- Lint clean apart from the pre-existing `no-img-element` warning; typecheck clean.
+
+Five browser failures were real and were fixed before this was called done:
+four locator or race defects in the new spec, and the null-secret factor above.
+
+### Not done
+
+Milestones keep their existing create/complete commands; `owner_id`,
+`description`, `status`, `evidence` and `sort_key` are still untouched by
+application code and belong to #28. The closing status update still quotes the
+results narrative back into the updates feed, so the sentence appears twice on
+a closed project — deliberate for now, because the feed is read as history.
+Hosted staging evidence stays with #55. The remaining Epic 02 issues are #28
+milestones, #71 task-core defects and #31 advanced task planning.
+
 ## Current feature: programs — lead, overview composition and approved templates
 
 Issue #26, on `12-epic-02-programs-projects-milestones-tasks` off `698c52f`.

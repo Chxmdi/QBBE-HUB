@@ -7,9 +7,15 @@ import { PageHeader } from "@/components/shared/page-header";
 import { TaskBoard } from "@/features/tasks/components/board";
 import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
 import { TaskDrawer } from "@/features/tasks/components/task-drawer";
+import { FilterConflictNotice } from "@/features/tasks/components/filter-conflict-notice";
 import { TaskFilterBar } from "@/features/tasks/components/task-filter-bar";
 import { SaveViewButton } from "@/features/tasks/components/save-view-button";
-import { hasActiveFilters, parseTaskFilters } from "@/features/tasks/filters";
+import {
+  describeFilterConflicts,
+  hasActiveFilters,
+  parseTaskFilters,
+} from "@/features/tasks/filters";
+import { TASK_STATUS_LABELS } from "@/features/tasks/schemas";
 import {
   getPickerOptions,
   getScopedTasks,
@@ -77,6 +83,12 @@ export default async function BoardPage({
       <Suspense fallback={<div className="mb-5 h-9" />}>
         <TaskFilterBar filters={filters} options={options} basePath="/board" />
       </Suspense>
+
+      <FilterConflictNotice
+        conflicts={describeFilterConflicts(filters, {
+          statusLabel: (status) => TASK_STATUS_LABELS[status],
+        })}
+      />
 
       {result.failed ? (
         <div

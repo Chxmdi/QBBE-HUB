@@ -5,6 +5,7 @@ import { useOptimistic, useState, useTransition } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { PriorityBadge, TASK_STATUS_META } from "@/components/shared/status-badges";
+import { BlockedReasonDialog } from "@/features/tasks/components/blocked-reason-dialog";
 import { StatusSelect } from "@/features/tasks/components/status-select";
 import { updateTaskStatus } from "@/features/tasks/services/task.commands";
 import { cn, dueLabel } from "@/lib/utils";
@@ -55,7 +56,11 @@ export function TaskBoard({
   const [dropTarget, setDropTarget] = useState<TaskStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const [, startTransition] = useTransition();
+  const [askingBlocked, setAskingBlocked] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const [pending, startTransition] = useTransition();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -70,32 +75,28 @@ export function TaskBoard({
     if (!task || task.status === status) return;
     // A card sliding to another column is a visual event. Anyone not watching
     // it — using the status control, or a screen reader — gets no confirmation
-    // that the move happened at all, so the board says so out loud.
-    const announce = () =>
-      setAnnouncement(`${task.title} moved to ${TASK_STATUS_META[status].label}`);
+    // that the move happened at all, so `commitMove` says so out loud.
 
+    // Blocking needs a reason, so the card cannot move yet. Asking in a dialog
+    // rather than `window.prompt` also means the drop is not lost if the
+    // question is dismissed — the card simply stays where it was.
     if (status === "blocked") {
-      const reason = window.prompt(
-        "What is blocking this task? A reason is required.",
-      );
-      if (!reason?.trim()) return;
-      startTransition(async () => {
-        applyMove({ id, status });
-        const result = await updateTaskStatus(id, status, reason.trim());
-        if (!result.ok) {
-          setError(result.error ?? "Move failed.");
-          setAnnouncement(`${task.title} could not be moved`);
-        } else announce();
-      });
+      setAskingBlocked({ id, title: task.title });
       return;
     }
+    commitMove(id, status, task.title);
+  }
+
+  function commitMove(id: string, status: TaskStatus, title: string, reason?: string) {
     startTransition(async () => {
       applyMove({ id, status });
-      const result = await updateTaskStatus(id, status);
+      const result = await updateTaskStatus(id, status, reason);
       if (!result.ok) {
         setError(result.error ?? "Move failed.");
-        setAnnouncement(`${task.title} could not be moved`);
-      } else announce();
+        setAnnouncement(`${title} could not be moved`);
+      } else {
+        setAnnouncement(`${title} moved to ${TASK_STATUS_META[status].label}`);
+      }
     });
   }
 
@@ -223,6 +224,7 @@ export function TaskBoard({
                         </div>
                         <StatusSelect
                           taskId={task.id}
+                          taskTitle={task.title}
                           status={task.status}
                           onSelect={(next) => moveTask(task.id, next)}
                         />
@@ -240,6 +242,18 @@ export function TaskBoard({
           })}
         </div>
       </div>
+
+      <BlockedReasonDialog
+        open={askingBlocked !== null}
+        taskTitle={askingBlocked?.title ?? null}
+        busy={pending}
+        onCancel={() => setAskingBlocked(null)}
+        onConfirm={(reason) => {
+          const target = askingBlocked;
+          setAskingBlocked(null);
+          if (target) commitMove(target.id, "blocked", target.title, reason);
+        }}
+      />
     </div>
   );
 }

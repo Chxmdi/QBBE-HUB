@@ -39,11 +39,18 @@ export function StageSelect({
         onChange={(e) => handleChange(e.target.value as ProjectStage)}
         className="h-8 w-36 text-[12.5px]"
       >
-        {(Object.keys(STAGE_LABELS) as ProjectStage[]).map((s) => (
-          <option key={s} value={s}>
-            {STAGE_LABELS[s]}
-          </option>
-        ))}
+        {(Object.keys(STAGE_LABELS) as ProjectStage[])
+          // `completed` is not offered as a destination: updateProjectStage
+          // refuses it, because closing a project has to capture results and
+          // check for unresolved work. Offering it only produced an inline
+          // error. It stays in the list when the project is already completed,
+          // or the control would show no value at all for a closed project.
+          .filter((s) => s !== "completed" || value === "completed")
+          .map((s) => (
+            <option key={s} value={s}>
+              {STAGE_LABELS[s]}
+            </option>
+          ))}
       </Select>
       {error ? (
         <p role="alert" className="mt-1 text-[12px] text-danger-fg">

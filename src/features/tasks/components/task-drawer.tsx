@@ -14,6 +14,7 @@ import { TASK_STATUS_META } from "@/components/shared/status-badges";
 import { addTaskComment, updateTask } from "@/features/tasks/services/task.commands";
 import { StatusSelect } from "@/features/tasks/components/status-select";
 import { TaskExtras } from "@/features/tasks/components/task-extras";
+import { TaskLabels, type TaskLabel } from "@/features/tasks/components/task-labels";
 import { TaskRoles, type TaskRoleHolder } from "@/features/tasks/components/task-roles";
 import { TaskHistory, type TaskHistoryEntry } from "@/features/tasks/components/task-history";
 import type { TaskRole } from "@/features/tasks/schemas";
@@ -51,6 +52,9 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
 
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [roles, setRoles] = useState<TaskRoleHolder[]>([]);
+  const [labels, setLabels] = useState<TaskLabel[]>([]);
+  const [allLabels, setAllLabels] = useState<TaskLabel[]>([]);
+  const [canCollaborate, setCanCollaborate] = useState(false);
   const [history, setHistory] = useState<TaskHistoryEntry[]>([]);
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [checklist, setChecklist] = useState<{ id: string; title: string; completed_at: string | null }[]>([]);
@@ -74,6 +78,9 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
       { data: depRows },
       { data: taskOptions },
       { data: roleRows },
+      { data: labelRows },
+      { data: labelOptions },
+      { data: collaborate },
       { data: historyRows, error: historyError },
     ] = await Promise.all([
       supabase.from("task").select(DETAIL_SELECT + ", recurrence_rule").eq("id", id).maybeSingle(),
@@ -99,6 +106,21 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
         .from("task_assignment")
         .select("user_id, role, user_profile:user_id(id, full_name, avatar_url)")
         .eq("task_id", id),
+      supabase
+        .from("task_label")
+        .select("label:label_id(id, name, color)")
+        .eq("task_id", id),
+      supabase.from("label").select("id, name, color").order("name"),
+      // Ask the database what this person may do rather than inferring it
+      // from their organization role. `task_label` insert and delete are
+      // gated on manage-or-collaborate, so a task's own assignee may tag it
+      // while never being staff. Guessing `isStaff` here would hide a control
+      // the server would have allowed, which is the quieter half of the same
+      // mistake as showing one it refuses.
+      supabase.rpc("has_task_capability", {
+        p_task: id,
+        p_capability: "collaborate",
+      }),
       supabase
         .from("activity_event")
         .select(
@@ -127,6 +149,13 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
       })),
     );
     setPeopleTasks((taskOptions ?? []) as { id: string; title: string }[]);
+    setLabels(
+      ((labelRows ?? []) as unknown as { label: TaskLabel | null }[])
+        .map((row) => row.label)
+        .filter((label): label is TaskLabel => label !== null),
+    );
+    setAllLabels((labelOptions ?? []) as unknown as TaskLabel[]);
+    setCanCollaborate(collaborate === true);
 
     type RoleRow = {
       user_id: string;
@@ -249,7 +278,7 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
       ) : task ? (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center gap-2">
-            <StatusSelect taskId={task.id} status={task.status} />
+            <StatusSelect taskId={task.id} taskTitle={task.title} status={task.status} />
             {task.project ? (
               <Link
                 href={`/projects/${task.project.id}`}
@@ -349,6 +378,44 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
               </Select>
             </div>
             <div>
+              <Label htmlFor="drawer-reviewer">Reviewer</Label>
+              <Select
+                id="drawer-reviewer"
+                defaultValue={task.reviewer_id ?? ""}
+                onChange={(e) =>
+                  void handleFieldSave({ reviewerId: e.target.value || null })
+                }
+              >
+                <option value="">No reviewer</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="drawer-approver">Approver</Label>
+              <Select
+                id="drawer-approver"
+                defaultValue={task.approver_id ?? ""}
+                onChange={(e) =>
+                  void handleFieldSave({ approverId: e.target.value || null })
+                }
+              >
+                <option value="">No approver</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1 text-[12.5px] text-muted">
+                Naming somebody here gives them access to this task and puts it
+                in their review queue.
+              </p>
+            </div>
+            <div>
               <Label htmlFor="drawer-due">Due date</Label>
               <Input
                 id="drawer-due"
@@ -379,6 +446,14 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
             checklist={checklist}
             blockers={blockers}
             peopleTasks={peopleTasks}
+          />
+
+          <TaskLabels
+            taskId={task.id}
+            attached={labels}
+            available={allLabels}
+            canEdit={canCollaborate}
+            onChanged={() => load(task.id)}
           />
 
           <TaskRoles

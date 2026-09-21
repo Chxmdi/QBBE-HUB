@@ -20,15 +20,19 @@ import {
 export function CloseProjectDialog({
   projectId,
   projectName,
+  documents = [],
 }: {
   projectId: string;
   projectName: string;
+  /** Documents already filed against this project, offerable as evidence. */
+  documents?: { id: string; title: string }[];
 }) {
   const router = useRouter();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [unresolved, setUnresolved] = useState<UnresolvedWork | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(true);
+  const [evidenceIds, setEvidenceIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +52,8 @@ export function CloseProjectDialog({
       projectId,
       results: form.get("results"),
       lessons: (form.get("lessons") as string) || undefined,
+      evidenceLinks: (form.get("evidenceLinks") as string) || undefined,
+      evidenceDocumentIds: evidenceIds,
       archiveOpenTasks: archiveOpen,
     });
     setSaving(false);
@@ -62,7 +68,10 @@ export function CloseProjectDialog({
 
   const hasOpenWork =
     unresolved !== null &&
-    (unresolved.openTasks > 0 || unresolved.openMilestones > 0);
+    (unresolved.openTasks > 0 ||
+      unresolved.openMilestones > 0 ||
+      unresolved.openRisks > 0 ||
+      unresolved.openIssues > 0);
 
   return (
     <>
@@ -96,12 +105,24 @@ export function CloseProjectDialog({
                     {unresolved.openMilestones === 1 ? "milestone" : "milestones"}
                   </li>
                 ) : null}
+                {unresolved.openRisks > 0 ? (
+                  <li>
+                    {unresolved.openRisks} live{" "}
+                    {unresolved.openRisks === 1 ? "risk" : "risks"}
+                  </li>
+                ) : null}
+                {unresolved.openIssues > 0 ? (
+                  <li>
+                    {unresolved.openIssues} unresolved{" "}
+                    {unresolved.openIssues === 1 ? "issue" : "issues"}
+                  </li>
+                ) : null}
               </ul>
             </div>
           ) : (
             <p className="flex items-center gap-1.5 rounded-(--radius-sm) bg-success/10 px-3 py-2 text-[13.5px] text-success-fg">
               <CheckCircle2 className="size-4" aria-hidden />
-              No open tasks or milestones remain.
+              No open tasks, milestones, risks or issues remain.
             </p>
           )}
 
@@ -123,6 +144,53 @@ export function CloseProjectDialog({
             </Label>
             <Textarea id="close-lessons" name="lessons" rows={2} maxLength={5000} />
           </div>
+
+          <div>
+            <Label htmlFor="close-evidence-links">
+              Evidence links{" "}
+              <span className="font-normal text-muted">(optional)</span>
+            </Label>
+            <Textarea
+              id="close-evidence-links"
+              name="evidenceLinks"
+              rows={2}
+              maxLength={4000}
+              placeholder="Final report|https://…"
+            />
+            <p className="mt-1 text-[12.5px] text-muted">
+              One per line, as <code>Label|https://…</code>. These are what a
+              funder asks for when the paragraph above is not enough.
+            </p>
+          </div>
+
+          {documents.length > 0 ? (
+            <fieldset>
+              <legend className="mb-1 text-[13.5px] font-medium">
+                Attach project documents as evidence
+              </legend>
+              <ul className="max-h-40 space-y-1 overflow-y-auto rounded-(--radius-sm) border border-line p-2">
+                {documents.map((document) => (
+                  <li key={document.id}>
+                    <label className="flex items-start gap-2 text-[13px]">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 size-4 accent-(--color-brand)"
+                        checked={evidenceIds.includes(document.id)}
+                        onChange={(e) =>
+                          setEvidenceIds((current) =>
+                            e.target.checked
+                              ? [...current, document.id]
+                              : current.filter((id) => id !== document.id),
+                          )
+                        }
+                      />
+                      <span>{document.title}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </fieldset>
+          ) : null}
 
           {hasOpenWork ? (
             <label className="flex items-start gap-2.5 text-[13.5px]">

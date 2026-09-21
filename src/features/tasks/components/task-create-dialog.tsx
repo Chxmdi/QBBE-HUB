@@ -60,6 +60,7 @@ export function TaskCreateDialog({
       dueAt: (form.get("dueAt") as string) || undefined,
       completionCriteria: (form.get("completionCriteria") as string) || undefined,
       reviewerId: (form.get("reviewerId") as string) || undefined,
+      approverId: (form.get("approverId") as string) || undefined,
     });
     setSaving(false);
     if (!result.ok) {
@@ -191,6 +192,19 @@ export function TaskCreateDialog({
               </Label>
               <Select id="task-reviewer" name="reviewerId" defaultValue="">
                 <option value="">No reviewer</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="task-approver">
+                Approver <span className="font-normal text-muted">(optional)</span>
+              </Label>
+              <Select id="task-approver" name="approverId" defaultValue="">
+                <option value="">No approver</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}

@@ -95,3 +95,90 @@ describe("task field history", () => {
     );
   });
 });
+
+/**
+ * #76: the diff covered five fields, so moving a task to another milestone or
+ * changing who approves it recorded a bare "updated" with empty metadata.
+ * P0-TSK-05 is about material changes being answerable afterwards, and those
+ * are material — the approver column is read by `app.has_task_capability`.
+ */
+describe("the fields a task history can answer for", () => {
+  it("records a milestone move with both names", () => {
+    const changes = diffTaskFields(
+      { milestone_id: "m-1" },
+      { milestone_id: "m-2" },
+      { "m-1": "Venue confirmed", "m-2": "Registration open" },
+    );
+    expect(changes).toHaveLength(1);
+    expect(describeChange(changes[0])).toBe(
+      "changed Milestone from Venue confirmed to Registration open",
+    );
+  });
+
+  it("records naming a reviewer and an approver", () => {
+    const changes = diffTaskFields(
+      { reviewer_id: null, approver_id: null },
+      { reviewer_id: "u-1", approver_id: "u-2" },
+      { "u-1": "Dana Reyes", "u-2": "Sam Okafor" },
+    );
+    expect(changes.map(describeChange)).toEqual([
+      "set Reviewer to Dana Reyes",
+      "set Approver to Sam Okafor",
+    ]);
+  });
+
+  it("records clearing an approver, not just setting one", () => {
+    const changes = diffTaskFields(
+      { approver_id: "u-2" },
+      { approver_id: null },
+      { "u-2": "Sam Okafor" },
+    );
+    expect(describeChange(changes[0])).toBe("cleared Approver (was Sam Okafor)");
+  });
+
+  it("shortens long free text so one field cannot swallow the entry", () => {
+    const criteria =
+      "Every registrant has been emailed, the attendance sheet is filed, " +
+      "and the final headcount is recorded against the grant report.";
+    const changes = diffTaskFields(
+      { completion_criteria: null },
+      { completion_criteria: criteria },
+    );
+    const described = describeChange(changes[0]);
+    expect(described.startsWith("set Completion criteria to ")).toBe(true);
+    expect(described).toContain("…");
+    // The full value stays in the change record even though the sentence is cut.
+    expect(changes[0].to).toBe(criteria);
+    expect(described.length).toBeLessThan(criteria.length);
+  });
+
+  it("records a blocked reason arriving and being cleared", () => {
+    const set = diffTaskFields(
+      { blocked_reason: null },
+      { blocked_reason: "Waiting on the signed venue contract." },
+    );
+    expect(describeChange(set[0])).toBe(
+      "set Blocked reason to Waiting on the signed venue contract.",
+    );
+    const cleared = diffTaskFields(
+      { blocked_reason: "Waiting on the signed venue contract." },
+      { blocked_reason: null },
+    );
+    expect(describeChange(cleared[0])).toBe(
+      "cleared Blocked reason (was Waiting on the signed venue contract.)",
+    );
+  });
+
+  it("reports a bulk unblock as a status change and a cleared reason together", () => {
+    // The bulk path used to write only the status, leaving the old reason on
+    // the row and out of the history at the same time.
+    const changes = diffTaskFields(
+      { status: "blocked", blocked_reason: "Waiting on the venue." },
+      { status: "in_progress", blocked_reason: null },
+    );
+    expect(summarizeChanges("Book the hall", changes)).toBe(
+      "changed Status from Blocked to In progress, " +
+        "cleared Blocked reason (was Waiting on the venue.) on “Book the hall”",
+    );
+  });
+});

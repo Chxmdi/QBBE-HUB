@@ -5,14 +5,15 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import {
+  EXPLAINED_REQUEST_STATUSES,
   PROJECT_REQUEST_STATUSES,
-  REFUSED_REQUEST_STATUSES,
   REQUEST_STATUS_LABELS,
   type ProjectRequestStatus,
 } from "@/features/requests/schemas";
 import {
   decideApproval,
   decideProjectRequest,
+  updateProjectRequest,
 } from "@/features/requests/services/request.commands";
 
 function useRowAction() {
@@ -37,13 +38,36 @@ function useRowAction() {
 }
 
 /**
+ * What the note field asks for, per decision.
+ *
+ * Four of these statuses hand the request back to somebody, and each hands it
+ * back for a different reason, so a single "Note" prompt gets a single kind of
+ * answer. A returned request in particular is useless without a specific
+ * question: the requester cannot guess what was missing.
+ */
+const NOTE_PROMPT: Partial<Record<ProjectRequestStatus, string>> = {
+  declined: "Why not? The next person to propose this needs to know.",
+  withdrawn: "Why is it being withdrawn?",
+  deferred: "Until when, and what would have to change?",
+  returned: "What is missing? Ask for one specific thing.",
+};
+
+const SUBMIT_LABEL: Partial<Record<ProjectRequestStatus, string>> = {
+  approved: "Approve and open the project",
+  declined: "Decline",
+  deferred: "Defer",
+  returned: "Return for clarification",
+};
+
+/**
  * Deciding one project request.
  *
  * Approving asks for the project's name, because the proposal's title is
  * written to persuade and the project's name has to be worked with daily —
  * they are usually not the same sentence. Declining asks why, which the
  * database also insists on; asking here means the person is not refused after
- * the fact.
+ * the fact. Deferring and returning ask the same way, for the same reason:
+ * neither tells the requester anything on its own.
  */
 export function RequestDecision({
   requestId,
@@ -59,7 +83,7 @@ export function RequestDecision({
   const [next, setNext] = React.useState<ProjectRequestStatus>(status);
 
   const approving = next === "approved";
-  const refusing = REFUSED_REQUEST_STATUSES.includes(next);
+  const explaining = EXPLAINED_REQUEST_STATUSES.includes(next);
 
   if (!open) {
     return (
@@ -122,19 +146,19 @@ export function RequestDecision({
 
       <div className="sm:col-span-2">
         <Label htmlFor={`request-note-${requestId}`}>
-          {refusing ? "Why not? The next person to propose this needs to know." : "Note"}
+          {NOTE_PROMPT[next] ?? "Note"}
         </Label>
         <Textarea
           id={`request-note-${requestId}`}
           name="decisionNote"
           rows={2}
-          required={refusing}
+          required={explaining}
         />
       </div>
 
       <div className="flex items-center gap-2 sm:col-span-2">
         <Button type="submit" size="sm" loading={busy} disabled={busy}>
-          {approving ? "Approve and open the project" : "Save"}
+          {SUBMIT_LABEL[next] ?? "Save"}
         </Button>
         <Button
           type="button"
@@ -145,6 +169,111 @@ export function RequestDecision({
             setNext(status);
           }}
         >
+          Cancel
+        </Button>
+        {error ? (
+          <span role="alert" className="text-[12.5px] text-danger-fg">
+            {error}
+          </span>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Answering a return, as the person who proposed it.
+ *
+ * This is the other half of "returned for clarification". Without it the
+ * status is a label on a dead end: the reviewer asks for something and the
+ * requester has no way to supply it. Saving puts the request back in the
+ * queue as submitted and tells the reviewer who asked.
+ */
+export function RequestClarification({
+  requestId,
+  summary,
+  rationale,
+  beneficiaries,
+  question,
+}: {
+  requestId: string;
+  summary: string;
+  rationale: string | null;
+  beneficiaries: string | null;
+  question: string | null;
+}) {
+  const { busy, error, run } = useRowAction();
+  const [open, setOpen] = React.useState(false);
+
+  if (!open) {
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={() => setOpen(true)}>
+          Answer and resubmit
+        </Button>
+        {error ? <span className="text-[12.5px] text-danger-fg">{error}</span> : null}
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="mt-2 space-y-3"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        const saved = await run(() =>
+          updateProjectRequest({
+            requestId,
+            summary: String(form.get("summary") ?? "").trim(),
+            rationale: String(form.get("rationale") ?? "").trim(),
+            beneficiaries: String(form.get("beneficiaries") ?? "").trim(),
+          }),
+        );
+        if (saved) setOpen(false);
+      }}
+    >
+      {question ? (
+        <p className="text-[13px] text-muted">
+          <span className="font-medium text-fg">You were asked: </span>
+          {question}
+        </p>
+      ) : null}
+
+      <div>
+        <Label htmlFor={`clarify-summary-${requestId}`}>What would it involve</Label>
+        <Textarea
+          id={`clarify-summary-${requestId}`}
+          name="summary"
+          rows={3}
+          required
+          defaultValue={summary}
+        />
+      </div>
+      <div>
+        <Label htmlFor={`clarify-rationale-${requestId}`}>Why now</Label>
+        <Textarea
+          id={`clarify-rationale-${requestId}`}
+          name="rationale"
+          rows={2}
+          defaultValue={rationale ?? ""}
+        />
+      </div>
+      <div>
+        <Label htmlFor={`clarify-beneficiaries-${requestId}`}>Who it serves</Label>
+        <Textarea
+          id={`clarify-beneficiaries-${requestId}`}
+          name="beneficiaries"
+          rows={2}
+          defaultValue={beneficiaries ?? ""}
+        />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button type="submit" size="sm" loading={busy} disabled={busy}>
+          Resubmit
+        </Button>
+        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
           Cancel
         </Button>
         {error ? (
