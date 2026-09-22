@@ -108,12 +108,19 @@ signal, and the Browsers row should stop treating it as one.
 - **P1-TSK-12 calendar rescheduling.** A date field rather than a drag handle,
   because the accessible control should not be the second one. The value sent
   is a calendar date, never an instant.
-- **P1-TSK-11 recurring series.** `task_series` carries an owner, a
-  `stopped_at` and a `series_edited_at` marker, and now carries through
-  `updateTaskStatus`, so completing an occurrence creates the next one and a
-  stopped series creates nothing. **There is no surface for creating or
-  stopping a series.** The mechanism is tested; the feature is not reachable,
-  and no browser test pretends otherwise.
+- **P1-TSK-11 recurring series.** Now reachable, and now actually working.
+  Repeats is offered in the Create task dialog, an occurrence shows what series
+  it belongs to, and the two safe actions on one — stop the series, detach this
+  occurrence — are offered there. Building the surface exposed two defects in
+  the mechanism, both introduced earlier in this same branch and neither
+  catchable by the database suite, because both live in application code:
+  `createTaskSeries` omitted `recurrence_rule` from its first occurrence, which
+  is the column the spawn path reads, so a series produced one task and stopped
+  without saying so; and `detachSeriesOccurrence` wrote a marker that nothing
+  read, so detaching had no effect at all. The second is the more instructive:
+  the comment beside the successor insert already described the correct
+  behaviour, and the code had simply never implemented what the comment
+  promised.
 
 ### Three product defects the new tests found
 
