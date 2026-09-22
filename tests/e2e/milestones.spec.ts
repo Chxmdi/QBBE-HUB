@@ -34,8 +34,14 @@ async function addMilestone(page: Page, name: string, owner?: string) {
   // The dialog closes on a successful action, but the rail only shows the new
   // milestone once the refreshed page comes back. Waiting for the row is what
   // makes three additions in a row deterministic.
+  // Addressed as the row's heading rather than as loose text. Each row carries
+  // a blocker picker listing every other milestone by name, so a plain text
+  // match finds the name once as a title and twice more as somebody else's
+  // option and label.
   await expect(
-    page.getByRole("region", { name: "Milestones", exact: true }).getByText(name),
+    page
+      .getByRole("region", { name: "Milestones", exact: true })
+      .getByRole("heading", { name, exact: true }),
   ).toBeVisible({ timeout: 30_000 });
 }
 
@@ -50,7 +56,7 @@ test("a milestone carries an owner and a description, and keeps them", async ({
   await addMilestone(page, `Venue confirmed ${stamp}`, "QA Staff");
 
   const rail = page.getByRole("region", { name: "Milestones", exact: true });
-  await expect(rail.getByText(`Venue confirmed ${stamp}`)).toBeVisible({
+  await expect(rail.getByRole("heading", { name: `Venue confirmed ${stamp}`, exact: true })).toBeVisible({
     timeout: 30_000,
   });
   // Visible-only: the Add-milestone dialog stays mounted, and its owner picker
@@ -169,9 +175,11 @@ test("milestones keep the order somebody arranged, and can be deleted", async ({
     rail.getByRole("button", { name: `Move Alpha ${stamp} up` }),
   ).toBeDisabled();
 
+  // Filtered by the row's own heading. `hasText` would also match Alpha's row,
+  // which lists Beta as a selectable blocker.
   await rail
     .locator("li")
-    .filter({ hasText: `Beta ${stamp}` })
+    .filter({ has: page.getByRole("heading", { name: `Beta ${stamp}`, exact: true }) })
     .getByRole("button", { name: "Delete" })
     .click();
   await expect
@@ -218,7 +226,7 @@ test("a read-only member sees a project's milestones without any way to change t
   await page.goto(`/projects/${projectId}`);
 
   const rail = page.getByRole("region", { name: "Milestones", exact: true });
-  await expect(rail.getByText(`Visible to readers ${stamp}`)).toBeVisible({
+  await expect(rail.getByRole("heading", { name: `Visible to readers ${stamp}`, exact: true })).toBeVisible({
     timeout: 30_000,
   });
 

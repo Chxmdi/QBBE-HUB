@@ -142,9 +142,17 @@ export function MilestoneRail({
                 ) : (
                   <Circle className="size-4 shrink-0 text-muted/50" aria-label="Open" />
                 )}
-                <span className="min-w-0 flex-1 truncate text-[13.5px]">
+                {/*
+                  The row's title, and addressable as one. Every row now carries
+                  a blocker picker listing the other milestones by name, so a
+                  bare span left each name matching three times over: the title,
+                  an option in a sibling row's picker, and that picker's label.
+                  Tailwind's preflight drops the heading's own size and weight,
+                  so this is a semantic change and not a visual one.
+                */}
+                <h3 className="min-w-0 flex-1 truncate text-[13.5px] font-normal">
                   {milestone.name}
-                </span>
+                </h3>
                 <Badge tone={STATUS_TONE[status]}>
                   {MILESTONE_STATUS_LABELS[status]}
                 </Badge>
