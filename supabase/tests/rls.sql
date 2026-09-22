@@ -219,7 +219,7 @@ begin
   values (v_other_org, v_other_message, 'Private announcement', v_owner)
   returning id into v_other_announcement;
   insert into document (organization_id, title, kind, url, visibility, created_by)
-  values (v_other_org, 'Private document', 'link', 'https://example.org/private',
+  values (v_other_org, 'Private document', 'link', 'https://drive.google.com/private',
           'organization', v_owner)
   returning id into v_other_document;
   insert into email_delivery (organization_id, recipient, subject, dedupe_key)

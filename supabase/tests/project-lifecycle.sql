@@ -237,11 +237,11 @@ begin
   returning id into v_other_project;
 
   insert into public.document (organization_id, title, kind, url, project_id, created_by)
-  values (v_org, 'Final report', 'link', 'https://example.org/report', v_project, v_owner)
+  values (v_org, 'Final report', 'link', 'https://drive.google.com/report', v_project, v_owner)
   returning id into v_document;
 
   insert into public.document (organization_id, title, kind, url, project_id, created_by)
-  values (v_org, 'Someone else''s report', 'link', 'https://example.org/other',
+  values (v_org, 'Someone else''s report', 'link', 'https://drive.google.com/other',
           v_other_project, v_owner)
   returning id into v_foreign_document;
 
