@@ -8,6 +8,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { cn } from "@/lib/utils";
+import { RescheduleControl } from "@/features/calendar/components/reschedule-control";
 
 export interface CalendarItem {
   id: string;
@@ -24,6 +25,18 @@ export interface CalendarItem {
   owner?: string | null;
   /** Already met. Rendered struck through, not hidden — it still happened. */
   done?: boolean;
+  /**
+   * The record's own date as `yyyy-MM-dd` in the workspace zone, present only
+   * on records this viewer may move. Absence is what hides the control: the
+   * caller decides who may reschedule, so the chip never has to guess, and a
+   * viewer who cannot move a record is not shown a field that would fail.
+   */
+  reschedulableDate?: string | null;
+  /**
+   * The record's own id. `id` above is prefixed to keep chips unique across
+   * six record types in one list, so it is not the value any command wants.
+   */
+  recordId?: string;
 }
 
 export const KIND_STYLES: Record<CalendarItem["kind"], string> = {
@@ -44,6 +57,19 @@ const KIND_PREFIX: Record<CalendarItem["kind"], string> = {
   follow_up: "Follow-up",
   google: "Google",
 };
+
+function rescheduleControl(item: CalendarItem) {
+  if (!item.reschedulableDate) return null;
+  if (item.kind !== "task" && item.kind !== "milestone") return null;
+  return (
+    <RescheduleControl
+      kind={item.kind}
+      id={item.recordId ?? item.id}
+      label={item.label}
+      date={item.reschedulableDate}
+    />
+  );
+}
 
 function calendarItemTitle(item: CalendarItem): string {
   const parts = [`${KIND_PREFIX[item.kind]}: ${item.label}`];
@@ -110,8 +136,8 @@ export function WeekView({
                 {allDay.length > 0 ? (
                   <div className="space-y-1 border-b border-line pb-1.5">
                     {allDay.map((item) => (
+                      <div key={item.id}>
                       <Link
-                        key={item.id}
                         href={item.href}
                         title={calendarItemTitle(item)}
                         className={cn(
@@ -128,13 +154,15 @@ export function WeekView({
                       </span>
                         </span>
                       </Link>
+                      {rescheduleControl(item)}
+                      </div>
                     ))}
                   </div>
                 ) : null}
 
                 {timed.map((item) => (
+                  <div key={item.id}>
                   <Link
-                    key={item.id}
                     href={item.href}
                     title={calendarItemTitle(item)}
                     className={cn(
@@ -151,6 +179,8 @@ export function WeekView({
                       </span>
                     </span>
                   </Link>
+                  {rescheduleControl(item)}
+                  </div>
                 ))}
 
                 {dayItems.length === 0 ? (

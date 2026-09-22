@@ -446,6 +446,7 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
             checklist={checklist}
             blockers={blockers}
             peopleTasks={peopleTasks}
+            onChanged={() => void load(task.id)}
           />
 
           <TaskLabels

@@ -89,6 +89,7 @@ export default async function ProjectDetailPage({
     { data: meetings },
     { data: channel },
     { data: closure },
+    { data: milestoneDependencies },
   ] = await Promise.all([
     supabase
       .from("milestone")
@@ -169,6 +170,12 @@ export default async function ProjectDetailPage({
       )
       .eq("project_id", id)
       .maybeSingle(),
+    // Dependency edges (P1-TSK-09). RLS already limits these to edges whose
+    // both ends this viewer may read; they are narrowed to this project's
+    // milestones below, once that list exists.
+    supabase
+      .from("milestone_dependency")
+      .select("blocking_milestone_id, blocked_milestone_id"),
   ]);
 
   type TeamGrant = {
@@ -204,6 +211,17 @@ export default async function ProjectDetailPage({
     compareMilestones,
   );
   const completedMilestones = milestoneList.filter((m) => m.completed_at).length;
+
+  // Keep only the edges that join two milestones on this page. An edge whose
+  // other end lives in a different project is readable and real, but the rail
+  // has no name to show for it, and a row reading "blocked by a milestone
+  // elsewhere" tells somebody less than nothing.
+  const milestoneIdSet = new Set(milestoneList.map((m) => m.id));
+  const projectMilestoneDependencies = (milestoneDependencies ?? []).filter(
+    (edge) =>
+      milestoneIdSet.has(edge.blocking_milestone_id) &&
+      milestoneIdSet.has(edge.blocked_milestone_id),
+  );
   // "Progress signals" in P0-PRJ-03 was only an open-task count on a tab badge.
   // Milestone burn is the signal a reader actually asks for.
   const nextMilestone = milestoneList
@@ -596,6 +614,7 @@ export default async function ProjectDetailPage({
               milestones={milestoneList}
               people={options.people}
               canManage={canManage}
+              dependencies={projectMilestoneDependencies}
             />
           </section>
 

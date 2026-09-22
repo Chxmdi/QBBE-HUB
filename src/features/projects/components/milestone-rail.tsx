@@ -18,6 +18,10 @@ import {
   reorderMilestone,
   updateMilestone,
 } from "@/features/projects/services/milestone.commands";
+import {
+  addMilestoneDependency,
+  removeMilestoneDependency,
+} from "@/features/tasks/services/planning.commands";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import type { Milestone } from "@/types/entities";
 import { formatDate } from "@/lib/utils";
@@ -43,10 +47,17 @@ export function MilestoneRail({
   milestones,
   people,
   canManage,
+  dependencies = [],
 }: {
   milestones: Milestone[];
   people: Option[];
   canManage: boolean;
+  /**
+   * Every dependency edge among this project's milestones (P1-TSK-09).
+   * Passed whole rather than fetched per row: the rail already has the
+   * milestones, and an edge is two ids.
+   */
+  dependencies?: { blocking_milestone_id: string; blocked_milestone_id: string }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -65,6 +76,39 @@ export function MilestoneRail({
     }
     router.refresh();
     return true;
+  }
+
+  const nameById = new Map(milestones.map((m) => [m.id, m.name]));
+
+  function blockersOf(milestoneId: string) {
+    return dependencies
+      .filter((edge) => edge.blocked_milestone_id === milestoneId)
+      .map((edge) => ({
+        id: edge.blocking_milestone_id,
+        name: nameById.get(edge.blocking_milestone_id) ?? "A milestone elsewhere",
+      }));
+  }
+
+  /**
+   * What may still be added as a blocker: not itself, not something already
+   * blocking it, and not anything it can already reach. That last clause is
+   * the cycle check, done here only so the choice is never offered; the
+   * database decides, because it can see edges this viewer cannot.
+   */
+  function availableBlockers(milestoneId: string) {
+    const reachable = new Set<string>([milestoneId]);
+    const pending = [milestoneId];
+    while (pending.length) {
+      const current = pending.pop()!;
+      for (const edge of dependencies) {
+        if (edge.blocking_milestone_id === current && !reachable.has(edge.blocked_milestone_id)) {
+          reachable.add(edge.blocked_milestone_id);
+          pending.push(edge.blocked_milestone_id);
+        }
+      }
+    }
+    const existing = new Set(blockersOf(milestoneId).map((b) => b.id));
+    return milestones.filter((m) => !reachable.has(m.id) && !existing.has(m.id));
   }
 
   if (milestones.length === 0) {
@@ -122,6 +166,69 @@ export function MilestoneRail({
                   <span className="text-muted">Evidence: </span>
                   {milestone.evidence}
                 </p>
+              ) : null}
+
+              {blockersOf(milestone.id).length > 0 ? (
+                <p className="mt-0.5 pl-6.5 text-[13px]">
+                  <span className="text-muted">Blocked by: </span>
+                  {blockersOf(milestone.id).map((blocker) => (
+                    <span key={blocker.id} className="mr-2 inline-flex items-center gap-1">
+                      {blocker.name}
+                      {canManage ? (
+                        <button
+                          type="button"
+                          aria-label={`Remove ${blocker.name} as a blocker of ${milestone.name}`}
+                          className="text-[12px] text-muted hover:underline"
+                          disabled={busy === milestone.id}
+                          onClick={() =>
+                            void run(milestone.id, () =>
+                              removeMilestoneDependency(blocker.id, milestone.id),
+                            )
+                          }
+                        >
+                          ×
+                        </button>
+                      ) : null}
+                    </span>
+                  ))}
+                </p>
+              ) : null}
+
+              {canManage && availableBlockers(milestone.id).length > 0 ? (
+                <div className="mt-1 pl-6.5">
+                  <label className="sr-only" htmlFor={`blocker-${milestone.id}`}>
+                    Add a blocker for {milestone.name}
+                  </label>
+                  {/* The list offered already excludes this milestone and the
+                      ones it blocks, so the obvious cycles cannot be chosen at
+                      all. The database refuses the rest — a longer loop that
+                      runs through a project this viewer cannot open — and its
+                      message is what surfaces here. */}
+                  <select
+                    id={`blocker-${milestone.id}`}
+                    className="rounded border border-line bg-surface px-1.5 py-1 text-[12.5px]"
+                    defaultValue=""
+                    disabled={busy === milestone.id}
+                    onChange={(e) => {
+                      const blockingMilestoneId = e.target.value;
+                      if (!blockingMilestoneId) return;
+                      e.target.value = "";
+                      void run(milestone.id, () =>
+                        addMilestoneDependency({
+                          blockingMilestoneId,
+                          blockedMilestoneId: milestone.id,
+                        }),
+                      );
+                    }}
+                  >
+                    <option value="">Add a blocker…</option>
+                    {availableBlockers(milestone.id).map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               ) : null}
 
               {canManage ? (

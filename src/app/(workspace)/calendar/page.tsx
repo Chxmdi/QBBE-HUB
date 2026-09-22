@@ -66,7 +66,7 @@ export default async function CalendarPage({
     await Promise.all([
       supabase
         .from("task")
-        .select("id, title, due_at")
+        .select("id, title, due_at, project_id")
         .gte("due_at", dateStart)
         .lte("due_at", dateEnd)
         .is("archived_at", null)
@@ -115,6 +115,28 @@ export default async function CalendarPage({
         .limit(100),
     ]);
 
+  // Which projects this viewer may actually reschedule within. Asked once, as
+  // a set, rather than per chip: a calendar can hold hundreds of records and a
+  // capability check for each would be hundreds of round trips to answer one
+  // question. Organization admins manage everything, so they skip the read.
+  //
+  // This decides whether the control is *offered*. It is not the permission
+  // boundary — `rescheduleCalendarItem` writes through RLS and refuses
+  // anything this set got wrong — but offering a control that can only fail
+  // is its own defect, so the two agree by default.
+  const manageableProjects = new Set<string>();
+  if (!session.isAdmin) {
+    const { data: grants } = await supabase
+      .from("project_access_grant")
+      .select("project_id, role")
+      .eq("user_id", session.userId);
+    for (const grant of grants ?? []) {
+      if (grant.role === "project_manager") manageableProjects.add(grant.project_id as string);
+    }
+  }
+  const canMove = (projectId: string | null) =>
+    session.isAdmin || (projectId !== null && manageableProjects.has(projectId));
+
   const items: CalendarItem[] = [
     ...(tasksRes.data ?? []).map((t) => ({
       id: `task-${t.id}`,
@@ -123,6 +145,10 @@ export default async function CalendarPage({
       kind: "task" as const,
       href: `/my-work?task=${t.id}`,
       timed: false,
+      recordId: t.id as string,
+      reschedulableDate: canMove((t.project_id as string | null) ?? null)
+        ? (t.due_at as string)
+        : null,
     })),
     ...((milestonesRes.data ?? []) as unknown as {
       id: string;
@@ -140,6 +166,8 @@ export default async function CalendarPage({
       timed: false,
       owner: m.owner?.full_name ?? null,
       done: Boolean(m.completed_at),
+      recordId: m.id,
+      reschedulableDate: canMove(m.project_id) ? m.due_date : null,
     })),
     ...(meetingsRes.data ?? []).map((m) => ({
       id: `meeting-${m.id}`,

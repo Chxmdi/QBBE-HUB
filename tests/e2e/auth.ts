@@ -118,8 +118,28 @@ export async function signIn(page: Page, account: QaAccount) {
  * second account.
  */
 export async function signOut(page: Page) {
+  // Leave the authenticated document before taking its cookies away.
+  //
+  // A page that has just closed a dialog still has router.refresh() in
+  // flight, and the App Router will act on what comes back. Clear the cookies
+  // underneath it and that pending refresh turns into a real navigation — to
+  // the page it was refreshing, not to /sign-in — which races the goto below
+  // and aborts it. Playwright then reports net::ERR_ABORTED for a navigation
+  // the browser had in fact completed, in a helper that looks innocent, and
+  // the failure lands on whichever spec happened to be running.
+  //
+  // CI run 35627688215 recorded it exactly: three /my-work RSC refreshes at
+  // 57126–57199, this goto to /sign-in aborted at 57222, and a hard /my-work
+  // navigation at 57246. The trace's page snapshot shows the sign-in page
+  // fully rendered, which is how a test can fail while ending up in the right
+  // place. See #79. Navigating to about:blank first discards the router state
+  // that would otherwise fire, so there is no second navigation to lose to.
+  await page.goto("about:blank");
   await page.context().clearCookies();
   await page.goto("/sign-in");
+  // Assert where we landed rather than trusting the goto. If this race ever
+  // returns, the failure names a URL instead of an opaque transport error.
+  await page.waitForURL("**/sign-in**", { timeout: 15_000 });
   await page.evaluate(() => {
     try {
       localStorage.clear();
