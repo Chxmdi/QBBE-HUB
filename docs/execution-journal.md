@@ -175,42 +175,58 @@ Five hypotheses are now closed, each by measurement rather than reasoning:
 | A dying Next render worker | Confirmed the PID owning port 3200 | `next start` is one process with no children |
 | Application code aborting | Searched `src/`, `scripts/` | No `process.abort` or `process.exit` |
 
-**One recorded figure withdrawn, and one explanation of it withdrawn too.**
-The exit code observed was 127, not the `0xC0000409` on file. 127 is the
-shell's "command not found", which a server that had served traffic for an
-hour plainly was not. The first explanation offered here was that `npx` stood
-between the shell and the server and rendered the child's death in its own
-terms. **That was wrong:** relaunched as
-`node ./node_modules/next/dist/bin/next start`, with no `npx` anywhere in the
-chain, the next death reported 127 again. The remaining explanation is the
-POSIX shell itself — Git Bash cannot represent a Windows NTSTATUS such as
-`0xC0000409` in a byte-wide exit status, so it substitutes one of its own.
-The server is now launched from PowerShell via `Start-Process -PassThru`,
-which reports `ExitCode` as the raw Windows DWORD. Until that number is in
-hand, neither 127 nor `0xC0000409` should be quoted as the crash signature.
+**The exit code, measured at last: `0xC0000409`.** On 2026-09-22 at 14:26:53
+the server died under a PowerShell launcher that reports the raw Windows exit
+status, and it reported -1073740791, which is `0xC0000409`,
+`STATUS_STACK_BUFFER_OVERRUN`.
 
-**The one signal that does precede the death**, in both instrumented runs, is
-`MaxListenersExceededWarning: 11 drain listeners added to [Gzip]` raised from
-`next/dist/compiled/compression`, alongside `destination stream closed early`.
-That is not proof — the earlier abort storm produced 4554 cancelled responses
-without killing anything — but it is the only recurring precursor left
-standing, and it points at the same compression path the storm failed to
-break by cancellation alone.
+**So the figure in #79's title is restored.** It was withdrawn earlier the same
+day when two instrumented runs reported 127, and the withdrawal was right to
+make and wrong in its conclusion: 127 was never the process's exit status, it
+was Git Bash's rendering of one it cannot express in a byte. The first
+explanation offered for that — `npx` sitting between the shell and the
+server — was also wrong, and both were disproved by running without `npx` and
+seeing 127 again. What was actually needed was a launcher that does not
+truncate, and `Start-Process -PassThru` with the handle touched before the
+wait is that launcher. (Its first version returned an empty string, because a
+Process object that never cached its handle reads `ExitCode` back as nothing.
+Verified afterwards against a process exiting 42.)
 
-Also found: stale `next start` processes from earlier checkouts still listening
-on ports 3000 and 3100. They are unrelated to the server under test, but they
-are exactly the confusion that produced a wrong reading earlier in this work,
-so port ownership is now confirmed by PID before any run is trusted.
+**And the code explains the silence.** `0xC0000409` is what `__fastfail`
+raises. It is not an exception: it is a deliberate instruction to terminate
+without unwinding, without running handlers, and without the usual error
+reporting path. That is precisely why this crash has never left a Node
+diagnostic report, a Windows Application error event or a Windows Error
+Reporting entry — three absences previously recorded as a puzzle, which are
+now a consequence. V8 and Node reach it through `IMMEDIATE_CRASH()`, the
+macro behind a failed `CHECK`.
+
+**A precursor withdrawn.** `MaxListenersExceededWarning: 11 drain listeners
+added to [Gzip]` was described here as "the only recurring precursor left
+standing", present before both earlier deaths. This death had **zero** of
+them, across the whole run. It is not a precursor, and nothing should be built
+on it.
+
+**Not a particular test, either.** Three deaths are now recorded at three
+different places — `identity-lifecycle.spec.ts:195`, `my-work.spec.ts:183`,
+and this one during `hello-hub.spec.ts:12` — at roughly six minutes, ninety
+seconds and eleven minutes of load. The run that died at eleven minutes had
+completed 40 of 43 checks. What kills the server is accumulated authenticated
+traffic, not one request.
 
 ### Next action
 
-Continue the `next start` investigation under #79 Requirement 1. The crash is
-reproducible on demand — it has now killed the server twice under
-instrumentation, once after six minutes and once after ninety seconds — and
-six explanations are eliminated, but there is no proven cause, so the
-requirement stays open. The next measurement is the raw Windows exit code from
-the PowerShell launcher, which is the one piece of evidence every reading of
-this crash has so far been missing.
+Continue the `next start` investigation under #79 Requirement 1. The exit code
+is now measured rather than assumed, and it names the mechanism — `__fastfail`,
+reached through `IMMEDIATE_CRASH()`, which is what a failed `CHECK` in Node or
+V8 does. That is a much smaller search space than "the process vanishes", but
+it is still not a cause, so the requirement stays open.
+
+The next step is a crash dump, because `__fastfail` leaves nothing behind by
+design and only a debugger already attached will see it. Windows Error
+Reporting local dumps are configured under `HKLM`, so that route needs
+administrator rights and should be raised with the user rather than attempted
+quietly.
 
 Then: the surface for creating and stopping a recurring series, which is all
 that stands between #31 and its fourth row, and an audit of the other drawers
