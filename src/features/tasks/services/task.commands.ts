@@ -261,10 +261,42 @@ export async function updateTaskStatus(
   if (status === "completed" && !wasAlreadyCompleted) {
     const { data: source } = await supabase
       .from("task")
-      .select("title, description, project_id, program_id, assignee_id, priority, due_at, recurrence_rule")
+      .select("title, description, project_id, program_id, assignee_id, priority, due_at, recurrence_rule, series_id, series_edited_at")
       .eq("id", taskId)
       .maybeSingle();
-    if (source?.recurrence_rule && source.due_at) {
+
+    // A series that has been stopped keeps everything it produced and makes
+    // nothing further (P1-TSK-11). Asked before the successor is built rather
+    // than after, so a stopped series costs one read and no write.
+    let seriesStopped = false;
+    let seriesDefinition: { title: string; owner_id: string | null } | null = null;
+    if (source?.series_id) {
+      const { data: series } = await supabase
+        .from("task_series")
+        .select("stopped_at, title, owner_id")
+        .eq("id", source.series_id as string)
+        .maybeSingle();
+      seriesStopped = Boolean(series?.stopped_at);
+      if (series) {
+        seriesDefinition = {
+          title: series.title as string,
+          owner_id: (series.owner_id as string | null) ?? null,
+        };
+      }
+    }
+
+    // What the next occurrence is built from. Normally it is the task just
+    // completed, which carries any correction forward — that is the point of a
+    // recurring task. Once an occurrence has been detached, it is the series'
+    // own definition instead, so renaming or reassigning a single week does not
+    // silently rename or reassign every week after it.
+    const detached = Boolean(source?.series_edited_at) && Boolean(seriesDefinition);
+    const successorTitle = detached ? seriesDefinition!.title : source?.title;
+    const successorAssignee = detached
+      ? (seriesDefinition!.owner_id ?? source?.assignee_id)
+      : source?.assignee_id;
+
+    if (source?.recurrence_rule && source.due_at && !seriesStopped) {
       const { nextOccurrence } = await import("@/features/tasks/recurrence");
       const nextDue = nextOccurrence(source.recurrence_rule as string, source.due_at as string);
       // `recurrence_parent_id` is uniquely indexed, so a concurrent second
@@ -276,10 +308,10 @@ export async function updateTaskStatus(
         organization_id: session.organizationId,
         program_id: source.program_id,
         project_id: source.project_id,
-        title: source.title,
+        title: successorTitle,
         description: source.description,
         priority: source.priority,
-        assignee_id: source.assignee_id,
+        assignee_id: successorAssignee,
         requester_id: session.userId,
         due_at: nextDue,
         created_by: session.userId,
@@ -287,6 +319,20 @@ export async function updateTaskStatus(
         recurrence_rule: source.recurrence_rule,
         recurrence_anchor: nextDue,
         recurrence_parent_id: taskId,
+        // Carry the series forward. `uq_one_task_per_series_occurrence` then
+        // guards the same duplicate this chain's own unique index guards, from
+        // the other direction: two completions racing produce one occurrence
+        // whichever pointer they collide on.
+        //
+        // An occurrence somebody detached still spawns the next one — the edit
+        // was to this occurrence, not a decision to end the series — but it
+        // does not pass its own edit on. `successorTitle` and
+        // `successorAssignee` above are where that is actually decided; the
+        // successor keeps the series' identity rather than one week's version
+        // of it.
+        ...(source.series_id
+          ? { series_id: source.series_id, occurrence_date: nextDue }
+          : {}),
       });
       // 23505 is the unique violation — the successor already exists. Anything
       // else is a real failure and should be visible rather than silent.

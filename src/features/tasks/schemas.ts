@@ -195,3 +195,110 @@ export const taskLabelSchema = z.object({
   taskId: z.string().uuid(),
   labelId: z.string().uuid(),
 });
+
+/**
+ * Advanced planning (#31, P1-TSK-09/10/11/12).
+ */
+
+export const milestoneDependencySchema = z.object({
+  blockingMilestoneId: z.string().uuid(),
+  blockedMilestoneId: z.string().uuid(),
+});
+
+/**
+ * Reordering sends the whole ordered list rather than one moved item.
+ *
+ * A "move item 3 above item 1" message has to be applied to the list the
+ * sender was looking at, and by the time it arrives that list may have gained
+ * an item from somebody else. Sending the order the person actually arranged
+ * makes the write idempotent and makes a concurrent edit a last-writer-wins
+ * over a visible arrangement instead of a silent reshuffle of a different one.
+ */
+export const checklistReorderSchema = z.object({
+  taskId: z.string().uuid(),
+  itemIds: z.array(z.string().uuid()).min(1, "Nothing to reorder."),
+});
+
+export const taskSeriesSchema = z.object({
+  title: requiredText("A recurring task needs a title.", 200),
+  projectId: z.string().uuid().nullable().optional(),
+  recurrenceRule: z.enum(["weekly", "monthly"]),
+  ownerId: z.string().uuid(),
+  // Carried onto the first occurrence rather than dropped. The create form
+  // offers one set of fields whether or not the task repeats, so a series
+  // that kept only the title would silently discard whatever else was typed
+  // the moment somebody chose "Repeats".
+  description: z.string().trim().max(5000).optional(),
+  milestoneId: z.string().uuid().optional(),
+  priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
+  // The date the first occurrence falls on, and therefore the anchor every
+  // later one is counted from. Left empty it is the workspace's today.
+  startsOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "A recurring task needs a valid start date.")
+    .optional(),
+});
+
+/**
+ * Calendar rescheduling (P1-TSK-12).
+ *
+ * The date is a calendar date, not an instant. A drag onto "the 14th" means
+ * the 14th in the workspace's zone; sending a timestamp would make the server
+ * re-derive a day from an instant and land on the 13th for anyone west of UTC
+ * for part of the day. The command resolves the zone, so the wire format stays
+ * the thing the user pointed at.
+ */
+export const rescheduleSchema = z.object({
+  kind: z.enum(["task", "milestone"]),
+  id: z.string().uuid(),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "A reschedule needs a calendar date.")
+    .nullable(),
+});
+
+/**
+ * Whether adding `from -> to` closes a loop in a directed graph.
+ *
+ * Shared by the task and milestone dependency commands. This is the client-
+ * side courtesy check that produces a readable message before a round trip;
+ * the guarantee lives in the database triggers, which see edges this caller
+ * may not be allowed to read.
+ */
+export function graphCycleError(
+  from: string,
+  to: string,
+  edges: readonly (readonly [string, string])[],
+  selfMessage: string,
+): string | null {
+  if (from === to) return selfMessage;
+  const outgoing = new Map<string, string[]>();
+  for (const [source, target] of edges) {
+    const targets = outgoing.get(source) ?? [];
+    targets.push(target);
+    outgoing.set(source, targets);
+  }
+  const visited = new Set<string>();
+  const pending = [to];
+  while (pending.length) {
+    const id = pending.pop()!;
+    if (id === from) return "That dependency would create a cycle.";
+    if (visited.has(id)) continue;
+    visited.add(id);
+    pending.push(...(outgoing.get(id) ?? []));
+  }
+  return null;
+}
+
+export function circularMilestoneDependencyError(
+  blockingMilestoneId: string,
+  blockedMilestoneId: string,
+  existing: { blocking_milestone_id: string; blocked_milestone_id: string }[],
+): string | null {
+  return graphCycleError(
+    blockingMilestoneId,
+    blockedMilestoneId,
+    existing.map(e => [e.blocking_milestone_id, e.blocked_milestone_id] as const),
+    "A milestone cannot depend on itself.",
+  );
+}

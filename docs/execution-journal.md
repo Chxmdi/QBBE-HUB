@@ -23,6 +23,186 @@ Resume the next action below. Confirm existing changes and verification before
 editing. Reconcile intervening work; repeat only invalidated checks. Do not
 restart the audit or treat an earlier summary as evidence of completion.
 
+## Current feature: advanced task planning, and the instrument that measures it (#31, #79)
+
+Two pieces of work that turned out to be one. #31 needed browser evidence;
+the browser suite could not be trusted to produce any, which is #79. Fixing
+the suite is what made the rest of this verifiable.
+
+### #79 — the suite was failing on things that had not gone wrong
+
+Two independent causes, both proven rather than inferred.
+
+**A navigation race in `signOut`.** The helper cleared cookies while the page
+still had `router.refresh()` in flight from a dialog that had just closed.
+The App Router turned that pending refresh into a real navigation — to the
+page it was refreshing, not to `/sign-in` — which superseded `signOut`'s own
+`goto` and aborted it. The browser reached the right page; only the promise
+lost. CI run 35627688215 recorded it exactly: three `/my-work` RSC refreshes
+at 57126–57199, `/sign-in` aborted at 57222, a hard `/my-work` navigation at
+57246, and a trace snapshot showing the sign-in page fully rendered. The fix
+navigates to `about:blank` first, so there is no router state left to fire,
+and asserts the landing URL so a recurrence names a URL instead of an opaque
+transport error.
+
+**An active member being told their account was deactivated.**
+`getSessionContext` discarded the membership query's error and treated an
+empty result as "not an active member". `membership_read` is
+`app.is_org_member(...)`, which opens with `auth.uid() is not null`, so a
+request that reaches PostgREST without a usable token reads zero rows — the
+membership is active, the reader was nobody. Both cases arrived as an empty
+result and the application picked the wrong explanation, sending the person
+to `/account-inactive`.
+
+Observed on 2026-09-21 against qa-owner, whose membership was `active` in the
+database before, during and after the run. Two assertions in
+`supabase/tests/work-planning.sql` now pin the mechanism, the second of which
+is the whole bug in one line: *an active membership reads as absent when the
+request carries no identity*.
+
+`current_actor_id()` is the missing third answer — it asks the database who
+it thinks is calling, under the identity the failed read used. Errors are no
+longer swallowed, and `SessionNotEstablishedError` separates "no active
+membership" from "the session never arrived".
+
+**Requirement 1 is not met: `next start` still dies.** Two consecutive full
+passes on 2026-09-21 were clean — 38 of 38 in 7.3 minutes and 38 of 38 in
+8.0 minutes, same server, alive afterwards. A third run on the final code
+then lost the server outright, during `identity-lifecycle.spec.ts:195`, the
+same check that carried the original signature. Everything after it failed in
+about 2.3 seconds on `net::ERR_CONNECTION_REFUSED`; only
+`realtime-revocation` survived, because it talks to Supabase and never to the
+Next server. The log ends mid-stream with nothing written, which is what
+Node's fail-fast abort leaves behind, and no Windows Application event was
+recorded.
+
+**So two clean passes were luck, exactly as #79 warned they could be** — the
+issue put the rate at roughly one crash per nine minutes of suite time and
+said in terms that a single clean pass proves nothing. Three runs at about
+eight minutes each is precisely the sample size where two clean and one dead
+is unremarkable.
+
+What this means for the two fixes here: both are real and both are still
+worth having — the `signOut` race and the membership misreport were separate,
+demonstrable defects with their own evidence. Neither was ever a candidate
+explanation for a process that vanishes without unwinding. #79 stays open on
+Requirement 1, and nothing in this work should be read as closing it.
+
+**A prediction withdrawn.** `destination stream closed early` was expected to
+drop sharply once the race was fixed. It did not: 134 occurrences across two
+fully clean runs. It is ordinary `router.refresh()` churn and not a fault
+signal, and the Browsers row should stop treating it as one.
+
+### #31 — three of four rows reachable, one deliberately not
+
+- **P1-TSK-09 dependencies.** `milestone_dependency` with a recursive cycle
+  guard under an advisory lock, mirroring the task one rather than sharing a
+  generic walker that would need dynamic SQL inside a definer function. Three-
+  node cycles are refused, which the old client-side check never covered. The
+  rail offers only blockers that cannot close a loop; the database decides,
+  because it sees edges the viewer cannot.
+- **P1-TSK-10 checklists.** Delete, reorder and a progress roll-up. The
+  column and the delete policy had existed since `0001_core.sql` and nothing
+  ever used them; `sort_key` was 0 in every row, so ordering by it was not an
+  ordering. A trigger now positions new items, matching `position_new_milestone`.
+- **P1-TSK-12 calendar rescheduling.** A date field rather than a drag handle,
+  because the accessible control should not be the second one. The value sent
+  is a calendar date, never an instant.
+- **P1-TSK-11 recurring series.** Now reachable, and now actually working.
+  Repeats is offered in the Create task dialog, an occurrence shows what series
+  it belongs to, and the two safe actions on one — stop the series, detach this
+  occurrence — are offered there. Building the surface exposed two defects in
+  the mechanism, both introduced earlier in this same branch and neither
+  catchable by the database suite, because both live in application code:
+  `createTaskSeries` omitted `recurrence_rule` from its first occurrence, which
+  is the column the spawn path reads, so a series produced one task and stopped
+  without saying so; and `detachSeriesOccurrence` wrote a marker that nothing
+  read, so detaching had no effect at all. The second is the more instructive:
+  the comment beside the successor insert already described the correct
+  behaviour, and the code had simply never implemented what the comment
+  promised.
+
+### Three product defects the new tests found
+
+None was introduced here; all three had shipped.
+
+1. `getSessionContext` reporting a failed read as a deactivated account.
+2. **The task drawer never showed checklist changes.** It loads its data in a
+   `useEffect` keyed on the task id, so `router.refresh()` left it alone: an
+   added item was saved and then invisible until the drawer was closed and
+   reopened. It looked like the add had failed. `TaskExtras` now re-reads the
+   drawer instead. **Every other drawer in the codebase that refreshes after a
+   write has the same shape and has not been audited.**
+3. The checklist checkbox snapped back when ticked, being controlled on
+   `completed_at` and re-rendering from stale props. Now optimistic.
+
+### The crash investigation, 2026-09-22 — what it is not
+
+Reproduced deliberately and instrumented. The server ran under
+`--report-on-fatalerror --report-uncaught-exception --trace-uncaught` with a
+report directory, and died about six minutes into a full authenticated suite,
+during `my-work.spec.ts:183`. Tally: 19 passed, 22 failed on
+`ERR_CONNECTION_REFUSED` after the server was gone, and one genuine flake in
+`milestones.spec.ts:138` that also flaked while the server was healthy.
+
+**It left no trace in any of the three places a crash should.** No Node
+diagnostic report, no Windows Application error event, no Windows Error
+Reporting entry. The instrument was not broken: an uncaught exception thrown
+deliberately under the identical `NODE_OPTIONS` wrote a report immediately.
+So the death bypassed Node's own fatal-error path, and Windows did not treat
+it as an application fault either.
+
+Five hypotheses are now closed, each by measurement rather than reasoning:
+
+| Hypothesis | How it was tested | Result |
+|---|---|---|
+| Node's zstd bindings, per codex-router #465 | Probed `Accept-Encoding` | Irrelevant — the server only ever returns gzip |
+| Aborted compression streams | 6000 requests, 4554 cancelled mid-body | Server survived |
+| Memory exhaustion | Sampled every 15s to death | Peak 467.6 MB, and falling at 419 MB when it died |
+| A dying Next render worker | Confirmed the PID owning port 3200 | `next start` is one process with no children |
+| Application code aborting | Searched `src/`, `scripts/` | No `process.abort` or `process.exit` |
+
+**One recorded figure withdrawn, and one explanation of it withdrawn too.**
+The exit code observed was 127, not the `0xC0000409` on file. 127 is the
+shell's "command not found", which a server that had served traffic for an
+hour plainly was not. The first explanation offered here was that `npx` stood
+between the shell and the server and rendered the child's death in its own
+terms. **That was wrong:** relaunched as
+`node ./node_modules/next/dist/bin/next start`, with no `npx` anywhere in the
+chain, the next death reported 127 again. The remaining explanation is the
+POSIX shell itself — Git Bash cannot represent a Windows NTSTATUS such as
+`0xC0000409` in a byte-wide exit status, so it substitutes one of its own.
+The server is now launched from PowerShell via `Start-Process -PassThru`,
+which reports `ExitCode` as the raw Windows DWORD. Until that number is in
+hand, neither 127 nor `0xC0000409` should be quoted as the crash signature.
+
+**The one signal that does precede the death**, in both instrumented runs, is
+`MaxListenersExceededWarning: 11 drain listeners added to [Gzip]` raised from
+`next/dist/compiled/compression`, alongside `destination stream closed early`.
+That is not proof — the earlier abort storm produced 4554 cancelled responses
+without killing anything — but it is the only recurring precursor left
+standing, and it points at the same compression path the storm failed to
+break by cancellation alone.
+
+Also found: stale `next start` processes from earlier checkouts still listening
+on ports 3000 and 3100. They are unrelated to the server under test, but they
+are exactly the confusion that produced a wrong reading earlier in this work,
+so port ownership is now confirmed by PID before any run is trusted.
+
+### Next action
+
+Continue the `next start` investigation under #79 Requirement 1. The crash is
+reproducible on demand — it has now killed the server twice under
+instrumentation, once after six minutes and once after ninety seconds — and
+six explanations are eliminated, but there is no proven cause, so the
+requirement stays open. The next measurement is the raw Windows exit code from
+the PowerShell launcher, which is the one piece of evidence every reading of
+this crash has so far been missing.
+
+Then: the surface for creating and stopping a recurring series, which is all
+that stands between #31 and its fourth row, and an audit of the other drawers
+for defect 2.
+
 ## Current feature: correcting the stale Tasks verdicts in audit 02
 
 `docs/audit/02-work-management.md` asserted gaps that the code has since

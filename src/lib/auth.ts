@@ -12,6 +12,18 @@ export const ADMIN_MFA_REQUIRED_ERROR =
 export const ADMIN_MFA_UNAVAILABLE_ERROR =
   "Could not verify multi-factor authentication. Try again.";
 
+/**
+ * The caller is authenticated, but the request reached the database without an
+ * identity, so nothing about their membership could be determined. Distinct
+ * from "no active membership", which is an answer; this is the absence of one.
+ */
+export class SessionNotEstablishedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SessionNotEstablishedError";
+  }
+}
+
 export interface SessionContext {
   userId: string;
   email: string;
@@ -41,7 +53,7 @@ export const getSessionContext = cache(
     } = await supabase.auth.getUser();
     if (!user) return null;
 
-    const { data: membership } = await supabase
+    const { data: membership, error: membershipError } = await supabase
       .from("organization_membership")
       .select("organization_id, role, status, user_profile:user_id(*), organization:organization_id(timezone)")
       .eq("user_id", user.id)
@@ -50,7 +62,29 @@ export const getSessionContext = cache(
       .limit(1)
       .maybeSingle();
 
-    if (!membership) return null;
+    // A failed read is not a deactivated membership. Returning null here would
+    // send an active member to /account-inactive and tell them an
+    // administrator removed their access, which is a lie the person cannot
+    // act on and support cannot reproduce. Fail loudly instead.
+    if (membershipError) {
+      throw new Error(`Could not read membership for ${user.id}: ${membershipError.message}`);
+    }
+
+    if (!membership) {
+      // Empty, with no error, has two causes and they need opposite handling.
+      // `membership_read` is `app.is_org_member(...)`, which begins
+      // `auth.uid() is not null`, so a request that reached PostgREST without
+      // a usable token reads nothing at all — the membership may be perfectly
+      // active and simply unreadable by nobody. Ask the database who it
+      // thinks is calling before concluding anything about the membership.
+      const { data: actorId } = await supabase.rpc("current_actor_id");
+      if (!actorId) {
+        throw new SessionNotEstablishedError(
+          "The session did not reach the database; membership could not be read.",
+        );
+      }
+      return null;
+    }
 
     const profile = membership.user_profile as unknown as Profile;
     const role = membership.role as OrgRole;
@@ -80,6 +114,9 @@ export async function requireSession(): Promise<SessionContext> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/sign-in");
+  // Reaching here means getSessionContext resolved to null with a usable
+  // database identity, which is the one case that really is an inactive
+  // membership. The other two now throw before they can get this far.
   redirect("/account-inactive");
 }
 

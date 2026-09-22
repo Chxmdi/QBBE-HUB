@@ -88,6 +88,12 @@ jobs:
         with:
           version: 2.114.0
 
+      - name: Avoid local DB port collisions on CI runners
+        run: |
+          if lsof -iTCP:54322 -sTCP:LISTEN -t >/dev/null; then
+            sed -i 's/^port = 54322$/port = 65432/' supabase/config.toml
+          fi
+
       - name: Start migrated local database
         run: supabase start
 
@@ -128,7 +134,7 @@ jobs:
         run: |
           npx next start -p 3000 -H 127.0.0.1 &
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
-          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core --project=chromium
+          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core work-planning --project=chromium
 
       - name: Preserve authenticated failure evidence
         if: failure()

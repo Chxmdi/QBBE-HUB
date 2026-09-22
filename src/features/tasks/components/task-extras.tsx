@@ -1,61 +1,173 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useOptimistic, useState, useTransition } from "react";
 import {
   addChecklistItem,
   addTaskDependency,
+  removeChecklistItem,
+  reorderChecklist,
   setTaskRecurrence,
   toggleChecklistItem,
 } from "@/features/tasks/services/checklist.commands";
+import {
+  detachSeriesOccurrence,
+  stopTaskSeries,
+} from "@/features/tasks/services/planning.commands";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
+
+const RULE_LABELS: Record<string, string> = {
+  weekly: "weekly",
+  monthly: "monthly",
+};
 
 export function TaskExtras({
   taskId,
   isStaff,
   recurrenceRule,
+  series,
+  seriesEditedAt,
   checklist,
   blockers,
   peopleTasks,
+  onChanged,
 }: {
   taskId: string;
   isStaff: boolean;
   recurrenceRule: string | null;
+  /** The series this task is an occurrence of, when it is one. */
+  series: {
+    id: string;
+    title: string;
+    recurrence_rule: string;
+    stopped_at: string | null;
+    owner_id: string | null;
+  } | null;
+  seriesEditedAt: string | null;
   checklist: { id: string; title: string; completed_at: string | null }[];
   blockers: { blocking_task_id: string; title: string }[];
   peopleTasks: { id: string; title: string }[];
+  /**
+   * Re-read the drawer's own data.
+   *
+   * `router.refresh()` is not enough here and never was. The drawer fetches
+   * its task, checklist and blockers from the browser in an effect keyed on
+   * the task id; refreshing the server tree leaves that effect alone, so an
+   * item added here was saved and then not shown until the drawer was closed
+   * and reopened. It looked like the add had failed.
+   */
+  onChanged: () => void;
 }) {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  // Tick the box now, reconcile when the server answers.
+  //
+  // A controlled checkbox bound straight to `completed_at` cannot stay ticked
+  // between the click and the reload: React re-renders from the old props
+  // first and the tick visibly snaps back. It is a real flicker for a person
+  // and an outright failure for anything checking the box actually changed.
+  const [optimisticChecklist, applyToggle] = useOptimistic(
+    checklist,
+    (current, change: { id: string; completed: boolean }) =>
+      current.map((item) =>
+        item.id === change.id
+          ? {
+              ...item,
+              completed_at: change.completed ? new Date().toISOString() : null,
+            }
+          : item,
+      ),
+  );
+  const done = optimisticChecklist.filter((item) => item.completed_at).length;
+
+  // Send the whole arrangement, not the one item that moved. The command
+  // rewrites positions as 1..n, so an order that has been nudged many times
+  // never drifts into fractions, and a concurrent edit loses to a visible
+  // arrangement instead of silently reshuffling a different one.
+  async function move(from: number, to: number) {
+    if (to < 0 || to >= optimisticChecklist.length) return;
+    const ids = optimisticChecklist.map((item) => item.id);
+    const [moved] = ids.splice(from, 1);
+    ids.splice(to, 0, moved);
+    const result = await reorderChecklist({ taskId, itemIds: ids });
+    if (!result.ok) setError(result.error ?? "Could not reorder the checklist.");
+    else onChanged();
+  }
 
   return (
     <div className="space-y-5">
       <section>
         <h3 className="section-heading mb-2">Checklist</h3>
-        {checklist.length === 0 ? (
+        {optimisticChecklist.length === 0 ? (
           <p className="text-[13px] text-muted">No checklist items yet.</p>
         ) : (
-          <ul className="space-y-1.5">
-            {checklist.map((item) => (
-              <li key={item.id}>
-                <label className="flex items-center gap-2 text-[13.5px]">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(item.completed_at)}
-                    onChange={async (e) => {
-                      await toggleChecklistItem(item.id, e.target.checked);
-                      router.refresh();
+          <>
+            {/* The roll-up P1-TSK-10 asks for. Announced politely so a screen
+                reader hears progress change after a box is ticked rather than
+                having to hunt for it. */}
+            <p className="mb-2 text-[13px] text-muted" aria-live="polite">
+              {done} of {optimisticChecklist.length} done
+            </p>
+            <ul className="space-y-1.5" aria-label="Checklist">
+              {optimisticChecklist.map((item, index) => (
+                <li key={item.id} className="flex items-center gap-2">
+                  <label className="flex flex-1 items-center gap-2 text-[13.5px]">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(item.completed_at)}
+                      onChange={(e) => {
+                        const completed = e.target.checked;
+                        startTransition(async () => {
+                          applyToggle({ id: item.id, completed });
+                          await toggleChecklistItem(item.id, completed);
+                          onChanged();
+                        });
+                      }}
+                      className="size-4 accent-(--color-brand)"
+                    />
+                    <span className={item.completed_at ? "text-muted line-through" : ""}>
+                      {item.title}
+                    </span>
+                  </label>
+                  {/* Ordinary buttons rather than a drag handle. Dragging is
+                      the only way to reorder in most tools and is unusable by
+                      keyboard; these are the accessible path, and there is no
+                      drag alternative to fall back from. */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-label={`Move ${item.title} up`}
+                    disabled={index === 0}
+                    onClick={() => move(index, index - 1)}
+                  >
+                    ↑
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-label={`Move ${item.title} down`}
+                    disabled={index === optimisticChecklist.length - 1}
+                    onClick={() => move(index, index + 1)}
+                  >
+                    ↓
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-label={`Remove ${item.title}`}
+                    onClick={async () => {
+                      const result = await removeChecklistItem(item.id);
+                      if (!result.ok) setError(result.error ?? "Could not remove item.");
+                      else onChanged();
                     }}
-                    className="size-4 accent-(--color-brand)"
-                  />
-                  <span className={item.completed_at ? "text-muted line-through" : ""}>
-                    {item.title}
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
+                  >
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
         <form
           className="mt-2 flex gap-2"
@@ -67,7 +179,7 @@ export function TaskExtras({
             if (!result.ok) setError(result.error ?? "Could not add item.");
             else {
               form.reset();
-              router.refresh();
+              onChanged();
             }
           }}
         >
@@ -97,7 +209,7 @@ export function TaskExtras({
               const blockingTaskId = new FormData(e.currentTarget).get("blockingTaskId") as string;
               const result = await addTaskDependency({ blockingTaskId, blockedTaskId: taskId });
               if (!result.ok) setError(result.error ?? "Could not add dependency.");
-              else router.refresh();
+              else onChanged();
             }}
           >
             <Select name="blockingTaskId" required defaultValue="">
@@ -119,20 +231,84 @@ export function TaskExtras({
         ) : null}
       </section>
 
-      <section>
-        <Label htmlFor="recurrence">Repeats</Label>
-        <Select
-          id="recurrence"
-          defaultValue={recurrenceRule ?? ""}
-          onChange={async (e) => {
-            await setTaskRecurrence({ taskId, recurrenceRule: e.target.value });
-            router.refresh();
-          }}
-        >
-          <option value="">Does not repeat</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-        </Select>
+      <section aria-label="Repeats">
+        {series ? (
+          /*
+           * An occurrence of a series is not the same thing as a task somebody
+           * set to repeat, and offering the plain Repeats picker here would let
+           * one occurrence quietly disagree with the series it belongs to. The
+           * two actions that are safe on an occurrence are offered instead.
+           */
+          <div className="space-y-2">
+            <p className="text-[13px]">
+              {series.stopped_at
+                ? `Stopped. This was part of “${series.title}”, which repeated ${RULE_LABELS[series.recurrence_rule] ?? series.recurrence_rule}.`
+                : `Repeats ${RULE_LABELS[series.recurrence_rule] ?? series.recurrence_rule} as part of “${series.title}”.`}
+            </p>
+            {seriesEditedAt ? (
+              <p className="text-[12.5px] text-muted">
+                This occurrence was detached, so it keeps its own changes and the series will not
+                replace it.
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {series.stopped_at ? null : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={async () => {
+                    setError(null);
+                    const result = await stopTaskSeries(series.id);
+                    if (!result.ok) {
+                      setError(result.error ?? "Could not stop the recurring task.");
+                      return;
+                    }
+                    onChanged();
+                  }}
+                >
+                  Stop repeating
+                </Button>
+              )}
+              {seriesEditedAt ? null : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={async () => {
+                    setError(null);
+                    const result = await detachSeriesOccurrence(taskId);
+                    if (!result.ok) {
+                      setError(result.error ?? "Could not detach this occurrence.");
+                      return;
+                    }
+                    onChanged();
+                  }}
+                >
+                  Detach this occurrence
+                </Button>
+              )}
+            </div>
+            <p className="text-[12.5px] text-muted">
+              Stopping keeps every occurrence that already exists; it only stops new ones being
+              created.
+            </p>
+          </div>
+        ) : (
+          <>
+            <Label htmlFor="recurrence">Repeats</Label>
+            <Select
+              id="recurrence"
+              defaultValue={recurrenceRule ?? ""}
+              onChange={async (e) => {
+                await setTaskRecurrence({ taskId, recurrenceRule: e.target.value });
+                onChanged();
+              }}
+            >
+              <option value="">Does not repeat</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </Select>
+          </>
+        )}
       </section>
       {error ? <p role="alert" className="text-[13px] text-danger-fg">{error}</p> : null}
     </div>

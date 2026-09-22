@@ -32,11 +32,23 @@ const DETAIL_SELECT =
   "assignee:assignee_id(id, full_name, email, avatar_url, title, timezone), " +
   "project:project_id(id, name)";
 
+type TaskSeriesSummary = {
+  id: string;
+  title: string;
+  recurrence_rule: string;
+  stopped_at: string | null;
+  owner_id: string | null;
+};
+
 type TaskDetail = Task & {
   recurrence_rule?: string | null;
   approver_id?: string | null;
   completion_criteria?: string | null;
   blocked_by_id?: string | null;
+  series_id?: string | null;
+  occurrence_date?: string | null;
+  series_edited_at?: string | null;
+  series?: TaskSeriesSummary | null;
 };
 
 /**
@@ -83,7 +95,15 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
       { data: collaborate },
       { data: historyRows, error: historyError },
     ] = await Promise.all([
-      supabase.from("task").select(DETAIL_SELECT + ", recurrence_rule").eq("id", id).maybeSingle(),
+      supabase
+        .from("task")
+        .select(
+          DETAIL_SELECT +
+            ", recurrence_rule, series_id, occurrence_date, series_edited_at, " +
+            "series:series_id(id, title, recurrence_rule, stopped_at, owner_id)",
+        )
+        .eq("id", id)
+        .maybeSingle(),
       supabase
         .from("task_comment")
         .select(
@@ -442,10 +462,13 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
           <TaskExtras
             taskId={task.id}
             isStaff={isStaff}
-            recurrenceRule={(task as Task & { recurrence_rule?: string | null }).recurrence_rule ?? null}
+            recurrenceRule={task.recurrence_rule ?? null}
+            series={task.series ?? null}
+            seriesEditedAt={task.series_edited_at ?? null}
             checklist={checklist}
             blockers={blockers}
             peopleTasks={peopleTasks}
+            onChanged={() => void load(task.id)}
           />
 
           <TaskLabels
