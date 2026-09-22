@@ -131,8 +131,21 @@ None was introduced here; all three had shipped.
    `useEffect` keyed on the task id, so `router.refresh()` left it alone: an
    added item was saved and then invisible until the drawer was closed and
    reopened. It looked like the add had failed. `TaskExtras` now re-reads the
-   drawer instead. **Every other drawer in the codebase that refreshes after a
-   write has the same shape and has not been audited.**
+   drawer instead.
+
+   **Audited on 2026-09-22, and the drawer was the only one.** Six client
+   components read their own data through `createSupabaseBrowserClient`; each
+   of the other five already avoids the trap, by a different route:
+   `mfa-settings` calls its own `reloadFactors()` after every write;
+   `message-item` already takes the `onChanged` callback that `TaskExtras` has
+   now been given; `channel-view` holds a Realtime subscription, so a write
+   arrives without being asked for; `topbar` loads notifications when the menu
+   opens rather than from an id-keyed effect, and updates its own state when it
+   marks them read; and `mfa-flow` navigates away from the page it just wrote
+   to. Three components call `router.refresh()` at all, and the two that are
+   not the drawer are refreshing genuinely server-rendered state — display
+   density, and a post-verification redirect. **The earlier note that every
+   other drawer "has the same shape" is withdrawn: none of them does.**
 3. The checklist checkbox snapped back when ticked, being controlled on
    `completed_at` and re-rendering from stale props. Now optimistic.
 
