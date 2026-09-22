@@ -214,23 +214,71 @@ seconds and eleven minutes of load. The run that died at eleven minutes had
 completed 40 of 43 checks. What kills the server is accumulated authenticated
 traffic, not one request.
 
+### #79 Requirement 1 is solved: a libuv defect, not this project's code
+
+**2026-09-22, from a minidump.** ProcDump supervised `next start` and wrote a
+748 MB dump when it died. WinDbgX is the GUI build and will not run `-c`
+commands, and no console debugger is installed, so the dump's exception record
+was parsed directly — which needs no symbols, because the deciding number is in
+the record itself:
+
+```
+exception code   : 0xC0000409  STATUS_STACK_BUFFER_OVERRUN (__fastfail)
+parameters       : 1
+  [0] 0x2   ->  FAST_FAIL_STACK_COOKIE_CHECK_FAILURE
+faulting module  : C:\Program Files\nodejs\node.exe +0x21F2189
+```
+
+Fast-fail code **2** is a `/GS` stack-cookie failure: the stack really was
+corrupted. It is not code 7, `FAST_FAIL_FATAL_APP_EXIT`, which is what Node or
+V8 raise when they abort on purpose. So this was never an application-level
+abort, and no amount of reading our own code would have found it.
+
+**It is a known, open upstream bug**: libuv issue #5274, "win: stack-cookie
+fast-fail (0xC0000409) in uv__tcp_connect on loopback connects". Every
+condition matches what was measured here — fast-fail parameter 2, loopback
+connects, long-running processes, `--report-on-fatalerror` and Windows Error
+Reporting capturing nothing, and ProcDump being the only thing that caught it.
+libuv passes stack-local `&bytes` and `&flags` to `WSARecv`/`WSASend` while an
+overlapped operation is still live, which Microsoft's documentation says must
+be `NULL`; the OS later writes into a stack frame that has gone.
+
+**The version is the point.** The bug is in libuv 1.51.0 as vendored in Node
+**v24.15.0**, and this machine runs exactly that: `node -v` is v24.15.0 and
+`process.versions.uv` is 1.51.0. **The repository asks for Node 22** —
+`.nvmrc` contains `22`, `package.json` sets `engines.node` to `>=22.13.0`, and
+CI's workflow pins `node-version: 22`. The local browser suite has therefore
+been running on an unsupported runtime throughout this investigation, which is
+also the most likely reason CI's failure rate was always lower than this
+machine's.
+
+**What the debug heap showed.** Launched under a debugger, Windows enables the
+debug heap, and the server survived 23 minutes and passed 45 of 45 twice.
+Relaunched with `_NO_DEBUG_HEAP=1` it died in nine minutes. A deliberate
+`CHECK` abort would not care about heap layout; corruption does. That contrast
+is what justified pressing on rather than accepting the quiet runs.
+
+**Every earlier elimination stands.** zstd, aborted gzip streams, memory
+exhaustion, a dying render worker, application code aborting, and the
+`MaxListenersExceededWarning` precursor were all ruled out correctly. None of
+them could have been the cause, because the fault sits below all of them.
+
 ### Next action
 
-Continue the `next start` investigation under #79 Requirement 1. The exit code
-is now measured rather than assumed, and it names the mechanism — `__fastfail`,
-reached through `IMMEDIATE_CRASH()`, which is what a failed `CHECK` in Node or
-V8 does. That is a much smaller search space than "the process vanishes", but
-it is still not a cause, so the requirement stays open.
+Bring the local runtime onto the version this repository already asks for.
+`.nvmrc` says 22 and `engines.node` says `>=22.13.0`; the machine runs 24.15.0.
+Install a per-user version manager, switch to 22, rebuild and run two
+consecutive full authenticated passes. Two clean passes on the supported
+runtime is the standing bar, and it has never been attempted on the supported
+runtime.
 
-The next step is a crash dump, because `__fastfail` leaves nothing behind by
-design and only a debugger already attached will see it. Windows Error
-Reporting local dumps are configured under `HKLM`, so that route needs
-administrator rights and should be raised with the user rather than attempted
-quietly.
+If 22 is clean, #79 Requirement 1 closes as an environmental defect with the
+upstream link, and the browser suite becomes an instrument whose results can be
+trusted for the first time. If 22 still crashes, the fallback is to stop using
+loopback for the test server, since the upstream defect is specific to loopback
+connects.
 
-Then: the surface for creating and stopping a recurring series, which is all
-that stands between #31 and its fourth row, and an audit of the other drawers
-for defect 2.
+Then Epic 03 continues at #32 events, per `docs/plans/epic-03-plan.md`.
 
 ## Current feature: correcting the stale Tasks verdicts in audit 02
 
