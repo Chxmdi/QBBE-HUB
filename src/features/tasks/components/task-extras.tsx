@@ -9,13 +9,24 @@ import {
   setTaskRecurrence,
   toggleChecklistItem,
 } from "@/features/tasks/services/checklist.commands";
+import {
+  detachSeriesOccurrence,
+  stopTaskSeries,
+} from "@/features/tasks/services/planning.commands";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
+
+const RULE_LABELS: Record<string, string> = {
+  weekly: "weekly",
+  monthly: "monthly",
+};
 
 export function TaskExtras({
   taskId,
   isStaff,
   recurrenceRule,
+  series,
+  seriesEditedAt,
   checklist,
   blockers,
   peopleTasks,
@@ -24,6 +35,15 @@ export function TaskExtras({
   taskId: string;
   isStaff: boolean;
   recurrenceRule: string | null;
+  /** The series this task is an occurrence of, when it is one. */
+  series: {
+    id: string;
+    title: string;
+    recurrence_rule: string;
+    stopped_at: string | null;
+    owner_id: string | null;
+  } | null;
+  seriesEditedAt: string | null;
   checklist: { id: string; title: string; completed_at: string | null }[];
   blockers: { blocking_task_id: string; title: string }[];
   peopleTasks: { id: string; title: string }[];
@@ -211,20 +231,84 @@ export function TaskExtras({
         ) : null}
       </section>
 
-      <section>
-        <Label htmlFor="recurrence">Repeats</Label>
-        <Select
-          id="recurrence"
-          defaultValue={recurrenceRule ?? ""}
-          onChange={async (e) => {
-            await setTaskRecurrence({ taskId, recurrenceRule: e.target.value });
-            onChanged();
-          }}
-        >
-          <option value="">Does not repeat</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-        </Select>
+      <section aria-label="Repeats">
+        {series ? (
+          /*
+           * An occurrence of a series is not the same thing as a task somebody
+           * set to repeat, and offering the plain Repeats picker here would let
+           * one occurrence quietly disagree with the series it belongs to. The
+           * two actions that are safe on an occurrence are offered instead.
+           */
+          <div className="space-y-2">
+            <p className="text-[13px]">
+              {series.stopped_at
+                ? `Stopped. This was part of “${series.title}”, which repeated ${RULE_LABELS[series.recurrence_rule] ?? series.recurrence_rule}.`
+                : `Repeats ${RULE_LABELS[series.recurrence_rule] ?? series.recurrence_rule} as part of “${series.title}”.`}
+            </p>
+            {seriesEditedAt ? (
+              <p className="text-[12.5px] text-muted">
+                This occurrence was detached, so it keeps its own changes and the series will not
+                replace it.
+              </p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {series.stopped_at ? null : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={async () => {
+                    setError(null);
+                    const result = await stopTaskSeries(series.id);
+                    if (!result.ok) {
+                      setError(result.error ?? "Could not stop the recurring task.");
+                      return;
+                    }
+                    onChanged();
+                  }}
+                >
+                  Stop repeating
+                </Button>
+              )}
+              {seriesEditedAt ? null : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={async () => {
+                    setError(null);
+                    const result = await detachSeriesOccurrence(taskId);
+                    if (!result.ok) {
+                      setError(result.error ?? "Could not detach this occurrence.");
+                      return;
+                    }
+                    onChanged();
+                  }}
+                >
+                  Detach this occurrence
+                </Button>
+              )}
+            </div>
+            <p className="text-[12.5px] text-muted">
+              Stopping keeps every occurrence that already exists; it only stops new ones being
+              created.
+            </p>
+          </div>
+        ) : (
+          <>
+            <Label htmlFor="recurrence">Repeats</Label>
+            <Select
+              id="recurrence"
+              defaultValue={recurrenceRule ?? ""}
+              onChange={async (e) => {
+                await setTaskRecurrence({ taskId, recurrenceRule: e.target.value });
+                onChanged();
+              }}
+            >
+              <option value="">Does not repeat</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </Select>
+          </>
+        )}
       </section>
       {error ? <p role="alert" className="text-[13px] text-danger-fg">{error}</p> : null}
     </div>

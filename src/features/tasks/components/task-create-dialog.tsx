@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { createTask } from "@/features/tasks/services/task.commands";
+import { createTaskSeries } from "@/features/tasks/services/planning.commands";
 import { BULK_STATUSES, TASK_STATUS_LABELS } from "@/features/tasks/schemas";
 
 export interface Option {
@@ -39,6 +40,10 @@ export function TaskCreateDialog({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [projectId, setProjectId] = useState(defaultProjectId ?? "");
+  // A repeating task is still a task, so it is made here rather than behind a
+  // separate "new recurring task" entry point nobody would find. Held in state
+  // because it decides which command runs and whether an owner is required.
+  const [repeats, setRepeats] = useState("");
 
   // Milestones are a property of the chosen project. Offering all of them and
   // rejecting the mismatch at the database would be a worse way to say so.
@@ -49,6 +54,38 @@ export function TaskCreateDialog({
     setError(null);
     setSaving(true);
     const form = new FormData(e.currentTarget);
+
+    // A recurring task is created as a series, so it has an owner who is
+    // answerable for it and a switch that stops it. The series carries the
+    // rest of the form onto its first occurrence rather than discarding it.
+    if (repeats) {
+      const ownerId = (form.get("assigneeId") as string) || "";
+      if (!ownerId) {
+        setSaving(false);
+        setError("A repeating task needs an assignee, who owns the series.");
+        return;
+      }
+      const seriesResult = await createTaskSeries({
+        title: form.get("title"),
+        projectId: (form.get("projectId") as string) || undefined,
+        milestoneId: (form.get("milestoneId") as string) || undefined,
+        description: (form.get("description") as string) || undefined,
+        priority: form.get("priority"),
+        recurrenceRule: repeats,
+        ownerId,
+        startsOn: (form.get("dueAt") as string) || undefined,
+      });
+      setSaving(false);
+      if (!seriesResult.ok) {
+        setError(seriesResult.error ?? "Something went wrong.");
+        return;
+      }
+      setRepeats("");
+      closeDialog();
+      router.refresh();
+      return;
+    }
+
     const result = await createTask({
       title: form.get("title"),
       description: (form.get("description") as string) || undefined,
@@ -170,8 +207,32 @@ export function TaskCreateDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="task-due">Due date</Label>
+              <Label htmlFor="task-due">{repeats ? "First due date" : "Due date"}</Label>
               <Input id="task-due" name="dueAt" type="date" />
+              {repeats ? (
+                <p className="mt-1 text-[12.5px] text-muted">
+                  Every later occurrence is counted from this date. Left empty, it starts today.
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <Label htmlFor="task-repeats">Repeats</Label>
+              <Select
+                id="task-repeats"
+                name="repeats"
+                value={repeats}
+                onChange={(e) => setRepeats(e.target.value)}
+              >
+                <option value="">Does not repeat</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </Select>
+              {repeats ? (
+                <p className="mt-1 text-[12.5px] text-muted">
+                  The assignee owns the series. Completing one occurrence creates the next until
+                  somebody stops it.
+                </p>
+              ) : null}
             </div>
             <div>
               <Label htmlFor="task-status">Status</Label>
@@ -238,7 +299,7 @@ export function TaskCreateDialog({
               Cancel
             </Button>
             <Button type="submit" loading={saving}>
-              Create task
+              {repeats ? "Create recurring task" : "Create task"}
             </Button>
           </div>
         </form>

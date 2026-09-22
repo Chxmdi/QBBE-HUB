@@ -224,6 +224,19 @@ export const taskSeriesSchema = z.object({
   projectId: z.string().uuid().nullable().optional(),
   recurrenceRule: z.enum(["weekly", "monthly"]),
   ownerId: z.string().uuid(),
+  // Carried onto the first occurrence rather than dropped. The create form
+  // offers one set of fields whether or not the task repeats, so a series
+  // that kept only the title would silently discard whatever else was typed
+  // the moment somebody chose "Repeats".
+  description: z.string().trim().max(5000).optional(),
+  milestoneId: z.string().uuid().optional(),
+  priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
+  // The date the first occurrence falls on, and therefore the anchor every
+  // later one is counted from. Left empty it is the workspace's today.
+  startsOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "A recurring task needs a valid start date.")
+    .optional(),
 });
 
 /**

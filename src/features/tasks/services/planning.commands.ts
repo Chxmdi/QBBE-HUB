@@ -92,14 +92,18 @@ export async function createTaskSeries(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid series." };
   }
-  const { title, projectId, recurrenceRule, ownerId } = parsed.data;
+  const { title, projectId, recurrenceRule, ownerId, description, milestoneId, priority, startsOn } =
+    parsed.data;
   const supabase = await createSupabaseServerClient();
 
   // The anchor is the workspace's today, not the server's. A series anchored a
   // day late recurs on the wrong weekday for as long as it lives, which is the
-  // same reasoning `setTaskRecurrence` records.
+  // same reasoning `setTaskRecurrence` records. An explicit start date wins,
+  // so a weekly task can be set up on Friday to run on Mondays.
   const anchor =
-    calendarDateInZone(new Date(), session.timeZone) ?? new Date().toISOString().slice(0, 10);
+    startsOn ??
+    calendarDateInZone(new Date(), session.timeZone) ??
+    new Date().toISOString().slice(0, 10);
 
   const { data, error } = await supabase
     .from("task_series")
@@ -117,12 +121,24 @@ export async function createTaskSeries(input: unknown): Promise<ActionResult> {
 
   // The first occurrence, so a new series is visible as work rather than as a
   // setting that will produce work later.
+  //
+  // `recurrence_rule` is not duplication of the series row and must be set
+  // here. `updateTaskStatus` decides whether to spawn a successor by reading
+  // the completed task's own `recurrence_rule`; the series row only says
+  // whether spawning is still allowed. An occurrence carrying a `series_id`
+  // but no rule is a series that produces exactly one task and then stops
+  // forever, without reporting anything.
   const { error: occurrenceError } = await supabase.from("task").insert({
     organization_id: session.organizationId,
     project_id: projectId ?? null,
     title,
+    description: description ?? null,
+    milestone_id: milestoneId ?? null,
+    priority,
     assignee_id: ownerId,
     due_at: anchor,
+    recurrence_rule: recurrenceRule,
+    recurrence_anchor: anchor,
     series_id: data.id as string,
     occurrence_date: anchor,
   });

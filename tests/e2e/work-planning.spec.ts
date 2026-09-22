@@ -15,11 +15,10 @@ import { sql } from "./db";
  * where the guarantees actually live, and the reachable surface is the last
  * test below.
  *
- * P1-TSK-11 recurring series is enforced in the database suite only. A series
- * now carries through `updateTaskStatus`, so completing an occurrence creates
- * the next one and a stopped series creates nothing — but there is no surface
- * for creating or stopping one yet, and there is deliberately no browser test
- * here pretending otherwise.
+ * P1-TSK-11 recurring series is settled in the last test below. It is the one
+ * row here whose whole point is what happens *after* a record is saved, so it
+ * is checked by completing an occurrence and looking for the next one in the
+ * database rather than by reading the form back.
  */
 
 async function createTask(page: Page, title: string, due?: string) {
@@ -219,4 +218,145 @@ test("a milestone can be blocked by another, and a cycle is never offered", asyn
   // It has to survive a reload, or it was a rendered edge and not a stored one.
   await page.reload();
   await expect(page.getByText("Blocked by:")).toBeVisible({ timeout: 30_000 });
+});
+
+test("a recurring task creates the next occurrence, until somebody stops it", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await signIn(page, "owner");
+
+  const title = `Recurring acceptance ${Date.now()}`;
+  const escaped = title.replace(/'/g, "''");
+  const today = new Date().toISOString().slice(0, 10);
+
+  await page.goto("/my-work?create=task");
+  const dialog = page.getByRole("dialog", { name: "Create task" });
+  await expect(dialog).toBeVisible({ timeout: 30_000 });
+  await dialog.getByLabel("Title", { exact: true }).fill(title);
+  await dialog.getByLabel("Assignee", { exact: true }).selectOption({ label: "QA Owner" });
+  await dialog.getByLabel("Repeats", { exact: true }).selectOption("weekly");
+  // The label changes once the task repeats, because the date stops being a
+  // deadline and becomes the anchor every later occurrence is counted from.
+  await dialog.getByLabel("First due date", { exact: true }).fill(today);
+  await dialog.getByRole("button", { name: "Create recurring task", exact: true }).click();
+  await expect(dialog).not.toBeVisible({ timeout: 30_000 });
+
+  // The series exists as a series, with an owner. Read from the database
+  // because "a clear series owner" is a property of the record, not of the
+  // page that submitted it.
+  await expect
+    .poll(
+      () =>
+        sql(
+          `select s.recurrence_rule || '|' || (s.owner_id is not null)::text
+             from task_series s where s.title = '${escaped}' limit 1;`,
+        ).trim(),
+      { timeout: 30_000 },
+    )
+    .toBe("weekly|true");
+
+  // The first occurrence must carry the rule itself. `updateTaskStatus` reads
+  // the completed task's own `recurrence_rule` to decide whether to spawn a
+  // successor, so an occurrence without one is a series that produces exactly
+  // one task and then stops silently. That was a real defect, and this is the
+  // assertion that catches it.
+  expect(
+    sql(
+      `select t.recurrence_rule || '|' || (t.series_id is not null)::text
+         from task t where t.title = '${escaped}' limit 1;`,
+    ).trim(),
+  ).toBe("weekly|true");
+
+  // Complete the occurrence, which is what creates the next one.
+  await page.goto("/my-work");
+  const drawer = await openTask(page, title);
+  await expect(drawer.getByText(/Repeats weekly as part of/)).toBeVisible({ timeout: 30_000 });
+  await drawer.getByLabel("Task status").selectOption("completed");
+
+  // Two tasks on the series now, the second due a week after the first.
+  await expect
+    .poll(
+      () => sql(`select count(*)::text from task where title = '${escaped}';`).trim(),
+      { timeout: 30_000 },
+    )
+    .toBe("2");
+  expect(
+    sql(
+      `select (max(due_at) - min(due_at))::text from task where title = '${escaped}';`,
+    ).trim(),
+  ).toBe("7");
+
+  // Stop the series from the occurrence that is still open, then complete it.
+  // Nothing further should be created, and what already exists stays.
+  await page.goto("/my-work");
+  const next = await openTask(page, title);
+  await next.getByRole("button", { name: "Stop repeating" }).click();
+  await expect(next.getByText(/^Stopped\./)).toBeVisible({ timeout: 30_000 });
+  await next.getByLabel("Task status").selectOption("completed");
+
+  // Give the command the same chance to create a third occurrence that the
+  // first completion had, then assert it did not take it.
+  await page.waitForTimeout(3_000);
+  expect(sql(`select count(*)::text from task where title = '${escaped}';`).trim()).toBe("2");
+  expect(
+    sql(`select (stopped_at is not null)::text from task_series where title = '${escaped}';`).trim(),
+  ).toBe("true");
+});
+
+test("detaching an occurrence keeps one week's edit out of every week after it", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await signIn(page, "owner");
+
+  const title = `Detach acceptance ${Date.now()}`;
+  const escaped = title.replace(/'/g, "''");
+  const today = new Date().toISOString().slice(0, 10);
+
+  await page.goto("/my-work?create=task");
+  const dialog = page.getByRole("dialog", { name: "Create task" });
+  await expect(dialog).toBeVisible({ timeout: 30_000 });
+  await dialog.getByLabel("Title", { exact: true }).fill(title);
+  await dialog.getByLabel("Assignee", { exact: true }).selectOption({ label: "QA Owner" });
+  await dialog.getByLabel("Repeats", { exact: true }).selectOption("weekly");
+  await dialog.getByLabel("First due date", { exact: true }).fill(today);
+  await dialog.getByRole("button", { name: "Create recurring task", exact: true }).click();
+  await expect(dialog).not.toBeVisible({ timeout: 30_000 });
+  await expect
+    .poll(() => sql(`select count(*)::text from task where title = '${escaped}';`).trim(), {
+      timeout: 30_000,
+    })
+    .toBe("1");
+
+  // Detach this week, then rename only this week.
+  const drawer = await openTask(page, title);
+  await drawer.getByRole("button", { name: "Detach this occurrence" }).click();
+  await expect(drawer.getByText(/This occurrence was detached/)).toBeVisible({
+    timeout: 30_000,
+  });
+
+  const edited = `${title} — this week only`;
+  await sql(
+    `update task set title = '${edited.replace(/'/g, "''")}' where title = '${escaped}';`,
+  );
+
+  // Completing the renamed occurrence must not carry the rename forward. This
+  // is the whole of "safe handling of edited occurrences": before the series
+  // definition was consulted, the successor was copied from the edited task and
+  // one week's wording became every later week's wording.
+  await page.goto("/my-work");
+  const renamed = await openTask(page, edited);
+  await renamed.getByLabel("Task status").selectOption("completed");
+
+  await expect
+    .poll(() => sql(`select count(*)::text from task where title = '${escaped}';`).trim(), {
+      timeout: 30_000,
+    })
+    .toBe("1");
+  expect(
+    sql(
+      `select count(*)::text from task where title = '${edited.replace(/'/g, "''")}';`,
+    ).trim(),
+  ).toBe("1");
 });
