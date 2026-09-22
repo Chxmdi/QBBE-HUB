@@ -21,9 +21,16 @@ const MAX_BYTES = 25 * 1024 * 1024;
 export function DocumentUploadDialog({
   projects,
   programs,
+  approvedHosts = [],
 }: {
   projects: Option[];
   programs: Option[];
+  /**
+   * What the library will accept, so the form can say so before somebody types
+   * a link it is going to refuse. The list is the organization's own, read
+   * server-side; the database is what actually enforces it.
+   */
+  approvedHosts?: { host: string; label: string }[];
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -229,8 +236,11 @@ export function DocumentUploadDialog({
                 placeholder="https://drive.google.com/…"
               />
               <FieldHint>
-                Use QBBE-controlled Drive links so access stays managed by the
-                organization.
+                {approvedHosts.length
+                  ? `Links must be https and point at ${approvedHosts
+                      .map((h) => h.label || h.host)
+                      .join(", ")}, so access stays managed by the organization.`
+                  : "No approved sources are configured yet. An administrator can add one before external links can be saved."}
               </FieldHint>
             </div>
             {contextInputs}

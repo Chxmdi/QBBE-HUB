@@ -23,8 +23,12 @@ export default async function DocumentsPage({
   const { document: highlightId = null } = await searchParams;
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: documents }, { data: projects }, { data: programs }] =
-    await Promise.all([
+  const [
+    { data: documents },
+    { data: projects },
+    { data: programs },
+    { data: approvedHosts },
+  ] = await Promise.all([
       supabase
         .from("document")
         .select(
@@ -40,6 +44,14 @@ export default async function DocumentsPage({
         .is("archived_at", null)
         .order("name"),
       supabase.from("program").select("id, name").eq("status", "active").order("name"),
+      // What the link form is allowed to accept (P0-FIL-01). Read here so the
+      // form can name the approved sources rather than refusing afterwards; the
+      // database is still what enforces it.
+      supabase
+        .from("approved_document_host")
+        .select("host, label")
+        .eq("organization_id", session.organizationId)
+        .order("host"),
     ]);
 
   const rows = (documents ?? []) as unknown as DocumentRow[];
@@ -54,6 +66,10 @@ export default async function DocumentsPage({
           <DocumentUploadDialog
             projects={(projects ?? []).map((p) => ({ id: p.id, label: p.name }))}
             programs={(programs ?? []).map((p) => ({ id: p.id, label: p.name }))}
+            approvedHosts={(approvedHosts ?? []).map((h) => ({
+              host: h.host as string,
+              label: (h.label as string) || (h.host as string),
+            }))}
           />
         }
       />
