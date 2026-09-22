@@ -16,9 +16,12 @@ What is missing is not mostly code. It is evidence, and reachability.
 - **All 18 PRD rows in this epic read `awaiting verification`** in
   `docs/acceptance-matrix.md` (EVT-01/02, MTG-01..04, AGD-01..06, COM-01..05,
   FIL-01/02). Not one has an acceptance artifact.
-- **There is no end-to-end spec for any of it.** `tests/e2e/` contains fourteen
-  files and none of them exercises a meeting, an event, a comment or a
-  document.
+- **There is almost no end-to-end spec for any of it.** Corrected on
+  2026-09-22: this originally read "no end-to-end spec for any of it", which
+  was wrong about documents. `hello-hub.spec.ts:87` already exercised an
+  upload's pending state, and it is the only such check — nothing covers a
+  meeting, an event or a comment. `documents.spec.ts` has since been added for
+  P0-FIL-01.
 - **`src/features/events` has `services` and nothing else** — no `components`
   directory. An event record that no page renders is what #33's definition of
   done calls a dead schema-only path.
@@ -42,6 +45,12 @@ mean building those two against a contract that had not been decided.
 
 - Reconcile Storage RLS, `document` rows, the scanner worker and the cleanup
   path against what the migrations already declare.
+- **Done 2026-09-22 for P0-FIL-01.** The row's "approved" requirement had no
+  implementation at all: any URL was accepted, including `javascript:` and
+  `data:`, and a link document's stored URL is handed to `window.open`. Links
+  are now restricted to https and to a per-organization allowlist enforced by a
+  trigger. What remains for this row is an administrator surface for editing
+  that allowlist.
 - Prove the fail-closed states in a browser: pending, clean, rejected, error.
 - Test the six named cases — clean file, EICAR, encrypted/unscannable,
   oversized, forbidden type, scanner outage, unauthorized download.

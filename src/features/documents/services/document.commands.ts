@@ -10,7 +10,18 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 
 const linkSchema = z.object({
   title: requiredText("Give the resource a title.", 200),
-  url: z.string().trim().url("Enter a valid URL."),
+  // https only, and not merely "a valid URL". `new URL()` — which is what Zod's
+  // `.url()` defers to — parses `javascript:alert(1)` and
+  // `data:text/html,<script>…</script>` without complaint, and a link document's
+  // stored URL is handed straight to `window.open` when somebody opens it.
+  url: z
+    .string()
+    .trim()
+    .url("Enter a valid URL.")
+    .refine(
+      (value) => /^https:\/\//i.test(value),
+      "A resource link must be an https address.",
+    ),
   description: z.string().trim().max(2000).optional(),
   projectId: z.string().uuid().optional(),
   programId: z.string().uuid().optional(),
@@ -30,6 +41,41 @@ export async function createDocumentLink(input: unknown): Promise<ActionResult> 
   const data = parsed.data;
 
   const supabase = await createSupabaseServerClient();
+
+  // The approved-source check the PRD row asks for (P0-FIL-01). The database
+  // enforces this too, in `app.reject_unapproved_document_link`, because a form
+  // is not a control — PostgREST is reachable without one. This is here so the
+  // refusal can name the sources that would work, which a trigger's error
+  // cannot do well.
+  let host: string;
+  try {
+    host = new URL(data.url).hostname.toLowerCase();
+  } catch {
+    return { ok: false, error: "Enter a valid URL." };
+  }
+
+  const { data: approved, error: approvedError } = await supabase
+    .from("approved_document_host")
+    .select("host, label")
+    .eq("organization_id", session.organizationId)
+    .order("host");
+
+  // A failed read is not an empty allowlist. Treating it as one would refuse
+  // every link and blame the person's URL for it.
+  if (approvedError) {
+    return { ok: false, error: "Could not check the approved sources. Try again." };
+  }
+
+  if (!approved?.some((row) => row.host === host)) {
+    const names = (approved ?? []).map((row) => row.label || row.host);
+    return {
+      ok: false,
+      error: names.length
+        ? `${host} is not an approved source. Links must point at ${names.join(", ")}.`
+        : `${host} is not an approved source, and no approved sources are configured yet. An administrator can add one.`,
+    };
+  }
+
   const { data: doc, error } = await supabase
     .from("document")
     .insert({
