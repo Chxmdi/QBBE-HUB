@@ -4,7 +4,9 @@ export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
   workers: 1,
-  reporter: [["list"]],
+  // The watchdog turns a server that exited mid-run into a stated server
+  // exit rather than a screenful of unrelated test failures (#79).
+  reporter: [["list"], ["./tests/e2e/server-watchdog.ts"]],
   timeout: 60_000,
   use: {
     baseURL: process.env.QA_BASE_URL ?? "http://127.0.0.1:3000",
