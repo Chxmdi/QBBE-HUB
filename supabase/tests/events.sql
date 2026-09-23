@@ -138,6 +138,20 @@ begin
   exception when insufficient_privilege then null; end;
   perform tests.ok(true, 'a read-only member cannot assign an event role');
 
+  -- Files on an event (P0-EVT-01 asks for "relevant files"). The guard that
+  -- matters is the last clause of app.can_read_document: it grants
+  -- organization-wide visibility to a document linked to nothing, and
+  -- recognises that by listing every link column as null. If event_id were
+  -- missing from that list, every event file would match it.
+  reset role;
+  perform set_config('request.jwt.claims', '{}', true);
+  insert into public.document(organization_id, title, kind, url, event_id, visibility, owner_id, created_by)
+    values (org, 'Run sheet', 'link', 'https://drive.google.com/file/d/runsheet/view',
+            ev, 'organization', owner_u, owner_u);
+  perform tests.authenticate(owner_u, 'aal2');
+  select count(*) into n from public.document where event_id = ev;
+  perform tests.ok(n = 1, 'a file can be attached to an event');
+
   -- An event in another organization is not visible here.
   reset role;
   perform set_config('request.jwt.claims', '{}', true);
