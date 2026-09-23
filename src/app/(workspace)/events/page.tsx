@@ -125,6 +125,11 @@ export default async function EventsPage({
                 { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1 },
                 { name: "endsAt", label: "Ends (defaults to one hour)", type: "datetime-local", colSpan: 1 },
                 { name: "location", label: "Location", type: "text", colSpan: 1 },
+                // `createEvent` has always accepted a type and the edit form has
+                // always shown one; only the create dialog left it out, so the
+                // type could be set on an event but never given to one
+                // (P0-EVT-01 asks for it on the record).
+                { name: "eventType", label: "Event type", type: "text", colSpan: 1 },
                 {
                   name: "volunteerNeed",
                   label: "Volunteers needed",

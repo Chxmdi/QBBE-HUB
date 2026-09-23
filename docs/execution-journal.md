@@ -479,6 +479,111 @@ and `NEXT_PUBLIC_*` is inlined when the bundle is built — so a plain
 preflight that refuses to start when the address does not answer would convert
 all of that from a lost afternoon into one line of output.
 
+## Current feature: events — the record, its preparation and who is accountable (#32)
+
+### What was wrong before
+
+**Creating an event had never worked.** Not slowly, not sometimes: the button
+returned "Could not create the event." every time, and had since the surface was
+written.
+
+`createEvent` did `.insert(...).select("id").single()`, which is an
+`insert ... returning`. Postgres applies the *select* policy to the returned
+row. `event_read` is `app.can_read_event(id)` — a `stable` function that
+re-queries `public.event` by id — and within the statement performing the insert
+it cannot see the row being inserted. So it returns false, and the statement is
+refused with "new row violates row-level security policy", which names the
+insert policy that was never the one failing.
+
+`createProject` already avoids exactly this, by generating the id with
+`crypto.randomUUID()` and not reading it back. That is why projects worked and
+events did not, and it is the fix applied here.
+
+The earlier claim in this journal that the events UI was missing was withdrawn
+before this work started: the list page, the create dialog, the detail page,
+editing, status and all seven role assignments were all present. What was
+missing was smaller and harder to see.
+
+### The rest of what P0-EVT-01 asks for
+
+- `event_checklist_item` had a table and read and write policies since
+  `20260912040000` and **zero references anywhere in the application** — the
+  preparation checklist existed only in the schema.
+- `document` could be linked to a program, project, channel, meeting or CRM
+  organization, and **not to an event**, so a run sheet or a venue contract had
+  nowhere to live but unattached in the library.
+- `event_type` was accepted by `createEvent`, absent from the create dialog, and
+  rendered only as a `defaultValue` inside the edit form. It could be given to
+  an event that already existed but never to a new one, and could not be read
+  without opening a form to change it.
+
+### Two guards that were not there (P0-EVT-02)
+
+Both were measured before being claimed, which matters because one of them was
+carried into this work as a hypothesis.
+
+`event_assignment.role` was plain `text not null`. The seven roles lived in a
+SQL comment, a TypeScript const and a Zod enum, and PostgREST consults none of
+them: `'not-a-real-role-at-all'` was accepted.
+
+`event_assignment_staff_write` checks `app.can_manage_event(event_id)`, which
+asks whether the **caller** may manage the event. Nothing asked anything about
+`user_id`. That column references `user_profile`, which only requires that
+somebody exists somewhere. A user whose only membership was in another
+organization was assigned to this organization's event.
+
+The assignee guard is a trigger rather than a policy, for the same reason
+`app.reject_unapproved_document_link` is: a policy binds to `authenticated` and
+is bypassed by `service_role`, while "is this person even in this organization"
+should have one answer regardless of who asks.
+
+### A defect found in the fixture, not in the feature
+
+Testing the cross-organization assignment needed a user in another
+organization, and building one through the real admission path put them in the
+wrong organization. That is #90, fixed separately and merged through PR #91
+before this work could proceed. The #32 test could not be written until it was,
+so it stopped being a detour and became the prerequisite.
+
+### A wrong turn worth recording
+
+The SQL harness shows `insert ... returning` failing under
+`tests.authenticate` for **project** as well as for event — and projects
+demonstrably work in a browser. Reporting the event failure from that evidence
+alone would have produced a defect that does not exist and missed the one that
+does. What separated them was checking a surface known to work, and then finding
+that `createProject` already sidesteps the trap. The database harness cannot
+distinguish these two cases; only the browser could.
+
+### Evidence
+
+Environment: clean local Supabase reset over the full migration chain through
+`20260923210000`, seeded with `npm run db:seed`, against the production build on
+127.0.0.1:3200 under Node 22.23.2 with `NEXT_PUBLIC_SUPABASE_URL` on the
+machine's LAN address per the #79 workaround.
+
+`supabase/tests/events.sql` — 14 assertions, run against the unfixed schema
+first, where they fail on the first gap. Chain at 456 assertions across 19
+files, up from 442 across 18.
+
+Commands: `npm run test:db` (456 assertions across 19 files),
+`npx supabase db advisors --local --type security --fail-on error` (no issues),
+`npm run lint` (0 errors), `npm run typecheck` (exit 0), `npm test` (504 pass),
+`npm run build` (exit 0), `npx playwright test events --project=chromium`
+(3 pass, 24.0s). `events` is added to the authenticated browser run in CI.
+
+### Not done
+
+`event_checklist_item` has a `sort_key` and no reordering, so items keep the
+order they were added in. The task checklist has reordering and this does not,
+which is a difference somebody will notice.
+
+`app.can_read_document` has the same self-referential shape that broke event
+creation — `can_read_document(id)` re-queries `public.document`. Any
+`insert ... returning` against `document` would fail the same way. Nothing here
+proves it does or does not happen today, and it is written down rather than
+claimed.
+
 ## Current feature: an invitation joins the organization that issued it (#90)
 
 ### What was wrong before

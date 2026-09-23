@@ -7,6 +7,8 @@ import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { assignEventRole, updateEvent, updateEventStatus } from "@/features/events/services/event.commands";
+import { addEventChecklistItem } from "@/features/events/services/event-checklist.commands";
+import { EventChecklist } from "@/features/events/components/event-checklist";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -54,11 +56,16 @@ export default async function EventDetailPage({
     project: { id: string; name: string } | null;
   };
 
-  const [{ data: assignments }, options] = await Promise.all([
+  const [{ data: assignments }, { data: checklist }, options] = await Promise.all([
     supabase
       .from("event_assignment")
       .select("id, event_id, user_id, role, user_profile:user_id(id, full_name, avatar_url)")
       .eq("event_id", id),
+    supabase
+      .from("event_checklist_item")
+      .select("id, title, completed_at, sort_key")
+      .eq("event_id", id)
+      .order("sort_key", { ascending: true }),
     getPickerOptions(),
   ]);
 
@@ -88,6 +95,9 @@ export default async function EventDetailPage({
             <Badge tone={event.status === "completed" ? "success" : event.status === "cancelled" ? "neutral" : "info"}>
               {(event.status as string).replace(/_/g, " ")}
             </Badge>
+            {/* The type was stored and shown only inside the edit dialog, so a
+                value nobody could see without opening a form to change it. */}
+            {event.event_type ? <Badge tone="neutral">{event.event_type}</Badge> : null}
             {session.isStaff && event.status !== "cancelled" ? (
               <>
                 <EntityFormDialog
@@ -170,6 +180,31 @@ export default async function EventDetailPage({
           </Link>
         ) : null}
       </div>
+
+      <section aria-labelledby="event-preparation" className="max-w-2xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 id="event-preparation" className="section-heading">
+            Preparation checklist
+          </h2>
+          {session.isStaff ? (
+            <EntityFormDialog
+              triggerLabel="Add item"
+              triggerVariant="secondary"
+              title="Add checklist item"
+              submitLabel="Add"
+              action={addEventChecklistItem}
+              extraValues={{ eventId: event.id }}
+              fields={[
+                { name: "title", label: "What needs doing", type: "text", required: true },
+              ]}
+            />
+          ) : null}
+        </div>
+        <EventChecklist
+          items={(checklist ?? []) as { id: string; title: string; completed_at: string | null }[]}
+          canManage={session.isStaff}
+        />
+      </section>
 
       <section aria-labelledby="event-roles" className="max-w-2xl">
         <div className="mb-3 flex items-center justify-between">
