@@ -11,7 +11,8 @@ begin;
 do $$
 declare
   u uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1';
-  volunteer uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2';
+  staff uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2';
+  volunteer uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3';
   org uuid;
   other_org uuid;
   doc uuid;
@@ -112,14 +113,30 @@ begin
   exception when check_violation then null; end;
   perform tests.ok(true, 'a host approved by another organization is not approved here');
 
-  -- Who may change the policy. A volunteer can see what the library accepts,
-  -- because the form has to be able to say so, but cannot widen it.
+  -- Who may change the policy. Everyone who can use the library can see what
+  -- it accepts, because the form has to be able to say so; only an
+  -- administrator can widen it.
+  --
+  -- Both non-admin roles are checked by name. An earlier version of this file
+  -- called `…aaa2` a volunteer and described it as a read-only member. It is
+  -- `qa-staff`, so the assertion was true about a person it had misnamed, and
+  -- the role the wording claimed to cover was never exercised at all.
+  perform tests.authenticate(staff);
+  select count(*) into n from public.approved_document_host where organization_id = org;
+  perform tests.ok(n > 0, 'a staff member can see the approved sources');
+  begin
+    insert into public.approved_document_host(organization_id, host, label)
+      values (org, 'dropbox.example', 'Personal');
+    raise exception 'FAIL: a staff member added an approved source';
+  exception when insufficient_privilege then null; end;
+  perform tests.ok(true, 'a staff member cannot add an approved source');
+
   perform tests.authenticate(volunteer);
   select count(*) into n from public.approved_document_host where organization_id = org;
   perform tests.ok(n > 0, 'a read-only member can see the approved sources');
   begin
     insert into public.approved_document_host(organization_id, host, label)
-      values (org, 'dropbox.example', 'Personal');
+      values (org, 'personal-drive.example', 'Personal');
     raise exception 'FAIL: a volunteer added an approved source';
   exception when insufficient_privilege then null; end;
   perform tests.ok(true, 'a read-only member cannot add an approved source');
