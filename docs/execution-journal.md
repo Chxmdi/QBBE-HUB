@@ -479,6 +479,82 @@ and `NEXT_PUBLIC_*` is inlined when the bundle is built — so a plain
 preflight that refuses to start when the address does not answer would convert
 all of that from a lost afternoon into one line of output.
 
+## Current feature: an invitation joins the organization that issued it (#90)
+
+### What was wrong before
+
+`app.handle_new_user` chose the organization for a new account like this:
+
+```sql
+select id into v_org from organization limit 1;
+```
+
+An arbitrary row. No `order by`, and no relationship to the invitation being
+accepted. The invitation was matched on email alone, with no organization
+predicate, its `intended_role` was read out of it — and the membership was then
+written against that arbitrary organization. The same value drove mandatory
+channel enrolment and the `audit_event` row, so the trail recorded the wrong
+organization too.
+
+**The role survived the journey and the organization did not.** That is the part
+that matters. An invitation issued as `admin` by one organization would have
+made that person an administrator of a different one, with the channels and the
+audit record to match.
+
+### How it was found, which was not by reading the code
+
+It surfaced while setting up a fixture for #32. Testing whether a cross-
+organization user can be assigned to an event needs a user in another
+organization, so one was created through the real admission path — a second
+organization, a live invitation, then the account. The fixture came back wrong:
+the member was in the *first* organization. The #32 test could not be written
+until this was fixed, so it stopped being a detour and became the prerequisite.
+
+### Severity, stated rather than inflated
+
+**Latent, not live.** Nothing in the application inserts an `organization` row
+and the database holds exactly one, so `limit 1` was returning the only
+available answer. It would have become a cross-tenant defect on the day a second
+organization existed — which every table's `organization_id` and every policy's
+scoping says is the intended shape, and which the database suite already creates
+routinely.
+
+### Evidence
+
+Commit on `90-invitation-organization`. Environment: clean local Supabase reset
+over the full migration chain through `20260923180000`, seeded with
+`npm run db:seed`.
+
+`supabase/tests/invitation-organization.sql` — 12 assertions, run against a
+second organization because that is the only condition under which the old code
+was wrong. **The assertions were run against the unfixed function first and the
+first substantive one fails there**, which is what makes the other eleven worth
+anything:
+
+```
+PASS: the test has two organizations to tell apart
+ERROR: FAIL: an invitation joins the organization that issued it
+```
+
+After the migration, all twelve pass. They cover the organization joined, the
+role carried, that nothing is granted in the other organization, that the
+invitation is spent, that the audit row and mandatory-channel enrolment follow
+the membership rather than the old value, that an `admin` invitation elsewhere
+confers no administration here, and that sign-up is still refused without an
+invitation.
+
+Commands: `npm run test:db` (442 assertions across 18 files, up from 430 across
+17), `npx supabase db advisors --local --type security --fail-on error` (no
+issues), `npm run lint` (0 errors), `npm run typecheck` (exit 0).
+
+### Not done
+
+The second question this raises is left open deliberately: an invitation is
+still matched by email across **all** organizations, newest first. Two
+organizations may invite the same address, and newest-wins is a policy nobody
+chose. Fixing the organization the membership lands in does not settle which
+invitation should win, and that deserves a decision rather than a default.
+
 ## Current feature: correcting the stale Tasks verdicts in audit 02
 
 `docs/audit/02-work-management.md` asserted gaps that the code has since
