@@ -80,7 +80,14 @@ test("blocking a task asks for a reason in a dialog, and unblocking clears it", 
   // Leaving `blocked` clears the reason: an explanation for a blockage that
   // has been declared over is not an explanation of anything, and the board
   // went on printing it above an in-progress task.
-  await page.reload();
+  // Reopen the drawer by asking for it, not by reloading whatever the URL
+  // happens to say. Giving a blocking reason closes the drawer, and closing it
+  // drops `?task=` from the URL (task-drawer.tsx `close`). A bare reload
+  // therefore lands on a plain /my-work with no drawer at all, and only passed
+  // before because the reload usually beat the router's replace. CI run
+  // 35875933334 is what it looks like when it loses: three minutes of waiting
+  // for a dialog that was never going to open.
+  await page.goto(`/my-work?task=${taskId}`);
   await page
     .getByRole("dialog")
     .first()
