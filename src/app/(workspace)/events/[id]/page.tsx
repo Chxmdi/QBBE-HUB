@@ -95,6 +95,9 @@ export default async function EventDetailPage({
             <Badge tone={event.status === "completed" ? "success" : event.status === "cancelled" ? "neutral" : "info"}>
               {(event.status as string).replace(/_/g, " ")}
             </Badge>
+            {/* The type was stored and shown only inside the edit dialog, so a
+                value nobody could see without opening a form to change it. */}
+            {event.event_type ? <Badge tone="neutral">{event.event_type}</Badge> : null}
             {session.isStaff && event.status !== "cancelled" ? (
               <>
                 <EntityFormDialog
