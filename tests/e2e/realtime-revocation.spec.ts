@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { loadEnvConfig } from "@next/env";
 import { createClient, type RealtimeChannel } from "@supabase/supabase-js";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { sql } from "./db";
 
 loadEnvConfig(process.cwd());
