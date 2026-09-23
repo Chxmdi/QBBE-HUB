@@ -12,10 +12,12 @@ import { createProject } from "@/features/projects/services/project.commands";
 export function ProjectCreateDialog({
   programs,
   people,
+  funders = [],
   defaultOpen = false,
 }: {
   programs: Option[];
   people: Option[];
+  funders?: Option[];
   defaultOpen?: boolean;
 }) {
   const router = useRouter();
@@ -39,6 +41,7 @@ export function ProjectCreateDialog({
       targetDate: (form.get("targetDate") as string) || undefined,
       priority: form.get("priority"),
       reportingCadence: form.get("reportingCadence"),
+      fundingSourceId: (form.get("fundingSourceId") as string) || undefined,
       stage: form.get("stage"),
     });
     setSaving(false);
@@ -141,6 +144,17 @@ export function ProjectCreateDialog({
                 <option value="none">As needed</option>
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="project-funding">Funding source</Label>
+              <Select id="project-funding" name="fundingSourceId" defaultValue="">
+                <option value="">None</option>
+                {funders.map((funder) => (
+                  <option key={funder.id} value={funder.id}>
+                    {funder.label}
+                  </option>
+                ))}
               </Select>
             </div>
             <div>

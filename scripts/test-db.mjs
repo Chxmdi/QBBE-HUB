@@ -41,6 +41,10 @@ const FILES = [
   "supabase/tests/document-scanning-meetings.sql",
   "supabase/tests/document-links.sql",
   "supabase/tests/work-planning.sql",
+  "supabase/tests/raid-decisions.sql",
+  "supabase/tests/crm-continuity.sql",
+  "supabase/tests/export-scope.sql",
+  "supabase/tests/epic4-completion.sql",
 ];
 
 // Docker needs sudo on some Linux installs and never on Windows or macOS.

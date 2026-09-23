@@ -132,6 +132,59 @@ export async function buildReportSnapshot(
       events: events ?? [],
       status_updates: (updates ?? []).filter((u) => projectIds.has(u.project_id)),
     });
+
+    const extras = await Promise.all([
+      readAll(supabase
+        .from("outcome_metric")
+        .select("id, name, unit, target, measurements:outcome_measurement(value, measured_on)")
+        .eq("program_id", programId!)
+        .is("retired_at", null)),
+      projectIds.size === 0
+        ? Promise.resolve({ data: [], error: null })
+        : readAll(supabase
+            .from("risk")
+            .select("id, title, status, project_id")
+            .in("project_id", [...projectIds])
+            .in("status", ["open", "mitigating"])),
+      readAll(supabase
+        .from("program_access_grant")
+        .select("user_id, role, member:user_id(full_name)")
+        .eq("program_id", programId!)),
+      projectIds.size === 0
+        ? Promise.resolve({ data: [], error: null })
+        : readAll(supabase
+            .from("milestone")
+            .select("id, name, due_date, project_id, completed_at")
+            .in("project_id", [...projectIds])
+            .is("completed_at", null)
+            .gte("due_date", periodStart)),
+    ]);
+    if (extras.some((result) => result.error)) {
+      return { ok: false, error: "Could not read all report data. Please retry." };
+    }
+    const [{ data: outcomes }, { data: risks }, { data: people }, { data: upcomingMilestones }] = extras;
+    Object.assign(snapshot, {
+      outcomes: (outcomes ?? []).map((metric) => {
+        const latest = [...((metric.measurements as { value: string; measured_on: string }[] | null) ?? [])]
+          .sort((a, b) => b.measured_on.localeCompare(a.measured_on))[0];
+        return {
+          name: metric.name,
+          unit: metric.unit,
+          target: metric.target,
+          latest: latest?.value ?? null,
+        };
+      }),
+      risks: risks ?? [],
+      people: (people ?? []).map((person) => ({
+        name: (person.member as { full_name?: string } | null)?.full_name ?? "Unknown",
+        role: person.role,
+      })),
+      upcoming: {
+        milestones: upcomingMilestones ?? [],
+        events: (events ?? []).filter((event) => (event.starts_at as string) >= periodStart),
+        meetings: (meetings ?? []).filter((meeting) => (meeting.starts_at as string) >= periodStart),
+      },
+    });
   } else {
     const results = await Promise.all([
         supabase
@@ -193,6 +246,29 @@ export async function buildReportSnapshot(
       status_updates: updates ?? [],
       decisions: decisions ?? [],
       tasks: tasks ?? [],
+    });
+
+    const extras = await Promise.all([
+      readAll(supabase
+        .from("activity_event")
+        .select("id, summary, created_at")
+        .eq("project_id", projectId!)
+        .order("created_at", { ascending: false })),
+    ]);
+    if (extras.some((result) => result.error)) {
+      return { ok: false, error: "Could not read all report data. Please retry." };
+    }
+    const [{ data: activity }] = extras;
+    const latestUpdate = (updates ?? [])[0] as { next_steps?: string | null } | undefined;
+    const completed = (tasks ?? []).filter((task) => task.status === "completed").length;
+    Object.assign(snapshot, {
+      progress: {
+        completed,
+        total: (tasks ?? []).length,
+        percent: (tasks ?? []).length === 0 ? 0 : Math.round((completed / (tasks ?? []).length) * 100),
+      },
+      next_steps: latestUpdate?.next_steps ?? null,
+      activity: activity ?? [],
     });
   }
 

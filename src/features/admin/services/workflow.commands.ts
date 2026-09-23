@@ -12,6 +12,7 @@ const saveViewSchema = z.object({
   name: requiredText("Name the view.", 80),
   path: z.string().trim().min(1).max(120).default("/my-work"),
   query: z.record(z.string()).default({}),
+  shared: z.boolean().optional(),
 });
 
 export async function saveView(input: unknown): Promise<ActionResult> {
@@ -29,6 +30,7 @@ export async function saveView(input: unknown): Promise<ActionResult> {
       name: parsed.data.name,
       path: parsed.data.path,
       query: parsed.data.query,
+      shared: parsed.data.shared ?? false,
     })
     .select("id")
     .single();

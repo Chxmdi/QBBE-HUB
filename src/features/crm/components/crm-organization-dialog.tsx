@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
-import { AlertTriangle, Plus } from "lucide-react";
+import { AlertTriangle, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import {
   createCrmOrganization,
   findDuplicateOrganizations,
+  updateCrmOrganization,
   type DuplicateMatch,
 } from "@/features/crm/services/crm.commands";
 
@@ -19,13 +20,24 @@ const CATEGORIES = [
   "government", "vendor", "media", "donor", "association",
 ];
 
-/**
- * Creates a relationship record, surfacing possible duplicates before the
- * record is created while still allowing a deliberate one (§10.13).
- */
-export function CrmOrganizationDialog({ defaultOpen = false }: { defaultOpen?: boolean }) {
+export function CrmOrganizationDialog({
+  defaultOpen = false,
+  organization,
+}: {
+  defaultOpen?: boolean;
+  organization?: {
+    id: string;
+    name: string;
+    category: string;
+    website: string | null;
+    notes: string | null;
+    next_action_at: string | null;
+    sensitive_notes?: string | null;
+  };
+}) {
   const router = useRouter();
   const { toast } = useToast();
+  const editing = Boolean(organization);
   const [open, setOpen] = useState(defaultOpen);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
   const [acknowledged, setAcknowledged] = useState(false);
@@ -33,7 +45,7 @@ export function CrmOrganizationDialog({ defaultOpen = false }: { defaultOpen?: b
   const [saving, setSaving] = useState(false);
 
   async function checkDuplicates(name: string, website: string) {
-    if (name.trim().length < 3) {
+    if (editing || name.trim().length < 3) {
       setDuplicates([]);
       return;
     }
@@ -47,25 +59,29 @@ export function CrmOrganizationDialog({ defaultOpen = false }: { defaultOpen?: b
     setError(null);
     const form = new FormData(e.currentTarget);
 
-    // Block the first submit when duplicates exist, until acknowledged.
-    if (duplicates.length > 0 && !acknowledged) {
+    if (!editing && duplicates.length > 0 && !acknowledged) {
       setError("Review the possible duplicates above, then confirm to continue.");
       return;
     }
 
     setSaving(true);
-    const result = await createCrmOrganization({
+    const payload = {
       name: form.get("name"),
       category: form.get("category"),
       website: (form.get("website") as string) || undefined,
       notes: (form.get("notes") as string) || undefined,
-    });
+      nextActionAt: (form.get("nextActionAt") as string) || undefined,
+      sensitiveNotes: (form.get("sensitiveNotes") as string) || undefined,
+    };
+    const result = editing && organization
+      ? await updateCrmOrganization({ id: organization.id, ...payload })
+      : await createCrmOrganization(payload);
     setSaving(false);
     if (!result.ok) {
       setError(result.error ?? "Could not save the organization.");
       return;
     }
-    toast("Organization added.");
+    toast(editing ? "Organization updated." : "Organization added.");
     setOpen(false);
     setDuplicates([]);
     router.refresh();
@@ -73,14 +89,14 @@ export function CrmOrganizationDialog({ defaultOpen = false }: { defaultOpen?: b
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
-        <Plus className="size-4" aria-hidden />
-        New organization
+      <Button variant={editing ? "secondary" : "primary"} onClick={() => setOpen(true)}>
+        {editing ? <Pencil className="size-4" aria-hidden /> : <Plus className="size-4" aria-hidden />}
+        {editing ? "Edit organization" : "New organization"}
       </Button>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Add organization"
+        title={editing ? "Edit organization" : "Add organization"}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -91,6 +107,7 @@ export function CrmOrganizationDialog({ defaultOpen = false }: { defaultOpen?: b
               required
               maxLength={200}
               autoFocus
+              defaultValue={organization?.name}
               onBlur={(e) =>
                 checkDuplicates(
                   e.target.value,
@@ -137,7 +154,12 @@ export function CrmOrganizationDialog({ defaultOpen = false }: { defaultOpen?: b
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="crm-category">Category</Label>
-              <Select id="crm-category" name="category" defaultValue="community" required>
+              <Select
+                id="crm-category"
+                name="category"
+                defaultValue={organization?.category ?? "community"}
+                required
+              >
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>
                     {c}
@@ -153,6 +175,7 @@ export function CrmOrganizationDialog({ defaultOpen = false }: { defaultOpen?: b
                 id="crm-website"
                 name="website"
                 type="url"
+                defaultValue={organization?.website ?? ""}
                 onBlur={(e) =>
                   checkDuplicates(
                     (document.getElementById("crm-name") as HTMLInputElement)
@@ -168,7 +191,35 @@ export function CrmOrganizationDialog({ defaultOpen = false }: { defaultOpen?: b
             <Label htmlFor="crm-notes">
               Notes <span className="font-normal text-muted">(optional)</span>
             </Label>
-            <Textarea id="crm-notes" name="notes" maxLength={5000} rows={2} />
+            <Textarea
+              id="crm-notes"
+              name="notes"
+              maxLength={5000}
+              rows={2}
+              defaultValue={organization?.notes ?? ""}
+            />
+          </div>
+          <div>
+            <Label htmlFor="crm-next-action">Next action</Label>
+            <Input
+              id="crm-next-action"
+              name="nextActionAt"
+              type="date"
+              required
+              defaultValue={organization?.next_action_at ?? ""}
+            />
+          </div>
+          <div>
+            <Label htmlFor="crm-sensitive">
+              Sensitive notes <span className="font-normal text-muted">(owner and admins only)</span>
+            </Label>
+            <Textarea
+              id="crm-sensitive"
+              name="sensitiveNotes"
+              maxLength={5000}
+              rows={2}
+              defaultValue={organization?.sensitive_notes ?? ""}
+            />
           </div>
 
           {error ? (
@@ -182,7 +233,7 @@ export function CrmOrganizationDialog({ defaultOpen = false }: { defaultOpen?: b
               Cancel
             </Button>
             <Button type="submit" loading={saving}>
-              Add organization
+              {editing ? "Save organization" : "Add organization"}
             </Button>
           </div>
         </form>

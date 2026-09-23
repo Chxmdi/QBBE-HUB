@@ -25,10 +25,17 @@ import {
   StatusDonut,
   WeeklyBars,
 } from "@/features/dashboard/components/charts";
+import { dashboardLens } from "@/features/dashboard/portfolio";
 import { getDashboardData } from "@/features/dashboard/services/dashboard.queries";
+import {
+  getCommitments,
+  getOutcomeRollup,
+  getPortfolio,
+  getWorkload,
+} from "@/features/dashboard/services/portfolio.queries";
 import { requireSession } from "@/lib/auth";
 import { DEFAULT_TIME_ZONE, calendarDateInZone } from "@/lib/time";
-import { formatDate, formatTime, relativeTime } from "@/lib/utils";
+import { formatDate, formatDateTime, formatTime, relativeTime } from "@/lib/utils";
 import type { ProjectHealth, Task } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Home" };
@@ -45,6 +52,30 @@ function greetingFor(timezone: string): string {
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
   return "Good evening";
+}
+
+function AttentionLink({
+  title,
+  reason,
+  href,
+}: {
+  title: string;
+  reason: string;
+  href: string;
+}) {
+  return (
+    <li className="interactive-row flex items-center gap-3 px-3 py-2">
+      <span className="min-w-0 flex-1">
+        <Link href={href} className="block truncate text-[13.5px] font-medium hover:text-brand-fg">
+          {title}
+        </Link>
+        <span className="meta">{reason}</span>
+      </span>
+      <Link href={href} aria-label={`Open ${title}`} className="text-muted hover:text-brand-fg">
+        <ArrowRight className="size-4" aria-hidden />
+      </Link>
+    </li>
+  );
 }
 
 function AttentionTask({ task, reason }: { task: Task; reason: string }) {
@@ -64,8 +95,8 @@ function AttentionTask({ task, reason }: { task: Task; reason: string }) {
         />
       ) : null}
       <Link
-        href="/board"
-        aria-label={`Open board for ${task.title}`}
+        href={`/my-work?task=${task.id}`}
+        aria-label={`Open ${task.title}`}
         className="text-muted hover:text-brand-fg"
       >
         <ArrowRight className="size-4" aria-hidden />
@@ -76,7 +107,17 @@ function AttentionTask({ task, reason }: { task: Task; reason: string }) {
 
 export default async function HomePage() {
   const session = await requireSession();
-  const data = await getDashboardData(session.userId, session.timeZone);
+  const lens = dashboardLens(session.role);
+  const showPortfolio = lens !== "volunteer";
+  const [data, portfolio, workload, outcomes, commitments] = await Promise.all([
+    getDashboardData(session.userId, session.timeZone),
+    showPortfolio
+      ? getPortfolio({ userId: session.userId, role: session.role, filters: {} })
+      : Promise.resolve(null),
+    showPortfolio ? getWorkload(session.timeZone) : Promise.resolve({ people: [], teams: [] }),
+    showPortfolio ? getOutcomeRollup() : Promise.resolve([]),
+    getCommitments(session.timeZone),
+  ]);
   const todayInZone =
     calendarDateInZone(new Date(), session.timeZone) ??
     new Date().toISOString().slice(0, 10);
@@ -109,11 +150,14 @@ export default async function HomePage() {
         )
       : null;
 
-  const attentionEmpty = session.isStaff
+  const attentionEmpty = showPortfolio
     ? attention.overdueTasks.length === 0 &&
       attention.blockedTasks.length === 0 &&
       attention.unassignedTasks.length === 0 &&
-      attention.riskyProjects.length === 0
+      attention.riskyProjects.length === 0 &&
+      attention.overdueMilestones.length === 0 &&
+      attention.pendingDecisions.length === 0 &&
+      attention.upcomingCommitments.length === 0
     : attention.overdueTasks.length === 0 && attention.blockedTasks.length === 0;
 
   const rail = data.announcementRail;
@@ -162,7 +206,7 @@ export default async function HomePage() {
         ) : null}
 
         {/* Hero: portfolio pulse — staff/leadership only (P0-VOL-02) */}
-        {session.isStaff ? (
+        {showPortfolio && portfolio ? (
         <section
           aria-label="Portfolio summary"
           className="card mb-5 flex flex-wrap items-center gap-x-8 gap-y-4 p-5"
@@ -177,19 +221,26 @@ export default async function HomePage() {
               </span>
             </p>
             <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted">
-              <span className="flex items-center gap-1">
-                <span aria-hidden className="size-2 rounded-full bg-(--color-chart-good)" />
-                {onTrack} on track
-              </span>
-              <span className="flex items-center gap-1">
-                <span aria-hidden className="size-2 rounded-full bg-(--color-chart-todo)" />
-                {healthCounts["at_risk"] ?? 0} needs attention
-              </span>
-              <span className="flex items-center gap-1">
-                <span aria-hidden className="size-2 rounded-full bg-(--color-chart-overdue)" />
-                {healthCounts["off_track"] ?? 0} at risk
-              </span>
+              <Link href="/projects?stage=active" className="hover:underline">
+                {portfolio.counts.active} active
+              </Link>
+              <Link href="/projects?health=on_track" className="hover:underline">
+                {portfolio.counts.onTrack} on track
+              </Link>
+              <Link href="/projects?health=at_risk" className="hover:underline">
+                {portfolio.counts.atRisk} at risk
+              </Link>
+              <Link href="/projects?health=off_track" className="hover:underline">
+                {portfolio.counts.offTrack} off track
+              </Link>
+              <Link href="/projects?health=paused" className="hover:underline">
+                {portfolio.counts.paused} paused
+              </Link>
+              <Link href="/projects?stale=1" className="hover:underline">
+                {portfolio.counts.stale} stale
+              </Link>
             </p>
+            <p className="meta mt-1">Last refreshed {formatDateTime(portfolio.refreshedAt)}</p>
           </div>
           <div className="hidden h-12 w-px bg-line sm:block" aria-hidden />
           <div>
@@ -507,6 +558,116 @@ export default async function HomePage() {
           </section>
         </div>
 
+        {showPortfolio ? (
+          <section aria-labelledby="workload-heading" className="mt-8">
+            <h2 id="workload-heading" className="section-heading mb-3">Workload</h2>
+            {workload.people.length === 0 ? (
+              <p className="card px-4 py-6 text-center text-[13px] text-muted">No open assigned work.</p>
+            ) : (
+              <div className="space-y-4">
+              <div className="card overflow-x-auto">
+                <table className="w-full text-left text-[13.5px]">
+                  <thead>
+                    <tr className="border-b border-line">
+                      <th className="px-4 py-2 font-semibold">Person</th>
+                      <th className="px-4 py-2 font-semibold">Active</th>
+                      <th className="px-4 py-2 font-semibold">Due soon</th>
+                      <th className="px-4 py-2 font-semibold">Overdue</th>
+                      <th className="px-4 py-2 font-semibold">Estimated hours</th>
+                      <th className="px-4 py-2 font-semibold">Overload</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {workload.people.map((person) => (
+                      <tr key={person.userId} className="border-b border-line last:border-b-0">
+                        <td className="px-4 py-2">{person.name}</td>
+                        <td className="px-4 py-2">{person.active}</td>
+                        <td className="px-4 py-2">{person.dueSoon}</td>
+                        <td className="px-4 py-2">{person.overdue}</td>
+                        <td className="px-4 py-2">
+                          {person.estimatedHours === null
+                            ? "Unknown"
+                            : `${person.estimatedHours}${person.unknownEstimates ? ` (${person.unknownEstimates} unknown)` : ""}`}
+                        </td>
+                        <td className="px-4 py-2">{person.overloaded ? "Possible overload" : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {workload.teams.length > 0 ? (
+                <div className="card overflow-x-auto">
+                  <table className="w-full text-left text-[13.5px]">
+                    <thead>
+                      <tr className="border-b border-line">
+                        <th className="px-4 py-2 font-semibold">Team</th>
+                        <th className="px-4 py-2 font-semibold">Active</th>
+                        <th className="px-4 py-2 font-semibold">Due soon</th>
+                        <th className="px-4 py-2 font-semibold">Overdue</th>
+                        <th className="px-4 py-2 font-semibold">Estimated hours</th>
+                        <th className="px-4 py-2 font-semibold">Overload</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {workload.teams.map((team) => (
+                        <tr key={team.teamId} className="border-b border-line last:border-b-0">
+                          <td className="px-4 py-2">{team.name}</td>
+                          <td className="px-4 py-2">{team.active}</td>
+                          <td className="px-4 py-2">{team.dueSoon}</td>
+                          <td className="px-4 py-2">{team.overdue}</td>
+                          <td className="px-4 py-2">
+                            {team.estimatedHours === null ? "Unknown" : team.estimatedHours}
+                          </td>
+                          <td className="px-4 py-2">{team.overloaded ? "Possible overload" : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        <section aria-labelledby="commitments-heading" className="mt-8">
+          <h2 id="commitments-heading" className="section-heading mb-3">Commitments</h2>
+          {commitments.length === 0 ? (
+            <p className="card px-4 py-6 text-center text-[13px] text-muted">No upcoming milestones, reporting dates, or follow-ups.</p>
+          ) : (
+            <ul className="card divide-y divide-line">
+              {commitments.map((item) => (
+                <li key={item.id} className="px-4 py-2.5">
+                  <Link href={item.href} className="text-[13.5px] font-medium hover:text-brand-fg">
+                    {item.title}
+                  </Link>
+                  <p className="meta">{item.kind} · {item.when}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {showPortfolio ? (
+          <section aria-labelledby="outcomes-heading" className="mt-8">
+            <h2 id="outcomes-heading" className="section-heading mb-3">Outcomes</h2>
+            {outcomes.length === 0 ? (
+              <p className="card px-4 py-6 text-center text-[13px] text-muted">No outcome targets yet.</p>
+            ) : (
+              <ul className="card divide-y divide-line">
+                {outcomes.map((metric) => (
+                  <li key={metric.id} className="px-4 py-2.5">
+                    <p className="text-[13.5px] font-medium">{metric.name}</p>
+                    <p className="meta">
+                      {metric.programName} · latest {metric.latest ?? "—"} {metric.unit} · target {metric.target ?? "—"}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ) : null}
+
         {/* Needs attention (P0-DASH-03) */}
         <section aria-labelledby="attention-heading" className="mt-8">
           <h2 id="attention-heading" className="section-heading mb-3">
@@ -519,12 +680,12 @@ export default async function HomePage() {
                 Nothing needs escalation right now.
               </p>
               <p className="mt-0.5 text-[13px] text-muted">
-                No overdue, blocked, unassigned, or at-risk work is visible to you.
+                No overdue, blocked, unassigned, at-risk, or upcoming work is visible to you.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {session.isStaff && attention.riskyProjects.length > 0 ? (
+              {showPortfolio && attention.riskyProjects.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
                     <AlertTriangle className="size-3.5 text-warning-fg" aria-hidden />
@@ -580,7 +741,7 @@ export default async function HomePage() {
                   </ul>
                 </div>
               ) : null}
-              {session.isStaff && attention.unassignedTasks.length > 0 ? (
+              {showPortfolio && attention.unassignedTasks.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
                     <AlertTriangle className="size-3.5 text-warning-fg" aria-hidden />
@@ -589,6 +750,45 @@ export default async function HomePage() {
                   <ul>
                     {attention.unassignedTasks.map((t) => (
                       <AttentionTask key={t.id} task={t} reason={t.project?.name ?? "No project"} />
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {showPortfolio && attention.overdueMilestones.length > 0 ? (
+                <div className="card overflow-hidden">
+                  <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
+                    <OctagonAlert className="size-3.5 text-danger-fg" aria-hidden />
+                    Overdue milestones
+                  </p>
+                  <ul>
+                    {attention.overdueMilestones.map((item) => (
+                      <AttentionLink key={item.id} title={item.title} reason={item.reason} href={item.href} />
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {showPortfolio && attention.pendingDecisions.length > 0 ? (
+                <div className="card overflow-hidden">
+                  <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
+                    <AlertTriangle className="size-3.5 text-warning-fg" aria-hidden />
+                    Pending decisions
+                  </p>
+                  <ul>
+                    {attention.pendingDecisions.map((item) => (
+                      <AttentionLink key={item.id} title={item.title} reason={item.reason} href={item.href} />
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {showPortfolio && attention.upcomingCommitments.length > 0 ? (
+                <div className="card overflow-hidden">
+                  <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
+                    <CalendarDays className="size-3.5 text-brand-fg" aria-hidden />
+                    Upcoming commitments
+                  </p>
+                  <ul>
+                    {attention.upcomingCommitments.map((item) => (
+                      <AttentionLink key={item.id} title={item.title} reason={item.reason} href={item.href} />
                     ))}
                   </ul>
                 </div>

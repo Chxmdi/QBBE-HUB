@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { CompleteFollowUpButton } from "@/features/crm/components/complete-follow-up-button";
+import { FollowUpTaskButton } from "@/features/crm/components/follow-up-task-button";
 import { CrmOrganizationDialog } from "@/features/crm/components/crm-organization-dialog";
 import { createCrmContact, createFollowUp } from "@/features/crm/services/crm.commands";
 import {
@@ -52,7 +53,7 @@ export default async function CrmPage({
     supabase
       .from("crm_follow_up")
       .select(
-        "id, crm_organization_id, owner_id, title, due_at, status, crm_organization:crm_organization_id(id, name)",
+        "id, crm_organization_id, owner_id, title, due_at, status, task_id, crm_organization:crm_organization_id(id, name)",
       )
       .eq("status", "open")
       .order("due_at")
@@ -181,33 +182,49 @@ export default async function CrmPage({
               Open follow-ups across all relationships appear here, soonest first.
             </p>
           ) : (
-            <ul className="card divide-y divide-line">
-              {followUpList.map((followUp) => (
-                <li key={followUp.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13.5px] font-medium">
-                      {followUp.title}
-                    </p>
-                    <p className="meta">
-                      {followUp.crm_organization?.name} ·{" "}
-                      <span
-                        className={
-                          followUp.due_at < today ? "font-medium text-danger-fg" : ""
-                        }
-                      >
-                        {followUp.due_at < today ? "Overdue · " : ""}
-                        {formatDate(followUp.due_at)}
-                      </span>
-                    </p>
-                  </div>
-                  <CompleteFollowUpButton followUpId={followUp.id} />
-                </li>
-              ))}
-            </ul>
+            <>
+              <FollowUpGroup
+                title="Overdue"
+                items={followUpList.filter((item) => item.due_at < today)}
+              />
+              <FollowUpGroup
+                title="Upcoming"
+                items={followUpList.filter((item) => item.due_at >= today)}
+              />
+            </>
           )}
           </section>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function FollowUpGroup({
+  title,
+  items,
+}: {
+  title: string;
+  items: CrmFollowUp[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div className="mb-4">
+      <h3 className="mb-2 text-[12.5px] font-semibold">{title}</h3>
+      <ul className="card divide-y divide-line">
+        {items.map((followUp) => (
+          <li key={followUp.id} className="flex items-center gap-3 px-4 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13.5px] font-medium">{followUp.title}</p>
+              <p className="meta">
+                {followUp.crm_organization?.name} · {formatDate(followUp.due_at)}
+              </p>
+            </div>
+            <FollowUpTaskButton followUpId={followUp.id} taskId={followUp.task_id} />
+            <CompleteFollowUpButton followUpId={followUp.id} />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

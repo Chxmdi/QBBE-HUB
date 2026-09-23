@@ -80,8 +80,16 @@ describe("settlement rules", () => {
   };
 
   it("accepts an ordinary open opportunity", () => {
-    const result = createOpportunitySchema.safeParse(base);
+    const result = createOpportunitySchema.safeParse({
+      ...base,
+      decisionExpectedAt: "2026-10-01",
+    });
     expect(result.success).toBe(true);
+  });
+
+  it("refuses an open opportunity with no review date", () => {
+    const result = createOpportunitySchema.safeParse(base);
+    expect(result.success).toBe(false);
   });
 
   it("refuses an award with no amount", () => {
@@ -118,6 +126,7 @@ describe("settlement rules", () => {
     const result = createOpportunitySchema.safeParse({
       ...base,
       stage: "submitted",
+      decisionExpectedAt: "2026-10-01",
       decidedAt: "2026-01-01",
     });
     expect(result.success).toBe(false);
@@ -163,6 +172,7 @@ describe("amounts", () => {
     const result = createOpportunitySchema.safeParse({
       ...base,
       amountRequested: "£25,000",
+      decisionExpectedAt: "2026-10-01",
     });
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.amountRequested).toBe(25000);
@@ -189,7 +199,11 @@ describe("amounts", () => {
     expect(
       createOpportunitySchema.safeParse({ ...base, currency: "pounds" }).success,
     ).toBe(false);
-    const upper = createOpportunitySchema.safeParse({ ...base, currency: "eur" });
+    const upper = createOpportunitySchema.safeParse({
+      ...base,
+      currency: "eur",
+      decisionExpectedAt: "2026-10-01",
+    });
     expect(upper.success).toBe(true);
     if (upper.success) expect(upper.data.currency).toBe("EUR");
   });

@@ -26,6 +26,7 @@ export interface RiskRow {
   status: RiskStatus;
   score: number;
   mitigation: string | null;
+  trigger: string | null;
   review_at: string | null;
   owner: { id: string; full_name: string } | null;
 }
@@ -36,6 +37,8 @@ export interface IssueRow {
   description: string | null;
   severity: IssueSeverity;
   status: IssueStatus;
+  impact: string | null;
+  resolution_plan: string | null;
   resolution: string | null;
   due_at: string | null;
   risk_id: string | null;
@@ -73,7 +76,7 @@ export async function getRaidLog(
     supabase
       .from("risk")
       .select(
-        "id, title, description, likelihood, impact, status, score, mitigation, review_at, owner:owner_id(id, full_name)",
+        "id, title, description, likelihood, impact, status, score, mitigation, trigger, review_at, owner:owner_id(id, full_name)",
       )
       .eq("project_id", projectId)
       .order("score", { ascending: false })
@@ -81,7 +84,7 @@ export async function getRaidLog(
     supabase
       .from("issue")
       .select(
-        "id, title, description, severity, status, resolution, due_at, risk_id, owner:owner_id(id, full_name)",
+        "id, title, description, severity, status, impact, resolution_plan, resolution, due_at, risk_id, owner:owner_id(id, full_name)",
       )
       .eq("project_id", projectId)
       .order("created_at", { ascending: false }),

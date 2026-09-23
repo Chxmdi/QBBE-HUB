@@ -25,7 +25,9 @@ import { hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { formatDate, relativeTime } from "@/lib/utils";
 import { RecordComments } from "@/features/comments/components/record-comments";
+import { DecisionLog } from "@/features/risks/components/decision-log";
 import { RaidLogPanel } from "@/features/risks/components/raid-log";
+import { getProjectDecisions } from "@/features/risks/services/decision.queries";
 import { getRaidLog } from "@/features/risks/services/risk.queries";
 import type {
   ActivityEvent,
@@ -61,7 +63,7 @@ export default async function ProjectDetailPage({
     .from("project")
     .select(
       "id, program_id, name, outcome, description, stage, health, health_reason, start_date, target_date, created_at, archived_at, owner_id, " +
-        "sponsor_id, priority, reporting_cadence, " +
+        "sponsor_id, priority, reporting_cadence, funding_source_id, " +
         "owner:owner_id(id, full_name, email, avatar_url, title, timezone), " +
         "sponsor:sponsor_id(id, full_name, avatar_url), program:program_id(id, name)",
     )
@@ -83,6 +85,7 @@ export default async function ProjectDetailPage({
     { data: activity },
     options,
     raidLog,
+    decisionLog,
     { data: comments },
     { data: grants },
     { data: documents },
@@ -90,6 +93,7 @@ export default async function ProjectDetailPage({
     { data: channel },
     { data: closure },
     { data: milestoneDependencies },
+    { data: funders },
   ] = await Promise.all([
     supabase
       .from("milestone")
@@ -129,6 +133,7 @@ export default async function ProjectDetailPage({
       .limit(15),
     getPickerOptions(),
     getRaidLog(id, session.timeZone),
+    getProjectDecisions(id),
     supabase
       .from("record_comment")
       .select("id, body, author_id, created_at, resolved_at, deleted_at")
@@ -176,6 +181,12 @@ export default async function ProjectDetailPage({
     supabase
       .from("milestone_dependency")
       .select("blocking_milestone_id, blocked_milestone_id"),
+    supabase
+      .from("crm_organization")
+      .select("id, name")
+      .in("category", ["funder", "sponsor", "donor", "government"])
+      .eq("status", "active")
+      .order("name"),
   ]);
 
   type TeamGrant = {
@@ -254,6 +265,10 @@ export default async function ProjectDetailPage({
                     project={project as unknown as Parameters<typeof ProjectEditDialog>[0]["project"]}
                     programs={options.programs}
                     people={options.people}
+                    funders={((funders ?? []) as { id: string; name: string }[]).map((funder) => ({
+                      id: funder.id,
+                      label: funder.name,
+                    }))}
                   />
                   <StageSelect projectId={project.id} stage={project.stage} />
                   {project.stage !== "completed" && project.stage !== "archived" ? (
@@ -787,6 +802,13 @@ export default async function ProjectDetailPage({
             canManage={canManage}
             highlightRiskId={highlightRiskId}
             highlightIssueId={highlightIssueId}
+          />
+          <DecisionLog
+            projectId={project.id}
+            decisions={decisionLog.decisions}
+            requests={decisionLog.requests}
+            people={options.people}
+            canManage={canManage}
           />
           <DeepLinkScroll
             targetId={

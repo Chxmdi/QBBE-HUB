@@ -130,6 +130,11 @@ export function RaidLogPanel({
                   options: OPTION(RISK_IMPACTS),
                 },
                 {
+                  name: "trigger",
+                  label: "What would make it happen",
+                  type: "textarea",
+                },
+                {
                   name: "mitigation",
                   label: "What we are doing about it",
                   type: "textarea",
@@ -216,6 +221,8 @@ export function RaidLogPanel({
               fields={[
                 { name: "title", label: "What has happened", type: "text", required: true },
                 { name: "description", label: "Detail", type: "textarea" },
+                { name: "impact", label: "Impact", type: "textarea" },
+                { name: "resolutionPlan", label: "Resolution plan", type: "textarea" },
                 {
                   name: "severity",
                   label: "Severity",
@@ -323,6 +330,12 @@ function RiskItem({
         {dueForReview ? " · due for review" : ""}
       </p>
 
+      {risk.trigger ? (
+        <p className="mt-1 text-[13px]">
+          <span className="text-muted">Trigger: </span>
+          {risk.trigger}
+        </p>
+      ) : null}
       {risk.description ? (
         <p className="mt-1 text-[13px] text-muted">{risk.description}</p>
       ) : null}
@@ -373,6 +386,18 @@ function IssueItem({
         {issue.risk_id ? " · escalated from a risk" : ""}
       </p>
 
+      {issue.impact ? (
+        <p className="mt-1 text-[13px]">
+          <span className="text-muted">Impact: </span>
+          {issue.impact}
+        </p>
+      ) : null}
+      {issue.resolution_plan ? (
+        <p className="mt-1 text-[13px]">
+          <span className="text-muted">Resolution plan: </span>
+          {issue.resolution_plan}
+        </p>
+      ) : null}
       {issue.description ? (
         <p className="mt-1 text-[13px] text-muted">{issue.description}</p>
       ) : null}

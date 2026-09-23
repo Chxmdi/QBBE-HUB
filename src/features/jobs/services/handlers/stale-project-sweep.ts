@@ -1,19 +1,18 @@
+import { cadenceDays, isProjectStale } from "@/features/projects/stale";
 import { createNotifications, type NotificationDraft } from "../notify";
 import type { JobContext, JobResult } from "../runner";
 
 /**
- * Weekly sweep for active projects nobody has touched (P0-DASH-03).
+ * Asks the owner of a project whose reporting cadence has lapsed to write a
+ * status update (P1-UPD-01, P1-UPD-02).
  *
- * "Touched" means an activity event — a task moved, a status changed, a note
- * added. A project with an owner and no activity in a fortnight is either
- * finished and unclosed, or quietly stalled; both are worth one message to the
- * person accountable for it.
- *
- * The dedupe key carries the week, so the owner hears about a stalled project
- * once a week rather than every time the sweep passes.
+ * Stale means the last status update — or creation, if there has never been
+ * one — is older than the cadence. Other activity does not reset it. A
+ * project set to "none" is never asked. The dedupe key carries the week, so
+ * the owner hears about a stalled project once a week rather than every time
+ * the sweep passes.
  */
 
-const STALE_DAYS = 14;
 const ACTIVE_STAGES = ["approved", "planning", "active"];
 
 interface ProjectRow {
@@ -21,7 +20,7 @@ interface ProjectRow {
   organization_id: string;
   name: string;
   owner_id: string | null;
-  updated_at: string;
+  created_at: string;
   reporting_cadence?: string;
   last_status_update_at?: string | null;
 }
@@ -43,11 +42,9 @@ export async function staleProjectSweep({
   definition,
   now,
 }: JobContext): Promise<JobResult> {
-  const cutoff = new Date(now.getTime() - STALE_DAYS * 86_400_000).toISOString();
-
   const { data: projectRows, error } = await db
     .from("project")
-    .select("id, organization_id, name, owner_id, updated_at, reporting_cadence, last_status_update_at")
+    .select("id, organization_id, name, owner_id, created_at, reporting_cadence, last_status_update_at")
     .in("stage", ACTIVE_STAGES)
     .is("archived_at", null)
     .not("owner_id", "is", null)
@@ -60,46 +57,25 @@ export async function staleProjectSweep({
     return { processed: 0, failed: 0, metadata: { scanned: 0 } };
   }
 
-  // One query for recent activity across the whole candidate set.
-  const { data: activityRows } = await db
-    .from("activity_event")
-    .select("project_id")
-    .gte("created_at", cutoff)
-    .in(
-      "project_id",
-      projects.map((project) => project.id),
-    );
-
-  const recentlyActive = new Set(
-    ((activityRows ?? []) as { project_id: string | null }[])
-      .map((row) => row.project_id)
-      .filter((id): id is string => Boolean(id)),
-  );
-
   const week = isoWeekKey(now);
   const drafts: NotificationDraft[] = projects
-    .filter((project) => {
-      const days = project.reporting_cadence === "weekly"
-        ? 7
-        : project.reporting_cadence === "monthly"
-          ? 30
-          : STALE_DAYS;
-      const projectCutoff = new Date(now.getTime() - days * 86_400_000).toISOString();
-      const lastUpdate = project.last_status_update_at ?? project.updated_at;
-      return !recentlyActive.has(project.id) && lastUpdate < projectCutoff;
-    })
-    .map((project) => ({
-      user_id: project.owner_id!,
-      organization_id: project.organization_id,
-      category: "system",
-      title: `No activity in ${STALE_DAYS} days: ${project.name}`,
-      body: "Update the health note, move it forward, or close it out.",
-      source_type: "project",
-      source_id: project.id,
-      link: `/projects/${project.id}`,
-      urgency: "normal" as const,
-      dedupe_key: `stale-project:${project.id}:${week}`,
-    }));
+    .filter((project) => isProjectStale({ ...project, stage: "active" }, now))
+    .map((project) => {
+      const days = cadenceDays(project.reporting_cadence) ?? 0;
+      const cadence = project.reporting_cadence === "monthly" ? "monthly" : "weekly";
+      return {
+        user_id: project.owner_id!,
+        organization_id: project.organization_id,
+        category: "system",
+        title: `Status update due: ${project.name}`,
+        body: `This project reports ${cadence}. The last status update is older than ${days} days.`,
+        source_type: "project",
+        source_id: project.id,
+        link: `/projects/${project.id}?tab=updates`,
+        urgency: "normal" as const,
+        dedupe_key: `stale-project:${project.id}:${week}`,
+      };
+    });
 
   const created = await createNotifications(db, drafts);
 

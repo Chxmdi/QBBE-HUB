@@ -94,6 +94,7 @@ export interface Project {
   sponsor?: { id: string; full_name: string; avatar_url: string | null } | null;
   priority?: string | null;
   reporting_cadence?: string | null;
+  funding_source_id?: string | null;
 }
 
 export interface Milestone {
@@ -359,6 +360,8 @@ export interface CrmOrganization {
   owner_id: string | null;
   status: string;
   notes: string | null;
+  next_action_at?: string | null;
+  sensitive_notes?: string | null;
   created_at: string;
   owner?: Profile | null;
 }
@@ -372,6 +375,7 @@ export interface CrmContact {
   phone: string | null;
   owner_id: string | null;
   status: string;
+  communication_notes?: string | null;
 }
 
 export interface CrmInteraction {
@@ -383,6 +387,8 @@ export interface CrmInteraction {
   owner_id: string;
   summary: string;
   next_steps: string | null;
+  document_id?: string | null;
+  document?: { id: string; title: string } | null;
   owner?: Profile | null;
 }
 
@@ -393,6 +399,7 @@ export interface CrmFollowUp {
   title: string;
   due_at: string;
   status: "open" | "done" | "cancelled";
+  task_id?: string | null;
   crm_organization?: Pick<CrmOrganization, "id" | "name"> | null;
 }
 

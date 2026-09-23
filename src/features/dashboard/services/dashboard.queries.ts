@@ -16,6 +16,14 @@ import type {
   Task,
 } from "@/types/entities";
 import { TASK_SELECT } from "@/features/tasks/services/task.queries";
+import { isProjectStale, nextReportingDueOn } from "@/features/projects/stale";
+
+export interface AttentionItem {
+  id: string;
+  title: string;
+  reason: string;
+  href: string;
+}
 
 export interface ProgramHealthRow {
   id: string;
@@ -54,6 +62,9 @@ export interface DashboardData {
     blockedTasks: Task[];
     unassignedTasks: Task[];
     riskyProjects: Project[];
+    overdueMilestones: AttentionItem[];
+    pendingDecisions: AttentionItem[];
+    upcomingCommitments: AttentionItem[];
   };
   requiredAnnouncements: Announcement[];
   recentActivity: ActivityEvent[];
@@ -89,6 +100,7 @@ export async function getDashboardData(
   const now = new Date();
   const today = calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
   const weekOut = addCalendarDays(today, 7) ?? today;
+  const plus14 = addCalendarDays(today, 14) ?? today;
   const monthAgo = new Date(now.getTime() - 30 * 86400_000).toISOString();
 
   // `due_at` is a `date`, so the strings above compare against it directly.
@@ -114,6 +126,11 @@ export async function getDashboardData(
     announcementsRes,
     myAcksRes,
     activityRes,
+    overdueMilestonesRes,
+    pendingDecisionsRes,
+    upcomingMilestonesRes,
+    upcomingFollowUpsRes,
+    reportingProjectsRes,
   ] = await Promise.all([
     supabase
       .from("program")
@@ -199,6 +216,41 @@ export async function getDashboardData(
       )
       .order("created_at", { ascending: false })
       .limit(10),
+    supabase
+      .from("milestone")
+      .select("id, name, due_date, project_id")
+      .lt("due_date", today)
+      .is("completed_at", null)
+      .order("due_date")
+      .limit(5),
+    supabase
+      .from("decision_request")
+      .select("id, context, due_at, project_id")
+      .eq("status", "open")
+      .order("due_at")
+      .limit(5),
+    supabase
+      .from("milestone")
+      .select("id, name, due_date, project_id")
+      .gte("due_date", today)
+      .lte("due_date", plus14)
+      .is("completed_at", null)
+      .order("due_date")
+      .limit(5),
+    supabase
+      .from("crm_follow_up")
+      .select("id, title, due_at, crm_organization_id")
+      .eq("status", "open")
+      .gte("due_at", today)
+      .lte("due_at", plus14)
+      .order("due_at")
+      .limit(5),
+    supabase
+      .from("project")
+      .select("id, name, reporting_cadence, last_status_update_at, created_at, stage, archived_at")
+      .in("reporting_cadence", ["weekly", "monthly"])
+      .is("archived_at", null)
+      .limit(20),
   ]);
 
   const healthCounts: Record<string, number> = {};
@@ -425,6 +477,54 @@ export async function getDashboardData(
       blockedTasks: (blockedTasksRes.data ?? []) as unknown as Task[],
       unassignedTasks: (unassignedTasksRes.data ?? []) as unknown as Task[],
       riskyProjects: (riskyProjectsRes.data ?? []) as unknown as Project[],
+      overdueMilestones: (overdueMilestonesRes.data ?? []).map((row) => ({
+        id: row.id as string,
+        title: row.name as string,
+        reason: `Due ${row.due_date as string}`,
+        href: `/projects/${row.project_id}`,
+      })),
+      pendingDecisions: (pendingDecisionsRes.data ?? []).map((row) => ({
+        id: row.id as string,
+        title: row.context as string,
+        reason: `Decide by ${row.due_at as string}`,
+        href: `/projects/${row.project_id}?tab=risks`,
+      })),
+      upcomingCommitments: [
+        ...(upcomingMilestonesRes.data ?? []).map((row) => ({
+          id: row.id as string,
+          title: row.name as string,
+          reason: `Milestone · ${row.due_date as string}`,
+          href: `/projects/${row.project_id}`,
+        })),
+        ...(upcomingFollowUpsRes.data ?? []).map((row) => ({
+          id: row.id as string,
+          title: row.title as string,
+          reason: `Follow-up · ${row.due_at as string}`,
+          href: `/crm/${row.crm_organization_id}`,
+        })),
+        ...((reportingProjectsRes.data ?? []) as {
+          id: string;
+          name: string;
+          reporting_cadence: string | null;
+          last_status_update_at: string | null;
+          created_at: string;
+          stage: string;
+          archived_at: string | null;
+        }[])
+          .map((project) => {
+            const due = nextReportingDueOn(project, now);
+            if (!due || due > plus14) return null;
+            return {
+              id: `report-${project.id}`,
+              title: project.name,
+              reason: isProjectStale(project, now)
+                ? "Reporting date overdue"
+                : `Report due ${due}`,
+              href: `/projects/${project.id}?tab=updates`,
+            };
+          })
+          .filter((item): item is AttentionItem => item !== null),
+      ].slice(0, 8),
     },
     requiredAnnouncements,
     recentActivity: (activityRes.data ?? []) as unknown as ActivityEvent[],
