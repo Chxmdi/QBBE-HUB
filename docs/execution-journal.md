@@ -372,6 +372,89 @@ the unexplained `waitForURL` timeouts in `signIn` recorded under #79. The fix
 removes the possibility either way, but nothing here proves that was the cause,
 and it is not claimed.
 
+### The 33 other call sites, closed by a fixture rather than 33 edits
+
+The section above recorded the 33 remaining call sites as a decision rather
+than an oversight, and guessed that "a fixture that waits after every
+navigation would probably beat 33 edits". It does, and this is that fixture.
+
+`tests/e2e/fixtures.ts` extends Playwright's `test` so `page.goto` and
+`page.reload` return only once the page is interactive, which makes the race
+unreachable from a navigation rather than defended against at each button. The
+33 sites needed no edits at all: the 14 spec files change by exactly one import
+line each.
+
+**What "interactive" is judged on.** React attaches a `__reactFiber$<id>` key to
+every host element it owns, so an element without one is still just markup. The
+fixture waits until every `a[href], button, input, select, textarea,
+[role="button"]` on the page carries one. Checking the whole page rather than
+the React root is deliberate: `hydrateRoot` attaches the root's key before it
+hydrates any children, so a root-only check reports success at the exact moment
+the page is least ready.
+
+**Two things it got wrong first, both worth recording.** An empty DOM satisfied
+the check trivially — a navigation that resolves on `commit` hands back a
+document with no controls, and "no controls are unhydrated" is vacuously true at
+the one moment nothing is. It now requires `document.readyState === "complete"`
+before it judges anything. And the fixture callback is named `provide`, not
+`use`: Playwright passes it positionally, so the name is ours, and `use` makes
+the react-hooks lint rule treat a fixture as a hook. Renaming it is a truer fix
+than switching the rule off for the directory.
+
+**It never fails a navigation.** A page that genuinely does not hydrate inside
+10s prints one note and carries on, so the test that depends on it fails on its
+own assertion with its own message instead of on a helper its author did not
+write. A navigation races its own successor often enough that throwing would add
+flakiness rather than remove it.
+
+**A lint rule keeps it from decaying.** `no-restricted-imports` on
+`tests/e2e/*.spec.ts` refuses `@playwright/test`, because the failure it
+prevents is silent: forgetting the import costs a day of looking in the wrong
+place rather than a red test. Verified by reverting one spec's import and
+watching the rule fire. The helper modules beside the specs are deliberately not
+covered — they import `expect`, types and the reporter, never `test`, so none of
+them can hand a spec an unwrapped `page`.
+
+**What it costs, measured rather than estimated.** The fixture timed its own
+waiting. Over public-routes in three browsers: 19.5s across 285 navigations.
+Over the authenticated suite in Chromium: 34.1s across 224 navigations. **No
+navigation in either timed out** — 509 of 509 reached the hydrated state, which
+is what settles the open question of whether the `readyState` gate would hang on
+a streamed RSC page.
+
+**What it costs in wall clock is not resolvable on this machine, and is not
+claimed.** Five identical public-routes runs took 3.2m, 2.1m, 1.8m, 1.8m and
+1.8m — a 1.8x spread with nothing changing between them. The authenticated
+suite reads 10.8m before the fixture, 11.3m with it instrumented and 12.5m with
+it final. Those three numbers sit inside that noise band, and the last is the
+slowest, so no wall-clock saving or cost can honestly be read out of them. The
+in-fixture measurement is the defensible figure: 34.1s of deliberate waiting on
+a run of roughly eleven to twelve minutes. That is the price, and it buys the
+removal of a silent failure mode at 33 call sites.
+
+**Verification, 2026-09-23.** Commit `51c382c` on `hydration-fixture`; local
+Supabase over the full migration chain; production build on 127.0.0.1:3200
+started under Node 22.23.2, with `NEXT_PUBLIC_SUPABASE_URL` set to the machine's
+LAN address per the #79 workaround. `npm ci --dry-run` (exit 0), `npm run lint`
+(0 errors; one pre-existing `no-img-element` warning in `qbbe-logo.tsx`),
+`npm run typecheck` (exit 0), `npm test` (504 pass across 54 files),
+`npm run build` (exit 0), `npm run test:db` (430 assertions across 17 files).
+`npx playwright test public-routes` five consecutive times: 24 passed each,
+120 of 120. `npx playwright test <twelve authenticated specs> --project=chromium`:
+46 passed. Supabase answered 200 before and after; the server held one process
+throughout, so the watchdog stayed silent.
+
+**A database mislabel corrected on the way past.** `supabase/tests/document-links.sql`
+bound `…aaa2` to a variable named `volunteer` and reported it as "a read-only
+member". `…aaa2` is `qa-staff`, and eight other files in the suite already use
+it that way. The two assertions were true, and the permission they check does
+hold — but about a role they had misnamed, and the volunteer they claimed to
+cover was never exercised at all. Staff and volunteer are now separate variables
+asserted under their own names, which takes the file from twelve assertions to
+fourteen and the chain from 428 to 430. Both counts in
+`docs/acceptance-matrix.md` and `docs/readiness-report.md` are updated from the
+measured run, not by adding two.
+
 ### Next action
 
 #80 is closed out by this work. #79 is ready to close on your word: its cause is
@@ -382,11 +465,19 @@ Then Epic 03 continues at **#32 events**, per `docs/plans/epic-03-plan.md`. It i
 the one place in that epic where the gap is a genuinely missing surface rather
 than missing proof — `src/features/events` has `services` and no `components`.
 
-Two smaller things worth doing while they are cheap: nothing enforces the Node
+Three smaller things worth doing while they are cheap: nothing enforces the Node
 pin locally, which is how this machine ran 24.15.0 against a repository asking
-for 22 throughout an investigation into a Node-version-sensitive crash; and the
+for 22 throughout an investigation into a Node-version-sensitive crash; the
 document allowlist has no administrator surface, so adding an approved source
-means a database change.
+means a database change; and **nothing checks that the Supabase address the
+build was given is actually reachable before a run starts.** On 2026-09-23 the
+subnet moved and a stale build hung every auth call for 30.4 minutes, producing
+one failure that meant nothing. The same trap is still armed at build time:
+`.env.local` holds the loopback address, the #79 workaround needs the LAN one,
+and `NEXT_PUBLIC_*` is inlined when the bundle is built — so a plain
+`npm run build` silently produces a bundle that cannot talk to Supabase. A
+preflight that refuses to start when the address does not answer would convert
+all of that from a lost afternoon into one line of output.
 
 ## Current feature: correcting the stale Tasks verdicts in audit 02
 
