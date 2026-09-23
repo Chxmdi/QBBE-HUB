@@ -1,10 +1,19 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { clickWhenInteractive } from "./interactive";
 
 /**
  * QA for the routes that render without a database round-trip. Runs in any
  * environment; the authenticated matrix in qa-matrix.spec.ts additionally
  * needs network access to the Supabase project.
+ *
+ * Every assertion here was timed on 2026-09-23 for #80, against the default 5s
+ * expect budget. Nothing in the file is close to it: across 36 route, theme and
+ * width combinations the `h1` check takes 36-144ms in Firefox, 36-198ms in
+ * WebKit and 29-71ms in Chromium, and the submit-button check is faster again.
+ * The two tests that submit a form are the only ones that depend on client-side
+ * JavaScript at all, and they use `clickWhenInteractive` for the reason given
+ * there. No timeout in this file is a margin against slowness.
  */
 
 const ROUTES = [
@@ -20,17 +29,23 @@ test("recovery requests give an account-neutral confirmation", async ({ page }) 
   });
   await page.goto("/forgot-password");
   await page.getByLabel("Email", { exact: true }).fill("person@example.com");
-  await page.getByRole("button", { name: "Send recovery link" }).click();
+  await clickWhenInteractive(page.getByRole("button", { name: "Send recovery link" }));
   await expect(page.getByRole("status")).toContainText("If this address belongs to an account");
 });
 
+/**
+ * This is the check that was reported flaky in Firefox (#80). It was not a
+ * timing margin — the submit click was being lost before React hydrated the
+ * form, and no request was ever sent. `clickWhenInteractive` waits for the
+ * condition that was actually missing.
+ */
 test("recovery failures leave a retryable form", async ({ page }) => {
   await page.route("**/auth/v1/recover**", route => route.fulfill({
     status: 429, contentType: "application/json", body: JSON.stringify({ msg: "Rate limited" }),
   }));
   await page.goto("/forgot-password");
   await page.getByLabel("Email", { exact: true }).fill("person@example.com");
-  await page.getByRole("button", { name: "Send recovery link" }).click();
+  await clickWhenInteractive(page.getByRole("button", { name: "Send recovery link" }));
   await expect(page.getByRole("main").getByRole("alert")).toContainText("try again");
   await expect(page.getByRole("button", { name: "Send recovery link" })).toBeEnabled();
 });
@@ -248,6 +263,9 @@ test("protected routes redirect unauthenticated visitors", async ({ page, browse
       if (!isWebkitInternalError) throw error;
       await page.goto(path);
     }
+    // 15s, against a measured 0.87-1.4s for all seven paths together on CI.
+    // These redirects are middleware decisions with no client JavaScript in
+    // them, so the margin is for a loaded runner, not for slow hydration.
     await page.waitForURL("**/sign-in**", { timeout: 15_000 });
     expect(page.url()).toContain("/sign-in");
   }

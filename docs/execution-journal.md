@@ -314,11 +314,69 @@ requirement 5: a transport failure stays distinguishable from a product failure.
 Verified in both directions: against a dead port it prints the banner and exits
 1; against a live server six checks pass with the reporter silent.
 
+### The flaky Firefox check, which was not a timeout (#80)
+
+`public-routes.spec.ts:27` was filed as a thin-margin timeout: the default 5s
+expect budget against Firefox timings said to run 3.2s to 10.4s. **That cause is
+withdrawn.** It was wrong, and fixing it as written would have raised a timeout
+over a defect.
+
+The original failure was hard to find because the run had been re-run, and `gh`
+serves only a run's latest attempt. It is in attempt 1 of run 35622498276, and
+the artifact was still retained, which is what settled it:
+
+- the assertion failed with `element(s) not found`, not a text mismatch
+- the trace contains the page, the logo and two `/sign-in` prefetches, and
+  **no request to `/auth/v1/recover` at all** — not a slow one, none
+- the page snapshot shows the form still there, the email still filled and the
+  button still enabled
+
+So the click was lost. Every form in this product is a client component whose
+submit handler React attaches on hydration; `page.goto` resolves on `load`,
+which happens earlier. The trace timings put the click 250ms after the page
+committed, inside that window. Playwright's actionability checks all passed,
+because the button really was present, visible and enabled — it simply had no
+handler yet.
+
+Measured on 2026-09-23, against the claim that replaced it: click-to-alert is
+18–36ms in Firefox over six runs, and across 36 route, theme and width
+combinations every assertion in the file runs in 29–198ms against a 5000ms
+budget. Nothing in it was ever near a timeout. The hydration window on this
+machine is 229–394ms wide.
+
+Clicking inside that window on purpose reproduces it. Holding hydration open for
+four seconds in Chromium: no request, no alert, and the browser falling back to
+a native form GET to `/forgot-password?email=…`. The same test with
+`clickWhenInteractive` waits 4.1s and then behaves normally. Firefox and WebKit
+did not reproduce it even so — they take long enough over the preceding steps
+that hydration wins — which is the same reason it is rare rather than constant.
+
+`tests/e2e/interactive.ts` waits for React to own a control before clicking it.
+It waits for the real condition rather than retrying the click, because a retry
+passes without ever saying the control was dead, and clicking twice on a form
+that may already have submitted is not something to do blindly. It is applied to
+both form submits in this file and to the shared `signIn` and `completeMfa`
+helpers, which have the identical shape.
+
+**The same shape exists in 33 other places, and is not fixed here.** A sweep of
+`tests/e2e` for a click within four lines of a `goto` or `reload` finds 33 call
+sites across 11 spec files — every "New project", "Add resource", "Invite user"
+and "Create account" button that a test presses on a freshly loaded page. They
+are exposed to exactly this race. Fixing them is mechanical but it is a separate
+change with its own verification, and a fixture that waits after every
+navigation would probably beat 33 edits. Recorded here so it is a decision
+rather than an oversight.
+
+**A hypothesis, not a finding:** a lost sign-in click would surface exactly as
+the unexplained `waitForURL` timeouts in `signIn` recorded under #79. The fix
+removes the possibility either way, but nothing here proves that was the cause,
+and it is not claimed.
+
 ### Next action
 
-#79 is ready to close once PR #85 merges: the cause is pinned to libuv#5274 at a
-named version, the workaround is documented, the supervisor now reports an exit
-as an exit, and the suite has passed twice consecutively with no logged exits.
+#80 is closed out by this work. #79 is ready to close on your word: its cause is
+pinned to libuv#5274 at a named version, the workaround is documented, the
+supervisor reports an exit as an exit, and PR #85 is merged.
 
 Then Epic 03 continues at **#32 events**, per `docs/plans/epic-03-plan.md`. It is
 the one place in that epic where the gap is a genuinely missing surface rather

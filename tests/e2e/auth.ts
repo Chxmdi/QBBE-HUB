@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expect, type Page } from "@playwright/test";
+import { clickWhenInteractive } from "./interactive";
 
 type QaAccount = "owner" | "admin" | "volunteer";
 
@@ -85,9 +86,9 @@ async function completeMfa(page: Page, account: "owner" | "admin") {
   const secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
   if (secondsRemaining <= 2) await page.waitForTimeout((secondsRemaining + 1) * 1000);
   await codeInput.fill(currentTotp(secret));
-  await page
-    .getByRole("button", { name: /^(Enable MFA|Verify and continue)$/ })
-    .click();
+  await clickWhenInteractive(
+    page.getByRole("button", { name: /^(Enable MFA|Verify and continue)$/ }),
+  );
 }
 
 /** Sign into the synthetic local account, including the owner's real MFA UI. */
@@ -95,7 +96,12 @@ export async function signIn(page: Page, account: QaAccount) {
   await page.goto("/sign-in");
   await page.getByLabel("Email", { exact: true }).fill(`qa-${account}@example.com`);
   await page.getByLabel("Password", { exact: true }).fill("QaTest!2026");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // Not a plain click: the sign-in form's submit handler is attached by React
+  // after `goto` has already resolved, and a click that lands before that is
+  // lost with no error anywhere. It surfaces much later as the 60s
+  // `waitForURL` below timing out, which looks like a slow or broken sign-in
+  // and is neither. See tests/e2e/interactive.ts and #80.
+  await clickWhenInteractive(page.getByRole("button", { name: "Sign in", exact: true }));
 
   if (account === "owner" || account === "admin") {
     const mfaHeading = page.getByRole("heading", {
