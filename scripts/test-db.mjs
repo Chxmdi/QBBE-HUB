@@ -29,6 +29,7 @@ const FILES = [
   "supabase/tests/admin-mfa.sql",
   "supabase/tests/membership-lifecycle.sql",
   "supabase/tests/invitation-lifecycle.sql",
+  "supabase/tests/invitation-organization.sql",
   "supabase/tests/communication-deactivation.sql",
   "supabase/tests/scoped-access-grants.sql",
   "supabase/tests/scoped-core-rls.sql",
