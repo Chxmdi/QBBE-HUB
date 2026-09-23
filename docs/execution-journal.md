@@ -243,14 +243,25 @@ libuv passes stack-local `&bytes` and `&flags` to `WSARecv`/`WSASend` while an
 overlapped operation is still live, which Microsoft's documentation says must
 be `NULL`; the OS later writes into a stack frame that has gone.
 
-**The version is the point.** The bug is in libuv 1.51.0 as vendored in Node
-**v24.15.0**, and this machine runs exactly that: `node -v` is v24.15.0 and
-`process.versions.uv` is 1.51.0. **The repository asks for Node 22** —
-`.nvmrc` contains `22`, `package.json` sets `engines.node` to `>=22.13.0`, and
-CI's workflow pins `node-version: 22`. The local browser suite has therefore
-been running on an unsupported runtime throughout this investigation, which is
-also the most likely reason CI's failure rate was always lower than this
-machine's.
+**The repository asks for Node 22** — `.nvmrc` contains `22`, `package.json`
+sets `engines.node` to `>=22.13.0`, and CI pins `node-version: 22` — while this
+machine runs 24.15.0. That is worth fixing on its own, but **it is not the
+explanation, and two first guesses about it were wrong:**
+
+- **Node 22 does not avoid the defect.** `v22.23.2` vendors libuv **1.51.0**,
+  the same version as `v24.15.0`. Checked rather than assumed, with
+  `process.versions.uv` on both. Moving to 22 is compliance, not a fix.
+- **CI was never susceptible, and the Node version is not why.** Both CI jobs
+  are `runs-on: ubuntu-latest`. The defect is in libuv's Windows backend, in
+  `WSARecv`/`WSASend`, so it cannot occur on Linux at all. An earlier version of
+  this entry said the runtime mismatch was the likeliest reason CI's failure
+  rate was lower than local; that reasoning is withdrawn. CI's failures are a
+  different matter and remain unexplained.
+
+**What actually triggers it here** is the server's own outbound connections.
+`uv__tcp_connect` is the connect path, and `NEXT_PUBLIC_SUPABASE_URL` is
+`http://127.0.0.1:54321`, so every server-side call into Supabase is a loopback
+connect. The browser-to-server direction is incidental.
 
 **What the debug heap showed.** Launched under a debugger, Windows enables the
 debug heap, and the server survived 23 minutes and passed 45 of 45 twice.
@@ -265,18 +276,21 @@ them could have been the cause, because the fault sits below all of them.
 
 ### Next action
 
-Bring the local runtime onto the version this repository already asks for.
-`.nvmrc` says 22 and `engines.node` says `>=22.13.0`; the machine runs 24.15.0.
-Install a per-user version manager, switch to 22, rebuild and run two
-consecutive full authenticated passes. Two clean passes on the supported
-runtime is the standing bar, and it has never been attempted on the supported
-runtime.
+Two things, in this order.
 
-If 22 is clean, #79 Requirement 1 closes as an environmental defect with the
-upstream link, and the browser suite becomes an instrument whose results can be
-trusted for the first time. If 22 still crashes, the fallback is to stop using
-loopback for the test server, since the upstream defect is specific to loopback
-connects.
+1. **Move the local runtime to Node 22**, because the repository already
+   requires it. This is compliance, not a fix: 22.23.2 carries the same libuv
+   1.51.0.
+2. **Take the server's Supabase connections off loopback.** The defect is in
+   `uv__tcp_connect` on loopback, and the server's outbound calls to
+   `http://127.0.0.1:54321` are the loopback connects being made in volume. The
+   local Supabase API already listens on all interfaces, so pointing
+   `NEXT_PUBLIC_SUPABASE_URL` at the machine's LAN address is a one-line change
+   to test. It may disturb auth redirects and allowed origins, so it is a
+   measurement before it is a recommendation.
+
+Then attempt two consecutive clean full authenticated passes, which is the
+standing bar and has never been attempted on a runtime free of this defect.
 
 Then Epic 03 continues at #32 events, per `docs/plans/epic-03-plan.md`.
 
