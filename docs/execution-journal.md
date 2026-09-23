@@ -274,25 +274,61 @@ exhaustion, a dying render worker, application code aborting, and the
 `MaxListenersExceededWarning` precursor were all ruled out correctly. None of
 them could have been the cause, because the fault sits below all of them.
 
+### The measurement that settles it, 2026-09-22
+
+On Node 22.23.2 with the server's outbound Supabase calls on a non-loopback
+address, one server process served **six consecutive full authenticated passes**
+across roughly two hours of uptime without dying:
+
+| Run | Pass 1 | Pass 2 | Note |
+|---|---|---|---|
+| battery | 46/46 in 8.2m | 44/46 in 28.7m | 20 minutes lost to Modern Standby |
+| battery | 45/46 in 27.1m | 46/46 in 13.1m | ~20 minutes lost to Modern Standby |
+| **mains** | **46/46 in 9.3m** | **46/46 in 9.7m** | **no standby events; the standing bar, met** |
+
+Against the previous configuration, which died three times at 90 seconds, six
+minutes and eleven minutes of load. **Every failure in the first four passes was
+the machine sleeping**, confirmed against Kernel-Power events — a 15-minute
+standby matching a 15.1-minute "timeout" exactly. None was the product and none
+was the crash. They are recorded rather than discarded because an explained
+failure is still not a pass, and the bar was not met until the machine stayed
+awake.
+
+The laptop was on battery and Windows logged "Austerity Battery Drain Budget
+Exceeded"; a `SetThreadExecutionState` keep-awake did not hold against it. Mains
+power did.
+
+### The supervisor, which is what requirement 4 actually asked for
+
+Identifying the cause was only half of it. The other half was to stop a server
+exit from arriving disguised as product failures, and that is now
+`tests/e2e/server-watchdog.ts`, registered as a Playwright reporter.
+
+A failure carrying a connection error triggers one probe of the base URL. If the
+server is gone, the run prints an unmissable banner naming the first check that
+saw it and the known cause, and **fails even if everything before the exit had
+passed** — a run whose server died proves nothing either way. If the server is
+still answering, the same connection failure gets a quiet note instead, which is
+requirement 5: a transport failure stays distinguishable from a product failure.
+
+Verified in both directions: against a dead port it prints the banner and exits
+1; against a live server six checks pass with the reporter silent.
+
 ### Next action
 
-Two things, in this order.
+#79 is ready to close once PR #85 merges: the cause is pinned to libuv#5274 at a
+named version, the workaround is documented, the supervisor now reports an exit
+as an exit, and the suite has passed twice consecutively with no logged exits.
 
-1. **Move the local runtime to Node 22**, because the repository already
-   requires it. This is compliance, not a fix: 22.23.2 carries the same libuv
-   1.51.0.
-2. **Take the server's Supabase connections off loopback.** The defect is in
-   `uv__tcp_connect` on loopback, and the server's outbound calls to
-   `http://127.0.0.1:54321` are the loopback connects being made in volume. The
-   local Supabase API already listens on all interfaces, so pointing
-   `NEXT_PUBLIC_SUPABASE_URL` at the machine's LAN address is a one-line change
-   to test. It may disturb auth redirects and allowed origins, so it is a
-   measurement before it is a recommendation.
+Then Epic 03 continues at **#32 events**, per `docs/plans/epic-03-plan.md`. It is
+the one place in that epic where the gap is a genuinely missing surface rather
+than missing proof — `src/features/events` has `services` and no `components`.
 
-Then attempt two consecutive clean full authenticated passes, which is the
-standing bar and has never been attempted on a runtime free of this defect.
-
-Then Epic 03 continues at #32 events, per `docs/plans/epic-03-plan.md`.
+Two smaller things worth doing while they are cheap: nothing enforces the Node
+pin locally, which is how this machine ran 24.15.0 against a repository asking
+for 22 throughout an investigation into a Node-version-sensitive crash; and the
+document allowlist has no administrator surface, so adding an approved source
+means a database change.
 
 ## Current feature: correcting the stale Tasks verdicts in audit 02
 
