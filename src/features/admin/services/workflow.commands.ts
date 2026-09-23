@@ -220,7 +220,7 @@ export async function listProjectTemplates() {
   const { data } = await supabase
     .from("project_template")
     .select(
-      "id, name, outcome, default_stage, " +
+      "id, name, outcome, default_stage, approved_at, " +
         "items:project_template_item(id, kind, name, day_offset, sort_key)",
     )
     .order("name");
@@ -229,6 +229,7 @@ export async function listProjectTemplates() {
     name: string;
     outcome: string | null;
     default_stage: string;
+    approved_at: string | null;
     items: {
       id: string;
       kind: "milestone" | "task";
@@ -265,10 +266,13 @@ export async function createProjectFromTemplate(
   const supabase = await createSupabaseServerClient();
   const { data: template } = await supabase
     .from("project_template")
-    .select("id, name, outcome, default_stage")
+    .select("id, name, outcome, default_stage, approved_at")
     .eq("id", templateId)
     .maybeSingle();
   if (!template) return { ok: false, error: "Template not found." };
+  if (!template.approved_at) {
+    return { ok: false, error: "That template has not been approved yet." };
+  }
 
   const { createProject } = await import("@/features/projects/services/project.commands");
   const created = await createProject({

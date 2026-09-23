@@ -368,7 +368,7 @@ function ApprovalList({
           {approvals.map((approval) => {
             const subject = subjectOf(approval);
             return (
-              <li key={approval.id} className="px-4 py-3">
+              <li key={approval.id} id={`approval-${approval.id}`} className="px-4 py-3">
                 {subject.href ? (
                   <Link
                     href={subject.href}

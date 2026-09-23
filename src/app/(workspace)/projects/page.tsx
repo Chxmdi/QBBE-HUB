@@ -56,7 +56,9 @@ export default async function ProjectsPage({
       supabase.from("program").select("id, name").eq("status", "active").order("name"),
       listProjectTemplates(),
     ]);
-  const templates = templateStructures.map((t) => ({ id: t.id, name: t.name }));
+  const templates = templateStructures
+    .filter((t) => t.approved_at)
+    .map((t) => ({ id: t.id, name: t.name }));
 
   const projectList = (projects ?? []) as unknown as Project[];
 

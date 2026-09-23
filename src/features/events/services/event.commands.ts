@@ -12,6 +12,7 @@ import {
   deleteGoogleEventRecord,
   updateGoogleEventRecord,
 } from "@/features/calendar/services/google-calendar-write";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import { fireWorkflows } from "@/features/admin/services/workflow.runtime";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
@@ -247,7 +248,7 @@ export async function assignEventRole(input: unknown): Promise<ActionResult> {
   // A duplicate role is already assigned. Do not emit a second notification
   // or trigger another workflow execution for the same state transition.
   if (!error && userId !== session.userId) {
-    await supabase.from("notification").insert({
+    await createNotifications(supabase, [{
       user_id: userId,
       organization_id: session.organizationId,
       category: "assignment",
@@ -255,8 +256,10 @@ export async function assignEventRole(input: unknown): Promise<ActionResult> {
       source_type: "event",
       source_id: eventId,
       link: `/events/${eventId}`,
-      dedupe_key: `event-role:${eventId}:${userId}:${role}`,
-    });
+      reason: `assigned ${role.replace(/_/g, " ")}`,
+      context: event?.name ?? "Event",
+      dedupe_key: notificationDedupeKey("event", eventId, userId),
+    }]);
   }
 
   if (!error && event) {

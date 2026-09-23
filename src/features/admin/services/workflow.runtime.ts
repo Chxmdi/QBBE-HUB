@@ -4,6 +4,7 @@ import {
   workflowRecipients,
   type WorkflowRuleRow,
 } from "@/features/admin/workflow-match";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 
 /**
  * Runs the workflow rules that match an event, and records what each one did.
@@ -109,25 +110,37 @@ export async function fireWorkflows(
       continue;
     }
 
-    const { error } = await supabase.from("notification").insert(
-      recipients.map((userId) => ({
-        user_id: userId,
-        organization_id: options.organizationId,
-        category: "assignment",
-        title: `Workflow: ${options.title}`,
-        source_type: options.sourceType,
-        source_id: options.sourceId,
-        link: options.link,
-        urgency: "normal",
-        dedupe_key: `workflow:${rule.id}:${options.sourceId}:${userId}`,
-      })),
-    );
+    const drafts = recipients.map((userId) => ({
+      user_id: userId,
+      organization_id: options.organizationId,
+      category: "assignment",
+      title: `Workflow: ${options.title}`,
+      source_type: options.sourceType,
+      source_id: options.sourceId,
+      link: options.link,
+      urgency: "normal" as const,
+      reason: "workflow",
+      context: options.title,
+      dedupe_key: notificationDedupeKey(
+        options.sourceType,
+        options.sourceId,
+        userId,
+        rule.id,
+      ),
+    }));
 
-    executions.push(
-      error
-        ? { ...entry, outcome: "failed", detail: error.message.slice(0, 500) }
-        : { ...entry, outcome: "notified" },
-    );
+    try {
+      await createNotifications(supabase, drafts);
+      executions.push({ ...entry, outcome: "notified", payload: null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Notification failed.";
+      executions.push({
+        ...entry,
+        outcome: "failed",
+        detail: message.slice(0, 500),
+        payload: drafts,
+      });
+    }
   }
 
   if (executions.length > 0) {

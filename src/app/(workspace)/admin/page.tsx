@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
@@ -100,14 +101,21 @@ const INTEGRATION_CATALOG = [
   },
 ];
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ audit?: string; auditPage?: string }>;
+}) {
   const session = await requireAdminAal2();
+  const params = await searchParams;
+  const auditPage = Math.max(1, Number(params.auditPage) || 1);
+  const auditFilter = params.audit && params.audit !== "all" ? params.audit : null;
   const supabase = await createSupabaseServerClient();
 
   const [
     { data: members },
     { data: invitations },
-    { data: audit },
+    { data: audit, count: auditCount },
     { data: integrations },
     { data: teams },
     { data: teamMembers },
@@ -127,13 +135,18 @@ export default async function AdminPage() {
         .select("id, email, intended_role, expires_at, accepted_at, revoked_at, created_at")
         .order("created_at", { ascending: false })
         .limit(20),
-      supabase
-        .from("audit_event")
-        .select(
-          "id, actor_id, event_type, action, object_type, created_at, actor:actor_id(full_name)",
-        )
-        .order("created_at", { ascending: false })
-        .limit(30),
+      (() => {
+        let auditQuery = supabase
+          .from("audit_event")
+          .select(
+            "id, actor_id, event_type, action, object_type, created_at, actor:actor_id(full_name)",
+            { count: "exact" },
+          )
+          .order("created_at", { ascending: false })
+          .range((auditPage - 1) * 30, auditPage * 30 - 1);
+        if (auditFilter) auditQuery = auditQuery.eq("event_type", auditFilter);
+        return auditQuery;
+      })(),
       supabase
         .from("integration_connection")
         .select("provider, status, last_sync_at, last_error"),
@@ -593,15 +606,36 @@ export default async function AdminPage() {
           )}
         </section>
 
-        {/* Audit history (P0-ADM-03) */}
         <section aria-labelledby="admin-audit">
           <h2 id="admin-audit" className="section-heading mb-3">
             Audit history
           </h2>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {[
+              ["all", "All"],
+              ["task.assignment", "Assignments"],
+              ["task.status", "Status"],
+              ["task.due_date", "Due dates"],
+              ["project.health", "Health"],
+              ["decision", "Decisions"],
+              ["task.deletion", "Deletions"],
+            ].map(([key, label]) => (
+              <Link
+                key={key}
+                href={key === "all" ? "/admin" : `/admin?audit=${key}`}
+                className="rounded-full border border-line px-2.5 py-1 text-[12px] text-muted hover:text-ink"
+                aria-current={
+                  (auditFilter ?? "all") === key ? "page" : undefined
+                }
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
           {auditList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              Material access, channel, project, export, and deletion events are
-              recorded here with actor and timestamp.
+              Material access, assignment, status, due date, health, decision,
+              and deletion events are recorded here with actor and timestamp.
             </p>
           ) : (
             <ol className="card divide-y divide-line">
@@ -617,13 +651,23 @@ export default async function AdminPage() {
                     ) : null}
                   </span>
                   <Badge tone="neutral">{event.event_type}</Badge>
-                  <span className="meta whitespace-nowrap">
+                  <time className="meta whitespace-nowrap" dateTime={event.created_at}>
                     {relativeTime(event.created_at)}
-                  </span>
+                  </time>
                 </li>
               ))}
             </ol>
           )}
+          {(auditCount ?? 0) > auditPage * 30 ? (
+            <p className="mt-3">
+              <Link
+                href={`/admin?audit=${auditFilter ?? "all"}&auditPage=${auditPage + 1}`}
+                className="text-[13px] font-medium text-brand-fg hover:underline"
+              >
+                Older events
+              </Link>
+            </p>
+          ) : null}
         </section>
       </div>
     </div>

@@ -53,6 +53,8 @@ export default async function ChannelPage({
     { data: messages },
     { data: pins },
     { data: orgMembers },
+    { data: grants },
+    { data: preference },
   ] = await Promise.all([
     supabase
       .from("channel_member")
@@ -79,6 +81,18 @@ export default async function ChannelPage({
       .from("organization_membership")
       .select("user_id, user_profile:user_id(id, full_name)")
       .eq("status", "active"),
+    supabase
+      .from("channel_access_grant")
+      .select(
+        "id, source, created_by, user:user_id(full_name), team:source_team_id(name), grantor:created_by(full_name)",
+      )
+      .eq("channel_id", id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("notification_preference")
+      .select("muted_thread_ids")
+      .eq("user_id", session.userId)
+      .maybeSingle(),
   ]);
 
   const isMember = Boolean(membership);
@@ -189,6 +203,8 @@ export default async function ChannelPage({
         </p>
       ) : null}
 
+      <ChannelAccess grants={(grants ?? []) as unknown as ChannelGrant[]} />
+
       <PinnedResources
         channelId={channel.id}
         resources={(pins ?? []) as PinnedResourceRow[]}
@@ -205,8 +221,50 @@ export default async function ChannelPage({
           initialMessages={initialMessages}
           initialSavedMessageIds={(saved ?? []).map((row) => row.message_id as string)}
           isStaff={session.isStaff}
+          mutedThreadIds={((preference?.muted_thread_ids as string[] | null) ?? []).filter(Boolean)}
         />
       </Suspense>
     </div>
+  );
+}
+
+interface ChannelGrant {
+  id: string;
+  source: string;
+  user: { full_name: string } | null;
+  team: { name: string } | null;
+  grantor: { full_name: string } | null;
+}
+
+const GRANT_SOURCE: Record<string, string> = {
+  direct: "Direct",
+  team: "Team",
+  program: "Program",
+  project: "Project",
+  event: "Event",
+  mandatory: "Required",
+  legacy: "Earlier access",
+};
+
+function ChannelAccess({ grants }: { grants: ChannelGrant[] }) {
+  if (grants.length === 0) return null;
+  return (
+    <details className="border-b border-line bg-surface px-4 py-2 md:px-6">
+      <summary className="cursor-pointer text-[13px] font-medium">
+        Access ({grants.length})
+      </summary>
+      <ul className="mt-2 space-y-1 pb-1">
+        {grants.map((grant) => (
+          <li key={grant.id} className="text-[12.5px] text-muted">
+            <span className="text-ink">{grant.user?.full_name ?? "Member"}</span>
+            {" · "}
+            {GRANT_SOURCE[grant.source] ?? grant.source}
+            {grant.team?.name ? ` · ${grant.team.name}` : ""}
+            {" · granted by "}
+            {grant.grantor?.full_name ?? "the workspace"}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

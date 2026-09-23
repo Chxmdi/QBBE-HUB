@@ -202,7 +202,7 @@ export async function getDocumentDownloadUrl(
 }
 
 export async function archiveDocument(documentId: string): Promise<ActionResult> {
-  const session = await requireSession();
+  await requireSession();
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("document")
@@ -210,15 +210,19 @@ export async function archiveDocument(documentId: string): Promise<ActionResult>
     .eq("id", documentId);
   if (error) return { ok: false, error: "Could not archive the document." };
 
-  await supabase.from("audit_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    event_type: "documents",
-    action: "document_archived",
-    object_type: "document",
-    object_id: documentId,
-  });
+  revalidatePath("/documents");
+  return { ok: true };
+}
 
+export async function restoreDocument(documentId: string): Promise<ActionResult> {
+  await requireSession();
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("document")
+    .update({ archived_at: null })
+    .eq("id", documentId)
+    .not("archived_at", "is", null);
+  if (error) return { ok: false, error: "Could not restore the document." };
   revalidatePath("/documents");
   return { ok: true };
 }

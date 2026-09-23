@@ -36,6 +36,7 @@ interface TaskRow {
   due_at: string;
   assignee_id: string;
   priority: string;
+  project_id: string | null;
 }
 
 /** Calendar date in the organization's zone, which is what "due today" means. */
@@ -96,7 +97,7 @@ export async function dueDateReminders({
   ] = await Promise.all([
     db
       .from("task")
-      .select("id, organization_id, title, due_at, assignee_id, priority")
+      .select("id, organization_id, title, due_at, assignee_id, priority, project_id")
       .in("status", OPEN_STATUSES)
       .not("assignee_id", "is", null)
       .not("due_at", "is", null)
@@ -110,7 +111,7 @@ export async function dueDateReminders({
     // task that slipped yesterday.
     db
       .from("task")
-      .select("id, organization_id, title, due_at, assignee_id, priority")
+      .select("id, organization_id, title, due_at, assignee_id, priority, project_id")
       .in("status", OPEN_STATUSES)
       .not("assignee_id", "is", null)
       .not("due_at", "is", null)
@@ -164,6 +165,10 @@ export async function dueDateReminders({
       urgency:
         state === "overdue" || task.priority === "critical" ? "high" : "normal",
       dedupe_key: `due:${task.id}:${state}:${today}`,
+      reason: "due date",
+      context: task.title,
+      due_on: due,
+      project_id: task.project_id ?? null,
     });
   }
 

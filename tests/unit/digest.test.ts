@@ -3,6 +3,7 @@ import {
   DIGEST_ITEM_CAP,
   buildDigest,
   digestDedupeKey,
+  digestSection,
   localDateString,
 } from "@/features/notifications/services/digest";
 import type { DigestItem } from "@/features/notifications/services/email-templates";
@@ -84,6 +85,36 @@ describe("buildDigest", () => {
     ]);
     expect(digest!.groups[0].category).toBe("assignment");
     expect(digest!.groups[1].category).toBe("something_new");
+  });
+
+  it("groups by the five digest sections when those are set", () => {
+    const digest = buildDigest([
+      item({ title: "Chat", section: "activity" }),
+      item({ title: "Soon", section: "upcoming" }),
+      item({ title: "Late", section: "overdue" }),
+    ]);
+    expect(digest!.groups.map((group) => group.category)).toEqual([
+      "overdue",
+      "upcoming",
+      "activity",
+    ]);
+  });
+});
+
+describe("digestSection", () => {
+  it("puts due dates into overdue or upcoming", () => {
+    expect(digestSection({ category: "due_date", title: "Due", dueOn: "2026-08-01" }, "2026-08-19")).toBe(
+      "overdue",
+    );
+    expect(digestSection({ category: "due_date", title: "Due", dueOn: "2026-08-20" }, "2026-08-19")).toBe(
+      "upcoming",
+    );
+  });
+
+  it("classifies stale, meeting, and other work", () => {
+    expect(digestSection({ category: "system", title: "Stale project" }, "2026-08-19")).toBe("stale");
+    expect(digestSection({ category: "meeting", title: "Stand-up" }, "2026-08-19")).toBe("meetings");
+    expect(digestSection({ category: "assignment", title: "Assigned" }, "2026-08-19")).toBe("activity");
   });
 });
 

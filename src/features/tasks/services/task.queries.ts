@@ -209,3 +209,14 @@ export async function getPickerOptions(): Promise<{
     labels: (labels ?? []).map((l) => ({ id: l.id, label: l.name })),
   };
 }
+
+export async function getArchivedTasks(): Promise<{ id: string; title: string }[]> {
+  const supabase = await createSupabaseServerClient();
+  const { data } = await supabase
+    .from("task")
+    .select("id, title")
+    .not("archived_at", "is", null)
+    .order("archived_at", { ascending: false })
+    .limit(50);
+  return (data ?? []) as { id: string; title: string }[];
+}

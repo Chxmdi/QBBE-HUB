@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import {
   SETTLED_ISSUE_STATUSES,
   SETTLED_RISK_STATUSES,
@@ -37,23 +38,23 @@ async function notifyOwner(
   },
 ) {
   if (!input.ownerId || input.ownerId === input.actorId) return;
-  await supabase.from("notification").upsert(
-    {
-      user_id: input.ownerId,
-      organization_id: input.organizationId,
-      category: "assignment",
-      title:
-        input.kind === "risk"
-          ? `You own a risk: ${input.title}`
-          : `You own an issue: ${input.title}`,
-      source_type: input.kind,
-      source_id: input.recordId,
-      link: `/projects/${input.projectId}?tab=risks`,
-      urgency: input.kind === "issue" ? "high" : "normal",
-      dedupe_key: `${input.kind}-owner:${input.recordId}:${input.ownerId}`,
-    },
-    { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
-  );
+  await createNotifications(supabase, [{
+    user_id: input.ownerId,
+    organization_id: input.organizationId,
+    category: "assignment",
+    title:
+      input.kind === "risk"
+        ? `You own a risk: ${input.title}`
+        : `You own an issue: ${input.title}`,
+    source_type: input.kind,
+    source_id: input.recordId,
+    link: `/projects/${input.projectId}?tab=risks`,
+    urgency: input.kind === "issue" ? "high" : "normal",
+    reason: "assigned",
+    context: input.title,
+    project_id: input.projectId,
+    dedupe_key: notificationDedupeKey(input.kind, input.recordId, input.ownerId),
+  }]);
 }
 
 export async function createRisk(input: unknown): Promise<ActionResult> {

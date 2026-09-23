@@ -32,6 +32,11 @@ export interface NotificationEmailInput {
   link: string | null;
   recipientName: string;
   organizationName: string;
+  /** Why the recipient got this: assigned, mentioned, asked to review. */
+  action?: string | null;
+  context?: string | null;
+  ownerLabel?: string | null;
+  dueOn?: string | null;
 }
 
 export interface DigestItem {
@@ -40,6 +45,8 @@ export interface DigestItem {
   category: string;
   link: string | null;
   createdAt: string;
+  /** When set, the digest groups by this section instead of by category. */
+  section?: string;
 }
 
 export interface DigestEmailInput {
@@ -78,8 +85,14 @@ export const CATEGORY_LABELS: Record<string, string> = {
   announcement: "Announcements",
   due_date: "Due dates",
   approval: "Approvals",
+  decision: "Decisions",
   security: "Security",
   system: "Updates",
+  activity: "General activity",
+  upcoming: "Upcoming deadlines",
+  overdue: "Overdue work",
+  stale: "Stale projects",
+  meetings: "Meeting reminders",
 };
 
 export function categoryLabel(category: string): string {
@@ -115,22 +128,42 @@ function button(href: string, label: string): string {
 </td></tr></table>`;
 }
 
+function detailLine(label: string, value: string | null | undefined): string | null {
+  if (!value) return null;
+  return `${label}: ${value}`;
+}
+
 /** A single notification, sent as it happens. */
 export function renderNotificationEmail(input: NotificationEmailInput): EmailBody {
   const href = safeLink(input.link);
   const subject = input.title;
+  const details = [
+    detailLine("Action", input.action),
+    detailLine("Context", input.context),
+    detailLine("Owner", input.ownerLabel),
+    detailLine("Due", input.dueOn),
+  ].filter((line): line is string => Boolean(line));
 
   const text = [
     `${input.title}`,
+    details.length ? `\n${details.join("\n")}` : "",
     input.body ? `\n${input.body}` : "",
     `\n\nOpen it: ${href}`,
     `\n\n— ${input.organizationName} · QBBE Hub`,
     `\nManage email preferences: ${safeLink("/settings/notifications")}`,
   ].join("");
 
+  const detailHtml = details
+    .map(
+      (line) =>
+        `<p style="margin:8px 0 0;font-size:14px;">${escapeHtml(line)}</p>`,
+    )
+    .join("");
+
   const inner = `
 <p style="margin:0 0 4px;font:600 18px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">${escapeHtml(input.title)}</p>
 <p style="margin:0;font-size:13px;color:${MUTED};">${escapeHtml(categoryLabel(input.category))}</p>
+${detailHtml}
 ${input.body ? `<p style="margin:14px 0 0;">${escapeHtml(input.body)}</p>` : ""}
 ${button(href, "Open in QBBE Hub")}`;
 

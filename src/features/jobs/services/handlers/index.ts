@@ -10,6 +10,7 @@ import { gmailWatchRenew } from "./gmail-watch-renew";
 import { googleSync } from "./google-sync";
 import { purgeJobHistory } from "./purge-job-history";
 import { retryFailedEmails } from "./retry-failed-emails";
+import { retryWorkflowExecutions } from "./retry-workflow-executions";
 import { runExports } from "./run-exports";
 import { scheduledAnnouncements } from "./scheduled-announcements";
 import { staleProjectSweep } from "./stale-project-sweep";
@@ -26,6 +27,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   // Notification delivery
   "drain-notifications": drainNotifications,
   "retry-failed-emails": retryFailedEmails,
+  "retry-workflow-executions": retryWorkflowExecutions,
   "daily-digest": dailyDigest,
 
   // Sweeps over Hub data

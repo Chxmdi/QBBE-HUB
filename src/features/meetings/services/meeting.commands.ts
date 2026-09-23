@@ -23,6 +23,7 @@ const createMeetingSchema = z.object({
   durationMinutes: z.coerce.number().int().min(15).max(480).default(60),
   location: z.string().trim().max(300).optional(),
   meetingLink: z.string().trim().url().max(500).optional().or(z.literal("")),
+  agendaTemplateId: z.string().uuid().optional().or(z.literal("")),
 });
 
 export async function createMeeting(input: unknown): Promise<ActionResult> {
@@ -31,7 +32,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { title, purpose, projectId, startsAt, durationMinutes, location, meetingLink } =
+  const { title, purpose, projectId, startsAt, durationMinutes, location, meetingLink, agendaTemplateId } =
     parsed.data;
 
   // Read as wall-clock time in the organization's zone. A `datetime-local`
@@ -51,6 +52,22 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   } else if (!session.isAdmin) {
     return { ok: false, error: "Link the meeting to a project you can access, or ask an administrator." };
   }
+
+  let agendaItems: { title?: string; notes?: string }[] = [];
+  if (agendaTemplateId) {
+    const { data: template } = await supabase
+      .from("agenda_template")
+      .select("items, approved_at")
+      .eq("id", agendaTemplateId)
+      .maybeSingle();
+    if (!template?.approved_at) {
+      return { ok: false, error: "That agenda template has not been approved yet." };
+    }
+    agendaItems = Array.isArray(template.items)
+      ? (template.items as { title?: string; notes?: string }[])
+      : [];
+  }
+
   const { data: meeting, error } = await supabase
     .from("meeting")
     .insert({
@@ -73,6 +90,18 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
     meeting_id: meeting.id,
     user_id: session.userId,
   });
+
+  if (agendaItems.length > 0) {
+    await supabase.from("agenda_item").insert(
+      agendaItems.map((item, index) => ({
+        meeting_id: meeting.id,
+        title: (item.title || "Agenda item").slice(0, 200),
+        desired_outcome: item.notes || null,
+        sort_key: index + 1,
+        proposed_by: session.userId,
+      })),
+    );
+  }
 
   // Calendar sync is additive: local operations stay available if Google is
   // unavailable, and the connection carries an actionable recovery state.

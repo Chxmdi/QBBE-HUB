@@ -29,7 +29,7 @@ export default async function MeetingsPage({
   const supabase = await createSupabaseServerClient();
   const cutoff = meetingListCutoff();
 
-  const [{ data: upcoming }, { data: past }, { data: projects }] =
+  const [{ data: upcoming }, { data: past }, { data: projects }, { data: agendas }] =
     await Promise.all([
       supabase
         .from("meeting")
@@ -55,6 +55,11 @@ export default async function MeetingsPage({
         .select("id, name")
         .is("archived_at", null)
         .in("stage", ["approved", "planning", "active"])
+        .order("name"),
+      supabase
+        .from("agenda_template")
+        .select("id, name")
+        .not("approved_at", "is", null)
         .order("name"),
     ]);
 
@@ -129,6 +134,15 @@ export default async function MeetingsPage({
                   label: "Meeting link",
                   type: "url",
                   hint: "Google Meet, Zoom, Teams — any provider.",
+                },
+                {
+                  name: "agendaTemplateId",
+                  label: "Agenda template",
+                  type: "select",
+                  options: (agendas ?? []).map((agenda) => ({
+                    value: agenda.id,
+                    label: agenda.name,
+                  })),
                 },
               ]}
             />

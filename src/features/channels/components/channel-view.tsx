@@ -10,6 +10,7 @@ import {
   markConversationRead,
   sendMessage,
 } from "@/features/channels/services/message.commands";
+import { setThreadMuted } from "@/features/notifications/services/preferences.commands";
 import { CHANNEL_HISTORY_PAGE_SIZE } from "@/features/channels/history";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -125,6 +126,7 @@ export function ChannelView({
   initialMessages,
   initialSavedMessageIds = [],
   isStaff = false,
+  mutedThreadIds = [],
 }: {
   channelId?: string;
   conversationId?: string;
@@ -135,12 +137,16 @@ export function ChannelView({
   initialMessages: Message[];
   initialSavedMessageIds?: string[];
   isStaff?: boolean;
+  mutedThreadIds?: string[];
 }) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [hasOlder, setHasOlder] = useState(
     initialMessages.length >= CHANNEL_HISTORY_PAGE_SIZE,
   );
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [mutedThreads, setMutedThreads] = useState<Set<string>>(
+    () => new Set(mutedThreadIds),
+  );
   const [threadRootId, setThreadRootId] = useState<string | null>(null);
   const [connection, setConnection] = useState<"live" | "reconnecting">("live");
   const savedMessageIds = new Set(initialSavedMessageIds);
@@ -363,14 +369,32 @@ export function ChannelView({
         >
           <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
             <h2 className="text-[13.5px] font-semibold">Thread</h2>
-            <button
-              type="button"
-              onClick={() => setThreadRootId(null)}
-              aria-label="Close thread"
-              className="rounded p-1 text-muted hover:bg-surface-soft hover:text-ink"
-            >
-              <X className="size-4" aria-hidden />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-[12px] text-muted hover:bg-surface-soft hover:text-ink"
+                onClick={() => {
+                  const muted = !mutedThreads.has(threadRoot.id);
+                  setMutedThreads((current) => {
+                    const next = new Set(current);
+                    if (muted) next.add(threadRoot.id);
+                    else next.delete(threadRoot.id);
+                    return next;
+                  });
+                  void setThreadMuted(threadRoot.id, muted);
+                }}
+              >
+                {mutedThreads.has(threadRoot.id) ? "Unmute thread" : "Mute thread"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setThreadRootId(null)}
+                aria-label="Close thread"
+                className="rounded p-1 text-muted hover:bg-surface-soft hover:text-ink"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </div>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto py-2">
             <MessageItem

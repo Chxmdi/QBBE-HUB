@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import {
   SETTLED_STAGES,
   createOpportunitySchema,
@@ -33,20 +34,19 @@ async function notifyOwner(
   },
 ) {
   if (!input.ownerId || input.ownerId === input.actorId) return;
-  await supabase.from("notification").upsert(
-    {
-      user_id: input.ownerId,
-      organization_id: input.organizationId,
-      category: "assignment",
-      title: `You own an opportunity: ${input.title}`,
-      source_type: "opportunity",
-      source_id: input.opportunityId,
-      link: `/crm/${input.crmOrganizationId}?tab=opportunities&opportunity=${input.opportunityId}`,
-      urgency: "normal",
-      dedupe_key: `opportunity-owner:${input.opportunityId}:${input.ownerId}`,
-    },
-    { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
-  );
+  await createNotifications(supabase, [{
+    user_id: input.ownerId,
+    organization_id: input.organizationId,
+    category: "assignment",
+    title: `You own an opportunity: ${input.title}`,
+    source_type: "opportunity",
+    source_id: input.opportunityId,
+    link: `/crm/${input.crmOrganizationId}?tab=opportunities&opportunity=${input.opportunityId}`,
+    urgency: "normal",
+    reason: "assigned",
+    context: input.title,
+    dedupe_key: notificationDedupeKey("opportunity", input.opportunityId, input.ownerId),
+  }]);
 }
 
 export async function createOpportunity(input: unknown): Promise<ActionResult> {

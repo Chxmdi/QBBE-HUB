@@ -97,8 +97,11 @@ export async function staleProjectSweep({
       source_type: "project",
       source_id: project.id,
       link: `/projects/${project.id}`,
-      urgency: "normal" as const,
+      urgency: "low" as const,
       dedupe_key: `stale-project:${project.id}:${week}`,
+      reason: "stale project",
+      context: project.name,
+      project_id: project.id,
     }));
 
   const created = await createNotifications(db, drafts);
