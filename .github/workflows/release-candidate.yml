@@ -1,0 +1,92 @@
+name: Release candidate
+
+# Every gate at one commit, with the evidence written down (#116, QA-FINAL).
+#
+# Run it on the candidate itself: Actions → Release candidate → Run workflow,
+# and pick the branch or tag pointing at the commit to certify. Every job
+# below then runs at that exact SHA:
+#   - CI: lint, typecheck, unit tests, build, public routes in three browsers,
+#     dependency audit, the database allow/deny suite and security advisor,
+#     every signed-in journey and the role matrix in Chromium, Firefox and
+#     WebKit, the accessibility/responsive matrix, phone emulation, and the
+#     realtime latency probe;
+#   - Security: CodeQL;
+#   - Performance: 50 people against the busiest screens (p95 <= 2 s).
+# The last job writes qa-evidence-<sha>.md — one row per gate with its
+# result and the run that produced it — to the run summary and as an
+# artifact, and fails unless every gate passed.
+#
+# On the local stack this certifies the code. The staging certification is
+# the same run with staging's URL once #55 exists.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+  actions: read
+  security-events: write
+
+jobs:
+  ci:
+    name: CI (all browsers)
+    uses: ./.github/workflows/ci.yml
+    with:
+      browsers: chromium firefox webkit
+      mobile: true
+
+  security:
+    name: Security
+    uses: ./.github/workflows/security.yml
+
+  performance:
+    name: Performance
+    uses: ./.github/workflows/perf.yml
+
+  evidence:
+    name: Evidence
+    needs: [ci, security, performance]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Write qa-evidence-${{ github.sha }}.md
+        env:
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CI_RESULT: ${{ needs.ci.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          PERF_RESULT: ${{ needs.performance.result }}
+        run: |
+          file="qa-evidence-${SHA}.md"
+          mark() { [ "$1" = "success" ] && echo "pass" || echo "**$1**"; }
+          {
+            echo "# QA evidence for ${SHA}"
+            echo
+            echo "Ref \`${REF}\`, run ${RUN_URL}, recorded $(date -u +%Y-%m-%dT%H:%MZ)."
+            echo
+            echo "| Gate | What it covers | Result |"
+            echo "|---|---|---|"
+            echo "| CI | Lint, typecheck, unit, build, dependency audit; database allow/deny suite and security advisor; every signed-in journey, the role matrix and the accessibility/responsive matrix in Chromium, Firefox and WebKit; phone emulation; realtime delivery and latency (p95 <= 5 s) | $(mark "$CI_RESULT") |"
+            echo "| Security | CodeQL (security-extended) | $(mark "$SECURITY_RESULT") |"
+            echo "| Performance | 50 signed-in people on the busiest screens, p95 <= 2 s each | $(mark "$PERF_RESULT") |"
+            echo
+            echo "Environment: the local Supabase stack on a GitHub-hosted runner."
+            echo "Not covered here: staging (#55), a screen-reader pass, real handsets (OPS-SIGNOFF)."
+          } > "$file"
+          cat "$file" >> "$GITHUB_STEP_SUMMARY"
+          echo "EVIDENCE_FILE=$file" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qa-evidence-${{ github.sha }}
+          path: ${{ env.EVIDENCE_FILE }}
+          retention-days: 90
+
+      - name: Every gate must pass
+        if: needs.ci.result != 'success' || needs.security.result != 'success' || needs.performance.result != 'success'
+        run: |
+          echo "::error::Not every gate passed; see the evidence table in the run summary."
+          exit 1
