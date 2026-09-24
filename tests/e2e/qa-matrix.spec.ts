@@ -56,6 +56,35 @@ async function horizontalOverflow(page: Page): Promise<number> {
   });
 }
 
+/**
+ * Names what sticks out: the outermost elements whose right edge passes the
+ * viewport and that are not already inside a scrolling container. A bare
+ * pixel count says a page is wrong, not where.
+ */
+async function overflowCulprits(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const width = document.documentElement.clientWidth;
+    const scrolls = (el: Element | null): boolean => {
+      for (let node = el?.parentElement; node; node = node.parentElement) {
+        const x = getComputedStyle(node).overflowX;
+        if (x === "auto" || x === "scroll" || x === "hidden" || x === "clip") return true;
+      }
+      return false;
+    };
+    const found: string[] = [];
+    for (const el of Array.from(document.body.querySelectorAll("*"))) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.right <= width + 2 || scrolls(el)) continue;
+      const parentRect = el.parentElement?.getBoundingClientRect();
+      if (parentRect && parentRect.right > width + 2 && !scrolls(el.parentElement)) continue;
+      const cls = (el.getAttribute("class") ?? "").split(/\s+/).slice(0, 6).join(".");
+      found.push(`<${el.tagName.toLowerCase()}${cls ? ` .${cls}` : ""}> right=${Math.round(rect.right)} width=${Math.round(rect.width)}`);
+      if (found.length >= 3) break;
+    }
+    return found.join(" | ");
+  });
+}
+
 test.describe("QA matrix", () => {
   // The responsive sweep visits 240 authenticated route/theme/viewport
   // combinations. It is intentionally broader than the default unit-style
@@ -88,7 +117,7 @@ test.describe("QA matrix", () => {
           const overflow = await horizontalOverflow(page);
           if (overflow > 2) {
             failures.push(
-              `${route.name} ${theme} @${size.name}: overflows by ${overflow}px`,
+              `${route.name} ${theme} @${size.name}: overflows by ${overflow}px — ${await overflowCulprits(page)}`,
             );
           }
         }
