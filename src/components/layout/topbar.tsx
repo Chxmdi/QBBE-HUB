@@ -18,6 +18,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { cn, relativeTime } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types/entities";
+import { ErrorState } from "@/components/ui/error-state";
 
 const ACTIONABLE_CATEGORIES = new Set([
   "assignment",
@@ -93,13 +94,20 @@ export function Topbar({
       return;
     }
     setOpenMenu("notifications");
+    await loadNotifications();
+  }
+
+  // A failed read used to render "You're all caught up".
+  const [notificationsFailed, setNotificationsFailed] = useState(false);
+  async function loadNotifications() {
     const supabase = createSupabaseBrowserClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("notification")
       .select("id, category, title, body, link, urgency, read_at, created_at")
       .order("created_at", { ascending: false })
       .limit(12);
-    setNotifications((data as Notification[] | null) ?? []);
+    setNotificationsFailed(Boolean(error));
+    setNotifications(error ? [] : ((data as Notification[] | null) ?? []));
   }
 
   async function markAllRead() {
@@ -191,6 +199,7 @@ export function Topbar({
             onClick={openNotifications}
             aria-label={`Notifications${badge > 0 ? ` (${badge} unread)` : ""}`}
             aria-expanded={openMenu === "notifications"}
+            aria-controls="topbar-notifications-panel"
             className="relative flex size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-brand-soft/60 hover:text-brand-fg"
           >
             <Bell className="size-4.5" aria-hidden />
@@ -201,7 +210,12 @@ export function Topbar({
             ) : null}
           </button>
           {openMenu === "notifications" ? (
-            <div className="absolute right-0 mt-2 w-80 rounded-(--radius-md) border border-line bg-surface shadow-(--shadow-pop)">
+            <div
+              id="topbar-notifications-panel"
+              role="region"
+              aria-label="Notifications"
+              className="absolute right-0 mt-2 w-80 rounded-(--radius-md) border border-line bg-surface shadow-(--shadow-pop)"
+            >
               <div className="flex items-center justify-between border-b border-line px-3.5 py-2.5">
                 <p className="section-heading text-[15px]">Notifications</p>
                 <button
@@ -213,7 +227,14 @@ export function Topbar({
                 </button>
               </div>
               <ul className="max-h-96 overflow-y-auto py-1">
-                {notifications.length === 0 ? (
+                {notificationsFailed ? (
+                  <li>
+                    <ErrorState
+                      message="Notifications couldn't be loaded."
+                      onRetry={loadNotifications}
+                    />
+                  </li>
+                ) : notifications.length === 0 ? (
                   <li className="px-3.5 py-6 text-center text-[13px] text-muted">
                     You&apos;re all caught up.
                   </li>
