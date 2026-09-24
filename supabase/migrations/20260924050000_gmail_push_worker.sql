@@ -20,7 +20,7 @@ on conflict (name) do update set
   max_attempts = excluded.max_attempts,
   enabled = true;
 
-do $$
+do $block$
 begin
   perform cron.unschedule('gmail-push-sync')
     where exists (select 1 from cron.job where jobname = 'gmail-push-sync');
@@ -30,4 +30,4 @@ begin
     $$select app.dispatch_job('gmail-push-sync')$$
   );
 end;
-$$;
+$block$;
