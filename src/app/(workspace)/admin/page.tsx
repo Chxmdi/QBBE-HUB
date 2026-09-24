@@ -12,6 +12,7 @@ import {
 import { InviteUserDialog } from "@/features/admin/components/invite-user-dialog";
 import { TransferOwnershipButton } from "@/features/admin/components/transfer-ownership-button";
 import { IntegrationActions } from "@/features/admin/components/integration-actions";
+import { VmsIdentityLinkControl } from "@/features/admin/components/vms-identity-link-control";
 import { TeamMemberControls } from "@/features/admin/components/team-member-controls";
 import { TeamOwnerControl } from "@/features/admin/components/team-owner-control";
 import { createTeam } from "@/features/admin/services/team.commands";
@@ -119,7 +120,7 @@ export default async function AdminPage() {
       supabase
         .from("organization_membership")
         .select(
-          "id, organization_id, user_id, role, status, joined_at, user_profile:user_id(id, full_name, email, avatar_url, title, timezone)",
+          "id, organization_id, user_id, role, status, joined_at, user_profile:user_id(id, full_name, email, avatar_url, title, timezone, vms_id, vms_availability, vms_synced_at)",
         )
         .order("joined_at"),
       supabase
@@ -210,6 +211,7 @@ export default async function AdminPage() {
                     <th scope="col" className="px-4 py-2.5 font-semibold">Person</th>
                     <th scope="col" className="px-4 py-2.5 font-semibold">Role</th>
                     <th scope="col" className="px-4 py-2.5 font-semibold">Status</th>
+                    <th scope="col" className="px-4 py-2.5 font-semibold">VMS</th>
                     <th scope="col" className="px-4 py-2.5 font-semibold">Joined</th>
                     <th scope="col" className="px-4 py-2.5 font-semibold">
                       <span className="sr-only">Actions</span>
@@ -218,7 +220,12 @@ export default async function AdminPage() {
                 </thead>
                 <tbody>
                   {memberList.map((member) => {
-                    const profile = member.user_profile!;
+                    const profile = member.user_profile! as typeof member.user_profile & {
+                      id: string;
+                      vms_id?: string | null;
+                      vms_availability?: string | null;
+                      vms_synced_at?: string | null;
+                    };
                     return (
                       <tr key={member.id} className="border-b border-line last:border-b-0">
                         <td className="px-4 py-3">
@@ -237,6 +244,13 @@ export default async function AdminPage() {
                           <Badge tone={member.status === "active" ? "success" : "neutral"}>
                             {member.status}
                           </Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <VmsIdentityLinkControl
+                            userId={profile.id}
+                            vmsId={profile.vms_id ?? null}
+                            availability={profile.vms_availability ?? null}
+                          />
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-muted">
                           {formatDate(member.joined_at)}
