@@ -281,6 +281,9 @@ test.describe("QA matrix", () => {
         const el = document.activeElement as HTMLElement | null;
         if (!el || el === document.body) return null;
         if (el.closest("header, nav[aria-label='Primary'], [role='dialog']")) return null;
+        // A fixed element (the skip link) is drawn above the bars on purpose,
+        // so it cannot be covered by them.
+        if (getComputedStyle(el).position === "fixed") return null;
         const r = el.getBoundingClientRect();
         const header = document.querySelector("header")?.getBoundingClientRect();
         const bottom = document.querySelector("nav[aria-label='Primary']")?.getBoundingClientRect();
