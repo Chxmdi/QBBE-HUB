@@ -46,10 +46,18 @@ describe("Gmail push/watch boundaries", () => {
     expect(parseGmailPushNotification("not-base64")).toBeNull();
   });
 
-  it("requires the expected Pub/Sub OIDC audience and service account", () => {
-    const claims = { aud: "https://hub.example.org/push", email: "pubsub@example.iam.gserviceaccount.com", email_verified: "true", exp: 2000 };
+  it("requires Google's issuer plus the expected Pub/Sub audience and service account", () => {
+    const claims = {
+      iss: "https://accounts.google.com",
+      aud: "https://hub.example.org/push",
+      email: "pubsub@example.iam.gserviceaccount.com",
+      email_verified: "true",
+      exp: 2000,
+    };
     expect(gmailPushClaimsAreValid(claims, claims.aud, claims.email, 1000)).toBe(true);
     expect(gmailPushClaimsAreValid(claims, "https://other.example.org", claims.email, 1000)).toBe(false);
+    expect(gmailPushClaimsAreValid({ ...claims, iss: "https://attacker.example" }, claims.aud, claims.email, 1000)).toBe(false);
+    expect(gmailPushClaimsAreValid({ ...claims, exp: 999 }, claims.aud, claims.email, 1000)).toBe(false);
   });
 
   it("collects every Gmail history variant without duplicate message ids", () => {

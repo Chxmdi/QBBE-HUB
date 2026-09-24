@@ -73,7 +73,7 @@ branch (`callback/route.ts:104`) and never for `google_calendar` or `google_driv
 (see GML-006), so "revoked at Google" and "disconnected locally" are indistinguishable.
 
 ### GML-003 — Gmail watch + Pub/Sub, then history cursor
-**Verdict:** Partial
+**Verdict:** Complete in code; live Google validation still required
 **Requirement:** When production sync is enabled, use a Gmail watch plus Google Cloud
 Pub/Sub for change notification, then use the Gmail history cursor to fetch the changes.
 **Evidence:** All three pieces exist. The watch is created on connect when Pub/Sub is
@@ -88,15 +88,16 @@ and expiry before parsing (`src/app/api/integrations/gmail/push/route.ts:7-26`,
 across all five history event variants (`gmailHistoryMessageIds`, `:129-144`), and
 treats HTTP 404 as "cursor expired; a full synchronization is required"
 (`:100`), which `google-sync.ts:100-110` catches and turns into a full re-fetch.
-**Gap:** **The push notification drives nothing.** The endpoint writes
-`gmail_pending_history_id` and `gmail_last_push_at`
-(`push/route.ts:45-47`) and no code ever reads them as a trigger: `google-sync.ts:47`
-selects `gmail_pending_history_id` and then only ever *clears* it (`:97`, `:107`,
-`:116`); `grep -rn "gmail_pending_history_id" src/` shows no branch on its value. So
-mailbox changes are still picked up by the 15-minute poll
-(`supabase/migrations/20260820170000_register_integration_jobs.sql:19-21`) exactly as
-they would be with no Pub/Sub at all — the notification arrives, is recorded, and is
-discarded. The "efficient change notification" half of the requirement is wired but inert.
+**2026-09-24 remediation (PR #94):** Accepted Pub/Sub pushes now persist the pending
+history id, enqueue a durable `gmail_push` item, and trigger the targeted
+`gmail-push-sync` worker after the webhook response. A one-minute scheduled
+run recovers queued work if that immediate process never starts, while the
+15-minute `google-sync` sweep remains missed-push reconciliation. Both paths
+use `reconcileGmailConnection`, which advances the durable Gmail history cursor
+and compare-and-set clears only the pending marker it observed, so a newer push
+cannot be erased by an older run. Unit coverage proves push-driven reconciliation
+and at-least-once duplicate handling. Live Pub/Sub evidence remains an external
+staging gate, not a code-completeness claim.
 
 ### GML-004 — Proactive watch renewal and reconciliation
 **Verdict:** Complete

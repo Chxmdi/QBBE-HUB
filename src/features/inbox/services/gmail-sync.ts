@@ -16,17 +16,21 @@ export interface GmailPushNotification {
   historyId: string;
 }
 
+const GOOGLE_OIDC_ISSUERS = new Set(["accounts.google.com", "https://accounts.google.com"]);
+
 export function gmailPushClaimsAreValid(
-  claims: { aud?: unknown; email?: unknown; email_verified?: unknown; exp?: unknown },
+  claims: { iss?: unknown; aud?: unknown; email?: unknown; email_verified?: unknown; exp?: unknown },
   audience: string | undefined,
   serviceAccount: string | undefined,
   nowSeconds = Math.floor(Date.now() / 1000),
 ): boolean {
   return Boolean(
     audience && serviceAccount &&
+    typeof claims.iss === "string" && GOOGLE_OIDC_ISSUERS.has(claims.iss) &&
     claims.aud === audience &&
     typeof claims.email === "string" && claims.email.toLowerCase() === serviceAccount.toLowerCase() &&
     (claims.email_verified === true || claims.email_verified === "true") &&
+    Number.isFinite(Number(claims.exp)) &&
     Number(claims.exp) > nowSeconds,
   );
 }
