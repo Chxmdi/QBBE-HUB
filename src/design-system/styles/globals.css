@@ -62,12 +62,59 @@
   --shadow-pop: 0 10px 28px rgb(25 34 64 / 0.12), 0 2px 6px rgb(25 34 64 / 0.08);
   --shadow-raise: 0 2px 5px rgb(25 34 64 / 0.07);
 
+  /* Text on the gold accent (badges, counts). */
+  --color-on-accent: #253460;
+
+  /* Navigation group labels on the dark sidebar. */
+  --color-nav-label-gold: #f3c88e;
+  --color-nav-label-blue: #c9d2ff;
+
+  /* Ground behind the bilingual logo outside the sidebar (onboarding). */
+  --color-logo-ground: #221219;
+
+  /* Program dots in the sidebar, deterministic per program name. */
+  --color-program-dot-1: #e8b36d;
+  --color-program-dot-2: #7185d2;
+  --color-program-dot-3: #56a57a;
+  --color-program-dot-4: #8e72be;
+  --color-program-dot-5: #d9834e;
+  --color-program-dot-6: #d65f78;
+
+  /* Avatar backgrounds: deterministic per name, all AA with white text. */
+  --color-avatar-1: #6d4a12;
+  --color-avatar-2: #17572f;
+  --color-avatar-3: #2c4a8f;
+  --color-avatar-4: #5b3a6e;
+  --color-avatar-5: #8a4211;
+
+  /* Type scale for new work (UI-001). Existing screens still carry pixel
+     literals; see docs/design-system.md. */
+  --text-meta: 12px;
+  --text-caption: 12.5px;
+  --text-body-sm: 13.5px;
+  --text-body: 14px;
+  --text-lead: 15px;
+  --text-title: 18px;
+
   /* Chart palette — status is still reinforced with labels. */
   --color-chart-good: #116639;
   --color-chart-todo: #c8811c;
   --color-chart-progress: #4565b4;
   --color-chart-overdue: #c33b4a;
   --color-chart-primary: #2a3c90;
+}
+
+/*
+ * Stacking layers (UI-001). One scale instead of literals chosen at each call
+ * site, so drawer over dialog over toast over menu is decided once. Native
+ * <dialog>s sit in the browser's top layer and need none of these.
+ */
+:root {
+  --z-raised: 10; /* sticky table heads, hover toolbars inside content */
+  --z-sticky-content: 20; /* in-page sticky bars, below the app chrome */
+  --z-chrome: 40; /* topbar and mobile bottom navigation */
+  --z-overlay: 50; /* menus and the mobile navigation drawer */
+  --z-toast: 100; /* toasts, above everything but the top layer */
 }
 
 /* Dark theme — designed independently, never as an inversion filter. */

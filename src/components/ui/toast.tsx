@@ -91,7 +91,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {/* Live region: assertive for errors, polite otherwise. */}
       <div
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[100] flex flex-col items-center gap-2 p-4 sm:items-end"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-(--z-toast) flex flex-col items-center gap-2 p-4 sm:items-end"
         aria-live="polite"
         aria-atomic="false"
       >

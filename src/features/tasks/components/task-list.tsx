@@ -97,7 +97,7 @@ export function TaskList({
         <div
           role="region"
           aria-label="Bulk actions"
-          className="sticky top-16 z-20 mb-3 flex flex-wrap items-center gap-2 rounded-(--radius-md) border border-brand/30 bg-brand-soft px-3 py-2"
+          className="sticky top-16 z-(--z-sticky-content) mb-3 flex flex-wrap items-center gap-2 rounded-(--radius-md) border border-brand/30 bg-brand-soft px-3 py-2"
         >
           <span className="text-[13px] font-medium">
             {selected.size} selected
