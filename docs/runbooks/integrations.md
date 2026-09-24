@@ -87,8 +87,17 @@ reauthenticate to acquire the read-only Drive metadata scope.
 ## Volunteer Management System (gated)
 
 Server-to-server only. Set `VMS_API_URL` (and `VMS_API_KEY`). Connect from
-Admin. Store `user_profile.vms_id` — do not duplicate the volunteer database.
-Disconnect clears VMS ids and does **not** delete Hub tasks.
+Admin only after the endpoint returns a recognized identity/assignment envelope.
+Admins explicitly link active Hub members to external VMS identities through the
+Members table. Hub stores `user_profile.vms_id`, availability and sync timestamp,
+plus minimal `vms_assignment_reference` rows for VMS-owned assignments.
+
+The VMS remains authoritative: assignment references never create, update,
+complete or delete QBBE Hub tasks. A full assignment snapshot reconciles removed
+external references; an identity-only response does not wipe prior assignments.
+Malformed payloads, provider outages and revoked credentials degrade the
+integration visibly. Disconnect clears VMS identity/assignment references and
+does **not** delete Hub tasks or historical work.
 
 
 ## Health visibility
