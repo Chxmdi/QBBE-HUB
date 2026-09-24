@@ -34,7 +34,14 @@ function seedConnection(db: FakeSupabase, pending: string | null = "101") {
     connection_id: CONNECTION,
     access_token: "access-token",
     refresh_token: "refresh-token",
-    token_expires_at: new Date(db.now().getTime() + 60 * 60_000).toISOString(),
+    // Against the real clock, not the fake one. The queue's visibility runs
+    // on `db.now()`, but `reconcileGmailConnection` asks whether the access
+    // token has expired *now* — which is correct, because a token expires in
+    // real time whenever the job happens to run. Seeding this an hour after
+    // the fixture's 2026-09-24T05:00Z gave the test an expiry date: it passed
+    // until that morning and failed every run afterwards, taking the token
+    // refresh path and consuming the mocked fetch responses out of order.
+    token_expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
     gmail_history_id: "100",
     gmail_pending_history_id: pending,
   }]);
