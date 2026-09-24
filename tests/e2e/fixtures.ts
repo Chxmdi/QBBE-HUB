@@ -124,11 +124,23 @@ export const test = base.extend({
     });
     page.on("requestfinished", (request) => pending.delete(request));
     page.on("requestfailed", (request) => pending.delete(request));
+    // A new document means the old one's requests are gone, whether or not
+    // the browser reported them as failed. Without this, a request abandoned
+    // by leaving the page (sign-out goes to about:blank) stayed "pending"
+    // forever and every later navigation in the test waited the full 10 s;
+    // identity-lifecycle, which signs out four times, ran out of its 60 s.
+    page.on("domcontentloaded", () => pending.clear());
 
     const settle = async () => {
       const deadline = Date.now() + 10_000;
       while (pending.size > 0 && Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      // Say so when the wait gave up, and on what, so a stall shows up in the
+      // CI log instead of only as a test timeout with no step named.
+      if (pending.size > 0) {
+        const urls = [...pending].map((request) => `${request.method()} ${new URL(request.url()).pathname}`);
+        console.log(`\n  note: navigated with app requests still in flight after 10s: ${urls.join(", ")}\n`);
       }
     };
 
