@@ -477,7 +477,181 @@ one failure that meant nothing. The same trap is still armed at build time:
 and `NEXT_PUBLIC_*` is inlined when the bundle is built — so a plain
 `npm run build` silently produces a bundle that cannot talk to Supabase. A
 preflight that refuses to start when the address does not answer would convert
-all of that from a lost afternoon into one line of output.
+all of that from a lost afternoon into one line of output. **It was built on
+2026-09-24, after the subnet moved a second time and cost a ten-run
+measurement batch — `tests/e2e/supabase-preflight.ts`, described under #93
+below.**
+
+## Current feature: the reorder that never happened (#93)
+
+### What was wrong before
+
+**`work-planning.spec.ts:44` failed about one run in eight, always the same
+way:** the first keyboard reorder never took effect, and thirty seconds of
+polling later the test gave up with `Expected "Confirm catering", Received
+"Send the agenda"`. It failed the Database security job on PR #92, a change
+that touches events and not tasks.
+
+The cause is a product defect, and it is not the one #93 was filed on.
+
+**Every edit in the task drawer ends by re-reading the record, and that
+re-read blanked the whole drawer to a loading skeleton first.** `load()` set
+`loading` before fetching and cleared it afterwards, and `loading` renders
+`<ListSkeleton />` in place of everything. So ticking a checklist box
+unmounted the checklist and mounted a fresh one about 150ms later. Anything
+focused inside it — a move button, a remove button, a comment box — lost
+focus to the document, and the next keystroke landed on nothing. No error,
+no message: the item simply did not move.
+
+The test met that as a race. It focuses the ↑ button and presses Enter
+immediately after ticking a box, so whether it passes depends on whether the
+re-read lands in the gap between the two.
+
+### Two claims in the issue, withdrawn
+
+**"The cause is the amount of task data in the database" is not supported.**
+The measurement behind it compared 54 tasks against 6, but those two
+conditions differed in more than row count. Measured deliberately on
+2026-09-24, one variable at a time:
+
+| Condition | `work-planning.spec.ts:44` |
+|---|---|
+| 55–63 tasks | 7 passed, 1 failed of 8 |
+| 254–261 tasks | 7 passed, 1 failed of 8 |
+
+A five-fold increase in task volume did not move the failure rate. What task
+volume does change is how long the round trip takes, and therefore where the
+re-read lands relative to the keypress — so volume shifts the odds of the
+race without being the cause of it.
+
+**`revalidatePath("/", "layout")` is not the mechanism either**, though it is
+real waste and it is gone. The hypothesis was that the whole-layout
+revalidation made the reorder exceed the 30s poll. It does not come close: a
+reorder settles in 483–549ms at 7 tasks and 577–777ms at 55. Thirty seconds
+was never in danger. The revalidation's actual cost was that nothing reads
+`checklist_item` on the server, so every checklist keystroke re-rendered
+every route's layout for data none of them use.
+
+### The measurement that settled it
+
+A probe reproduced the spec's sequence up to the first reorder and recorded
+what the spec cannot see: whether the checklist was still mounted, and the
+button still focused, when Enter arrived. Ten runs at 254–271 tasks:
+
+| Runs | Remount before the keypress | Focus at the keypress | Reorder |
+|---|---|---|---|
+| 9 | 215–506ms earlier | the move button | settled in 542–1020ms |
+| 1 | **85ms earlier** | **nothing** | **never happened** |
+
+One run in ten pressed Enter while the drawer was still rebuilding itself.
+`document.activeElement` was null, the keystroke went nowhere, and the order
+never changed — the reported failure, with its cause visible rather than
+inferred.
+
+### The fix
+
+**The drawer blanks itself only when it has nothing to show for that task.**
+A `shownTaskId` ref records what is on screen; `load()` sets `loading` only
+when the id differs. Opening a task still shows a skeleton. Re-reading the
+task already open re-renders in place, React reconciles by key, and focus
+stays where the person put it.
+
+**The four checklist commands revalidate nothing.** `checklist_item` is read
+in exactly one place, the drawer, from the browser. A comment in the file
+says so and says what would have to change if a checklist count is ever shown
+outside the drawer.
+
+### A regression test that is not a race
+
+`an edit re-reads the drawer without throwing keyboard focus away` focuses
+the move button *while the previous command is still in flight* — which is
+what a person doing two things in a row does anyway — waits for the re-read
+to land, and asserts the button still has focus. Against the unfixed drawer
+it fails every time, with `Received: null`. It replaces a one-in-eight flake
+with a deterministic check of the thing that was actually broken.
+
+### The preflight, because the subnet moved again
+
+Halfway through the after-fix measurements, ten consecutive runs failed
+inside `signIn`. Nothing was wrong with the product: this machine's LAN
+address had changed from `192.168.0.156` to `192.168.2.117`, and
+`NEXT_PUBLIC_SUPABASE_URL` is inlined when the bundle is built, so the
+running build was calling an address that no longer existed. That is the
+second time in two days, and it is the trap the previous entry in this
+journal described and left armed.
+
+`tests/e2e/supabase-preflight.ts` now runs as Playwright's `globalSetup`. It
+reads the Supabase address out of the served bundle's own JavaScript — not
+out of the environment, because the environment is not what the browser
+uses — and refuses to start the run if that address does not answer. Proved
+against the stale build before rebuilding: it stopped the run in about five
+seconds and named the dead address. If it finds no address in the bundle it
+says so and continues, because a preflight that guesses is worse than none.
+
+### Two reds on `main`, and only one of them was this
+
+CI came back red on PR #98, and the first job to fail was not the one this
+work touches. Both of `main`'s own last two runs — `c0ae048` (#94) and
+`0e8116a` (#95) — were already red before this branch was merged into
+anything.
+
+**`Database security` on `main` is #93 itself.** `work-planning.spec.ts:44`,
+`Expected "Confirm catering", Received "Send the agenda"` — the exact failure
+this branch fixes, now failing on `main` rather than only on a branch.
+
+**`Verify` is a separate defect that arrived with #94 and expires on a date.**
+`tests/unit/gmail-push-sync.test.ts` seeds the access token's expiry an hour
+after its fixture clock of `2026-09-24T05:00Z`, and
+`reconcileGmailConnection` asks whether the token has expired against the
+**real** clock. That is the right question for it to ask, because a token
+expires in real time whenever the job happens to run — so the test passed on
+the CI run that merged it and has failed every run since that morning,
+taking the token refresh path and consuming the mocked fetch responses out
+of order. `expected +0 to be 1`.
+
+Separated from this work by running it on `origin/main` in a worktree with
+nothing of this branch in the tree, where it fails the same way. Fixed here
+rather than in a separate pull request only because nothing on this branch
+can be verified through CI until it is fixed, and that is stated rather than
+folded in quietly.
+
+### Evidence
+
+Environment: `supabase db reset` over the full chain, `npm run db:seed`,
+production build on 127.0.0.1:3200 under Node 22.23.2 with this machine's
+current LAN Supabase address per the #79 workaround.
+
+| Command | Result |
+|---|---|
+| `work-planning.spec.ts:44`, before the fix, 55–63 tasks | 7 of 8 |
+| `work-planning.spec.ts:44`, before the fix, 254–261 tasks | 7 of 8 |
+| `work-planning.spec.ts:44`, after the fix, 290–299 tasks | **10 of 10** |
+| the focus probe, before the fix | a remount in every run, focus lost in one |
+| the focus probe, after the fix | **no remount in any run** |
+| the new test against the unfixed drawer | fails, `Received: null` |
+| `npm run lint` | 0 errors (1 pre-existing `no-img-element` warning) |
+| `npm run typecheck` | exit 0 |
+| `npm test` | 515 passed on the merged head (504 before `main` moved) |
+| `npm run test:db` | 456 assertions across 19 files, unchanged |
+| full authenticated suite, merged head | **50 passed (6.5m)** |
+| `npm run build` | exit 0 |
+
+The after-fix runs are at a higher task volume than the before-fix runs, so
+the improvement is not the loaded database being unloaded.
+
+### Not done
+
+**One observation is recorded rather than claimed.** At 256 tasks, one
+pre-fix run spent its whole 180s budget waiting for the checklist form to
+appear — the drawer's initial `load()` never finished. It did not recur in
+ten post-fix runs at ~295 tasks, and nothing here explains it or claims to
+have fixed it. The drawer fires ten queries in parallel on open and this
+change does not touch any of them.
+
+**The suite still leaves its fixtures behind.** Each run of this spec adds a
+task. That is no longer known to affect the result — 10 of 10 at ~295 tasks
+says so — and cleaning up was deliberately not added, because a suite that
+tidies itself would hide the next volume sensitivity rather than reveal it.
 
 ## Current feature: events — the record, its preparation and who is accountable (#32)
 

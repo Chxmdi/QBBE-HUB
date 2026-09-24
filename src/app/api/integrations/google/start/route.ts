@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { requireSession } from "@/lib/auth";
+import { googleScopeString, type GoogleIntegrationProvider } from "@/features/inbox/services/google-oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -11,15 +12,6 @@ function googleConfigured(): boolean {
       process.env.GOOGLE_OAUTH_REDIRECT_URI,
   );
 }
-
-const SCOPES: Record<string, string> = {
-  gmail: "https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.send",
-  // `calendar.events` is the narrowest scope that permits Hub-created meeting
-  // events to be created, updated, and deleted. Existing read-only grants must
-  // reauthenticate to receive this expanded consent.
-  google_calendar: "https://www.googleapis.com/auth/calendar.events",
-  google_drive: "https://www.googleapis.com/auth/drive.metadata.readonly",
-};
 
 export async function GET(request: Request) {
   const session = await requireSession();
@@ -34,9 +26,10 @@ export async function GET(request: Request) {
   }
   const url = new URL(request.url);
   const requested = url.searchParams.get("provider");
-  const provider = requested === "google_calendar" || requested === "google_drive"
-    ? requested
-    : "gmail";
+  const provider: GoogleIntegrationProvider =
+    requested === "google_calendar" || requested === "google_drive"
+      ? requested
+      : "gmail";
   const state = `${provider}:${session.userId}:${crypto.randomUUID()}`;
   const cookieStore = await cookies();
   cookieStore.set("qbbe_oauth_state", state, {
@@ -50,7 +43,7 @@ export async function GET(request: Request) {
   auth.searchParams.set("client_id", process.env.GOOGLE_CLIENT_ID!);
   auth.searchParams.set("redirect_uri", process.env.GOOGLE_OAUTH_REDIRECT_URI!);
   auth.searchParams.set("response_type", "code");
-  auth.searchParams.set("scope", SCOPES[provider]);
+  auth.searchParams.set("scope", googleScopeString(provider));
   auth.searchParams.set("access_type", "offline");
   auth.searchParams.set("prompt", "consent");
   auth.searchParams.set("state", state);

@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link2, Send } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -79,8 +79,22 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
   const [posting, setPosting] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // The task the drawer is currently showing. A ref rather than state so that
+  // `load` keeps its identity — the effect below is keyed on it, and a
+  // callback that changed on every load would make the drawer reload forever.
+  const shownTaskId = useRef<string | null>(null);
+
   const load = useCallback(async (id: string) => {
-    setLoading(true);
+    // Blank the drawer only when there is nothing in it for this task yet.
+    //
+    // Every edit in here finishes by calling this to re-read the record.
+    // Doing that behind a skeleton unmounted the section that had just been
+    // edited and mounted a fresh one about 150ms later, which threw keyboard
+    // focus back to the document. Press ↑ on a checklist item inside that
+    // window and the keystroke lands on nothing: the item does not move and
+    // nothing says why. That is #93, and it is a real defect for anybody
+    // working a checklist by keyboard, not only for the test that caught it.
+    if (shownTaskId.current !== id) setLoading(true);
     setNotFound(false);
     const supabase = createSupabaseBrowserClient();
     const [
@@ -152,6 +166,7 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
         .limit(50),
     ]);
     setLoading(false);
+    shownTaskId.current = id;
     setHistoryFailed(Boolean(historyError));
     if (!taskRow) {
       // RLS filtered it out, or it does not exist — same message either way.
