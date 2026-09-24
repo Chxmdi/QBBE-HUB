@@ -46,6 +46,7 @@ const FILES = [
   "supabase/tests/drive-integration-access.sql",
   "supabase/tests/email-suppression.sql",
   "supabase/tests/channel-history-access.sql",
+  "supabase/tests/creator-visibility.sql",
   // Last: it opens its own sessions, which only see committed rows, so it
   // must not run inside a transaction an earlier file left open.
   "supabase/tests/concurrency.sql",
