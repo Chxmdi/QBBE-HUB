@@ -71,19 +71,31 @@ delete from public.notification where dedupe_key like 'race-test:%';
 delete from public.email_suppression where address like 'race-test-%@example.com';
 delete from public.email_delivery where dedupe_key like 'race-test:%';
 delete from public.task where title like 'race-test task%';
+delete from public.project where name = 'race-test project';
+delete from public.program where slug = 'race-test-program';
 select pgmq.drop_queue('race_test') where exists (select 1 from pgmq.list_queues() where queue_name = 'race_test');
 
 -- Committed before the races start: the other two sessions cannot see
 -- anything this session has not committed.
 select pgmq.create('race_test');
 select public.job_queue_send('race_test', '{"race": true}'::jsonb, 0);
+-- Its own program and project: CI runs this suite before the workspace is
+-- seeded, so there may be no project to borrow.
+insert into public.program (organization_id, name, slug, created_by)
+select m.organization_id, 'race-test program', 'race-test-program',
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'
+from public.organization_membership m
+where m.user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'
+limit 1;
+insert into public.project (organization_id, program_id, name, owner_id, created_by)
+select p.organization_id, p.id, 'race-test project',
+       'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'
+from public.program p
+where p.slug = 'race-test-program';
 insert into public.task (organization_id, project_id, title, priority, created_by)
 select p.organization_id, p.id, 'race-test task', 'medium', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'
 from public.project p
-join public.organization_membership m
-  on m.organization_id = p.organization_id and m.user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1'
-order by p.created_at
-limit 1;
+where p.name = 'race-test project';
 
 do $$
 declare
@@ -210,4 +222,6 @@ delete from public.notification where dedupe_key like 'race-test:%';
 delete from public.email_suppression where address like 'race-test-%@example.com';
 delete from public.email_delivery where dedupe_key like 'race-test:%';
 delete from public.task where title like 'race-test task%';
+delete from public.project where name = 'race-test project';
+delete from public.program where slug = 'race-test-program';
 select pgmq.drop_queue('race_test');
