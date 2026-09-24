@@ -5,6 +5,14 @@ on:
     branches: [main]
   pull_request:
   workflow_call:
+    inputs:
+      browsers:
+        # Playwright projects for the signed-in suites. Pull requests and
+        # deploys use Chromium; the nightly run passes all three (#101).
+        description: Space-separated Playwright projects for signed-in checks
+        type: string
+        required: false
+        default: chromium
 
 permissions:
   contents: read
@@ -74,7 +82,10 @@ jobs:
   database-security:
     name: Database security
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Three browsers take roughly three times as long as one.
+    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 90 || 30 }}
+    env:
+      SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -184,14 +195,14 @@ jobs:
         run: |
           npx next start -p 3000 -H 127.0.0.1 &
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
-          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core work-planning documents events --project=chromium
+          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core work-planning documents events $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
 
       - name: Signed-in accessibility, responsive and keyboard matrix
         # WCAG 2.2 AA axe scans in both themes, a 6-width x 2-theme overflow
         # sweep, 200% zoom and keyboard paths across every workspace route
         # (#101). It ran nowhere before this step existed. The server started
         # in the previous step is still listening.
-        run: npx playwright test qa-matrix --project=chromium
+        run: npx playwright test qa-matrix $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
 
       - name: Preserve authenticated failure evidence
         if: failure()
