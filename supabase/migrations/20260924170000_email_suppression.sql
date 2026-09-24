@@ -18,9 +18,9 @@ create table email_suppression (
 comment on table email_suppression is
   'Addresses the email provider reported as bounced or complained. The worker never mails them.';
 
+-- No policies: the list spans organizations, so no organization's admin may
+-- read it (that would show them addresses from other tenants), and nobody
+-- writes it through the API. The webhook and the worker use the service role.
+-- Admins see the effect, org-scoped, as bounced/suppressed rows in
+-- email_delivery.
 alter table email_suppression enable row level security;
-
--- Administrators may see why an address stopped receiving mail. Nobody writes
--- through the API; the service role bypasses RLS for the webhook.
-create policy email_suppression_admin_read on email_suppression
-  for select using (app.is_admin());

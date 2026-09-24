@@ -1,5 +1,5 @@
--- INT-EMAIL: the bounce/complaint suppression list is readable by
--- administrators only and writable by nobody through the API.
+-- INT-EMAIL: the bounce/complaint suppression list spans organizations, so
+-- nobody reads or writes it through the API, administrators included.
 begin;
 do $$
 declare
@@ -16,7 +16,7 @@ begin
   perform tests.authenticate(admin_user, 'aal2');
   set local role authenticated;
   select count(*) into n from public.email_suppression where address = 'bounced-fixture@example.com';
-  perform tests.ok(n = 1, 'an administrator can see why an address stopped receiving mail');
+  perform tests.ok(n = 0, 'an organization administrator cannot read the cross-organization suppression list');
 
   reset role;
   perform tests.authenticate(member_user);
