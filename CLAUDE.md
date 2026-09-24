@@ -36,6 +36,8 @@ This is the one place where longer is better. Be explicit, not brief:
 - Long apologies or replaying your mistakes. Correct it plainly and continue.
 ## How to work
 
+- Always make a comprehensive plan and then create a task checklist before
+  solving any problem or implementing any task or feature.
 - Once you have answered something, treat that answer as done. On later turns,
   focus your thinking on what I am asking now, and don't go back over an
   earlier answer unless I ask about it or point out a problem with it.
