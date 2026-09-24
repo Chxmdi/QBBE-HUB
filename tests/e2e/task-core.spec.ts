@@ -206,11 +206,13 @@ test("an approver can be named after the task exists, and the change is in its h
   ).toHaveValue(sql(`select approver_id::text from task where id = '${taskId}'`));
 
   // Before #76 the history said "updated" with empty metadata for this, because
-  // approver was not one of the five tracked fields.
+  // approver was not one of the five tracked fields. Match the change itself:
+  // the task's title also contains "Approver", so '%Approver%' matched the
+  // "created task" event too, and `limit 1` picked either row.
   const summary = sql(
     `select summary from activity_event
      where source_type = 'task' and source_id = '${taskId}'
-       and summary like '%Approver%' limit 1`,
+       and summary like '%set Approver to%' limit 1`,
   );
   expect(summary).toContain("set Approver to QA Staff");
 });
