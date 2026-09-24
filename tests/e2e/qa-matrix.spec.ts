@@ -127,6 +127,150 @@ test.describe("QA matrix", () => {
     expect(violations, violations.join("\n")).toEqual([]);
   });
 
+  test("overlays pass axe while open, in both themes", async ({ page }) => {
+    // A scan of a closed page never sees the surfaces most likely to fail:
+    // menus, dialogs and drawers exist only while they are open.
+    const violations: string[] = [];
+    const scan = async (label: string) => {
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
+        .analyze();
+      for (const v of results.violations) {
+        if (v.impact === "critical" || v.impact === "serious") {
+          violations.push(
+            `${label}: [${v.impact}] ${v.id} — ${v.help} (${v.nodes.length} nodes)\n    ${v.nodes[0]?.html?.slice(0, 160)}`,
+          );
+        }
+      }
+    };
+
+    const overlays: { name: string; width: number; open: () => Promise<void> }[] = [
+      {
+        name: "command palette",
+        width: 1280,
+        open: async () => {
+          await page.goto("/");
+          await page.keyboard.press("Control+k");
+          await expect(page.getByRole("combobox", { name: "Search" })).toBeFocused();
+        },
+      },
+      {
+        name: "quick create menu",
+        width: 1280,
+        open: async () => {
+          await page.goto("/");
+          await page.getByRole("button", { name: "Quick create" }).click();
+        },
+      },
+      {
+        name: "notifications menu",
+        width: 1280,
+        open: async () => {
+          await page.goto("/");
+          await page.getByRole("button", { name: /^Notifications/ }).click();
+        },
+      },
+      {
+        name: "account menu",
+        width: 1280,
+        open: async () => {
+          await page.goto("/");
+          await page.getByRole("button", { name: "Account menu" }).click();
+        },
+      },
+      {
+        name: "create project dialog",
+        width: 1280,
+        open: async () => {
+          await page.goto("/projects?create=1");
+          await expect(page.getByRole("dialog")).toBeVisible();
+        },
+      },
+      {
+        name: "task drawer",
+        width: 1280,
+        open: async () => {
+          await page.goto("/my-work");
+          await page
+            .locator("button")
+            .filter({ hasText: /Confirm workshop venue contract|Draft registration form/ })
+            .first()
+            .click();
+          await expect(page.getByRole("dialog")).toBeVisible();
+        },
+      },
+      {
+        name: "mobile navigation drawer",
+        width: 390,
+        open: async () => {
+          await page.goto("/");
+          await page.getByRole("button", { name: "Open navigation" }).click();
+          await expect(page.getByRole("button", { name: "Close navigation" })).toBeVisible();
+        },
+      },
+    ];
+
+    for (const theme of ["light", "dark"] as const) {
+      for (const overlay of overlays) {
+        await page.setViewportSize({ width: overlay.width, height: 800 });
+        await page.goto("/");
+        await setTheme(page, theme);
+        await overlay.open();
+        await page.waitForLoadState("networkidle");
+        await scan(`${overlay.name} ${theme}`);
+      }
+    }
+
+    expect(violations, violations.join("\n")).toEqual([]);
+  });
+
+  test("keyboard: a skip link is first and moves focus past the navigation", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/my-work");
+    await page.keyboard.press("Tab");
+    const skip = page.getByRole("link", { name: "Skip to main content" });
+    await expect(skip).toBeFocused();
+    await expect(skip).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#main-content")).toBeFocused();
+  });
+
+  test("keyboard: focus is never hidden under the sticky or fixed bars", async ({
+    page,
+  }) => {
+    // WCAG 2.4.11. Tab through the first stretch of a long page on a phone
+    // width, where both the topbar and the bottom navigation are present,
+    // and require every focused control to sit clear of both.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/my-work");
+    const hidden: string[] = [];
+    for (let i = 0; i < 40; i++) {
+      await page.keyboard.press("Tab");
+      const box = await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null;
+        if (!el || el === document.body) return null;
+        if (el.closest("header, nav[aria-label='Primary'], [role='dialog']")) return null;
+        const r = el.getBoundingClientRect();
+        const header = document.querySelector("header")?.getBoundingClientRect();
+        const bottom = document.querySelector("nav[aria-label='Primary']")?.getBoundingClientRect();
+        return {
+          label: el.getAttribute("aria-label") || el.textContent?.trim().slice(0, 40) || el.tagName,
+          top: r.top,
+          bottom: r.bottom,
+          headerBottom: header?.bottom ?? 0,
+          navTop: bottom && bottom.height > 0 ? bottom.top : window.innerHeight,
+        };
+      });
+      if (!box) continue;
+      if (box.bottom <= box.headerBottom || box.top >= box.navTop) {
+        hidden.push(`${box.label} (top ${Math.round(box.top)}, bottom ${Math.round(box.bottom)})`);
+      }
+    }
+    expect(hidden, hidden.join("\n")).toEqual([]);
+  });
+
   test("200% zoom keeps content usable", async ({ page }) => {
     const failures: string[] = [];
     // Emulate 200% zoom by halving the viewport at the same CSS scale.

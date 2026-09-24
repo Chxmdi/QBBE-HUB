@@ -99,6 +99,15 @@
 @layer base {
   html {
     color-scheme: light;
+    /* WCAG 2.4.11 Focus Not Obscured: when focus or an anchor scrolls an
+       element into view, keep it clear of the sticky 64px topbar and, below
+       lg, the fixed bottom navigation (52px plus the safe area). */
+    scroll-padding-top: 5rem;
+  }
+  @media (max-width: 1023.98px) {
+    html {
+      scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+    }
   }
   html.dark {
     color-scheme: dark;
