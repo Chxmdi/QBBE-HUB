@@ -8,6 +8,7 @@ import { ChannelView } from "@/features/channels/components/channel-view";
 import { ChannelAdminMenu } from "@/features/channels/components/channel-admin-menu";
 import { AddChannelMemberDialog } from "@/features/channels/components/add-channel-member";
 import { LeaveChannelButton } from "@/features/channels/components/leave-channel-button";
+import { RemoveChannelMemberDialog } from "@/features/channels/components/remove-channel-member";
 import {
   PinnedResources,
   type PinnedResourceRow,
@@ -53,6 +54,7 @@ export default async function ChannelPage({
     { data: messages },
     { data: pins },
     { data: orgMembers },
+    { data: directGrants },
   ] = await Promise.all([
     supabase
       .from("channel_member")
@@ -79,6 +81,11 @@ export default async function ChannelPage({
       .from("organization_membership")
       .select("user_id, user_profile:user_id(id, full_name)")
       .eq("status", "active"),
+    supabase
+      .from("channel_access_grant")
+      .select("user_id")
+      .eq("channel_id", id)
+      .eq("source", "direct"),
   ]);
 
   const isMember = Boolean(membership);
@@ -158,6 +165,21 @@ export default async function ChannelPage({
               people={((orgMembers ?? []) as unknown as { user_id: string; user_profile: { full_name: string } | null }[])
                 .filter((m) => m.user_profile)
                 .map((m) => ({ id: m.user_id, label: m.user_profile!.full_name }))}
+            />
+            <RemoveChannelMemberDialog
+              channelId={channel.id}
+              people={((directGrants ?? []) as { user_id: string }[])
+                .filter((grant) => grant.user_id !== channel.owner_id)
+                .map((grant) => {
+                  const member = ((orgMembers ?? []) as unknown as {
+                    user_id: string;
+                    user_profile: { full_name: string } | null;
+                  }[]).find((row) => row.user_id === grant.user_id);
+                  return {
+                    id: grant.user_id,
+                    label: member?.user_profile?.full_name ?? "Member",
+                  };
+                })}
             />
             <ChannelAdminMenu
               channelId={channel.id}
