@@ -1,10 +1,10 @@
 import {
   fetchCalendarOverlay,
-  fetchGoogleDriveSync,
   refreshGoogleAccessToken,
 } from "@/features/inbox/services/gmail-sync";
 import { reconcileGmailConnection } from "@/features/inbox/services/gmail-reconcile";
 import { classifyIntegrationFailure } from "@/features/admin/services/integration-health";
+import { reconcileGoogleDrive } from "@/features/documents/services/google-drive-reconcile";
 import { recordJobRun } from "@/lib/job-observability";
 import type { JobContext, JobResult } from "../runner";
 
@@ -135,52 +135,19 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
           await saveCalendarSync(fullSync);
         }
       } else {
-        const saveDriveSync = async (sync: Awaited<ReturnType<typeof fetchGoogleDriveSync>>) => {
-          if (sync.rows.length) {
-            const { error } = await db.from("document").upsert(
-              sync.rows.map((row) => ({
-              organization_id: connection.organization_id,
-              title: row.title,
-              description: row.description,
-              kind: "link",
-              url: row.url,
-              mime_type: row.mime_type,
-              visibility: "organization",
-              owner_id: connection.user_id,
-              created_by: connection.user_id,
-              integration_connection_id: connection.id,
-              external_id: row.external_id,
-              external_updated_at: row.updated_at,
-              })),
-              { onConflict: "integration_connection_id,external_id" },
-            );
-            if (error) throw new Error(`Could not save Google Drive metadata: ${error.message}`);
-          }
-          if (sync.removedIds.length) {
-            const { error } = await db.from("document")
-              .delete()
-              .eq("integration_connection_id", connection.id)
-              .in("external_id", sync.removedIds);
-            if (error) throw new Error(`Could not remove stale Google Drive metadata: ${error.message}`);
-          }
-          const { error } = await db.from("integration_secret")
-            .update({ google_drive_page_token: sync.pageToken })
-            .eq("connection_id", connection.id);
-          if (error) throw new Error(`Could not save Google Drive page token: ${error.message}`);
-        };
-        const pageToken = typeof secret.google_drive_page_token === "string" ? secret.google_drive_page_token : undefined;
-        try {
-          await saveDriveSync(await fetchGoogleDriveSync(accessToken, pageToken));
-        } catch (driveError) {
-          const message = driveError instanceof Error ? driveError.message : "Google Drive synchronization failed.";
-          if (!pageToken || !message.includes("full synchronization is required")) throw driveError;
-          const fullSync = await fetchGoogleDriveSync(accessToken);
-          const { error } = await db.from("document")
-            .delete()
-            .eq("integration_connection_id", connection.id);
-          if (error) throw new Error(`Could not reset Google Drive metadata: ${error.message}`);
-          await saveDriveSync(fullSync);
-        }
+        const pageToken = typeof secret.google_drive_page_token === "string"
+          ? secret.google_drive_page_token
+          : undefined;
+        await reconcileGoogleDrive(
+          db,
+          {
+            id: connection.id,
+            organization_id: connection.organization_id,
+            user_id: connection.user_id,
+          },
+          accessToken,
+          pageToken,
+        );
       }
       const { error: connectionUpdateError } = await db
         .from("integration_connection")
