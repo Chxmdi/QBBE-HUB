@@ -10,6 +10,7 @@ import {
   createGoogleMeetingEvent,
   deleteGoogleMeetingEvent,
   updateGoogleMeetingEvent,
+  calendarFailureStatus,
 } from "@/features/calendar/services/google-calendar-write";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { wallTimeToInstant } from "@/lib/time";
@@ -86,7 +87,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
     // The Calendar URL already has its own home in `calendar_event_link`.
     await createGoogleMeetingEvent({ organizationId: session.organizationId, userId: session.userId, meetingId: meeting.id, title, purpose: purpose || null, startsAt: starts.toISOString(), endsAt: ends.toISOString(), location: location || null });
   } catch (calendarError) {
-    await supabase.from("integration_connection").update({ status: "error", last_error: calendarError instanceof Error ? calendarError.message : "Calendar sync failed." }).eq("organization_id", session.organizationId).eq("user_id", session.userId).eq("provider", "google_calendar");
+    await supabase.from("integration_connection").update({ status: calendarFailureStatus(calendarError, "Calendar sync failed."), last_error: calendarError instanceof Error ? calendarError.message : "Calendar sync failed." }).eq("organization_id", session.organizationId).eq("user_id", session.userId).eq("provider", "google_calendar");
   }
 
   revalidatePath("/meetings");
@@ -212,7 +213,7 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
     });
   } catch (calendarError) {
     await supabase.from("integration_connection").update({
-      status: "degraded",
+      status: calendarFailureStatus(calendarError, "Calendar update failed."),
       last_error: calendarError instanceof Error ? calendarError.message : "Calendar update failed.",
     }).eq("organization_id", session.organizationId).eq("user_id", existing.organizer_id).eq("provider", "google_calendar");
   }
@@ -260,7 +261,7 @@ export async function cancelMeeting(input: unknown): Promise<ActionResult> {
     await supabase
       .from("integration_connection")
       .update({
-        status: "degraded",
+        status: calendarFailureStatus(calendarError, "Calendar cancellation failed."),
         last_error: calendarError instanceof Error ? calendarError.message : "Calendar cancellation failed.",
       })
       .eq("organization_id", session.organizationId)

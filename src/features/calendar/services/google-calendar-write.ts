@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { classifyIntegrationFailure } from "@/features/admin/services/integration-health";
 import { refreshGoogleAccessToken } from "@/features/inbox/services/gmail-sync";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -200,7 +201,10 @@ async function createGoogleCalendarRecord(input: CalendarRecordInput): Promise<s
 async function updateGoogleCalendarRecord(input: CalendarRecordInput): Promise<string | null> {
   const supabase = createSupabaseServiceClient();
   const link = await findCalendarLink(supabase, input.organizationId, input.userId, input.record);
-  if (!link) return null;
+  // No link means the record was saved while Calendar was disconnected or
+  // failing. Creating it now is what makes a reconnect catch up on the next
+  // edit; create returns null again if Calendar is still not connected.
+  if (!link) return createGoogleCalendarRecord(input);
   const token = await calendarAccessToken(supabase, link.connection_id);
   const response = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(link.external_id)}?sendUpdates=none`,
@@ -231,6 +235,16 @@ async function updateGoogleCalendarRecord(input: CalendarRecordInput): Promise<s
   }).eq("id", link.id);
   if (error) throw new Error(`Could not save the updated Calendar link: ${error.message}`);
   return event.htmlLink ?? null;
+}
+
+/**
+ * The connection status a failed Hub-owned Calendar write should leave behind.
+ * A revoked or expired authorization must read "Authentication expired" so an
+ * admin knows to reconnect; a provider outage reads "Synchronization delayed"
+ * and clears on the next successful sync.
+ */
+export function calendarFailureStatus(error: unknown, fallback: string) {
+  return classifyIntegrationFailure(error instanceof Error ? error.message : fallback);
 }
 
 /** A missing Google event is a successful terminal state for a cancellation. */
