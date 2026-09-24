@@ -34,3 +34,11 @@ This is the one place where longer is better. Be explicit, not brief:
 - Claiming something works without checking. Tell me what you actually
   verified and what you did not.
 - Long apologies or replaying your mistakes. Correct it plainly and continue.
+## How to work
+
+- Once you have answered something, treat that answer as done. On later turns,
+  focus your thinking on what I am asking now, and don't go back over an
+  earlier answer unless I ask about it or point out a problem with it.
+- When completing any task, remember that time matters. Solve every problem as
+  quickly and efficiently as possible without compromising on quality
+  whatsoever.
