@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { notFound } from "next/navigation";
 import { Download, Printer } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
@@ -146,10 +146,10 @@ export default async function ReportDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="no-print mb-2">
-        <Link href="/reports" className="meta hover:text-brand-fg hover:underline">
-          ← Reports
-        </Link>
+      <div className="no-print ">
+        <Breadcrumbs
+          items={[{ label: "Reports", href: "/reports" }, { label: report.title as string }]}
+        />
       </div>
       <PageHeader
         eyebrow={`${formatDate(report.period_start)} → ${formatDate(report.period_end)}`}

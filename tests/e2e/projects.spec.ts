@@ -291,3 +291,17 @@ test("a project built from a template carries its work and none of its history",
   );
   expect(borrowed).toBe("0");
 });
+
+test("a project page shows where it sits, and the trail leads back (P0-UX-01)", async ({ page }) => {
+  await signIn(page, "owner");
+  await page.goto("/projects");
+  await page.locator('main a[href^="/projects/"]').first().click();
+  await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}/);
+
+  const trail = page.getByRole("navigation", { name: "Breadcrumb" });
+  const title = (await page.getByRole("heading", { level: 1 }).innerText()).trim();
+  await expect(trail.locator('[aria-current="page"]')).toHaveText(title);
+
+  await trail.getByRole("link", { name: "Projects" }).click();
+  await expect(page).toHaveURL(/\/projects$/);
+});
