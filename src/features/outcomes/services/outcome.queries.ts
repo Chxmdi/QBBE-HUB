@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import {
   metricProgress,
   summarizeDelivery,
@@ -110,7 +110,7 @@ export function withProgress(metric: MetricRow): MetricWithProgress {
 export async function getProgramOutcomes(
   programId: string,
 ): Promise<ProgramOutcomes> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const [{ data: operations }, { data: metrics }] = await Promise.all([
     supabase

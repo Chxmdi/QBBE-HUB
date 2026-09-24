@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { SendHorizonal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import { MessageItem } from "@/features/channels/components/message-item";
 import { markChannelRead } from "@/features/channels/services/channel.commands";
 import {
@@ -139,6 +140,7 @@ export function ChannelView({
     initialMessages.length >= CHANNEL_HISTORY_PAGE_SIZE,
   );
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderFailed, setOlderFailed] = useState(false);
   const [threadRootId, setThreadRootId] = useState<string | null>(null);
   const [connection, setConnection] = useState<"live" | "reconnecting">("live");
   const savedMessageIds = new Set(initialSavedMessageIds);
@@ -190,6 +192,14 @@ export function ChannelView({
         .order("id", { ascending: false })
         .limit(CHANNEL_HISTORY_PAGE_SIZE),
     ]);
+    // A failed read used to come back empty, conclude there was no older
+    // history, and remove the button for good. Keep it, and say so.
+    if (sameInstant.error || earlier.error) {
+      setOlderFailed(true);
+      setLoadingOlder(false);
+      return;
+    }
+    setOlderFailed(false);
     const older = olderPage(
       (sameInstant.data ?? []) as unknown as Message[],
       (earlier.data ?? []) as unknown as Message[],
@@ -326,7 +336,13 @@ export function ChannelView({
           aria-label="Messages"
           className="min-h-0 flex-1 overflow-y-auto py-3"
         >
-          {hasOlder ? (
+          {olderFailed ? (
+            <ErrorState
+              className="mb-2"
+              message="Older messages couldn't be loaded."
+              onRetry={() => void loadOlder()}
+            />
+          ) : hasOlder ? (
             <div className="mb-2 flex justify-center">
               <button
                 type="button"

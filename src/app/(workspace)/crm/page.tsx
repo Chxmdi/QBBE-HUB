@@ -17,7 +17,7 @@ import {
 import { getPipeline } from "@/features/crm/services/opportunity.queries";
 import { requireSession } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate } from "@/lib/utils";
 import type { CrmFollowUp, CrmOrganization } from "@/types/entities";
 
@@ -39,7 +39,7 @@ export default async function CrmPage({
     calendarDateInZone(now, session.timeZone) ?? now.toISOString().slice(0, 10);
   if (!session.isStaff) redirect("/");
   const params = await searchParams;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const [{ data: organizations }, { data: followUps }, pipeline] = await Promise.all([
     supabase

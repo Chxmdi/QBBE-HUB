@@ -9,7 +9,7 @@ import { GmailComposeForm } from "@/features/inbox/components/gmail-compose-form
 import { GmailReplyForm } from "@/features/inbox/components/gmail-reply-form";
 import { getGmailMessageDetail } from "@/features/inbox/services/gmail.commands";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn, relativeTime } from "@/lib/utils";
 import type { Notification } from "@/types/entities";
 
@@ -33,7 +33,7 @@ export default async function InboxPage({
   const session = await requireSession();
   const params = await searchParams;
   const filter = params.filter ?? "all";
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const googleConfigured = Boolean(
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
   );

@@ -9,7 +9,7 @@ import {
 import { DocumentUploadDialog } from "@/features/documents/components/document-upload-dialog";
 import { DeepLinkScroll } from "@/components/shared/deep-link-scroll";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 
 export const metadata: Metadata = { title: "Documents" };
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export default async function DocumentsPage({
 }) {
   const session = await requireSession();
   const { document: highlightId = null } = await searchParams;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const [
     { data: documents },
