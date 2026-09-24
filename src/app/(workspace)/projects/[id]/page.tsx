@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/shared/page-header";
@@ -236,11 +237,15 @@ export default async function ProjectDetailPage({
 
   return (
     <div>
-      <div className="mb-2">
-        <Link href="/projects" className="meta hover:text-brand-fg hover:underline">
-          ← Projects
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Projects", href: "/projects" },
+          ...(project.program
+            ? [{ label: project.program.name, href: `/programs/${project.program.id}` }]
+            : []),
+          { label: project.name },
+        ]}
+      />
       <PageHeader
         eyebrow={project.program?.name ?? "Independent project"}
         title={project.name}

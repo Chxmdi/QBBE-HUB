@@ -2,24 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  Banknote,
-  BarChart3,
-  Building2,
-  CalendarDays,
-  CalendarRange,
-  FileText,
-  FolderKanban,
-  Hash,
-  Layers,
-  MessageSquare,
-  Paperclip,
-  Search,
-  ShieldAlert,
-  User,
-} from "lucide-react";
+import { AlertTriangle, Banknote, BarChart3, Building2, CalendarDays, CalendarRange, FileText, FolderKanban, Hash, Layers, MessageSquare, Paperclip, Search, ShieldAlert, User, Plus } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createActions } from "@/config/create-actions";
 import { visibleNav } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 import { ErrorState } from "@/components/ui/error-state";
@@ -74,8 +59,23 @@ export function CommandPalette({
       )
     : navItems.slice(0, 6);
 
+  // The same create actions as quick create (P0-CMD-01), matched on
+  // "new task", "task", "proposal" and so on.
+  const needle = query.trim().toLowerCase().replace(/^(new|create|add)\s+/, "");
+  const createMatches = query.trim()
+    ? createActions({ isAdmin, isStaff }).filter((action) =>
+        action.label.toLowerCase().includes(needle),
+      )
+    : [];
+
   const items: { label: string; sub?: string; href: string; icon: React.ReactNode }[] =
     [
+      ...createMatches.map((action) => ({
+        label: `New ${action.label.toLowerCase()}`,
+        sub: "Create",
+        href: action.href,
+        icon: <Plus className="size-4" aria-hidden />,
+      })),
       ...navMatches.map((n) => ({
         label: n.label,
         sub: "Go to",

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
@@ -98,11 +98,9 @@ export default async function CrmDetailPage({
 
   return (
     <div>
-      <div className="mb-2">
-        <Link href="/crm" className="meta hover:text-brand-fg hover:underline">
-          ← Relationships
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[{ label: "Relationships", href: "/crm" }, { label: org.name as string }]}
+      />
       <PageHeader
         eyebrow={org.category as string}
         title={org.name as string}

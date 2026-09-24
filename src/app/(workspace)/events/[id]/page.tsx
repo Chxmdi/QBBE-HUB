@@ -1,6 +1,7 @@
 import { instantToWallTime } from "@/lib/time";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
@@ -81,11 +82,9 @@ export default async function EventDetailPage({
 
   return (
     <div>
-      <div className="mb-2">
-        <Link href="/events" className="meta hover:text-brand-fg hover:underline">
-          ← Events
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[{ label: "Events", href: "/events" }, { label: event.name }]}
+      />
       <PageHeader
         eyebrow={formatDateTime(event.starts_at)}
         title={event.name}

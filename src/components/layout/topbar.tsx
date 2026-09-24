@@ -18,6 +18,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { cn, relativeTime } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types/entities";
+import { createActions } from "@/config/create-actions";
 import { ErrorState } from "@/components/ui/error-state";
 
 const ACTIONABLE_CATEGORIES = new Set([
@@ -122,22 +123,7 @@ export function Topbar({
     );
   }
 
-  const createLinks = [
-    { label: "Task", href: "/my-work?create=task" },
-    ...(isStaff
-      ? [
-          { label: "Project", href: "/projects?create=1" },
-          { label: "Program", href: "/programs?create=1" },
-          { label: "Meeting", href: "/meetings?create=1" },
-          { label: "Event", href: "/events?create=1" },
-          { label: "Channel", href: "/channels?create=1" },
-          { label: "CRM organization", href: "/crm?create=organization" },
-          { label: "CRM contact", href: "/crm?create=contact" },
-          { label: "CRM follow-up", href: "/crm?create=follow-up" },
-        ]
-      : []),
-    ...(isAdmin ? [{ label: "Announcement", href: "/channels?create=announcement" }] : []),
-  ];
+  const createLinks = createActions({ isAdmin, isStaff });
 
   return (
     <header className="sticky top-0 z-(--z-chrome) flex h-16 items-center gap-2 border-b border-line bg-surface/92 px-3 shadow-[0_1px_0_rgb(42_60_144_/_0.03)] backdrop-blur md:px-5">
