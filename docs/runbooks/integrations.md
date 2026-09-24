@@ -74,9 +74,13 @@ expires a token, the worker clears only generic overlays and rebuilds the
 mirror before persisting a replacement token.
 Existing connections must reauthenticate because the required scope is now the
 narrow `https://www.googleapis.com/auth/calendar.events` write scope. If a
-write or cancellation fails, Hub preserves the local record/link and marks the
-organizer's connection `degraded` with an actionable error in Admin →
-Integrations. Until credentials exist the calendar stays Hub-only.
+write or cancellation fails, Hub preserves the local record/link and records
+the organizer's connection status by cause, with the error, in Admin →
+Integrations: revoked or expired consent reads **Authentication expired**
+(reconnect Calendar), a Google outage reads **Synchronization delayed** and
+clears itself on the next successful `google-sync` run. A meeting or event
+saved while Calendar was disconnected is pushed on its next edit after
+reconnecting. Until credentials exist the calendar stays Hub-only.
 
 ## Google Drive metadata mirror
 
@@ -170,3 +174,6 @@ address. Lifting a suppression is a deliberate database change by an operator.
 values exist, prove INT-EMAIL, INT-GMAIL, INT-CALENDAR, INT-DRIVE and INT-VMS
 against authorized recipients and record the dated run in
 `docs/acceptance-matrix.md`.
+
+The step-by-step procedure, with the result to expect at each step and the
+evidence to record, is in `docs/runbooks/epic-06-live-verification.md`.
