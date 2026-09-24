@@ -104,7 +104,7 @@ async function applyFullSnapshot(
   const currentIds = new Set(sync.rows.map((row) => row.external_id));
   const staleIds = (existing ?? [])
     .map((row) => row.external_id as string | null)
-    .filter((id): id is string => Boolean(id) && !currentIds.has(id));
+    .filter((id): id is string => !!id && !currentIds.has(id));
   const removed = await deleteDriveIds(db, connection.id, staleIds);
   await saveCursor(db, connection.id, sync.pageToken);
   return { mode: "full", upserted, removed, pageToken: sync.pageToken };
