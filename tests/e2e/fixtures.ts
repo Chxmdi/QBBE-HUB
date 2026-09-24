@@ -97,8 +97,8 @@ export const test = base.extend({
     const goto = page.goto.bind(page);
     const reload = page.reload.bind(page);
 
-    // The app's own navigations still in flight: router.refresh() after a
-    // dialog closes, a router.push after a create. Next fetches those as React
+    // The app's own work still in flight: router.refresh() after a dialog
+    // closes, a router.push after a create, a server action saving a change. Next fetches those as React
     // Server Component payloads (an `RSC: 1` request header). A test that
     // navigates while one is pending races it, and the loser is aborted —
     // NS_BINDING_ABORTED in Firefox, "WebKit encountered an internal error" in
@@ -106,8 +106,14 @@ export const test = base.extend({
     // Firefox and WebKit failure in the first nightly run (#114): the product
     // was fine, the harness started a second navigation on top of the first.
     const pending = new Set<import("@playwright/test").Request>();
-    const isAppNavigation = (request: import("@playwright/test").Request) =>
-      request.headers()["rsc"] === "1" || request.url().includes("_rsc=");
+    // Server actions (a `Next-Action` header) count too: a save still in
+    // flight when the test reloads is cancelled by the reload, and the page
+    // then correctly shows the unsaved state. events.spec's checklist tick,
+    // which is optimistic, lost its save that way on CI.
+    const isAppNavigation = (request: import("@playwright/test").Request) => {
+      const headers = request.headers();
+      return headers["rsc"] === "1" || "next-action" in headers || request.url().includes("_rsc=");
+    };
     page.on("request", (request) => {
       if (isAppNavigation(request)) pending.add(request);
     });
