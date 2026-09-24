@@ -9,7 +9,7 @@ import { AcknowledgeButton } from "@/features/announcements/components/acknowled
 import { AnnouncementComposeDialog } from "@/features/announcements/components/announcement-compose-dialog";
 import { ProgressBar } from "@/features/dashboard/components/charts";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn, formatDate, relativeTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Announcements" };
@@ -41,7 +41,7 @@ const PRIORITY_TONE = {
  */
 export default async function AnnouncementsPage() {
   const session = await requireSession();
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const now = new Date().toISOString();
 
   const [{ data: announcements }, { data: myAcks }, { count: totalMembers }] =

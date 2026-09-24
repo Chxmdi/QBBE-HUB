@@ -4,14 +4,14 @@ import { NotificationPreferencesForm } from "@/features/onboarding/components/no
 import { MfaSettings } from "@/features/auth/components/mfa-settings";
 import { verifiedTotpFactors } from "@/features/auth/mfa";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 
 export const metadata: Metadata = { title: "Account settings" };
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const session = await requireSession();
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const [{ data: preference }, { data: memberships }, factorResult] = await Promise.all([
     supabase
       .from("notification_preference")

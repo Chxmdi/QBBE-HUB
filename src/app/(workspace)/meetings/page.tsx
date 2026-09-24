@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { createMeeting } from "@/features/meetings/services/meeting.commands";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDateTime } from "@/lib/utils";
 import type { Meeting } from "@/types/entities";
 
@@ -26,7 +26,7 @@ export default async function MeetingsPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const cutoff = meetingListCutoff();
 
   const [{ data: upcoming }, { data: past }, { data: projects }] =

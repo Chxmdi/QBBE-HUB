@@ -5,7 +5,7 @@ import {
   calendarDateInZone,
   startOfDayInstant,
 } from "@/lib/time";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import type {
   ActivityEvent,
   Announcement,
@@ -79,7 +79,7 @@ export async function getDashboardData(
   userId: string,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): Promise<DashboardData> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   // "Today" is a question about the organization's calendar, not the server's.
   // This previously read `new Date().toISOString().slice(0, 10)` — the host's

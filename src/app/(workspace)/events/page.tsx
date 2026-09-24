@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { createEvent } from "@/features/events/services/event.commands";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDateTime } from "@/lib/utils";
 import type { EventRecord } from "@/types/entities";
 
@@ -33,7 +33,7 @@ export default async function EventsPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const [{ data: events }, { data: programs }, { data: projects }] =
     await Promise.all([

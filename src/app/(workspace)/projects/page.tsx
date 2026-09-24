@@ -15,7 +15,7 @@ import {
 import { ProjectTemplateManager } from "@/features/projects/components/project-template-manager";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate } from "@/lib/utils";
 import type { Project } from "@/types/entities";
 
@@ -29,7 +29,7 @@ export default async function ProjectsPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   // Without this, an archived project is reachable only by someone who already
   // knows its URL, so restoring one is effectively impossible through the

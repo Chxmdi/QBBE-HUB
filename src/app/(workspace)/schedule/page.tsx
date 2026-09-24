@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { HealthBadge } from "@/components/shared/status-badges";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types/entities";
 
@@ -39,7 +39,7 @@ const HEALTH_BAR_TEXT: Record<string, string> = {
  */
 export default async function SchedulePage() {
   await requireSession();
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const windowStart = startOfMonth(addMonths(new Date(), -1));
   const windowEnd = addMonths(windowStart, WINDOW_MONTHS);

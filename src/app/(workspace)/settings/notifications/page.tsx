@@ -7,7 +7,7 @@ import {
 } from "@/features/notifications/components/notification-preferences-form";
 import { DEFAULT_PREFERENCES } from "@/features/notifications/services/delivery-rules";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDateTime, relativeTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Email preferences" };
@@ -29,7 +29,7 @@ interface RecentDelivery {
  */
 export default async function NotificationSettingsPage() {
   const session = await requireSession();
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const [{ data: prefRow }, { data: deliveryRows }] = await Promise.all([
     supabase
