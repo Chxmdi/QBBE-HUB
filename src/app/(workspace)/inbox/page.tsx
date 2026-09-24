@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { MarkReadButton } from "@/features/inbox/components/mark-read-button";
+import { GmailComposeForm } from "@/features/inbox/components/gmail-compose-form";
 import { GmailReplyForm } from "@/features/inbox/components/gmail-reply-form";
 import { getGmailMessageDetail } from "@/features/inbox/services/gmail.commands";
 import { requireSession } from "@/lib/auth";
@@ -102,6 +103,7 @@ export default async function InboxPage({
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_320px]">
         <section aria-label="Notifications">
+          {filter === "mail" && gmailConnection?.status === "connected" ? <GmailComposeForm /> : null}
           {filter === "mail" ? (
             gmailConnection?.status !== "connected" ? (
               <EmptyState
@@ -222,7 +224,7 @@ export default async function InboxPage({
                     Reconnect required: {gmailConnection.last_error}
                   </p>
                 ) : null}
-                <p className="meta mt-2">Open a synced message to read it on demand and reply through Gmail. Existing read-only connections must reconnect to grant send permission.</p>
+                <p className="meta mt-2">Compose new mail here or open a synced message to read it on demand and reply through Gmail. Existing connections using the older modify scope should reconnect to receive the narrower read + send grant.</p>
               </>
             ) : (
               <>

@@ -27,7 +27,7 @@ Target design per GML-001..008. Do not mark done on stubs.
 
 1. Create a Google Cloud project (QBBE-owned). Configure the OAuth consent
    screen (internal) and credentials with the **narrowest scopes**
-   (`gmail.readonly` initially).
+   (`gmail.readonly` + `gmail.send`; Hub does not request `gmail.modify`).
 2. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
    `GOOGLE_OAUTH_REDIRECT_URI` (`/api/integrations/google/callback`).
 3. Connect from Inbox or Admin. Tokens live in `integration_secret` (no
@@ -41,13 +41,19 @@ Target design per GML-001..008. Do not mark done on stubs.
    its OIDC audience. Set `GOOGLE_GMAIL_PUBSUB_TOPIC`,
    `GOOGLE_GMAIL_PUBSUB_AUDIENCE`, and
    `GOOGLE_GMAIL_PUBSUB_SERVICE_ACCOUNT_EMAIL` in the deployment's secret
-   manager. The endpoint verifies Google token integrity through tokeninfo plus
-   its audience, account identity, and expiry before accepting a notification.
+   manager. The endpoint verifies Google's OIDC issuer, token integrity through
+   tokeninfo, exact audience, service-account identity, verified email and expiry
+   before accepting a notification. Accepted pushes persist the pending Gmail
+   history id, enqueue durable work on the integrations queue and trigger the
+   `gmail-push-sync` worker after the response. A one-minute scheduled run is
+   the recovery path if the web process ends before that immediate worker starts.
    The daily `gmail-watch-renew` job renews watches before expiry; the
-   15-minute Gmail job walks every page of the stored Gmail history cursor.
-   If Google expires that cursor, the job rebuilds the metadata mirror by
-   walking every paginated Inbox listing before setting a new cursor. Do not
-   put any value in browser-visible environment variables.
+   15-minute `google-sync` job remains periodic reconciliation for pushes that
+   Google delays or drops. Both paths share the same durable history-cursor
+   reconciliation. If Google expires that cursor, Hub first fetches a complete
+   Inbox mirror and then removes stale local metadata, so a transient provider
+   failure cannot erase the last known good state. Do not put any value in
+   browser-visible environment variables.
 
 ## Google Calendar overlay and linked meetings (P1-CAL-03)
 
@@ -81,8 +87,17 @@ reauthenticate to acquire the read-only Drive metadata scope.
 ## Volunteer Management System (gated)
 
 Server-to-server only. Set `VMS_API_URL` (and `VMS_API_KEY`). Connect from
-Admin. Store `user_profile.vms_id` — do not duplicate the volunteer database.
-Disconnect clears VMS ids and does **not** delete Hub tasks.
+Admin only after the endpoint returns a recognized identity/assignment envelope.
+Admins explicitly link active Hub members to external VMS identities through the
+Members table. Hub stores `user_profile.vms_id`, availability and sync timestamp,
+plus minimal `vms_assignment_reference` rows for VMS-owned assignments.
+
+The VMS remains authoritative: assignment references never create, update,
+complete or delete QBBE Hub tasks. A full assignment snapshot reconciles removed
+external references; an identity-only response does not wipe prior assignments.
+Malformed payloads, provider outages and revoked credentials degrade the
+integration visibly. Disconnect clears VMS identity/assignment references and
+does **not** delete Hub tasks or historical work.
 
 
 ## Health visibility
