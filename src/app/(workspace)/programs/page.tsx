@@ -18,7 +18,7 @@ import { summarizeProjectHealth } from "@/features/dashboard/health";
 import { programAccent } from "@/features/programs/colors";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import type { Project } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Programs" };
@@ -41,7 +41,7 @@ export default async function ProgramsPage({
   const session = await requireSession();
   const params = await searchParams;
   const archived = params.status === "archived";
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const [{ data: programs }, { data: projects }, options] = await Promise.all([
     supabase

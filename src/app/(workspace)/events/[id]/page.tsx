@@ -12,7 +12,7 @@ import { addEventChecklistItem } from "@/features/events/services/event-checklis
 import { EventChecklist } from "@/features/events/components/event-checklist";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDateTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Event" };
@@ -30,7 +30,7 @@ export default async function EventDetailPage({
 }) {
   const session = await requireSession();
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const { data: eventRow } = await supabase
     .from("event")

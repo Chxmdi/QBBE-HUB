@@ -1,5 +1,5 @@
 import { DEFAULT_TIME_ZONE, calendarDateInZone } from "@/lib/time";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import {
   SETTLED_ISSUE_STATUSES,
   SETTLED_RISK_STATUSES,
@@ -65,7 +65,7 @@ export async function getRaidLog(
   projectId: string,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): Promise<RaidLog> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const now = new Date();
   const today = calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
 

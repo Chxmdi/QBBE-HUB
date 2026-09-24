@@ -14,7 +14,7 @@ import { programAccent } from "@/features/programs/colors";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { hasProgramCapability } from "@/lib/access-capabilities";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/utils";
 import type {
   ActivityEvent,
@@ -33,7 +33,7 @@ export default async function ProgramDetailPage({
 }) {
   await requireSession();
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const canManage = await hasProgramCapability(supabase, id, "manage");
 
   const { data: program } = await supabase

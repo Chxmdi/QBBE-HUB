@@ -11,7 +11,7 @@ import {
   versionToShow,
 } from "@/features/reports/services/report.queries";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, formatDateTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Report" };
@@ -64,7 +64,7 @@ export default async function ReportDetailPage({
 }) {
   const session = await requireSession();
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const { data: reportRow } = await supabase
     .from("report_instance")

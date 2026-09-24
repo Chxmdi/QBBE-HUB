@@ -19,6 +19,7 @@ import { cn, relativeTime } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types/entities";
 import { createActions } from "@/config/create-actions";
+import { ErrorState } from "@/components/ui/error-state";
 
 const ACTIONABLE_CATEGORIES = new Set([
   "assignment",
@@ -94,13 +95,20 @@ export function Topbar({
       return;
     }
     setOpenMenu("notifications");
+    await loadNotifications();
+  }
+
+  // A failed read used to render "You're all caught up".
+  const [notificationsFailed, setNotificationsFailed] = useState(false);
+  async function loadNotifications() {
     const supabase = createSupabaseBrowserClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("notification")
       .select("id, category, title, body, link, urgency, read_at, created_at")
       .order("created_at", { ascending: false })
       .limit(12);
-    setNotifications((data as Notification[] | null) ?? []);
+    setNotificationsFailed(Boolean(error));
+    setNotifications(error ? [] : ((data as Notification[] | null) ?? []));
   }
 
   async function markAllRead() {
@@ -209,7 +217,14 @@ export function Topbar({
                 </button>
               </div>
               <ul className="max-h-96 overflow-y-auto py-1">
-                {notifications.length === 0 ? (
+                {notificationsFailed ? (
+                  <li>
+                    <ErrorState
+                      message="Notifications couldn't be loaded."
+                      onRetry={loadNotifications}
+                    />
+                  </li>
+                ) : notifications.length === 0 ? (
                   <li className="px-3.5 py-6 text-center text-[13px] text-muted">
                     You&apos;re all caught up.
                   </li>

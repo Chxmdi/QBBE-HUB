@@ -16,7 +16,7 @@ import { getOpportunitiesForCrmOrganization } from "@/features/crm/services/oppo
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, relativeTime } from "@/lib/utils";
 import type { CrmContact, CrmFollowUp, CrmInteraction } from "@/types/entities";
 
@@ -40,7 +40,7 @@ export default async function CrmDetailPage({
   const today =
     calendarDateInZone(nowInstant, session.timeZone) ??
     nowInstant.toISOString().slice(0, 10);
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const { data: org } = await supabase
     .from("crm_organization")

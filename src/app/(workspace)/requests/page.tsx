@@ -24,7 +24,7 @@ import type {
 } from "@/features/requests/services/request.queries";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn, formatDate } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Requests" };
@@ -60,7 +60,7 @@ export default async function RequestsPage({
   const { request: highlightId = null, create } = await searchParams;
   const now = new Date();
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const [board, options, { data: programRows }] = await Promise.all([
     getIntakeBoard(session.userId),
     getPickerOptions(),

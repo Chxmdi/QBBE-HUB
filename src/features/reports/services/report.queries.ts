@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 
 /**
  * Reading a report's history.
@@ -52,7 +52,7 @@ const SELECT =
 export async function getReportVersions(
   reportId: string,
 ): Promise<ReportVersionRow[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const { data } = await supabase
     .from("report_version")
     .select(SELECT)

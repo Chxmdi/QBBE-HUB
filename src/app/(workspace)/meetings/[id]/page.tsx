@@ -21,7 +21,7 @@ import {
 } from "@/features/meetings/services/meeting.commands";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import type { AgendaItem, Decision, MeetingAction } from "@/types/entities";
 
@@ -57,7 +57,7 @@ export default async function MeetingDetailPage({
 }) {
   const session = await requireSession();
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const { data: meetingRow } = await supabase
     .from("meeting")

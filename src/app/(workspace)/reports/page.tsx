@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { generateReport } from "@/features/reports/services/report.commands";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, relativeTime } from "@/lib/utils";
 import type { ReportInstance } from "@/types/entities";
 
@@ -22,7 +22,7 @@ export default async function ReportsPage() {
   // hiding a link is not a boundary. Anyone who typed the address reached the
   // page and was offered Generate report on it.
   if (!session.isStaff) redirect("/");
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const [{ data: reports }, { data: programs }, { data: projects }] =
     await Promise.all([
