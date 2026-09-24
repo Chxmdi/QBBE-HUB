@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { notFound } from "next/navigation";
 import { CheckCircle2, ExternalLink, Gavel, ListChecks } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
@@ -146,11 +147,15 @@ export default async function MeetingDetailPage({
 
   return (
     <div>
-      <div className="mb-2">
-        <Link href="/meetings" className="meta hover:text-brand-fg hover:underline">
-          ← Meetings
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Meetings", href: "/meetings" },
+          ...(meeting.project
+            ? [{ label: meeting.project.name, href: `/projects/${meeting.project.id}` }]
+            : []),
+          { label: meeting.title },
+        ]}
+      />
       <PageHeader
         eyebrow={formatDateTime(meeting.starts_at)}
         title={meeting.title}

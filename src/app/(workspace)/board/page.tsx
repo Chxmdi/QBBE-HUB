@@ -10,6 +10,8 @@ import { TaskDrawer } from "@/features/tasks/components/task-drawer";
 import { FilterConflictNotice } from "@/features/tasks/components/filter-conflict-notice";
 import { TaskFilterBar } from "@/features/tasks/components/task-filter-bar";
 import { SaveViewButton } from "@/features/tasks/components/save-view-button";
+import { SavedViews } from "@/features/tasks/components/saved-views";
+import { listSavedViews } from "@/features/tasks/services/saved-view.queries";
 import {
   describeFilterConflicts,
   hasActiveFilters,
@@ -36,9 +38,10 @@ export default async function BoardPage({
   const filters = parseTaskFilters(params);
   const today = calendarDateInZone(new Date(), session.timeZone) ?? "";
 
-  const [result, options] = await Promise.all([
+  const [result, options, savedViews] = await Promise.all([
     getScopedTasks(filters, today),
     getPickerOptions(),
+    listSavedViews("/board"),
   ]);
 
   const projectName = filters.project
@@ -79,6 +82,10 @@ export default async function BoardPage({
           </div>
         }
       />
+
+      <Suspense fallback={null}>
+        <SavedViews views={savedViews} />
+      </Suspense>
 
       <Suspense fallback={<div className="mb-5 h-9" />}>
         <TaskFilterBar filters={filters} options={options} basePath="/board" />
