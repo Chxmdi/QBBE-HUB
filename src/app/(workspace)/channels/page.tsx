@@ -8,7 +8,7 @@ import { AnnouncementComposeDialog } from "@/features/announcements/components/a
 import { ChannelCreateDialog } from "@/features/channels/components/channel-create-dialog";
 import { JoinChannelButton } from "@/features/channels/components/join-channel-button";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import type { Channel } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Channels" };
@@ -21,7 +21,7 @@ export default async function ChannelsPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const [{ data: channels }, { data: myMemberships }] = await Promise.all([
     supabase

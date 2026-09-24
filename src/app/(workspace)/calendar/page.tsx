@@ -23,7 +23,7 @@ import {
 } from "@/features/calendar/components/week-view";
 import { cn } from "@/lib/utils";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 
 export const metadata: Metadata = { title: "Calendar" };
 export const dynamic = "force-dynamic";
@@ -56,7 +56,7 @@ export default async function CalendarPage({
       ? endOfWeek(anchor, { weekStartsOn: 0 })
       : endOfWeek(endOfMonth(anchor), { weekStartsOn: 0 });
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const rangeStartIso = rangeStartDate.toISOString();
   const rangeEndIso = rangeEndDate.toISOString();
   const dateStart = format(rangeStartDate, "yyyy-MM-dd");
@@ -300,7 +300,7 @@ export default async function CalendarPage({
         {view === "week" ? (
           <WeekView anchor={anchor} items={items} />
         ) : (
-          <div className="card overflow-x-auto">
+          <div className="card relative overflow-x-auto">
             <table className="w-full min-w-[720px] table-fixed border-collapse">
               <thead>
                 <tr>

@@ -212,7 +212,7 @@ export function TaskExtras({
               else onChanged();
             }}
           >
-            <Select name="blockingTaskId" required defaultValue="">
+            <Select name="blockingTaskId" aria-label="Blocked by task" required defaultValue="">
               <option value="" disabled>
                 This task is blocked by…
               </option>

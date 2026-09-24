@@ -18,6 +18,8 @@ import { Avatar } from "@/components/ui/avatar";
 import { cn, relativeTime } from "@/lib/utils";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types/entities";
+import { createActions } from "@/config/create-actions";
+import { ErrorState } from "@/components/ui/error-state";
 
 const ACTIONABLE_CATEGORIES = new Set([
   "assignment",
@@ -93,13 +95,20 @@ export function Topbar({
       return;
     }
     setOpenMenu("notifications");
+    await loadNotifications();
+  }
+
+  // A failed read used to render "You're all caught up".
+  const [notificationsFailed, setNotificationsFailed] = useState(false);
+  async function loadNotifications() {
     const supabase = createSupabaseBrowserClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("notification")
       .select("id, category, title, body, link, urgency, read_at, created_at")
       .order("created_at", { ascending: false })
       .limit(12);
-    setNotifications((data as Notification[] | null) ?? []);
+    setNotificationsFailed(Boolean(error));
+    setNotifications(error ? [] : ((data as Notification[] | null) ?? []));
   }
 
   async function markAllRead() {
@@ -114,22 +123,7 @@ export function Topbar({
     );
   }
 
-  const createLinks = [
-    { label: "Task", href: "/my-work?create=task" },
-    ...(isStaff
-      ? [
-          { label: "Project", href: "/projects?create=1" },
-          { label: "Program", href: "/programs?create=1" },
-          { label: "Meeting", href: "/meetings?create=1" },
-          { label: "Event", href: "/events?create=1" },
-          { label: "Channel", href: "/channels?create=1" },
-          { label: "CRM organization", href: "/crm?create=organization" },
-          { label: "CRM contact", href: "/crm?create=contact" },
-          { label: "CRM follow-up", href: "/crm?create=follow-up" },
-        ]
-      : []),
-    ...(isAdmin ? [{ label: "Announcement", href: "/channels?create=announcement" }] : []),
-  ];
+  const createLinks = createActions({ isAdmin, isStaff });
 
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-2 border-b border-line bg-surface/92 px-3 shadow-[0_1px_0_rgb(42_60_144_/_0.03)] backdrop-blur md:px-5">
@@ -165,12 +159,16 @@ export function Topbar({
             onClick={() => setOpenMenu(openMenu === "create" ? null : "create")}
             aria-label="Quick create"
             aria-expanded={openMenu === "create"}
+            aria-controls="topbar-create-panel"
             className="qbbe-primary-action flex size-9 items-center justify-center rounded-(--radius-sm) transition-transform active:scale-[0.97]"
           >
             <Plus className="size-4.5" aria-hidden />
           </button>
           {openMenu === "create" ? (
-            <div className="absolute right-0 mt-2 w-44 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)">
+            <div
+              id="topbar-create-panel"
+              className="absolute right-0 mt-2 w-44 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)"
+            >
               {createLinks.map((l) => (
                 <Link
                   key={l.href}
@@ -191,6 +189,7 @@ export function Topbar({
             onClick={openNotifications}
             aria-label={`Notifications${badge > 0 ? ` (${badge} unread)` : ""}`}
             aria-expanded={openMenu === "notifications"}
+            aria-controls="topbar-notifications-panel"
             className="relative flex size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-brand-soft/60 hover:text-brand-fg"
           >
             <Bell className="size-4.5" aria-hidden />
@@ -201,7 +200,12 @@ export function Topbar({
             ) : null}
           </button>
           {openMenu === "notifications" ? (
-            <div className="absolute right-0 mt-2 w-80 rounded-(--radius-md) border border-line bg-surface shadow-(--shadow-pop)">
+            <div
+              id="topbar-notifications-panel"
+              role="region"
+              aria-label="Notifications"
+              className="absolute right-0 mt-2 w-80 rounded-(--radius-md) border border-line bg-surface shadow-(--shadow-pop)"
+            >
               <div className="flex items-center justify-between border-b border-line px-3.5 py-2.5">
                 <p className="section-heading text-[15px]">Notifications</p>
                 <button
@@ -213,7 +217,14 @@ export function Topbar({
                 </button>
               </div>
               <ul className="max-h-96 overflow-y-auto py-1">
-                {notifications.length === 0 ? (
+                {notificationsFailed ? (
+                  <li>
+                    <ErrorState
+                      message="Notifications couldn't be loaded."
+                      onRetry={loadNotifications}
+                    />
+                  </li>
+                ) : notifications.length === 0 ? (
                   <li className="px-3.5 py-6 text-center text-[13px] text-muted">
                     You&apos;re all caught up.
                   </li>
@@ -324,12 +335,16 @@ export function Topbar({
             onClick={() => setOpenMenu(openMenu === "profile" ? null : "profile")}
             aria-label="Account menu"
             aria-expanded={openMenu === "profile"}
+            aria-controls="topbar-account-panel"
             className="ml-1 flex items-center rounded-full ring-2 ring-transparent transition-shadow hover:ring-accent/35"
           >
             <Avatar name={name} src={avatarUrl} size="md" />
           </button>
           {openMenu === "profile" ? (
-            <div className="absolute right-0 mt-2 w-48 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)">
+            <div
+              id="topbar-account-panel"
+              className="absolute right-0 mt-2 w-48 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)"
+            >
               <p className="truncate border-b border-line px-3 py-2 text-[13px] font-bold text-brand-fg">
                 {name}
               </p>

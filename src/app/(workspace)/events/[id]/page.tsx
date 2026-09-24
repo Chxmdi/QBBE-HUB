@@ -1,6 +1,7 @@
 import { instantToWallTime } from "@/lib/time";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
@@ -11,7 +12,7 @@ import { addEventChecklistItem } from "@/features/events/services/event-checklis
 import { EventChecklist } from "@/features/events/components/event-checklist";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDateTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Event" };
@@ -29,7 +30,7 @@ export default async function EventDetailPage({
 }) {
   const session = await requireSession();
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const { data: eventRow } = await supabase
     .from("event")
@@ -81,11 +82,9 @@ export default async function EventDetailPage({
 
   return (
     <div>
-      <div className="mb-2">
-        <Link href="/events" className="meta hover:text-brand-fg hover:underline">
-          ← Events
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[{ label: "Events", href: "/events" }, { label: event.name }]}
+      />
       <PageHeader
         eyebrow={formatDateTime(event.starts_at)}
         title={event.name}

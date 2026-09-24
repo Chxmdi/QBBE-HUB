@@ -200,3 +200,26 @@ test("a task link re-checks access for whoever opens it", async ({ page }) => {
   });
   await expect(page.getByText(title, { exact: true })).toHaveCount(0);
 });
+
+test("a saved view can be found again, applied, and removed (P1-UX-08)", async ({ page }) => {
+  await signIn(page, "owner");
+  const name = `Critical only ${Date.now()}`;
+
+  await page.goto("/my-work?priority=critical");
+  await page.getByRole("button", { name: "Save view" }).click();
+  await page.getByPlaceholder("View name").fill(name);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+
+  // Before this, a saved view was written and never read back.
+  const views = page.getByRole("navigation", { name: "Saved views" });
+  await expect(views.getByRole("link", { name })).toBeVisible();
+
+  await page.goto("/my-work");
+  await views.getByRole("link", { name }).click();
+  await expect(page).toHaveURL(/priority=critical/);
+  await expect(page.getByLabel("Filter by priority")).toHaveValue("critical");
+  await expect(views.getByRole("link", { name })).toHaveAttribute("aria-current", "page");
+
+  await views.getByRole("button", { name: `Delete saved view ${name}` }).click();
+  await expect(views.getByRole("link", { name })).toHaveCount(0);
+});

@@ -24,7 +24,7 @@ import type {
 } from "@/features/requests/services/request.queries";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn, formatDate } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Requests" };
@@ -54,13 +54,13 @@ const HIGHLIGHT = "bg-accent/15 ring-1 ring-brand/40";
 export default async function RequestsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ request?: string }>;
+  searchParams: Promise<{ request?: string; create?: string }>;
 }) {
   const session = await requireSession();
-  const { request: highlightId = null } = await searchParams;
+  const { request: highlightId = null, create } = await searchParams;
   const now = new Date();
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const [board, options, { data: programRows }] = await Promise.all([
     getIntakeBoard(session.userId),
     getPickerOptions(),
@@ -82,6 +82,8 @@ export default async function RequestsPage({
           <EntityFormDialog
             triggerLabel="Propose something"
             title="Propose a project"
+            // Quick create and the command palette land here (P0-QC-01).
+            defaultOpen={create === "1"}
             submitLabel="Submit request"
             action={submitProjectRequest}
             fields={[
