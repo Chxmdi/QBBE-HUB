@@ -132,8 +132,9 @@ begin
     v_people := v_people + 1;
   end loop;
 
-  -- The comparison proves nothing if it had nothing to compare.
-  perform tests.ok(v_people >= 5 and v_tasks >= 20,
+  -- The comparison proves nothing if it had nothing to compare: the fixture
+  -- alone is 15 tasks, and CI's database carries little else at this point.
+  perform tests.ok(v_people >= 5 and v_tasks >= 15,
     format('compared %s people against %s tasks', v_people, v_tasks));
 
   -- And the fixture really does exercise both sides: the guest reads through
