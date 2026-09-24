@@ -16,7 +16,7 @@ import {
   mergeMessages,
   olderPage,
 } from "@/features/channels/history";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { authorizeRealtime, createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types/entities";
 
@@ -142,7 +142,12 @@ export function ChannelView({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderFailed, setOlderFailed] = useState(false);
   const [threadRootId, setThreadRootId] = useState<string | null>(null);
-  const [connection, setConnection] = useState<"live" | "reconnecting">("live");
+  // "connecting" until Realtime is listening to Postgres; shown the same as
+  // "live", but it is not live yet, and a message sent in that window is only
+  // picked up by the refetch on going live (#113).
+  const [connection, setConnection] = useState<"connecting" | "live" | "reconnecting">(
+    "connecting",
+  );
   const savedMessageIds = new Set(initialSavedMessageIds);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToLatestRef = useRef(true);
@@ -217,36 +222,54 @@ export function ChannelView({
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     const topic = `messages:${container.id}`;
-    const subscription = supabase
-      .channel(topic)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "message",
-          filter: `${container.column}=eq.${container.id}`,
-        },
-        () => {
-          void refresh();
-          if (channelId) void markChannelRead(channelId);
-          if (conversationId) void markConversationRead(conversationId);
-        },
-      )
-      .subscribe((status) => {
-        // Visible but not alarming reconnect state (§14.3). On recovery we
-        // refetch so nothing missed during the gap stays missing.
-        if (status === "SUBSCRIBED") {
-          setConnection((previous) => {
-            if (previous === "reconnecting") void refresh();
-            return "live";
-          });
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          setConnection("reconnecting");
-        }
-      });
+    let cancelled = false;
+    let subscription: ReturnType<typeof supabase.channel> | null = null;
+    void authorizeRealtime(supabase).then(() => {
+      if (cancelled) return;
+      subscription = supabase
+        .channel(topic)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "message",
+            filter: `${container.column}=eq.${container.id}`,
+          },
+          () => {
+            void refresh();
+            if (channelId) void markChannelRead(channelId);
+            if (conversationId) void markConversationRead(conversationId);
+          },
+        )
+        // "Subscribed" only means the socket joined the topic. Realtime starts
+        // listening to Postgres afterwards (2 s locally, longer under load)
+        // and says so with this system message; a change committed in between
+        // is never sent. So the page is live, and refetches what it may have
+        // missed, only from here (#113).
+        .on("system", {}, (payload: { extension?: string; status?: string }) => {
+          if (payload.extension !== "postgres_changes") return;
+          if (payload.status === "ok") {
+            setConnection((previous) => {
+              if (previous !== "live") void refresh();
+              return "live";
+            });
+          } else {
+            setConnection("reconnecting");
+          }
+        })
+        .subscribe((status) => {
+          // Visible but not alarming reconnect state (§14.3). A rejoin goes
+          // live again through the system message above, which refetches, so
+          // nothing sent while the socket was not listening stays missing.
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            setConnection("reconnecting");
+          }
+        });
+    });
     return () => {
-      void supabase.removeChannel(subscription);
+      cancelled = true;
+      if (subscription) void supabase.removeChannel(subscription);
     };
   }, [container.column, container.id, channelId, conversationId, refresh]);
 
@@ -317,7 +340,7 @@ export function ChannelView({
   }
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1" data-realtime={connection}>
       {/* Main column */}
       <div className={cn("flex min-w-0 flex-1 flex-col", threadRoot && "hidden md:flex")}>
         {connection === "reconnecting" ? (
