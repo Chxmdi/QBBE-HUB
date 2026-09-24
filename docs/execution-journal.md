@@ -588,6 +588,33 @@ against the stale build before rebuilding: it stopped the run in about five
 seconds and named the dead address. If it finds no address in the bundle it
 says so and continues, because a preflight that guesses is worse than none.
 
+### Two reds on `main`, and only one of them was this
+
+CI came back red on PR #98, and the first job to fail was not the one this
+work touches. Both of `main`'s own last two runs — `c0ae048` (#94) and
+`0e8116a` (#95) — were already red before this branch was merged into
+anything.
+
+**`Database security` on `main` is #93 itself.** `work-planning.spec.ts:44`,
+`Expected "Confirm catering", Received "Send the agenda"` — the exact failure
+this branch fixes, now failing on `main` rather than only on a branch.
+
+**`Verify` is a separate defect that arrived with #94 and expires on a date.**
+`tests/unit/gmail-push-sync.test.ts` seeds the access token's expiry an hour
+after its fixture clock of `2026-09-24T05:00Z`, and
+`reconcileGmailConnection` asks whether the token has expired against the
+**real** clock. That is the right question for it to ask, because a token
+expires in real time whenever the job happens to run — so the test passed on
+the CI run that merged it and has failed every run since that morning,
+taking the token refresh path and consuming the mocked fetch responses out
+of order. `expected +0 to be 1`.
+
+Separated from this work by running it on `origin/main` in a worktree with
+nothing of this branch in the tree, where it fails the same way. Fixed here
+rather than in a separate pull request only because nothing on this branch
+can be verified through CI until it is fixed, and that is stated rather than
+folded in quietly.
+
 ### Evidence
 
 Environment: `supabase db reset` over the full chain, `npm run db:seed`,
@@ -604,8 +631,9 @@ current LAN Supabase address per the #79 workaround.
 | the new test against the unfixed drawer | fails, `Received: null` |
 | `npm run lint` | 0 errors (1 pre-existing `no-img-element` warning) |
 | `npm run typecheck` | exit 0 |
-| `npm test` | 504 passed |
+| `npm test` | 515 passed on the merged head (504 before `main` moved) |
 | `npm run test:db` | 456 assertions across 19 files, unchanged |
+| full authenticated suite, merged head | **50 passed (6.5m)** |
 | `npm run build` | exit 0 |
 
 The after-fix runs are at a higher task volume than the before-fix runs, so
