@@ -109,10 +109,10 @@ begin
     foreach v_level in array case when v_user.member then array['aal1', 'aal2'] else array['aal1'] end loop
       perform tests.authenticate(v_user.user_id, v_level);
 
-      select e.title, app.has_task_capability(e.id, 'read') as capability
+      select e.title, public.has_task_capability(e.id, 'read') as capability
       into v_mismatch
       from equivalence_task e
-      where app.has_task_capability(e.id, 'read')
+      where public.has_task_capability(e.id, 'read')
          <> exists (select 1 from public.task t where t.id = e.id)
       limit 1;
 
