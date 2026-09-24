@@ -62,3 +62,49 @@ export function Label({
 export function FieldHint({ children }: { children: React.ReactNode }) {
   return <p className="mt-1 text-[12.5px] text-muted">{children}</p>;
 }
+
+/**
+ * A native checkbox, styled once (UI-004). Native because it is keyboard- and
+ * screen-reader-correct by default; a primitive so its look is set in one
+ * place. Pair it with a <label>, or wrap it in one.
+ */
+export function Checkbox({
+  className,
+  ...props
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "type">) {
+  return (
+    <input
+      type="checkbox"
+      className={cn(
+        "size-4 shrink-0 cursor-pointer accent-(--color-brand) disabled:cursor-not-allowed disabled:opacity-60",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/**
+ * An on/off setting that takes effect immediately (UI-004). Still a native
+ * checkbox underneath, so it is focusable and toggles with Space, announced
+ * as a switch. Use Checkbox inside forms that are submitted.
+ */
+export function Switch({
+  className,
+  ...props
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "type" | "role">) {
+  return (
+    <input
+      type="checkbox"
+      role="switch"
+      className={cn(
+        "relative h-5 w-9 shrink-0 cursor-pointer appearance-none rounded-full bg-muted/40 transition-colors duration-(--duration-fast)",
+        "before:absolute before:top-0.5 before:left-0.5 before:size-4 before:rounded-full before:bg-surface before:shadow-(--shadow-raise) before:transition-transform before:duration-(--duration-fast)",
+        "checked:bg-brand checked:before:translate-x-4",
+        "disabled:cursor-not-allowed disabled:opacity-60",
+        className,
+      )}
+      {...props}
+    />
+  );
+}

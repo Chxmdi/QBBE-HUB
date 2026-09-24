@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Label, Select } from "@/components/ui/input";
+import { Label, Select, Checkbox } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { setChannelMute } from "@/features/channels/services/channel.commands";
 import { saveNotificationPreferences } from "@/features/notifications/services/preferences.commands";
@@ -62,11 +62,11 @@ export function NotificationPreferencesForm({
           <p className="meta mt-1">Choose how QBBE Hub reaches you outside the workspace.</p>
         </div>
         <label className="flex cursor-pointer items-start gap-3 rounded-(--radius-sm) p-2 hover:bg-surface-soft">
-          <input name="emailCritical" type="checkbox" defaultChecked={initial.emailCritical} className="mt-0.5 size-4 accent-brand" />
+          <Checkbox name="emailCritical" defaultChecked={initial.emailCritical} className="mt-0.5 accent-brand" />
           <span><span className="block text-[13.5px] font-medium">Email critical activity</span><span className="meta">Assignments, mentions, deadlines, and urgent announcements.</span></span>
         </label>
         <label className="flex cursor-pointer items-start gap-3 rounded-(--radius-sm) p-2 hover:bg-surface-soft">
-          <input name="emailDigest" type="checkbox" defaultChecked={initial.emailDigest} className="mt-0.5 size-4 accent-brand" />
+          <Checkbox name="emailDigest" defaultChecked={initial.emailDigest} className="mt-0.5 accent-brand" />
           <span><span className="block text-[13.5px] font-medium">Daily digest</span><span className="meta">A summary of non-urgent updates when digest delivery is configured.</span></span>
         </label>
         <div className="grid gap-4 sm:grid-cols-2">

@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Megaphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input";
+import { FieldHint, Input, Label, Select, Textarea, Checkbox } from "@/components/ui/input";
 import { publishAnnouncement } from "@/features/announcements/services/announcement.commands";
 
 /** Admin-only announcement composer for the mandatory channel (P0-ANN-02). */
@@ -69,11 +69,9 @@ export function AnnouncementComposeDialog({ defaultOpen = false }: { defaultOpen
             </div>
             <div className="flex items-end pb-1">
               <label className="flex items-center gap-2 text-[13.5px]">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={requiresAck}
                   onChange={(e) => setRequiresAck(e.target.checked)}
-                  className="size-4 accent-(--color-brand)"
                 />
                 Require acknowledgment
               </label>

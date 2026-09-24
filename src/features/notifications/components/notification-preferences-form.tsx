@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FieldHint, Label, Select } from "@/components/ui/input";
+import { FieldHint, Label, Select, Checkbox } from "@/components/ui/input";
 import { saveNotificationPreferences } from "@/features/notifications/services/preferences.commands";
 
 /**
@@ -87,11 +87,9 @@ function Switch({
 }) {
   return (
     <label className="flex cursor-pointer items-start gap-3 py-3">
-      <input
-        type="checkbox"
+      <Checkbox
         name={name}
-        defaultChecked={defaultChecked}
-        className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
+        defaultChecked={defaultChecked} className="mt-0.5"
       />
       <span className="min-w-0">
         <span className="block text-[13.5px] font-medium">{label}</span>
@@ -183,12 +181,10 @@ export function NotificationPreferencesForm({
         </h2>
         <div className="card px-4 py-3">
           <label className="flex cursor-pointer items-start gap-3 pb-1">
-            <input
-              type="checkbox"
+            <Checkbox
               name="quiet_enabled"
               defaultChecked={quietEnabled}
-              onChange={(event) => setQuietEnabled(event.currentTarget.checked)}
-              className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
+              onChange={(event) => setQuietEnabled(event.currentTarget.checked)} className="mt-0.5"
             />
             <span className="min-w-0">
               <span className="block text-[13.5px] font-medium">
