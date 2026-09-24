@@ -110,8 +110,13 @@ export const test = base.extend({
     // flight when the test reloads is cancelled by the reload, and the page
     // then correctly shows the unsaved state. events.spec's checklist tick,
     // which is optimistic, lost its save that way on CI.
+    // Prefetches (`Next-Router-Prefetch: 1`) are left out. Next loads every
+    // visible link's page in the background, and those can stay open for
+    // seconds; waiting on them held each navigation up to the full 10 s and
+    // tripled the suite's run time. Losing one to a navigation costs nothing.
     const isAppNavigation = (request: import("@playwright/test").Request) => {
       const headers = request.headers();
+      if (headers["next-router-prefetch"] === "1") return false;
       return headers["rsc"] === "1" || "next-action" in headers || request.url().includes("_rsc=");
     };
     page.on("request", (request) => {
