@@ -175,7 +175,9 @@ export function CommandPalette({
           aria-activedescendant={
             items[activeIndex] ? `command-palette-option-${activeIndex}` : undefined
           }
-          className="h-12 flex-1 bg-transparent text-[14.5px] outline-none placeholder:text-muted/60"
+          // No outline-none: the global focus ring is this input's only
+          // visible focus indicator (WCAG 2.4.7).
+          className="h-12 flex-1 bg-transparent text-[14.5px] placeholder:text-muted/60"
         />
         {loading && query.length >= 2 ? (
           <span className="meta" aria-live="polite">
@@ -183,25 +185,24 @@ export function CommandPalette({
           </span>
         ) : null}
       </div>
+      {/* Outside the listbox: a listbox may own only options, and an option
+          may not contain another interactive control. */}
+      {query.length >= 2 ? (
+        <button
+          type="button"
+          onClick={() => go(`/search?q=${encodeURIComponent(query)}`)}
+          className="flex w-full items-center gap-3 border-b border-line px-4 py-2 text-left text-[13px] font-medium text-brand-fg hover:bg-surface-soft"
+        >
+          <Search className="size-4" aria-hidden />
+          See all results for “{query}”
+        </button>
+      ) : null}
       <ul
         id="command-palette-results"
         role="listbox"
+        aria-label="Results"
         className="max-h-[50vh] overflow-y-auto py-1.5"
       >
-        {/* A listbox may only own options, so the escape hatch and the empty
-            message are presentational and named by their own button/text. */}
-        {query.length >= 2 ? (
-          <li role="presentation">
-            <button
-              type="button"
-              onClick={() => go(`/search?q=${encodeURIComponent(query)}`)}
-              className="flex w-full items-center gap-3 border-b border-line px-4 py-2 text-left text-[13px] font-medium text-brand-fg hover:bg-surface-soft"
-            >
-              <Search className="size-4" aria-hidden />
-              See all results for “{query}”
-            </button>
-          </li>
-        ) : null}
         {items.length === 0 ? (
           <li
             role="presentation"
@@ -213,27 +214,27 @@ export function CommandPalette({
           </li>
         ) : (
           items.map((item, i) => (
+            // The option itself is the target. It used to wrap a focusable
+            // button — nested interactive content, and a second Tab stop per
+            // result. Keyboard selection stays on the input's
+            // aria-activedescendant; a pointer clicks the option.
             <li
               key={`${item.href}-${i}`}
               id={`command-palette-option-${i}`}
               role="option"
               aria-selected={i === activeIndex}
+              onClick={() => go(item.href)}
+              onMouseEnter={() => setActiveIndex(i)}
+              className={cn(
+                "flex w-full cursor-pointer items-center gap-3 px-4 py-2 text-left text-[13.5px]",
+                i === activeIndex && "bg-surface-soft",
+              )}
             >
-              <button
-                type="button"
-                onClick={() => go(item.href)}
-                onMouseEnter={() => setActiveIndex(i)}
-                className={cn(
-                  "flex w-full items-center gap-3 px-4 py-2 text-left text-[13.5px]",
-                  i === activeIndex && "bg-surface-soft",
-                )}
-              >
-                <span className="text-muted">{item.icon}</span>
-                <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {/* Labels arrive already cased; `capitalize` would turn
-                    "Go to" into "Go To". */}
-                {item.sub ? <span className="meta">{item.sub}</span> : null}
-              </button>
+              <span className="text-muted">{item.icon}</span>
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {/* Labels arrive already cased; `capitalize` would turn
+                  "Go to" into "Go To". */}
+              {item.sub ? <span className="meta">{item.sub}</span> : null}
             </li>
           ))
         )}

@@ -100,7 +100,9 @@ export function TabPanel({
       id={`tabpanel-${id}`}
       aria-labelledby={`tab-${id}`}
       tabIndex={0}
-      className="pt-5 focus-visible:outline-none"
+      // Focusable, so it keeps the global focus ring (WCAG 2.4.7); this
+      // class used to remove it with no replacement.
+      className="pt-5"
     >
       {children}
     </div>
