@@ -79,10 +79,21 @@ export async function GET(request: Request) {
   const expires = tokens.expires_in
     ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
     : null;
+  // Google commonly omits refresh_token on reconnect. Preserve the prior
+  // server-side refresh token instead of accidentally converting a durable
+  // authorization into one that dies when the new access token expires.
+  const { data: priorSecret, error: priorSecretError } = await supabase
+    .from("integration_secret")
+    .select("refresh_token")
+    .eq("connection_id", connection.id)
+    .maybeSingle();
+  if (priorSecretError) {
+    return fail("Connected, but the previous authorization could not be reconciled.");
+  }
   const secretPayload = {
     connection_id: connection.id,
     access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token ?? null,
+    refresh_token: tokens.refresh_token ?? priorSecret?.refresh_token ?? null,
     token_expires_at: expires,
   };
   const { error: secretError } = await supabase
