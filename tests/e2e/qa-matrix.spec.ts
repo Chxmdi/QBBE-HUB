@@ -6,8 +6,8 @@ import { signIn } from "./auth";
  * Visual QA + accessibility matrix (Part II §16.1):
  * themes, widths, content stress, keyboard, and data states.
  *
- * Runs against a seeded QA database (`npm run db:seed`). Not part of the CI
- * unit suite; see docs/runbooks/qa.md.
+ * Runs against a seeded QA database (`npm run db:seed`), in CI's Database
+ * security job after the authenticated checks (#101); see docs/runbooks/qa.md.
  */
 
 const ROUTES = [
@@ -101,20 +101,25 @@ test.describe("QA matrix", () => {
   test("no critical or serious accessibility violations", async ({ page }) => {
     const violations: string[] = [];
 
-    for (const route of ROUTES) {
-      await page.setViewportSize({ width: 1280, height: 800 });
-      await page.goto(route.path);
-      await page.waitForLoadState("networkidle");
+    // Both themes: dark mode is a token swap, and contrast is exactly what a
+    // token swap can break without any single component changing.
+    for (const theme of ["light", "dark"] as const) {
+      for (const route of ROUTES) {
+        await page.setViewportSize({ width: 1280, height: 800 });
+        await page.goto(route.path);
+        await setTheme(page, theme);
+        await page.waitForLoadState("networkidle");
 
-      const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
-        .analyze();
+        const results = await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
+          .analyze();
 
-      for (const v of results.violations) {
-        if (v.impact === "critical" || v.impact === "serious") {
-          violations.push(
-            `${route.name}: [${v.impact}] ${v.id} — ${v.help} (${v.nodes.length} nodes)\n    ${v.nodes[0]?.html?.slice(0, 160)}`,
-          );
+        for (const v of results.violations) {
+          if (v.impact === "critical" || v.impact === "serious") {
+            violations.push(
+              `${route.name} ${theme}: [${v.impact}] ${v.id} — ${v.help} (${v.nodes.length} nodes)\n    ${v.nodes[0]?.html?.slice(0, 160)}`,
+            );
+          }
         }
       }
     }

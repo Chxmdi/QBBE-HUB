@@ -186,6 +186,13 @@ jobs:
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
           npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core work-planning documents events --project=chromium
 
+      - name: Signed-in accessibility, responsive and keyboard matrix
+        # WCAG 2.2 AA axe scans in both themes, a 6-width x 2-theme overflow
+        # sweep, 200% zoom and keyboard paths across every workspace route
+        # (#101). It ran nowhere before this step existed. The server started
+        # in the previous step is still listening.
+        run: npx playwright test qa-matrix --project=chromium
+
       - name: Preserve authenticated failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
