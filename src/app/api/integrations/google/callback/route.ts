@@ -160,36 +160,16 @@ export async function GET(request: Request) {
         .eq("connection_id", connection.id);
       if (cursorError) throw new Error(`Could not save Google Calendar sync token: ${cursorError.message}`);
     } else {
-      const { fetchGoogleDriveSync } = await import("@/features/inbox/services/gmail-sync");
-      const sync = await fetchGoogleDriveSync(tokens.access_token);
-      const { error: resetError } = await supabase.from("document")
-        .delete()
-        .eq("integration_connection_id", connection.id);
-      if (resetError) throw new Error(`Could not reset Google Drive metadata: ${resetError.message}`);
-      if (sync.rows.length) {
-        const { error: driveError } = await supabase.from("document").upsert(
-          sync.rows.map((row) => ({
-            organization_id: session.organizationId,
-            title: row.title,
-            description: row.description,
-            kind: "link",
-            url: row.url,
-            mime_type: row.mime_type,
-            visibility: "organization",
-            owner_id: session.userId,
-            created_by: session.userId,
-            integration_connection_id: connection.id,
-            external_id: row.external_id,
-            external_updated_at: row.updated_at,
-          })),
-          { onConflict: "integration_connection_id,external_id" },
-        );
-        if (driveError) throw new Error(`Could not save Google Drive metadata: ${driveError.message}`);
-      }
-      const { error: cursorError } = await supabase.from("integration_secret")
-        .update({ google_drive_page_token: sync.pageToken })
-        .eq("connection_id", connection.id);
-      if (cursorError) throw new Error(`Could not save Google Drive page token: ${cursorError.message}`);
+      const { reconcileGoogleDrive } = await import("@/features/documents/services/google-drive-reconcile");
+      await reconcileGoogleDrive(
+        supabase,
+        {
+          id: connection.id,
+          organization_id: session.organizationId,
+          user_id: session.userId,
+        },
+        tokens.access_token,
+      );
     }
     await supabase
       .from("integration_connection")
