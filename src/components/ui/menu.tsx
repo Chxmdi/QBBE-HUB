@@ -97,7 +97,7 @@ export function Menu({
           aria-label={label}
           onKeyDown={handleKeyDown}
           className={cn(
-            "absolute z-50 mt-1 min-w-48 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)",
+            "absolute z-(--z-overlay) mt-1 min-w-48 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)",
             align === "right" ? "right-0" : "left-0",
           )}
         >

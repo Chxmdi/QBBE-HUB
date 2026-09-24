@@ -12,11 +12,11 @@ const sizes = {
 function colorFor(name: string): string {
   const palette = [
     "bg-brand text-white",
-    "bg-[#6d4a12] text-white",
-    "bg-[#17572f] text-white",
-    "bg-[#2c4a8f] text-white",
-    "bg-[#5b3a6e] text-white",
-    "bg-[#8a4211] text-white",
+    "bg-avatar-1 text-white",
+    "bg-avatar-2 text-white",
+    "bg-avatar-3 text-white",
+    "bg-avatar-4 text-white",
+    "bg-avatar-5 text-white",
   ];
   let hash = 0;
   for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) % 997;

@@ -110,7 +110,7 @@ export default async function SchedulePage() {
               {todayOffset >= 0 && todayOffset <= 100 ? (
                 <div
                   aria-hidden
-                  className="absolute inset-y-0 z-10 w-0.5 bg-brand/70"
+                  className="absolute inset-y-0 z-(--z-raised) w-0.5 bg-brand/70"
                   style={{ left: `calc(16rem + (100% - 16rem) * ${todayOffset / 100})` }}
                   title="Today"
                 />

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createProgramFromTemplate } from "@/features/programs/services/program-template.commands";
+import { Select } from "@/components/ui/input";
 
 export function CreateProgramFromTemplateButton({
   templates,
@@ -36,9 +37,9 @@ export function CreateProgramFromTemplateButton({
       <label className="sr-only" htmlFor="program-template">
         Create program from template
       </label>
-      <select
+      <Select
         id="program-template"
-        className="h-9 rounded-(--radius-sm) border border-line bg-surface px-2 text-[13px]"
+        className="h-9 w-auto px-2 text-[13px]"
         defaultValue=""
         disabled={busy}
         onChange={(e) => void handleChange(e.target.value)}
@@ -49,7 +50,7 @@ export function CreateProgramFromTemplateButton({
             {t.name}
           </option>
         ))}
-      </select>
+      </Select>
       {error ? (
         <p role="alert" className="text-[12px] text-danger-fg">
           {error}

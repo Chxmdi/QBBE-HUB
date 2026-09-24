@@ -13,11 +13,23 @@
 
 import { absoluteUrl } from "@/lib/env";
 
-const BRAND = "#8f1538";
-const INK = "#1c1917";
-const MUTED = "#57534e";
-const LINE = "#e7e2df";
-const CANVAS = "#faf8f7";
+// Email clients ignore CSS custom properties, so these are literals. They
+// are the light-theme design tokens from globals.css and a test holds them
+// there: these were the pre-rebrand wine and warm greys, so every
+// notification email went out in the old brand after #48.
+export const EMAIL_COLORS = {
+  brand: "#2a3c90", // --color-brand
+  ink: "#192240", // --color-ink
+  muted: "#5b6e7f", // --color-muted
+  line: "#dfe4ef", // --color-line
+  canvas: "#f7f8fc", // --color-canvas
+  surface: "#ffffff", // --color-surface
+} as const;
+const BRAND = EMAIL_COLORS.brand;
+const INK = EMAIL_COLORS.ink;
+const MUTED = EMAIL_COLORS.muted;
+const LINE = EMAIL_COLORS.line;
+const CANVAS = EMAIL_COLORS.canvas;
 
 export interface EmailBody {
   subject: string;
@@ -94,7 +106,7 @@ function shell(heading: string, inner: string, footerNote: string): string {
 <body style="margin:0;padding:0;background:${CANVAS};">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CANVAS};padding:24px 12px;">
 <tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid ${LINE};border-radius:10px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:${EMAIL_COLORS.surface};border:1px solid ${LINE};border-radius:10px;">
 <tr><td style="padding:20px 24px;border-bottom:1px solid ${LINE};">
 <span style="font:600 14px/1.2 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${BRAND};letter-spacing:.04em;text-transform:uppercase;">QBBE Hub</span>
 </td></tr>
@@ -111,7 +123,7 @@ ${escapeHtml(footerNote)} <a href="${safeLink("/settings/notifications")}" style
 
 function button(href: string, label: string): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0 4px;"><tr><td style="background:${BRAND};border-radius:7px;">
-<a href="${href}" style="display:inline-block;padding:10px 18px;font:600 14px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#ffffff;text-decoration:none;">${escapeHtml(label)}</a>
+<a href="${href}" style="display:inline-block;padding:10px 18px;font:600 14px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${EMAIL_COLORS.surface};text-decoration:none;">${escapeHtml(label)}</a>
 </td></tr></table>`;
 }
 

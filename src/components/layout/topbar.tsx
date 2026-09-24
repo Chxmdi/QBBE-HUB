@@ -126,7 +126,7 @@ export function Topbar({
   const createLinks = createActions({ isAdmin, isStaff });
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center gap-2 border-b border-line bg-surface/92 px-3 shadow-[0_1px_0_rgb(42_60_144_/_0.03)] backdrop-blur md:px-5">
+    <header className="sticky top-0 z-(--z-chrome) flex h-16 items-center gap-2 border-b border-line bg-surface/92 px-3 shadow-[0_1px_0_rgb(42_60_144_/_0.03)] backdrop-blur md:px-5">
       <button
         type="button"
         onClick={onOpenNav}
@@ -194,7 +194,7 @@ export function Topbar({
           >
             <Bell className="size-4.5" aria-hidden />
             {badge > 0 ? (
-              <span className="absolute top-1 right-1 flex min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9.5px] font-bold text-[#253460] shadow-[0_1px_3px_rgb(25_34_64_/_0.18)]">
+              <span className="absolute top-1 right-1 flex min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[9.5px] font-bold text-on-accent shadow-[0_1px_3px_rgb(25_34_64_/_0.18)]">
                 {badge > 9 ? "9+" : badge}
               </span>
             ) : null}

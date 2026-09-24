@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import { startConversation } from "@/features/channels/services/message.commands";
+import { Checkbox } from "@/components/ui/input";
 
 export function StartConversationDialog({ people }: { people: Option[] }) {
   const router = useRouter();
@@ -66,11 +67,9 @@ export function StartConversationDialog({ people }: { people: Option[] }) {
               {people.map((person) => (
                 <li key={person.id}>
                   <label className="flex cursor-pointer items-center gap-2.5 rounded-(--radius-sm) px-2 py-1.5 text-[13.5px] hover:bg-surface-soft">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={selected.has(person.id)}
                       onChange={() => toggle(person.id)}
-                      className="size-4 accent-(--color-brand)"
                     />
                     {person.label}
                   </label>

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Checkbox } from "@/components/ui/input";
 import { setReduceMotion } from "@/features/onboarding/services/onboarding.commands";
 
 /** Settings control for the in-app reduced-motion preference (UI-009). */
@@ -17,10 +18,9 @@ export function ReduceMotionSetting({ initial }: { initial: boolean }) {
         Display
       </h2>
       <div className="mt-3 flex items-start gap-3">
-        <input
+        <Checkbox
           id="reduce-motion"
-          type="checkbox"
-          className="mt-1 size-4 accent-(--color-brand)"
+          className="mt-1"
           checked={checked}
           disabled={pending}
           aria-describedby="reduce-motion-help"

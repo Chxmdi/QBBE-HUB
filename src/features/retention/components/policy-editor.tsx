@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { Input, Label, Select, Textarea, Checkbox } from "@/components/ui/input";
 import {
   ACTION_LABELS,
   describeDuration,
@@ -139,11 +139,9 @@ export function PolicyEditor({
       </div>
 
       <label className="flex items-center gap-2 text-[13.5px] sm:col-span-2">
-        <input
-          type="checkbox"
+        <Checkbox
           name="enabled"
           defaultChecked={policy?.enabled ?? false}
-          className="size-4"
         />
         Apply this every night
       </label>

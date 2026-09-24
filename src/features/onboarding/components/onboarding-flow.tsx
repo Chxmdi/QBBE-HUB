@@ -11,7 +11,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { FieldHint, Input, Label, Select } from "@/components/ui/input";
+import { FieldHint, Input, Label, Select, Checkbox } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { QbbeLogo } from "@/components/layout/qbbe-logo";
 import { saveNotificationPreferences } from "@/features/notifications/services/preferences.commands";
@@ -106,7 +106,7 @@ export function OnboardingFlow({
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">
       <div className="mb-8 flex justify-center">
-        <span className="rounded-(--radius-md) bg-[#221219] px-4 py-3">
+        <span className="rounded-(--radius-md) bg-logo-ground px-4 py-3">
           <QbbeLogo />
         </span>
       </div>
@@ -209,11 +209,9 @@ export function OnboardingFlow({
               required announcements are always delivered.
             </p>
             <label className="flex items-start gap-2.5 rounded-(--radius-sm) border border-line p-3 text-[13.5px]">
-              <input
-                type="checkbox"
+              <Checkbox
                 name="emailCritical"
-                defaultChecked
-                className="mt-0.5 size-4 accent-(--color-brand)"
+                defaultChecked className="mt-0.5"
               />
               <span>
                 <span className="block font-medium">Email me urgent items</span>
@@ -223,10 +221,8 @@ export function OnboardingFlow({
               </span>
             </label>
             <label className="flex items-start gap-2.5 rounded-(--radius-sm) border border-line p-3 text-[13.5px]">
-              <input
-                type="checkbox"
-                name="emailDigest"
-                className="mt-0.5 size-4 accent-(--color-brand)"
+              <Checkbox
+                name="emailDigest" className="mt-0.5"
               />
               <span>
                 <span className="block font-medium">Send a daily digest</span>
