@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
 /*
+ * The theme is the `dark` class on <html> (set from the topbar toggle, or the
+ * OS preference when none is saved). Without this, Tailwind v4's `dark:`
+ * follows the OS alone, so dark: styles disagreed with the chosen theme.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
  * QBBE Hub design tokens — the single source for brand color, surfaces,
  * typography, spacing, radius, shadow, and motion. (UI-001, UI-003)
  *

@@ -100,7 +100,7 @@ export function WeekView({
   });
 
   return (
-    <div className="card overflow-x-auto">
+    <div className="card relative overflow-x-auto">
       <div className="grid min-w-[860px] grid-cols-7">
         {days.map((day) => {
           const dayItems = items

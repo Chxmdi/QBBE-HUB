@@ -74,7 +74,10 @@ async function overflowCulprits(page: Page): Promise<string> {
     const found: string[] = [];
     for (const el of Array.from(document.body.querySelectorAll("*"))) {
       const rect = el.getBoundingClientRect();
-      if (rect.width === 0 || rect.right <= width + 2 || scrolls(el)) continue;
+      // An absolutely positioned element escapes a scroller that is not its
+      // containing block, so its scrolling ancestors do not excuse it.
+      const escapes = getComputedStyle(el).position === "absolute";
+      if (rect.width === 0 || rect.right <= width + 2 || (!escapes && scrolls(el))) continue;
       const parentRect = el.parentElement?.getBoundingClientRect();
       if (parentRect && parentRect.right > width + 2 && !scrolls(el.parentElement)) continue;
       const cls = (el.getAttribute("class") ?? "").split(/\s+/).slice(0, 6).join(".");
