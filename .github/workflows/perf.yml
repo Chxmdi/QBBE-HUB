@@ -1,0 +1,153 @@
+name: Performance
+
+# The 50-user load test (#115, QA-FINAL "50-user performance"): 50 people,
+# each signed in as themselves, working through the busiest screens against
+# a workspace holding 10 projects, 2,000 tasks and a 1,000-message channel.
+# The run fails when any screen's 95th percentile exceeds 2 s.
+#
+# This measures the local stack on a CI runner, which makes it a regression
+# signal rather than the acceptance figure: the acceptance run is the same
+# script against staging once it exists (#55).
+
+on:
+  schedule:
+    - cron: "30 6 * * *"
+  # Called by release-candidate.yml, so the candidate's evidence includes it.
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: How long the 50 users keep working (k6 duration, e.g. 2m)
+        type: string
+        required: false
+        default: 2m
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  load:
+    name: 50-user load test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install from lockfile
+        run: npm ci
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v3
+        with:
+          version: 2.114.0
+
+      - name: Avoid local DB port collisions on CI runners
+        run: |
+          if lsof -iTCP:54322 -sTCP:LISTEN -t >/dev/null; then
+            sed -i 's/^port = 54322$/port = 65432/' supabase/config.toml
+          fi
+
+      - name: Authenticate to ghcr.io before pulling service images
+        # Anonymous pulls from ghcr.io draw on a shared allowance, and on
+        # 2026-09-23 that allowance refused every image for three consecutive
+        # attempts across three minutes — a database job failing on a registry.
+        # An authenticated pull uses this repository's own allowance instead.
+        # This token is issued to the workflow run and needs no secret to be
+        # configured.
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Start migrated local database
+        # `supabase start` pulls a dozen images, and a registry refusing them
+        # fails this job before a single assertion runs. That happened four
+        # times on 2026-09-23, during a GitHub incident, with the database job
+        # reporting a registry problem as a database security failure.
+        #
+        # Three things are done about it.
+        #
+        # The services this job never uses are excluded, so their images are
+        # not pulled at all: Studio is a web UI nothing here opens,
+        # edge-runtime serves functions this project does not have, and
+        # logflare, vector and supavisor are analytics and pooling. What stays
+        # is what the checks below need — gotrue for sign-in, kong and
+        # postgrest for the API, realtime for the revocation spec, storage-api
+        # for uploads, mailpit for the recovery email, and postgres-meta for
+        # the advisor.
+        #
+        # `supabase/setup-cli` pins SUPABASE_INTERNAL_IMAGE_REGISTRY to
+        # ghcr.io, so every image comes from one registry and one registry's
+        # bad day stops everything. The later attempts fall back to Docker Hub,
+        # which publishes the same images.
+        #
+        # The retry then covers a transient refusal from either.
+        run: |
+          for attempt in 1 2 3; do
+            if [ "$attempt" = 1 ]; then
+              export SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io
+            else
+              export SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io
+            fi
+            echo "Attempt $attempt, pulling from $SUPABASE_INTERNAL_IMAGE_REGISTRY"
+            if supabase start -x studio,edge-runtime,logflare,vector,supavisor; then
+              exit 0
+            fi
+            echo "::warning::supabase start failed on attempt $attempt via $SUPABASE_INTERNAL_IMAGE_REGISTRY"
+            supabase stop --no-backup || true
+            sleep $((attempt * 20))
+          done
+          echo "::error::supabase start failed three times across both registries"
+          exit 1
+
+      - name: Configure synthetic local Auth for browser checks
+        run: |
+          supabase status -o json > "$RUNNER_TEMP/supabase-status.json"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const status = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/supabase-status.json`, 'utf8'));
+          if (!status.API_URL || !status.ANON_KEY) throw new Error('Local Supabase configuration missing');
+          fs.appendFileSync(process.env.GITHUB_ENV,
+            `NEXT_PUBLIC_SUPABASE_URL=${status.API_URL}\nNEXT_PUBLIC_SUPABASE_ANON_KEY=${status.ANON_KEY}\n`);
+          fs.unlinkSync(`${process.env.RUNNER_TEMP}/supabase-status.json`);
+          NODE
+
+      - name: Seed the workspace and the 50-user fixture
+        run: |
+          npm run db:seed
+          docker exec -i supabase_db_workspace psql -U postgres -v ON_ERROR_STOP=1 -q < supabase/tests/perf-fixture.sql
+
+      - name: Build and start the production app
+        run: |
+          npm run build
+          npx next start -p 3000 -H 127.0.0.1 &
+          npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
+
+      - name: Sign in the 50 people
+        run: node scripts/qa/perf-sessions.mjs perf-sessions.json
+
+      - uses: grafana/setup-k6-action@v1
+
+      - name: 50 people for ${{ inputs.duration || '2m' }}
+        run: |
+          k6 run \
+            -e BASE_URL=http://127.0.0.1:3000 \
+            -e SESSIONS=${{ github.workspace }}/perf-sessions.json \
+            -e DURATION=${{ inputs.duration || '2m' }} \
+            --summary-export=perf-summary.json \
+            scripts/qa/perf.k6.js
+
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-summary
+          path: perf-summary.json
+          retention-days: 30
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop
