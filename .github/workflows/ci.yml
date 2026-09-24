@@ -13,6 +13,13 @@ on:
         type: string
         required: false
         default: chromium
+      mobile:
+        # Also run qa-matrix and the public routes on phone emulation
+        # (Pixel 7, iPhone 14). Nightly only (#114).
+        description: Run the phone-emulation projects too
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -203,6 +210,10 @@ jobs:
         # (#101). It ran nowhere before this step existed. The server started
         # in the previous step is still listening.
         run: npx playwright test qa-matrix $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+
+      - name: Phone emulation (qa-matrix and public routes)
+        if: inputs.mobile
+        run: npx playwright test qa-matrix public-routes --project=mobile-chrome --project=mobile-safari
 
       - name: Preserve authenticated failure evidence
         if: failure()

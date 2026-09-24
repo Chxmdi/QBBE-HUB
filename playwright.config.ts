@@ -35,5 +35,18 @@ export default defineConfig({
     } },
     { name: "firefox", use: { ...devices["Desktop Firefox"] } },
     { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    // Phone emulation (#114): touch, a mobile user agent and device pixel
+    // ratio, not only a narrow window. Nightly runs qa-matrix and the public
+    // routes on these; real handsets stay with the operator sign-off.
+    {
+      name: "mobile-chrome",
+      use: {
+        ...devices["Pixel 7"],
+        launchOptions: process.env.QA_CHROME_PATH
+          ? { executablePath: process.env.QA_CHROME_PATH }
+          : undefined,
+      },
+    },
+    { name: "mobile-safari", use: { ...devices["iPhone 14"] } },
   ],
 });

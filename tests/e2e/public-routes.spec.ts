@@ -244,7 +244,7 @@ test("the job endpoint refuses anyone without the shared secret", async ({
   expect(get.status()).toBe(405);
 });
 
-test("protected routes redirect unauthenticated visitors", async ({ page, browserName }) => {
+test("protected routes redirect unauthenticated visitors", async ({ page }) => {
   for (const path of [
     "/",
     "/my-work",
@@ -254,15 +254,10 @@ test("protected routes redirect unauthenticated visitors", async ({ page, browse
     "/settings/notifications",
     "/crm",
   ]) {
-    try {
-      await page.goto(path);
-    } catch (error) {
-      const isWebkitInternalError = browserName === "webkit"
-        && error instanceof Error
-        && error.message.includes("WebKit encountered an internal error");
-      if (!isWebkitInternalError) throw error;
-      await page.goto(path);
-    }
+    // No retry (#89, #114). The "WebKit encountered an internal error" this
+    // used to swallow was the test navigating over the sign-in page's own
+    // in-flight link prefetches; the page fixture now lets those finish first.
+    await page.goto(path);
     // 15s, against a measured 0.87-1.4s for all seven paths together on CI.
     // These redirects are middleware decisions with no client JavaScript in
     // them, so the margin is for a loaded runner, not for slow hydration.
