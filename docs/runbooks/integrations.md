@@ -74,9 +74,13 @@ expires a token, the worker clears only generic overlays and rebuilds the
 mirror before persisting a replacement token.
 Existing connections must reauthenticate because the required scope is now the
 narrow `https://www.googleapis.com/auth/calendar.events` write scope. If a
-write or cancellation fails, Hub preserves the local record/link and marks the
-organizer's connection `degraded` with an actionable error in Admin →
-Integrations. Until credentials exist the calendar stays Hub-only.
+write or cancellation fails, Hub preserves the local record/link and records
+the organizer's connection status by cause, with the error, in Admin →
+Integrations: revoked or expired consent reads **Authentication expired**
+(reconnect Calendar), a Google outage reads **Synchronization delayed** and
+clears itself on the next successful `google-sync` run. A meeting or event
+saved while Calendar was disconnected is pushed on its next edit after
+reconnecting. Until credentials exist the calendar stays Hub-only.
 
 ## Google Drive metadata mirror
 
@@ -130,6 +134,38 @@ scoped to the record, recipient, and day where repeat reminders are intended,
 so retries and overlapping cron invocations cannot duplicate alerts. Execution
 results are recorded in Admin → background jobs.
 
+## Keeping test mail away from real people
+
+Every non-production environment must set `EMAIL_RECIPIENT_ALLOWLIST` to the
+authorized test addresses and/or `@domain` entries (for example
+`tester@qbbe.org,@qbbe.org`). With it set, the notification worker records any
+other recipient as `suppressed` with reason `recipient_not_allowlisted`, visible
+in Admin → Email, and `sendEmail` refuses them as a backstop. Admin → Email
+shows a notice while the allowlist is active. Leave it unset only in production.
+
+It covers notification mail and digests, which go through the Hub's email
+worker. Password-recovery mail is sent by Supabase Auth itself, so on staging
+point Supabase Auth's SMTP at a sandbox or restrict its recipients separately.
+
+## Bounces and spam complaints
+
+Resend reports hard bounces and complaints after a send has succeeded. To
+receive them:
+
+1. In Resend, open **Webhooks**, click **Add Endpoint**, enter
+   `https://<domain>/api/integrations/email/webhook`, and subscribe to
+   `email.bounced` and `email.complained`.
+2. Copy the endpoint's signing secret (it starts with `whsec_`) into the
+   hosting environment as `EMAIL_WEBHOOK_SECRET`, then redeploy.
+3. Use Resend's **Send test event**. The endpoint should answer 200. A 401
+   means the secret does not match; a 503 means it is not set.
+
+A hard bounce or complaint marks the delivery `bounced` in Admin → Email and
+adds the address to `email_suppression`; the worker then records any later
+mail to it as suppressed (`provider_bounced` / `provider_complained`). A
+transient (soft) bounce is recorded on the delivery but does not suppress the
+address. Lifting a suppression is a deliberate database change by an operator.
+
 ## Workstream 6 live gate
 
 `scripts/verify-integrations.sh` refuses to run until QBBE-owned
@@ -138,3 +174,6 @@ results are recorded in Admin → background jobs.
 values exist, prove INT-EMAIL, INT-GMAIL, INT-CALENDAR, INT-DRIVE and INT-VMS
 against authorized recipients and record the dated run in
 `docs/acceptance-matrix.md`.
+
+The step-by-step procedure, with the result to expect at each step and the
+evidence to record, is in `docs/runbooks/epic-06-live-verification.md`.

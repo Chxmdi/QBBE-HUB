@@ -9,7 +9,7 @@ export type IntegrationHealthStatus =
 /** Maps non-sensitive provider failures to operator-actionable health states. */
 export function classifyIntegrationFailure(message: string): Exclude<IntegrationHealthStatus, "connected" | "disconnected"> {
   const normalized = message.toLowerCase();
-  if (/(401|403|invalid_grant|unauthenticated|token (?:has )?expired|invalid token|access token)/.test(normalized)) {
+  if (/(401|403|invalid_grant|unauthenticated|token (?:has )?expired|invalid token|access token|authorization (?:expired|is unavailable)|reconnect)/.test(normalized)) {
     return "authentication_expired";
   }
   if (/(not configured|configuration|required credential|missing (?:token|credential|secret))/.test(normalized)) {

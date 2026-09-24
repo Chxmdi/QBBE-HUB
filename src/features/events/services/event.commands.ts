@@ -11,6 +11,7 @@ import {
   createGoogleEventRecord,
   deleteGoogleEventRecord,
   updateGoogleEventRecord,
+  calendarFailureStatus,
 } from "@/features/calendar/services/google-calendar-write";
 import { fireWorkflows } from "@/features/admin/services/workflow.runtime";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -54,7 +55,7 @@ async function markCalendarDegraded(
   await supabase
     .from("integration_connection")
     .update({
-      status: "degraded",
+      status: calendarFailureStatus(error, fallback),
       last_error: error instanceof Error ? error.message : fallback,
     })
     .eq("organization_id", organizationId)

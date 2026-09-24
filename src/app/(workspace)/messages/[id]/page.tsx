@@ -43,6 +43,7 @@ export default async function ConversationPage({
       .select(MESSAGE_SELECT)
       .eq("conversation_id", id)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(CHANNEL_HISTORY_PAGE_SIZE),
   ]);
 

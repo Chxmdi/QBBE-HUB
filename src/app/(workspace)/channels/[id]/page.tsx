@@ -69,6 +69,7 @@ export default async function ChannelPage({
       .select(MESSAGE_SELECT)
       .eq("channel_id", id)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(CHANNEL_HISTORY_PAGE_SIZE),
     supabase
       .from("pinned_resource")

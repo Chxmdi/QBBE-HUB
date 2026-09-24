@@ -301,10 +301,11 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
   }
 
   /**
-   * `upsert(..., { onConflict, ignoreDuplicates: true })` — the one form the
-   * application uses, for notification dedupe. Rows colliding on the named
-   * columns are skipped rather than inserted, and are absent from the returned
-   * set, which is what lets a caller count what it actually created.
+   * `upsert(..., { onConflict, ignoreDuplicates: true })` — notification
+   * dedupe. Rows colliding on the named columns are skipped rather than
+   * inserted, and are absent from the returned set, which is what lets a
+   * caller count what it actually created. Without `ignoreDuplicates`, a
+   * colliding row is updated in place, as the integration mirrors expect.
    */
   upsert(
     payload: Row | Row[],
@@ -473,6 +474,26 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
           seen.add(key);
           return true;
         });
+      }
+
+      if (this.onConflict && !this.ignoreDuplicates) {
+        // A plain upsert updates the row it collides with, as Postgres's
+        // ON CONFLICT ... DO UPDATE does, instead of inserting a second one.
+        const columns = this.onConflict;
+        const collides = (row: Row, candidate: Row) =>
+          columns.every((column) => row[column] === candidate[column]);
+        const merged: Row[] = [];
+        candidates = candidates.filter((candidate) => {
+          const existing = store.find((row) => collides(row, candidate));
+          if (!existing) return true;
+          Object.assign(existing, candidate, { updated_at: this.db.now().toISOString() });
+          merged.push(existing);
+          return false;
+        });
+        if (!candidates.length) {
+          if (!this.returning) return { data: null, error: null };
+          return this.shape(merged);
+        }
       }
 
       // Postgres applies the whole statement or none of it.

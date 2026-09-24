@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AdminNav } from "@/features/admin/components/admin-nav";
-import { activeTransport } from "@/features/notifications/services/email-provider";
+import { activeTransport, recipientAllowlist } from "@/features/notifications/services/email-provider";
 import {
   DELIVERY_STATUSES,
   getDeliveryOverview,
@@ -47,6 +47,7 @@ export default async function AdminEmailPage({
 
   const { rows, counts, problemCount } = await getDeliveryOverview(status);
   const transport = activeTransport();
+  const allowlist = recipientAllowlist();
 
   return (
     <div>
@@ -70,6 +71,18 @@ export default async function AdminEmailPage({
               EMAIL_FROM_ADDRESS
             </code>{" "}
             for a verified QBBE sender domain to start real delivery.
+          </p>
+        ) : null}
+
+        {allowlist ? (
+          <p className="card border-info/40 bg-info/8 px-4 py-3 text-[13.5px]">
+            <strong className="font-semibold">Email is restricted to an allowlist.</strong>{" "}
+            Only {allowlist.join(", ")} can receive mail from this environment; anyone else
+            is listed as suppressed. Unset{" "}
+            <code className="rounded bg-surface-soft px-1 py-0.5 text-[12.5px]">
+              EMAIL_RECIPIENT_ALLOWLIST
+            </code>{" "}
+            only in production.
           </p>
         ) : null}
 

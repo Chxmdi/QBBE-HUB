@@ -27,7 +27,10 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
     .from("integration_connection")
     .select("id, user_id, organization_id, provider, status")
     .in("provider", ["gmail", "google_calendar", "google_drive"])
-    .eq("status", "connected");
+    // Retry transient failures, not just healthy connections: a success below
+    // sets the status back to connected, so an outage clears on its own. An
+    // expired or revoked authorization still waits for the user to reconnect.
+    .in("status", ["connected", "synchronization_delayed", "degraded", "error"]);
   if (connectionError) {
     throw new Error(`could not load Google connections: ${connectionError.message}`);
   }
