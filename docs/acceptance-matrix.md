@@ -101,7 +101,7 @@ external blockers. Acceptance criteria below are transcribed from the supplied P
 
 | ID | Acceptance | Status | Dependencies / evidence |
 |---|---|---|---|
-| INT-GMAIL | OAuth, retrieval/send/reply, push verification, renewal and reconciliation | blocked | QBBE Google access and authorized test recipients |
+| INT-GMAIL | OAuth, retrieval/send/reply, push verification, renewal and reconciliation | blocked | Code/test boundary implemented in PR #94: least-privilege scopes, durable authenticated push worker, shared cursor reconciliation, compose/reply, reconnect token preservation and recovery tests. **Still blocked** on QBBE-owned Google/Pub/Sub staging plus authorized recipients; do not mark verified from CI alone. |
 | INT-CALENDAR | Create/update/cancel and expired-token recovery | blocked | QBBE Google access |
 | INT-DRIVE | Metadata and access/removal reconciliation | blocked | QBBE Drive access |
 | INT-VMS | Identity, availability and assignment against actual contract | blocked | Actual provider contract and QBBE credentials |
