@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { GOOGLE_PROVIDER_SCOPES, type GoogleIntegrationProvider } from "@/features/inbox/services/google-oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
   if (!code || !state || !expected || state !== expected) {
     return fail("OAuth state mismatch. Try connecting again.");
   }
-  const provider = state.startsWith("google_calendar:")
+  const provider: GoogleIntegrationProvider = state.startsWith("google_calendar:")
     ? "google_calendar"
     : state.startsWith("google_drive:")
       ? "google_drive"
@@ -64,6 +65,7 @@ export async function GET(request: Request) {
         organization_id: session.organizationId,
         user_id: session.userId,
         provider,
+        scopes: [...GOOGLE_PROVIDER_SCOPES[provider]],
         status: "connected",
         last_error: null,
         last_sync_at: null,
