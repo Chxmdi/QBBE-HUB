@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { refreshGoogleAccessToken } from "@/features/inbox/services/gmail-sync";
+import { buildGmailSendPayload } from "@/features/inbox/services/gmail-message";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 interface GmailHeader { name?: string; value?: string }
@@ -82,12 +83,10 @@ export async function sendGmailMessage(input: unknown): Promise<ActionResult> {
   try {
     const { session, accessToken } = await gmailAccess();
     const data = parsed.data;
-    const lines = [`To: ${data.to}`, `Subject: ${data.subject}`, "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8"];
-    if (data.inReplyTo) lines.push(`In-Reply-To: ${data.inReplyTo}`, `References: ${data.inReplyTo}`);
-    const raw = Buffer.from(`${lines.join("\r\n")}\r\n\r\n${data.body}`, "utf8").toString("base64url");
+    const payload = buildGmailSendPayload(data);
     const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
       method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ raw, ...(data.threadId ? { threadId: data.threadId } : {}) }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error(`Gmail rejected the message (${response.status}). Reconnect Gmail and grant send permission.`);
     const supabase = createSupabaseServiceClient();
