@@ -18,7 +18,7 @@ import {
   Textarea,
 } from "@/components/ui/input";
 import { ListSkeleton, Skeleton } from "@/components/ui/skeleton";
-import { Tabs } from "@/components/ui/tabs";
+import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 
 /**
@@ -155,6 +155,17 @@ export function ComponentGallery() {
           active={tab}
           onChange={setTab}
         />
+        {/* Each tab names its panel through aria-controls, so the panels are
+            part of the example, not optional. */}
+        <TabPanel id="one" active={tab}>
+          <p className="py-3 text-[13px] text-muted">Overview panel.</p>
+        </TabPanel>
+        <TabPanel id="two" active={tab}>
+          <p className="py-3 text-[13px] text-muted">Activity panel.</p>
+        </TabPanel>
+        <TabPanel id="three" active={tab}>
+          <p className="py-3 text-[13px] text-muted">Files panel.</p>
+        </TabPanel>
       </Section>
 
       <Section title="Overlays and feedback">
