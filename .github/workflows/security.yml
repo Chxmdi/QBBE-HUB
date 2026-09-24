@@ -13,6 +13,8 @@ on:
     # Weekly, so a newly published CodeQL query or advisory reaches code that
     # has not changed.
     - cron: "0 5 * * 1"
+  # Called by release-candidate.yml, so the candidate's evidence includes it.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
