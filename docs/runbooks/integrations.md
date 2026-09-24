@@ -70,13 +70,22 @@ Integrations. Until credentials exist the calendar stays Hub-only.
 ## Google Drive metadata mirror
 
 Use the OAuth start URL with `?provider=google_drive`. QBBE imports metadata
-and private Google links only; it never copies Drive file bytes. An initial
-sync records a Drive start-page token before walking every page of the current
-non-trashed file listing. Scheduled syncs consume every page of Drive's change
-feed, update changed metadata, remove deleted/inaccessible links, and retain
-the final page token. If Google invalidates a token, QBBE fetches a successful
-full mirror before replacing the old one. Existing Drive connections must
-reauthenticate to acquire the read-only Drive metadata scope.
+and private Google links only; it never copies Drive file bytes or changes
+Google permissions. Imported rows are `visibility = private` and owned by the
+connected Hub user, so merely connecting a personal/QBBE Drive account cannot
+make its metadata visible to unrelated organization members. Wider QBBE access
+must come from an explicit QBBE-owned document/link workflow and normal record
+authorization, not from stale Google metadata.
+
+An initial sync records a Drive start-page token before walking every page of
+the current non-trashed file listing. Scheduled syncs consume every page of
+Drive's change feed, update changed metadata, remove deleted/inaccessible links,
+and retain the final page token. Full reconciliation is fail-safe: the provider
+read and replacement upserts succeed before stale local rows are pruned, so a
+provider/database failure cannot empty the last known mirror. If Google
+invalidates a token, QBBE performs that same safe full reconciliation. Existing
+Drive connections must reauthenticate to acquire the read-only Drive metadata
+scope.
 
 ## Volunteer Management System (gated)
 
