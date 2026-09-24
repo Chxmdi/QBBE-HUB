@@ -271,6 +271,40 @@ test.describe("QA matrix", () => {
     expect(hidden, hidden.join("\n")).toEqual([]);
   });
 
+  test("reduce motion can be set in the Hub, not only in the OS", async ({ page }) => {
+    // UI-009. Emulate an OS that does NOT ask for reduced motion, so only the
+    // in-app setting can be what turns animation down.
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto("/settings");
+    const toggle = page.getByLabel("Reduce motion");
+    await expect(toggle).not.toBeChecked();
+    try {
+      await toggle.check();
+      await expect(page.locator("html")).toHaveClass(/\breduce-motion\b/);
+      // Persisted, not just toggled in this tab.
+      await page.reload();
+      await expect(page.getByLabel("Reduce motion")).toBeChecked();
+      await expect(page.locator("html")).toHaveClass(/\breduce-motion\b/);
+      const duration = await page.evaluate(() => {
+        const probe = document.createElement("div");
+        probe.style.transition = "opacity 300ms";
+        document.body.append(probe);
+        const value = getComputedStyle(probe).transitionDuration;
+        probe.remove();
+        return value;
+      });
+      expect(parseFloat(duration)).toBeLessThan(0.01);
+    } finally {
+      // Leave the shared QA owner as it was for every other test.
+      await page.goto("/settings");
+      const reset = page.getByLabel("Reduce motion");
+      if (await reset.isChecked()) {
+        await reset.uncheck();
+        await expect(page.locator("html")).not.toHaveClass(/\breduce-motion\b/);
+      }
+    }
+  });
+
   test("200% zoom keeps content usable", async ({ page }) => {
     const failures: string[] = [];
     // Emulate 200% zoom by halving the viewport at the same CSS scale.

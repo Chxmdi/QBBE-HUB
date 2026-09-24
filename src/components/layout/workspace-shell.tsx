@@ -27,6 +27,7 @@ export function WorkspaceShell({
   programs,
   counts,
   density = "comfortable",
+  reduceMotion = false,
   children,
 }: {
   name: string;
@@ -39,10 +40,17 @@ export function WorkspaceShell({
   programs: SidebarProgram[];
   counts: SidebarCounts;
   density?: "comfortable" | "compact";
+  reduceMotion?: boolean;
   children: React.ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // The in-app reduced-motion setting (UI-009) applies the same rules as the
+  // OS preference, through a class on <html> so portals and dialogs get it.
+  useEffect(() => {
+    document.documentElement.classList.toggle("reduce-motion", reduceMotion);
+  }, [reduceMotion]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
