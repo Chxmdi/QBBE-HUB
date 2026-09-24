@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/shared/page-header";
 import { NotificationPreferencesForm } from "@/features/onboarding/components/notification-preferences-form";
 import { MfaSettings } from "@/features/auth/components/mfa-settings";
+import { ReduceMotionSetting } from "@/features/onboarding/components/reduce-motion-setting";
 import { verifiedTotpFactors } from "@/features/auth/mfa";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function SettingsPage() {
   const session = await requireSession();
   const supabase = await createSupabasePageClient();
-  const [{ data: preference }, { data: memberships }, factorResult] = await Promise.all([
+  const [{ data: preference }, { data: memberships }, factorResult, { data: profile }] = await Promise.all([
     supabase
       .from("notification_preference")
       .select("email_critical, email_digest, quiet_hours_start, quiet_hours_end")
@@ -25,6 +26,7 @@ export default async function SettingsPage() {
     session.isAdmin
       ? supabase.auth.mfa.listFactors()
       : Promise.resolve({ data: null, error: null }),
+    supabase.from("user_profile").select("reduce_motion").eq("id", session.userId).maybeSingle(),
   ]);
 
   type MembershipRow = {
@@ -56,6 +58,7 @@ export default async function SettingsPage() {
         }}
         channels={channels}
       />
+      <ReduceMotionSetting initial={profile?.reduce_motion === true} />
       {session.isAdmin && factorResult.data ? (
         <MfaSettings initialFactors={verifiedTotpFactors(factorResult.data.all)} />
       ) : null}

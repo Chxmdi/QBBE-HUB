@@ -300,7 +300,7 @@ export default async function CalendarPage({
         {view === "week" ? (
           <WeekView anchor={anchor} items={items} />
         ) : (
-          <div className="card overflow-x-auto">
+          <div className="card relative overflow-x-auto">
             <table className="w-full min-w-[720px] table-fixed border-collapse">
               <thead>
                 <tr>

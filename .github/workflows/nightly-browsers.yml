@@ -1,0 +1,21 @@
+name: Nightly browsers
+
+# The signed-in suites, including the accessibility and responsive matrix,
+# in Chromium, Firefox and WebKit. Pull requests run Chromium only to keep
+# them quick (decision recorded on #101, 2026-09-24); this catches what is
+# specific to the other two within a day. Run it by hand before a release.
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  all-browsers:
+    uses: ./.github/workflows/ci.yml
+    with:
+      browsers: chromium firefox webkit
