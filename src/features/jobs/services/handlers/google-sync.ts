@@ -1,12 +1,9 @@
 import {
   fetchCalendarOverlay,
-  fetchGmailChangedMetadata,
-  fetchGmailHistory,
   fetchGoogleDriveSync,
-  fetchGmailMetadata,
-  fetchGmailProfile,
   refreshGoogleAccessToken,
 } from "@/features/inbox/services/gmail-sync";
+import { reconcileGmailConnection } from "@/features/inbox/services/gmail-reconcile";
 import { classifyIntegrationFailure } from "@/features/admin/services/integration-health";
 import { recordJobRun } from "@/lib/job-observability";
 import type { JobContext, JobResult } from "../runner";
@@ -42,6 +39,30 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
     const startedAt = new Date().toISOString();
     try {
       if (!connection.user_id) throw new Error("Google integration has no connected user.");
+
+      if (connection.provider === "gmail") {
+        const gmail = await reconcileGmailConnection(db, {
+          id: connection.id,
+          organization_id: connection.organization_id,
+          user_id: connection.user_id,
+        }, now);
+        await recordJobRun(db, {
+          organizationId: connection.organization_id,
+          jobName: "google_sync",
+          status: "succeeded",
+          details: {
+            provider: "gmail",
+            connectionId: connection.id,
+            mode: gmail.mode,
+            upserted: gmail.upserted,
+            removed: gmail.removed,
+          },
+          startedAt,
+        });
+        synced += 1;
+        continue;
+      }
+
       const { data: secret, error: secretError } = await db
         .from("integration_secret")
         .select("access_token, refresh_token, token_expires_at, gmail_history_id, gmail_pending_history_id, google_calendar_sync_token, google_drive_page_token")
@@ -66,58 +87,7 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
         if (tokenUpdateError) throw new Error(`Could not save refreshed OAuth token: ${tokenUpdateError.message}`);
       }
 
-      if (connection.provider === "gmail") {
-        const saveRows = async (rows: Awaited<ReturnType<typeof fetchGmailMetadata>>) => {
-          if (!rows.length) return;
-          const { error } = await db.from("gmail_message").upsert(
-            rows.map((row) => ({
-              organization_id: connection.organization_id,
-              user_id: connection.user_id,
-              connection_id: connection.id,
-              ...row,
-            })),
-            { onConflict: "user_id,external_id" },
-          );
-          if (error) throw new Error(`Could not save Gmail metadata: ${error.message}`);
-        };
-        const historyId = typeof secret.gmail_history_id === "string" ? secret.gmail_history_id : null;
-        if (historyId) {
-          try {
-            const delta = await fetchGmailHistory(accessToken, historyId);
-            const changed = await fetchGmailChangedMetadata(accessToken, delta.messageIds);
-            await saveRows(changed.rows);
-            if (changed.removedIds.length) {
-              const { error } = await db.from("gmail_message")
-                .delete()
-                .eq("connection_id", connection.id)
-                .in("external_id", changed.removedIds);
-              if (error) throw new Error(`Could not remove stale Gmail metadata: ${error.message}`);
-            }
-            const { error } = await db.from("integration_secret")
-              .update({ gmail_history_id: delta.historyId ?? historyId, gmail_pending_history_id: null })
-              .eq("connection_id", connection.id);
-            if (error) throw new Error(`Could not save Gmail history cursor: ${error.message}`);
-          } catch (historyError) {
-            const message = historyError instanceof Error ? historyError.message : "Gmail history failed.";
-            if (!message.includes("full synchronization is required")) throw historyError;
-            const rows = await fetchGmailMetadata(accessToken);
-            await saveRows(rows);
-            const profile = await fetchGmailProfile(accessToken);
-            const { error } = await db.from("integration_secret")
-              .update({ gmail_history_id: profile.historyId, gmail_pending_history_id: null })
-              .eq("connection_id", connection.id);
-            if (error) throw new Error(`Could not reset Gmail history cursor: ${error.message}`);
-          }
-        } else {
-          const rows = await fetchGmailMetadata(accessToken);
-          await saveRows(rows);
-          const profile = await fetchGmailProfile(accessToken);
-          const { error } = await db.from("integration_secret")
-            .update({ gmail_history_id: profile.historyId, gmail_pending_history_id: null })
-            .eq("connection_id", connection.id);
-          if (error) throw new Error(`Could not initialize Gmail history cursor: ${error.message}`);
-        }
-      } else if (connection.provider === "google_calendar") {
+      if (connection.provider === "google_calendar") {
         const saveCalendarSync = async (sync: Awaited<ReturnType<typeof fetchCalendarOverlay>>) => {
           if (sync.rows.length) {
             const { error } = await db.from("calendar_event_link").upsert(
