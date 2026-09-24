@@ -10,7 +10,11 @@ import {
   markConversationRead,
   sendMessage,
 } from "@/features/channels/services/message.commands";
-import { CHANNEL_HISTORY_PAGE_SIZE } from "@/features/channels/history";
+import {
+  CHANNEL_HISTORY_PAGE_SIZE,
+  mergeMessages,
+  olderPage,
+} from "@/features/channels/history";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types/entities";
@@ -18,12 +22,6 @@ import type { Message } from "@/types/entities";
 const MESSAGE_SELECT =
   "id, channel_id, conversation_id, thread_root_id, author_id, body, is_system, created_at, edited_at, deleted_at, " +
   "author:author_id(id, full_name, email, avatar_url, title, timezone), reactions:message_reaction(message_id, user_id, emoji)";
-
-function mergeByCreatedAt(left: Message[], right: Message[]): Message[] {
-  const byId = new Map<string, Message>();
-  for (const message of [...left, ...right]) byId.set(message.id, message);
-  return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
-}
 
 export function Composer({
   placeholder,
@@ -160,9 +158,10 @@ export function ChannelView({
       .select(MESSAGE_SELECT)
       .eq(container.column, container.id)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(CHANNEL_HISTORY_PAGE_SIZE);
     const latest = ([...((data ?? []) as unknown as Message[])] as Message[]).reverse();
-    setMessages((current) => mergeByCreatedAt(current, latest));
+    setMessages((current) => mergeMessages(current, latest));
   }, [container.column, container.id]);
 
   const loadOlder = useCallback(async () => {
@@ -171,17 +170,35 @@ export function ChannelView({
     stickToLatestRef.current = false;
     const oldest = messages[0];
     const supabase = createSupabaseBrowserClient();
-    const { data } = await supabase
-      .from("message")
-      .select(MESSAGE_SELECT)
-      .eq(container.column, container.id)
-      .lt("created_at", oldest.created_at)
-      .order("created_at", { ascending: false })
-      .limit(CHANNEL_HISTORY_PAGE_SIZE);
-    const older = ([...((data ?? []) as unknown as Message[])] as Message[]).reverse();
+    // Keyset on (created_at, id): a timestamp-only cursor skipped every
+    // message sharing the oldest one's timestamp. See olderPage.
+    const [sameInstant, earlier] = await Promise.all([
+      supabase
+        .from("message")
+        .select(MESSAGE_SELECT)
+        .eq(container.column, container.id)
+        .eq("created_at", oldest.created_at)
+        .lt("id", oldest.id)
+        .order("id", { ascending: false })
+        .limit(CHANNEL_HISTORY_PAGE_SIZE),
+      supabase
+        .from("message")
+        .select(MESSAGE_SELECT)
+        .eq(container.column, container.id)
+        .lt("created_at", oldest.created_at)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(CHANNEL_HISTORY_PAGE_SIZE),
+    ]);
+    const older = olderPage(
+      (sameInstant.data ?? []) as unknown as Message[],
+      (earlier.data ?? []) as unknown as Message[],
+      oldest,
+      CHANNEL_HISTORY_PAGE_SIZE,
+    );
     setHasOlder(older.length >= CHANNEL_HISTORY_PAGE_SIZE);
     if (older.length) {
-      setMessages((current) => mergeByCreatedAt(older, current));
+      setMessages((current) => mergeMessages(older, current));
     }
     setLoadingOlder(false);
   }, [container.column, container.id, loadingOlder, messages]);
