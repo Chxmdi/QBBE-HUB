@@ -83,8 +83,15 @@ const channel = receiver
   });
 await new Promise((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error("Realtime subscription timed out")), 15_000);
+  // "SUBSCRIBED" is the topic join; Realtime listens to Postgres only once it
+  // sends this system message, and anything sent before then is never delivered.
+  channel.on("system", {}, (payload) => {
+    if (payload.extension !== "postgres_changes") return;
+    clearTimeout(timer);
+    if (payload.status === "ok") resolve();
+    else reject(new Error(`Realtime could not listen to Postgres: ${JSON.stringify(payload)}`));
+  });
   channel.subscribe((status) => {
-    if (status === "SUBSCRIBED") { clearTimeout(timer); resolve(); }
     if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") { clearTimeout(timer); reject(new Error(status)); }
   });
 });

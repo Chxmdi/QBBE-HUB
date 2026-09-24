@@ -142,9 +142,9 @@ export function ChannelView({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderFailed, setOlderFailed] = useState(false);
   const [threadRootId, setThreadRootId] = useState<string | null>(null);
-  // "connecting" until the socket first joins; shown the same as "live", but
-  // it is not live yet, and a message sent in that window is only picked up
-  // by the refetch on joining (#113).
+  // "connecting" until Realtime is listening to Postgres; shown the same as
+  // "live", but it is not live yet, and a message sent in that window is only
+  // picked up by the refetch on going live (#113).
   const [connection, setConnection] = useState<"connecting" | "live" | "reconnecting">(
     "connecting",
   );
@@ -242,17 +242,27 @@ export function ChannelView({
             if (conversationId) void markConversationRead(conversationId);
           },
         )
-        .subscribe((status) => {
-          // Visible but not alarming reconnect state (§14.3). Whenever the
-          // socket (re)joins we refetch, so nothing sent while it was not
-          // listening stays missing: after a reconnect, and also on the first
-          // join, which happens a moment after the page has rendered.
-          if (status === "SUBSCRIBED") {
+        // "Subscribed" only means the socket joined the topic. Realtime starts
+        // listening to Postgres afterwards (2 s locally, longer under load)
+        // and says so with this system message; a change committed in between
+        // is never sent. So the page is live, and refetches what it may have
+        // missed, only from here (#113).
+        .on("system", {}, (payload: { extension?: string; status?: string }) => {
+          if (payload.extension !== "postgres_changes") return;
+          if (payload.status === "ok") {
             setConnection((previous) => {
               if (previous !== "live") void refresh();
               return "live";
             });
-          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          } else {
+            setConnection("reconnecting");
+          }
+        })
+        .subscribe((status) => {
+          // Visible but not alarming reconnect state (§14.3). A rejoin goes
+          // live again through the system message above, which refetches, so
+          // nothing sent while the socket was not listening stays missing.
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
             setConnection("reconnecting");
           }
         });

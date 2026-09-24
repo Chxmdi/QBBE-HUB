@@ -53,13 +53,18 @@ function subscribe(client: SupabaseClient, channelId: string, received: string[]
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "message", filter: `channel_id=eq.${channelId}` },
         (payload) => received.push(String(payload.new.body)),
-      );
+      )
+      // Joining the topic ("SUBSCRIBED") comes before Realtime listens to
+      // Postgres; only this system message means changes will be delivered.
+      .on("system", {}, (payload: { extension?: string; status?: string }) => {
+        if (payload.extension !== "postgres_changes") return;
+        clearTimeout(timeout);
+        if (payload.status === "ok") resolve(channel);
+        else reject(new Error(`Realtime could not listen to Postgres: ${JSON.stringify(payload)}`));
+      });
     const timeout = setTimeout(() => reject(new Error("Realtime subscription timed out")), 15_000);
     channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        clearTimeout(timeout);
-        resolve(channel);
-      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         clearTimeout(timeout);
         reject(new Error(`Realtime subscription failed: ${status}`));
       }
@@ -80,8 +85,8 @@ test("a message posted in a channel appears for another member without a reload"
   await signIn(reader, "volunteer");
   await reader.goto(`/channels/${channelId}`);
   await sender.goto(`/channels/${channelId}`);
-  // Wait for the reader's socket to have joined; before that the page is
-  // rendered but not yet listening.
+  // Wait for the reader's page to be listening to Postgres; before that it is
+  // rendered, and its socket may even have joined, but it hears nothing.
   await expect(reader.locator('[data-realtime="live"]')).toBeVisible({ timeout: 15_000 });
 
   const body = `Delivered live ${randomUUID().slice(0, 8)}`;
