@@ -66,6 +66,18 @@ describe("design tokens", () => {
     expect(layout).toContain(`"(prefers-color-scheme: dark)", color: "${token("canvas", "dark")}"`);
   });
 
+  it("form controls come from the primitives, not bare elements (UI-004)", () => {
+    const offenders: string[] = [];
+    for (const dir of ["src/features", "src/app"]) {
+      for (const path of files(join(ROOT, dir)).filter((file) => file.endsWith(".tsx"))) {
+        const text = readFileSync(path, "utf8");
+        if (/<select[\s>]/.test(text)) offenders.push(`${relative(ROOT, path)}: <select>`);
+        if (/type="checkbox"/.test(text)) offenders.push(`${relative(ROOT, path)}: checkbox`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it("stacking uses the layer tokens, not z-index literals", () => {
     const offenders: string[] = [];
     for (const dir of ["src/components", "src/features", "src/app"]) {

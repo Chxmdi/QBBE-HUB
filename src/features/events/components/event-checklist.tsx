@@ -5,6 +5,7 @@ import {
   removeEventChecklistItem,
   toggleEventChecklistItem,
 } from "@/features/events/services/event-checklist.commands";
+import { Checkbox } from "@/components/ui/input";
 
 type ChecklistItem = {
   id: string;
@@ -73,13 +74,11 @@ export function EventChecklist({
       <ul className="card divide-y divide-line">
         {optimisticItems.map((item) => (
           <li key={item.id} className="flex items-center gap-3 px-4 py-2.5">
-            <input
-              type="checkbox"
+            <Checkbox
               id={`event-checklist-${item.id}`}
               checked={Boolean(item.completed_at)}
               onChange={() => toggle(item)}
               disabled={!canManage || isPending}
-              className="size-4 shrink-0"
             />
             <label
               htmlFor={`event-checklist-${item.id}`}
