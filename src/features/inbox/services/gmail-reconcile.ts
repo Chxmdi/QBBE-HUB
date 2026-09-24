@@ -23,6 +23,7 @@ export interface GmailReconcileResult {
 async function loadAccessToken(
   db: SupabaseClient,
   connectionId: string,
+  now: Date,
 ): Promise<{
   accessToken: string;
   historyId: string | null;
@@ -42,7 +43,7 @@ async function loadAccessToken(
     ? new Date(secret.token_expires_at as string).getTime()
     : 0;
 
-  if (expiresAt && expiresAt < Date.now() + 60_000) {
+  if (expiresAt && expiresAt < now.getTime() + 60_000) {
     if (!secret.refresh_token) {
       throw new Error("Google access token expired and no refresh token is available.");
     }
@@ -56,7 +57,7 @@ async function loadAccessToken(
       .update({
         access_token: refreshed.access_token,
         token_expires_at: refreshed.expires_in
-          ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
+          ? new Date(now.getTime() + refreshed.expires_in * 1000).toISOString()
           : null,
       })
       .eq("connection_id", connectionId);
@@ -152,7 +153,7 @@ export async function reconcileGmailConnection(
   connection: GmailConnectionRef,
   now: Date,
 ): Promise<GmailReconcileResult> {
-  const { accessToken, historyId, pendingHistoryId } = await loadAccessToken(db, connection.id);
+  const { accessToken, historyId, pendingHistoryId } = await loadAccessToken(db, connection.id, now);
 
   let result: GmailReconcileResult;
 
