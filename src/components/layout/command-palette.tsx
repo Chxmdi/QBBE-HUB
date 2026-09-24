@@ -22,6 +22,7 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { visibleNav } from "@/config/navigation";
 import { cn } from "@/lib/utils";
+import { ErrorState } from "@/components/ui/error-state";
 import { searchTypeLabel } from "@/features/search/result-types";
 import type { SearchResult } from "@/types/entities";
 
@@ -104,19 +105,23 @@ export function CommandPalette({
     if (!open && dialog.open) dialog.close();
   }, [open]);
 
-  // Debounced permission-safe search.
+  // Debounced permission-safe search. A failure is reported as a failure:
+  // it used to fall through to "No matching records you have access to".
+  const [searchFailed, setSearchFailed] = useState(false);
+  const [searchAttempt, setSearchAttempt] = useState(0);
   useEffect(() => {
     if (!query || query.length < 2) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       setLoading(true);
       const supabase = createSupabaseBrowserClient();
-      const { data } = await supabase.rpc("global_search", {
+      const { data, error } = await supabase.rpc("global_search", {
         p_query: query,
         p_limit: 12,
       });
       if (cancelled) return;
-      setResults((data as SearchResult[] | null) ?? []);
+      setSearchFailed(Boolean(error));
+      setResults(error ? [] : ((data as SearchResult[] | null) ?? []));
       setActiveIndex(0);
       setLoading(false);
     }, 200);
@@ -124,7 +129,7 @@ export function CommandPalette({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, searchAttempt]);
 
   const go = useCallback(
     (href: string) => {
@@ -197,6 +202,12 @@ export function CommandPalette({
           See all results for “{query}”
         </button>
       ) : null}
+      {searchFailed && query.length >= 2 ? (
+        <ErrorState
+          message="Search isn't available right now."
+          onRetry={() => setSearchAttempt((n) => n + 1)}
+        />
+      ) : null}
       <ul
         id="command-palette-results"
         role="listbox"
@@ -204,6 +215,8 @@ export function CommandPalette({
         className="max-h-[50vh] overflow-y-auto py-1.5"
       >
         {items.length === 0 ? (
+          // After a failed search the error above is the whole answer.
+          searchFailed && query.length >= 2 ? null : (
           <li
             role="presentation"
             className="px-4 py-8 text-center text-[13.5px] text-muted"
@@ -212,6 +225,7 @@ export function CommandPalette({
               ? "No matching records you have access to."
               : "Type to search, or pick a destination."}
           </li>
+          )
         ) : (
           items.map((item, i) => (
             // The option itself is the target. It used to wrap a focusable

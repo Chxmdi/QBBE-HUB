@@ -22,7 +22,7 @@ import { TaskRow } from "@/features/tasks/components/task-row";
 import { TASK_SELECT, getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { hasProjectCapability } from "@/lib/access-capabilities";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, relativeTime } from "@/lib/utils";
 import { RecordComments } from "@/features/comments/components/record-comments";
 import { RaidLogPanel } from "@/features/risks/components/raid-log";
@@ -55,7 +55,7 @@ export default async function ProjectDetailPage({
   // overview and looking broken.
   const tab =
     tabParam ?? (highlightRiskId || highlightIssueId ? "risks" : "overview");
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const { data: projectRow } = await supabase
     .from("project")

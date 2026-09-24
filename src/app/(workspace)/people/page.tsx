@@ -5,7 +5,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { PersonDeepLink } from "@/features/admin/components/person-deep-link";
 import type { Membership, OrgRole } from "@/types/entities";
 
@@ -37,7 +37,7 @@ export default async function PeoplePage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const [{ data: members }, openTasks, { data: teams }, { data: teamMembers }] = await Promise.all([
     supabase
