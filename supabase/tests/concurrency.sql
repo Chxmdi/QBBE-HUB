@@ -15,7 +15,9 @@
 -- file cannot roll back: it tags everything it creates and deletes it at the
 -- end, and again at the start in case an earlier run died half way.
 
-create extension if not exists dblink;
+-- In `extensions`, not `public`: the security advisor flags extensions in
+-- public, and these helpers already carry `extensions` on their search_path.
+create extension if not exists dblink with schema extensions;
 
 create or replace function tests.dblink_open(p_name text)
 returns void
