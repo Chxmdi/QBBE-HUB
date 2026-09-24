@@ -11,8 +11,10 @@
 -- Who can read a task does not change. The same rule is restated so that the
 -- expensive part depends only on the reader, not the row: each helper below
 -- returns the ids the reader can reach, and the policy wraps each call in
--- `(select ...)`, which Postgres evaluates once per statement (an InitPlan)
--- and then checks every row against with an array membership test.
+-- `(select ...)::uuid[]`, which Postgres evaluates once per statement (an
+-- InitPlan) and then checks every row against with an array membership test.
+-- The cast matters: `x = any ((select f()))` would be read as a subquery
+-- yielding one uuid[] row and compared as uuid = uuid[].
 --
 -- Project and program readability are still decided by has_project_capability
 -- and has_program_capability themselves, only over the few candidates a
@@ -126,19 +128,19 @@ grant execute on function
 drop policy if exists task_read on public.task;
 create policy task_read on public.task for select to authenticated
   using (
-    organization_id = any ((select app.task_read_member_organizations()))
+    organization_id = any ((select app.task_read_member_organizations())::uuid[])
     and (
-      organization_id = any ((select app.task_read_organization_wide()))
-      or project_id = any ((select app.task_read_projects()))
+      organization_id = any ((select app.task_read_organization_wide())::uuid[])
+      or project_id = any ((select app.task_read_projects())::uuid[])
       or (
         project_id is null
-        and program_id = any ((select app.task_read_programs()))
+        and program_id = any ((select app.task_read_programs())::uuid[])
       )
       or assignee_id = (select auth.uid())
       or requester_id = (select auth.uid())
       or reviewer_id = (select auth.uid())
       or approver_id = (select auth.uid())
-      or id = any ((select app.task_read_assignments()))
+      or id = any ((select app.task_read_assignments())::uuid[])
     )
   );
 
