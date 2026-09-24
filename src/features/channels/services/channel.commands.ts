@@ -164,6 +164,42 @@ export async function addChannelMember(
   return { ok: true };
 }
 
+
+export async function removeChannelMember(
+  channelId: string,
+  userId: string,
+): Promise<ActionResult> {
+  await requireSession();
+  const parsed = z.object({
+    channelId: z.string().uuid(),
+    userId: z.string().uuid(),
+  }).safeParse({ channelId, userId });
+  if (!parsed.success) return { ok: false, error: "Invalid channel member." };
+
+  const supabase = await createSupabaseServerClient();
+  const { data: removed, error } = await supabase.rpc("remove_channel_member", {
+    p_channel_id: parsed.data.channelId,
+    p_user_id: parsed.data.userId,
+  });
+  if (error) {
+    return {
+      ok: false,
+      error: error.message.includes("ownership")
+        ? "Transfer channel ownership before removing its owner."
+        : "Only the channel owner or an admin can revoke direct access.",
+    };
+  }
+  if (!removed) {
+    return {
+      ok: false,
+      error: "This person has no direct access to revoke. Managed team/assignment access must be changed at its source.",
+    };
+  }
+  revalidatePath("/channels");
+  revalidatePath(`/channels/${channelId}`);
+  return { ok: true };
+}
+
 /**
  * Archive / restore a channel (P0-COMM-05). History is preserved and stays
  * searchable for authorized members; archived channels are read-only
