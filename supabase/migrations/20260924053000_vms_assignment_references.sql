@@ -32,8 +32,7 @@ alter table vms_assignment_reference enable row level security;
 create policy vms_assignment_read on vms_assignment_reference
   for select to authenticated
   using (
-    app.is_org_member(organization_id)
-    and user_id = auth.uid()
+    (app.is_org_member(organization_id) and user_id = auth.uid())
     or app.is_org_admin(organization_id)
   );
 
