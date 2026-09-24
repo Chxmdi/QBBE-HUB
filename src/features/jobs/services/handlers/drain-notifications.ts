@@ -507,6 +507,25 @@ async function handleMessage(
     return { disposition: { kind: "ack" }, outcome: "resolved" };
   }
 
+  // An address the provider reported as hard-bounced or complaining is never
+  // mailed again; retrying it is what gets a sending domain blocked.
+  const { data: suppression, error: suppressionLookupError } = await db
+    .from("email_suppression")
+    .select("reason")
+    .eq("address", delivery.recipient.trim().toLowerCase())
+    .maybeSingle();
+  if (suppressionLookupError) {
+    throw new Error(`could not check the suppression list: ${suppressionLookupError.message}`);
+  }
+  if (suppression) {
+    const { error: suppressionError } = await db
+      .from("email_delivery")
+      .update({ status: "suppressed", suppressed_reason: `provider_${suppression.reason as string}` })
+      .eq("id", delivery.id);
+    if (suppressionError) throw new Error(`could not suppress delivery: ${suppressionError.message}`);
+    return { disposition: { kind: "ack" }, outcome: "resolved" };
+  }
+
   try {
     const sent = await sendEmail({
       idempotencyKey: `delivery/${delivery.id}`,

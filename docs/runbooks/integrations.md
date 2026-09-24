@@ -143,6 +143,25 @@ It covers notification mail and digests, which go through the Hub's email
 worker. Password-recovery mail is sent by Supabase Auth itself, so on staging
 point Supabase Auth's SMTP at a sandbox or restrict its recipients separately.
 
+## Bounces and spam complaints
+
+Resend reports hard bounces and complaints after a send has succeeded. To
+receive them:
+
+1. In Resend, open **Webhooks**, click **Add Endpoint**, enter
+   `https://<domain>/api/integrations/email/webhook`, and subscribe to
+   `email.bounced` and `email.complained`.
+2. Copy the endpoint's signing secret (it starts with `whsec_`) into the
+   hosting environment as `EMAIL_WEBHOOK_SECRET`, then redeploy.
+3. Use Resend's **Send test event**. The endpoint should answer 200. A 401
+   means the secret does not match; a 503 means it is not set.
+
+A hard bounce or complaint marks the delivery `bounced` in Admin → Email and
+adds the address to `email_suppression`; the worker then records any later
+mail to it as suppressed (`provider_bounced` / `provider_complained`). A
+transient (soft) bounce is recorded on the delivery but does not suppress the
+address. Lifting a suppression is a deliberate database change by an operator.
+
 ## Workstream 6 live gate
 
 `scripts/verify-integrations.sh` refuses to run until QBBE-owned

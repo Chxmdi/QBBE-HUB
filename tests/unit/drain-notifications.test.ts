@@ -568,3 +568,31 @@ describe("a non-production allowlist keeps test mail away from real people", () 
     expect(deliveries(db)[0].status).toBe("sent");
   });
 });
+
+describe("an address the provider reported is never mailed again", () => {
+  it.each(["bounced", "complained"])("suppresses mail to an address that %s", async (reason) => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    db.seed("email_suppression", [{ address: "amara@example.org", reason }]);
+    raiseNotification(db);
+
+    await run(db);
+
+    expect(sends).toHaveLength(0);
+    expect(deliveries(db)[0]).toMatchObject({
+      status: "suppressed",
+      suppressed_reason: `provider_${reason}`,
+    });
+  });
+
+  it("still mails everyone else", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    db.seed("email_suppression", [{ address: "someone.else@example.org", reason: "bounced" }]);
+    raiseNotification(db);
+
+    await run(db);
+
+    expect(sends).toHaveLength(1);
+  });
+});
