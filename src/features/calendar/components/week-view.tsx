@@ -40,8 +40,11 @@ export interface CalendarItem {
 }
 
 export const KIND_STYLES: Record<CalendarItem["kind"], string> = {
-  task: "bg-brand-soft text-brand-fg dark:text-[#f2b8c8]",
-  milestone: "bg-accent/20 text-[#7a5f1a] dark:text-accent",
+  // Both used to pin a hex literal for one theme; the -fg tokens already
+  // carry a designed dark value. The milestone chip failed dark-mode
+  // contrast (axe, qa-matrix, #101).
+  task: "bg-brand-soft text-brand-fg",
+  milestone: "bg-accent/20 text-accent-fg",
   meeting: "bg-info/12 text-info-fg",
   event: "bg-success/12 text-success-fg",
   follow_up: "bg-warning/12 text-warning-fg",
@@ -97,7 +100,7 @@ export function WeekView({
   });
 
   return (
-    <div className="card overflow-x-auto">
+    <div className="card relative overflow-x-auto">
       <div className="grid min-w-[860px] grid-cols-7">
         {days.map((day) => {
           const dayItems = items

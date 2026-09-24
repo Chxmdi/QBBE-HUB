@@ -151,12 +151,16 @@ export function Topbar({
             onClick={() => setOpenMenu(openMenu === "create" ? null : "create")}
             aria-label="Quick create"
             aria-expanded={openMenu === "create"}
+            aria-controls="topbar-create-panel"
             className="qbbe-primary-action flex size-9 items-center justify-center rounded-(--radius-sm) transition-transform active:scale-[0.97]"
           >
             <Plus className="size-4.5" aria-hidden />
           </button>
           {openMenu === "create" ? (
-            <div className="absolute right-0 mt-2 w-44 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)">
+            <div
+              id="topbar-create-panel"
+              className="absolute right-0 mt-2 w-44 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)"
+            >
               {createLinks.map((l) => (
                 <Link
                   key={l.href}
@@ -177,6 +181,7 @@ export function Topbar({
             onClick={openNotifications}
             aria-label={`Notifications${badge > 0 ? ` (${badge} unread)` : ""}`}
             aria-expanded={openMenu === "notifications"}
+            aria-controls="topbar-notifications-panel"
             className="relative flex size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-brand-soft/60 hover:text-brand-fg"
           >
             <Bell className="size-4.5" aria-hidden />
@@ -187,7 +192,12 @@ export function Topbar({
             ) : null}
           </button>
           {openMenu === "notifications" ? (
-            <div className="absolute right-0 mt-2 w-80 rounded-(--radius-md) border border-line bg-surface shadow-(--shadow-pop)">
+            <div
+              id="topbar-notifications-panel"
+              role="region"
+              aria-label="Notifications"
+              className="absolute right-0 mt-2 w-80 rounded-(--radius-md) border border-line bg-surface shadow-(--shadow-pop)"
+            >
               <div className="flex items-center justify-between border-b border-line px-3.5 py-2.5">
                 <p className="section-heading text-[15px]">Notifications</p>
                 <button
@@ -310,12 +320,16 @@ export function Topbar({
             onClick={() => setOpenMenu(openMenu === "profile" ? null : "profile")}
             aria-label="Account menu"
             aria-expanded={openMenu === "profile"}
+            aria-controls="topbar-account-panel"
             className="ml-1 flex items-center rounded-full ring-2 ring-transparent transition-shadow hover:ring-accent/35"
           >
             <Avatar name={name} src={avatarUrl} size="md" />
           </button>
           {openMenu === "profile" ? (
-            <div className="absolute right-0 mt-2 w-48 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)">
+            <div
+              id="topbar-account-panel"
+              className="absolute right-0 mt-2 w-48 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)"
+            >
               <p className="truncate border-b border-line px-3 py-2 text-[13px] font-bold text-brand-fg">
                 {name}
               </p>

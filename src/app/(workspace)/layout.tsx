@@ -43,7 +43,7 @@ export default async function WorkspaceLayout({
   // (§10.18).
   const { data: profile } = await supabase
     .from("user_profile")
-    .select("onboarded_at, display_density")
+    .select("onboarded_at, display_density, reduce_motion")
     .eq("id", session.userId)
     .maybeSingle();
   if (profile && !profile.onboarded_at) redirect("/welcome");
@@ -119,6 +119,7 @@ export default async function WorkspaceLayout({
       programs={(programs ?? []).map((p) => ({ id: p.id, name: p.name }))}
       counts={{ myWork: myWorkCount ?? 0, inbox: unreadCount ?? 0 }}
       density={(profile?.display_density as "comfortable" | "compact") ?? "comfortable"}
+      reduceMotion={profile?.reduce_motion === true}
     >
       {children}
     </WorkspaceShell>
