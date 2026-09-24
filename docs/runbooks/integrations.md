@@ -54,8 +54,13 @@ Target design per GML-001..008. Do not mark done on stubs.
 Same OAuth start URL with `?provider=google_calendar`. Overlay rows live in
 `calendar_event_link`. QBBE-created meetings and events create, update and
 delete only their own linked Google event; Hub does not overwrite
-attendee-managed fields. Events without an explicitly supplied end time default
-to one hour, so the Hub and Google records have the same schedule.
+attendee-managed fields. Hub-owned events use a deterministic Google event id,
+so a retry after Google accepted a create but before Hub persisted the link
+converges on the same remote event instead of duplicating it. A 409 create
+conflict is reconciled with PATCH, and an update that discovers a remotely
+deleted event (404) clears the stale link and recreates it. Events without an
+explicitly supplied end time default to one hour, so the Hub and Google records
+have the same schedule.
 The scheduled sync performs a paginated initial mirror, stores Google's
 server-only sync token, and then requests only incremental changes. Cancelled
 external overlays are removed without touching Hub-authored links. If Google
