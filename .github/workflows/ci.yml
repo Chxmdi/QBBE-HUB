@@ -195,7 +195,7 @@ jobs:
         run: |
           npx next start -p 3000 -H 127.0.0.1 &
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
-          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core work-planning documents events error-states $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core work-planning documents events error-states realtime-delivery $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
 
       - name: Signed-in accessibility, responsive and keyboard matrix
         # WCAG 2.2 AA axe scans in both themes, a 6-width x 2-theme overflow
@@ -203,6 +203,11 @@ jobs:
         # (#101). It ran nowhere before this step existed. The server started
         # in the previous step is still listening.
         run: npx playwright test qa-matrix $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+
+      - name: Realtime latency (p95 within 5 s)
+        # 30 messages from one signed-in member to another over Realtime;
+        # fails if any is lost or the 95th percentile exceeds 5 s (#113).
+        run: npm run qa:realtime-latency
 
       - name: Preserve authenticated failure evidence
         if: failure()

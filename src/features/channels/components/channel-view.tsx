@@ -16,7 +16,7 @@ import {
   mergeMessages,
   olderPage,
 } from "@/features/channels/history";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { authorizeRealtime, createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types/entities";
 
@@ -142,7 +142,12 @@ export function ChannelView({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [olderFailed, setOlderFailed] = useState(false);
   const [threadRootId, setThreadRootId] = useState<string | null>(null);
-  const [connection, setConnection] = useState<"live" | "reconnecting">("live");
+  // "connecting" until the socket first joins; shown the same as "live", but
+  // it is not live yet, and a message sent in that window is only picked up
+  // by the refetch on joining (#113).
+  const [connection, setConnection] = useState<"connecting" | "live" | "reconnecting">(
+    "connecting",
+  );
   const savedMessageIds = new Set(initialSavedMessageIds);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToLatestRef = useRef(true);
@@ -217,36 +222,44 @@ export function ChannelView({
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     const topic = `messages:${container.id}`;
-    const subscription = supabase
-      .channel(topic)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "message",
-          filter: `${container.column}=eq.${container.id}`,
-        },
-        () => {
-          void refresh();
-          if (channelId) void markChannelRead(channelId);
-          if (conversationId) void markConversationRead(conversationId);
-        },
-      )
-      .subscribe((status) => {
-        // Visible but not alarming reconnect state (§14.3). On recovery we
-        // refetch so nothing missed during the gap stays missing.
-        if (status === "SUBSCRIBED") {
-          setConnection((previous) => {
-            if (previous === "reconnecting") void refresh();
-            return "live";
-          });
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          setConnection("reconnecting");
-        }
-      });
+    let cancelled = false;
+    let subscription: ReturnType<typeof supabase.channel> | null = null;
+    void authorizeRealtime(supabase).then(() => {
+      if (cancelled) return;
+      subscription = supabase
+        .channel(topic)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "message",
+            filter: `${container.column}=eq.${container.id}`,
+          },
+          () => {
+            void refresh();
+            if (channelId) void markChannelRead(channelId);
+            if (conversationId) void markConversationRead(conversationId);
+          },
+        )
+        .subscribe((status) => {
+          // Visible but not alarming reconnect state (§14.3). Whenever the
+          // socket (re)joins we refetch, so nothing sent while it was not
+          // listening stays missing: after a reconnect, and also on the first
+          // join, which happens a moment after the page has rendered.
+          if (status === "SUBSCRIBED") {
+            setConnection((previous) => {
+              if (previous !== "live") void refresh();
+              return "live";
+            });
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            setConnection("reconnecting");
+          }
+        });
+    });
     return () => {
-      void supabase.removeChannel(subscription);
+      cancelled = true;
+      if (subscription) void supabase.removeChannel(subscription);
     };
   }, [container.column, container.id, channelId, conversationId, refresh]);
 
@@ -317,7 +330,7 @@ export function ChannelView({
   }
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1" data-realtime={connection}>
       {/* Main column */}
       <div className={cn("flex min-w-0 flex-1 flex-col", threadRoot && "hidden md:flex")}>
         {connection === "reconnecting" ? (
