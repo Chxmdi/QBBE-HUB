@@ -149,7 +149,7 @@ async function calendarAccessToken(
 
 /** Creates an event that Hub owns and can safely reconcile later. It never
  * updates arbitrary Calendar items imported into the overlay. */
-async function createGoogleCalendarRecord(input: CalendarRecordInput) {
+async function createGoogleCalendarRecord(input: CalendarRecordInput): Promise<string | null> {
   const supabase = createSupabaseServiceClient();
   const { data: connection, error: connectionError } = await supabase
     .from("integration_connection")
@@ -197,7 +197,7 @@ async function createGoogleCalendarRecord(input: CalendarRecordInput) {
 
 /** Updates only a Hub-owned Calendar link. Attendee-managed fields remain in
  * Google Calendar and are never sent by QBBE Hub. */
-async function updateGoogleCalendarRecord(input: CalendarRecordInput) {
+async function updateGoogleCalendarRecord(input: CalendarRecordInput): Promise<string | null> {
   const supabase = createSupabaseServiceClient();
   const link = await findCalendarLink(supabase, input.organizationId, input.userId, input.record);
   if (!link) return null;
