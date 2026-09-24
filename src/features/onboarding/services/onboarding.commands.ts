@@ -51,6 +51,26 @@ export async function completeOnboarding(): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * Reduced motion as an in-app setting (UI-009), for people who cannot change
+ * the operating-system preference. Either one turns animation down.
+ */
+export async function setReduceMotion(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  const parsed = z.boolean().safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Invalid setting." };
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("user_profile")
+    .update({ reduce_motion: parsed.data })
+    .eq("id", session.userId);
+  if (error) return { ok: false, error: "Could not save the setting." };
+
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 const densitySchema = z.enum(["comfortable", "compact"]);
 
 /** Display density for heavy operational screens (P1-UX-07). */

@@ -6,8 +6,8 @@ import { signIn } from "./auth";
  * Visual QA + accessibility matrix (Part II §16.1):
  * themes, widths, content stress, keyboard, and data states.
  *
- * Runs against a seeded QA database (`npm run db:seed`). Not part of the CI
- * unit suite; see docs/runbooks/qa.md.
+ * Runs against a seeded QA database (`npm run db:seed`), in CI's Database
+ * security job after the authenticated checks (#101); see docs/runbooks/qa.md.
  */
 
 const ROUTES = [
@@ -58,6 +58,38 @@ async function horizontalOverflow(page: Page): Promise<number> {
   });
 }
 
+/**
+ * Names what sticks out: the outermost elements whose right edge passes the
+ * viewport and that are not already inside a scrolling container. A bare
+ * pixel count says a page is wrong, not where.
+ */
+async function overflowCulprits(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const width = document.documentElement.clientWidth;
+    const scrolls = (el: Element | null): boolean => {
+      for (let node = el?.parentElement; node; node = node.parentElement) {
+        const x = getComputedStyle(node).overflowX;
+        if (x === "auto" || x === "scroll" || x === "hidden" || x === "clip") return true;
+      }
+      return false;
+    };
+    const found: string[] = [];
+    for (const el of Array.from(document.body.querySelectorAll("*"))) {
+      const rect = el.getBoundingClientRect();
+      // An absolutely positioned element escapes a scroller that is not its
+      // containing block, so its scrolling ancestors do not excuse it.
+      const escapes = getComputedStyle(el).position === "absolute";
+      if (rect.width === 0 || rect.right <= width + 2 || (!escapes && scrolls(el))) continue;
+      const parentRect = el.parentElement?.getBoundingClientRect();
+      if (parentRect && parentRect.right > width + 2 && !scrolls(el.parentElement)) continue;
+      const cls = (el.getAttribute("class") ?? "").split(/\s+/).slice(0, 6).join(".");
+      found.push(`<${el.tagName.toLowerCase()}${cls ? ` .${cls}` : ""}> right=${Math.round(rect.right)} width=${Math.round(rect.width)}`);
+      if (found.length >= 3) break;
+    }
+    return found.join(" | ");
+  });
+}
+
 test.describe("QA matrix", () => {
   // The responsive sweep visits 240 authenticated route/theme/viewport
   // combinations. It is intentionally broader than the default unit-style
@@ -90,7 +122,7 @@ test.describe("QA matrix", () => {
           const overflow = await horizontalOverflow(page);
           if (overflow > 2) {
             failures.push(
-              `${route.name} ${theme} @${size.name}: overflows by ${overflow}px`,
+              `${route.name} ${theme} @${size.name}: overflows by ${overflow}px — ${await overflowCulprits(page)}`,
             );
           }
         }
@@ -103,25 +135,211 @@ test.describe("QA matrix", () => {
   test("no critical or serious accessibility violations", async ({ page }) => {
     const violations: string[] = [];
 
-    for (const route of ROUTES) {
-      await page.setViewportSize({ width: 1280, height: 800 });
-      await page.goto(route.path);
-      await page.waitForLoadState("networkidle");
+    // Both themes: dark mode is a token swap, and contrast is exactly what a
+    // token swap can break without any single component changing.
+    for (const theme of ["light", "dark"] as const) {
+      for (const route of ROUTES) {
+        await page.setViewportSize({ width: 1280, height: 800 });
+        await page.goto(route.path);
+        await setTheme(page, theme);
+        await page.waitForLoadState("networkidle");
 
-      const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
-        .analyze();
+        const results = await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
+          .analyze();
 
-      for (const v of results.violations) {
-        if (v.impact === "critical" || v.impact === "serious") {
-          violations.push(
-            `${route.name}: [${v.impact}] ${v.id} — ${v.help} (${v.nodes.length} nodes)\n    ${v.nodes[0]?.html?.slice(0, 160)}`,
-          );
+        for (const v of results.violations) {
+          if (v.impact === "critical" || v.impact === "serious") {
+            violations.push(
+              `${route.name} ${theme}: [${v.impact}] ${v.id} — ${v.help} (${v.nodes.length} nodes)\n    ${v.nodes[0]?.html?.slice(0, 160)}`,
+            );
+          }
         }
       }
     }
 
     expect(violations, violations.join("\n")).toEqual([]);
+  });
+
+  test("overlays pass axe while open, in both themes", async ({ page }) => {
+    // A scan of a closed page never sees the surfaces most likely to fail:
+    // menus, dialogs and drawers exist only while they are open.
+    const violations: string[] = [];
+    const scan = async (label: string) => {
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
+        .analyze();
+      for (const v of results.violations) {
+        if (v.impact === "critical" || v.impact === "serious") {
+          violations.push(
+            `${label}: [${v.impact}] ${v.id} — ${v.help} (${v.nodes.length} nodes)\n    ${v.nodes[0]?.html?.slice(0, 160)}`,
+          );
+        }
+      }
+    };
+
+    const overlays: { name: string; width: number; open: () => Promise<void> }[] = [
+      {
+        name: "command palette",
+        width: 1280,
+        open: async () => {
+          await page.goto("/");
+          await page.keyboard.press("Control+k");
+          await expect(page.getByRole("combobox", { name: "Search" })).toBeFocused();
+        },
+      },
+      {
+        name: "quick create menu",
+        width: 1280,
+        open: async () => {
+          await page.goto("/");
+          await page.getByRole("button", { name: "Quick create" }).click();
+        },
+      },
+      {
+        name: "notifications menu",
+        width: 1280,
+        open: async () => {
+          await page.goto("/");
+          await page.getByRole("button", { name: /^Notifications/ }).click();
+        },
+      },
+      {
+        name: "account menu",
+        width: 1280,
+        open: async () => {
+          await page.goto("/");
+          await page.getByRole("button", { name: "Account menu" }).click();
+        },
+      },
+      {
+        name: "create project dialog",
+        width: 1280,
+        open: async () => {
+          await page.goto("/projects?create=1");
+          await expect(page.getByRole("dialog")).toBeVisible();
+        },
+      },
+      {
+        name: "task drawer",
+        width: 1280,
+        open: async () => {
+          await page.goto("/my-work");
+          await page
+            .locator("button")
+            .filter({ hasText: /Confirm workshop venue contract|Draft registration form/ })
+            .first()
+            .click();
+          await expect(page.getByRole("dialog")).toBeVisible();
+        },
+      },
+      {
+        name: "mobile navigation drawer",
+        width: 390,
+        open: async () => {
+          await page.goto("/");
+          await page.getByRole("button", { name: "Open navigation" }).click();
+          await expect(page.getByRole("button", { name: "Close navigation" })).toBeVisible();
+        },
+      },
+    ];
+
+    for (const theme of ["light", "dark"] as const) {
+      for (const overlay of overlays) {
+        await page.setViewportSize({ width: overlay.width, height: 800 });
+        await page.goto("/");
+        await setTheme(page, theme);
+        await overlay.open();
+        await page.waitForLoadState("networkidle");
+        await scan(`${overlay.name} ${theme}`);
+      }
+    }
+
+    expect(violations, violations.join("\n")).toEqual([]);
+  });
+
+  test("keyboard: a skip link is first and moves focus past the navigation", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/my-work");
+    await page.keyboard.press("Tab");
+    const skip = page.getByRole("link", { name: "Skip to main content" });
+    await expect(skip).toBeFocused();
+    await expect(skip).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#main-content")).toBeFocused();
+  });
+
+  test("keyboard: focus is never hidden under the sticky or fixed bars", async ({
+    page,
+  }) => {
+    // WCAG 2.4.11. Tab through the first stretch of a long page on a phone
+    // width, where both the topbar and the bottom navigation are present,
+    // and require every focused control to sit clear of both.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/my-work");
+    const hidden: string[] = [];
+    for (let i = 0; i < 40; i++) {
+      await page.keyboard.press("Tab");
+      const box = await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null;
+        if (!el || el === document.body) return null;
+        if (el.closest("header, nav[aria-label='Primary'], [role='dialog']")) return null;
+        // A fixed element (the skip link) is drawn above the bars on purpose,
+        // so it cannot be covered by them.
+        if (getComputedStyle(el).position === "fixed") return null;
+        const r = el.getBoundingClientRect();
+        const header = document.querySelector("header")?.getBoundingClientRect();
+        const bottom = document.querySelector("nav[aria-label='Primary']")?.getBoundingClientRect();
+        return {
+          label: el.getAttribute("aria-label") || el.textContent?.trim().slice(0, 40) || el.tagName,
+          top: r.top,
+          bottom: r.bottom,
+          headerBottom: header?.bottom ?? 0,
+          navTop: bottom && bottom.height > 0 ? bottom.top : window.innerHeight,
+        };
+      });
+      if (!box) continue;
+      if (box.bottom <= box.headerBottom || box.top >= box.navTop) {
+        hidden.push(`${box.label} (top ${Math.round(box.top)}, bottom ${Math.round(box.bottom)})`);
+      }
+    }
+    expect(hidden, hidden.join("\n")).toEqual([]);
+  });
+
+  test("reduce motion can be set in the Hub, not only in the OS", async ({ page }) => {
+    // UI-009. Emulate an OS that does NOT ask for reduced motion, so only the
+    // in-app setting can be what turns animation down.
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto("/settings");
+    const toggle = page.getByLabel("Reduce motion");
+    await expect(toggle).not.toBeChecked();
+    try {
+      await toggle.check();
+      await expect(page.locator("html")).toHaveClass(/\breduce-motion\b/);
+      // Persisted, not just toggled in this tab.
+      await page.reload();
+      await expect(page.getByLabel("Reduce motion")).toBeChecked();
+      await expect(page.locator("html")).toHaveClass(/\breduce-motion\b/);
+      const duration = await page.evaluate(() => {
+        const probe = document.createElement("div");
+        probe.style.transition = "opacity 300ms";
+        document.body.append(probe);
+        const value = getComputedStyle(probe).transitionDuration;
+        probe.remove();
+        return value;
+      });
+      expect(parseFloat(duration)).toBeLessThan(0.01);
+    } finally {
+      // Leave the shared QA owner as it was for every other test.
+      await page.goto("/settings");
+      const reset = page.getByLabel("Reduce motion");
+      if (await reset.isChecked()) {
+        await reset.uncheck();
+        await expect(page.locator("html")).not.toHaveClass(/\breduce-motion\b/);
+      }
+    }
   });
 
   test("200% zoom keeps content usable", async ({ page }) => {

@@ -28,10 +28,14 @@ const HEALTH_BAR: Record<string, string> = {
   unknown: "bg-(--color-chart-progress)",
 };
 
+// The chart colours are light tints in dark mode, so white text on them
+// failed contrast there (axe, qa-matrix, #101); dark mode uses the canvas.
+// ink turns light in dark mode too, which the amber bar could not carry.
 const HEALTH_BAR_TEXT: Record<string, string> = {
-  at_risk: "text-ink",
+  at_risk: "text-ink dark:text-canvas",
   paused: "text-ink",
 };
+const HEALTH_BAR_TEXT_DEFAULT = "text-white dark:text-canvas";
 
 /**
  * Master Schedule (P0-GNT-01): server-prepared bounded window — never an
@@ -157,7 +161,7 @@ export default async function SchedulePage() {
                           <span
                             className={cn(
                               "truncate text-[10.5px] font-semibold",
-                              HEALTH_BAR_TEXT[project.health] ?? "text-white",
+                              HEALTH_BAR_TEXT[project.health] ?? HEALTH_BAR_TEXT_DEFAULT,
                             )}
                           >
                             {project.name}
