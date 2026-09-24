@@ -130,6 +130,19 @@ scoped to the record, recipient, and day where repeat reminders are intended,
 so retries and overlapping cron invocations cannot duplicate alerts. Execution
 results are recorded in Admin → background jobs.
 
+## Keeping test mail away from real people
+
+Every non-production environment must set `EMAIL_RECIPIENT_ALLOWLIST` to the
+authorized test addresses and/or `@domain` entries (for example
+`tester@qbbe.org,@qbbe.org`). With it set, the notification worker records any
+other recipient as `suppressed` with reason `recipient_not_allowlisted`, visible
+in Admin → Email, and `sendEmail` refuses them as a backstop. Admin → Email
+shows a notice while the allowlist is active. Leave it unset only in production.
+
+It covers notification mail and digests, which go through the Hub's email
+worker. Password-recovery mail is sent by Supabase Auth itself, so on staging
+point Supabase Auth's SMTP at a sandbox or restrict its recipients separately.
+
 ## Workstream 6 live gate
 
 `scripts/verify-integrations.sh` refuses to run until QBBE-owned

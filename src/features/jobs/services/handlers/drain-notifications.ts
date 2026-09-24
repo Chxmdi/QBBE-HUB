@@ -7,6 +7,7 @@ import {
 } from "@/features/notifications/services/delivery-rules";
 import {
   EmailSendError,
+  recipientIsAllowed,
   sendEmail,
 } from "@/features/notifications/services/email-provider";
 import {
@@ -494,6 +495,17 @@ async function handleMessage(
   }
 
   const { delivery, email } = prepared;
+
+  // Staging's allowlist: record the message as suppressed, visibly and
+  // terminally, rather than sending it or letting it bounce and retry.
+  if (!recipientIsAllowed(delivery.recipient)) {
+    const { error: suppressionError } = await db
+      .from("email_delivery")
+      .update({ status: "suppressed", suppressed_reason: "recipient_not_allowlisted" })
+      .eq("id", delivery.id);
+    if (suppressionError) throw new Error(`could not suppress delivery: ${suppressionError.message}`);
+    return { disposition: { kind: "ack" }, outcome: "resolved" };
+  }
 
   try {
     const sent = await sendEmail({

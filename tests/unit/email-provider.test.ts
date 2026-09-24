@@ -3,6 +3,7 @@ import {
   EmailSendError,
   activeTransport,
   isRetryableStatus,
+  recipientIsAllowed,
   sendEmail,
   transactionalEmailIsLive,
 } from "@/features/notifications/services/email-provider";
@@ -151,5 +152,35 @@ describe("sendEmail", () => {
     });
     expect(info).toHaveBeenCalledOnce();
     info.mockRestore();
+  });
+});
+
+describe("recipient allowlist", () => {
+  afterEach(() => {
+    delete process.env.EMAIL_RECIPIENT_ALLOWLIST;
+  });
+
+  it("allows everyone when no allowlist is set, as production does", () => {
+    expect(recipientIsAllowed("anyone@example.org")).toBe(true);
+  });
+
+  it("does not treat a domain that merely ends the same way as a match", () => {
+    expect(recipientIsAllowed("a@evil-qbbe.org", ["@qbbe.org"])).toBe(false);
+    expect(recipientIsAllowed("a@qbbe.org.evil.com", ["@qbbe.org"])).toBe(false);
+    expect(recipientIsAllowed("a@QBBE.org", ["@qbbe.org"])).toBe(true);
+  });
+
+  it("refuses to send to anyone off the list, even when called directly", async () => {
+    process.env.EMAIL_RECIPIENT_ALLOWLIST = "tester@qbbe.org";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(sendEmail({
+      to: "real.person@example.org",
+      subject: "Test",
+      text: "Test",
+      html: "Test",
+    })).rejects.toMatchObject({ retryable: false });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
