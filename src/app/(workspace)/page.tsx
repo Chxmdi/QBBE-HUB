@@ -35,7 +35,12 @@ import {
 } from "@/features/dashboard/services/portfolio.queries";
 import { requireSession } from "@/lib/auth";
 import { DEFAULT_TIME_ZONE, calendarDateInZone } from "@/lib/time";
-import { formatDate, formatDateTime, formatTime, relativeTime } from "@/lib/utils";
+import {
+  formatDate,
+  formatDateTime,
+  formatTime,
+  relativeTime,
+} from "@/lib/utils";
 import type { ProjectHealth, Task } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Home" };
@@ -66,12 +71,19 @@ function AttentionLink({
   return (
     <li className="interactive-row flex items-center gap-3 px-3 py-2">
       <span className="min-w-0 flex-1">
-        <Link href={href} className="block truncate text-[13.5px] font-medium hover:text-brand-fg">
+        <Link
+          href={href}
+          className="block truncate text-[13.5px] font-medium hover:text-brand-fg"
+        >
           {title}
         </Link>
         <span className="meta">{reason}</span>
       </span>
-      <Link href={href} aria-label={`Open ${title}`} className="text-muted hover:text-brand-fg">
+      <Link
+        href={href}
+        aria-label={`Open ${title}`}
+        className="text-muted hover:text-brand-fg"
+      >
         <ArrowRight className="size-4" aria-hidden />
       </Link>
     </li>
@@ -112,9 +124,15 @@ export default async function HomePage() {
   const [data, portfolio, workload, outcomes, commitments] = await Promise.all([
     getDashboardData(session.userId, session.timeZone),
     showPortfolio
-      ? getPortfolio({ userId: session.userId, role: session.role, filters: {} })
+      ? getPortfolio({
+          userId: session.userId,
+          role: session.role,
+          filters: {},
+        })
       : Promise.resolve(null),
-    showPortfolio ? getWorkload(session.timeZone) : Promise.resolve({ people: [], teams: [] }),
+    showPortfolio
+      ? getWorkload(session.timeZone)
+      : Promise.resolve({ people: [], teams: [] }),
     showPortfolio ? getOutcomeRollup() : Promise.resolve([]),
     getCommitments(session.timeZone),
   ]);
@@ -138,8 +156,10 @@ export default async function HomePage() {
 
   const activeTotal = Object.values(healthCounts).reduce((a, b) => a + b, 0);
   const onTrack = healthCounts["on_track"] ?? 0;
-  const atRisk = (healthCounts["at_risk"] ?? 0) + (healthCounts["off_track"] ?? 0);
-  const healthPercent = activeTotal > 0 ? Math.round((onTrack / activeTotal) * 100) : null;
+  const atRisk =
+    (healthCounts["at_risk"] ?? 0) + (healthCounts["off_track"] ?? 0);
+  const healthPercent =
+    activeTotal > 0 ? Math.round((onTrack / activeTotal) * 100) : null;
 
   const completionDelta =
     data.completedPrevious30 > 0
@@ -158,7 +178,8 @@ export default async function HomePage() {
       attention.overdueMilestones.length === 0 &&
       attention.pendingDecisions.length === 0 &&
       attention.upcomingCommitments.length === 0
-    : attention.overdueTasks.length === 0 && attention.blockedTasks.length === 0;
+    : attention.overdueTasks.length === 0 &&
+      attention.blockedTasks.length === 0;
 
   const rail = data.announcementRail;
   const latestAnn = rail.latest;
@@ -169,8 +190,7 @@ export default async function HomePage() {
       <div className="min-w-0">
         <header className="mb-6">
           <h1 className="page-title">
-            {greetingFor(timezone)}, {firstName}{" "}
-            <span aria-hidden>👋</span>
+            {greetingFor(timezone)}, {firstName} <span aria-hidden>👋</span>
           </h1>
           <p className="mt-1.5 text-[14.5px] text-muted">
             {session.isStaff
@@ -180,9 +200,12 @@ export default async function HomePage() {
         </header>
 
         {/* Required announcements beyond the rail stay pinned until acked */}
-        {data.requiredAnnouncements.filter((a) => a.id !== latestAnn?.id).length >
-        0 ? (
-          <section aria-label="Required announcements" className="mb-5 space-y-2">
+        {data.requiredAnnouncements.filter((a) => a.id !== latestAnn?.id)
+          .length > 0 ? (
+          <section
+            aria-label="Required announcements"
+            className="mb-5 space-y-2"
+          >
             {data.requiredAnnouncements
               .filter((a) => a.id !== latestAnn?.id)
               .map((a) => (
@@ -190,13 +213,18 @@ export default async function HomePage() {
                   key={a.id}
                   className="flex flex-wrap items-center gap-3 rounded-(--radius-md) border border-brand/30 bg-brand-soft/60 px-4 py-3"
                 >
-                  <Megaphone className="size-4.5 shrink-0 text-brand-fg" aria-hidden />
+                  <Megaphone
+                    className="size-4.5 shrink-0 text-brand-fg"
+                    aria-hidden
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="text-[13.5px] font-semibold">{a.title}</p>
                     <p className="meta">
                       {a.priority === "critical" ? "Critical · " : ""}
                       Acknowledgment required
-                      {a.ack_deadline ? ` by ${formatDate(a.ack_deadline)}` : ""}
+                      {a.ack_deadline
+                        ? ` by ${formatDate(a.ack_deadline)}`
+                        : ""}
                     </p>
                   </div>
                   <AcknowledgeButton announcementId={a.id} />
@@ -207,80 +235,101 @@ export default async function HomePage() {
 
         {/* Hero: portfolio pulse — staff/leadership only (P0-VOL-02) */}
         {showPortfolio && portfolio ? (
-        <section
-          aria-label="Portfolio summary"
-          className="card mb-5 flex flex-wrap items-center gap-x-8 gap-y-4 p-5"
-        >
-          <div>
-            <p className="flex items-baseline gap-2">
-              <span className="text-[34px] leading-none font-semibold">
-                {kpis.activePrograms}
-              </span>
-              <span className="text-[15px] font-medium">
-                active {kpis.activePrograms === 1 ? "program" : "programs"}
-              </span>
-            </p>
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted">
-              <Link href="/projects?stage=active" className="hover:underline">
-                {portfolio.counts.active} active
-              </Link>
-              <Link href="/projects?health=on_track" className="hover:underline">
-                {portfolio.counts.onTrack} on track
-              </Link>
-              <Link href="/projects?health=at_risk" className="hover:underline">
-                {portfolio.counts.atRisk} at risk
-              </Link>
-              <Link href="/projects?health=off_track" className="hover:underline">
-                {portfolio.counts.offTrack} off track
-              </Link>
-              <Link href="/projects?health=paused" className="hover:underline">
-                {portfolio.counts.paused} paused
-              </Link>
-              <Link href="/projects?stale=1" className="hover:underline">
-                {portfolio.counts.stale} stale
-              </Link>
-            </p>
-            <p className="meta mt-1">Last refreshed {formatDateTime(portfolio.refreshedAt)}</p>
-          </div>
-          <div className="hidden h-12 w-px bg-line sm:block" aria-hidden />
-          <div>
-            <p className="eyebrow">Overall portfolio health</p>
-            {healthPercent === null ? (
-              <p className="mt-1 text-[14px] text-muted">
-                No active projects yet
+          <section
+            aria-label="Portfolio summary"
+            className="card mb-5 flex flex-wrap items-center gap-x-8 gap-y-4 p-5"
+          >
+            <div>
+              <p className="flex items-baseline gap-2">
+                <span className="text-[34px] leading-none font-semibold">
+                  {kpis.activePrograms}
+                </span>
+                <span className="text-[15px] font-medium">
+                  active {kpis.activePrograms === 1 ? "program" : "programs"}
+                </span>
               </p>
-            ) : (
-              <p className="mt-0.5 flex items-baseline gap-2">
-                <span
-                  className={
-                    healthPercent >= 70
-                      ? "text-[28px] leading-none font-semibold text-success-fg"
-                      : healthPercent >= 40
-                        ? "text-[28px] leading-none font-semibold text-warning-fg"
-                        : "text-[28px] leading-none font-semibold text-danger-fg"
-                  }
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted">
+                <Link
+                  href="/projects?stage=active"
+                  className="inline-flex min-h-6 items-center hover:underline"
                 >
-                  {healthPercent}%
-                </span>
-                <span className="text-[12.5px] text-muted">
-                  of {activeTotal} active {activeTotal === 1 ? "project" : "projects"} on track
-                  {atRisk > 0 ? ` · ${atRisk} flagged` : ""}
-                </span>
+                  {portfolio.counts.active} active
+                </Link>
+                <Link
+                  href="/projects?health=on_track"
+                  className="inline-flex min-h-6 items-center hover:underline"
+                >
+                  {portfolio.counts.onTrack} on track
+                </Link>
+                <Link
+                  href="/projects?health=at_risk"
+                  className="inline-flex min-h-6 items-center hover:underline"
+                >
+                  {portfolio.counts.atRisk} at risk
+                </Link>
+                <Link
+                  href="/projects?health=off_track"
+                  className="inline-flex min-h-6 items-center hover:underline"
+                >
+                  {portfolio.counts.offTrack} off track
+                </Link>
+                <Link
+                  href="/projects?health=paused"
+                  className="inline-flex min-h-6 items-center hover:underline"
+                >
+                  {portfolio.counts.paused} paused
+                </Link>
+                <Link
+                  href="/projects?stale=1"
+                  className="inline-flex min-h-6 items-center hover:underline"
+                >
+                  {portfolio.counts.stale} stale
+                </Link>
               </p>
-            )}
-          </div>
-          {session.isStaff ? (
-            <div className="ml-auto">
-              <Link
-                href="/projects?create=1"
-                className="inline-flex h-9.5 items-center gap-1.5 rounded-(--radius-sm) bg-brand px-4 text-sm font-medium text-white transition-colors hover:bg-brand-strong"
-              >
-                <Plus className="size-4" aria-hidden />
-                New project
-              </Link>
+              <p className="meta mt-1">
+                Last refreshed {formatDateTime(portfolio.refreshedAt)}
+              </p>
             </div>
-          ) : null}
-        </section>
+            <div className="hidden h-12 w-px bg-line sm:block" aria-hidden />
+            <div>
+              <p className="eyebrow">Overall portfolio health</p>
+              {healthPercent === null ? (
+                <p className="mt-1 text-[14px] text-muted">
+                  No active projects yet
+                </p>
+              ) : (
+                <p className="mt-0.5 flex items-baseline gap-2">
+                  <span
+                    className={
+                      healthPercent >= 70
+                        ? "text-[28px] leading-none font-semibold text-success-fg"
+                        : healthPercent >= 40
+                          ? "text-[28px] leading-none font-semibold text-warning-fg"
+                          : "text-[28px] leading-none font-semibold text-danger-fg"
+                    }
+                  >
+                    {healthPercent}%
+                  </span>
+                  <span className="text-[12.5px] text-muted">
+                    of {activeTotal} active{" "}
+                    {activeTotal === 1 ? "project" : "projects"} on track
+                    {atRisk > 0 ? ` · ${atRisk} flagged` : ""}
+                  </span>
+                </p>
+              )}
+            </div>
+            {session.isStaff ? (
+              <div className="ml-auto">
+                <Link
+                  href="/projects?create=1"
+                  className="inline-flex h-9.5 items-center gap-1.5 rounded-(--radius-sm) bg-brand px-4 text-sm font-medium text-white transition-colors hover:bg-brand-strong"
+                >
+                  <Plus className="size-4" aria-hidden />
+                  New project
+                </Link>
+              </div>
+            ) : null}
+          </section>
         ) : null}
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -367,131 +416,143 @@ export default async function HomePage() {
 
           {/* PROGRAM HEALTH — staff only */}
           {session.isStaff ? (
-          <section aria-labelledby="program-health-heading" className="card p-5">
-            <h2 id="program-health-heading" className="eyebrow mb-4">
-              Program health
-            </h2>
-            {data.programHealth.length === 0 ? (
-              <p className="py-6 text-center text-[13.5px] text-muted">
-                Create a program to see its delivery health here.
-              </p>
-            ) : (
-              <ul className="space-y-4">
-                {data.programHealth.map((program) => (
-                  <li key={program.id}>
-                    <Link href={`/programs/${program.id}`} className="group block">
-                      <span className="mb-1.5 flex items-baseline justify-between gap-3">
-                        <span className="truncate text-[13.5px] font-medium group-hover:text-brand-fg">
-                          {program.name}
-                        </span>
-                        <span className="flex items-center gap-2 whitespace-nowrap">
-                          {program.totalTasks > 0 ? (
-                            <span className="text-[13px] font-semibold tabular-nums">
-                              {Math.round(program.completionPercent)}%
+            <section
+              aria-labelledby="program-health-heading"
+              className="card p-5"
+            >
+              <h2 id="program-health-heading" className="eyebrow mb-4">
+                Program health
+              </h2>
+              {data.programHealth.length === 0 ? (
+                <p className="py-6 text-center text-[13.5px] text-muted">
+                  Create a program to see its delivery health here.
+                </p>
+              ) : (
+                <ul className="space-y-4">
+                  {data.programHealth.map((program) => (
+                    <li key={program.id}>
+                      <Link
+                        href={`/programs/${program.id}`}
+                        className="group block"
+                      >
+                        <span className="mb-1.5 flex items-baseline justify-between gap-3">
+                          <span className="truncate text-[13.5px] font-medium group-hover:text-brand-fg">
+                            {program.name}
+                          </span>
+                          <span className="flex items-center gap-2 whitespace-nowrap">
+                            {program.totalTasks > 0 ? (
+                              <span className="text-[13px] font-semibold tabular-nums">
+                                {Math.round(program.completionPercent)}%
+                              </span>
+                            ) : null}
+                            <span
+                              className={
+                                program.tone === "good"
+                                  ? "text-[11.5px] font-medium text-success-fg"
+                                  : program.tone === "attention"
+                                    ? "text-[11.5px] font-medium text-warning-fg"
+                                    : program.tone === "risk"
+                                      ? "text-[11.5px] font-medium text-danger-fg"
+                                      : "text-[11.5px] font-medium text-muted"
+                              }
+                            >
+                              {program.statusLabel}
                             </span>
-                          ) : null}
-                          <span
-                            className={
-                              program.tone === "good"
-                                ? "text-[11.5px] font-medium text-success-fg"
-                                : program.tone === "attention"
-                                  ? "text-[11.5px] font-medium text-warning-fg"
-                                  : program.tone === "risk"
-                                    ? "text-[11.5px] font-medium text-danger-fg"
-                                    : "text-[11.5px] font-medium text-muted"
-                            }
-                          >
-                            {program.statusLabel}
                           </span>
                         </span>
-                      </span>
-                      <ProgressBar
-                        label={`${program.name} completion`}
-                        percent={program.completionPercent}
-                        tone={program.tone}
-                      />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Link
-              href="/projects"
-              className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
-            >
-              View portfolio <ArrowRight className="size-3.5" aria-hidden />
-            </Link>
-          </section>
+                        <ProgressBar
+                          label={`${program.name} completion`}
+                          percent={program.completionPercent}
+                          tone={program.tone}
+                        />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link
+                href="/projects"
+                className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
+              >
+                View portfolio <ArrowRight className="size-3.5" aria-hidden />
+              </Link>
+            </section>
           ) : null}
 
           {/* ACTIVITY OVERVIEW — staff only */}
           {session.isStaff ? (
-          <section aria-labelledby="activity-overview-heading" className="card p-5">
-            <h2 id="activity-overview-heading" className="eyebrow mb-4">
-              Activity overview
-            </h2>
-            <div className="mb-4 flex items-baseline gap-3">
-              <p className="text-[30px] leading-none font-semibold">
-                {kpis.completedLast30}
-              </p>
-              <div>
-                <p className="text-[12.5px] text-muted">
-                  tasks completed · last 30 days
+            <section
+              aria-labelledby="activity-overview-heading"
+              className="card p-5"
+            >
+              <h2 id="activity-overview-heading" className="eyebrow mb-4">
+                Activity overview
+              </h2>
+              <div className="mb-4 flex items-baseline gap-3">
+                <p className="text-[30px] leading-none font-semibold">
+                  {kpis.completedLast30}
                 </p>
-                {completionDelta !== null ? (
-                  <p
-                    className={
-                      completionDelta >= 0
-                        ? "flex items-center gap-1 text-[12px] font-medium text-success-fg"
-                        : "flex items-center gap-1 text-[12px] font-medium text-danger-fg"
-                    }
-                  >
-                    {completionDelta >= 0 ? (
-                      <TrendingUp className="size-3.5" aria-hidden />
-                    ) : (
-                      <TrendingDown className="size-3.5" aria-hidden />
-                    )}
-                    {completionDelta >= 0 ? "+" : ""}
-                    {completionDelta}% vs previous 30 days
+                <div>
+                  <p className="text-[12.5px] text-muted">
+                    tasks completed · last 30 days
                   </p>
-                ) : null}
+                  {completionDelta !== null ? (
+                    <p
+                      className={
+                        completionDelta >= 0
+                          ? "flex items-center gap-1 text-[12px] font-medium text-success-fg"
+                          : "flex items-center gap-1 text-[12px] font-medium text-danger-fg"
+                      }
+                    >
+                      {completionDelta >= 0 ? (
+                        <TrendingUp className="size-3.5" aria-hidden />
+                      ) : (
+                        <TrendingDown className="size-3.5" aria-hidden />
+                      )}
+                      {completionDelta >= 0 ? "+" : ""}
+                      {completionDelta}% vs previous 30 days
+                    </p>
+                  ) : null}
+                </div>
               </div>
-            </div>
-            <WeeklyBars weeks={data.weeklyCompleted} />
-            <div className="mt-5 border-t border-line pt-4">
-              <p className="mb-3 text-[12.5px] font-medium text-muted">
-                Tasks by status
-              </p>
-              <StatusDonut
-                slices={[
-                  {
-                    label: "Completed · 30d",
-                    value: statusBreakdown.completed,
-                    colorVar: "--color-chart-good",
-                  },
-                  {
-                    label: "To do",
-                    value: statusBreakdown.toDo,
-                    colorVar: "--color-chart-todo",
-                  },
-                  {
-                    label: "In progress",
-                    value: statusBreakdown.inProgress,
-                    colorVar: "--color-chart-progress",
-                  },
-                  {
-                    label: "Overdue",
-                    value: statusBreakdown.overdue,
-                    colorVar: "--color-chart-overdue",
-                  },
-                ]}
-              />
-            </div>
-          </section>
+              <WeeklyBars weeks={data.weeklyCompleted} />
+              <div className="mt-5 border-t border-line pt-4">
+                <p className="mb-3 text-[12.5px] font-medium text-muted">
+                  Tasks by status
+                </p>
+                <StatusDonut
+                  slices={[
+                    {
+                      label: "Completed · 30d",
+                      value: statusBreakdown.completed,
+                      colorVar: "--color-chart-good",
+                    },
+                    {
+                      label: "To do",
+                      value: statusBreakdown.toDo,
+                      colorVar: "--color-chart-todo",
+                    },
+                    {
+                      label: "In progress",
+                      value: statusBreakdown.inProgress,
+                      colorVar: "--color-chart-progress",
+                    },
+                    {
+                      label: "Overdue",
+                      value: statusBreakdown.overdue,
+                      colorVar: "--color-chart-overdue",
+                    },
+                  ]}
+                />
+              </div>
+            </section>
           ) : null}
 
           {/* UPCOMING EVENTS */}
-          <section aria-labelledby="upcoming-events-heading" className="card p-5">
+          <section
+            aria-labelledby="upcoming-events-heading"
+            className="card p-5"
+          >
             <div className="mb-4 flex items-center justify-between">
               <h2 id="upcoming-events-heading" className="eyebrow">
                 Upcoming events
@@ -505,7 +566,10 @@ export default async function HomePage() {
             </div>
             {data.upcomingEvents.length === 0 ? (
               <div className="py-6 text-center">
-                <CalendarDays className="mx-auto mb-2 size-7 text-muted/50" aria-hidden />
+                <CalendarDays
+                  className="mx-auto mb-2 size-7 text-muted/50"
+                  aria-hidden
+                />
                 <p className="text-[13.5px] text-muted">
                   No upcoming events scheduled.
                 </p>
@@ -522,10 +586,16 @@ export default async function HomePage() {
                       >
                         <span className="flex w-11 shrink-0 flex-col items-center rounded-(--radius-sm) border border-line bg-surface-soft/70 py-1">
                           <span className="text-[9.5px] font-bold tracking-wide text-brand-fg uppercase">
-                            {date.toLocaleDateString("en-CA", { month: "short", timeZone: timezone })}
+                            {date.toLocaleDateString("en-CA", {
+                              month: "short",
+                              timeZone: timezone,
+                            })}
                           </span>
                           <span className="text-[16px] leading-tight font-bold">
-                            {date.toLocaleDateString("en-CA", { day: "2-digit", timeZone: timezone })}
+                            {date.toLocaleDateString("en-CA", {
+                              day: "2-digit",
+                              timeZone: timezone,
+                            })}
                           </span>
                         </span>
                         <span className="min-w-0 flex-1">
@@ -560,88 +630,127 @@ export default async function HomePage() {
 
         {showPortfolio ? (
           <section aria-labelledby="workload-heading" className="mt-8">
-            <h2 id="workload-heading" className="section-heading mb-3">Workload</h2>
+            <h2 id="workload-heading" className="section-heading mb-3">
+              Workload
+            </h2>
             {workload.people.length === 0 ? (
-              <p className="card px-4 py-6 text-center text-[13px] text-muted">No open assigned work.</p>
+              <p className="card px-4 py-6 text-center text-[13px] text-muted">
+                No open assigned work.
+              </p>
             ) : (
               <div className="space-y-4">
-              <div className="card overflow-x-auto">
-                <table className="w-full text-left text-[13.5px]">
-                  <thead>
-                    <tr className="border-b border-line">
-                      <th className="px-4 py-2 font-semibold">Person</th>
-                      <th className="px-4 py-2 font-semibold">Active</th>
-                      <th className="px-4 py-2 font-semibold">Due soon</th>
-                      <th className="px-4 py-2 font-semibold">Overdue</th>
-                      <th className="px-4 py-2 font-semibold">Estimated hours</th>
-                      <th className="px-4 py-2 font-semibold">Overload</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {workload.people.map((person) => (
-                      <tr key={person.userId} className="border-b border-line last:border-b-0">
-                        <td className="px-4 py-2">{person.name}</td>
-                        <td className="px-4 py-2">{person.active}</td>
-                        <td className="px-4 py-2">{person.dueSoon}</td>
-                        <td className="px-4 py-2">{person.overdue}</td>
-                        <td className="px-4 py-2">
-                          {person.estimatedHours === null
-                            ? "Unknown"
-                            : `${person.estimatedHours}${person.unknownEstimates ? ` (${person.unknownEstimates} unknown)` : ""}`}
-                        </td>
-                        <td className="px-4 py-2">{person.overloaded ? "Possible overload" : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {workload.teams.length > 0 ? (
-                <div className="card overflow-x-auto">
+                <div
+                  className="card overflow-x-auto"
+                  role="region"
+                  aria-label="Workload by person"
+                  tabIndex={0}
+                >
                   <table className="w-full text-left text-[13.5px]">
                     <thead>
                       <tr className="border-b border-line">
-                        <th className="px-4 py-2 font-semibold">Team</th>
+                        <th className="px-4 py-2 font-semibold">Person</th>
                         <th className="px-4 py-2 font-semibold">Active</th>
                         <th className="px-4 py-2 font-semibold">Due soon</th>
                         <th className="px-4 py-2 font-semibold">Overdue</th>
-                        <th className="px-4 py-2 font-semibold">Estimated hours</th>
+                        <th className="px-4 py-2 font-semibold">
+                          Estimated hours
+                        </th>
                         <th className="px-4 py-2 font-semibold">Overload</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {workload.teams.map((team) => (
-                        <tr key={team.teamId} className="border-b border-line last:border-b-0">
-                          <td className="px-4 py-2">{team.name}</td>
-                          <td className="px-4 py-2">{team.active}</td>
-                          <td className="px-4 py-2">{team.dueSoon}</td>
-                          <td className="px-4 py-2">{team.overdue}</td>
+                      {workload.people.map((person) => (
+                        <tr
+                          key={person.userId}
+                          className="border-b border-line last:border-b-0"
+                        >
+                          <td className="px-4 py-2">{person.name}</td>
+                          <td className="px-4 py-2">{person.active}</td>
+                          <td className="px-4 py-2">{person.dueSoon}</td>
+                          <td className="px-4 py-2">{person.overdue}</td>
                           <td className="px-4 py-2">
-                            {team.estimatedHours === null ? "Unknown" : team.estimatedHours}
+                            {person.estimatedHours === null
+                              ? "Unknown"
+                              : `${person.estimatedHours}${person.unknownEstimates ? ` (${person.unknownEstimates} unknown)` : ""}`}
                           </td>
-                          <td className="px-4 py-2">{team.overloaded ? "Possible overload" : "—"}</td>
+                          <td className="px-4 py-2">
+                            {person.overloaded ? "Possible overload" : "—"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              ) : null}
+                {workload.teams.length > 0 ? (
+                  <div
+                    className="card overflow-x-auto"
+                    role="region"
+                    aria-label="Workload by team"
+                    tabIndex={0}
+                  >
+                    <table className="w-full text-left text-[13.5px]">
+                      <thead>
+                        <tr className="border-b border-line">
+                          <th className="px-4 py-2 font-semibold">Team</th>
+                          <th className="px-4 py-2 font-semibold">Active</th>
+                          <th className="px-4 py-2 font-semibold">Due soon</th>
+                          <th className="px-4 py-2 font-semibold">Overdue</th>
+                          <th className="px-4 py-2 font-semibold">
+                            Estimated hours
+                          </th>
+                          <th className="px-4 py-2 font-semibold">Overload</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {workload.teams.map((team) => (
+                          <tr
+                            key={team.teamId}
+                            className="border-b border-line last:border-b-0"
+                          >
+                            <td className="px-4 py-2">{team.name}</td>
+                            <td className="px-4 py-2">{team.active}</td>
+                            <td className="px-4 py-2">{team.dueSoon}</td>
+                            <td className="px-4 py-2">{team.overdue}</td>
+                            <td className="px-4 py-2">
+                              {team.estimatedHours === null
+                                ? "Unknown"
+                                : team.estimatedHours}
+                            </td>
+                            <td className="px-4 py-2">
+                              {team.overloaded ? "Possible overload" : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
               </div>
             )}
           </section>
         ) : null}
 
         <section aria-labelledby="commitments-heading" className="mt-8">
-          <h2 id="commitments-heading" className="section-heading mb-3">Commitments</h2>
+          <h2 id="commitments-heading" className="section-heading mb-3">
+            Commitments
+          </h2>
           {commitments.length === 0 ? (
-            <p className="card px-4 py-6 text-center text-[13px] text-muted">No upcoming milestones, reporting dates, or follow-ups.</p>
+            <p className="card px-4 py-6 text-center text-[13px] text-muted">
+              No upcoming milestones, reporting dates, or follow-ups.
+            </p>
           ) : (
             <ul className="card divide-y divide-line">
               {commitments.map((item) => (
                 <li key={item.id} className="px-4 py-2.5">
-                  <Link href={item.href} className="text-[13.5px] font-medium hover:text-brand-fg">
+                  <Link
+                    href={item.href}
+                    className="text-[13.5px] font-medium hover:text-brand-fg"
+                  >
                     {item.title}
                   </Link>
-                  <p className="meta">{item.kind} · {item.when}</p>
+                  <p className="meta">
+                    {item.kind} · {item.when}
+                  </p>
                 </li>
               ))}
             </ul>
@@ -650,16 +759,21 @@ export default async function HomePage() {
 
         {showPortfolio ? (
           <section aria-labelledby="outcomes-heading" className="mt-8">
-            <h2 id="outcomes-heading" className="section-heading mb-3">Outcomes</h2>
+            <h2 id="outcomes-heading" className="section-heading mb-3">
+              Outcomes
+            </h2>
             {outcomes.length === 0 ? (
-              <p className="card px-4 py-6 text-center text-[13px] text-muted">No outcome targets yet.</p>
+              <p className="card px-4 py-6 text-center text-[13px] text-muted">
+                No outcome targets yet.
+              </p>
             ) : (
               <ul className="card divide-y divide-line">
                 {outcomes.map((metric) => (
                   <li key={metric.id} className="px-4 py-2.5">
                     <p className="text-[13.5px] font-medium">{metric.name}</p>
                     <p className="meta">
-                      {metric.programName} · latest {metric.latest ?? "—"} {metric.unit} · target {metric.target ?? "—"}
+                      {metric.programName} · latest {metric.latest ?? "—"}{" "}
+                      {metric.unit} · target {metric.target ?? "—"}
                     </p>
                   </li>
                 ))}
@@ -675,12 +789,16 @@ export default async function HomePage() {
           </h2>
           {attentionEmpty ? (
             <div className="card px-5 py-6 text-center">
-              <CheckCircle2 className="mx-auto mb-1.5 size-6 text-success-fg" aria-hidden />
+              <CheckCircle2
+                className="mx-auto mb-1.5 size-6 text-success-fg"
+                aria-hidden
+              />
               <p className="text-[14px] font-medium">
                 Nothing needs escalation right now.
               </p>
               <p className="mt-0.5 text-[13px] text-muted">
-                No overdue, blocked, unassigned, at-risk, or upcoming work is visible to you.
+                No overdue, blocked, unassigned, at-risk, or upcoming work is
+                visible to you.
               </p>
             </div>
           ) : (
@@ -688,12 +806,18 @@ export default async function HomePage() {
               {showPortfolio && attention.riskyProjects.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <AlertTriangle className="size-3.5 text-warning-fg" aria-hidden />
+                    <AlertTriangle
+                      className="size-3.5 text-warning-fg"
+                      aria-hidden
+                    />
                     Projects at risk
                   </p>
                   <ul>
                     {attention.riskyProjects.map((p) => (
-                      <li key={p.id} className="interactive-row flex items-center gap-3 px-3 py-2">
+                      <li
+                        key={p.id}
+                        className="interactive-row flex items-center gap-3 px-3 py-2"
+                      >
                         <span className="min-w-0 flex-1">
                           <Link
                             href={`/projects/${p.id}`}
@@ -714,7 +838,10 @@ export default async function HomePage() {
               {attention.overdueTasks.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <OctagonAlert className="size-3.5 text-danger-fg" aria-hidden />
+                    <OctagonAlert
+                      className="size-3.5 text-danger-fg"
+                      aria-hidden
+                    />
                     Overdue tasks
                   </p>
                   <ul>
@@ -731,12 +858,19 @@ export default async function HomePage() {
               {attention.blockedTasks.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <OctagonAlert className="size-3.5 text-danger-fg" aria-hidden />
+                    <OctagonAlert
+                      className="size-3.5 text-danger-fg"
+                      aria-hidden
+                    />
                     Blocked work
                   </p>
                   <ul>
                     {attention.blockedTasks.map((t) => (
-                      <AttentionTask key={t.id} task={t} reason={t.blocked_reason ?? "Blocked"} />
+                      <AttentionTask
+                        key={t.id}
+                        task={t}
+                        reason={t.blocked_reason ?? "Blocked"}
+                      />
                     ))}
                   </ul>
                 </div>
@@ -744,12 +878,19 @@ export default async function HomePage() {
               {showPortfolio && attention.unassignedTasks.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <AlertTriangle className="size-3.5 text-warning-fg" aria-hidden />
+                    <AlertTriangle
+                      className="size-3.5 text-warning-fg"
+                      aria-hidden
+                    />
                     Unassigned tasks
                   </p>
                   <ul>
                     {attention.unassignedTasks.map((t) => (
-                      <AttentionTask key={t.id} task={t} reason={t.project?.name ?? "No project"} />
+                      <AttentionTask
+                        key={t.id}
+                        task={t}
+                        reason={t.project?.name ?? "No project"}
+                      />
                     ))}
                   </ul>
                 </div>
@@ -757,12 +898,20 @@ export default async function HomePage() {
               {showPortfolio && attention.overdueMilestones.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <OctagonAlert className="size-3.5 text-danger-fg" aria-hidden />
+                    <OctagonAlert
+                      className="size-3.5 text-danger-fg"
+                      aria-hidden
+                    />
                     Overdue milestones
                   </p>
                   <ul>
                     {attention.overdueMilestones.map((item) => (
-                      <AttentionLink key={item.id} title={item.title} reason={item.reason} href={item.href} />
+                      <AttentionLink
+                        key={item.id}
+                        title={item.title}
+                        reason={item.reason}
+                        href={item.href}
+                      />
                     ))}
                   </ul>
                 </div>
@@ -770,12 +919,20 @@ export default async function HomePage() {
               {showPortfolio && attention.pendingDecisions.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <AlertTriangle className="size-3.5 text-warning-fg" aria-hidden />
+                    <AlertTriangle
+                      className="size-3.5 text-warning-fg"
+                      aria-hidden
+                    />
                     Pending decisions
                   </p>
                   <ul>
                     {attention.pendingDecisions.map((item) => (
-                      <AttentionLink key={item.id} title={item.title} reason={item.reason} href={item.href} />
+                      <AttentionLink
+                        key={item.id}
+                        title={item.title}
+                        reason={item.reason}
+                        href={item.href}
+                      />
                     ))}
                   </ul>
                 </div>
@@ -783,12 +940,20 @@ export default async function HomePage() {
               {showPortfolio && attention.upcomingCommitments.length > 0 ? (
                 <div className="card overflow-hidden">
                   <p className="flex items-center gap-2 border-b border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-semibold">
-                    <CalendarDays className="size-3.5 text-brand-fg" aria-hidden />
+                    <CalendarDays
+                      className="size-3.5 text-brand-fg"
+                      aria-hidden
+                    />
                     Upcoming commitments
                   </p>
                   <ul>
                     {attention.upcomingCommitments.map((item) => (
-                      <AttentionLink key={item.id} title={item.title} reason={item.reason} href={item.href} />
+                      <AttentionLink
+                        key={item.id}
+                        title={item.title}
+                        reason={item.reason}
+                        href={item.href}
+                      />
                     ))}
                   </ul>
                 </div>
@@ -809,7 +974,10 @@ export default async function HomePage() {
           ) : (
             <ol className="card divide-y divide-line">
               {data.recentActivity.map((event) => (
-                <li key={event.id} className="flex items-start gap-2.5 px-4 py-2.5">
+                <li
+                  key={event.id}
+                  className="flex items-start gap-2.5 px-4 py-2.5"
+                >
                   {event.actor ? (
                     <Avatar
                       name={event.actor.full_name}
@@ -887,7 +1055,8 @@ export default async function HomePage() {
                   )}
                   <div>
                     <p className="meta mb-1">
-                      {latestAnn.ackCount} of {latestAnn.totalRecipients} acknowledged
+                      {latestAnn.ackCount} of {latestAnn.totalRecipients}{" "}
+                      acknowledged
                       {latestAnn.ack_deadline
                         ? ` · due ${formatDate(latestAnn.ack_deadline)}`
                         : ""}
@@ -896,7 +1065,8 @@ export default async function HomePage() {
                       label="Announcement acknowledgment progress"
                       percent={
                         latestAnn.totalRecipients > 0
-                          ? (latestAnn.ackCount / latestAnn.totalRecipients) * 100
+                          ? (latestAnn.ackCount / latestAnn.totalRecipients) *
+                            100
                           : 0
                       }
                       tone="attention"
@@ -934,7 +1104,9 @@ export default async function HomePage() {
                             {relativeTime(message.created_at)}
                           </span>
                         </p>
-                        <p className="line-clamp-2 text-[13px]">{message.body}</p>
+                        <p className="line-clamp-2 text-[13px]">
+                          {message.body}
+                        </p>
                       </div>
                     </li>
                   ))}
