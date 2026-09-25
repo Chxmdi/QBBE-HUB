@@ -182,7 +182,11 @@ test("rescheduling a task on the calendar moves the record, not just the chip", 
   const title = `Calendar acceptance ${Date.now()}`;
   await createTask(page, title, due);
 
-  await page.goto("/calendar");
+  // Open the week that holds each date rather than "this week": the calendar's
+  // weeks start on Sunday and "today" is the server's, so a date two days out
+  // is in next week's view on Fridays and Saturdays, and in UTC-behind zones
+  // on Thursday evenings too. CI hit exactly that on 2026-09-25 at 01:44 UTC.
+  await page.goto(`/calendar?date=${due}`);
   const field = page.getByLabel(`Reschedule ${title}`);
   await expect(field).toBeVisible({ timeout: 30_000 });
   await expect(field).toHaveValue(due);
@@ -207,7 +211,7 @@ test("rescheduling a task on the calendar moves the record, not just the chip", 
   // And the date is the day that was picked, not a day either side of it. A
   // reschedule that round-trips through an instant lands here when the
   // workspace zone is behind UTC.
-  await page.reload();
+  await page.goto(`/calendar?date=${moved}`);
   await expect(page.getByLabel(`Reschedule ${title}`)).toHaveValue(moved, {
     timeout: 30_000,
   });

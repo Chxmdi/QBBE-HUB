@@ -214,7 +214,6 @@ export async function getDashboardData(
     todayMeetingsRes,
     upcomingEventsRes,
     programsRes2,
-    programTasksRes,
     completedTasksRes,
     annChannelRes,
     activeMembersRes,
@@ -255,11 +254,6 @@ export async function getDashboardData(
       .limit(8),
     supabase
       .from("task")
-      .select("id, program_id, status")
-      .is("archived_at", null)
-      .not("program_id", "is", null),
-    supabase
-      .from("task")
       .select("id, completed_at")
       .eq("status", "completed")
       .gte("completed_at", sixtyDaysAgo),
@@ -294,19 +288,38 @@ export async function getDashboardData(
   }
 
   // Completion and owner-assessed health are separate signals (PRD §16.1).
-  const programHealth: ProgramHealthRow[] = (
-    (programsRes2.data ?? []) as { id: string; name: string; projects: { health: string; stage: string; archived_at: string | null }[] }[]
-  ).map((program) => {
-    const tasks = (programTasksRes.data ?? []).filter(
-      (t) => t.program_id === program.id,
-    );
-    const completed = tasks.filter((t) => t.status === "completed").length;
-    const percent = tasks.length > 0 ? (completed / tasks.length) * 100 : 0;
+  // Completion is counted in the database for the programs shown, rather than
+  // by downloading every program task to count here: that list was the whole
+  // workspace's tasks on every dashboard load, and past 1,000 rows it was also
+  // silently cut short by the API's row cap (#115).
+  const shownPrograms = (programsRes2.data ?? []) as {
+    id: string;
+    name: string;
+    projects: { health: string; stage: string; archived_at: string | null }[];
+  }[];
+  const programTaskCounts = await Promise.all(
+    shownPrograms.map(async (program) => {
+      const tasksIn = () =>
+        supabase
+          .from("task")
+          .select("id", { count: "exact", head: true })
+          .eq("program_id", program.id)
+          .is("archived_at", null);
+      const [all, completed] = await Promise.all([
+        tasksIn(),
+        tasksIn().eq("status", "completed"),
+      ]);
+      return { total: all.count ?? 0, completed: completed.count ?? 0 };
+    }),
+  );
+  const programHealth: ProgramHealthRow[] = shownPrograms.map((program, index) => {
+    const { total, completed } = programTaskCounts[index];
+    const percent = total > 0 ? (completed / total) * 100 : 0;
     return {
       id: program.id,
       name: program.name,
       completionPercent: percent,
-      totalTasks: tasks.length,
+      totalTasks: total,
       ...summarizeProjectHealth(program.projects ?? []),
     };
   });
