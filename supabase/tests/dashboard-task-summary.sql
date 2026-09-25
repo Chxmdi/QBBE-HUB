@@ -24,6 +24,8 @@ declare
   v_progress bigint;
   v_done60 bigint;
   v_people integer := 0;
+  v_program uuid;
+  v_count_mismatches integer;
 begin
   select organization_id into strict v_org
   from public.organization_membership where user_id = v_owner limit 1;
@@ -47,6 +49,16 @@ begin
   insert into public.task (organization_id, title, created_by, assignee_id, status, completed_at)
   select v_org, 'summary: completed ' || ago, v_owner, v_volunteer, 'completed', now() - (ago || ' days')::interval
   from unnest(array[10, 45, 90]) as ago;
+
+  -- A program with open, completed and archived tasks, for program_task_counts.
+  insert into public.program (organization_id, name, slug, created_by)
+  values (v_org, 'Summary counts', 'summary-counts-' || substr(gen_random_uuid()::text, 1, 8), v_owner)
+  returning id into v_program;
+  insert into public.task (organization_id, program_id, title, created_by, assignee_id, status, completed_at, archived_at)
+  values (v_org, v_program, 'counts: open', v_owner, v_volunteer, 'in_progress', null, null),
+         (v_org, v_program, 'counts: done', v_owner, v_volunteer, 'completed', now(), null),
+         (v_org, v_program, 'counts: archived', v_owner, v_volunteer, 'completed', now(), now()),
+         (v_org, v_program, 'counts: unassigned', v_owner, null, 'not_started', null, null);
 
   for v_user in select distinct user_id from public.organization_membership loop
     foreach v_level in array array['aal1', 'aal2'] loop
@@ -88,6 +100,27 @@ begin
           cardinality(s.completed_at_since_sixty_days), v_done60
         )
       );
+
+      -- program_task_counts gives, for every program, the two counts the
+      -- dashboard used to request separately; programs with no readable
+      -- task are simply absent.
+      select count(*) into v_count_mismatches
+      from (
+        select p.id as program_id,
+               (select count(*) from public.task t
+                where t.program_id = p.id and t.archived_at is null) as total,
+               (select count(*) from public.task t
+                where t.program_id = p.id and t.archived_at is null and t.status = 'completed') as completed
+        from public.program p
+      ) expected
+      full join public.program_task_counts(array(select id from public.program)) actual
+        using (program_id)
+      where coalesce(expected.total, 0) <> coalesce(actual.total, 0)
+         or coalesce(expected.completed, 0) <> coalesce(actual.completed, 0);
+      perform tests.ok(v_count_mismatches = 0,
+        format('program_task_counts matches the separate counts for %s at %s (%s programs differ)',
+               v_user.user_id, v_level, v_count_mismatches));
+
       perform tests.clear_auth();
     end loop;
     v_people := v_people + 1;
@@ -100,6 +133,14 @@ begin
                      and s.completed_last_30 >= 1,
     format('the fixture is visible to an assignee (open %s, overdue %s, week %s, done30 %s)',
            s.open_tasks, s.overdue, s.due_this_week, s.completed_last_30));
+
+  -- The volunteer reads the program's tasks through assignment: two of the
+  -- three unarchived ones, one completed.
+  perform tests.ok(
+    exists (select 1 from public.program_task_counts(array[v_program])
+            where total = 2 and completed = 1),
+    'program_task_counts counts only readable, unarchived tasks'
+  );
   perform tests.clear_auth();
 
   perform tests.ok(v_people >= 5, format('compared %s people', v_people));

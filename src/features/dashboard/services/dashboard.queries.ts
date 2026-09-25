@@ -100,6 +100,8 @@ export async function getDashboardData(
     new Date(now.getTime() + 86400_000);
   const sixtyDaysAgo = new Date(Date.now() - 60 * 86400_000).toISOString();
 
+  // One round of independent reads. They used to go in two waves, one after
+  // the other; under load every extra wave is another wait in the queue (#115).
   const [
     programsRes,
     projectsRes,
@@ -112,6 +114,12 @@ export async function getDashboardData(
     announcementsRes,
     myAcksRes,
     activityRes,
+    todayTasksRes,
+    todayMeetingsRes,
+    upcomingEventsRes,
+    programsRes2,
+    annChannelRes,
+    activeMembersRes,
   ] = await Promise.all([
     supabase
       .from("program")
@@ -185,23 +193,6 @@ export async function getDashboardData(
       )
       .order("created_at", { ascending: false })
       .limit(10),
-  ]);
-
-  const healthCounts: Record<string, number> = {};
-  for (const row of healthRes.data ?? []) {
-    healthCounts[row.health] = (healthCounts[row.health] ?? 0) + 1;
-  }
-
-  // Second wave: reference-dashboard surfaces (Today, program health,
-  // activity charts, events, announcements rail).
-  const [
-    todayTasksRes,
-    todayMeetingsRes,
-    upcomingEventsRes,
-    programsRes2,
-    annChannelRes,
-    activeMembersRes,
-  ] = await Promise.all([
     supabase
       .from("task")
       .select(TASK_SELECT)
@@ -248,6 +239,11 @@ export async function getDashboardData(
       .eq("status", "active"),
   ]);
 
+  const healthCounts: Record<string, number> = {};
+  for (const row of healthRes.data ?? []) {
+    healthCounts[row.health] = (healthCounts[row.health] ?? 0) + 1;
+  }
+
   // Mutually exclusive donut buckets, counted by dashboard_task_summary:
   // overdue trumps status; otherwise not-started (and ready) vs started;
   // completed counts the last 30 days. The donut used to count at most the
@@ -264,30 +260,30 @@ export async function getDashboardData(
   const completedAtSinceSixtyDays = taskSummary?.completed_at_since_sixty_days ?? [];
 
   // Completion and owner-assessed health are separate signals (PRD §16.1).
-  // Completion is counted in the database for the programs shown, rather than
-  // by downloading every program task to count here: that list was the whole
-  // workspace's tasks on every dashboard load, and past 1,000 rows it was also
-  // silently cut short by the API's row cap (#115).
   const shownPrograms = (programsRes2.data ?? []) as {
     id: string;
     name: string;
     projects: { health: string; stage: string; archived_at: string | null }[];
   }[];
-  const programTaskCounts = await Promise.all(
-    shownPrograms.map(async (program) => {
-      const tasksIn = () =>
-        supabase
-          .from("task")
-          .select("id", { count: "exact", head: true })
-          .eq("program_id", program.id)
-          .is("archived_at", null);
-      const [all, completed] = await Promise.all([
-        tasksIn(),
-        tasksIn().eq("status", "completed"),
-      ]);
-      return { total: all.count ?? 0, completed: completed.count ?? 0 };
-    }),
+  // Completion is counted in the database for the programs shown, rather than
+  // by downloading every program task to count here: that list was the whole
+  // workspace's tasks on every dashboard load, and past 1,000 rows it was also
+  // silently cut short by the API's row cap. One call counts every program
+  // shown; it used to be two count requests per program (#115).
+  const { data: countRows } = shownPrograms.length
+    ? await supabase.rpc("program_task_counts", {
+        p_program_ids: shownPrograms.map((program) => program.id),
+      })
+    : { data: [] };
+  const countsByProgram = new Map(
+    ((countRows ?? []) as { program_id: string; total: number; completed: number }[]).map(
+      (row) => [row.program_id, row],
+    ),
   );
+  const programTaskCounts = shownPrograms.map((program) => {
+    const row = countsByProgram.get(program.id);
+    return { total: Number(row?.total ?? 0), completed: Number(row?.completed ?? 0) };
+  });
   const programHealth: ProgramHealthRow[] = shownPrograms.map((program, index) => {
     const { total, completed } = programTaskCounts[index];
     const percent = total > 0 ? (completed / total) * 100 : 0;
