@@ -11,6 +11,7 @@ import {
   createGoogleEventRecord,
   deleteGoogleEventRecord,
   updateGoogleEventRecord,
+  calendarFailureStatus,
 } from "@/features/calendar/services/google-calendar-write";
 import { fireWorkflows } from "@/features/admin/services/workflow.runtime";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -54,7 +55,7 @@ async function markCalendarDegraded(
   await supabase
     .from("integration_connection")
     .update({
-      status: "degraded",
+      status: calendarFailureStatus(error, fallback),
       last_error: error instanceof Error ? error.message : fallback,
     })
     .eq("organization_id", organizationId)
@@ -85,9 +86,20 @@ export async function createEvent(input: unknown): Promise<ActionResult> {
   } else if (!session.isAdmin) {
     return { ok: false, error: "Link the event to work you can access, or ask an administrator." };
   }
-  const { data: event, error } = await supabase
+  // The id is generated here rather than read back, because reading it back
+  // cannot work. `event_read` is `app.can_read_event(id)`, a STABLE function
+  // that re-queries `public.event` by id — and within the statement doing the
+  // insert it cannot see the row being inserted, so the SELECT policy applied
+  // to `RETURNING` fails and Postgres refuses the whole statement with "new row
+  // violates row-level security policy". Creating an event never worked.
+  //
+  // `createProject` already sidesteps this the same way; this brings events
+  // into line with it.
+  const eventId = crypto.randomUUID();
+  const { error } = await supabase
     .from("event")
     .insert({
+      id: eventId,
       organization_id: session.organizationId,
       program_id: data.programId ?? null,
       project_id: data.projectId ?? null,
@@ -100,11 +112,10 @@ export async function createEvent(input: unknown): Promise<ActionResult> {
       location: data.location || null,
       volunteer_need: data.volunteerNeed ?? null,
       created_by: session.userId,
-    })
-    .select("id")
-    .single();
+    });
 
-  if (error || !event) return { ok: false, error: "Could not create the event." };
+  if (error) return { ok: false, error: "Could not create the event." };
+  const event = { id: eventId };
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,

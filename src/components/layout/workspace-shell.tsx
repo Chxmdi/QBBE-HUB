@@ -27,6 +27,7 @@ export function WorkspaceShell({
   programs,
   counts,
   density = "comfortable",
+  reduceMotion = false,
   children,
 }: {
   name: string;
@@ -39,10 +40,17 @@ export function WorkspaceShell({
   programs: SidebarProgram[];
   counts: SidebarCounts;
   density?: "comfortable" | "compact";
+  reduceMotion?: boolean;
   children: React.ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // The in-app reduced-motion setting (UI-009) applies the same rules as the
+  // OS preference, through a class on <html> so portals and dialogs get it.
+  useEffect(() => {
+    document.documentElement.classList.toggle("reduce-motion", reduceMotion);
+  }, [reduceMotion]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -58,6 +66,14 @@ export function WorkspaceShell({
   return (
     <ToastProvider>
     <div className="flex min-h-dvh" data-density={density}>
+      {/* WCAG 2.4.1: first in the tab order, so a keyboard user can pass the
+          sidebar and topbar on every page. Visible only when focused. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-(--z-toast) focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:text-[14px] focus:font-semibold focus:text-ink focus:shadow-lg"
+      >
+        Skip to main content
+      </a>
       <Sidebar
         isAdmin={isAdmin}
         isStaff={isStaff}
@@ -82,7 +98,11 @@ export function WorkspaceShell({
           onOpenPalette={() => setPaletteOpen(true)}
         />
         {/* pb-20 on mobile clears the fixed bottom navigation. */}
-        <main className="mx-auto w-full max-w-[1440px] flex-1 px-4 pt-6 pb-24 md:px-8 md:pb-6">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-[1440px] flex-1 px-4 pt-6 pb-24 outline-none md:px-8 md:pb-6"
+        >
           {children}
         </main>
       </div>

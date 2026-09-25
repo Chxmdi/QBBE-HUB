@@ -515,3 +515,84 @@ describe("delivery persistence failures", () => {
     expect(db.queue("notifications")).toHaveLength(1);
   });
 });
+
+describe("a non-production allowlist keeps test mail away from real people", () => {
+  afterEach(() => {
+    delete process.env.EMAIL_RECIPIENT_ALLOWLIST;
+  });
+
+  it("suppresses a recipient who is not on the list, visibly and without retrying", async () => {
+    process.env.EMAIL_RECIPIENT_ALLOWLIST = "tester@qbbe.org";
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db);
+
+    const result = await run(db);
+
+    expect(sends).toHaveLength(0);
+    expect(result.failed).toBe(0);
+    expect(deliveries(db)[0]).toMatchObject({
+      status: "suppressed",
+      suppressed_reason: "recipient_not_allowlisted",
+    });
+    expect(db.queue("notifications")).toHaveLength(0);
+  });
+
+  it("applies to a prebuilt digest as well as a notification", async () => {
+    process.env.EMAIL_RECIPIENT_ALLOWLIST = "@qbbe.org";
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    db.seed("email_delivery", [{ id: "digest-1", organization_id: ORG,
+      recipient_user_id: USER, recipient: "amara@example.org", subject: "Digest",
+      body_text: "Private work", body_html: "Private work", status: "queued", attempt: 0 }]);
+    db.enqueueRaw("notifications", { delivery_id: "digest-1" });
+
+    await run(db);
+
+    expect(sends).toHaveLength(0);
+    expect(deliveries(db)[0].suppressed_reason).toBe("recipient_not_allowlisted");
+  });
+
+  it.each([
+    ["an exact address", "Amara@Example.org"],
+    ["a whole domain", "someone@qbbe.org, @example.org"],
+  ])("delivers to %s on the list", async (_label, allowlist) => {
+    process.env.EMAIL_RECIPIENT_ALLOWLIST = allowlist;
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db);
+
+    await run(db);
+
+    expect(sends).toEqual([expect.objectContaining({ to: "amara@example.org" })]);
+    expect(deliveries(db)[0].status).toBe("sent");
+  });
+});
+
+describe("an address the provider reported is never mailed again", () => {
+  it.each(["bounced", "complained"])("suppresses mail to an address that %s", async (reason) => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    db.seed("email_suppression", [{ address: "amara@example.org", reason }]);
+    raiseNotification(db);
+
+    await run(db);
+
+    expect(sends).toHaveLength(0);
+    expect(deliveries(db)[0]).toMatchObject({
+      status: "suppressed",
+      suppressed_reason: `provider_${reason}`,
+    });
+  });
+
+  it("still mails everyone else", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    db.seed("email_suppression", [{ address: "someone.else@example.org", reason: "bounced" }]);
+    raiseNotification(db);
+
+    await run(db);
+
+    expect(sends).toHaveLength(1);
+  });
+});

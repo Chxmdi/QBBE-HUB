@@ -19,9 +19,8 @@ import { getPortfolio, listPortfolioViews } from "@/features/dashboard/services/
 import { SaveViewButton } from "@/features/tasks/components/save-view-button";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { formatDate } from "@/lib/utils";
-import { formatDateTime } from "@/lib/utils";
+import { createSupabasePageClient } from "@/lib/supabase/page";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Projects" };
 export const dynamic = "force-dynamic";
@@ -33,7 +32,11 @@ export default async function ProjectsPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
+
+  // Without this, an archived project is reachable only by someone who already
+  // knows its URL, so restoring one is effectively impossible through the
+  // product. The programs directory already had this; projects did not.
   const archived = params.archived === "1";
   const views = await listPortfolioViews();
   const selectedView = views.find((view) => view.id === (Array.isArray(params.view) ? params.view[0] : params.view));

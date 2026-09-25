@@ -6,7 +6,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { ChannelView } from "@/features/channels/components/channel-view";
 import { CHANNEL_HISTORY_PAGE_SIZE } from "@/features/channels/history";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import type { Message } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Conversation" };
@@ -23,7 +23,7 @@ export default async function ConversationPage({
 }) {
   const session = await requireSession();
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const { data: conversation } = await supabase
     .from("conversation")
@@ -43,6 +43,7 @@ export default async function ConversationPage({
       .select(MESSAGE_SELECT)
       .eq("conversation_id", id)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(CHANNEL_HISTORY_PAGE_SIZE),
   ]);
 

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { HealthBadge, StageBadge } from "@/components/shared/status-badges";
@@ -13,7 +14,7 @@ import { programAccent } from "@/features/programs/colors";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { hasProgramCapability } from "@/lib/access-capabilities";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/utils";
 import type {
   ActivityEvent,
@@ -32,7 +33,7 @@ export default async function ProgramDetailPage({
 }) {
   await requireSession();
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const canManage = await hasProgramCapability(supabase, id, "manage");
 
   const { data: program } = await supabase
@@ -117,11 +118,9 @@ export default async function ProgramDetailPage({
 
   return (
     <div>
-      <div className="mb-2">
-        <Link href="/programs" className="meta hover:text-brand-fg hover:underline">
-          ← Programs
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[{ label: "Programs", href: "/programs" }, { label: program.name }]}
+      />
       {/* Wayfinding only: the title beside it carries the meaning. */}
       <div
         aria-hidden="true"

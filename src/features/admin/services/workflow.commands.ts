@@ -39,7 +39,7 @@ export async function saveView(input: unknown): Promise<ActionResult> {
   return { ok: true, id: data.id as string };
 }
 
-export async function deleteSavedView(id: string): Promise<ActionResult> {
+export async function deleteSavedView(id: string, path = "/my-work"): Promise<ActionResult> {
   const session = await requireSession();
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
@@ -48,7 +48,7 @@ export async function deleteSavedView(id: string): Promise<ActionResult> {
     .eq("id", id)
     .eq("user_id", session.userId);
   if (error) return { ok: false, error: "Could not delete the view." };
-  revalidatePath("/my-work");
+  revalidatePath(path);
   return { ok: true };
 }
 

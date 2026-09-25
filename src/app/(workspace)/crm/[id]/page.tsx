@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
@@ -21,7 +21,7 @@ import { getOpportunitiesForCrmOrganization } from "@/features/crm/services/oppo
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, relativeTime } from "@/lib/utils";
 import type { CrmContact, CrmFollowUp, CrmInteraction } from "@/types/entities";
 
@@ -45,7 +45,7 @@ export default async function CrmDetailPage({
   const today =
     calendarDateInZone(nowInstant, session.timeZone) ??
     nowInstant.toISOString().slice(0, 10);
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const { data: org } = await supabase
     .from("crm_organization")
@@ -143,11 +143,9 @@ export default async function CrmDetailPage({
 
   return (
     <div>
-      <div className="mb-2">
-        <Link href="/crm" className="meta hover:text-brand-fg hover:underline">
-          ← Relationships
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[{ label: "Relationships", href: "/crm" }, { label: org.name as string }]}
+      />
       <PageHeader
         eyebrow={org.category as string}
         title={org.name as string}

@@ -391,7 +391,7 @@ export function MessageItem({
               <SmilePlus className="size-4" aria-hidden />
             </button>
             {showEmoji ? (
-              <div className="absolute top-full right-0 z-10 mt-1 flex gap-0.5 rounded-(--radius-sm) border border-line bg-surface p-1 shadow-(--shadow-pop)">
+              <div className="absolute top-full right-0 z-(--z-raised) mt-1 flex gap-0.5 rounded-(--radius-sm) border border-line bg-surface p-1 shadow-(--shadow-pop)">
                 {QUICK_EMOJI.map((emoji) => (
                   <button
                     key={emoji}

@@ -148,9 +148,39 @@ function sendViaLog(email: OutboundEmail): SendResult {
   return { provider: "log", providerMessageId: null };
 }
 
+/**
+ * Staging's guard against mailing real people. `EMAIL_RECIPIENT_ALLOWLIST` is a
+ * comma-separated list of exact addresses and/or `@domain` entries; when it is
+ * set, only those recipients receive mail. Production leaves it unset.
+ */
+export function recipientAllowlist(): string[] | null {
+  const raw = process.env.EMAIL_RECIPIENT_ALLOWLIST;
+  if (!raw || !raw.trim()) return null;
+  return raw
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function recipientIsAllowed(to: string, allowlist = recipientAllowlist()): boolean {
+  if (!allowlist) return true;
+  const address = to.trim().toLowerCase();
+  const domain = address.slice(address.lastIndexOf("@"));
+  return allowlist.some((entry) =>
+    entry.startsWith("@") ? domain === entry : address === entry,
+  );
+}
+
 export async function sendEmail(email: OutboundEmail): Promise<SendResult> {
   if (!email.to.includes("@")) {
     throw new EmailSendError(`not a deliverable address: ${email.to}`, {
+      retryable: false,
+    });
+  }
+  // The worker suppresses these before claiming a send; this is the backstop
+  // for any other caller, so no path can reach a recipient off the list.
+  if (!recipientIsAllowed(email.to)) {
+    throw new EmailSendError("recipient is not on EMAIL_RECIPIENT_ALLOWLIST", {
       retryable: false,
     });
   }

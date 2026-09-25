@@ -112,6 +112,64 @@ test("a checklist keeps the order somebody arranged, counts itself, and lets ite
   await expect(drawer.getByText(/of 2 done/)).toBeVisible({ timeout: 30_000 });
 });
 
+/**
+ * The regression behind #93.
+ *
+ * Every edit in the drawer ends by re-reading the record, and that re-read
+ * used to blank the whole drawer to a loading skeleton first. The section the
+ * person was working in was unmounted and a fresh one mounted about 150ms
+ * later, so keyboard focus went back to the document and the next keystroke
+ * landed on nothing. Nothing said so: the item simply did not move.
+ *
+ * The test above met this as a flake — one run in eight, depending on whether
+ * the re-read happened to land between focusing a move button and pressing it.
+ * This one removes the timing from the question by focusing the button while
+ * the previous command is still in flight, which is what a person doing two
+ * things in a row does anyway. Against the unfixed drawer it fails every time.
+ */
+test("an edit re-reads the drawer without throwing keyboard focus away", async ({ page }) => {
+  test.setTimeout(180_000);
+  await signIn(page, "owner");
+
+  const title = `Focus acceptance ${Date.now()}`;
+  await createTask(page, title);
+  const drawer = await openTask(page, title);
+
+  const checklistForm = drawer.locator("form").filter({
+    has: page.getByPlaceholder("Add a checklist item"),
+  });
+  for (const item of ["Draft the brief", "Circulate it"]) {
+    await checklistForm.getByPlaceholder("Add a checklist item").fill(item);
+    await checklistForm.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(drawer.getByText(item, { exact: true })).toBeVisible({ timeout: 30_000 });
+  }
+
+  const moveUp = drawer.getByRole("button", { name: "Move Circulate it up" });
+  await drawer.getByRole("checkbox").first().check();
+  // Deliberately without waiting for the tick to come back from the server.
+  await moveUp.focus();
+  await expect(drawer.getByText("1 of 2 done")).toBeVisible({ timeout: 30_000 });
+  // Long enough for the re-read the tick started to have landed and rendered.
+  await page.waitForTimeout(3_000);
+
+  expect(
+    await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? null),
+    "the move button still has focus after the drawer re-read itself",
+  ).toBe("Move Circulate it up");
+
+  // And the keystroke that follows does what it says on the button.
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(
+      async () =>
+        (
+          await page.getByRole("list", { name: "Checklist" }).getByRole("listitem").allInnerTexts()
+        )[0],
+      { timeout: 30_000 },
+    )
+    .toContain("Circulate it");
+});
+
 test("rescheduling a task on the calendar moves the record, not just the chip", async ({
   page,
 }) => {
@@ -124,7 +182,11 @@ test("rescheduling a task on the calendar moves the record, not just the chip", 
   const title = `Calendar acceptance ${Date.now()}`;
   await createTask(page, title, due);
 
-  await page.goto("/calendar");
+  // Open the week that holds each date rather than "this week": the calendar's
+  // weeks start on Sunday and "today" is the server's, so a date two days out
+  // is in next week's view on Fridays and Saturdays, and in UTC-behind zones
+  // on Thursday evenings too. CI hit exactly that on 2026-09-25 at 01:44 UTC.
+  await page.goto(`/calendar?date=${due}`);
   const field = page.getByLabel(`Reschedule ${title}`);
   await expect(field).toBeVisible({ timeout: 30_000 });
   await expect(field).toHaveValue(due);
@@ -149,7 +211,7 @@ test("rescheduling a task on the calendar moves the record, not just the chip", 
   // And the date is the day that was picked, not a day either side of it. A
   // reschedule that round-trips through an instant lands here when the
   // workspace zone is behind UTC.
-  await page.reload();
+  await page.goto(`/calendar?date=${moved}`);
   await expect(page.getByLabel(`Reschedule ${title}`)).toHaveValue(moved, {
     timeout: 30_000,
   });

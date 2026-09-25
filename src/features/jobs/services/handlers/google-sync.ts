@@ -1,13 +1,10 @@
 import {
   fetchCalendarOverlay,
-  fetchGmailChangedMetadata,
-  fetchGmailHistory,
-  fetchGoogleDriveSync,
-  fetchGmailMetadata,
-  fetchGmailProfile,
   refreshGoogleAccessToken,
 } from "@/features/inbox/services/gmail-sync";
+import { reconcileGmailConnection } from "@/features/inbox/services/gmail-reconcile";
 import { classifyIntegrationFailure } from "@/features/admin/services/integration-health";
+import { reconcileGoogleDrive } from "@/features/documents/services/google-drive-reconcile";
 import { recordJobRun } from "@/lib/job-observability";
 import type { JobContext, JobResult } from "../runner";
 
@@ -30,7 +27,10 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
     .from("integration_connection")
     .select("id, user_id, organization_id, provider, status")
     .in("provider", ["gmail", "google_calendar", "google_drive"])
-    .eq("status", "connected");
+    // Retry transient failures, not just healthy connections: a success below
+    // sets the status back to connected, so an outage clears on its own. An
+    // expired or revoked authorization still waits for the user to reconnect.
+    .in("status", ["connected", "synchronization_delayed", "degraded", "error"]);
   if (connectionError) {
     throw new Error(`could not load Google connections: ${connectionError.message}`);
   }
@@ -42,6 +42,30 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
     const startedAt = new Date().toISOString();
     try {
       if (!connection.user_id) throw new Error("Google integration has no connected user.");
+
+      if (connection.provider === "gmail") {
+        const gmail = await reconcileGmailConnection(db, {
+          id: connection.id,
+          organization_id: connection.organization_id,
+          user_id: connection.user_id,
+        }, now);
+        await recordJobRun(db, {
+          organizationId: connection.organization_id,
+          jobName: "google_sync",
+          status: "succeeded",
+          details: {
+            provider: "gmail",
+            connectionId: connection.id,
+            mode: gmail.mode,
+            upserted: gmail.upserted,
+            removed: gmail.removed,
+          },
+          startedAt,
+        });
+        synced += 1;
+        continue;
+      }
+
       const { data: secret, error: secretError } = await db
         .from("integration_secret")
         .select("access_token, refresh_token, token_expires_at, gmail_history_id, gmail_pending_history_id, google_calendar_sync_token, google_drive_page_token")
@@ -66,58 +90,7 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
         if (tokenUpdateError) throw new Error(`Could not save refreshed OAuth token: ${tokenUpdateError.message}`);
       }
 
-      if (connection.provider === "gmail") {
-        const saveRows = async (rows: Awaited<ReturnType<typeof fetchGmailMetadata>>) => {
-          if (!rows.length) return;
-          const { error } = await db.from("gmail_message").upsert(
-            rows.map((row) => ({
-              organization_id: connection.organization_id,
-              user_id: connection.user_id,
-              connection_id: connection.id,
-              ...row,
-            })),
-            { onConflict: "user_id,external_id" },
-          );
-          if (error) throw new Error(`Could not save Gmail metadata: ${error.message}`);
-        };
-        const historyId = typeof secret.gmail_history_id === "string" ? secret.gmail_history_id : null;
-        if (historyId) {
-          try {
-            const delta = await fetchGmailHistory(accessToken, historyId);
-            const changed = await fetchGmailChangedMetadata(accessToken, delta.messageIds);
-            await saveRows(changed.rows);
-            if (changed.removedIds.length) {
-              const { error } = await db.from("gmail_message")
-                .delete()
-                .eq("connection_id", connection.id)
-                .in("external_id", changed.removedIds);
-              if (error) throw new Error(`Could not remove stale Gmail metadata: ${error.message}`);
-            }
-            const { error } = await db.from("integration_secret")
-              .update({ gmail_history_id: delta.historyId ?? historyId, gmail_pending_history_id: null })
-              .eq("connection_id", connection.id);
-            if (error) throw new Error(`Could not save Gmail history cursor: ${error.message}`);
-          } catch (historyError) {
-            const message = historyError instanceof Error ? historyError.message : "Gmail history failed.";
-            if (!message.includes("full synchronization is required")) throw historyError;
-            const rows = await fetchGmailMetadata(accessToken);
-            await saveRows(rows);
-            const profile = await fetchGmailProfile(accessToken);
-            const { error } = await db.from("integration_secret")
-              .update({ gmail_history_id: profile.historyId, gmail_pending_history_id: null })
-              .eq("connection_id", connection.id);
-            if (error) throw new Error(`Could not reset Gmail history cursor: ${error.message}`);
-          }
-        } else {
-          const rows = await fetchGmailMetadata(accessToken);
-          await saveRows(rows);
-          const profile = await fetchGmailProfile(accessToken);
-          const { error } = await db.from("integration_secret")
-            .update({ gmail_history_id: profile.historyId, gmail_pending_history_id: null })
-            .eq("connection_id", connection.id);
-          if (error) throw new Error(`Could not initialize Gmail history cursor: ${error.message}`);
-        }
-      } else if (connection.provider === "google_calendar") {
+      if (connection.provider === "google_calendar") {
         const saveCalendarSync = async (sync: Awaited<ReturnType<typeof fetchCalendarOverlay>>) => {
           if (sync.rows.length) {
             const { error } = await db.from("calendar_event_link").upsert(
@@ -165,52 +138,19 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
           await saveCalendarSync(fullSync);
         }
       } else {
-        const saveDriveSync = async (sync: Awaited<ReturnType<typeof fetchGoogleDriveSync>>) => {
-          if (sync.rows.length) {
-            const { error } = await db.from("document").upsert(
-              sync.rows.map((row) => ({
-              organization_id: connection.organization_id,
-              title: row.title,
-              description: row.description,
-              kind: "link",
-              url: row.url,
-              mime_type: row.mime_type,
-              visibility: "organization",
-              owner_id: connection.user_id,
-              created_by: connection.user_id,
-              integration_connection_id: connection.id,
-              external_id: row.external_id,
-              external_updated_at: row.updated_at,
-              })),
-              { onConflict: "integration_connection_id,external_id" },
-            );
-            if (error) throw new Error(`Could not save Google Drive metadata: ${error.message}`);
-          }
-          if (sync.removedIds.length) {
-            const { error } = await db.from("document")
-              .delete()
-              .eq("integration_connection_id", connection.id)
-              .in("external_id", sync.removedIds);
-            if (error) throw new Error(`Could not remove stale Google Drive metadata: ${error.message}`);
-          }
-          const { error } = await db.from("integration_secret")
-            .update({ google_drive_page_token: sync.pageToken })
-            .eq("connection_id", connection.id);
-          if (error) throw new Error(`Could not save Google Drive page token: ${error.message}`);
-        };
-        const pageToken = typeof secret.google_drive_page_token === "string" ? secret.google_drive_page_token : undefined;
-        try {
-          await saveDriveSync(await fetchGoogleDriveSync(accessToken, pageToken));
-        } catch (driveError) {
-          const message = driveError instanceof Error ? driveError.message : "Google Drive synchronization failed.";
-          if (!pageToken || !message.includes("full synchronization is required")) throw driveError;
-          const fullSync = await fetchGoogleDriveSync(accessToken);
-          const { error } = await db.from("document")
-            .delete()
-            .eq("integration_connection_id", connection.id);
-          if (error) throw new Error(`Could not reset Google Drive metadata: ${error.message}`);
-          await saveDriveSync(fullSync);
-        }
+        const pageToken = typeof secret.google_drive_page_token === "string"
+          ? secret.google_drive_page_token
+          : undefined;
+        await reconcileGoogleDrive(
+          db,
+          {
+            id: connection.id,
+            organization_id: connection.organization_id,
+            user_id: connection.user_id,
+          },
+          accessToken,
+          pageToken,
+        );
       }
       const { error: connectionUpdateError } = await db
         .from("integration_connection")

@@ -12,8 +12,13 @@ const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth", "/account-inactive", "/fo
  */
 export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  // Cron/job routes authenticate with CRON_JOB_SECRET, not a user session.
-  if (path.startsWith("/api/jobs/") || path === "/api/integrations/gmail/push") {
+  // Cron/job routes authenticate with CRON_JOB_SECRET, not a user session;
+  // provider webhooks authenticate with their own signatures.
+  if (
+    path.startsWith("/api/jobs/") ||
+    path === "/api/integrations/gmail/push" ||
+    path === "/api/integrations/email/webhook"
+  ) {
     return NextResponse.next({ request });
   }
 

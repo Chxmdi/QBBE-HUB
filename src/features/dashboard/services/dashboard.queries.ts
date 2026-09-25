@@ -5,7 +5,7 @@ import {
   calendarDateInZone,
   startOfDayInstant,
 } from "@/lib/time";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import type {
   ActivityEvent,
   Announcement,
@@ -90,7 +90,7 @@ export async function getDashboardData(
   userId: string,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): Promise<DashboardData> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   // "Today" is a question about the organization's calendar, not the server's.
   // This previously read `new Date().toISOString().slice(0, 10)` — the host's
@@ -110,14 +110,12 @@ export async function getDashboardData(
   const dayEnd =
     startOfDayInstant(addCalendarDays(today, 1) ?? today, timeZone) ??
     new Date(now.getTime() + 86400_000);
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 86400_000).toISOString();
 
   const [
     programsRes,
     projectsRes,
-    openTasksRes,
-    dueWeekRes,
-    overdueRes,
-    completedRes,
+    taskSummaryRes,
     healthRes,
     overdueTasksRes,
     blockedTasksRes,
@@ -141,29 +139,17 @@ export async function getDashboardData(
       .select("id", { count: "exact", head: true })
       .eq("stage", "active")
       .is("archived_at", null),
+    // Every task figure on the page in one pass over the readable tasks,
+    // rather than a separate scan per number (#115). Same filters as before;
+    // row-level security still limits each figure to what the viewer can read.
     supabase
-      .from("task")
-      .select("id", { count: "exact", head: true })
-      .in("status", OPEN_STATUSES)
-      .is("archived_at", null),
-    supabase
-      .from("task")
-      .select("id", { count: "exact", head: true })
-      .in("status", OPEN_STATUSES)
-      .is("archived_at", null)
-      .gte("due_at", today)
-      .lte("due_at", weekOut),
-    supabase
-      .from("task")
-      .select("id", { count: "exact", head: true })
-      .in("status", OPEN_STATUSES)
-      .is("archived_at", null)
-      .lt("due_at", today),
-    supabase
-      .from("task")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "completed")
-      .gte("completed_at", monthAgo),
+      .rpc("dashboard_task_summary", {
+        p_today: today,
+        p_week_out: weekOut,
+        p_month_ago: monthAgo,
+        p_sixty_days_ago: sixtyDaysAgo,
+      })
+      .single(),
     supabase
       .from("project")
       .select("health")
@@ -260,14 +246,11 @@ export async function getDashboardData(
 
   // Second wave: reference-dashboard surfaces (Today, program health,
   // activity charts, events, announcements rail).
-  const sixtyDaysAgo = new Date(Date.now() - 60 * 86400_000).toISOString();
   const [
     todayTasksRes,
     todayMeetingsRes,
     upcomingEventsRes,
     programsRes2,
-    programTasksRes,
-    completedTasksRes,
     annChannelRes,
     activeMembersRes,
   ] = await Promise.all([
@@ -306,16 +289,6 @@ export async function getDashboardData(
       .order("name")
       .limit(8),
     supabase
-      .from("task")
-      .select("id, program_id, status")
-      .is("archived_at", null)
-      .not("program_id", "is", null),
-    supabase
-      .from("task")
-      .select("id, completed_at")
-      .eq("status", "completed")
-      .gte("completed_at", sixtyDaysAgo),
-    supabase
       .from("channel")
       .select("id")
       .eq("type", "announcements")
@@ -327,38 +300,54 @@ export async function getDashboardData(
       .eq("status", "active"),
   ]);
 
-  const { data: openTaskRows } = await supabase
-    .from("task")
-    .select("status, due_at")
-    .in("status", OPEN_STATUSES)
-    .is("archived_at", null)
-    .limit(1000);
-
-  // Mutually exclusive donut buckets: overdue trumps status; otherwise
-  // started vs not-started; completed counts the last 30 days.
-  let donutInProgress = 0;
-  let donutToDo = 0;
-  let donutOverdue = 0;
-  for (const row of openTaskRows ?? []) {
-    if (row.due_at && (row.due_at as string) < today) donutOverdue += 1;
-    else if (row.status === "not_started" || row.status === "ready") donutToDo += 1;
-    else donutInProgress += 1;
-  }
+  // Mutually exclusive donut buckets, counted by dashboard_task_summary:
+  // overdue trumps status; otherwise not-started (and ready) vs started;
+  // completed counts the last 30 days. The donut used to count at most the
+  // first 1,000 open tasks; it now counts all of them.
+  const taskSummary = (taskSummaryRes.data ?? null) as {
+    open_tasks: number;
+    due_this_week: number;
+    overdue: number;
+    completed_last_30: number;
+    donut_to_do: number;
+    donut_in_progress: number;
+    completed_at_since_sixty_days: string[] | null;
+  } | null;
+  const completedAtSinceSixtyDays = taskSummary?.completed_at_since_sixty_days ?? [];
 
   // Completion and owner-assessed health are separate signals (PRD §16.1).
-  const programHealth: ProgramHealthRow[] = (
-    (programsRes2.data ?? []) as { id: string; name: string; projects: { health: string; stage: string; archived_at: string | null }[] }[]
-  ).map((program) => {
-    const tasks = (programTasksRes.data ?? []).filter(
-      (t) => t.program_id === program.id,
-    );
-    const completed = tasks.filter((t) => t.status === "completed").length;
-    const percent = tasks.length > 0 ? (completed / tasks.length) * 100 : 0;
+  // Completion is counted in the database for the programs shown, rather than
+  // by downloading every program task to count here: that list was the whole
+  // workspace's tasks on every dashboard load, and past 1,000 rows it was also
+  // silently cut short by the API's row cap (#115).
+  const shownPrograms = (programsRes2.data ?? []) as {
+    id: string;
+    name: string;
+    projects: { health: string; stage: string; archived_at: string | null }[];
+  }[];
+  const programTaskCounts = await Promise.all(
+    shownPrograms.map(async (program) => {
+      const tasksIn = () =>
+        supabase
+          .from("task")
+          .select("id", { count: "exact", head: true })
+          .eq("program_id", program.id)
+          .is("archived_at", null);
+      const [all, completed] = await Promise.all([
+        tasksIn(),
+        tasksIn().eq("status", "completed"),
+      ]);
+      return { total: all.count ?? 0, completed: completed.count ?? 0 };
+    }),
+  );
+  const programHealth: ProgramHealthRow[] = shownPrograms.map((program, index) => {
+    const { total, completed } = programTaskCounts[index];
+    const percent = total > 0 ? (completed / total) * 100 : 0;
     return {
       id: program.id,
       name: program.name,
       completionPercent: percent,
-      totalTasks: tasks.length,
+      totalTasks: total,
       ...summarizeProjectHealth(program.projects ?? []),
     };
   });
@@ -368,9 +357,8 @@ export async function getDashboardData(
   for (let i = 7; i >= 0; i--) {
     const start = new Date(Date.now() - (i + 1) * 7 * 86400_000);
     const end = new Date(Date.now() - i * 7 * 86400_000);
-    const count = (completedTasksRes.data ?? []).filter((t) => {
-      if (!t.completed_at) return false;
-      const at = new Date(t.completed_at as string);
+    const count = completedAtSinceSixtyDays.filter((completedAt) => {
+      const at = new Date(completedAt);
       return at >= start && at < end;
     }).length;
     weeklyCompleted.push({
@@ -378,11 +366,9 @@ export async function getDashboardData(
       value: count,
     });
   }
-  const completedPrevious30 = (completedTasksRes.data ?? []).filter((t) => {
-    if (!t.completed_at) return false;
-    const at = new Date(t.completed_at as string).getTime();
-    return at < Date.now() - 30 * 86400_000;
-  }).length;
+  const completedPrevious30 = completedAtSinceSixtyDays.filter(
+    (completedAt) => new Date(completedAt).getTime() < Date.now() - 30 * 86400_000,
+  ).length;
 
   // Announcements rail: latest announcement with acknowledgment progress.
   let announcementRail: AnnouncementRail = {
@@ -466,10 +452,10 @@ export async function getDashboardData(
     kpis: {
       activePrograms: programsRes.count ?? 0,
       activeProjects: projectsRes.count ?? 0,
-      openTasks: openTasksRes.count ?? 0,
-      dueThisWeek: dueWeekRes.count ?? 0,
-      overdue: overdueRes.count ?? 0,
-      completedLast30: completedRes.count ?? 0,
+      openTasks: Number(taskSummary?.open_tasks ?? 0),
+      dueThisWeek: Number(taskSummary?.due_this_week ?? 0),
+      overdue: Number(taskSummary?.overdue ?? 0),
+      completedLast30: Number(taskSummary?.completed_last_30 ?? 0),
     },
     healthCounts,
     attention: {
@@ -534,10 +520,10 @@ export async function getDashboardData(
     programHealth,
     weeklyCompleted,
     statusBreakdown: {
-      completed: completedRes.count ?? 0,
-      inProgress: donutInProgress,
-      toDo: donutToDo,
-      overdue: donutOverdue,
+      completed: Number(taskSummary?.completed_last_30 ?? 0),
+      inProgress: Number(taskSummary?.donut_in_progress ?? 0),
+      toDo: Number(taskSummary?.donut_to_do ?? 0),
+      overdue: Number(taskSummary?.overdue ?? 0),
     },
     completedPrevious30,
     announcementRail,

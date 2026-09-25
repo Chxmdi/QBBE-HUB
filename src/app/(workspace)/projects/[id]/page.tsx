@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/shared/page-header";
@@ -22,7 +23,7 @@ import { TaskRow } from "@/features/tasks/components/task-row";
 import { TASK_SELECT, getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { hasProjectCapability } from "@/lib/access-capabilities";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, relativeTime } from "@/lib/utils";
 import { RecordComments } from "@/features/comments/components/record-comments";
 import { DecisionLog } from "@/features/risks/components/decision-log";
@@ -57,7 +58,7 @@ export default async function ProjectDetailPage({
   // overview and looking broken.
   const tab =
     tabParam ?? (highlightRiskId || highlightIssueId ? "risks" : "overview");
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const { data: projectRow } = await supabase
     .from("project")
@@ -247,11 +248,15 @@ export default async function ProjectDetailPage({
 
   return (
     <div>
-      <div className="mb-2">
-        <Link href="/projects" className="meta hover:text-brand-fg hover:underline">
-          ← Projects
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Projects", href: "/projects" },
+          ...(project.program
+            ? [{ label: project.program.name, href: `/programs/${project.program.id}` }]
+            : []),
+          { label: project.name },
+        ]}
+      />
       <PageHeader
         eyebrow={project.program?.name ?? "Independent project"}
         title={project.name}

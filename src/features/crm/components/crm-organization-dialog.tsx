@@ -6,7 +6,7 @@ import { useState } from "react";
 import { AlertTriangle, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { Input, Label, Select, Textarea, Checkbox } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import {
   createCrmOrganization,
@@ -140,11 +140,9 @@ export function CrmOrganizationDialog({
                 ))}
               </ul>
               <label className="mt-2 flex items-start gap-2 text-[13px]">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={acknowledged}
-                  onChange={(e) => setAcknowledged(e.target.checked)}
-                  className="mt-0.5 size-4 accent-(--color-brand)"
+                  onChange={(e) => setAcknowledged(e.target.checked)} className="mt-0.5"
                 />
                 This is a different organization — create it anyway.
               </label>

@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
@@ -10,6 +11,7 @@ import {
   createGoogleMeetingEvent,
   deleteGoogleMeetingEvent,
   updateGoogleMeetingEvent,
+  calendarFailureStatus,
 } from "@/features/calendar/services/google-calendar-write";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { wallTimeToInstant } from "@/lib/time";
@@ -51,9 +53,17 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   } else if (!session.isAdmin) {
     return { ok: false, error: "Link the meeting to a project you can access, or ask an administrator." };
   }
-  const { data: meeting, error } = await supabase
+  // The id is chosen here rather than read back. meeting's read policy is
+  // app.can_read_meeting(id), which looks the meeting up by id, and within the
+  // inserting statement the new row is not yet visible to it — so
+  // insert(...).select() failed row-level security for every meeting, and no
+  // meeting could be created at all (#112). Nothing is read back, so nothing
+  // depends on that visibility.
+  const meeting = { id: randomUUID() };
+  const { error } = await supabase
     .from("meeting")
     .insert({
+      id: meeting.id,
       organization_id: session.organizationId,
       project_id: projectId ?? null,
       title,
@@ -63,11 +73,9 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
       ends_at: ends.toISOString(),
       location: location || null,
       meeting_link: meetingLink || null,
-    })
-    .select("id")
-    .single();
+    });
 
-  if (error || !meeting) return { ok: false, error: "Could not create the meeting." };
+  if (error) return { ok: false, error: "Could not create the meeting." };
 
   await supabase.from("meeting_attendee").insert({
     meeting_id: meeting.id,
@@ -86,7 +94,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
     // The Calendar URL already has its own home in `calendar_event_link`.
     await createGoogleMeetingEvent({ organizationId: session.organizationId, userId: session.userId, meetingId: meeting.id, title, purpose: purpose || null, startsAt: starts.toISOString(), endsAt: ends.toISOString(), location: location || null });
   } catch (calendarError) {
-    await supabase.from("integration_connection").update({ status: "error", last_error: calendarError instanceof Error ? calendarError.message : "Calendar sync failed." }).eq("organization_id", session.organizationId).eq("user_id", session.userId).eq("provider", "google_calendar");
+    await supabase.from("integration_connection").update({ status: calendarFailureStatus(calendarError, "Calendar sync failed."), last_error: calendarError instanceof Error ? calendarError.message : "Calendar sync failed." }).eq("organization_id", session.organizationId).eq("user_id", session.userId).eq("provider", "google_calendar");
   }
 
   revalidatePath("/meetings");
@@ -212,7 +220,7 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
     });
   } catch (calendarError) {
     await supabase.from("integration_connection").update({
-      status: "degraded",
+      status: calendarFailureStatus(calendarError, "Calendar update failed."),
       last_error: calendarError instanceof Error ? calendarError.message : "Calendar update failed.",
     }).eq("organization_id", session.organizationId).eq("user_id", existing.organizer_id).eq("provider", "google_calendar");
   }
@@ -260,7 +268,7 @@ export async function cancelMeeting(input: unknown): Promise<ActionResult> {
     await supabase
       .from("integration_connection")
       .update({
-        status: "degraded",
+        status: calendarFailureStatus(calendarError, "Calendar cancellation failed."),
         last_error: calendarError instanceof Error ? calendarError.message : "Calendar cancellation failed.",
       })
       .eq("organization_id", session.organizationId)

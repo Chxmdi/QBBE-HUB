@@ -97,13 +97,62 @@ export const test = base.extend({
     const goto = page.goto.bind(page);
     const reload = page.reload.bind(page);
 
+    // The app's own work still in flight: router.refresh() after a dialog
+    // closes, a router.push after a create, a server action saving a change. Next fetches those as React
+    // Server Component payloads (an `RSC: 1` request header). A test that
+    // navigates while one is pending races it, and the loser is aborted —
+    // NS_BINDING_ABORTED in Firefox, "WebKit encountered an internal error" in
+    // WebKit, while Chromium lets the test's navigation win. That was every
+    // Firefox and WebKit failure in the first nightly run (#114): the product
+    // was fine, the harness started a second navigation on top of the first.
+    const pending = new Set<import("@playwright/test").Request>();
+    // Server actions (a `Next-Action` header) count too: a save still in
+    // flight when the test reloads is cancelled by the reload, and the page
+    // then correctly shows the unsaved state. events.spec's checklist tick,
+    // which is optimistic, lost its save that way on CI.
+    // Prefetches (`Next-Router-Prefetch: 1`) are left out. Next loads every
+    // visible link's page in the background, and those can stay open for
+    // seconds; waiting on them held each navigation up to the full 10 s and
+    // tripled the suite's run time. Losing one to a navigation costs nothing.
+    const isAppNavigation = (request: import("@playwright/test").Request) => {
+      const headers = request.headers();
+      if (headers["next-router-prefetch"] === "1") return false;
+      return headers["rsc"] === "1" || "next-action" in headers || request.url().includes("_rsc=");
+    };
+    page.on("request", (request) => {
+      if (isAppNavigation(request)) pending.add(request);
+    });
+    page.on("requestfinished", (request) => pending.delete(request));
+    page.on("requestfailed", (request) => pending.delete(request));
+    // A new document means the old one's requests are gone, whether or not
+    // the browser reported them as failed. Without this, a request abandoned
+    // by leaving the page (sign-out goes to about:blank) stayed "pending"
+    // forever and every later navigation in the test waited the full 10 s;
+    // identity-lifecycle, which signs out four times, ran out of its 60 s.
+    page.on("domcontentloaded", () => pending.clear());
+
+    const settle = async () => {
+      const deadline = Date.now() + 10_000;
+      while (pending.size > 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      // Say so when the wait gave up, and on what, so a stall shows up in the
+      // CI log instead of only as a test timeout with no step named.
+      if (pending.size > 0) {
+        const urls = [...pending].map((request) => `${request.method()} ${new URL(request.url()).pathname}`);
+        console.log(`\n  note: navigated with app requests still in flight after 10s: ${urls.join(", ")}\n`);
+      }
+    };
+
     page.goto = async (url, options) => {
+      await settle();
       const response = await goto(url, options);
       await waitUntilInteractive(page);
       return response;
     };
 
     page.reload = async (options) => {
+      await settle();
       const response = await reload(options);
       await waitUntilInteractive(page);
       return response;

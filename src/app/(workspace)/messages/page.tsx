@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StartConversationDialog } from "@/features/channels/components/start-conversation-dialog";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { relativeTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Direct messages" };
@@ -26,7 +26,7 @@ interface ConversationListRow {
 
 export default async function MessagesPage() {
   const session = await requireSession();
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const options = await getPickerOptions();
 
   const { data: memberships } = await supabase

@@ -1,10 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   calendarEventDeleteSucceeded,
+  calendarExternalId,
   calendarLinkRecordFields,
+  createOrRecoverGoogleCalendarEvent,
 } from "@/features/calendar/services/google-calendar-write";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("Google Calendar meeting cancellation", () => {
   it.each([200, 202, 204, 404])("treats %i as a terminal delete result", (status) => {
@@ -52,5 +56,59 @@ describe("Calendar sync leaves the organizer's meeting link alone", () => {
     // The create path must keep writing the user's own value, or this guard
     // would pass on a version that dropped the field altogether.
     expect(source).toMatch(/meeting_link:\s*meetingLink \|\| null/);
+  });
+});
+
+describe("Hub-owned Calendar write idempotency", () => {
+  it("derives a stable provider id from the Hub record", () => {
+    const first = calendarExternalId({ kind: "meeting", id: "11111111-1111-1111-1111-111111111111" });
+    const again = calendarExternalId({ kind: "meeting", id: "11111111-1111-1111-1111-111111111111" });
+    const event = calendarExternalId({ kind: "event", id: "11111111-1111-1111-1111-111111111111" });
+    expect(first).toBe(again);
+    expect(first).not.toBe(event);
+    expect(first).toMatch(/^qbbe[0-9a-f]{48}$/);
+  });
+
+  it("converges a duplicate create retry by PATCHing the deterministic event", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 409 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: "qbbe123",
+        htmlLink: "https://calendar.google.com/event",
+        updated: "2026-09-24T05:00:00Z",
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await createOrRecoverGoogleCalendarEvent(
+      "token",
+      "qbbe123",
+      {
+        summary: "Board meeting",
+        start: { dateTime: "2026-11-01T14:00:00.000Z" },
+        end: { dateTime: "2026-11-01T15:00:00.000Z" },
+      },
+    );
+
+    expect(result.id).toBe("qbbe123");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ method: "POST" });
+    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ method: "PATCH" });
+    expect(fetchMock.mock.calls[1]?.[0].toString()).toContain("/events/qbbe123");
+  });
+
+  it("does not retry permanent provider rejections as a conflict recovery", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 403 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(createOrRecoverGoogleCalendarEvent(
+      "token",
+      "qbbe123",
+      {
+        summary: "Board meeting",
+        start: { dateTime: "2026-11-01T14:00:00.000Z" },
+        end: { dateTime: "2026-11-01T15:00:00.000Z" },
+      },
+    )).rejects.toThrow("rejected the event (403)");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

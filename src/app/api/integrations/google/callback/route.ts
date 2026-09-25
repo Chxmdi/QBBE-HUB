@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { GOOGLE_PROVIDER_SCOPES, type GoogleIntegrationProvider } from "@/features/inbox/services/google-oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function GET(request: Request) {
   if (!code || !state || !expected || state !== expected) {
     return fail("OAuth state mismatch. Try connecting again.");
   }
-  const provider = state.startsWith("google_calendar:")
+  const provider: GoogleIntegrationProvider = state.startsWith("google_calendar:")
     ? "google_calendar"
     : state.startsWith("google_drive:")
       ? "google_drive"
@@ -64,6 +65,7 @@ export async function GET(request: Request) {
         organization_id: session.organizationId,
         user_id: session.userId,
         provider,
+        scopes: [...GOOGLE_PROVIDER_SCOPES[provider]],
         status: "connected",
         last_error: null,
         last_sync_at: null,
@@ -79,10 +81,21 @@ export async function GET(request: Request) {
   const expires = tokens.expires_in
     ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
     : null;
+  // Google commonly omits refresh_token on reconnect. Preserve the prior
+  // server-side refresh token instead of accidentally converting a durable
+  // authorization into one that dies when the new access token expires.
+  const { data: priorSecret, error: priorSecretError } = await supabase
+    .from("integration_secret")
+    .select("refresh_token")
+    .eq("connection_id", connection.id)
+    .maybeSingle();
+  if (priorSecretError) {
+    return fail("Connected, but the previous authorization could not be reconciled.");
+  }
   const secretPayload = {
     connection_id: connection.id,
     access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token ?? null,
+    refresh_token: tokens.refresh_token ?? priorSecret?.refresh_token ?? null,
     token_expires_at: expires,
   };
   const { error: secretError } = await supabase
@@ -160,36 +173,16 @@ export async function GET(request: Request) {
         .eq("connection_id", connection.id);
       if (cursorError) throw new Error(`Could not save Google Calendar sync token: ${cursorError.message}`);
     } else {
-      const { fetchGoogleDriveSync } = await import("@/features/inbox/services/gmail-sync");
-      const sync = await fetchGoogleDriveSync(tokens.access_token);
-      const { error: resetError } = await supabase.from("document")
-        .delete()
-        .eq("integration_connection_id", connection.id);
-      if (resetError) throw new Error(`Could not reset Google Drive metadata: ${resetError.message}`);
-      if (sync.rows.length) {
-        const { error: driveError } = await supabase.from("document").upsert(
-          sync.rows.map((row) => ({
-            organization_id: session.organizationId,
-            title: row.title,
-            description: row.description,
-            kind: "link",
-            url: row.url,
-            mime_type: row.mime_type,
-            visibility: "organization",
-            owner_id: session.userId,
-            created_by: session.userId,
-            integration_connection_id: connection.id,
-            external_id: row.external_id,
-            external_updated_at: row.updated_at,
-          })),
-          { onConflict: "integration_connection_id,external_id" },
-        );
-        if (driveError) throw new Error(`Could not save Google Drive metadata: ${driveError.message}`);
-      }
-      const { error: cursorError } = await supabase.from("integration_secret")
-        .update({ google_drive_page_token: sync.pageToken })
-        .eq("connection_id", connection.id);
-      if (cursorError) throw new Error(`Could not save Google Drive page token: ${cursorError.message}`);
+      const { reconcileGoogleDrive } = await import("@/features/documents/services/google-drive-reconcile");
+      await reconcileGoogleDrive(
+        supabase,
+        {
+          id: connection.id,
+          organization_id: session.organizationId,
+          user_id: session.userId,
+        },
+        tokens.access_token,
+      );
     }
     await supabase
       .from("integration_connection")

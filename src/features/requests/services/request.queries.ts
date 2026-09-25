@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { isOpenRequest } from "@/features/requests/schemas";
 import type {
   ApprovalDecision,
@@ -83,7 +83,7 @@ export interface IntakeBoard {
  * would cost more than the filter does.
  */
 export async function getIntakeBoard(userId: string): Promise<IntakeBoard> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const [{ data: requests }, { data: approvals }] = await Promise.all([
     supabase
@@ -117,7 +117,7 @@ export async function getIntakeBoard(userId: string): Promise<IntakeBoard> {
 
 /** The requests one person raised, for their own view of intake. */
 export async function getMyRequests(userId: string): Promise<ProjectRequestRow[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const { data } = await supabase
     .from("project_request")
     .select(REQUEST_SELECT)

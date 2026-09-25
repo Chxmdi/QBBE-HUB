@@ -16,7 +16,7 @@ import { JoinChannelButton } from "@/features/channels/components/join-channel-b
 import { AnnouncementComposeDialog } from "@/features/announcements/components/announcement-compose-dialog";
 import { CHANNEL_HISTORY_PAGE_SIZE } from "@/features/channels/history";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import type { Channel, Message } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Channel" };
@@ -33,7 +33,7 @@ export default async function ChannelPage({
 }) {
   const session = await requireSession();
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
 
   const { data: channelRow } = await supabase
     .from("channel")
@@ -69,6 +69,7 @@ export default async function ChannelPage({
       .select(MESSAGE_SELECT)
       .eq("channel_id", id)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(CHANNEL_HISTORY_PAGE_SIZE),
     supabase
       .from("pinned_resource")

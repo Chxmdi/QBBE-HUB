@@ -5,7 +5,7 @@ import { useState } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Label, Textarea } from "@/components/ui/input";
+import { Label, Textarea, Checkbox } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import {
   closeProject,
@@ -172,9 +172,7 @@ export function CloseProjectDialog({
                 {documents.map((document) => (
                   <li key={document.id}>
                     <label className="flex items-start gap-2 text-[13px]">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 size-4 accent-(--color-brand)"
+                      <Checkbox className="mt-0.5"
                         checked={evidenceIds.includes(document.id)}
                         onChange={(e) =>
                           setEvidenceIds((current) =>
@@ -194,11 +192,9 @@ export function CloseProjectDialog({
 
           {hasOpenWork ? (
             <label className="flex items-start gap-2.5 text-[13.5px]">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={archiveOpen}
-                onChange={(e) => setArchiveOpen(e.target.checked)}
-                className="mt-0.5 size-4 accent-(--color-brand)"
+                onChange={(e) => setArchiveOpen(e.target.checked)} className="mt-0.5"
               />
               <span>
                 Archive the {unresolved?.openTasks ?? 0} remaining open{" "}

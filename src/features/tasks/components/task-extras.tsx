@@ -14,7 +14,7 @@ import {
   stopTaskSeries,
 } from "@/features/tasks/services/planning.commands";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Select } from "@/components/ui/input";
+import { Input, Label, Select, Checkbox } from "@/components/ui/input";
 
 const RULE_LABELS: Record<string, string> = {
   weekly: "weekly",
@@ -113,8 +113,7 @@ export function TaskExtras({
               {optimisticChecklist.map((item, index) => (
                 <li key={item.id} className="flex items-center gap-2">
                   <label className="flex flex-1 items-center gap-2 text-[13.5px]">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={Boolean(item.completed_at)}
                       onChange={(e) => {
                         const completed = e.target.checked;
@@ -124,7 +123,6 @@ export function TaskExtras({
                           onChanged();
                         });
                       }}
-                      className="size-4 accent-(--color-brand)"
                     />
                     <span className={item.completed_at ? "text-muted line-through" : ""}>
                       {item.title}
@@ -212,7 +210,7 @@ export function TaskExtras({
               else onChanged();
             }}
           >
-            <Select name="blockingTaskId" required defaultValue="">
+            <Select name="blockingTaskId" aria-label="Blocked by task" required defaultValue="">
               <option value="" disabled>
                 This task is blocked by…
               </option>

@@ -35,7 +35,7 @@ export function DataTable({
 
 export function TableHead({ children }: { children: React.ReactNode }) {
   return (
-    <thead className="sticky top-0 z-10 bg-surface-soft">
+    <thead className="sticky top-0 z-(--z-raised) bg-surface-soft">
       <tr className="border-b border-line">{children}</tr>
     </thead>
   );
