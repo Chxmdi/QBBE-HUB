@@ -131,6 +131,16 @@ jobs:
 
       - uses: grafana/setup-k6-action@v1
 
+      # Where the time goes, not only how much of it: pg_stat_statements is
+      # preloaded in the Supabase image. Reset it after seeding and sign-in so
+      # the report covers only the 50-person run.
+      - name: Start query statistics
+        run: |
+          docker exec -i supabase_db_workspace psql -U postgres -q <<'SQL'
+          create extension if not exists pg_stat_statements with schema extensions;
+          select extensions.pg_stat_statements_reset();
+          SQL
+
       - name: 50 people for ${{ inputs.duration || '2m' }}
         run: |
           k6 run \
@@ -139,6 +149,21 @@ jobs:
             -e DURATION=${{ inputs.duration || '2m' }} \
             --summary-export=perf-summary.json \
             scripts/qa/perf.k6.js
+
+      - name: Queries that took the most database time
+        if: always()
+        run: |
+          docker exec -i supabase_db_workspace psql -U postgres -P pager=off <<'SQL'
+          select round(total_exec_time)::int as total_ms,
+                 calls,
+                 round(mean_exec_time::numeric, 1) as mean_ms,
+                 rows,
+                 left(regexp_replace(query, '\s+', ' ', 'g'), 240) as query
+          from extensions.pg_stat_statements
+          where query not ilike '%pg_stat_statements%'
+          order by total_exec_time desc
+          limit 25;
+          SQL
 
       - name: Keep the measurements
         if: always()
