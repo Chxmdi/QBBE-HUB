@@ -1,0 +1,76 @@
+name: Rollback Netlify
+
+# Puts an earlier deploy back live on one QBBE environment (#51).
+#
+# This restores the website only. Database migrations are append-only and
+# are not reversed here: fix forward with a new migration, or follow the
+# schema rollback section of docs/runbooks/release-procedure.md.
+#
+# The deploy ID to restore is printed in the Deploy Netlify run's Publish
+# summary ("Rollback target"), and listed on the site's Deploys page.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: QBBE environment to roll back
+        required: true
+        type: choice
+        options: [staging, production]
+      deploy_id:
+        description: Netlify deploy ID to restore (from the Deploy run's Publish summary)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netlify-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Restore deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.environment }}
+    env:
+      NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      DEPLOY_ID: ${{ inputs.deploy_id }}
+      TARGET_ENVIRONMENT: ${{ inputs.environment }}
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - name: Check the site and the deploy belong to this environment
+        run: |
+          case "$TARGET_ENVIRONMENT" in
+            staging) expected='2169b17a-8dc3-49de-a466-4281e1285de2' ;;
+            production) expected='a34499c8-0d84-47d5-bfb2-502c2b9b9071' ;;
+            *) echo "::error::Unsupported environment"; exit 1 ;;
+          esac
+          [ "$NETLIFY_SITE_ID" = "$expected" ] || { echo "::error::Wrong Netlify site for $TARGET_ENVIRONMENT."; exit 1; }
+          [[ "$DEPLOY_ID" =~ ^[0-9a-f]{24}$ ]] || { echo "::error::'$DEPLOY_ID' is not a Netlify deploy ID."; exit 1; }
+          site=$(curl -fsS -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
+            "https://api.netlify.com/api/v1/deploys/${DEPLOY_ID}" \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('site_id',''), d.get('state',''), d.get('title') or '')")
+          echo "Deploy ${DEPLOY_ID}: ${site}"
+          [ "${site%% *}" = "$NETLIFY_SITE_ID" ] || { echo "::error::Deploy ${DEPLOY_ID} is not from this environment's site."; exit 1; }
+
+      - name: Restore it
+        run: |
+          curl -fsS -X POST -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
+            "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}/deploys/${DEPLOY_ID}/restore" > /dev/null
+          echo "Restored deploy \`${DEPLOY_ID}\` on ${TARGET_ENVIRONMENT}." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: The restored site answers
+        run: |
+          test -n "$SITE_URL" || { echo "::error::SITE_URL is not set for this environment."; exit 1; }
+          code=none
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${SITE_URL%/}/sign-in")
+            [ "$code" = 200 ] && { echo "${SITE_URL%/}/sign-in answered 200."; exit 0; }
+            sleep 6
+          done
+          echo "::error::${SITE_URL%/}/sign-in did not answer 200 after the restore (last: ${code})."
+          exit 1
