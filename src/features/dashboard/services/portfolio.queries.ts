@@ -1,4 +1,8 @@
-import { addCalendarDays, calendarDateInZone, DEFAULT_TIME_ZONE } from "@/lib/time";
+import {
+  addCalendarDays,
+  calendarDateInZone,
+  DEFAULT_TIME_ZONE,
+} from "@/lib/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   applyPortfolioFilters,
@@ -53,10 +57,8 @@ export async function getPortfolio(input: {
   const supabase = await createSupabaseServerClient();
   const refreshedAt = now.toISOString();
 
-  if (lens === "volunteer") {
-    return { rows: [], counts: portfolioCounts([]), refreshedAt, lens };
-  }
-
+  // No lens short-circuit: row-level security already limits every reader,
+  // volunteers included, to the projects they were granted.
   let query = supabase
     .from("project")
     .select(
@@ -65,50 +67,52 @@ export async function getPortfolio(input: {
     )
     .order("name")
     .limit(200);
-  query = input.filters.status === "archived" || input.filters.stage === "archived"
-    ? query.not("archived_at", "is", null)
-    : query.is("archived_at", null);
+  query =
+    input.filters.status === "archived" || input.filters.stage === "archived"
+      ? query.not("archived_at", "is", null)
+      : query.is("archived_at", null);
 
   const { data } = await query;
   const projects = (data ?? []) as unknown as ProjectRecord[];
   const projectIds = projects.map((project) => project.id);
 
-  const [tasksRes, milestonesRes, issuesRes, updatesRes, grantsRes] = await Promise.all([
-    projectIds.length === 0
-      ? Promise.resolve({ data: [] })
-      : supabase
-          .from("task")
-          .select("id, project_id, status, title, assignee_id")
-          .in("project_id", projectIds)
-          .is("archived_at", null),
-    projectIds.length === 0
-      ? Promise.resolve({ data: [] })
-      : supabase
-          .from("milestone")
-          .select("id, project_id, name, due_date, completed_at, status")
-          .in("project_id", projectIds)
-          .order("due_date", { ascending: true, nullsFirst: false }),
-    projectIds.length === 0
-      ? Promise.resolve({ data: [] })
-      : supabase
-          .from("issue")
-          .select("project_id, title, severity")
-          .in("project_id", projectIds)
-          .in("status", ["open", "investigating"]),
-    projectIds.length === 0
-      ? Promise.resolve({ data: [] })
-      : supabase
-          .from("project_status_update")
-          .select("project_id, blockers, created_at")
-          .in("project_id", projectIds)
-          .order("created_at", { ascending: false }),
-    input.filters.member
-      ? supabase
-          .from("project_access_grant")
-          .select("project_id")
-          .eq("user_id", input.filters.member)
-      : Promise.resolve({ data: [] }),
-  ]);
+  const [tasksRes, milestonesRes, issuesRes, updatesRes, grantsRes] =
+    await Promise.all([
+      projectIds.length === 0
+        ? Promise.resolve({ data: [] })
+        : supabase
+            .from("task")
+            .select("id, project_id, status, title, assignee_id")
+            .in("project_id", projectIds)
+            .is("archived_at", null),
+      projectIds.length === 0
+        ? Promise.resolve({ data: [] })
+        : supabase
+            .from("milestone")
+            .select("id, project_id, name, due_date, completed_at, status")
+            .in("project_id", projectIds)
+            .order("due_date", { ascending: true, nullsFirst: false }),
+      projectIds.length === 0
+        ? Promise.resolve({ data: [] })
+        : supabase
+            .from("issue")
+            .select("project_id, title, severity")
+            .in("project_id", projectIds)
+            .in("status", ["open", "investigating"]),
+      projectIds.length === 0
+        ? Promise.resolve({ data: [] })
+        : supabase
+            .from("project_status_update")
+            .select("project_id, blockers, created_at")
+            .in("project_id", projectIds)
+            .order("created_at", { ascending: false }),
+      input.filters.member
+        ? supabase
+            .from("project_access_grant")
+            .select("project_id")
+            .eq("user_id", input.filters.member)
+        : Promise.resolve({ data: [] }),
+    ]);
 
   const tasks = (tasksRes.data ?? []) as {
     project_id: string;
@@ -123,7 +127,11 @@ export async function getPortfolio(input: {
     completed_at: string | null;
     status: string;
   }[];
-  const issues = (issuesRes.data ?? []) as { project_id: string; title: string; severity: string }[];
+  const issues = (issuesRes.data ?? []) as {
+    project_id: string;
+    title: string;
+    severity: string;
+  }[];
   const updates = (updatesRes.data ?? []) as {
     project_id: string;
     blockers: string | null;
@@ -131,17 +139,22 @@ export async function getPortfolio(input: {
   }[];
 
   const memberIds = new Set<string>(
-    ((grantsRes.data ?? []) as { project_id: string }[]).map((grant) => grant.project_id),
+    ((grantsRes.data ?? []) as { project_id: string }[]).map(
+      (grant) => grant.project_id,
+    ),
   );
   if (input.filters.member) {
     for (const task of tasks) {
-      if (task.assignee_id === input.filters.member) memberIds.add(task.project_id);
+      if (task.assignee_id === input.filters.member)
+        memberIds.add(task.project_id);
     }
   }
 
   const sources: PortfolioSource[] = projects.map((project) => {
     const projectTasks = tasks.filter((task) => task.project_id === project.id);
-    const completed = projectTasks.filter((task) => task.status === "completed").length;
+    const completed = projectTasks.filter(
+      (task) => task.status === "completed",
+    ).length;
     const next = milestones.find(
       (milestone) =>
         milestone.project_id === project.id &&
@@ -164,10 +177,17 @@ export async function getPortfolio(input: {
       stage: project.stage,
       priority: project.priority,
       targetDate: project.target_date,
-      progressPercent: projectTasks.length === 0 ? 0 : Math.round((completed / projectTasks.length) * 100),
+      progressPercent:
+        projectTasks.length === 0
+          ? 0
+          : Math.round((completed / projectTasks.length) * 100),
       nextMilestone: next?.name ?? null,
       nextMilestoneDue: next?.due_date ?? null,
-      mainBlocker: latestBlocker?.blockers ?? openIssue?.title ?? blockedTask?.title ?? null,
+      mainBlocker:
+        latestBlocker?.blockers ??
+        openIssue?.title ??
+        blockedTask?.title ??
+        null,
       lastUpdateAt: project.last_status_update_at,
       createdAt: project.created_at,
       reportingCadence: project.reporting_cadence,
@@ -191,10 +211,14 @@ export async function getPortfolio(input: {
     .select("project_id")
     .eq("user_id", input.userId);
   const managedIds = new Set(
-    ((ownGrants ?? []) as { project_id: string }[]).map((grant) => grant.project_id),
+    ((ownGrants ?? []) as { project_id: string }[]).map(
+      (grant) => grant.project_id,
+    ),
   );
   const assignedIds = new Set(
-    tasks.filter((task) => task.assignee_id === input.userId).map((task) => task.project_id),
+    tasks
+      .filter((task) => task.assignee_id === input.userId)
+      .map((task) => task.project_id),
   );
   const visible =
     lens === "leadership"
@@ -204,26 +228,39 @@ export async function getPortfolio(input: {
             row.ownerId === input.userId ||
             managedIds.has(row.id) ||
             assignedIds.has(row.id) ||
-            projects.find((project) => project.id === row.id)?.program?.lead_id === input.userId,
+            projects.find((project) => project.id === row.id)?.program
+              ?.lead_id === input.userId,
         );
 
   const rows = applyPortfolioFilters(visible, input.filters, memberIds);
   return { rows, counts: portfolioCounts(visible), refreshedAt, lens };
 }
 
-export async function getWorkload(timeZone: string = DEFAULT_TIME_ZONE): Promise<{
+export async function getWorkload(
+  timeZone: string = DEFAULT_TIME_ZONE,
+): Promise<{
   people: WorkloadPerson[];
   teams: WorkloadTeam[];
 }> {
   const supabase = await createSupabaseServerClient();
   const now = new Date();
-  const today = calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
+  const today =
+    calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
   const weekOut = addCalendarDays(today, 7) ?? today;
   const [{ data }, { data: teams }, { data: members }] = await Promise.all([
     supabase
       .from("task")
-      .select("assignee_id, due_at, estimate_hours, assignee:assignee_id(full_name)")
-      .in("status", ["not_started", "ready", "in_progress", "waiting", "blocked", "in_review"])
+      .select(
+        "assignee_id, due_at, estimate_hours, assignee:assignee_id(full_name)",
+      )
+      .in("status", [
+        "not_started",
+        "ready",
+        "in_progress",
+        "waiting",
+        "blocked",
+        "in_review",
+      ])
       .is("archived_at", null)
       .limit(1000),
     supabase.from("team").select("id, name").order("name"),
@@ -245,16 +282,20 @@ export async function getWorkload(timeZone: string = DEFAULT_TIME_ZONE): Promise
     today,
     weekOut,
   );
-  const teamNames = new Map((teams ?? []).map((team) => [team.id as string, team.name as string]));
+  const teamNames = new Map(
+    (teams ?? []).map((team) => [team.id as string, team.name as string]),
+  );
   return {
     people,
     teams: rollupWorkloadByTeam(
       people,
-      ((members ?? []) as { team_id: string; user_id: string }[]).map((member) => ({
-        teamId: member.team_id,
-        teamName: teamNames.get(member.team_id) ?? "Team",
-        userId: member.user_id,
-      })),
+      ((members ?? []) as { team_id: string; user_id: string }[]).map(
+        (member) => ({
+          teamId: member.team_id,
+          teamName: teamNames.get(member.team_id) ?? "Team",
+          userId: member.user_id,
+        }),
+      ),
     ),
   };
 }
@@ -277,14 +318,16 @@ export async function getOutcomeRollup(): Promise<OutcomeRollup[]> {
     )
     .is("retired_at", null)
     .limit(12);
-  return ((data ?? []) as unknown as {
-    id: string;
-    name: string;
-    unit: string;
-    target: string | null;
-    program: { name: string } | null;
-    measurements: { value: string; measured_on: string }[];
-  }[]).map((metric) => {
+  return (
+    (data ?? []) as unknown as {
+      id: string;
+      name: string;
+      unit: string;
+      target: string | null;
+      program: { name: string } | null;
+      measurements: { value: string; measured_on: string }[];
+    }[]
+  ).map((metric) => {
     const latest = [...(metric.measurements ?? [])].sort((a, b) =>
       b.measured_on.localeCompare(a.measured_on),
     )[0];
@@ -307,10 +350,13 @@ export interface CommitmentItem {
   href: string;
 }
 
-export async function getCommitments(timeZone: string = DEFAULT_TIME_ZONE): Promise<CommitmentItem[]> {
+export async function getCommitments(
+  timeZone: string = DEFAULT_TIME_ZONE,
+): Promise<CommitmentItem[]> {
   const supabase = await createSupabaseServerClient();
   const now = new Date();
-  const today = calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
+  const today =
+    calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
   const plus30 = addCalendarDays(today, 30) ?? today;
   const [milestones, followUps, projects] = await Promise.all([
     supabase
@@ -329,7 +375,9 @@ export async function getCommitments(timeZone: string = DEFAULT_TIME_ZONE): Prom
       .limit(8),
     supabase
       .from("project")
-      .select("id, name, reporting_cadence, last_status_update_at, created_at, stage, archived_at")
+      .select(
+        "id, name, reporting_cadence, last_status_update_at, created_at, stage, archived_at",
+      )
       .in("reporting_cadence", ["weekly", "monthly"])
       .is("archived_at", null)
       .limit(20),
@@ -379,7 +427,13 @@ export async function getCommitments(timeZone: string = DEFAULT_TIME_ZONE): Prom
 }
 
 export async function listPortfolioViews(): Promise<
-  { id: string; name: string; query: Record<string, string>; shared: boolean; ownerId: string }[]
+  {
+    id: string;
+    name: string;
+    query: Record<string, string>;
+    shared: boolean;
+    ownerId: string;
+  }[]
 > {
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
@@ -387,13 +441,15 @@ export async function listPortfolioViews(): Promise<
     .select("id, name, query, shared, user_id")
     .eq("path", "/projects")
     .order("name");
-  return ((data ?? []) as {
-    id: string;
-    name: string;
-    query: Record<string, string> | null;
-    shared: boolean;
-    user_id: string;
-  }[]).map((view) => ({
+  return (
+    (data ?? []) as {
+      id: string;
+      name: string;
+      query: Record<string, string> | null;
+      shared: boolean;
+      user_id: string;
+    }[]
+  ).map((view) => ({
     id: view.id,
     name: view.name,
     query: view.query ?? {},
