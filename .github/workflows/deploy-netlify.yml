@@ -1,5 +1,19 @@
 name: Deploy Netlify
 
+# Publishes one exact commit of `main` to one QBBE environment (#51, #52).
+#
+# Order, each step gating the next:
+#   1. verify    every CI gate, re-run against this workflow's exact commit
+#   2. evidence  production only: a green Release candidate run for the same
+#                commit must exist, so production never gets a commit that was
+#                not certified as a whole (all browsers, security, 50 users)
+#   3. migrate   environment and isolation checks, then database migrations
+#   4. publish   the site, recording the deploy it replaces for rollback
+#   5. smoke     the published site answers
+#
+# Rollback: .github/workflows/rollback-netlify.yml and
+# docs/runbooks/release-procedure.md.
+
 on:
   workflow_dispatch:
     inputs:
@@ -22,12 +36,109 @@ jobs:
     # Re-run every gate against this workflow's exact commit, with no hosted secrets.
     uses: ./.github/workflows/ci.yml
 
-  publish:
+  evidence:
+    name: Release candidate evidence
     needs: verify
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Require a green Release candidate run for this commit (production)
+        if: inputs.environment == 'production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          runs=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-candidate.yml/runs?head_sha=${GITHUB_SHA}&status=success&per_page=1" \
+            --jq '.total_count')
+          if [ "${runs:-0}" -lt 1 ]; then
+            echo "::error::No successful Release candidate run exists for ${GITHUB_SHA}."
+            echo "Run the 'Release candidate' workflow on this commit, confirm it is green, then deploy again."
+            exit 1
+          fi
+          echo "Release candidate evidence found for ${GITHUB_SHA}."
+      - name: Staging needs only the gates above
+        if: inputs.environment != 'production'
+        run: echo "Staging deploys are gated by CI on ${GITHUB_SHA}."
+
+  migrate:
+    name: Environment checks and migrations
+    needs: evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Check environment readiness and isolation
+        env:
+          RELEASE_ENABLED: ${{ vars.RELEASE_ENABLED }}
+          # Repository-level variables, so each environment can check it is
+          # not pointed at the other one's database.
+          STAGING_SUPABASE_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          PRODUCTION_SUPABASE_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+        run: scripts/check-deploy-environment.sh
+
+      - name: Confirm the site's runtime database is this environment's
+        run: |
+          url=$(npx --yes netlify-cli@27.5.0 env:get NEXT_PUBLIC_SUPABASE_URL \
+            --context production --site "$NETLIFY_SITE_ID" 2>/dev/null | tail -n 1 | tr -d '[:space:]')
+          case "$url" in
+            "https://${SUPABASE_PROJECT_REF}.supabase.co"|"https://${SUPABASE_PROJECT_REF}.supabase.co/") ;;
+            *) echo "::error::The Netlify site's NEXT_PUBLIC_SUPABASE_URL is not this environment's Supabase project (${SUPABASE_PROJECT_REF})."; exit 1 ;;
+          esac
+          echo "Site ${NETLIFY_SITE_ID} reads Supabase project ${SUPABASE_PROJECT_REF}."
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.114.0
+
+      - name: Link the environment's database
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      # `db push` refuses to run when the database holds a migration version
+      # this commit does not have (drift), so an out-of-band change stops the
+      # deploy here rather than being silently built on.
+      - name: Migrations this deploy will apply (dry run)
+        run: |
+          supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD" | tee migration-plan.txt
+          {
+            echo "### Migrations for ${{ inputs.environment }} at ${GITHUB_SHA}"
+            echo '```'
+            cat migration-plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply migrations
+        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Confirm nothing is left to apply
+        run: |
+          supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD" | tee after.txt
+          grep -qi "up to date" after.txt || { echo "::error::Migrations still pending after push."; exit 1; }
+
+  publish:
+    name: Publish
+    needs: migrate
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: ${{ inputs.environment }}
+    outputs:
+      previous_deploy: ${{ steps.previous.outputs.id }}
+    env:
+      NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,31 +148,39 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Check environment readiness and hosting isolation
-        env:
-          RELEASE_ENABLED: ${{ vars.RELEASE_ENABLED }}
-          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+
+      - name: Record the deploy being replaced
+        id: previous
         run: |
-          test "$RELEASE_ENABLED" = true || { echo 'Release is disabled. Complete the environment release checklist first.'; exit 1; }
-          test -n "$NETLIFY_SITE_ID" || { echo 'Missing environment site ID'; exit 1; }
-          test -n "$NETLIFY_AUTH_TOKEN" || { echo 'Missing environment deployment token'; exit 1; }
+          id=$(curl -fsS -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
+            "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}" \
+            | python3 -c "import json,sys; print((json.load(sys.stdin).get('published_deploy') or {}).get('id',''))")
+          echo "id=${id}" >> "$GITHUB_OUTPUT"
+          echo "Rollback target (the ${{ inputs.environment }} deploy this replaces): \`${id:-none}\`" >> "$GITHUB_STEP_SUMMARY"
 
-          case "$TARGET_ENVIRONMENT" in
-            staging) expected_site_id='2169b17a-8dc3-49de-a466-4281e1285de2' ;;
-            production) expected_site_id='a34499c8-0d84-47d5-bfb2-502c2b9b9071' ;;
-            *) echo "Unsupported environment: $TARGET_ENVIRONMENT"; exit 1 ;;
-          esac
-
-          test "$NETLIFY_SITE_ID" = "$expected_site_id" || {
-            echo "Refusing deployment: $TARGET_ENVIRONMENT is bound to the wrong Netlify site ID."
-            exit 1
-          }
+      # Each environment has a separate site. Its production context contains
+      # that environment's build/runtime settings, including public Auth keys.
       - name: Build and publish to the selected QBBE site
-        env:
-          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-        # Each environment has a separate site. Its production context contains
-        # that environment's build/runtime settings, including public Auth keys.
         run: npx --yes netlify-cli@27.5.0 deploy --prod --context production --message "$GITHUB_SHA"
+
+  smoke:
+    name: Smoke check
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: The published site answers
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          PREVIOUS: ${{ needs.publish.outputs.previous_deploy }}
+        run: |
+          test -n "$SITE_URL" || { echo "::error::SITE_URL is not set for this environment."; exit 1; }
+          code=none
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${SITE_URL%/}/sign-in")
+            [ "$code" = 200 ] && { echo "${SITE_URL%/}/sign-in answered 200."; exit 0; }
+            sleep 6
+          done
+          echo "::error::${SITE_URL%/}/sign-in did not answer 200 (last: ${code}). Roll back with the 'Rollback Netlify' workflow, deploy ${PREVIOUS:-<see the Publish summary>}."
+          exit 1

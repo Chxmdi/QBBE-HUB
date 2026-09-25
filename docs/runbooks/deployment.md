@@ -187,13 +187,26 @@ browser.
 
 ## Gated Netlify workflow
 
-`.github/workflows/deploy-netlify.yml` is manual and defaults to staging. It
-calls the complete CI workflow from the same commit, then publishes only from
-`main`. CI includes lint, types, unit tests, build, dependency audit, migrated
-RLS/advisor checks, public browser checks and an authenticated project/milestone and program lifecycle
-smoke. Both browser suites are configured for Chromium, Firefox and WebKit.
-The broader authenticated QA matrix and manual Safari/mobile acceptance remain
-separate release evidence; this smoke does not certify all PRD criteria.
+`.github/workflows/deploy-netlify.yml` is manual and defaults to staging.
+The full step-by-step procedure, including rollback, is
+[`release-procedure.md`](release-procedure.md). Each run:
+
+1. Re-runs the complete CI workflow on the exact commit, and publishes only
+   from `main`.
+2. For **production**, requires a green **Release candidate** run on the same
+   commit (all browsers, security scans, the 50-user test).
+3. Checks the environment fail-closed (`scripts/check-deploy-environment.sh`):
+   release enabled, credentials present, Netlify site and Supabase project are
+   the ones registered for that environment, and staging and production are
+   different Supabase projects. It also reads the site's
+   `NEXT_PUBLIC_SUPABASE_URL` from Netlify and refuses if it is another
+   environment's database.
+4. Shows the migrations it will apply (dry run, in the run summary), applies
+   them, and confirms none are left. `supabase db push` stops the deploy if
+   the database holds a migration this commit does not have.
+5. Records the currently published deploy as the rollback target, then
+   publishes.
+6. Smoke-checks `SITE_URL/sign-in`.
 
 Create GitHub environments named `staging` and `production`. In each, configure:
 
@@ -201,7 +214,18 @@ Create GitHub environments named `staging` and `production`. In each, configure:
 |---|---|---|
 | `NETLIFY_SITE_ID` | environment variable | distinct QBBE site for this environment |
 | `NETLIFY_AUTH_TOKEN` | environment secret | deployment credential; never commit it |
+| `SUPABASE_PROJECT_REF` | environment variable | this environment's Supabase project ref |
+| `SUPABASE_ACCESS_TOKEN` | environment secret | Supabase personal access token of a QBBE account, for migrations |
+| `SUPABASE_DB_PASSWORD` | environment secret | this environment's database password, for migrations |
+| `SITE_URL` | environment variable | the environment's public URL, for the smoke check |
 | `RELEASE_ENABLED` | environment variable | literal `true` only after readiness review |
+
+And at repository level (Settings, Secrets and variables, Actions, Variables):
+
+| Setting | Purpose |
+|---|---|
+| `STAGING_SUPABASE_PROJECT_REF` | registered staging project; deploys refuse any other |
+| `PRODUCTION_SUPABASE_PROJECT_REF` | registered production project; deploys refuse any other |
 
 Keep `RELEASE_ENABLED` absent/false until migrations are applied, the site’s
 production build/runtime variables are verified, and that environment’s release
