@@ -3,17 +3,20 @@
 Moves production-critical resources out of the personal `Chxmdi` account into
 QBBE-controlled accounts, and separates staging from production.
 
-**Measured starting state, 2026-09-23.** Re-check each line before trusting it;
-this is what the repository and GitHub reported on that date.
+**Measured state, 2026-09-25** (first measured 2026-09-23). Re-check each
+line before trusting it; this is what GitHub and the connected Supabase
+account reported on that date.
 
 | Thing | State |
 |---|---|
 | Repository | `Chxmdi/QBBE-HUB`, **public**, personal account, not in an organization |
-| GitHub environments | `staging` and `copilot` exist. **`production` does not.** |
-| Repository variables | none set |
-| CI secrets referenced | `NETLIFY_AUTH_TOKEN` only |
-| Deploy gate | `vars.RELEASE_ENABLED` must equal `true`, per `.github/workflows/deploy-netlify.yml` |
-| Netlify site IDs | **hardcoded in the deploy workflow** — staging `2169b17a-8dc3-49de-a466-4281e1285de2`, production `a34499c8-0d84-47d5-bfb2-502c2b9b9071` |
+| GitHub environments | `staging` and `copilot` exist. **`production` does not.** (2026-09-23; the connector cannot read environments) |
+| Repository variables | none set (2026-09-23) |
+| Secrets the deploy reads | `NETLIFY_AUTH_TOKEN`; since #128 also `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` per environment |
+| Deploy gate | `vars.RELEASE_ENABLED` must equal `true`; see `scripts/check-deploy-environment.sh` |
+| Netlify site IDs | registered in `scripts/check-deploy-environment.sh` and `rollback-netlify.yml`: staging `2169b17a-8dc3-49de-a466-4281e1285de2`, production `a34499c8-0d84-47d5-bfb2-502c2b9b9071` |
+| Supabase | **one** project, `qbbe-hub` (ref `xvxahcbwydsnllqbjnlr`, ca-central-1, healthy), in the Supabase organization **"BMF"**, not a QBBE organization. There is no second project, so staging and production cannot yet be isolated. |
+| Hosted schema | 60 migrations applied, newest `20260905062624`. **43 repository migrations are not applied.** No drift: every applied version exists in the repository. |
 
 ## Providers to bring under QBBE control
 
