@@ -62,7 +62,7 @@ export async function createRisk(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { projectId, title, description, likelihood, impact, mitigation, ownerId, reviewAt } =
+  const { projectId, title, description, likelihood, impact, mitigation, trigger, ownerId, reviewAt } =
     parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -76,6 +76,7 @@ export async function createRisk(input: unknown): Promise<ActionResult> {
       likelihood,
       impact,
       mitigation: mitigation || null,
+      trigger: trigger || null,
       owner_id: ownerId ?? null,
       review_at: reviewAt || null,
       created_by: session.userId,
@@ -129,6 +130,7 @@ export async function updateRisk(input: unknown): Promise<ActionResult> {
   if (fields.likelihood !== undefined) patch.likelihood = fields.likelihood;
   if (fields.impact !== undefined) patch.impact = fields.impact;
   if (fields.mitigation !== undefined) patch.mitigation = fields.mitigation || null;
+  if (fields.trigger !== undefined) patch.trigger = fields.trigger || null;
   if (fields.ownerId !== undefined) patch.owner_id = fields.ownerId;
   if (fields.reviewAt !== undefined) patch.review_at = fields.reviewAt || null;
   if (fields.status !== undefined) {
@@ -170,7 +172,8 @@ export async function createIssue(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
-  const { projectId, riskId, title, description, severity, ownerId, dueAt } = parsed.data;
+  const { projectId, riskId, title, description, impact, resolutionPlan, severity, ownerId, dueAt } =
+    parsed.data;
 
   const supabase = await createSupabaseServerClient();
   const { data: issue, error } = await supabase
@@ -181,6 +184,8 @@ export async function createIssue(input: unknown): Promise<ActionResult> {
       risk_id: riskId ?? null,
       title,
       description: description || null,
+      impact: impact || null,
+      resolution_plan: resolutionPlan || null,
       severity,
       owner_id: ownerId ?? null,
       due_at: dueAt || null,
@@ -232,6 +237,8 @@ export async function updateIssue(input: unknown): Promise<ActionResult> {
   const patch: Record<string, unknown> = {};
   if (fields.title !== undefined) patch.title = fields.title;
   if (fields.description !== undefined) patch.description = fields.description || null;
+  if (fields.impact !== undefined) patch.impact = fields.impact || null;
+  if (fields.resolutionPlan !== undefined) patch.resolution_plan = fields.resolutionPlan || null;
   if (fields.severity !== undefined) patch.severity = fields.severity;
   if (fields.resolution !== undefined) patch.resolution = fields.resolution || null;
   if (fields.ownerId !== undefined) patch.owner_id = fields.ownerId;

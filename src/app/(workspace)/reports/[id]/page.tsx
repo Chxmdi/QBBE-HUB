@@ -13,6 +13,7 @@ import {
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { snapshotSections } from "@/features/reports/snapshot-view";
 
 export const metadata: Metadata = { title: "Report" };
 export const dynamic = "force-dynamic";
@@ -41,18 +42,21 @@ function SnapshotList({
   title: string;
   rows: { primary: string; secondary?: string }[];
 }) {
-  if (rows.length === 0) return null;
   return (
     <section className="mt-6">
       <h2 className="section-heading mb-2">{title}</h2>
-      <ul className="card divide-y divide-line">
-        {rows.map((row, i) => (
-          <li key={i} className="px-4 py-2.5">
-            <p className="text-[13.5px] font-medium">{row.primary}</p>
-            {row.secondary ? <p className="meta">{row.secondary}</p> : null}
-          </li>
-        ))}
-      </ul>
+      {rows.length === 0 ? (
+        <p className="card px-4 py-3 text-[13px] text-muted">None in this snapshot.</p>
+      ) : (
+        <ul className="card divide-y divide-line">
+          {rows.map((row, i) => (
+            <li key={i} className="px-4 py-2.5">
+              <p className="text-[13.5px] font-medium">{row.primary}</p>
+              {row.secondary ? <p className="meta">{row.secondary}</p> : null}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -99,50 +103,7 @@ export default async function ReportDetailPage({
   const generator = report.generator;
   const approver = report.approver;
 
-  const deliveredWork = ((snapshot.delivered_work ?? []) as {
-    title: string;
-    completed_at: string;
-  }[]).map((w) => ({
-    primary: w.title,
-    secondary: `Completed ${formatDate(w.completed_at)}`,
-  }));
-  const decisions = ((snapshot.decisions ?? []) as {
-    title: string;
-    decided_at: string;
-  }[]).map((d) => ({
-    primary: d.title,
-    secondary: `Decided ${formatDate(d.decided_at)}`,
-  }));
-  const meetings = ((snapshot.meetings ?? []) as {
-    title: string;
-    starts_at: string;
-  }[]).map((m) => ({
-    primary: m.title,
-    secondary: formatDateTime(m.starts_at),
-  }));
-  const events = ((snapshot.events ?? []) as { name: string; starts_at: string }[]).map(
-    (e) => ({ primary: e.name, secondary: formatDateTime(e.starts_at) }),
-  );
-  const milestones = ((snapshot.milestones ?? []) as {
-    name: string;
-    due_date: string | null;
-    completed_at: string | null;
-  }[]).map((m) => ({
-    primary: m.name,
-    secondary: `${m.completed_at ? "Completed" : "Open"} · due ${formatDate(m.due_date)}`,
-  }));
-  const blockers = ((snapshot.blockers ?? []) as {
-    title: string;
-    reason: string | null;
-  }[]).map((b) => ({ primary: b.title, secondary: b.reason ?? undefined }));
-  const statusUpdates = ((snapshot.status_updates ?? []) as {
-    progress_summary: string;
-    health: string;
-    created_at: string;
-  }[]).map((u) => ({
-    primary: u.progress_summary,
-    secondary: `${u.health.replace(/_/g, " ")} · ${formatDate(u.created_at)}`,
-  }));
+  const sections = snapshotSections(snapshot);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -189,13 +150,9 @@ export default async function ReportDetailPage({
 
       {Object.keys(metrics).length > 0 ? <MetricGrid metrics={metrics} /> : null}
 
-      <SnapshotList title="Delivered work" rows={deliveredWork} />
-      <SnapshotList title="Milestones" rows={milestones} />
-      <SnapshotList title="Blockers" rows={blockers} />
-      <SnapshotList title="Status updates" rows={statusUpdates} />
-      <SnapshotList title="Meetings" rows={meetings} />
-      <SnapshotList title="Decisions" rows={decisions} />
-      <SnapshotList title="Events" rows={events} />
+      {sections.map((section) => (
+        <SnapshotList key={section.title} title={section.title} rows={section.rows} />
+      ))}
 
       <VersionHistory
         versions={versions}

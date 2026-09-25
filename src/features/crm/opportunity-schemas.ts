@@ -174,6 +174,11 @@ function settlementRules<T extends z.ZodTypeAny>(schema: T) {
       (v: { submittedAt?: string | null; decidedAt?: string | null }) =>
         !v.submittedAt || !v.decidedAt || v.decidedAt >= v.submittedAt,
       { message: orderMessage, path: ["decidedAt"] },
+    )
+    .refine(
+      (v: { stage?: OpportunityStage; decisionExpectedAt?: string | null }) =>
+        !v.stage || SETTLED_STAGES.includes(v.stage) || Boolean(v.decisionExpectedAt),
+      { message: "An open opportunity needs a next review date.", path: ["decisionExpectedAt"] },
     );
 }
 

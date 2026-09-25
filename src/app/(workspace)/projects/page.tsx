@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { FolderKanban } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
-import { HealthBadge, StageBadge } from "@/components/shared/status-badges";
+import { HealthBadge } from "@/components/shared/status-badges";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ProjectCreateDialog } from "@/features/projects/components/project-create-dialog";
@@ -13,11 +13,14 @@ import {
   listProjectTemplates,
 } from "@/features/admin/services/workflow.commands";
 import { ProjectTemplateManager } from "@/features/projects/components/project-template-manager";
+import { PortfolioFilters } from "@/features/dashboard/components/portfolio-filters";
+import { parsePortfolioFilters } from "@/features/dashboard/portfolio";
+import { getPortfolio, listPortfolioViews } from "@/features/dashboard/services/portfolio.queries";
+import { SaveViewButton } from "@/features/tasks/components/save-view-button";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDate } from "@/lib/utils";
-import type { Project } from "@/types/entities";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Projects" };
 export const dynamic = "force-dynamic";
@@ -25,7 +28,7 @@ export const dynamic = "force-dynamic";
 export default async function ProjectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ create?: string; stage?: string; archived?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession();
   const params = await searchParams;
@@ -35,30 +38,32 @@ export default async function ProjectsPage({
   // knows its URL, so restoring one is effectively impossible through the
   // product. The programs directory already had this; projects did not.
   const archived = params.archived === "1";
+  const views = await listPortfolioViews();
+  const selectedView = views.find((view) => view.id === (Array.isArray(params.view) ? params.view[0] : params.view));
+  const filters = parsePortfolioFilters({
+    ...(selectedView?.query ?? {}),
+    ...params,
+    ...(archived ? { status: "archived" } : {}),
+  });
 
-  let query = supabase
-    .from("project")
-    .select(
-      "id, program_id, name, outcome, stage, health, health_reason, start_date, target_date, created_at, archived_at, owner_id, description, " +
-        "owner:owner_id(id, full_name, email, avatar_url, title, timezone), program:program_id(id, name)",
-    )
-    .order("created_at", { ascending: false })
-    .limit(100);
-  query = archived
-    ? query.not("archived_at", "is", null)
-    : query.is("archived_at", null);
-  if (params.stage) query = query.eq("stage", params.stage);
-
-  const [{ data: projects }, options, { data: programs }, templateStructures] =
-    await Promise.all([
-      query,
-      getPickerOptions(),
-      supabase.from("program").select("id, name").eq("status", "active").order("name"),
-      listProjectTemplates(),
-    ]);
+  const [portfolio, options, { data: programs }, templateStructures, { data: funders }] = await Promise.all([
+    getPortfolio({
+      userId: session.userId,
+      role: session.role,
+      filters,
+    }),
+    getPickerOptions(),
+    supabase.from("program").select("id, name").eq("status", "active").order("name"),
+    listProjectTemplates(),
+    supabase
+      .from("crm_organization")
+      .select("id, name")
+      .in("category", ["funder", "sponsor", "donor", "government"])
+      .eq("status", "active")
+      .order("name"),
+  ]);
   const templates = templateStructures.map((t) => ({ id: t.id, name: t.name }));
-
-  const projectList = (projects ?? []) as unknown as Project[];
+  const projectList = portfolio.rows;
 
   return (
     <div>
@@ -84,6 +89,10 @@ export default async function ProjectsPage({
               <ProjectCreateDialog
                 programs={(programs ?? []).map((p) => ({ id: p.id, label: p.name }))}
                 people={options.people}
+                funders={((funders ?? []) as { id: string; name: string }[]).map((funder) => ({
+                  id: funder.id,
+                  label: funder.name,
+                }))}
                 defaultOpen={params.create === "1"}
               />
             </div>
@@ -108,6 +117,27 @@ export default async function ProjectsPage({
         </Link>
       </nav>
 
+      <p className="meta mb-3">Last refreshed {formatDateTime(portfolio.refreshedAt)}</p>
+      {views.length > 0 ? (
+        <nav aria-label="Saved views" className="mb-3 flex flex-wrap gap-2">
+          {views.map((view) => (
+            <Link key={view.id} href={`/projects?view=${view.id}`} className="text-[13px] hover:underline">
+              {view.name}
+              {view.shared ? " · shared" : ""}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <PortfolioFilters
+          filters={filters}
+          programs={(programs ?? []) as { id: string; name: string }[]}
+          people={options.people}
+          funders={(funders ?? []) as { id: string; name: string }[]}
+        />
+        <SaveViewButton path="/projects" />
+      </div>
+
       {projectList.length === 0 ? (
         <EmptyState
           icon={<FolderKanban />}
@@ -127,9 +157,12 @@ export default async function ProjectsPage({
                   <th scope="col" className="px-4 py-2.5 font-semibold">Project</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold">Program</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold">Owner</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Stage</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold">Health</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Progress</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Next milestone</th>
                   <th scope="col" className="px-4 py-2.5 font-semibold">Target</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Main blocker</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Last update</th>
                 </tr>
               </thead>
               <tbody>
@@ -142,37 +175,32 @@ export default async function ProjectsPage({
                       >
                         {project.name}
                       </Link>
-                      {project.outcome ? (
-                        <p className="meta max-w-md truncate">{project.outcome}</p>
-                      ) : null}
+                      {project.stale ? <p className="meta">Stale</p> : null}
                     </td>
-                    <td className="px-4 py-3 text-muted">
-                      {project.program?.name ?? "—"}
-                    </td>
+                    <td className="px-4 py-3 text-muted">{project.programName ?? "—"}</td>
                     <td className="px-4 py-3">
-                      {project.owner ? (
+                      {project.ownerName ? (
                         <span className="flex items-center gap-2">
-                          <Avatar
-                            name={project.owner.full_name}
-                            src={project.owner.avatar_url}
-                            size="sm"
-                          />
-                          <span className="whitespace-nowrap">
-                            {project.owner.full_name}
-                          </span>
+                          <Avatar name={project.ownerName} size="sm" />
+                          <span className="whitespace-nowrap">{project.ownerName}</span>
                         </span>
                       ) : (
                         "—"
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <StageBadge stage={project.stage} />
-                    </td>
-                    <td className="px-4 py-3">
                       <HealthBadge health={project.health} />
                     </td>
+                    <td className="px-4 py-3 whitespace-nowrap">{project.progressPercent}%</td>
+                    <td className="px-4 py-3 text-muted">{project.nextMilestone ?? "—"}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-muted">
-                      {formatDate(project.target_date)}
+                      {formatDate(project.targetDate)}
+                    </td>
+                    <td className="max-w-48 truncate px-4 py-3 text-muted">
+                      {project.mainBlocker ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-muted">
+                      {formatDate(project.lastUpdateAt)}
                     </td>
                   </tr>
                 ))}
