@@ -109,9 +109,8 @@ export default async function CrmDetailPage({
       .select("id, title, status, starts_on, ends_on")
       .eq("crm_organization_id", id)
       .order("created_at", { ascending: false }),
-    session.isAdmin || (org as { owner_id?: string }).owner_id === session.userId
-      ? supabase.from("crm_organization").select("sensitive_notes").eq("id", id).maybeSingle()
-      : Promise.resolve({ data: null }),
+    // Row-level security returns the note only to the owner or an administrator.
+    supabase.from("crm_sensitive_note").select("notes").eq("crm_organization_id", id).maybeSingle(),
     ]);
 
   const owner = org.owner as unknown as { full_name: string; avatar_url: string | null } | null;
@@ -122,7 +121,9 @@ export default async function CrmDetailPage({
     id: p.id as string,
     label: p.name as string,
   }));
-  const sensitiveNotes = (sensitiveRes.data as { sensitive_notes?: string | null } | null)?.sensitive_notes ?? null;
+  const sensitiveNotes = (sensitiveRes.data as { notes?: string | null } | null)?.notes ?? null;
+  const canEditSensitive =
+    session.isAdmin || (org as { owner_id?: string }).owner_id === session.userId;
   const linkRows = (links ?? []) as unknown as {
     id: string;
     contact_id?: string | null;
@@ -163,6 +164,7 @@ export default async function CrmDetailPage({
                 next_action_at: (org.next_action_at as string | null) ?? null,
                 sensitive_notes: sensitiveNotes,
               }}
+              canEditSensitive={canEditSensitive}
             />
             <ArchiveOrganizationButton
               organizationId={org.id as string}

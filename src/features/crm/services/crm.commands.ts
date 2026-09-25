@@ -68,6 +68,40 @@ export async function findDuplicateOrganizations(
   return matches.map((m) => ({ id: m.id, name: m.name, category: m.category }));
 }
 
+/**
+ * Sensitive notes live in their own table, which row-level security shows
+ * only to the relationship owner or an administrator (#38). An empty value
+ * removes the note. Returns false when the caller may not write it.
+ */
+async function saveSensitiveNote(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  organizationId: string,
+  crmOrganizationId: string,
+  notes: string,
+): Promise<boolean> {
+  const text = notes.trim();
+  if (!text) {
+    const { error } = await supabase
+      .from("crm_sensitive_note")
+      .delete()
+      .eq("crm_organization_id", crmOrganizationId);
+    return !error;
+  }
+  const { data, error } = await supabase
+    .from("crm_sensitive_note")
+    .upsert(
+      {
+        organization_id: organizationId,
+        crm_organization_id: crmOrganizationId,
+        notes: text,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "crm_organization_id" },
+    )
+    .select("id");
+  return !error && (data?.length ?? 0) > 0;
+}
+
 export async function createCrmOrganization(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   if (!session.isStaff) return { ok: false, error: "Staff access required." };
@@ -87,13 +121,17 @@ export async function createCrmOrganization(input: unknown): Promise<ActionResul
       website: website || null,
       notes: notes || null,
       next_action_at: nextActionAt || null,
-      sensitive_notes: sensitiveNotes || null,
       owner_id: session.userId,
       created_by: session.userId,
     })
     .select("id")
     .single();
   if (error || !org) return { ok: false, error: "Could not save the organization." };
+
+  if (sensitiveNotes) {
+    const saved = await saveSensitiveNote(supabase, session.organizationId, org.id as string, sensitiveNotes);
+    if (!saved) return { ok: false, error: "The organization was saved, but its sensitive notes were not." };
+  }
 
   revalidatePath("/crm");
   return { ok: true, id: org.id as string };
@@ -115,9 +153,14 @@ export async function updateCrmOrganization(input: unknown): Promise<ActionResul
     notes: notes || null,
     next_action_at: nextActionAt || null,
   };
-  if (sensitiveNotes !== undefined) patch.sensitive_notes = sensitiveNotes || null;
   const { error } = await supabase.from("crm_organization").update(patch).eq("id", id);
   if (error) return { ok: false, error: "Could not update the organization." };
+  if (sensitiveNotes !== undefined) {
+    const saved = await saveSensitiveNote(supabase, session.organizationId, id, sensitiveNotes);
+    if (!saved) {
+      return { ok: false, error: "Only the relationship owner or an administrator can change sensitive notes." };
+    }
+  }
   revalidatePath("/crm");
   revalidatePath(`/crm/${id}`);
   return { ok: true, id };

@@ -23,8 +23,11 @@ const CATEGORIES = [
 export function CrmOrganizationDialog({
   defaultOpen = false,
   organization,
+  canEditSensitive = true,
 }: {
   defaultOpen?: boolean;
+  /** Only the relationship owner or an administrator may see or change them. */
+  canEditSensitive?: boolean;
   organization?: {
     id: string;
     name: string;
@@ -71,7 +74,8 @@ export function CrmOrganizationDialog({
       website: (form.get("website") as string) || undefined,
       notes: (form.get("notes") as string) || undefined,
       nextActionAt: (form.get("nextActionAt") as string) || undefined,
-      sensitiveNotes: (form.get("sensitiveNotes") as string) || undefined,
+      // Present only when the field is shown; an empty value clears the note.
+      sensitiveNotes: form.has("sensitiveNotes") ? String(form.get("sensitiveNotes")) : undefined,
     };
     const result = editing && organization
       ? await updateCrmOrganization({ id: organization.id, ...payload })
@@ -207,18 +211,20 @@ export function CrmOrganizationDialog({
               defaultValue={organization?.next_action_at ?? ""}
             />
           </div>
-          <div>
-            <Label htmlFor="crm-sensitive">
-              Sensitive notes <span className="font-normal text-muted">(owner and admins only)</span>
-            </Label>
-            <Textarea
-              id="crm-sensitive"
-              name="sensitiveNotes"
-              maxLength={5000}
-              rows={2}
-              defaultValue={organization?.sensitive_notes ?? ""}
-            />
-          </div>
+          {canEditSensitive ? (
+            <div>
+              <Label htmlFor="crm-sensitive">
+                Sensitive notes <span className="font-normal text-muted">(owner and admins only)</span>
+              </Label>
+              <Textarea
+                id="crm-sensitive"
+                name="sensitiveNotes"
+                maxLength={5000}
+                rows={2}
+                defaultValue={organization?.sensitive_notes ?? ""}
+              />
+            </div>
+          ) : null}
 
           {error ? (
             <p role="alert" className="text-[13px] text-danger-fg">
