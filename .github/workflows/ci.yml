@@ -83,8 +83,36 @@ jobs:
           path: test-results/
           retention-days: 7
 
+  audit:
+    # Its own job, so a failing browser check earlier in Verify can no longer
+    # skip it (#51).
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install from lockfile
+        run: npm ci --ignore-scripts
+
       - name: Dependency audit (high+)
         run: npm audit --audit-level=high
+
+      - name: Moderate and low advisories (reported, not blocking)
+        if: always()
+        run: |
+          npm audit --audit-level=moderate > audit.txt 2>&1 || true
+          {
+            echo '### npm audit (all severities)'
+            echo '```'
+            tail -n 40 audit.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   database-security:
     name: Database security
