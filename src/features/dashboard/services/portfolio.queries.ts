@@ -206,31 +206,10 @@ export async function getPortfolio(input: {
     };
   });
 
-  const { data: ownGrants } = await supabase
-    .from("project_access_grant")
-    .select("project_id")
-    .eq("user_id", input.userId);
-  const managedIds = new Set(
-    ((ownGrants ?? []) as { project_id: string }[]).map(
-      (grant) => grant.project_id,
-    ),
-  );
-  const assignedIds = new Set(
-    tasks
-      .filter((task) => task.assignee_id === input.userId)
-      .map((task) => task.project_id),
-  );
-  const visible =
-    lens === "leadership"
-      ? sources
-      : sources.filter(
-          (row) =>
-            row.ownerId === input.userId ||
-            managedIds.has(row.id) ||
-            assignedIds.has(row.id) ||
-            projects.find((project) => project.id === row.id)?.program
-              ?.lead_id === input.userId,
-        );
+  // Row-level security already limits the query to projects this reader may
+  // see (owned, led, assigned, granted, or organization-wide), so every lens
+  // lists what it was given; filtering again here hid granted projects.
+  const visible = sources;
 
   const rows = applyPortfolioFilters(visible, input.filters, memberIds);
   return { rows, counts: portfolioCounts(visible), refreshedAt, lens };

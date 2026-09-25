@@ -124,9 +124,9 @@ test("a relationship stores a next action, a contact, a link, and a follow-up", 
   await page.getByRole("button", { name: "Add", exact: true }).first().click();
   const contact = page.getByRole("dialog", { name: "Add contact" });
   await contact.getByLabel("Name", { exact: true }).fill("Jordan Lee");
-  await contact.getByLabel("Role", { exact: true }).fill("Principal");
+  await contact.getByLabel(/^Role\s*\(optional\)$/).fill("Principal");
   await contact
-    .getByLabel("Consent or communication notes", { exact: true })
+    .getByLabel(/^Consent or communication notes\s*\(optional\)$/)
     .fill("Prefers email");
   await contact.getByRole("button", { name: "Add contact" }).click();
   await expect(contact).not.toBeVisible({ timeout: 30_000 });

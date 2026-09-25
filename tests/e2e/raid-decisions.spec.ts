@@ -37,7 +37,7 @@ test("a project records a risk trigger, an issue plan, a decision, and a request
     .getByLabel("What might happen", { exact: true })
     .fill("The hall cancels");
   await risk
-    .getByLabel("What would make it happen (optional)", { exact: true })
+    .getByLabel(/^What would make it happen\s*\(optional\)$/)
     .fill("Notice inside two weeks");
   await risk.getByRole("button", { name: "Log risk" }).click();
   await expect(risk).not.toBeVisible({ timeout: 30_000 });
@@ -48,10 +48,10 @@ test("a project records a risk trigger, an issue plan, a decision, and a request
     .getByLabel("What has happened", { exact: true })
     .fill("The printer failed");
   await issue
-    .getByLabel("Impact (optional)", { exact: true })
+    .getByLabel(/^Impact\s*\(optional\)$/)
     .fill("Packets cannot be printed");
   await issue
-    .getByLabel("Resolution plan (optional)", { exact: true })
+    .getByLabel(/^Resolution plan\s*\(optional\)$/)
     .fill("Borrow the school copier");
   await issue.getByRole("button", { name: "Raise issue" }).click();
   await expect(issue).not.toBeVisible({ timeout: 30_000 });
@@ -62,16 +62,16 @@ test("a project records a risk trigger, an issue plan, a decision, and a request
     .getByLabel("The decision", { exact: true })
     .fill("Hold the event indoors");
   await decision
-    .getByLabel("Rationale (optional)", { exact: true })
+    .getByLabel(/^Rationale\s*\(optional\)$/)
     .fill("Rain is forecast");
   await decision
-    .getByLabel("Alternatives considered (optional)", { exact: true })
+    .getByLabel(/^Alternatives considered\s*\(optional\)$/)
     .fill("Postpone");
   await decision
-    .getByLabel("Affected records (optional)", { exact: true })
+    .getByLabel(/^Affected records\s*\(optional\)$/)
     .fill("Saturday session");
   await decision
-    .getByLabel("What would reopen it (optional)", { exact: true })
+    .getByLabel(/^What would reopen it\s*\(optional\)$/)
     .fill("A dry forecast by Thursday");
   await decision.getByRole("button", { name: "Record decision" }).click();
   await expect(decision).not.toBeVisible({ timeout: 30_000 });
