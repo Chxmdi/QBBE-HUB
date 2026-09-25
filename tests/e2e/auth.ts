@@ -4,7 +4,16 @@ import { dirname, join } from "node:path";
 import { expect, type Page } from "@playwright/test";
 import { clickWhenInteractive } from "./interactive";
 
-type QaAccount = "owner" | "admin" | "volunteer";
+export type QaAccount =
+  | "owner"
+  | "admin"
+  | "staff"
+  | "volunteer"
+  | "guest"
+  | "lead"
+  | "pm"
+  | "contributor"
+  | "readonly";
 
 // The authenticated suite uses one worker. Keep the test enrollment secret in
 // that worker so later owner sessions can pass the normal challenge screen.

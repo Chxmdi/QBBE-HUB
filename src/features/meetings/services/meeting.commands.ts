@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
@@ -52,9 +53,17 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   } else if (!session.isAdmin) {
     return { ok: false, error: "Link the meeting to a project you can access, or ask an administrator." };
   }
-  const { data: meeting, error } = await supabase
+  // The id is chosen here rather than read back. meeting's read policy is
+  // app.can_read_meeting(id), which looks the meeting up by id, and within the
+  // inserting statement the new row is not yet visible to it — so
+  // insert(...).select() failed row-level security for every meeting, and no
+  // meeting could be created at all (#112). Nothing is read back, so nothing
+  // depends on that visibility.
+  const meeting = { id: randomUUID() };
+  const { error } = await supabase
     .from("meeting")
     .insert({
+      id: meeting.id,
       organization_id: session.organizationId,
       project_id: projectId ?? null,
       title,
@@ -64,11 +73,9 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
       ends_at: ends.toISOString(),
       location: location || null,
       meeting_link: meetingLink || null,
-    })
-    .select("id")
-    .single();
+    });
 
-  if (error || !meeting) return { ok: false, error: "Could not create the meeting." };
+  if (error) return { ok: false, error: "Could not create the meeting." };
 
   await supabase.from("meeting_attendee").insert({
     meeting_id: meeting.id,

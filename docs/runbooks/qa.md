@@ -153,3 +153,31 @@ Postgres. See the verification table in `jobs.md`.
 - Backup restore rehearsal (see `backup-recovery.md`).
 - Privacy / retention review (`privacy.md`).
 - Launch-gate ticks (`launch-gate.md`).
+
+## 7. Certify a release candidate — one run, every gate, evidence written
+
+The release-candidate workflow (#116) runs every automated gate at one commit
+and writes down what passed. Use it before any release, and for staging
+certification once #55 exists.
+
+1. Pick the commit to certify and give it a tag, so the evidence names
+   something stable: `git tag rc-2026-10-01 <sha> && git push origin rc-2026-10-01`.
+   You should see the tag under **Code → Tags** on GitHub.
+2. On GitHub, open **Actions → Release candidate → Run workflow**, choose the
+   tag in **Use workflow from**, and click **Run workflow**.
+   A run appears with four jobs: **CI (all browsers)**, **Security**,
+   **Performance** and **Evidence**. It takes about 45 minutes.
+3. When it finishes, open the run. The summary page shows a table headed
+   **QA evidence for <sha>** with one row per gate and its result. The same
+   file is attached to the run as `qa-evidence-<sha>`.
+4. If every row says **pass**, copy the table into the `QA-FINAL` row of
+   `docs/acceptance-matrix.md` with the run link.
+   If any row shows a failure, the **Evidence** job is red. Open the failed job,
+   fix the cause in a pull request, and certify the new commit from step 1.
+   Never re-run the same candidate hoping for green: a gate that fails once
+   is a finding.
+
+What the run does not cover, and is still owed by a person: the screen-reader
+pass, real iPhone and Android handsets (OPS-SIGNOFF), and anything that needs
+staging (#55).
+

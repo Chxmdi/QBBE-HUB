@@ -87,6 +87,11 @@ test("blocking a task asks for a reason in a dialog, and unblocking clears it", 
   // before because the reload usually beat the router's replace. CI run
   // 35875933334 is what it looks like when it loses: three minutes of waiting
   // for a dialog that was never going to open.
+  // Wait for that replace to land first. Next may not have started it when
+  // the test moves on, so there is no request yet for the fixture to wait
+  // for, and WebKit then cancels our navigation in favour of the app's
+  // ("interrupted by another navigation to /my-work", #114).
+  await expect(page).not.toHaveURL(/[?&]task=/, { timeout: 15_000 });
   await page.goto(`/my-work?task=${taskId}`);
   await page
     .getByRole("dialog")
