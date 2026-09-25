@@ -76,11 +76,13 @@ test("a project records a risk trigger, an issue plan, a decision, and a request
   await decision.getByRole("button", { name: "Record decision" }).click();
   await expect(decision).not.toBeVisible({ timeout: 30_000 });
 
+  // The person asked must be able to read the project; the owner reads every
+  // project in the organization, a staff member only the ones they belong to.
   await page.getByRole("button", { name: "Request a decision" }).click();
   const request = page.getByRole("dialog", { name: "Request a decision" });
   await request
     .getByLabel("Ask", { exact: true })
-    .selectOption({ label: "QA Staff" });
+    .selectOption({ label: "QA Owner" });
   await request.getByLabel("Due", { exact: true }).fill("2026-10-01");
   await request
     .getByLabel("What needs deciding", { exact: true })
