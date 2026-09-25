@@ -9,17 +9,13 @@ GitHub Project is the canonical PM surface. Repository Issues/PRs remain the dur
 `gh` must be authenticated with the `project` scope (see below). Nothing else is
 required.
 
-There is no auto-add workflow. `.github/workflows/project-sync.yml` used to add
-each newly opened Issue and pull request to the Project, and failed by design
-whenever the repository variable `QBBE_PROJECT_URL` was unset — which it never
-was. The result was a required check that was red on every Issue and every pull
-request in the repository's history, which is how people learn to ignore checks.
-It was removed rather than configured, because nothing here depends on the board
-being current within seconds.
-
-Reconciling the board is a deliberate act: re-run the bootstrap script below. It
-is idempotent, so running it after a batch of work is filed is the intended way
-to catch the board up.
+New Issues and pull requests are captured by the Project's **built-in**
+workflows (below), which run inside GitHub and need no token, secret or
+repository workflow. The old `.github/workflows/project-sync.yml` needed a
+Project token in a repository variable that was never set, so it failed on
+every Issue and pull request; it was removed (#75). The bootstrap script
+remains the way to catch up anything added before the built-in workflow was
+switched on.
 
 ## Bootstrap existing canonical work
 
@@ -55,16 +51,42 @@ Configure the Project's built-in `Status` field exactly as:
 
 ## Required views
 
-Create these Project views:
-1. Execution Board — board, grouped by Status
-2. Roadmap — roadmap/table grouped by Epic / Workstream and Target
-3. Critical Path — launch-blocking items only
-4. Verification Queue — Status=Verification or Verification != Passed
-5. External Blockers — external dependency items
-6. Security — identity/RLS/MFA/privacy/supply-chain scope
-7. Staging Gate — items required by #21
-8. Production Gate — #58 and all launch dependencies
-9. PRD Coverage — grouped by PRD / Acceptance IDs
+For each: open the Project, click **+ New view** (right of the last view tab),
+choose the layout, rename the tab (double-click its name), type the filter in
+the **Filter** bar, set **Group by** / **Sort by** from the view's menu (the
+down-arrow on the tab), then click **Save**.
+
+| # | View name | Layout | Filter | Group by |
+|---|---|---|---|---|
+| 1 | Execution Board | Board | `is:open` | Status (columns) |
+| 2 | Roadmap | Roadmap | `is:issue` | Epic / Workstream |
+| 3 | Critical Path | Table | `is:open priority:P0` | Target |
+| 4 | Verification Queue | Table | `status:Verification` | Verification |
+| 5 | External Blockers | Table | `is:open status:Blocked` | Owner |
+| 6 | Security | Table | `type:Security` | Status |
+| 7 | Staging Gate | Table | `target:Staging` | Status |
+| 8 | Production Gate | Table | `target:Production` | Status |
+| 9 | PRD Coverage | Table | `has:"PRD / Acceptance IDs"` | PRD / Acceptance IDs |
+
+A view shows nothing until items carry the field values it filters on. Set
+Type, Priority and Target when triaging each Issue.
+
+## Built-in workflows (automatic capture)
+
+Open the Project, click the **...** menu at the top right, then
+**Workflows**. For each row below: select it in the left list, click
+**Edit**, set it as shown, click **Save and turn on workflow**.
+
+| Workflow | Setting |
+|---|---|
+| Auto-add to project | Repository `QBBE-HUB`, filter `is:issue,pr is:open` |
+| Item added to project | Set Status to **Backlog** |
+| Item reopened | Set Status to **In Progress** |
+| Item closed | Set Status to **Done** |
+| Pull request merged | Set Status to **Done** |
+
+Auto-add only captures items created or updated after it is switched on; run
+the bootstrap script once afterwards to add everything older.
 
 ## Required workflow semantics
 
@@ -79,7 +101,7 @@ Create these Project views:
 
 - every canonical Issue is visible in the Project
 - every pull request is visible, including PR #9 and PR #10
-- a newly filed Issue/PR appears on the board after the bootstrap script is re-run
+- a newly filed Issue/PR appears on the board by itself (Auto-add), within a minute
 - all required fields exist
 - Status options match exactly
 - all nine views exist and filter/group correctly

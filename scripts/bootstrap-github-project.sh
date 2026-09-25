@@ -98,4 +98,4 @@ if [ "$fields_failed" -gt 0 ] || [ "$items_failed" -gt 0 ]; then
 fi
 
 echo 'Fields and canonical issue/PR population are present.'
-echo 'Now configure the built-in Status options and Project views listed in docs/project-management.md.'
+echo 'Now configure the Status options, the nine views and the built-in workflows in docs/runbooks/github-project.md.'
