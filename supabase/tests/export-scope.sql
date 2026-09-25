@@ -14,8 +14,9 @@ begin
   where user_id = v_owner
   limit 1;
 
-  insert into public.export_job (organization_id, kind, requested_by, status)
-  values (v_org, 'task_history', v_owner, 'ready')
+  -- A finished export: it has a file and a completion time.
+  insert into public.export_job (organization_id, kind, requested_by, status, storage_path, completed_at)
+  values (v_org, 'task_history', v_owner, 'ready', v_org || '/export-scope-test.csv', now())
   returning id into v_export;
 
   perform tests.authenticate(v_guest);
