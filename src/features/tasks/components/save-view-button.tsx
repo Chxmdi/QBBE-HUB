@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { saveView } from "@/features/admin/services/workflow.commands";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Checkbox, Input } from "@/components/ui/input";
 
 export function SaveViewButton({ path = "/my-work" }: { path?: string }) {
   const router = useRouter();
@@ -43,7 +43,7 @@ export function SaveViewButton({ path = "/my-work" }: { path?: string }) {
       <Input name="name" required placeholder="View name" className="h-9 w-40" />
       {path === "/projects" ? (
         <label className="flex items-center gap-1.5 text-[12.5px] text-muted">
-          <input type="checkbox" name="shared" />
+          <Checkbox name="shared" />
           Share with the organization
         </label>
       ) : null}

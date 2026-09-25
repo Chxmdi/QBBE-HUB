@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Checkbox, Input, Select } from "@/components/ui/input";
 import { PROJECT_HEALTHS, PROJECT_STAGES, type PortfolioFilters } from "@/features/dashboard/portfolio";
 
 const LABELS: Record<string, string> = {
@@ -46,11 +47,11 @@ export function PortfolioFilters({
       <FilterSelect name="status" label="Status" value={filters.status} options={PROJECT_STAGES.map((value) => ({ value, label: label(value) }))} />
       <label className="text-[12px] text-muted">
         From
-        <input className="mt-1 block h-9 rounded-(--radius-sm) border border-line bg-surface px-2 text-[13px]" type="date" name="from" defaultValue={filters.from ?? ""} />
+        <Input className="mt-1 h-9 w-auto" type="date" name="from" defaultValue={filters.from ?? ""} />
       </label>
       <label className="text-[12px] text-muted">
         To
-        <input className="mt-1 block h-9 rounded-(--radius-sm) border border-line bg-surface px-2 text-[13px]" type="date" name="to" defaultValue={filters.to ?? ""} />
+        <Input className="mt-1 h-9 w-auto" type="date" name="to" defaultValue={filters.to ?? ""} />
       </label>
       {funders.length > 0 ? (
         <FilterSelect
@@ -61,7 +62,7 @@ export function PortfolioFilters({
         />
       ) : null}
       <label className="flex items-center gap-1.5 pb-2 text-[13px]">
-        <input type="checkbox" name="stale" value="1" defaultChecked={filters.stale === "1"} />
+        <Checkbox name="stale" value="1" defaultChecked={filters.stale === "1"} />
         Stale only
       </label>
       <button className="h-9 rounded-(--radius-sm) bg-brand px-3 text-[13px] font-medium text-white" type="submit">
@@ -88,18 +89,14 @@ function FilterSelect({
   return (
     <label className="text-[12px] text-muted">
       {fieldLabel}
-      <select
-        className="mt-1 block h-9 max-w-40 rounded-(--radius-sm) border border-line bg-surface px-2 text-[13px]"
-        name={name}
-        defaultValue={value ?? ""}
-      >
+      <Select className="mt-1 h-9 max-w-40" name={name} defaultValue={value ?? ""}>
         <option value="">Any</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }
