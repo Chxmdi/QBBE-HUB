@@ -144,7 +144,7 @@ test("a relationship stores a next action, a contact, a link, and a follow-up", 
   await edit.getByLabel(/^Notes\s*\(optional\)$/).fill("Updated notes");
   await edit.getByRole("button", { name: "Save organization" }).click();
   await expect(edit).not.toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("Updated notes")).toBeVisible();
+  await expect(page.getByText(/^Updated notes · /)).toBeVisible();
 
   await page
     .locator("section", {
