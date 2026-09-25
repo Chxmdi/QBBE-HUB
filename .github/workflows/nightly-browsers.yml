@@ -19,3 +19,4 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       browsers: chromium firefox webkit
+      mobile: true
