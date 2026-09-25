@@ -35,11 +35,11 @@ begin
   -- and 90 days ago. Assigned to the volunteer so a non-administrator sees
   -- some of them.
   insert into public.task (organization_id, title, created_by, assignee_id, status, due_at, archived_at, blocked_reason)
-  select v_org, 'summary: ' || s.status || ' ' || coalesce(d.label, 'none'), v_owner, v_volunteer,
-         s.status::public.task_status, d.due,
+  select v_org, 'summary: ' || st.status || ' ' || coalesce(d.label, 'none'), v_owner, v_volunteer,
+         st.status::public.task_status, d.due,
          case when d.label = 'archived' then now() end,
-         case when s.status = 'blocked' then 'Waiting on the venue' end
-  from unnest(array['not_started', 'ready', 'in_progress', 'waiting', 'blocked', 'in_review']) as s(status)
+         case when st.status = 'blocked' then 'Waiting on the venue' end
+  from unnest(array['not_started', 'ready', 'in_progress', 'waiting', 'blocked', 'in_review']) as st(status)
   cross join (values
     ('past', current_date - 3), ('week', current_date + 2), ('later', current_date + 30),
     ('none', null::date), ('archived', current_date + 1)
