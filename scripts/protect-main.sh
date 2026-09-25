@@ -62,6 +62,7 @@ read -r -d '' BODY <<'JSON' || true
         "required_status_checks": [
           { "context": "Verify" },
           { "context": "Database security" },
+          { "context": "Dependency audit" },
           { "context": "CodeQL" },
           { "context": "Secret scan" },
           { "context": "Dependency review" }
