@@ -156,7 +156,9 @@ test("a relationship stores a next action, a contact, a link, and a follow-up", 
   await agreement.getByLabel("Title", { exact: true }).fill("Hall hire letter");
   await agreement.getByRole("button", { name: "Save" }).click();
   await expect(agreement).not.toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("Hall hire letter")).toBeVisible({
+  await expect(
+    page.getByLabel("Agreements").getByText("Hall hire letter"),
+  ).toBeVisible({
     timeout: 30_000,
   });
 });
