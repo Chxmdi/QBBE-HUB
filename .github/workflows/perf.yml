@@ -120,11 +120,21 @@ jobs:
           npm run db:seed
           docker exec -i supabase_db_workspace psql -U postgres -v ON_ERROR_STOP=1 -q < supabase/tests/perf-fixture.sql
 
+      # Three app instances behind a round-robin proxy on :3000. One `next
+      # start` is a single Node.js thread, and on 2026-09-26 it was pinned at
+      # 94% of one core while the rest of the stack used about 1.5 of the other
+      # three (#115). Production runs many instances; one process measured the
+      # process, not the app. This remains a regression signal: the acceptance
+      # figure is the same script against staging.
       - name: Build and start the production app
         run: |
           npm run build
-          npx next start -p 3000 -H 127.0.0.1 &
-          npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
+          for port in 3001 3002 3003; do
+            npx next start -p "$port" -H 127.0.0.1 &
+          done
+          npx wait-on --timeout 90000 http-get://127.0.0.1:3001/sign-in http-get://127.0.0.1:3002/sign-in http-get://127.0.0.1:3003/sign-in
+          node scripts/qa/round-robin.mjs 3000 3001 3002 3003 &
+          npx wait-on --timeout 30000 http-get://127.0.0.1:3000/sign-in
 
       - name: Sign in the 50 people
         run: node scripts/qa/perf-sessions.mjs perf-sessions.json
@@ -141,6 +151,21 @@ jobs:
           select extensions.pg_stat_statements_reset();
           SQL
 
+      # Which process the runner's CPU goes to while the 50 people work: the
+      # Next.js server, Postgres, PostgREST, Kong or Auth. Database figures
+      # alone stopped explaining the page times (#115).
+      - name: Sample CPU by process during the run
+        run: |
+          nproc > "$RUNNER_TEMP/nproc.txt"
+          (
+            for i in $(seq 1 30); do
+              # The second frame of a two-frame top is the CPU used in that
+              # second; the first is averaged since each process started.
+              top -b -n 2 -d 1 -w 512 | awk '/^top -/{frame++} frame==2 && $1 ~ /^[0-9]+$/ {print $9, $12}' >> "$RUNNER_TEMP/cpu-samples.txt"
+              sleep 3
+            done
+          ) &
+
       - name: 50 people for ${{ inputs.duration || '2m' }}
         run: |
           k6 run \
@@ -148,7 +173,29 @@ jobs:
             -e SESSIONS=${{ github.workspace }}/perf-sessions.json \
             -e DURATION=${{ inputs.duration || '2m' }} \
             --summary-export=perf-summary.json \
+            --log-output=file=k6.log \
             scripts/qa/perf.k6.js
+
+      # Redirects are not failures to k6, so the summary only counts them. The
+      # script logs each one's status and destination; print them in one place.
+      - name: Non-200 answers during the run
+        if: always()
+        run: grep -h 'answered' k6.log | sed 's/.*msg="//; s/" source=.*//' | sort | uniq -c | sort -rn | head -20 || echo "none"
+
+      - name: CPU by process during the run
+        if: always()
+        run: |
+          echo "Runner CPUs: $(cat "$RUNNER_TEMP/nproc.txt")"
+          echo "Average % of one CPU per process name, over $(grep -c . "$RUNNER_TEMP/cpu-samples.txt" || true) samples:"
+          awk '{cpu[$2]+=$1} END {for (p in cpu) printf "%8.1f  %s\n", cpu[p]/30, p}' "$RUNNER_TEMP/cpu-samples.txt" | sort -rn | head -15
+
+      # How often the app asked Auth who the user was. One page view should
+      # cost one /user call (made by the request proxy), not two (#115).
+      - name: Auth user lookups during the run
+        if: always()
+        run: |
+          echo "GET /user calls logged by Auth: $(docker logs supabase_auth_workspace 2>&1 | grep -c '"path":"/user"' || true)"
+          echo "Page requests made by k6: $(jq '.metrics.http_reqs.count' perf-summary.json 2>/dev/null || echo unknown)"
 
       - name: Queries that took the most database time
         if: always()

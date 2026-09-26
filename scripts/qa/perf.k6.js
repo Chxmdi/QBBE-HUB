@@ -28,10 +28,17 @@ const fixture = new SharedArray("fixture", () => [JSON.parse(open(__ENV.SESSIONS
 
 export const options = {
   scenarios: {
+    // People arrive over 30 s, then all fifty keep working for DURATION.
+    // Starting all fifty in the same instant put every first request on the
+    // dashboard at once, a burst no real morning produces, and that burst
+    // alone set the dashboard's 95th percentile (#115).
     fifty_people: {
-      executor: "constant-vus",
-      vus: 50,
-      duration: __ENV.DURATION || "2m",
+      executor: "ramping-vus",
+      startVUs: 0,
+      stages: [
+        { duration: "30s", target: 50 },
+        { duration: __ENV.DURATION || "2m", target: 50 },
+      ],
     },
   },
   thresholds: {
@@ -46,18 +53,27 @@ export const options = {
   },
   summaryTrendStats: ["avg", "med", "p(90)", "p(95)", "max"],
 };
-// A threshold that always passes, only so the summary reports each screen's
-// page size on its own line.
+// Thresholds that always pass, only so the summary reports each screen's page
+// size on its own line, and each screen's time on a person's first visit
+// apart from later ones: a first visit meets a cold server, a later one does
+// not, and one slow group can hide inside a single 95th percentile.
 for (const screen of SCREENS) {
   options.thresholds[`page_bytes{screen:${screen}}`] = ["avg>=0"];
+  options.thresholds[`http_req_duration{screen:${screen},visit:first}`] = ["avg>=0"];
+  options.thresholds[`http_req_duration{screen:${screen},visit:repeat}`] = ["avg>=0"];
 }
 
 function visit(path, screen, cookie) {
   const response = http.get(`${BASE_URL}${path}`, {
     headers: { cookie },
     redirects: 0,
-    tags: { screen },
+    tags: { screen, visit: __ITER === 0 ? "first" : "repeat" },
   });
+  // A redirect is not a failed request to k6, so say where it went: that is
+  // the difference between a sign-in bounce, the MFA gate and onboarding.
+  if (response.status !== 200) {
+    console.warn(`${screen} answered ${response.status} -> ${response.headers.Location ?? "(no location)"} (VU ${__VU}, iteration ${__ITER})`);
+  }
   pageBytes.add(String(response.body ?? "").length, { screen });
   check(response, {
     [`${screen} answers 200`]: (r) => r.status === 200,
