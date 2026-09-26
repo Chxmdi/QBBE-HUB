@@ -104,7 +104,7 @@ export default async function AccountantAccessPage() {
             <Link className="text-brand-fg hover:underline" href="/admin">
               Invite the accountant
             </Link>{" "}
-            with the role <strong>Guest</strong>. A Guest sees no relationships, finance or people records.
+            with the role <strong>Read-only guest</strong>. A guest sees no relationships or finance records, but like every member sees public channels, announcements and the people directory.
           </li>
           <li>Once they have signed up, grant access below and choose the last day.</li>
           <li>

@@ -75,7 +75,7 @@ nothing. It needs MFA, ends on a date you choose (at most one year), and can
 be revoked at any time.
 
 1. **Invite the accountant as a Guest.** Admin, then **Invite user**, enter
-   their email and choose the role **Guest**. A Guest sees no relationships,
+   their email and choose the role **Read-only guest**. A Guest sees no relationships,
    finance, receipts or HR-type records. (They can still see what every
    member sees: public channels, announcements and the people directory.)
 2. **Wait for them to sign up** with that email. You should see them in
