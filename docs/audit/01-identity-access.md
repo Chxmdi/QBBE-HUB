@@ -359,11 +359,17 @@ findings here were all found by looking somewhere no assertion points.
 
 Recorded because an understated readiness is an error too.
 
-- **No `SECURITY DEFINER` RPC is reachable by a signed-in user.** All four
-  public RPCs granted to `authenticated` are `SECURITY INVOKER` and so run
-  under the caller's policies; every definer function is `service_role`-only,
-  with the two deliberate narrowings written down
-  (`20260820180000_tighten_definer_grants.sql`). Independently confirmed:
+- **Correction (2026-09-26): `SECURITY DEFINER` functions *are* reachable by
+  signed-in users.** This entry used to say none were. A query of the local
+  database on 2026-09-26 (`pg_proc` where `prosecdef` and `authenticated` has
+  execute, schema `public`) lists 24, among them the capability checks
+  (`has_task_capability` and friends), the channel and team membership
+  actions, `transfer_organization_ownership`, `my_open_task_count` (#115) and
+  `team_overview` (#136). A definer function is only as safe as the caller
+  check inside it. The last two were written with that check and have database
+  tests proving who gets nothing back (`supabase/tests/my-open-task-count.sql`,
+  `supabase/tests/team-overview.sql`); the other 22 have not been re-reviewed
+  for this correction. Independently confirmed:
   **75 tables, 75 `enable row level security`**, and exactly one `using (true)`
   policy in the schema — immutable reference data.
 - **AUTH-009 is genuinely met**, which no document claims. ~20 centralized

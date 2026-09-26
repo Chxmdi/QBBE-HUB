@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Users } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Avatar } from "@/components/ui/avatar";
@@ -87,6 +88,16 @@ export default async function PeoplePage({
         eyebrow="Directory"
         title="People"
         description="Internal users, roles, and current workload context."
+        actions={
+          session.isAdmin ? (
+            <Link
+              href="/people/overview"
+              className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-semibold hover:bg-surface-soft"
+            >
+              Team overview
+            </Link>
+          ) : null
+        }
       />
       <PersonDeepLink personId={highlighted} />
       {teamList.length > 0 ? (
