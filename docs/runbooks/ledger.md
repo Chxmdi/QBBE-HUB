@@ -68,9 +68,71 @@ Post or delete every draft in the month, check the trial balance, then close
 the period on the Periods page. Reopening a closed month asks for confirmation
 and is audited.
 
+## Giving the external accountant access (#154)
+
+The accountant gets their own login that can read the books and change
+nothing. It needs MFA, ends on a date you choose (at most one year), and can
+be revoked at any time.
+
+1. **Invite the accountant as a Guest.** Admin, then **Invite user**, enter
+   their email and choose the role **Guest**. A Guest sees no relationships,
+   finance, receipts or HR-type records. (They can still see what every
+   member sees: public channels, announcements and the people directory.)
+2. **Wait for them to sign up** with that email. You should see them in
+   People with the role Guest.
+3. **Grant access.** Ledger, then Year-end, then **Accountant access**.
+   Choose them, choose the last day of access, then **Grant access**. You
+   should see a row marked **Active**. If you see "Invite the accountant as a
+   Guest first", their role is not Guest or they have not signed up yet.
+4. **Tell the accountant** to sign in and click **Open the books** on Home.
+   The first time, they set up an authenticator app; without it they see
+   nothing. After that they land on the Ledger.
+5. **Revoke** on the same page when the engagement ends. It takes effect on
+   their next page load.
+
+Every accountant sign-in that opens the books, every grant and revocation,
+and every export is written to the audit log. The last twenty sign-ins are
+listed on the Accountant access page.
+
+## Year-end
+
+1. **Close every month** on the Periods page, except the last month of the
+   year (the closing entry is dated its last day). Post or delete every draft
+   first.
+2. **Review the statements.** Ledger, then Statements, choose the year. You
+   should see the statement of financial position and the statement of
+   operations by fund class, with the prior year when there is one. **Print**
+   gives a paper-style copy; the CSV links give spreadsheets.
+3. **Close the year.** Ledger, then Year-end, then **Close year** on that
+   year's row. **This posts a closing entry and closes all twelve months.**
+   It moves every revenue and expense balance into the fund's net assets
+   account: 3000 (unrestricted), 3100 (internally restricted) or 3200
+   (externally restricted). If one of those accounts is missing you will see
+   "Net assets account … is missing"; add it on the Accounts page and retry.
+   Years close in order: an earlier year must be closed first.
+4. **Send the year-end package.** The Year-end page lists, for the chosen
+   year: both statements (CSV and printable), the trial balance at year end,
+   the general ledger for the year and for each month (import CSV: date, entry
+   no, account code, account name, fund, program, description, debit,
+   credit) and the receipts list. The accountant can download them all
+   themselves.
+5. **Annual returns.** Ledger, then Returns shows the T2, T1044, CO-17 and
+   TP-997.1 with the figures from the books and the T1044 thresholds. It is
+   prepared for your accountant, not filed. The accountant decides which
+   returns apply and files them.
+
+### Reopening a closed year
+
+Only an admin with MFA can reopen, and only by giving a reason. On the
+Year-end page, **Reopen**, enter the reason, then **Reopen and post reopening
+entry**. This posts the exact reversal of the closing entry and reopens the
+twelve months. Make the corrections, then close the year again. A closed
+year's months cannot be reopened one at a time, and the closing entry cannot
+be reversed from its own page.
+
 ## Not built yet
 
-Year-end closing entries, the statement of financial position, the statement
-of operations, the statement of changes in fund balances, per-funder spending
-statements and automatic release of restricted funds. See the pull request's
-"Not included" list.
+The statement of cash flows and notes, per-funder spending statements,
+automatic release of restricted funds, interfund transfers, form-by-form
+mapping of the returns (GIFI line numbers and Quebec equivalents), and tracking
+whether each return has been filed. See the pull request's "Not included" list.
