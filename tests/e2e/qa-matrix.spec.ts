@@ -29,6 +29,7 @@ const ROUTES = [
   { path: "/crm", name: "crm" },
   { path: "/reports", name: "reports" },
   { path: "/documents", name: "documents" },
+  { path: "/finance/receipts", name: "receipts" },
   { path: "/admin", name: "admin" },
   // Every primitive in every state (UI-008), so the sweep covers them.
   { path: "/admin/design-system", name: "design-system" },
@@ -203,6 +204,15 @@ test.describe("QA matrix", () => {
         open: async () => {
           await page.goto("/");
           await page.getByRole("button", { name: /^Notifications/ }).click();
+        },
+      },
+      {
+        name: "receipt submit dialog",
+        width: 390,
+        open: async () => {
+          await page.goto("/finance/receipts");
+          await page.getByRole("button", { name: "Submit receipt" }).click();
+          await expect(page.getByRole("dialog", { name: "Submit a receipt or bill" })).toBeVisible();
         },
       },
       {
@@ -443,7 +453,7 @@ test.describe("authorization", () => {
     await signIn(page, "volunteer");
 
     // Staff-only and admin-only: the route must redirect, not render.
-    for (const path of ["/crm", "/reports", "/admin"]) {
+    for (const path of ["/crm", "/reports", "/finance/receipts", "/admin"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(page.url(), `${path} must not render for a volunteer`).not.toContain(
