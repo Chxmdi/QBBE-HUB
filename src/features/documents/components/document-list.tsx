@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FileSpreadsheet,
   FileText,
+  History,
   Image as ImageIcon,
   Link2,
   Paperclip,
@@ -31,6 +32,7 @@ import {
   restoreDocument,
 } from "@/features/documents/services/document.commands";
 import { formatDate } from "@/lib/utils";
+import { folderLabel, type LibraryFolder } from "@/features/documents/services/library";
 
 export interface DocumentRow {
   id: string;
@@ -45,6 +47,10 @@ export interface DocumentRow {
   owner: { full_name: string } | null;
   project: { id: string; name: string } | null;
   program: { id: string; name: string } | null;
+  folder: Pick<LibraryFolder, "id" | "category" | "name" | "visibility"> | null;
+  tags: string[];
+  version_number: number;
+  requires_acknowledgement: boolean;
 }
 
 /** File-type icon from the MIME type, falling back safely (§10.15). */
@@ -204,9 +210,26 @@ export function DocumentList({
                     ) : null}
                     <span className="meta">
                       {doc.kind === "link" ? "External link" : formatSize(doc.size_bytes)}
+                      {doc.version_number > 1 ? ` · Version ${doc.version_number}` : ""}
                     </span>
                   </span>
                 </button>
+                {doc.tags.length || doc.requires_acknowledgement ? (
+                  <div className="mt-1 flex flex-wrap gap-1 pl-6.5">
+                    {doc.requires_acknowledgement ? (
+                      <Badge tone="info">Required reading</Badge>
+                    ) : null}
+                    {doc.tags.map((tag) => (
+                      <Link
+                        key={tag}
+                        href={`/documents?tag=${encodeURIComponent(tag)}`}
+                        className="rounded-full bg-surface-soft px-2 py-0.5 text-[12px] text-muted hover:text-brand-fg"
+                      >
+                        #{tag}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
               </TableCell>
               <TableCell className="text-muted">
                 {doc.project ? (
@@ -223,9 +246,19 @@ export function DocumentList({
                   >
                     {doc.program.name}
                   </Link>
+                ) : doc.folder ? (
+                  <Link
+                    href={`/documents?folder=${doc.folder.id}`}
+                    className="hover:text-brand-fg hover:underline"
+                  >
+                    {folderLabel(doc.folder)}
+                  </Link>
                 ) : (
                   "General"
                 )}
+                {(doc.project || doc.program) && doc.folder ? (
+                  <span className="meta block">{folderLabel(doc.folder)}</span>
+                ) : null}
               </TableCell>
               <TableCell className="text-muted">
                 {doc.owner?.full_name ?? "—"}
@@ -262,6 +295,11 @@ export function DocumentList({
                         ) : (
                           <Download className="size-4" aria-hidden />
                         ),
+                    },
+                    {
+                      label: "Details and versions",
+                      onSelect: () => router.push(`/documents/${doc.id}`),
+                      icon: <History className="size-4" aria-hidden />,
                     },
                     ...(canManage
                       ? [
