@@ -41,6 +41,7 @@ const FILES = [
   "supabase/tests/project-lifecycle.sql",
   "supabase/tests/document-scanning-meetings.sql",
   "supabase/tests/document-links.sql",
+  "supabase/tests/document-library.sql",
   "supabase/tests/work-planning.sql",
   "supabase/tests/raid-decisions.sql",
   "supabase/tests/crm-continuity.sql",

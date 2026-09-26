@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { tagsSchema } from "@/features/documents/services/library";
 
 const linkSchema = z.object({
   title: requiredText("Give the resource a title.", 200),
@@ -26,6 +27,8 @@ const linkSchema = z.object({
   projectId: z.string().uuid().optional(),
   programId: z.string().uuid().optional(),
   visibility: z.enum(["organization", "staff"]).default("organization"),
+  folderId: z.string().uuid().optional(),
+  tags: tagsSchema,
 });
 
 /** Registers an external resource link (QBBE-controlled Drive, etc.). */
@@ -87,6 +90,8 @@ export async function createDocumentLink(input: unknown): Promise<ActionResult> 
       project_id: data.projectId ?? null,
       program_id: data.programId ?? null,
       visibility: data.visibility,
+      folder_id: data.folderId ?? null,
+      tags: data.tags,
       owner_id: session.userId,
       created_by: session.userId,
     })
@@ -108,6 +113,8 @@ const fileSchema = z.object({
   projectId: z.string().uuid().optional(),
   programId: z.string().uuid().optional(),
   visibility: z.enum(["organization", "staff"]).default("organization"),
+  folderId: z.string().uuid().optional(),
+  tags: tagsSchema,
 });
 
 /** Records an uploaded file after the client streams it into Storage. */
@@ -137,6 +144,8 @@ export async function registerUploadedDocument(
       project_id: data.projectId ?? null,
       program_id: data.programId ?? null,
       visibility: data.visibility,
+      folder_id: data.folderId ?? null,
+      tags: data.tags,
       owner_id: session.userId,
       created_by: session.userId,
     })
