@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
@@ -20,11 +19,10 @@ const OPTIONS: { value: Locale; label: string; lang: string }[] = [
 ];
 
 function useSaveLanguage() {
-  const router = useRouter();
   const t = useT();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  function save(choice: Choice, after?: () => void) {
+  function save(choice: Choice) {
     setError(null);
     startTransition(async () => {
       const result = await setInterfaceLanguage(choice);
@@ -32,8 +30,11 @@ function useSaveLanguage() {
         setError(result.error ?? t("language.saveError"));
         return;
       }
-      after?.();
-      router.refresh();
+      // A full reload, not router.refresh(): the language changes the whole
+      // document — <html lang>, the <title>, every string — and an in-place
+      // refresh briefly left the page with an empty <title> (axe
+      // document-title) while the new metadata streamed in.
+      window.location.reload();
     });
   }
   return { save, pending, error };

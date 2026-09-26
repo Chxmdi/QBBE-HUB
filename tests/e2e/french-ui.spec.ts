@@ -25,6 +25,7 @@ test.describe("before sign-in", () => {
     await clickWhenInteractive(page.getByRole("button", { name: "Français", exact: true }));
     await expect(page.getByRole("button", { name: "Se connecter", exact: true })).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("lang", "fr-CA");
+    await expect(page).toHaveTitle("Connexion · QBBE Hub");
     await expect(page.getByLabel("Courriel", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Mot de passe oublié?" })).toBeVisible();
 
@@ -35,6 +36,7 @@ test.describe("before sign-in", () => {
     await clickWhenInteractive(page.getByRole("button", { name: "English", exact: true }));
     await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(page).toHaveTitle("Sign in · QBBE Hub");
   });
 });
 
@@ -70,6 +72,7 @@ test.describe("a signed-in person who chooses French", () => {
     await expect(nav.getByRole("link", { name: "Mon travail" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Accueil", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Paramètres", level: 1 })).toBeVisible();
+    await expect(page).toHaveTitle("Paramètres du compte · QBBE Hub");
     await expect(page.getByRole("radio", { name: "Français" })).toBeChecked();
     await expect(page.getByRole("button", { name: "Menu du compte" })).toBeVisible();
 
