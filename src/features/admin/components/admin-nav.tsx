@@ -17,6 +17,7 @@ const ADMIN_SECTIONS = [
   { href: "/admin/email", label: "Email" },
   { href: "/admin/exports", label: "Exports" },
   { href: "/admin/retention", label: "Retention" },
+  { href: "/admin/records", label: "Records & holds" },
   { href: "/admin/approvals", label: "Approvals" },
   { href: "/admin/design-system", label: "Design system" },
 ];

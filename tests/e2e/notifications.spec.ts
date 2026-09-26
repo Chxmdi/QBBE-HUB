@@ -20,8 +20,9 @@ test("inbox filters, weekly modes, mutes, and one actionable email", async ({
   await expect(
     page.getByRole("link", { name: "Due dates", exact: true }),
   ).toBeVisible();
+  // Scoped to the filters: the sidebar also has an Approvals link (#143).
   await expect(
-    page.getByRole("link", { name: "Approvals", exact: true }),
+    page.getByLabel("Inbox filters").getByRole("link", { name: "Approvals", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Decisions", exact: true }),
