@@ -156,25 +156,21 @@ export const test = base.extend({
         // being refreshed. A goto started in between is reported as
         // "interrupted by another navigation" to that page. Seen as
         // task-core's `/my-work?task=…` and `/my-work?create=task` interrupted
-        // by `/my-work` (#134, #135). A server action that revalidates and a
-        // client `router.refresh()` after it can land as two such refreshes
-        // back to back, which also interrupts a single retry (#160, #164).
-        // The app did nothing wrong, so wait for the page to settle and try
-        // again, up to three times; anything past that is a real failure.
-        let lastError = error;
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          if (!String(lastError).includes("is interrupted by another navigation")) throw lastError;
-          await page.waitForLoadState("load").catch(() => {});
-          await settle();
-          try {
-            response = await goto(url, options);
-            lastError = null;
-            break;
-          } catch (retryError) {
-            lastError = retryError;
-          }
-        }
-        if (lastError) throw lastError;
+        // by `/my-work` (#134, #135).
+        //
+        // Retrying in place is not enough (#165's first attempt retried three
+        // times and all three were interrupted, on #160, #162 and #164). The
+        // interruption comes from the page being left: until the new
+        // document commits, the old one is still running, and a refresh it
+        // commits rewrites the address, which Chromium treats as a
+        // same-document navigation that cancels the pending one. So on an
+        // interruption, leave for about:blank first (no script left to
+        // interfere; cookies and the session are kept), then navigate. A
+        // second interruption after that is a real failure.
+        if (!String(error).includes("is interrupted by another navigation")) throw error;
+        await goto("about:blank");
+        pending.clear();
+        response = await goto(url, options);
       }
       await waitUntilInteractive(page);
       return response;
