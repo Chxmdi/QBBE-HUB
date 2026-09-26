@@ -23,7 +23,7 @@ begin
   perform tests.authenticate(v_owner);
 
   insert into public.project (organization_id, name, owner_id, created_by, stage, health)
-  values (v_org, 'Epic05 audit project', v_owner, v_owner, 'active', 'on_track')
+  values (v_org, 'Epic05 audit project', v_owner, v_owner, 'planning', 'on_track')
   returning id into v_project;
 
   insert into public.task (organization_id, project_id, title, created_by, assignee_id, status)
