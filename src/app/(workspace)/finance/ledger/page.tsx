@@ -115,7 +115,7 @@ export default async function LedgerOverviewPage() {
             ) : (
               <>
                 <p className="mb-3">
-                  Review the <Link className="text-brand-fg hover:underline" href="/finance/ledger/accounts">starter chart of accounts</Link>{" "}
+                  Review the <Link className="text-brand-fg underline underline-offset-2" href="/finance/ledger/accounts">starter chart of accounts</Link>{" "}
                   with the accountant. Nothing can be posted until their approval is recorded here.
                 </p>
                 {canManage ? <ChartApprovalForm today={todayIn(session.timeZone)} /> : null}
@@ -125,7 +125,7 @@ export default async function LedgerOverviewPage() {
           <Step done={(periods.count ?? 0) > 0} title="Fiscal periods exist">
             <p>
               {(periods.count ?? 0) > 0 ? `${periods.count} monthly periods. ` : "No periods yet. "}
-              <Link className="text-brand-fg hover:underline" href="/finance/ledger/periods">
+              <Link className="text-brand-fg underline underline-offset-2" href="/finance/ledger/periods">
                 Manage periods
               </Link>
             </p>
@@ -133,7 +133,7 @@ export default async function LedgerOverviewPage() {
           <Step done={Boolean(opening)} title="Opening balances are posted">
             {opening ? (
               <p>
-                <Link className="text-brand-fg hover:underline" href={`/finance/ledger/journal/${opening.id}`}>
+                <Link className="text-brand-fg underline underline-offset-2" href={`/finance/ledger/journal/${opening.id}`}>
                   Entry {opening.entry_number}
                 </Link>{" "}
                 dated {opening.entry_date}.
@@ -142,7 +142,7 @@ export default async function LedgerOverviewPage() {
               <p>
                 Enter the accountant&apos;s 2026-09-30 balances as one entry dated 2026-10-01.{" "}
                 {canManage ? (
-                  <Link className="text-brand-fg hover:underline" href="/finance/ledger/journal/new?kind=opening">
+                  <Link className="text-brand-fg underline underline-offset-2" href="/finance/ledger/journal/new?kind=opening">
                     Enter opening balances
                   </Link>
                 ) : null}
