@@ -141,6 +141,21 @@ jobs:
           select extensions.pg_stat_statements_reset();
           SQL
 
+      # Which process the runner's CPU goes to while the 50 people work: the
+      # Next.js server, Postgres, PostgREST, Kong or Auth. Database figures
+      # alone stopped explaining the page times (#115).
+      - name: Sample CPU by process during the run
+        run: |
+          nproc > "$RUNNER_TEMP/nproc.txt"
+          (
+            for i in $(seq 1 30); do
+              # The second frame of a two-frame top is the CPU used in that
+              # second; the first is averaged since each process started.
+              top -b -n 2 -d 1 -w 512 | awk '/^top -/{frame++} frame==2 && $1 ~ /^[0-9]+$/ {print $9, $12}' >> "$RUNNER_TEMP/cpu-samples.txt"
+              sleep 3
+            done
+          ) &
+
       - name: 50 people for ${{ inputs.duration || '2m' }}
         run: |
           k6 run \
@@ -149,6 +164,13 @@ jobs:
             -e DURATION=${{ inputs.duration || '2m' }} \
             --summary-export=perf-summary.json \
             scripts/qa/perf.k6.js
+
+      - name: CPU by process during the run
+        if: always()
+        run: |
+          echo "Runner CPUs: $(cat "$RUNNER_TEMP/nproc.txt")"
+          echo "Average % of one CPU per process name, over $(grep -c . "$RUNNER_TEMP/cpu-samples.txt" || true) samples:"
+          awk '{cpu[$2]+=$1} END {for (p in cpu) printf "%8.1f  %s\n", cpu[p]/30, p}' "$RUNNER_TEMP/cpu-samples.txt" | sort -rn | head -15
 
       - name: Queries that took the most database time
         if: always()
