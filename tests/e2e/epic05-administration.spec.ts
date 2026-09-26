@@ -8,7 +8,9 @@ import { sql } from "./db";
 
 const OWNER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1";
 
-test("material changes appear in Admin audit with actor and time", async ({ page }) => {
+test("material changes appear in Admin audit with actor and time", async ({
+  page,
+}) => {
   test.setTimeout(180_000);
   await signIn(page, "owner");
 
@@ -23,7 +25,6 @@ test("material changes appear in Admin audit with actor and time", async ({ page
     begin
       select organization_id into v_org from organization_membership
         where user_id = '${OWNER}' limit 1;
-      perform set_config('role', 'authenticated', true);
       perform set_config('request.jwt.claim.sub', '${OWNER}', true);
       perform set_config('request.jwt.claim.role', 'authenticated', true);
       perform set_config(
@@ -43,14 +44,20 @@ test("material changes appear in Admin audit with actor and time", async ({ page
   expect(taskId).toMatch(/^[0-9a-f-]{36}$/i);
 
   await page.goto("/admin?audit=task.due_date");
-  await expect(page.getByRole("heading", { name: "Audit history", exact: true })).toBeVisible({
+  await expect(
+    page.getByRole("heading", { name: "Audit history", exact: true }),
+  ).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByText("task.due_date").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("task.due_date").first()).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(page.getByText("QA Owner").first()).toBeVisible();
 
   await page.goto("/admin?audit=task.status");
-  await expect(page.getByText("task.status").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("task.status").first()).toBeVisible({
+    timeout: 30_000,
+  });
 });
 
 test("a task and a document can be archived and restored", async ({ page }) => {
@@ -74,7 +81,9 @@ test("a task and a document can be archived and restored", async ({ page }) => {
   `);
 
   await page.goto("/my-work?archived=1");
-  await expect(page.getByRole("heading", { name: "Archived tasks", exact: true })).toBeVisible({
+  await expect(
+    page.getByRole("heading", { name: "Archived tasks", exact: true }),
+  ).toBeVisible({
     timeout: 30_000,
   });
   await expect(page.getByText(taskTitle, { exact: true })).toBeVisible();
@@ -86,13 +95,17 @@ test("a task and a document can be archived and restored", async ({ page }) => {
   await expect
     .poll(
       () =>
-        sql(`select archived_at is null from task where title = '${taskTitle}' limit 1;`).trim(),
+        sql(
+          `select archived_at is null from task where title = '${taskTitle}' limit 1;`,
+        ).trim(),
       { timeout: 30_000 },
     )
     .toBe("t");
 
   await page.goto("/documents?archived=1");
-  await expect(page.getByText(docTitle, { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(docTitle, { exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
   await page.getByRole("button", { name: `Actions for ${docTitle}` }).click();
   await page.getByRole("menuitem", { name: "Restore", exact: true }).click();
   await expect
@@ -122,16 +135,24 @@ test("an unapproved template cannot be used, and an approved one creates a clean
   `).trim();
 
   await page.goto("/admin/templates");
-  await expect(page.getByRole("heading", { name: "Templates", exact: true })).toBeVisible({
+  await expect(
+    page.getByRole("heading", { name: "Templates", exact: true }),
+  ).toBeVisible({
     timeout: 30_000,
   });
   const draftRow = page.locator("li").filter({ hasText: `Draft tpl ${stamp}` });
   await expect(draftRow.getByText("Draft", { exact: true })).toBeVisible();
-  await draftRow.getByRole("button", { name: "Try to use", exact: true }).click();
-  await expect(draftRow.getByText(/has not been approved/i)).toBeVisible({ timeout: 15_000 });
+  await draftRow
+    .getByRole("button", { name: "Try to use", exact: true })
+    .click();
+  await expect(draftRow.getByText(/has not been approved/i)).toBeVisible({
+    timeout: 15_000,
+  });
 
   await draftRow.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(draftRow.getByText("Approved", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await expect(draftRow.getByText("Approved", { exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
   await draftRow.getByRole("button", { name: "Use", exact: true }).click();
 
   await expect

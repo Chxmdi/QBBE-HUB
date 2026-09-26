@@ -35,30 +35,39 @@ test("channel access provenance is visible and history survives archive", async 
 
   for (let i = 0; i < 3; i += 1) {
     sql(`
-      insert into message (channel_id, author_id, body, created_at)
-      values (
-        '${channelId}', '${OWNER}',
+      insert into message (organization_id, channel_id, author_id, body, created_at)
+      select organization_id, id, '${OWNER}',
         'History line ${i} ${stamp}',
         now() - interval '${i} minutes'
-      );
+      from channel where id = '${channelId}';
     `);
   }
 
   await page.goto(`/channels/${channelId}`);
-  await expect(page.getByRole("heading", { name: slug, exact: true })).toBeVisible({
+  await expect(
+    page.getByRole("heading", { name: slug, exact: true }),
+  ).toBeVisible({
     timeout: 30_000,
   });
   await expect(page.getByText(`History line 0 ${stamp}`)).toBeVisible();
 
-  const accessSummary = page.locator("summary").filter({ hasText: /Access \(/ });
+  const accessSummary = page
+    .locator("summary")
+    .filter({ hasText: /Access \(/ });
   if (await accessSummary.count()) {
     await accessSummary.click();
-    await expect(page.getByText(/Direct|Required|Team|Program|Managed/i).first()).toBeVisible();
+    await expect(
+      page.getByText(/Direct|Required|Team|Program|Managed/i).first(),
+    ).toBeVisible();
   }
 
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Channel settings", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Archive channel", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Channel settings", exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "Archive channel", exact: true })
+    .click();
 
   await expect(page.getByText(/This channel is archived/i)).toBeVisible({
     timeout: 30_000,
@@ -70,7 +79,9 @@ test("channel access provenance is visible and history survives archive", async 
   expect(Number(messageCount)).toBeGreaterThanOrEqual(3);
 
   await page.reload();
-  await expect(page.getByText(`History line 0 ${stamp}`)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(`History line 0 ${stamp}`)).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(page.getByText(/This channel is archived/i)).toBeVisible();
 });
 
@@ -181,8 +192,9 @@ test("a deactivated member cannot read a private channel", async () => {
     on conflict do nothing;
   `);
   sql(`
-    insert into message (channel_id, author_id, body)
-    values ('${channelId}', '${OWNER}', 'Secret ${stamp}');
+    insert into message (organization_id, channel_id, author_id, body)
+    select organization_id, id, '${OWNER}', 'Secret ${stamp}'
+    from channel where id = '${channelId}';
   `);
 
   function asUser(userId: string, body: string) {

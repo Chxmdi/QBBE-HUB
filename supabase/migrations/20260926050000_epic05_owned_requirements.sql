@@ -123,6 +123,7 @@ begin
   end if;
   if new.approved_at is not null
      and (tg_op = 'INSERT' or new.approved_at is distinct from old.approved_at)
+     and auth.uid() is not null
      and not app.is_org_admin(new.organization_id) then
     raise exception 'Only an administrator can approve a template'
       using errcode = '42501';

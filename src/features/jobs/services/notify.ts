@@ -86,7 +86,9 @@ function higherUrgency(
  * Collapses drafts that name the same person and the same event. The surviving
  * draft keeps every reason and the more urgent of the two.
  */
-export function collapseDrafts(drafts: NotificationDraft[]): NotificationDraft[] {
+export function collapseDrafts(
+  drafts: NotificationDraft[],
+): NotificationDraft[] {
   const byKey = new Map<string, NotificationDraft>();
   for (const draft of drafts) {
     if (!draft.dedupe_key) continue;
@@ -159,10 +161,13 @@ export async function createNotifications(
 
     const existing = new Map<string, { id: string; reason: string | null }>();
     for (const row of existingRows ?? []) {
-      existing.set(`${row.user_id as string}\u0000${row.dedupe_key as string}`, {
-        id: row.id as string,
-        reason: (row.reason as string | null) ?? null,
-      });
+      existing.set(
+        `${row.user_id as string}\u0000${row.dedupe_key as string}`,
+        {
+          id: row.id as string,
+          reason: (row.reason as string | null) ?? null,
+        },
+      );
     }
 
     const fresh: NotificationDraft[] = [];
@@ -188,21 +193,27 @@ export async function createNotifications(
           read_at: null,
         })
         .eq("id", prior.id);
-      if (error) throw new Error(`could not merge notification: ${error.message}`);
+      if (error)
+        throw new Error(`could not merge notification: ${error.message}`);
     }
 
     if (fresh.length === 0) continue;
 
-    const { data, error } = await db
+    // No representation is asked for: a person may create a notification
+    // for someone else but may not read it back, and asking for the row would
+    // make row-level security refuse the whole insert. The count comes from
+    // the response header instead.
+    const { count, error } = await db
       .from("notification")
       .upsert(fresh.map(rowPayload), {
         onConflict: "user_id,dedupe_key",
         ignoreDuplicates: true,
-      })
-      .select("id");
+        count: "exact",
+      });
 
-    if (error) throw new Error(`could not create notifications: ${error.message}`);
-    inserted += data?.length ?? 0;
+    if (error)
+      throw new Error(`could not create notifications: ${error.message}`);
+    inserted += count ?? 0;
   }
 
   return inserted;
