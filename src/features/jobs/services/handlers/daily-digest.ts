@@ -2,10 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildDigest,
   digestDedupeKey,
+  digestSection,
   localDateString,
 } from "@/features/notifications/services/digest";
 import {
-  isDigestHour,
+  PREFERENCE_COLUMNS,
+  deliveryMode,
+  isDigestDue,
+  weekdayIn,
   withPreferenceDefaults,
   type DeliveryPreferences,
 } from "@/features/notifications/services/delivery-rules";
@@ -40,7 +44,7 @@ export async function dailyDigest({
   const { data: prefRows, error } = await db
     .from("notification_preference")
     .select(
-      "user_id, email_critical, email_digest, email_assignments, email_mentions, email_announcements, email_due_dates, quiet_hours_start, quiet_hours_end, digest_hour, timezone",
+      `user_id, ${PREFERENCE_COLUMNS}`,
     )
     .eq("email_digest", true)
     .limit(definition.batch_size);
@@ -48,7 +52,7 @@ export async function dailyDigest({
   if (error) throw new Error(`could not load digest subscribers: ${error.message}`);
 
   const due = ((prefRows ?? []) as PreferenceRow[]).filter((row) =>
-    isDigestHour(withPreferenceDefaults(row), now),
+    isDigestDue(withPreferenceDefaults(row), now),
   );
 
   let processed = 0;
@@ -86,9 +90,12 @@ async function buildDigestFor(
 ): Promise<{ deliveryId: string } | null> {
   const since = new Date(now.getTime() - LOOKBACK_DAYS * 86_400_000).toISOString();
 
+  const today = localDateString(prefs.timezone, now);
+  const weeklyToday = weekdayIn(prefs.timezone, now) === prefs.digest_weekday;
+
   const { data: unread } = await db
     .from("notification")
-    .select("organization_id, title, body, category, link, created_at")
+    .select("organization_id, title, body, category, link, created_at, due_on, dedupe_key")
     .eq("user_id", userId)
     .is("read_at", null)
     .gte("created_at", since)
@@ -102,22 +109,80 @@ async function buildDigestFor(
     category: string;
     link: string | null;
     created_at: string;
+    due_on: string | null;
+    dedupe_key: string | null;
   }[];
 
-  const content = buildDigest(
-    rows.map((row) => ({
+  const sentKeys = new Set<string>();
+  const dedupeKeys = rows
+    .map((row) => (row.dedupe_key ? `email:${row.dedupe_key}` : null))
+    .filter((key): key is string => Boolean(key));
+  if (dedupeKeys.length > 0) {
+    const { data: sent } = await db
+      .from("email_delivery")
+      .select("dedupe_key, status")
+      .in("dedupe_key", dedupeKeys)
+      .eq("status", "sent");
+    for (const row of sent ?? []) {
+      if (row.dedupe_key) sentKeys.add(row.dedupe_key as string);
+    }
+  }
+
+  const digestRows = rows.filter((row) => {
+    if (row.dedupe_key && sentKeys.has(`email:${row.dedupe_key}`)) return false;
+    const mode = deliveryMode(row.category, prefs);
+    if (mode === "weekly") return weeklyToday;
+    if (mode === "daily") return true;
+    if (mode === "immediate" || mode === "off") return false;
+    return prefs.email_digest;
+  });
+
+  const horizon = new Date(now.getTime() + 7 * 86_400_000).toISOString();
+  const { data: meetings } = await db
+    .from("meeting_attendee")
+    .select("meeting:meeting_id(id, title, starts_at, organization_id)")
+    .eq("user_id", userId)
+    .limit(20);
+
+  const meetingItems = ((meetings ?? []) as unknown as {
+    meeting: { id: string; title: string; starts_at: string; organization_id: string } | null;
+  }[])
+    .map((row) => row.meeting)
+    .filter((meeting): meeting is NonNullable<typeof meeting> => {
+      if (!meeting?.starts_at) return false;
+      return meeting.starts_at >= now.toISOString() && meeting.starts_at <= horizon;
+    });
+
+  const items = [
+    ...digestRows.map((row) => ({
       title: row.title,
       body: row.body,
       category: row.category,
       link: row.link,
       createdAt: row.created_at,
+      section: digestSection(
+        { category: row.category, title: row.title, dueOn: row.due_on },
+        today,
+      ),
     })),
-  );
-  if (!content) return null;
+    ...meetingItems.map((meeting) => ({
+      title: meeting.title,
+      body: null,
+      category: "meeting",
+      link: `/meetings/${meeting.id}`,
+      createdAt: meeting.starts_at,
+      section: "meetings",
+    })),
+  ];
+
+  const content = buildDigest(items);
+  const organizationId =
+    digestRows[0]?.organization_id ?? meetingItems[0]?.organization_id;
+  if (!content || !organizationId) return null;
 
   const [{ data: profile }, { data: organization }] = await Promise.all([
     db.from("user_profile").select("full_name, email").eq("id", userId).maybeSingle(),
-    db.from("organization").select("name").eq("id", rows[0].organization_id).maybeSingle(),
+    db.from("organization").select("name").eq("id", organizationId).maybeSingle(),
   ]);
 
   const recipient = (profile?.email as string | undefined) ?? null;
@@ -136,7 +201,7 @@ async function buildDigestFor(
   const { data, error } = await db
     .from("email_delivery")
     .insert({
-      organization_id: rows[0].organization_id,
+      organization_id: organizationId,
       recipient_user_id: userId,
       recipient,
       subject: email.subject,

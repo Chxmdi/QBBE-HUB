@@ -13,9 +13,13 @@
 
 export type NotificationUrgency = "low" | "normal" | "high" | "critical";
 
+export type DeliveryMode = "off" | "immediate" | "daily" | "weekly";
+
 export interface NotificationForDelivery {
   category: string;
   urgency: NotificationUrgency;
+  projectId?: string | null;
+  threadId?: string | null;
 }
 
 export interface DeliveryPreferences {
@@ -28,8 +32,15 @@ export interface DeliveryPreferences {
   quiet_hours_start: number | null;
   quiet_hours_end: number | null;
   digest_hour: number;
+  digest_weekday: number;
   timezone: string;
+  category_modes: Partial<Record<string, DeliveryMode>>;
+  muted_project_ids: string[];
+  muted_thread_ids: string[];
 }
+
+export const PREFERENCE_COLUMNS =
+  "email_critical, email_digest, email_assignments, email_mentions, email_announcements, email_due_dates, quiet_hours_start, quiet_hours_end, digest_hour, digest_weekday, timezone, category_modes, muted_project_ids, muted_thread_ids";
 
 export type DeliveryDecision =
   | { action: "send" }
@@ -47,7 +58,11 @@ export const DEFAULT_PREFERENCES: DeliveryPreferences = {
   quiet_hours_start: null,
   quiet_hours_end: null,
   digest_hour: 8,
+  digest_weekday: 1,
   timezone: "America/Toronto",
+  category_modes: {},
+  muted_project_ids: [],
+  muted_thread_ids: [],
 };
 
 /**
@@ -64,6 +79,24 @@ export function isMandatory(notification: NotificationForDelivery): boolean {
     return true;
   }
   return false;
+}
+
+const MODE_ALIAS: Record<string, string> = {
+  reply: "mention",
+  approval: "assignment",
+  decision: "assignment",
+};
+
+/** The per-category mode, following reply→mention and approval→assignment. */
+export function deliveryMode(
+  category: string,
+  prefs: DeliveryPreferences,
+): DeliveryMode | null {
+  const direct = prefs.category_modes[category];
+  if (direct) return direct;
+  const alias = MODE_ALIAS[category];
+  if (!alias) return null;
+  return prefs.category_modes[alias] ?? null;
 }
 
 /** The preference switch that governs a category, if any governs it. */
@@ -169,12 +202,33 @@ export function decideDelivery(
 
   if (isMandatory(notification)) return { action: "send" };
 
+  if (
+    notification.projectId &&
+    prefs.muted_project_ids.includes(notification.projectId)
+  ) {
+    return { action: "suppress", reason: "muted-project" };
+  }
+  if (
+    notification.threadId &&
+    prefs.muted_thread_ids.includes(notification.threadId)
+  ) {
+    return { action: "suppress", reason: "muted-thread" };
+  }
+
+  const mode = deliveryMode(notification.category, prefs);
+  if (mode === "off") {
+    return { action: "suppress", reason: `preference:${notification.category}` };
+  }
+  if (mode === "daily" || mode === "weekly") {
+    return { action: "suppress", reason: `digest-only:${mode}` };
+  }
+
   const key = switchFor(notification.category);
-  if (key && !prefs[key]) {
+  if (mode == null && key && !prefs[key]) {
     return { action: "suppress", reason: `preference:${key}` };
   }
 
-  if (notification.urgency === "low" && prefs.email_digest) {
+  if (mode == null && notification.urgency === "low" && prefs.email_digest) {
     return { action: "suppress", reason: "low-urgency-digest-only" };
   }
 
@@ -195,14 +249,52 @@ export function decideDelivery(
   return { action: "send" };
 }
 
+/** Local weekday, Sunday = 0, in the recipient's zone. */
+export function weekdayIn(timezone: string, at: Date): number {
+  try {
+    const name = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+    }).format(at);
+    const index = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(name);
+    return index === -1 ? at.getUTCDay() : index;
+  } catch {
+    return at.getUTCDay();
+  }
+}
+
 /** True when this tick is the recipient's chosen digest hour. */
 export function isDigestHour(prefs: DeliveryPreferences, now: Date): boolean {
   return prefs.email_digest && hourIn(prefs.timezone, now) === prefs.digest_hour;
+}
+
+/**
+ * True when a digest should be built on this tick.
+ *
+ * Daily categories (and the older digest switch, when no per-category mode is
+ * stored yet) send every day at the digest hour. Weekly categories send on
+ * the chosen weekday only. A mix sends every day; the builder drops weekly
+ * items on the other days.
+ */
+export function isDigestDue(prefs: DeliveryPreferences, now: Date): boolean {
+  if (hourIn(prefs.timezone, now) !== prefs.digest_hour) return false;
+  const modes = Object.values(prefs.category_modes);
+  const hasDaily = modes.includes("daily");
+  const hasWeekly = modes.includes("weekly");
+  if (hasDaily) return true;
+  if (hasWeekly) return weekdayIn(prefs.timezone, now) === prefs.digest_weekday;
+  return prefs.email_digest;
 }
 
 /** Fills gaps in a partial preference row read from the database. */
 export function withPreferenceDefaults(
   row: Partial<DeliveryPreferences> | null | undefined,
 ): DeliveryPreferences {
-  return { ...DEFAULT_PREFERENCES, ...(row ?? {}) };
+  const merged = { ...DEFAULT_PREFERENCES, ...(row ?? {}) };
+  if (!merged.category_modes || typeof merged.category_modes !== "object") {
+    merged.category_modes = {};
+  }
+  if (!Array.isArray(merged.muted_project_ids)) merged.muted_project_ids = [];
+  if (!Array.isArray(merged.muted_thread_ids)) merged.muted_thread_ids = [];
+  return merged;
 }

@@ -17,7 +17,9 @@ async function createProject(page: Page, name: string) {
   await page.getByRole("button", { name: "New project" }).click();
   const dialog = page.getByRole("dialog", { name: "Create project" });
   await dialog.getByLabel("Name", { exact: true }).fill(name);
-  await dialog.getByRole("button", { name: "Create project", exact: true }).click();
+  await dialog
+    .getByRole("button", { name: "Create project", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/, { timeout: 60_000 });
   return page.url();
 }
@@ -35,11 +37,19 @@ test("a project's full detail is reachable at creation and survives a reload", a
   await create.getByLabel("Name", { exact: true }).fill(name);
   // Four fields the schema has always accepted and the form never offered, so
   // sponsor, priority, cadence and description could not be set at all.
-  await create.getByLabel("Description", { exact: true }).fill("Background for a newcomer.");
-  await create.getByLabel("Sponsor", { exact: true }).selectOption({ label: "QA Staff" });
+  await create
+    .getByLabel("Description", { exact: true })
+    .fill("Background for a newcomer.");
+  await create
+    .getByLabel("Sponsor", { exact: true })
+    .selectOption({ label: "QA Staff" });
   await create.getByLabel("Priority", { exact: true }).selectOption("high");
-  await create.getByLabel("Reporting cadence", { exact: true }).selectOption("weekly");
-  await create.getByRole("button", { name: "Create project", exact: true }).click();
+  await create
+    .getByLabel("Reporting cadence", { exact: true })
+    .selectOption("weekly");
+  await create
+    .getByRole("button", { name: "Create project", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/, { timeout: 60_000 });
 
   // Re-read from the server rather than trusting what the form just showed.
@@ -57,9 +67,15 @@ test("a project's full detail is reachable at creation and survives a reload", a
   // updateProject was dead code: nothing in the application called it.
   await page.getByRole("button", { name: "Edit project" }).click();
   const edit = page.getByRole("dialog", { name: "Edit project" });
-  await expect(edit.getByLabel("Priority", { exact: true })).toHaveValue("high");
-  await expect(edit.getByLabel("Reporting cadence", { exact: true })).toHaveValue("weekly");
-  await edit.getByLabel("Outcome", { exact: true }).fill("Forty families served.");
+  await expect(edit.getByLabel("Priority", { exact: true })).toHaveValue(
+    "high",
+  );
+  await expect(
+    edit.getByLabel("Reporting cadence", { exact: true }),
+  ).toHaveValue("weekly");
+  await edit
+    .getByLabel("Outcome", { exact: true })
+    .fill("Forty families served.");
   await edit.getByLabel("Priority", { exact: true }).selectOption("critical");
   await edit.getByRole("button", { name: "Save project" }).click();
   await expect(edit).not.toBeVisible({ timeout: 30_000 });
@@ -70,11 +86,15 @@ test("a project's full detail is reachable at creation and survives a reload", a
   ).toBeVisible({ timeout: 30_000 });
   await page.getByRole("button", { name: "Edit project" }).click();
   await expect(
-    page.getByRole("dialog", { name: "Edit project" }).getByLabel("Priority", { exact: true }),
+    page
+      .getByRole("dialog", { name: "Edit project" })
+      .getByLabel("Priority", { exact: true }),
   ).toHaveValue("critical");
 });
 
-test("an archived project can still be found, and restored", async ({ page }) => {
+test("an archived project can still be found, and restored", async ({
+  page,
+}) => {
   test.setTimeout(180_000);
   await signIn(page, "owner");
 
@@ -85,9 +105,12 @@ test("an archived project can still be found, and restored", async ({ page }) =>
   // StageSelect moves its own value before the server answers, so the value is
   // not proof. The close control disappears only after the refreshed page comes
   // back from the server saying the project really is archived.
-  await expect(page.getByRole("button", { name: "Close project" })).toHaveCount(0, {
-    timeout: 30_000,
-  });
+  await expect(page.getByRole("button", { name: "Close project" })).toHaveCount(
+    0,
+    {
+      timeout: 30_000,
+    },
+  );
 
   // The directory filtered `archived_at is null` unconditionally, so an
   // archived project was reachable only by somebody who already knew its URL.
@@ -101,9 +124,11 @@ test("an archived project can still be found, and restored", async ({ page }) =>
 
   await page.goto(url);
   await page.getByLabel("Project stage").selectOption("planning");
-  await expect(page.getByRole("button", { name: "Close project" })).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(page.getByRole("button", { name: "Close project" })).toBeVisible(
+    {
+      timeout: 30_000,
+    },
+  );
   await page.goto("/projects");
   await expect(page.getByRole("link", { name, exact: true })).toBeVisible({
     timeout: 30_000,
@@ -121,7 +146,9 @@ test("a returned request goes back to its author, and comes back answered", asyn
   await page.goto("/requests");
   await page.getByRole("button", { name: "Propose something" }).click();
   const propose = page.getByRole("dialog", { name: "Propose a project" });
-  await propose.getByLabel("What are you proposing", { exact: true }).fill(title);
+  await propose
+    .getByLabel("What are you proposing", { exact: true })
+    .fill(title);
   await propose
     .getByLabel("What would it involve", { exact: true })
     .fill("A weekly drop-in.");
@@ -141,10 +168,14 @@ test("a returned request goes back to its author, and comes back answered", asyn
   await row.getByRole("button", { name: "Return for clarification" }).click();
   // The form closes on success, so the Decide button coming back is the signal
   // that the server accepted it rather than that the click landed.
-  await expect(row.getByRole("button", { name: "Decide", exact: true })).toBeVisible({
+  await expect(
+    row.getByRole("button", { name: "Decide", exact: true }),
+  ).toBeVisible({
     timeout: 30_000,
   });
-  await expect(row.getByText("Returned for clarification").first()).toBeVisible();
+  await expect(
+    row.getByText("Returned for clarification").first(),
+  ).toBeVisible();
 
   // Deferring and returning are decisions the database demands attribution
   // for. Before this, the command wrote a null decider and the row was refused.
@@ -160,7 +191,9 @@ test("a returned request goes back to its author, and comes back answered", asyn
   await signIn(page, "volunteer");
   await page.goto("/requests");
   const mine = page.getByRole("listitem").filter({ hasText: title });
-  await expect(mine.getByText("Which school, and how many places?")).toBeVisible({
+  await expect(
+    mine.getByText("Which school, and how many places?"),
+  ).toBeVisible({
     timeout: 30_000,
   });
   await mine.getByRole("button", { name: "Answer and resubmit" }).click();
@@ -210,14 +243,21 @@ test("closing a project records evidence that is still there after a reload", as
   // Scoped to the closure record: the closing status update quotes the same
   // sentence back in the updates feed, which is a second, legitimate match.
   await expect(
-    closure.getByText("Forty-eight families served over twelve weeks.", { exact: true }),
+    closure.getByText("Forty-eight families served over twelve weeks.", {
+      exact: true,
+    }),
   ).toBeVisible();
 
-  const report = closure.getByRole("link", { name: "Final report", exact: true });
+  const report = closure.getByRole("link", {
+    name: "Final report",
+    exact: true,
+  });
   await expect(report).toBeVisible();
   await expect(report).toHaveAttribute("href", "https://qbbe.ca/report");
   // These render as anchors, so a non-http scheme surviving would be stored XSS.
-  await expect(closure.getByRole("link", { name: "Bad", exact: true })).toHaveCount(0);
+  await expect(
+    closure.getByRole("link", { name: "Bad", exact: true }),
+  ).toHaveCount(0);
 });
 
 test("a project built from a template carries its work and none of its history", async ({
@@ -229,7 +269,9 @@ test("a project built from a template carries its work and none of its history",
   await signIn(page, "owner");
 
   await page.goto("/projects");
-  await page.getByRole("button", { name: "Save template", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Save template", exact: true })
+    .click();
   const saveTemplate = page.getByRole("dialog", { name: "Project template" });
   await saveTemplate.getByLabel("Name", { exact: true }).fill(templateName);
   await saveTemplate.getByRole("button", { name: "Save", exact: true }).click();
@@ -237,9 +279,13 @@ test("a project built from a template carries its work and none of its history",
 
   // Structure, through the interface. Until this existed a template carried a
   // name and a stage, so "create from template" saved one form field.
-  const structure = page.getByRole("listitem").filter({ hasText: templateName });
+  const structure = page
+    .getByRole("listitem")
+    .filter({ hasText: templateName });
   await structure.getByLabel("Kind", { exact: true }).selectOption("milestone");
-  await structure.getByLabel("Name", { exact: true }).fill(`Venue confirmed ${stamp}`);
+  await structure
+    .getByLabel("Name", { exact: true })
+    .fill(`Venue confirmed ${stamp}`);
   await structure.getByLabel("Day", { exact: true }).fill("7");
   await structure.getByRole("button", { name: "Add", exact: true }).click();
   await expect(structure.getByText(`Venue confirmed ${stamp}`)).toBeVisible({
@@ -247,14 +293,28 @@ test("a project built from a template carries its work and none of its history",
   });
 
   await structure.getByLabel("Kind", { exact: true }).selectOption("task");
-  await structure.getByLabel("Name", { exact: true }).fill(`Book the room ${stamp}`);
+  await structure
+    .getByLabel("Name", { exact: true })
+    .fill(`Book the room ${stamp}`);
   await structure.getByLabel("Day", { exact: true }).fill("1");
   await structure.getByRole("button", { name: "Add", exact: true }).click();
   await expect(structure.getByText(`Book the room ${stamp}`)).toBeVisible({
     timeout: 30_000,
   });
 
-  await page.getByLabel("Create from template").selectOption({ label: templateName });
+  // A template is offered for use only once an administrator approves it
+  // (P1-ADM-03). The approval itself is covered by epic05-administration;
+  // here it is granted directly so this test stays about what a build copies.
+  sql(`
+    update project_template
+    set approved_at = now(),
+        approved_by = created_by
+    where name = '${templateName}';
+  `);
+  await page.reload();
+  await page
+    .getByLabel("Create from template")
+    .selectOption({ label: templateName });
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/, { timeout: 60_000 });
   const projectId = page.url().split("/").pop() as string;
 
@@ -292,14 +352,18 @@ test("a project built from a template carries its work and none of its history",
   expect(borrowed).toBe("0");
 });
 
-test("a project page shows where it sits, and the trail leads back (P0-UX-01)", async ({ page }) => {
+test("a project page shows where it sits, and the trail leads back (P0-UX-01)", async ({
+  page,
+}) => {
   await signIn(page, "owner");
   await page.goto("/projects");
   await page.locator('main a[href^="/projects/"]').first().click();
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}/);
 
   const trail = page.getByRole("navigation", { name: "Breadcrumb" });
-  const title = (await page.getByRole("heading", { level: 1 }).innerText()).trim();
+  const title = (
+    await page.getByRole("heading", { level: 1 }).innerText()
+  ).trim();
   await expect(trail.locator('[aria-current="page"]')).toHaveText(title);
 
   await trail.getByRole("link", { name: "Projects" }).click();

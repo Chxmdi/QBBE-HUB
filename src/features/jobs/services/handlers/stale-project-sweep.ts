@@ -74,6 +74,9 @@ export async function staleProjectSweep({
         link: `/projects/${project.id}?tab=updates`,
         urgency: "normal" as const,
         dedupe_key: `stale-project:${project.id}:${week}`,
+        reason: "stale project",
+        context: project.name,
+        project_id: project.id,
       };
     });
 

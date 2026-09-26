@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { TaskStatus } from "@/types/entities";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import {
   TASK_STATUSES,
   blockedReasonError,
@@ -196,18 +197,23 @@ export async function createTask(input: unknown): Promise<ActionResult> {
 
   // Deduplicated assignment notification (P0-NOT-04): one per task+assignee.
   if (assigneeId && assigneeId !== session.userId) {
-    await supabase.from("notification").insert({
+    await createNotifications(supabase, [{
       user_id: assigneeId,
       organization_id: session.organizationId,
       category: "assignment",
       title: `${session.profile.full_name} assigned you a task`,
       body: title,
       source_type: "task",
-      source_id: task.id,
+      source_id: task.id as string,
       link: `/my-work?task=${task.id}`,
       urgency: priority === "critical" ? "high" : "normal",
-      dedupe_key: `assign:${task.id}:${assigneeId}`,
-    });
+      reason: "assigned",
+      context: title,
+      owner_label: session.profile.full_name,
+      due_on: dueAt || null,
+      project_id: projectId ?? null,
+      dedupe_key: notificationDedupeKey("task", task.id as string, assigneeId),
+    }]);
   }
 
   revalidatePath("/", "layout");
@@ -251,11 +257,36 @@ export async function updateTaskStatus(
       completed_at: status === "completed" ? new Date().toISOString() : null,
     })
     .eq("id", taskId)
-    .select("id, title, project_id, program_id, assignee_id, blocked_reason")
+    .select("id, title, project_id, program_id, assignee_id, reviewer_id, due_at, blocked_reason")
     .maybeSingle();
 
   if (error || !updated) {
     return { ok: false, error: "Could not update the task status." };
+  }
+
+  if (
+    status === "in_review" &&
+    before?.status !== "in_review" &&
+    updated.reviewer_id &&
+    updated.reviewer_id !== session.userId
+  ) {
+    await createNotifications(supabase, [{
+      user_id: updated.reviewer_id as string,
+      organization_id: session.organizationId,
+      category: "approval",
+      title: `${session.profile.full_name} asked you to review “${updated.title}”`,
+      body: updated.title as string,
+      source_type: "task_review",
+      source_id: taskId,
+      link: `/my-work?task=${taskId}`,
+      urgency: "high",
+      reason: "review requested",
+      context: updated.title as string,
+      owner_label: session.profile.full_name,
+      due_on: (updated.due_at as string | null) ?? null,
+      project_id: (updated.project_id as string | null) ?? null,
+      dedupe_key: notificationDedupeKey("task_review", taskId, updated.reviewer_id as string),
+    }]);
   }
 
   if (status === "completed" && !wasAlreadyCompleted) {
@@ -426,19 +457,72 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
 
   if (error || !updated) return { ok: false, error: "Could not update the task." };
 
-  if (fields.assigneeId && fields.assigneeId !== session.userId) {
-    await supabase.from("notification").insert({
+  const drafts = [];
+  if (fields.assigneeId && fields.assigneeId !== session.userId && fields.assigneeId !== before?.assignee_id) {
+    drafts.push({
       user_id: fields.assigneeId,
       organization_id: session.organizationId,
       category: "assignment",
       title: `${session.profile.full_name} assigned you a task`,
-      body: updated.title,
+      body: updated.title as string,
       source_type: "task",
       source_id: taskId,
       link: `/my-work?task=${taskId}`,
-      dedupe_key: `assign:${taskId}:${fields.assigneeId}`,
+      reason: "assigned",
+      context: updated.title as string,
+      owner_label: session.profile.full_name,
+      due_on: (updated.due_at as string | null) ?? null,
+      project_id: (updated.project_id as string | null) ?? null,
+      dedupe_key: notificationDedupeKey("task", taskId, fields.assigneeId),
     });
   }
+  if (
+    fields.dueAt &&
+    fields.dueAt !== before?.due_at &&
+    updated.assignee_id &&
+    updated.assignee_id !== session.userId
+  ) {
+    drafts.push({
+      user_id: updated.assignee_id as string,
+      organization_id: session.organizationId,
+      category: "due_date",
+      title: `Due date changed on “${updated.title}”`,
+      body: updated.title as string,
+      source_type: "task_due",
+      source_id: taskId,
+      link: `/my-work?task=${taskId}`,
+      reason: "due date changed",
+      context: updated.title as string,
+      owner_label: session.profile.full_name,
+      due_on: fields.dueAt,
+      project_id: (updated.project_id as string | null) ?? null,
+      dedupe_key: notificationDedupeKey("task_due", taskId, updated.assignee_id as string, fields.dueAt),
+    });
+  }
+  if (
+    fields.reviewerId &&
+    fields.reviewerId !== before?.reviewer_id &&
+    fields.reviewerId !== session.userId
+  ) {
+    drafts.push({
+      user_id: fields.reviewerId,
+      organization_id: session.organizationId,
+      category: "approval",
+      title: `${session.profile.full_name} asked you to review “${updated.title}”`,
+      body: updated.title as string,
+      source_type: "task_review",
+      source_id: taskId,
+      link: `/my-work?task=${taskId}`,
+      urgency: "high" as const,
+      reason: "review requested",
+      context: updated.title as string,
+      owner_label: session.profile.full_name,
+      due_on: (updated.due_at as string | null) ?? null,
+      project_id: (updated.project_id as string | null) ?? null,
+      dedupe_key: notificationDedupeKey("task_review", taskId, fields.reviewerId),
+    });
+  }
+  if (drafts.length > 0) await createNotifications(supabase, drafts);
 
   await recordTaskChanges(
     supabase,
@@ -516,19 +600,27 @@ export async function setTaskRole(input: unknown): Promise<ActionResult> {
     });
 
     if (userId !== session.userId) {
-      await supabase.from("notification").insert({
+      const review = role === "reviewer" || role === "approver";
+      await createNotifications(supabase, [{
         user_id: userId,
         organization_id: session.organizationId,
-        category: "assignment",
+        category: review ? "approval" : "assignment",
         title: `${session.profile.full_name} made you ${
           role === "approver" ? "an" : "a"
         } ${TASK_ROLE_LABELS[role].toLowerCase()}`,
-        body: task.title,
-        source_type: "task",
+        body: task.title as string,
+        source_type: review ? "task_review" : "task",
         source_id: taskId,
         link: `/my-work?task=${taskId}`,
-        dedupe_key: `role:${taskId}:${userId}:${role}`,
-      });
+        reason: review ? "review requested" : role === "follower" ? "following" : "assigned",
+        context: task.title as string,
+        project_id: (task.project_id as string | null) ?? null,
+        dedupe_key: notificationDedupeKey(
+          review ? "task_review" : "task",
+          taskId,
+          userId,
+        ),
+      }]);
     }
   }
 
@@ -667,17 +759,21 @@ export async function bulkUpdateTasks(
 
     // One deduplicated notification per newly assigned person.
     if (action === "assignee" && assigneeId && assigneeId !== session.userId) {
-      await supabase.from("notification").insert(
+      await createNotifications(
+        supabase,
         rows.map((row) => ({
           user_id: assigneeId,
           organization_id: session.organizationId,
           category: "assignment",
           title: `${session.profile.full_name} assigned you a task`,
-          body: row.title,
+          body: row.title as string,
           source_type: "task",
-          source_id: row.id,
+          source_id: row.id as string,
           link: `/my-work?task=${row.id}`,
-          dedupe_key: `assign:${row.id}:${assigneeId}`,
+          reason: "assigned",
+          context: row.title as string,
+          project_id: (row.project_id as string | null) ?? null,
+          dedupe_key: notificationDedupeKey("task", row.id as string, assigneeId),
         })),
       );
     }
@@ -685,6 +781,23 @@ export async function bulkUpdateTasks(
 
   revalidatePath("/", "layout");
   return { ok: true, updated: rows.length };
+}
+
+export async function restoreTasks(taskIds: string[]): Promise<ActionResult> {
+  await requireSession();
+  const ids = [...new Set(taskIds)].filter((id) =>
+    /^[0-9a-f-]{36}$/i.test(id),
+  );
+  if (ids.length === 0) return { ok: false, error: "Choose a task to restore." };
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase
+    .from("task")
+    .update({ archived_at: null })
+    .in("id", ids)
+    .not("archived_at", "is", null);
+  if (error) return { ok: false, error: "Could not restore those tasks." };
+  revalidatePath("/my-work");
+  return { ok: true };
 }
 
 export async function addTaskComment(
@@ -697,14 +810,13 @@ export async function addTaskComment(
   if (trimmed.length > 5000) return { ok: false, error: "Comment is too long." };
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.from("task_comment").insert({
+  const { data: comment, error } = await supabase.from("task_comment").insert({
     task_id: taskId,
     author_id: session.userId,
     body: trimmed,
-  });
-  if (error) return { ok: false, error: "Could not post the comment." };
+  }).select("id").single();
+  if (error || !comment) return { ok: false, error: "Could not post the comment." };
 
-  // Notify assignee about new discussion, deduplicated per comment author.
   const { data: task } = await supabase
     .from("task")
     .select("title, assignee_id, project_id, program_id")
@@ -712,16 +824,20 @@ export async function addTaskComment(
     .maybeSingle();
 
   if (task?.assignee_id && task.assignee_id !== session.userId) {
-    await supabase.from("notification").insert({
-      user_id: task.assignee_id,
+    await createNotifications(supabase, [{
+      user_id: task.assignee_id as string,
       organization_id: session.organizationId,
       category: "reply",
       title: `${session.profile.full_name} commented on “${task.title}”`,
       body: trimmed.slice(0, 140),
-      source_type: "task",
-      source_id: taskId,
-      link: `/my-work?task=${taskId}`,
-    });
+      source_type: "task_comment",
+      source_id: comment.id as string,
+      link: `/my-work?task=${taskId}&comment=${comment.id}`,
+      reason: "reply",
+      context: task.title as string,
+      project_id: (task.project_id as string | null) ?? null,
+      dedupe_key: notificationDedupeKey("task_comment", comment.id as string, task.assignee_id as string),
+    }]);
   }
 
   revalidatePath("/", "layout");

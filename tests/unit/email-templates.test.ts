@@ -86,6 +86,26 @@ describe("renderNotificationEmail", () => {
     });
     expect(bodyless.html).toContain("Assigned to you");
   });
+
+  it("prints action, owner, and due date next to the deep link", () => {
+    const actionable = renderNotificationEmail({
+      title: "Review the brief",
+      body: null,
+      category: "assignment",
+      link: "/my-work?task=t1",
+      recipientName: "Amara",
+      organizationName: "QBBE",
+      action: "asked to review",
+      context: "Q3 brief",
+      ownerLabel: "Amara",
+      dueOn: "2026-08-20",
+    });
+    expect(actionable.text).toContain("Action: asked to review");
+    expect(actionable.text).toContain("Owner: Amara");
+    expect(actionable.text).toContain("Due: 2026-08-20");
+    expect(actionable.text).toContain("https://hub.example.org/my-work?task=t1");
+    expect(actionable.html).toContain("Action: asked to review");
+  });
 });
 
 describe("renderDigestEmail", () => {

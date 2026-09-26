@@ -5,7 +5,7 @@ import {
   NotificationPreferencesForm,
   type PreferenceValues,
 } from "@/features/notifications/components/notification-preferences-form";
-import { DEFAULT_PREFERENCES } from "@/features/notifications/services/delivery-rules";
+import { DEFAULT_PREFERENCES, PREFERENCE_COLUMNS } from "@/features/notifications/services/delivery-rules";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDateTime, relativeTime } from "@/lib/utils";
@@ -31,12 +31,10 @@ export default async function NotificationSettingsPage() {
   const session = await requireSession();
   const supabase = await createSupabasePageClient();
 
-  const [{ data: prefRow }, { data: deliveryRows }] = await Promise.all([
+  const [{ data: prefRow }, { data: deliveryRows }, { data: projects }] = await Promise.all([
     supabase
       .from("notification_preference")
-      .select(
-        "email_critical, email_digest, email_assignments, email_mentions, email_announcements, email_due_dates, quiet_hours_start, quiet_hours_end, digest_hour, timezone",
-      )
+      .select(PREFERENCE_COLUMNS)
       .eq("user_id", session.userId)
       .maybeSingle(),
     supabase
@@ -45,12 +43,18 @@ export default async function NotificationSettingsPage() {
       .eq("recipient_user_id", session.userId)
       .order("created_at", { ascending: false })
       .limit(8),
+    supabase.from("project").select("id, name").is("archived_at", null).order("name").limit(50),
   ]);
 
   const values: PreferenceValues = {
     ...DEFAULT_PREFERENCES,
     timezone: session.profile.timezone || DEFAULT_PREFERENCES.timezone,
     ...((prefRow ?? {}) as Partial<PreferenceValues>),
+    category_modes:
+      ((prefRow as { category_modes?: PreferenceValues["category_modes"] } | null)?.category_modes) ??
+      {},
+    muted_project_ids:
+      ((prefRow as { muted_project_ids?: string[] } | null)?.muted_project_ids) ?? [],
   };
 
   const deliveries = (deliveryRows ?? []) as unknown as RecentDelivery[];
@@ -63,7 +67,10 @@ export default async function NotificationSettingsPage() {
         description="Choose what reaches your inbox, and when. Everything still appears in the Hub either way."
       />
 
-      <NotificationPreferencesForm values={values} />
+      <NotificationPreferencesForm
+        values={values}
+        projects={(projects ?? []) as { id: string; name: string }[]}
+      />
 
       <section aria-labelledby="recent-email" className="mt-10">
         <h2 id="recent-email" className="section-heading mb-3">

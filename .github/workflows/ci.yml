@@ -206,8 +206,14 @@ jobs:
           import fs from 'node:fs';
           const status = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/supabase-status.json`, 'utf8'));
           if (!status.API_URL || !status.ANON_KEY) throw new Error('Local Supabase configuration missing');
+          if (!status.SERVICE_ROLE_KEY) throw new Error('Local service role key missing');
           fs.appendFileSync(process.env.GITHUB_ENV,
             `NEXT_PUBLIC_SUPABASE_URL=${status.API_URL}\nNEXT_PUBLIC_SUPABASE_ANON_KEY=${status.ANON_KEY}\n`);
+          // Jobs run as the service role; the notification checks drain the
+          // queue into the local Mailpit (SMTP 54325) and read it back. Both are
+          // the throwaway local stack's, never a hosted project's.
+          fs.appendFileSync(process.env.GITHUB_ENV,
+            `SUPABASE_SERVICE_ROLE_KEY=${status.SERVICE_ROLE_KEY}\nSMTP_HOST=127.0.0.1\nSMTP_PORT=54325\n`);
           fs.unlinkSync(`${process.env.RUNNER_TEMP}/supabase-status.json`);
           NODE
 
@@ -227,10 +233,14 @@ jobs:
         run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Authenticated lifecycle and access checks
+        env:
+          # A per-run value: the job routes need one, and nothing outside this
+          # runner ever sees it.
+          CRON_JOB_SECRET: ci-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           npx next start -p 3000 -H 127.0.0.1 &
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
-          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core work-planning documents events error-states role-matrix realtime-delivery crm reports raid-decisions portfolio-search collaboration meetings-comments $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core work-planning documents events error-states role-matrix realtime-delivery crm reports raid-decisions portfolio-search collaboration meetings-comments notifications epic05-administration epic05-continuity $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
 
       - name: Signed-in accessibility, responsive and keyboard matrix
         # WCAG 2.2 AA axe scans in both themes, a 6-width x 2-theme overflow

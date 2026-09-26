@@ -6,7 +6,7 @@ import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
-import { createNotifications } from "@/features/jobs/services/notify";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 
 const parentTypes = [
   "project",
@@ -85,22 +85,29 @@ export async function addRecordComment(input: unknown): Promise<ActionResult> {
   // page, and the anchor lands on the comment itself.
   const link = `/search?comment=${commentId}`;
 
-  const drafts: Parameters<typeof createNotifications>[1] = [];
-  for (const userId of new Set(data.mentionIds ?? [])) {
-    if (userId === session.userId) continue;
-    drafts.push({
-      user_id: userId,
-      organization_id: session.organizationId,
-      category: "mention",
-      title: `${session.profile.full_name} mentioned you`,
-      body: data.body.slice(0, 180),
-      source_type: "comment",
-      source_id: commentId,
-      link,
-      urgency: "normal",
-      dedupe_key: `comment-mention:${commentId}:${userId}`,
-    });
-  }
+  // One notification per person per record: a mention and a reply to the same
+  // person merge their reasons rather than sending twice (P1-NOT-06).
+  const projectId = data.parentType === "project" ? data.parentId : null;
+  const draftFor = (userId: string, category: string, title: string, reason: string) => ({
+    user_id: userId,
+    organization_id: session.organizationId,
+    category,
+    title,
+    body: data.body.slice(0, 180),
+    source_type: data.parentType,
+    source_id: data.parentId,
+    link,
+    urgency: "normal" as const,
+    reason,
+    context: data.body.slice(0, 180),
+    project_id: projectId,
+    dedupe_key: notificationDedupeKey(data.parentType, data.parentId, userId),
+  });
+  const drafts = [...new Set(data.mentionIds ?? [])]
+    .filter((userId) => userId !== session.userId)
+    .map((userId) =>
+      draftFor(userId, "mention", `${session.profile.full_name} mentioned you`, "mentioned"),
+    );
   if (data.parentCommentId) {
     const { data: parent } = await db
       .from("record_comment")
@@ -108,23 +115,20 @@ export async function addRecordComment(input: unknown): Promise<ActionResult> {
       .eq("id", data.parentCommentId)
       .maybeSingle();
     const parentAuthor = parent?.author_id as string | undefined;
-    if (
-      parentAuthor &&
-      parentAuthor !== session.userId &&
-      !drafts.some((draft) => draft.user_id === parentAuthor)
-    ) {
-      drafts.push({
-        user_id: parentAuthor,
-        organization_id: session.organizationId,
-        category: "mention",
-        title: `${session.profile.full_name} replied to your comment`,
-        body: data.body.slice(0, 180),
-        source_type: "comment",
-        source_id: commentId,
-        link,
-        urgency: "normal",
-        dedupe_key: `comment-reply:${commentId}:${parentAuthor}`,
-      });
+    if (parentAuthor && parentAuthor !== session.userId) {
+      const existing = drafts.find((draft) => draft.user_id === parentAuthor);
+      if (existing) {
+        existing.reason = `${existing.reason}, reply`;
+      } else {
+        drafts.push(
+          draftFor(
+            parentAuthor,
+            "reply",
+            `${session.profile.full_name} replied to your comment`,
+            "reply",
+          ),
+        );
+      }
     }
   }
   if (drafts.length > 0) {

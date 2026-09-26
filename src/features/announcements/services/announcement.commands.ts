@@ -5,9 +5,10 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
 import { authorizeAdminAction, requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 
 export async function acknowledgeAnnouncement(
   announcementId: string,
@@ -139,7 +140,8 @@ export async function publishAnnouncement(
         .filter((id) => id !== session.userId);
 
   if (recipients.length > 0) {
-    await supabase.from("notification").insert(
+    await createNotifications(
+      supabase,
       recipients.map((userId) => ({
         user_id: userId,
         organization_id: session.organizationId,
@@ -147,13 +149,15 @@ export async function publishAnnouncement(
         title: `Announcement: ${title}`,
         body: body.slice(0, 140),
         source_type: "announcement",
-        source_id: announcement.id,
-        link: "/announcements",
-        // An announcement that must be acknowledged is never routine mail:
-        // 'high' and above are exempt from the per-category opt-outs, which is
-        // how NTF-003's carve-out is enforced at delivery time.
-        urgency: priority === "critical" ? "critical" : requiresAck ? "high" : "normal",
-        dedupe_key: `announcement:${announcement.id}:${userId}`,
+        source_id: announcement.id as string,
+        link: `/announcements#${announcement.id}`,
+        urgency: (priority === "critical" ? "critical" : requiresAck ? "high" : "normal") as
+          | "critical"
+          | "high"
+          | "normal",
+        reason: "announcement",
+        context: title,
+        dedupe_key: notificationDedupeKey("announcement", announcement.id as string, userId),
       })),
     );
   }

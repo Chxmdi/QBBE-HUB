@@ -29,6 +29,7 @@ const createMeetingSchema = z.object({
   // editing one never changes the others.
   repeat: z.enum(["none", "weekly", "fortnightly", "monthly"]).default("none"),
   occurrences: z.coerce.number().int().min(2).max(12).optional(),
+  agendaTemplateId: z.string().uuid().optional().or(z.literal("")),
 });
 
 /** The start of occurrence `index` (0-based) in wall-clock terms. */
@@ -64,6 +65,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
     location,
     meetingLink,
     repeat,
+    agendaTemplateId,
   } = parsed.data;
   const count = repeat === "none" ? 1 : (parsed.data.occurrences ?? 4);
 
@@ -91,6 +93,22 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
         "Link the meeting to a project you can access, or ask an administrator.",
     };
   }
+
+  let agendaItems: { title?: string; notes?: string }[] = [];
+  if (agendaTemplateId) {
+    const { data: template } = await supabase
+      .from("agenda_template")
+      .select("items, approved_at")
+      .eq("id", agendaTemplateId)
+      .maybeSingle();
+    if (!template?.approved_at) {
+      return { ok: false, error: "That agenda template has not been approved yet." };
+    }
+    agendaItems = Array.isArray(template.items)
+      ? (template.items as { title?: string; notes?: string }[])
+      : [];
+  }
+
   // The id is chosen here rather than read back. meeting's read policy is
   // app.can_read_meeting(id), which looks the meeting up by id, and within the
   // inserting statement the new row is not yet visible to it — so
@@ -143,6 +161,21 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
       user_id: session.userId,
     })),
   );
+
+  if (agendaItems.length > 0) {
+    // Every occurrence of a series starts from the same template agenda.
+    await supabase.from("agenda_item").insert(
+      occurrences.flatMap((occurrence) =>
+        agendaItems.map((item, index) => ({
+          meeting_id: occurrence.id,
+          title: (item.title || "Agenda item").slice(0, 200),
+          desired_outcome: item.notes || null,
+          sort_key: index + 1,
+          proposed_by: session.userId,
+        })),
+      ),
+    );
+  }
 
   // Calendar sync is additive: local operations stay available if Google is
   // unavailable, and the connection carries an actionable recovery state.

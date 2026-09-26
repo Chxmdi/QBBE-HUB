@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
   createProjectRequestSchema,
@@ -37,24 +38,28 @@ async function notify(
     organizationId: string;
     title: string;
     link: string;
-    dedupeKey: string;
+    sourceId: string;
+    reason: string;
+    category?: string;
     urgency?: "normal" | "high";
+    dueOn?: string | null;
   },
 ) {
   if (!input.userId || input.userId === input.actorId) return;
-  await supabase.from("notification").upsert(
-    {
-      user_id: input.userId,
-      organization_id: input.organizationId,
-      category: "assignment",
-      title: input.title,
-      source_type: "request",
-      link: input.link,
-      urgency: input.urgency ?? "normal",
-      dedupe_key: input.dedupeKey,
-    },
-    { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
-  );
+  await createNotifications(supabase, [{
+    user_id: input.userId,
+    organization_id: input.organizationId,
+    category: input.category ?? "approval",
+    title: input.title,
+    source_type: "request",
+    source_id: input.sourceId,
+    link: input.link,
+    urgency: input.urgency ?? "normal",
+    reason: input.reason,
+    context: input.title,
+    due_on: input.dueOn ?? null,
+    dedupe_key: notificationDedupeKey("request", input.sourceId, input.userId, decisionStamp()),
+  }]);
 }
 
 /**
@@ -119,7 +124,9 @@ export async function submitProjectRequest(input: unknown): Promise<ActionResult
     organizationId: session.organizationId,
     title: `You are named as sponsor: ${data.title}`,
     link: `/requests?request=${created.id}`,
-    dedupeKey: `request-sponsor:${created.id}`,
+    sourceId: created.id as string,
+    reason: "sponsor",
+    category: "assignment",
   });
 
   revalidatePath("/requests");
@@ -194,7 +201,8 @@ export async function updateProjectRequest(input: unknown): Promise<ActionResult
       organizationId: session.organizationId,
       title: `Answered and back with you: ${existing.title}`,
       link: `/requests?request=${requestId}`,
-      dedupeKey: `request-resubmitted:${requestId}:${decisionStamp()}`,
+      sourceId: requestId,
+      reason: "resubmitted",
     });
   }
 
@@ -243,7 +251,8 @@ export async function decideProjectRequest(input: unknown): Promise<ActionResult
       organizationId: session.organizationId,
       title: `Approved: ${existing.title}`,
       link: `/projects/${projectId}`,
-      dedupeKey: `request-decided:${requestId}`,
+      sourceId: requestId,
+      reason: "approved",
     });
 
     await supabase.from("activity_event").insert({
@@ -293,7 +302,8 @@ export async function decideProjectRequest(input: unknown): Promise<ActionResult
       // Returning a request is the one decision that asks the requester to do
       // something, so it is worth interrupting them for.
       urgency: status === "returned" ? "high" : "normal",
-      dedupeKey: `request-decided:${requestId}:${status}:${decisionStamp(decidedAt)}`,
+      sourceId: requestId,
+      reason: status,
     });
   }
 
@@ -352,9 +362,12 @@ export async function requestApproval(input: unknown): Promise<ActionResult> {
     actorId: session.userId,
     organizationId: session.organizationId,
     title: "A decision is waiting on you",
-    link: "/requests",
-    dedupeKey: `approval-request:${created!.id}`,
+    link: `/requests#approval-${created!.id}`,
+    sourceId: created!.id as string,
+    reason: "decision requested",
+    category: "decision",
     urgency: "high",
+    dueOn: data.dueAt || null,
   });
 
   revalidatePath("/requests");
@@ -411,8 +424,9 @@ export async function decideApproval(input: unknown): Promise<ActionResult> {
       decision === "approved"
         ? "Your approval request was approved"
         : "Your approval request was answered",
-    link: "/requests",
-    dedupeKey: `approval-decided:${approvalId}`,
+    link: `/requests#approval-${approvalId}`,
+    sourceId: approvalId,
+    reason: decision,
   });
 
   revalidatePath("/requests");

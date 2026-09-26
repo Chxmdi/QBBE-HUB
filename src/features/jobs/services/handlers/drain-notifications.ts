@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  PREFERENCE_COLUMNS,
   decideDelivery,
   withPreferenceDefaults,
   type DeliveryPreferences,
@@ -103,7 +104,7 @@ async function prepareNotification(
   const { data: notificationRow, error: notificationError } = await db
     .from("notification")
     .select(
-      "id, user_id, organization_id, category, title, body, link, urgency, dedupe_key",
+      "id, user_id, organization_id, category, title, body, link, urgency, dedupe_key, reason, context, owner_label, due_on, project_id, thread_id",
     )
     .eq("id", notificationId)
     .maybeSingle();
@@ -123,6 +124,12 @@ async function prepareNotification(
     link: string | null;
     urgency: NotificationUrgency;
     dedupe_key: string | null;
+    reason: string | null;
+    context: string | null;
+    owner_label: string | null;
+    due_on: string | null;
+    project_id: string | null;
+    thread_id: string | null;
   };
 
   const dedupeKey = notification.dedupe_key
@@ -141,7 +148,7 @@ async function prepareNotification(
     db
       .from("notification_preference")
       .select(
-        "email_critical, email_digest, email_assignments, email_mentions, email_announcements, email_due_dates, quiet_hours_start, quiet_hours_end, digest_hour, timezone",
+        PREFERENCE_COLUMNS,
       )
       .eq("user_id", notification.user_id)
       .maybeSingle(),
@@ -180,7 +187,12 @@ async function prepareNotification(
   const prefs = withPreferenceDefaults(prefRow as Partial<DeliveryPreferences> | null);
 
   const decision = decideDelivery(
-    { category: notification.category, urgency: notification.urgency },
+    {
+      category: notification.category,
+      urgency: notification.urgency,
+      projectId: notification.project_id,
+      threadId: notification.thread_id,
+    },
     prefs,
     now,
     recipientEmail,
@@ -214,6 +226,10 @@ async function prepareNotification(
     link: notification.link,
     recipientName,
     organizationName,
+    action: notification.reason,
+    context: notification.context,
+    ownerLabel: notification.owner_label,
+    dueOn: notification.due_on,
   });
 
   if (decision.action === "defer") {
