@@ -16,6 +16,12 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 import { SharedArray } from "k6/data";
+import { Trend } from "k6/metrics";
+
+// Bytes of HTML each screen sends. Time says a screen is slow; size says how
+// much of that is the page itself, and shows what a change saved (#115).
+const pageBytes = new Trend("page_bytes");
+const SCREENS = ["dashboard", "my-work", "board", "projects", "project", "channel"];
 
 const BASE_URL = __ENV.BASE_URL || "http://127.0.0.1:3000";
 const fixture = new SharedArray("fixture", () => [JSON.parse(open(__ENV.SESSIONS || "../../perf-sessions.json"))]);
@@ -40,6 +46,11 @@ export const options = {
   },
   summaryTrendStats: ["avg", "med", "p(90)", "p(95)", "max"],
 };
+// A threshold that always passes, only so the summary reports each screen's
+// page size on its own line.
+for (const screen of SCREENS) {
+  options.thresholds[`page_bytes{screen:${screen}}`] = ["avg>=0"];
+}
 
 function visit(path, screen, cookie) {
   const response = http.get(`${BASE_URL}${path}`, {
@@ -47,6 +58,7 @@ function visit(path, screen, cookie) {
     redirects: 0,
     tags: { screen },
   });
+  pageBytes.add(String(response.body ?? "").length, { screen });
   check(response, {
     [`${screen} answers 200`]: (r) => r.status === 200,
     [`${screen} is not the sign-in page`]: (r) => !String(r.body).includes('name="password"'),
