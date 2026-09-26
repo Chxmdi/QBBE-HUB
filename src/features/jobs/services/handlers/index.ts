@@ -1,4 +1,5 @@
 import { scanDocuments } from "./scan-documents";
+import { scanReceipts } from "./scan-receipts";
 import type { JobHandler } from "../runner";
 import { announcementNudge } from "./announcement-nudge";
 import { applyRetention } from "./apply-retention";
@@ -48,6 +49,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   "expire-exports": expireExports,
 
   "scan-documents": scanDocuments,
+  "scan-receipts": scanReceipts,
 
   // Housekeeping
   "purge-job-history": purgeJobHistory,
