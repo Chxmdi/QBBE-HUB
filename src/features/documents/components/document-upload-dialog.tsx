@@ -14,6 +14,11 @@ import {
 } from "@/features/documents/services/document.commands";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
+import {
+  folderLabel,
+  groupFolders,
+  type LibraryFolder,
+} from "@/features/documents/services/library";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -22,9 +27,14 @@ export function DocumentUploadDialog({
   projects,
   programs,
   approvedHosts = [],
+  folders = [],
+  defaultFolderId = "",
 }: {
   projects: Option[];
   programs: Option[];
+  /** Library folders the person can see (#147). */
+  folders?: LibraryFolder[];
+  defaultFolderId?: string;
   /**
    * What the library will accept, so the form can say so before somebody types
    * a link it is going to refuse. The list is the organization's own, read
@@ -46,6 +56,8 @@ export function DocumentUploadDialog({
       programId: (form.get("programId") as string) || undefined,
       visibility: (form.get("visibility") as string) || "organization",
       description: (form.get("description") as string) || undefined,
+      folderId: (form.get("folderId") as string) || undefined,
+      tags: (form.get("tags") as string) || undefined,
     };
   }
 
@@ -150,6 +162,33 @@ export function DocumentUploadDialog({
           </Select>
         </div>
       </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="doc-folder">Folder</Label>
+          <Select id="doc-folder" name="folderId" defaultValue={defaultFolderId}>
+            <option value="">No folder</option>
+            {groupFolders(folders).map((group) => (
+              <optgroup key={group.category} label={group.label}>
+                {group.folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {folderLabel(f)}
+                    {f.visibility === "staff" ? " (staff only)" : ""}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="doc-tags">
+            Tags <span className="font-normal text-muted">(optional)</span>
+          </Label>
+          <Input id="doc-tags" name="tags" maxLength={500} placeholder="policy, 2026" />
+        </div>
+      </div>
+      <FieldHint>
+        A staff-only folder limits who can open everything filed in it.
+      </FieldHint>
       <div>
         <Label htmlFor="doc-visibility">Who can see this</Label>
         <Select id="doc-visibility" name="visibility" defaultValue="organization">
