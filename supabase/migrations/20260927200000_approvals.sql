@@ -82,7 +82,9 @@ create or replace function app.check_approval_rule() returns trigger
 language plpgsql security definer set search_path = '' as $$
 begin
   new.updated_at := now();
-  if tg_op = 'UPDATE' then
+  if tg_op = 'INSERT' then
+    new.created_by := coalesce(auth.uid(), new.created_by);
+  else
     new.organization_id := old.organization_id;
     new.created_by := old.created_by;
     new.created_at := old.created_at;
@@ -552,8 +554,6 @@ begin
   values (p_item, v_item.organization_id, v_uid, 'commented', v_item.current_step, v_note)
   returning id into v_event;
   if v_uid = v_item.requested_by then
-    perform app.notify_approvers(v_item);
-    -- notify_approvers dedupes per step; a reply is a new message.
     insert into public.notification (user_id, organization_id, category, title, body,
       source_type, source_id, link, dedupe_key)
     select distinct s.approver_id, v_item.organization_id, 'approval',
