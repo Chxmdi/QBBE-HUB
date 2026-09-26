@@ -25,6 +25,7 @@ const ROUTES = [
   { path: "/meetings", name: "meetings" },
   { path: "/events", name: "events" },
   { path: "/people", name: "people" },
+  { path: "/people/overview", name: "team-overview" },
   { path: "/crm", name: "crm" },
   { path: "/reports", name: "reports" },
   { path: "/documents", name: "documents" },
