@@ -985,6 +985,9 @@ begin
     coalesce((x.value->>'credit_cents')::bigint, 0)
   from jsonb_array_elements(p_lines) with ordinality as x(value, ordinality);
 
+  -- Check now rather than at commit, so the caller gets the reason at once.
+  perform app.ledger_check_entry(v_entry);
+
   perform app.record_material_audit(p_organization, 'ledger', 'draft_saved',
     'journal_entry', v_entry, jsonb_build_object('lines', jsonb_array_length(p_lines)));
   return v_entry;
