@@ -51,6 +51,9 @@ begin
   perform tests.clear_auth();
 
   -- A deactivated member reads none of the organization's tasks, so counts none.
+  -- clear_auth leaves the anon role in place, which may not change memberships,
+  -- so the update runs as the session's own role.
+  reset role;
   update public.organization_membership set status = 'deactivated'
   where organization_id = v_org and user_id = v_volunteer;
   perform tests.authenticate(v_volunteer, 'aal1');
