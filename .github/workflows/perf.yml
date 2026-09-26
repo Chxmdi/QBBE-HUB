@@ -182,6 +182,14 @@ jobs:
           echo "Average % of one CPU per process name, over $(grep -c . "$RUNNER_TEMP/cpu-samples.txt" || true) samples:"
           awk '{cpu[$2]+=$1} END {for (p in cpu) printf "%8.1f  %s\n", cpu[p]/30, p}' "$RUNNER_TEMP/cpu-samples.txt" | sort -rn | head -15
 
+      # How often the app asked Auth who the user was. One page view should
+      # cost one /user call (made by the request proxy), not two (#115).
+      - name: Auth user lookups during the run
+        if: always()
+        run: |
+          echo "GET /user calls logged by Auth: $(docker logs supabase_auth_workspace 2>&1 | grep -c '"path":"/user"' || true)"
+          echo "Page requests made by k6: $(jq '.metrics.http_reqs.count' perf-summary.json 2>/dev/null || echo unknown)"
+
       - name: Queries that took the most database time
         if: always()
         run: |
