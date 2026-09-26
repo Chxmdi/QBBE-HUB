@@ -7,6 +7,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createActions } from "@/config/create-actions";
 import { visibleNav } from "@/config/navigation";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import { createActionLabel, navItemLabel } from "@/lib/i18n/navigation";
 import { ErrorState } from "@/components/ui/error-state";
 import { searchTypeLabel } from "@/features/search/result-types";
 import type { SearchResult } from "@/types/entities";
@@ -44,6 +46,7 @@ export function CommandPalette({
   isStaff: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -51,7 +54,9 @@ export function CommandPalette({
   const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const navItems = visibleNav({ isAdmin, isStaff }).flatMap((g) => g.items);
+  const navItems = visibleNav({ isAdmin, isStaff })
+    .flatMap((g) => g.items)
+    .map((item) => ({ ...item, label: navItemLabel(t, item) }));
   const remoteResults = query.length >= 2 ? results : [];
   const navMatches = query
     ? navItems.filter((i) =>
@@ -61,24 +66,30 @@ export function CommandPalette({
 
   // The same create actions as quick create (P0-CMD-01), matched on
   // "new task", "task", "proposal" and so on.
-  const needle = query.trim().toLowerCase().replace(/^(new|create|add)\s+/, "");
+  // French too: "nouvelle tâche", "créer", or just "tâche".
+  const needle = query
+    .trim()
+    .toLowerCase()
+    .replace(/^(new|create|add|nouvel|nouvelle|nouveau|créer|ajouter)\s+/, "");
   const createMatches = query.trim()
-    ? createActions({ isAdmin, isStaff }).filter((action) =>
-        action.label.toLowerCase().includes(needle),
+    ? createActions({ isAdmin, isStaff }).filter(
+        (action) =>
+          action.label.toLowerCase().includes(needle) ||
+          createActionLabel(t, action).toLowerCase().includes(needle),
       )
     : [];
 
   const items: { label: string; sub?: string; href: string; icon: React.ReactNode }[] =
     [
       ...createMatches.map((action) => ({
-        label: `New ${action.label.toLowerCase()}`,
-        sub: "Create",
+        label: createActionLabel(t, action),
+        sub: t("palette.create"),
         href: action.href,
         icon: <Plus className="size-4" aria-hidden />,
       })),
       ...navMatches.map((n) => ({
         label: n.label,
-        sub: "Go to",
+        sub: t("palette.goTo"),
         href: n.href,
         icon: <n.icon className="size-4" aria-hidden />,
       })),
@@ -159,7 +170,7 @@ export function CommandPalette({
       onClick={(e) => {
         if (e.target === dialogRef.current) onClose();
       }}
-      aria-label="Command palette"
+      aria-label={t("palette.label")}
       className="m-auto mt-[12vh] w-[min(600px,calc(100vw-2rem))] rounded-(--radius-md) border border-line bg-surface p-0 text-ink shadow-(--shadow-pop) backdrop:bg-ink/40"
     >
       <div className="flex items-center gap-2.5 border-b border-line px-4">
@@ -169,8 +180,8 @@ export function CommandPalette({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Search tasks, projects, people, documents, risks…"
-          aria-label="Search"
+          placeholder={t("palette.placeholder")}
+          aria-label={t("palette.search")}
           role="combobox"
           aria-controls="command-palette-results"
           aria-expanded={items.length > 0}
@@ -186,7 +197,7 @@ export function CommandPalette({
         />
         {loading && query.length >= 2 ? (
           <span className="meta" aria-live="polite">
-            Searching…
+            {t("palette.searching")}
           </span>
         ) : null}
       </div>
@@ -199,19 +210,19 @@ export function CommandPalette({
           className="flex w-full items-center gap-3 border-b border-line px-4 py-2 text-left text-[13px] font-medium text-brand-fg hover:bg-surface-soft"
         >
           <Search className="size-4" aria-hidden />
-          See all results for “{query}”
+          {t("palette.seeAll", { query })}
         </button>
       ) : null}
       {searchFailed && query.length >= 2 ? (
         <ErrorState
-          message="Search isn't available right now."
+          message={t("palette.searchFailed")}
           onRetry={() => setSearchAttempt((n) => n + 1)}
         />
       ) : null}
       <ul
         id="command-palette-results"
         role="listbox"
-        aria-label="Results"
+        aria-label={t("palette.results")}
         className="max-h-[50vh] overflow-y-auto py-1.5"
       >
         {items.length === 0 ? (
@@ -222,8 +233,8 @@ export function CommandPalette({
             className="px-4 py-8 text-center text-[13.5px] text-muted"
           >
             {query.length >= 2
-              ? "No matching records you have access to."
-              : "Type to search, or pick a destination."}
+              ? t("palette.noMatches")
+              : t("palette.prompt")}
           </li>
           )
         ) : (

@@ -1,3 +1,4 @@
+import type { CreateAction } from "@/config/create-actions";
 import type { NavGroup, NavItem } from "@/config/navigation";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 
@@ -28,6 +29,7 @@ const ITEM_KEYS: Record<string, MessageKey> = {
   "/crm": "nav.items.relationships",
   "/reports": "nav.items.reports",
   "/documents": "nav.items.documents",
+  "/finance/receipts": "nav.items.receipts",
   "/people": "nav.items.people",
   "/admin": "nav.items.admin",
 };
@@ -41,6 +43,26 @@ const GROUP_KEYS: Record<string, MessageKey> = {
 export function navItemLabel(t: TranslateFn, item: Pick<NavItem, "href" | "label">): string {
   const key = ITEM_KEYS[item.href];
   return key ? t(key) : item.label;
+}
+
+const CREATE_KEYS: Record<string, MessageKey> = {
+  "/my-work?create=task": "topbar.create.task",
+  "/requests?create=1": "topbar.create.proposal",
+  "/projects?create=1": "topbar.create.project",
+  "/programs?create=1": "topbar.create.program",
+  "/meetings?create=1": "topbar.create.meeting",
+  "/events?create=1": "topbar.create.event",
+  "/channels?create=1": "topbar.create.channel",
+  "/crm?create=organization": "topbar.create.crmOrganization",
+  "/crm?create=contact": "topbar.create.crmContact",
+  "/crm?create=follow-up": "topbar.create.crmFollowUp",
+  "/channels?create=announcement": "topbar.create.announcement",
+};
+
+/** "New task", "Nouvelle tâche": the whole phrase, since French agrees in gender. */
+export function createActionLabel(t: TranslateFn, action: CreateAction): string {
+  const key = CREATE_KEYS[action.href];
+  return key ? t(key) : `New ${action.label.toLowerCase()}`;
 }
 
 export function navGroupLabel(t: TranslateFn, group: Pick<NavGroup, "label">): string {

@@ -7,8 +7,10 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { safeRedirectPath } from "@/lib/safe-redirect";
+import { useT } from "@/lib/i18n/client";
 
 function SignInFormInner() {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -29,7 +31,7 @@ function SignInFormInner() {
     if (signInError) {
       setError(
         signInError.message === "Invalid login credentials"
-          ? "That email and password combination didn't match. Check both and try again."
+          ? t("auth.signIn.badCredentials")
           : signInError.message,
       );
       return;
@@ -41,7 +43,7 @@ function SignInFormInner() {
   return (
     <form onSubmit={handleSubmit} className="card space-y-4 p-6">
       <div>
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{t("common.email")}</Label>
         <Input
           id="email"
           type="email"
@@ -52,7 +54,7 @@ function SignInFormInner() {
         />
       </div>
       <div>
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{t("common.password")}</Label>
         <Input
           id="password"
           type="password"
@@ -68,15 +70,15 @@ function SignInFormInner() {
         </p>
       ) : null}
       <Button type="submit" loading={loading} className="w-full">
-        Sign in
+        {t("auth.signIn.submit")}
       </Button>
       <p className="text-center text-sm">
-        <Link href="/forgot-password" className="text-brand-fg hover:underline">Forgot your password?</Link>
+        <Link href="/forgot-password" className="text-brand-fg hover:underline">{t("auth.signIn.forgot")}</Link>
       </p>
       <p className="text-center text-[13px] text-muted">
-        New to QBBE Hub?{" "}
+        {t("auth.signIn.newHere")}{" "}
         <Link href="/sign-up" className="font-medium text-brand-fg hover:underline">
-          Create an account
+          {t("auth.signIn.createAccount")}
         </Link>
       </p>
     </form>

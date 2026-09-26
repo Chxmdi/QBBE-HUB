@@ -1,14 +1,19 @@
 import type { Metadata, Viewport } from "next";
 import "@/design-system/styles/globals.css";
+import { I18nProvider } from "@/lib/i18n/client";
+import { htmlLang } from "@/lib/i18n/config";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = {
-  title: {
-    default: "QBBE Hub",
-    template: "%s · QBBE Hub",
-  },
-  description:
-    "The Quebec Board of Black Educators' internal operating and communication system.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: {
+      default: "QBBE Hub",
+      template: "%s · QBBE Hub",
+    },
+    description: t("meta.description"),
+  };
+}
 
 export const viewport: Viewport = {
   // Browser chrome colour. A <meta> value cannot read CSS variables, so
@@ -29,15 +34,20 @@ try {
 } catch (e) {}
 `;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // The person's language decides `lang` for the whole document, so screen
+  // readers pronounce French as French and the axe sweep sees the truth.
+  const locale = await getLocale();
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={htmlLang(locale)} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        <I18nProvider locale={locale}>{children}</I18nProvider>
+      </body>
     </html>
   );
 }
