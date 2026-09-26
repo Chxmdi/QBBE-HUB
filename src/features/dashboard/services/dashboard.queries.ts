@@ -164,7 +164,6 @@ export async function getDashboardData(
 
   const [
     programsRes,
-    projectsRes,
     taskSummaryRes,
     healthRes,
     overdueTasksRes,
@@ -184,11 +183,6 @@ export async function getDashboardData(
       .from("program")
       .select("id", { count: "exact", head: true })
       .eq("status", "active"),
-    supabase
-      .from("project")
-      .select("id", { count: "exact", head: true })
-      .eq("stage", "active")
-      .is("archived_at", null),
     // Every task figure on the page in one pass over the readable tasks,
     // rather than a separate scan per number (#115). Same filters as before;
     // row-level security still limits each figure to what the viewer can read.
@@ -200,9 +194,11 @@ export async function getDashboardData(
         p_sixty_days_ago: sixtyDaysAgo,
       })
       .single(),
+    // One row per active project, so its exact count is also the active
+    // project count; a separate count request asked the same question (#115).
     supabase
       .from("project")
-      .select("health")
+      .select("health", { count: "exact" })
       .eq("stage", "active")
       .is("archived_at", null),
     supabase
@@ -328,6 +324,9 @@ export async function getDashboardData(
     name: string;
     projects: { health: string; stage: string; archived_at: string | null }[];
   }[];
+  const ackedIds = new Set(
+    (myAcksRes.data ?? []).map((a) => a.announcement_id as string),
+  );
   // The announcements rail and the program counts are independent reads,
   // so they run side by side.
   const announcementRailPromise = (async (): Promise<AnnouncementRail> => {
@@ -365,25 +364,19 @@ export async function getDashboardData(
         const ann = latestAnnRes.data as unknown as Announcement & {
           author?: { full_name: string } | null;
         };
-        const [{ count: ackCount }, { data: myAck }] = await Promise.all([
-          supabase
-            .from("announcement_acknowledgment")
-            .select("user_id", { count: "exact", head: true })
-            .eq("announcement_id", ann.id),
-          supabase
-            .from("announcement_acknowledgment")
-            .select("user_id")
-            .eq("announcement_id", ann.id)
-            .eq("user_id", userId)
-            .maybeSingle(),
-        ]);
+        // Whether the viewer acknowledged it comes from their acknowledgments,
+        // already loaded above, rather than a request of its own (#115).
+        const { count: ackCount } = await supabase
+          .from("announcement_acknowledgment")
+          .select("user_id", { count: "exact", head: true })
+          .eq("announcement_id", ann.id);
         announcementRail = {
           channelId: annChannelRes.data.id as string,
           latest: {
             ...ann,
             ackCount: ackCount ?? 0,
             totalRecipients: activeMembersRes.count ?? 0,
-            acknowledgedByMe: Boolean(myAck),
+            acknowledgedByMe: ackedIds.has(ann.id),
             authorName: ann.author?.full_name ?? "Leadership",
           },
           recentMessages: (
@@ -399,23 +392,28 @@ export async function getDashboardData(
     return announcementRail;
   })();
 
-  const programTaskCounts = await Promise.all(
-    shownPrograms.map(async (program) => {
-      const tasksIn = () =>
-        supabase
-          .from("task")
-          .select("id", { count: "exact", head: true })
-          .eq("program_id", program.id)
-          .is("archived_at", null);
-      const [all, completed] = await Promise.all([
-        tasksIn(),
-        tasksIn().eq("status", "completed"),
-      ]);
-      return { total: all.count ?? 0, completed: completed.count ?? 0 };
-    }),
+  // Both counts for every program shown in one request, instead of two per
+  // program (#115). A program with no readable tasks has no row.
+  const programCountsRes = shownPrograms.length
+    ? await supabase.rpc("dashboard_program_task_counts", {
+        p_program_ids: shownPrograms.map((program) => program.id),
+      })
+    : { data: [] };
+  const programTaskCounts = new Map(
+    ((programCountsRes.data ?? []) as {
+      program_id: string;
+      total: number;
+      completed: number;
+    }[]).map((row) => [
+      row.program_id,
+      { total: Number(row.total), completed: Number(row.completed) },
+    ]),
   );
-  const programHealth: ProgramHealthRow[] = shownPrograms.map((program, index) => {
-    const { total, completed } = programTaskCounts[index];
+  const programHealth: ProgramHealthRow[] = shownPrograms.map((program) => {
+    const { total, completed } = programTaskCounts.get(program.id) ?? {
+      total: 0,
+      completed: 0,
+    };
     const percent = total > 0 ? (completed / total) * 100 : 0;
     return {
       id: program.id,
@@ -448,9 +446,6 @@ export async function getDashboardData(
 
   const announcementRail = await announcementRailPromise;
 
-  const ackedIds = new Set(
-    (myAcksRes.data ?? []).map((a) => a.announcement_id as string),
-  );
   const requiredAnnouncements = (
     (announcementsRes.data ?? []) as unknown as Announcement[]
   ).filter(
@@ -462,7 +457,7 @@ export async function getDashboardData(
   return {
     kpis: {
       activePrograms: programsRes.count ?? 0,
-      activeProjects: projectsRes.count ?? 0,
+      activeProjects: healthRes.count ?? 0,
       openTasks: Number(taskSummary?.open_tasks ?? 0),
       dueThisWeek: Number(taskSummary?.due_this_week ?? 0),
       overdue: Number(taskSummary?.overdue ?? 0),
