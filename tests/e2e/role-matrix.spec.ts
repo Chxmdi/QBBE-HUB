@@ -120,9 +120,9 @@ const MATRIX: Row[] = [
 ];
 
 // Reached by every signed-in role; what is on them is scoped by the database.
-const EVERYONE = ["/", "/my-work", "/board", "/programs", "/projects", "/people", "/channels", "/settings"];
+const EVERYONE = ["/", "/my-work", "/board", "/programs", "/projects", "/people", "/channels", "/settings", "/forms", "/signatures"];
 const STAFF_ONLY = ["/crm", "/reports", "/finance/receipts"];
-const ADMIN_ONLY = ["/admin", "/admin/access", "/admin/records", "/people/overview"];
+const ADMIN_ONLY = ["/admin", "/admin/access", "/admin/records", "/people/overview", "/forms/new"];
 
 function idsByName(table: "project" | "program"): Record<string, string> {
   return Object.fromEntries(
