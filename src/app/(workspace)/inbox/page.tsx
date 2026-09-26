@@ -11,6 +11,7 @@ import { getGmailMessageDetail } from "@/features/inbox/services/gmail.commands"
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn, relativeTime } from "@/lib/utils";
+import { inboxItemVisible } from "@/features/notifications/services/mute";
 import type { Notification } from "@/types/entities";
 
 export const metadata: Metadata = { title: "Inbox" };
@@ -21,6 +22,9 @@ const CATEGORIES = [
   { key: "mention", label: "Mentions" },
   { key: "assignment", label: "Assignments" },
   { key: "reply", label: "Replies" },
+  { key: "due_date", label: "Due dates" },
+  { key: "approval", label: "Approvals" },
+  { key: "decision", label: "Decisions" },
   { key: "announcement", label: "Announcements" },
   { key: "mail", label: "Mail" },
 ] as const;
@@ -40,12 +44,12 @@ export default async function InboxPage({
 
   let query = supabase
     .from("notification")
-    .select("id, category, title, body, link, urgency, read_at, created_at")
+    .select("id, category, title, body, link, urgency, read_at, created_at, project_id, thread_id")
     .order("created_at", { ascending: false })
     .limit(100);
   if (filter !== "all" && filter !== "mail") query = query.eq("category", filter);
 
-  const [{ data: notifications }, { data: gmailConnection }, { data: mail }] = await Promise.all([
+  const [{ data: notifications }, { data: gmailConnection }, { data: mail }, { data: prefs }] = await Promise.all([
     filter === "mail" ? Promise.resolve({ data: [] }) : query,
     supabase
       .from("integration_connection")
@@ -61,9 +65,28 @@ export default async function InboxPage({
           .order("received_at", { ascending: false })
           .limit(50)
       : Promise.resolve({ data: [] }),
+    supabase
+      .from("notification_preference")
+      .select("muted_project_ids, muted_thread_ids")
+      .eq("user_id", session.userId)
+      .maybeSingle(),
   ]);
 
-  const items = (notifications ?? []) as Notification[];
+  const mutedProjects = (prefs?.muted_project_ids as string[] | null) ?? [];
+  const mutedThreads = (prefs?.muted_thread_ids as string[] | null) ?? [];
+  const items = ((notifications ?? []) as (Notification & {
+    project_id?: string | null;
+    thread_id?: string | null;
+  })[]).filter((item) =>
+    inboxItemVisible({
+      category: item.category,
+      urgency: item.urgency,
+      projectId: item.project_id,
+      threadId: item.thread_id,
+      mutedProjectIds: mutedProjects,
+      mutedThreadIds: mutedThreads,
+    }),
+  );
   const unread = items.filter((n) => !n.read_at);
   const selectedMail = filter === "mail" && params.message
     ? await getGmailMessageDetail(params.message)

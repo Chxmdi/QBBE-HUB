@@ -1,4 +1,5 @@
 import { recordJobRun } from "@/lib/job-observability";
+import { createNotifications, notificationDedupeKey } from "../notify";
 import type { JobContext, JobResult } from "../runner";
 
 /**
@@ -56,9 +57,10 @@ export async function scheduledAnnouncements({
 
     if (recipients.length === 0) continue;
 
-    const { data: inserted, error: insertError } = await db
-      .from("notification")
-      .upsert(
+    let count = 0;
+    try {
+      count = await createNotifications(
+        db,
         recipients.map((userId) => ({
           user_id: userId,
           organization_id: announcement.organization_id,
@@ -66,28 +68,28 @@ export async function scheduledAnnouncements({
           title: `Announcement: ${announcement.title}`,
           source_type: "announcement",
           source_id: announcement.id,
-          link: "/announcements",
-          urgency: announcement.priority === "critical" ? "critical" : "normal",
-          dedupe_key: `announcement:${announcement.id}:${userId}`,
+          link: `/announcements#${announcement.id}`,
+          urgency: (announcement.priority === "critical" ? "critical" : "normal") as
+            | "critical"
+            | "normal",
+          reason: "announcement",
+          context: announcement.title,
+          dedupe_key: notificationDedupeKey("announcement", announcement.id, userId),
         })),
-        { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
-      )
-      .select("id");
-
-    if (insertError) {
+      );
+    } catch (error) {
       failed += 1;
       await recordJobRun(db, {
         organizationId: announcement.organization_id,
         jobName: "scheduled-announcements",
         status: "failed",
         details: { announcementId: announcement.id, recipients: recipients.length },
-        error: insertError.message,
+        error: error instanceof Error ? error.message : "Could not notify.",
         startedAt,
       });
       continue;
     }
 
-    const count = inserted?.length ?? 0;
     fanned += count;
     await recordJobRun(db, {
       organizationId: announcement.organization_id,

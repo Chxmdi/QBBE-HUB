@@ -21,8 +21,8 @@ export async function sendSmtpMail(options: {
     let buffer = "";
     const queue = [
       `EHLO qbbe-hub.local`,
-      `MAIL FROM:<${from}>`,
-      `RCPT TO:<${to}>`,
+      `MAIL FROM:<${envelopeAddress(from)}>`,
+      `RCPT TO:<${envelopeAddress(to)}>`,
       `DATA`,
       `From: ${from}\r\nTo: ${to}\r\nSubject: ${subject}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${text}\r\n.`,
       `QUIT`,
@@ -69,4 +69,14 @@ export async function sendSmtpMail(options: {
       resolve();
     });
   });
+}
+
+/**
+ * The bare address for the SMTP envelope. A header may say
+ * "QBBE Hub <hub@localhost>", but MAIL FROM and RCPT TO take only the address
+ * inside the brackets; the whole string is a syntax error to the server.
+ */
+export function envelopeAddress(value: string): string {
+  const match = value.match(/<([^<>]+)>\s*$/);
+  return (match ? match[1] : value).trim();
 }

@@ -6,7 +6,7 @@ import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
-import { createNotifications } from "@/features/jobs/services/notify";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 
 const parentTypes = [
   "project", "task", "milestone", "event", "meeting", "agenda_item",
@@ -42,26 +42,55 @@ export async function addRecordComment(input: unknown): Promise<ActionResult> {
     .single();
   if (error || !data) return { ok: false, error: "Could not save the comment." };
 
-  const mentions = parsed.data.mentionIds ?? [];
-  if (mentions.length) {
-    await createNotifications(
-      db,
-      mentions
-        .filter((userId) => userId !== session.userId)
-        .map((userId) => ({
-          user_id: userId,
+  const mentions = (parsed.data.mentionIds ?? []).filter((userId) => userId !== session.userId);
+  const drafts = mentions.map((userId) => ({
+    user_id: userId,
+    organization_id: session.organizationId,
+    category: "mention",
+    title: `${session.profile.full_name} mentioned you`,
+    body: parsed.data.body.slice(0, 180),
+    source_type: parsed.data.parentType,
+    source_id: parsed.data.parentId,
+    link: `/search?comment=${data.id}`,
+    urgency: "normal" as const,
+    reason: "mentioned",
+    context: parsed.data.body.slice(0, 180),
+    project_id: parsed.data.parentType === "project" ? parsed.data.parentId : null,
+    dedupe_key: notificationDedupeKey(parsed.data.parentType, parsed.data.parentId, userId),
+  }));
+
+  if (parsed.data.parentCommentId) {
+    const { data: parent } = await db
+      .from("record_comment")
+      .select("author_id")
+      .eq("id", parsed.data.parentCommentId)
+      .maybeSingle();
+    const authorId = parent?.author_id as string | undefined;
+    if (authorId && authorId !== session.userId) {
+      const existing = drafts.find((draft) => draft.user_id === authorId);
+      if (existing) {
+        existing.reason = existing.reason ? `${existing.reason}, reply` : "reply";
+      } else {
+        drafts.push({
+          user_id: authorId,
           organization_id: session.organizationId,
-          category: "mention",
-          title: `${session.profile.full_name} mentioned you`,
+          category: "reply",
+          title: `${session.profile.full_name} replied to your comment`,
           body: parsed.data.body.slice(0, 180),
-          source_type: "comment",
-          source_id: data.id as string,
+          source_type: parsed.data.parentType,
+          source_id: parsed.data.parentId,
           link: `/search?comment=${data.id}`,
           urgency: "normal" as const,
-          dedupe_key: `comment-mention:${data.id}:${userId}`,
-        })),
-    );
+          reason: "reply",
+          context: parsed.data.body.slice(0, 180),
+          project_id: parsed.data.parentType === "project" ? parsed.data.parentId : null,
+          dedupe_key: notificationDedupeKey(parsed.data.parentType, parsed.data.parentId, authorId),
+        });
+      }
+    }
   }
+
+  if (drafts.length) await createNotifications(db, drafts);
 
   revalidatePath("/", "layout");
   return { ok: true, id: data.id as string };

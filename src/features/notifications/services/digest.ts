@@ -16,14 +16,39 @@ import type { DigestItem } from "./email-templates";
 
 /** Most actionable first. Anything unlisted sorts after these, alphabetically. */
 export const DIGEST_CATEGORY_ORDER = [
+  "overdue",
+  "upcoming",
+  "meetings",
+  "stale",
+  "activity",
   "announcement",
   "assignment",
   "approval",
+  "decision",
   "due_date",
   "mention",
   "reply",
   "system",
 ];
+
+/**
+ * Which digest section a notification belongs in.
+ *
+ * `today` is the recipient's calendar date (YYYY-MM-DD). Due dates on or
+ * after it are upcoming; earlier ones are overdue.
+ */
+export function digestSection(
+  item: { category: string; title: string; dueOn?: string | null },
+  today: string,
+): string {
+  if (item.category === "due_date") {
+    if (item.dueOn && item.dueOn < today) return "overdue";
+    return "upcoming";
+  }
+  if (item.category === "system" && /stale|no activity/i.test(item.title)) return "stale";
+  if (item.category === "meeting") return "meetings";
+  return "activity";
+}
 
 export const DIGEST_ITEM_CAP = 20;
 
@@ -48,11 +73,16 @@ export function buildDigest(
 ): DigestContent | null {
   if (items.length === 0) return null;
 
+  const groupedBySection = items.some((item) => item.section);
+  const groupOf = (item: DigestItem) =>
+    groupedBySection ? item.section || "activity" : item.category;
+
   const ordered = [...items].sort((a, b) => {
-    const rank = categoryRank(a.category) - categoryRank(b.category);
+    const rank = categoryRank(groupOf(a)) - categoryRank(groupOf(b));
     if (rank !== 0) return rank;
-    if (a.category !== b.category) return a.category.localeCompare(b.category);
-    // Newest first inside a category.
+    const left = groupOf(a);
+    const right = groupOf(b);
+    if (left !== right) return left.localeCompare(right);
     return b.createdAt.localeCompare(a.createdAt);
   });
 
@@ -60,9 +90,10 @@ export function buildDigest(
 
   const groups: { category: string; items: DigestItem[] }[] = [];
   for (const item of shown) {
+    const key = groupOf(item);
     const last = groups[groups.length - 1];
-    if (last && last.category === item.category) last.items.push(item);
-    else groups.push({ category: item.category, items: [item] });
+    if (last && last.category === key) last.items.push(item);
+    else groups.push({ category: key, items: [item] });
   }
 
   return { groups, totalCount: items.length, shownCount: shown.length };

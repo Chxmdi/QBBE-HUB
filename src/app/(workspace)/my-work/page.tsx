@@ -20,7 +20,8 @@ import {
   type TaskFilters,
 } from "@/features/tasks/filters";
 import { TASK_STATUS_LABELS } from "@/features/tasks/schemas";
-import { getMyWork, getPickerOptions } from "@/features/tasks/services/task.queries";
+import { getMyWork, getPickerOptions, getArchivedTasks } from "@/features/tasks/services/task.queries";
+import { RestoreTaskButton } from "@/features/tasks/components/restore-task-button";
 import { requireSession } from "@/lib/auth";
 import { calendarDateInZone, formatInZone } from "@/lib/time";
 import { myWorkBucket } from "@/lib/utils";
@@ -46,10 +47,11 @@ export default async function MyWorkPage({
   const filters = parseTaskFilters(params);
   const today = calendarDateInZone(new Date(), session.timeZone) ?? "";
 
-  const [work, options, savedViews] = await Promise.all([
+  const [work, options, savedViews, archivedTasks] = await Promise.all([
     getMyWork(session.userId, filters, today),
     getPickerOptions(),
     listSavedViews("/my-work"),
+    params.archived === "1" ? getArchivedTasks() : Promise.resolve([]),
   ]);
 
   // Group in the organization's zone — the same zone each row prints its due
@@ -83,6 +85,12 @@ export default async function MyWorkPage({
             <Suspense fallback={null}>
               <SaveViewButton path="/my-work" />
             </Suspense>
+            <Link
+              href={params.archived === "1" ? "/my-work" : "/my-work?archived=1"}
+              className="text-[13px] font-medium text-brand-fg hover:underline"
+            >
+              {params.archived === "1" ? "Open work" : "Archived"}
+            </Link>
             <TaskCreateDialog
               projects={options.projects}
               people={options.people}
@@ -182,6 +190,28 @@ export default async function MyWorkPage({
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+
+      {params.archived === "1" ? (
+        <section aria-labelledby="archived-tasks" className="mb-8">
+          <h2 id="archived-tasks" className="section-heading mb-3">
+            Archived tasks
+          </h2>
+          {archivedTasks.length === 0 ? (
+            <p className="card px-4 py-6 text-center text-[13px] text-muted">
+              Nothing archived that you can restore.
+            </p>
+          ) : (
+            <ul className="card divide-y divide-line">
+              {archivedTasks.map((task) => (
+                <li key={task.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="min-w-0 flex-1 text-[14px]">{task.title}</span>
+                  <RestoreTaskButton taskId={task.id} />
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       ) : null}
 

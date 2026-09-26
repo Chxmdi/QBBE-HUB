@@ -7,6 +7,8 @@ import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { mentionRecipientIds } from "@/features/channels/mention-recipients";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
+import { channelMuteAllows } from "@/features/notifications/services/mute";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
 
@@ -88,23 +90,44 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
       teamMembers: (teamMembers ?? []).map((member) => ({ teamId: member.team_id as string, userId: member.user_id as string })),
     });
 
-    for (const userId of mentioned) {
-      await supabase.from("message_mention").insert({
-        message_id: message.id,
-        mentioned_user_id: userId,
-      });
-      await supabase.from("notification").insert({
+    const muteByUser = new Map<string, string>();
+    if (channelId && mentioned.length > 0) {
+      const { data: muteRows } = await supabase
+        .from("channel_member")
+        .select("user_id, muted_level")
+        .eq("channel_id", channelId)
+        .in("user_id", mentioned);
+      for (const row of muteRows ?? []) {
+        muteByUser.set(row.user_id as string, row.muted_level as string);
+      }
+    }
+
+    const mentionDrafts = mentioned
+      .filter((userId) => channelMuteAllows(muteByUser.get(userId) ?? "all", "mention"))
+      .map((userId) => ({
         user_id: userId,
         organization_id: session.organizationId,
         category: "mention",
         title: `${session.profile.full_name} mentioned you`,
         body: body.slice(0, 140),
         source_type: "message",
-        source_id: message.id,
-        link: channelId ? `/channels/${channelId}` : `/messages/${conversationId}`,
-        dedupe_key: `mention:${message.id}:${userId}`,
+        source_id: message.id as string,
+        link: channelId
+          ? `/channels/${channelId}${threadRootId ? `?thread=${threadRootId}` : `?message=${message.id}`}`
+          : `/messages/${conversationId}`,
+        reason: "mentioned",
+        context: body.slice(0, 140),
+        thread_id: threadRootId ?? (message.id as string),
+        dedupe_key: notificationDedupeKey("message", message.id as string, userId),
+      }));
+
+    for (const userId of mentioned) {
+      await supabase.from("message_mention").insert({
+        message_id: message.id,
+        mentioned_user_id: userId,
       });
     }
+    if (mentionDrafts.length > 0) await createNotifications(supabase, mentionDrafts);
   }
 
   // Thread replies notify the thread author (deduplicated, P0-NOT-04).
@@ -115,17 +138,32 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
       .eq("id", threadRootId)
       .maybeSingle();
     if (root && root.author_id !== session.userId) {
-      await supabase.from("notification").insert({
-        user_id: root.author_id,
-        organization_id: session.organizationId,
-        category: "reply",
-        title: `${session.profile.full_name} replied to your message`,
-        body: body.slice(0, 140),
-        source_type: "message",
-        source_id: message.id,
-        link: channelId ? `/channels/${channelId}?thread=${threadRootId}` : `/messages/${conversationId}`,
-        dedupe_key: `reply:${message.id}:${root.author_id}`,
-      });
+      let level = "all";
+      if (channelId) {
+        const { data: member } = await supabase
+          .from("channel_member")
+          .select("muted_level")
+          .eq("channel_id", channelId)
+          .eq("user_id", root.author_id)
+          .maybeSingle();
+        level = (member?.muted_level as string | undefined) ?? "all";
+      }
+      if (channelMuteAllows(level, "reply")) {
+        await createNotifications(supabase, [{
+          user_id: root.author_id as string,
+          organization_id: session.organizationId,
+          category: "reply",
+          title: `${session.profile.full_name} replied to your message`,
+          body: body.slice(0, 140),
+          source_type: "message",
+          source_id: message.id as string,
+          link: channelId ? `/channels/${channelId}?thread=${threadRootId}` : `/messages/${conversationId}`,
+          reason: "reply",
+          context: body.slice(0, 140),
+          thread_id: threadRootId,
+          dedupe_key: notificationDedupeKey("message", message.id as string, root.author_id as string),
+        }]);
+      }
     }
   }
 

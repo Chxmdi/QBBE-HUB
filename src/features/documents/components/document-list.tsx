@@ -28,6 +28,7 @@ import { useToast } from "@/components/ui/toast";
 import {
   archiveDocument,
   getDocumentDownloadUrl,
+  restoreDocument,
 } from "@/features/documents/services/document.commands";
 import { formatDate } from "@/lib/utils";
 
@@ -71,11 +72,13 @@ export function DocumentList({
   documents,
   canManage,
   highlightId = null,
+  archived = false,
 }: {
   documents: DocumentRow[];
   canManage: boolean;
   /** Deep-linked from search: this row is anchored and marked. */
   highlightId?: string | null;
+  archived?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -101,6 +104,16 @@ export function DocumentList({
       return;
     }
     window.open(result.url, "_blank", "noopener,noreferrer");
+  }
+
+  async function restore(doc: DocumentRow) {
+    const result = await restoreDocument(doc.id);
+    if (result.ok) {
+      toast("Document restored.");
+      router.refresh();
+    } else {
+      toast(result.error ?? "Could not restore.", { tone: "error" });
+    }
   }
 
   async function archive(doc: DocumentRow) {
@@ -253,9 +266,9 @@ export function DocumentList({
                     ...(canManage
                       ? [
                           {
-                            label: "Archive",
-                            onSelect: () => archive(doc),
-                            destructive: true,
+                            label: archived ? "Restore" : "Archive",
+                            onSelect: () => (archived ? restore(doc) : archive(doc)),
+                            destructive: !archived,
                           },
                         ]
                       : []),

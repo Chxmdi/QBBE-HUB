@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Avatar } from "@/components/ui/avatar";
@@ -17,7 +18,10 @@ import { TeamMemberControls } from "@/features/admin/components/team-member-cont
 import { TeamOwnerControl } from "@/features/admin/components/team-owner-control";
 import { createTeam } from "@/features/admin/services/team.commands";
 import { createWorkflowRule } from "@/features/admin/services/workflow.commands";
-import { integrationHealthLabel, integrationHealthTone } from "@/features/admin/services/integration-health";
+import {
+  integrationHealthLabel,
+  integrationHealthTone,
+} from "@/features/admin/services/integration-health";
 import { requireAdminAal2 } from "@/lib/auth";
 import { transactionalEmailIsLive } from "@/features/notifications/services/email-provider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -76,7 +80,8 @@ const INTEGRATION_CATALOG = [
   {
     provider: "gmail",
     name: "Gmail",
-    description: "Unified inbox email sync. Requires Google OAuth credentials and consent review.",
+    description:
+      "Unified inbox email sync. Requires Google OAuth credentials and consent review.",
   },
   {
     provider: "google_calendar",
@@ -86,12 +91,14 @@ const INTEGRATION_CATALOG = [
   {
     provider: "google_drive",
     name: "Google Drive",
-    description: "Metadata sync for Drive resources. Opening a resource respects its Drive sharing controls.",
+    description:
+      "Metadata sync for Drive resources. Opening a resource respects its Drive sharing controls.",
   },
   {
     provider: "volunteer_system",
     name: "Volunteer Management System",
-    description: "Volunteer identity/availability references. Server-to-server integration boundary.",
+    description:
+      "Volunteer identity/availability references. Server-to-server integration boundary.",
   },
   {
     provider: "email",
@@ -101,66 +108,102 @@ const INTEGRATION_CATALOG = [
   },
 ];
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ audit?: string; auditPage?: string }>;
+}) {
   const session = await requireAdminAal2();
+  const params = await searchParams;
+  const auditPage = Math.max(1, Number(params.auditPage) || 1);
+  const auditFilter =
+    params.audit && params.audit !== "all" ? params.audit : null;
   const supabase = await createSupabaseServerClient();
 
   const [
     { data: members },
     { data: invitations },
-    { data: audit },
+    { data: audit, count: auditCount },
     { data: integrations },
     { data: teams },
     { data: teamMembers },
     { data: rules },
     { data: jobRuns },
     { data: workflowRuns },
-  ] =
-    await Promise.all([
-      supabase
-        .from("organization_membership")
-        .select(
-          "id, organization_id, user_id, role, status, joined_at, user_profile:user_id(id, full_name, email, avatar_url, title, timezone, vms_id, vms_availability, vms_synced_at)",
-        )
-        .order("joined_at"),
-      supabase
-        .from("invitation")
-        .select("id, email, intended_role, expires_at, accepted_at, revoked_at, created_at")
-        .order("created_at", { ascending: false })
-        .limit(20),
-      supabase
+  ] = await Promise.all([
+    supabase
+      .from("organization_membership")
+      .select(
+        "id, organization_id, user_id, role, status, joined_at, user_profile:user_id(id, full_name, email, avatar_url, title, timezone, vms_id, vms_availability, vms_synced_at)",
+      )
+      .order("joined_at"),
+    supabase
+      .from("invitation")
+      .select(
+        "id, email, intended_role, expires_at, accepted_at, revoked_at, created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(20),
+    (() => {
+      let auditQuery = supabase
         .from("audit_event")
         .select(
-          "id, actor_id, event_type, action, object_type, created_at, actor:actor_id(full_name)",
+          // No embed: audit_event.actor_id has no foreign key to user_profile,
+          // so PostgREST cannot join it and the whole query fails — which
+          // showed an empty history. Names come from the member list below.
+          "id, actor_id, event_type, action, object_type, created_at",
+          { count: "exact" },
         )
         .order("created_at", { ascending: false })
-        .limit(30),
-      supabase
-        .from("integration_connection")
-        .select("provider, status, last_sync_at, last_error"),
-      supabase.from("team").select("id, name, description, owner_id").order("name"),
-      supabase.from("team_member").select("team_id, user_id"),
-      supabase
-        .from("workflow_rule")
-        .select("id, name, enabled, trigger_event")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("background_job_run")
-        .select("id, job_name, status, error, finished_at")
-        .order("finished_at", { ascending: false })
-        .limit(20),
-      supabase
-        .from("workflow_execution")
-        .select("id, rule_name, trigger_event, outcome, recipient_count, detail, created_at")
-        .order("created_at", { ascending: false })
-        .limit(20),
-    ]);
+        .range((auditPage - 1) * 30, auditPage * 30 - 1);
+      if (auditFilter) auditQuery = auditQuery.eq("event_type", auditFilter);
+      return auditQuery;
+    })(),
+    supabase
+      .from("integration_connection")
+      .select("provider, status, last_sync_at, last_error"),
+    supabase
+      .from("team")
+      .select("id, name, description, owner_id")
+      .order("name"),
+    supabase.from("team_member").select("team_id, user_id"),
+    supabase
+      .from("workflow_rule")
+      .select("id, name, enabled, trigger_event")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("background_job_run")
+      .select("id, job_name, status, error, finished_at")
+      .order("finished_at", { ascending: false })
+      .limit(20),
+    supabase
+      .from("workflow_execution")
+      .select(
+        "id, rule_name, trigger_event, outcome, recipient_count, detail, created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
 
   const memberList = ((members ?? []) as unknown as Membership[]).filter(
     (m) => m.user_profile,
   );
   const invitationList = (invitations ?? []) as InvitationRow[];
-  const auditList = (audit ?? []) as unknown as AuditRow[];
+  const actorNames = new Map(
+    (
+      (members ?? []) as unknown as {
+        user_id: string;
+        user_profile: { full_name: string } | null;
+      }[]
+    ).map((m) => [m.user_id, m.user_profile?.full_name ?? null]),
+  );
+  const auditList = ((audit ?? []) as unknown as AuditRow[]).map((event) => ({
+    ...event,
+    actor:
+      event.actor_id && actorNames.get(event.actor_id)
+        ? { full_name: actorNames.get(event.actor_id) as string }
+        : null,
+  }));
   const integrationMap = new Map(
     ((integrations ?? []) as IntegrationRow[]).map((i) => [i.provider, i]),
   );
@@ -175,7 +218,10 @@ export default async function AdminPage() {
     description: string | null;
     owner_id: string;
   }[];
-  const teamMemberList = (teamMembers ?? []) as { team_id: string; user_id: string }[];
+  const teamMemberList = (teamMembers ?? []) as {
+    team_id: string;
+    user_id: string;
+  }[];
   const ruleList = (rules ?? []) as {
     id: string;
     name: string;
@@ -191,9 +237,7 @@ export default async function AdminPage() {
         eyebrow="Administration"
         title="Admin"
         description="Users, access, invitations, integrations, and the audit trail."
-        actions={
-          <InviteUserDialog emailConfigured={emailConfigured} />
-        }
+        actions={<InviteUserDialog emailConfigured={emailConfigured} />}
       />
       <AdminNav />
 
@@ -208,11 +252,21 @@ export default async function AdminPage() {
               <table className="w-full text-left text-[13.5px]">
                 <thead>
                   <tr className="border-b border-line bg-surface-soft/60">
-                    <th scope="col" className="px-4 py-2.5 font-semibold">Person</th>
-                    <th scope="col" className="px-4 py-2.5 font-semibold">Role</th>
-                    <th scope="col" className="px-4 py-2.5 font-semibold">Status</th>
-                    <th scope="col" className="px-4 py-2.5 font-semibold">VMS</th>
-                    <th scope="col" className="px-4 py-2.5 font-semibold">Joined</th>
+                    <th scope="col" className="px-4 py-2.5 font-semibold">
+                      Person
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 font-semibold">
+                      Role
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 font-semibold">
+                      Status
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 font-semibold">
+                      VMS
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 font-semibold">
+                      Joined
+                    </th>
                     <th scope="col" className="px-4 py-2.5 font-semibold">
                       <span className="sr-only">Actions</span>
                     </th>
@@ -220,28 +274,45 @@ export default async function AdminPage() {
                 </thead>
                 <tbody>
                   {memberList.map((member) => {
-                    const profile = member.user_profile! as typeof member.user_profile & {
-                      id: string;
-                      vms_id?: string | null;
-                      vms_availability?: string | null;
-                      vms_synced_at?: string | null;
-                    };
+                    const profile =
+                      member.user_profile! as typeof member.user_profile & {
+                        id: string;
+                        vms_id?: string | null;
+                        vms_availability?: string | null;
+                        vms_synced_at?: string | null;
+                      };
                     return (
-                      <tr key={member.id} className="border-b border-line last:border-b-0">
+                      <tr
+                        key={member.id}
+                        className="border-b border-line last:border-b-0"
+                      >
                         <td className="px-4 py-3">
                           <span className="flex items-center gap-2.5">
-                            <Avatar name={profile.full_name} src={profile.avatar_url} size="md" />
+                            <Avatar
+                              name={profile.full_name}
+                              src={profile.avatar_url}
+                              size="md"
+                            />
                             <span>
-                              <span className="block font-medium">{profile.full_name}</span>
+                              <span className="block font-medium">
+                                {profile.full_name}
+                              </span>
                               <span className="meta">{profile.email}</span>
                             </span>
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <MemberRoleSelect membershipId={member.id} role={member.role} />
+                          <MemberRoleSelect
+                            membershipId={member.id}
+                            role={member.role}
+                          />
                         </td>
                         <td className="px-4 py-3">
-                          <Badge tone={member.status === "active" ? "success" : "neutral"}>
+                          <Badge
+                            tone={
+                              member.status === "active" ? "success" : "neutral"
+                            }
+                          >
                             {member.status}
                           </Badge>
                         </td>
@@ -283,19 +354,37 @@ export default async function AdminPage() {
         </section>
 
         <section aria-labelledby="admin-job-runs">
-          <h2 id="admin-job-runs" className="section-heading mb-3">Background jobs</h2>
+          <h2 id="admin-job-runs" className="section-heading mb-3">
+            Background jobs
+          </h2>
           {jobRunList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              No completed background jobs have been recorded for this organization yet.
+              No completed background jobs have been recorded for this
+              organization yet.
             </p>
           ) : (
             <ul className="card divide-y divide-line">
               {jobRunList.map((run) => (
-                <li key={run.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-[13px]">
-                  <span className="min-w-36 font-medium">{run.job_name.replaceAll("_", " ")}</span>
-                  <Badge tone={run.status === "succeeded" ? "success" : "danger"}>{run.status}</Badge>
-                  <span className="meta ml-auto">{relativeTime(run.finished_at)}</span>
-                  {run.error ? <p className="basis-full text-[12.5px] text-danger-fg">{run.error}</p> : null}
+                <li
+                  key={run.id}
+                  className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-[13px]"
+                >
+                  <span className="min-w-36 font-medium">
+                    {run.job_name.replaceAll("_", " ")}
+                  </span>
+                  <Badge
+                    tone={run.status === "succeeded" ? "success" : "danger"}
+                  >
+                    {run.status}
+                  </Badge>
+                  <span className="meta ml-auto">
+                    {relativeTime(run.finished_at)}
+                  </span>
+                  {run.error ? (
+                    <p className="basis-full text-[12.5px] text-danger-fg">
+                      {run.error}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ul>
@@ -315,7 +404,8 @@ export default async function AdminPage() {
           ) : null}
           {invitationList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              No invitations yet. Invited users get their intended role on sign-up.
+              No invitations yet. Invited users get their intended role on
+              sign-up.
             </p>
           ) : (
             <ul className="card divide-y divide-line">
@@ -329,13 +419,17 @@ export default async function AdminPage() {
                       ? "expired"
                       : "pending";
                 return (
-                  <li key={invitation.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                  <li
+                    key={invitation.id}
+                    className="flex flex-wrap items-center gap-3 px-4 py-2.5"
+                  >
                     <span className="min-w-0 flex-1 basis-48">
                       <span className="block truncate text-[13.5px] font-medium">
                         {invitation.email}
                       </span>
                       <span className="meta">
-                        {invitation.intended_role} · invited {relativeTime(invitation.created_at)}
+                        {invitation.intended_role} · invited{" "}
+                        {relativeTime(invitation.created_at)}
                       </span>
                     </span>
                     <Badge
@@ -371,20 +465,34 @@ export default async function AdminPage() {
                 integration.provider === "email"
                   ? emailConfigured
                   : connection?.status === "connected";
-              const status = integration.provider === "email"
-                ? (emailConfigured ? "connected" : "configuration_required")
-                : connection?.status;
+              const status =
+                integration.provider === "email"
+                  ? emailConfigured
+                    ? "connected"
+                    : "configuration_required"
+                  : connection?.status;
               return (
                 <div key={integration.provider} className="card p-4">
                   <div className="mb-1 flex items-center justify-between">
-                    <p className="text-[14px] font-semibold">{integration.name}</p>
+                    <p className="text-[14px] font-semibold">
+                      {integration.name}
+                    </p>
                     <Badge tone={integrationHealthTone(status)}>
                       {integrationHealthLabel(status)}
                     </Badge>
                   </div>
-                  <p className="text-[13px] text-muted">{integration.description}</p>
+                  <p className="text-[13px] text-muted">
+                    {integration.description}
+                  </p>
                   <IntegrationActions
-                    provider={integration.provider as "gmail" | "google_calendar" | "google_drive" | "volunteer_system" | "email"}
+                    provider={
+                      integration.provider as
+                        | "gmail"
+                        | "google_calendar"
+                        | "google_drive"
+                        | "volunteer_system"
+                        | "email"
+                    }
                     connected={
                       integration.provider === "email"
                         ? emailConfigured
@@ -400,7 +508,9 @@ export default async function AdminPage() {
                     </p>
                   ) : null}
                   {connection?.last_error ? (
-                    <p className="mt-1.5 text-[12.5px] text-danger-fg">{connection.last_error}</p>
+                    <p className="mt-1.5 text-[12.5px] text-danger-fg">
+                      {connection.last_error}
+                    </p>
                   ) : null}
                 </div>
               );
@@ -429,7 +539,10 @@ export default async function AdminPage() {
                   required: true,
                   defaultValue: session.userId,
                   options: memberList
-                    .filter((member) => member.status === "active" && member.user_profile)
+                    .filter(
+                      (member) =>
+                        member.status === "active" && member.user_profile,
+                    )
                     .map((member) => ({
                       value: member.user_id,
                       label: member.user_profile!.full_name,
@@ -446,7 +559,9 @@ export default async function AdminPage() {
           ) : (
             <ul className="space-y-3">
               {teamList.map((team) => {
-                const membersOfTeam = teamMemberList.filter((m) => m.team_id === team.id);
+                const membersOfTeam = teamMemberList.filter(
+                  (m) => m.team_id === team.id,
+                );
                 return (
                   <li key={team.id} className="card p-4">
                     <p className="text-[14px] font-semibold">{team.name}</p>
@@ -458,7 +573,10 @@ export default async function AdminPage() {
                       teamId={team.id}
                       currentOwnerId={team.owner_id}
                       members={memberList
-                        .filter((member) => member.status === "active" && member.user_profile)
+                        .filter(
+                          (member) =>
+                            member.status === "active" && member.user_profile,
+                        )
                         .map((member) => ({
                           id: member.user_id,
                           name: member.user_profile!.full_name,
@@ -468,15 +586,28 @@ export default async function AdminPage() {
                       {memberList
                         .filter((m) => m.status === "active" && m.user_profile)
                         .map((m) => {
-                          const isMember = membersOfTeam.some((tm) => tm.user_id === m.user_id);
+                          const isMember = membersOfTeam.some(
+                            (tm) => tm.user_id === m.user_id,
+                          );
                           return (
-                            <li key={m.id} className="flex items-center justify-between gap-2">
-                              <span className="text-[13px]">{m.user_profile!.full_name}</span>
+                            <li
+                              key={m.id}
+                              className="flex items-center justify-between gap-2"
+                            >
+                              <span className="text-[13px]">
+                                {m.user_profile!.full_name}
+                              </span>
                               <TeamMemberControls
                                 teamId={team.id}
                                 userId={m.user_id}
                                 isMember={isMember}
-                                label={isMember ? "member" : m.user_profile!.full_name.split(" ")[0] ?? "person"}
+                                label={
+                                  isMember
+                                    ? "member"
+                                    : (m.user_profile!.full_name.split(
+                                        " ",
+                                      )[0] ?? "person")
+                                }
                                 isOwner={team.owner_id === m.user_id}
                               />
                             </li>
@@ -510,11 +641,23 @@ export default async function AdminPage() {
                   required: true,
                   defaultValue: "task_status_changed",
                   options: [
-                    { value: "task_status_changed", label: "Task status changes" },
-                    { value: "announcement_published", label: "Announcement published" },
-                    { value: "project_health_changed", label: "Project health changes" },
+                    {
+                      value: "task_status_changed",
+                      label: "Task status changes",
+                    },
+                    {
+                      value: "announcement_published",
+                      label: "Announcement published",
+                    },
+                    {
+                      value: "project_health_changed",
+                      label: "Project health changes",
+                    },
                     { value: "meeting_completed", label: "Meeting completed" },
-                    { value: "event_assignment_created", label: "Event role assigned" },
+                    {
+                      value: "event_assignment_created",
+                      label: "Event role assigned",
+                    },
                   ],
                 },
                 {
@@ -532,7 +675,10 @@ export default async function AdminPage() {
                   options: [
                     { value: "notify_assignee", label: "Notify assignee" },
                     { value: "notify_admins", label: "Notify admins" },
-                    { value: "notify_event_owner", label: "Notify event owner" },
+                    {
+                      value: "notify_event_owner",
+                      label: "Notify event owner",
+                    },
                     { value: "notify_team", label: "Notify a team" },
                   ],
                 },
@@ -541,7 +687,10 @@ export default async function AdminPage() {
                   label: "Team to notify",
                   type: "select",
                   hint: "Required only when “Notify a team” is selected.",
-                  options: teamList.map((team) => ({ value: team.id, label: team.name })),
+                  options: teamList.map((team) => ({
+                    value: team.id,
+                    label: team.name,
+                  })),
                 },
               ]}
             />
@@ -554,12 +703,19 @@ export default async function AdminPage() {
           ) : (
             <ul className="card divide-y divide-line">
               {ruleList.map((rule) => (
-                <li key={rule.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="min-w-0 flex-1 text-[13.5px] font-medium">{rule.name}</span>
+                <li
+                  key={rule.id}
+                  className="flex items-center gap-3 px-4 py-2.5"
+                >
+                  <span className="min-w-0 flex-1 text-[13.5px] font-medium">
+                    {rule.name}
+                  </span>
                   <Badge tone={rule.enabled ? "success" : "neutral"}>
                     {rule.enabled ? "On" : "Off"}
                   </Badge>
-                  <span className="meta">{rule.trigger_event.replace(/_/g, " ")}</span>
+                  <span className="meta">
+                    {rule.trigger_event.replace(/_/g, " ")}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -607,20 +763,44 @@ export default async function AdminPage() {
           )}
         </section>
 
-        {/* Audit history (P0-ADM-03) */}
         <section aria-labelledby="admin-audit">
           <h2 id="admin-audit" className="section-heading mb-3">
             Audit history
           </h2>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {[
+              ["all", "All"],
+              ["task.assignment", "Assignments"],
+              ["task.status", "Status"],
+              ["task.due_date", "Due dates"],
+              ["project.health", "Health"],
+              ["decision", "Decisions"],
+              ["task.deletion", "Deletions"],
+            ].map(([key, label]) => (
+              <Link
+                key={key}
+                href={key === "all" ? "/admin" : `/admin?audit=${key}`}
+                className="rounded-full border border-line px-2.5 py-1 text-[12px] text-muted hover:text-ink"
+                aria-current={
+                  (auditFilter ?? "all") === key ? "page" : undefined
+                }
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
           {auditList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              Material access, channel, project, export, and deletion events are
-              recorded here with actor and timestamp.
+              Material access, assignment, status, due date, health, decision,
+              and deletion events are recorded here with actor and timestamp.
             </p>
           ) : (
             <ol className="card divide-y divide-line">
               {auditList.map((event) => (
-                <li key={event.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                <li
+                  key={event.id}
+                  className="flex flex-wrap items-center gap-3 px-4 py-2.5"
+                >
                   <span className="min-w-0 flex-1 text-[13px]">
                     <span className="font-medium">
                       {event.actor?.full_name ?? "System"}
@@ -631,13 +811,26 @@ export default async function AdminPage() {
                     ) : null}
                   </span>
                   <Badge tone="neutral">{event.event_type}</Badge>
-                  <span className="meta whitespace-nowrap">
+                  <time
+                    className="meta whitespace-nowrap"
+                    dateTime={event.created_at}
+                  >
                     {relativeTime(event.created_at)}
-                  </span>
+                  </time>
                 </li>
               ))}
             </ol>
           )}
+          {(auditCount ?? 0) > auditPage * 30 ? (
+            <p className="mt-3">
+              <Link
+                href={`/admin?audit=${auditFilter ?? "all"}&auditPage=${auditPage + 1}`}
+                className="text-[13px] font-medium text-brand-fg hover:underline"
+              >
+                Older events
+              </Link>
+            </p>
+          ) : null}
         </section>
       </div>
     </div>

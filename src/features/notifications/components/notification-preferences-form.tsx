@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Label, Select, Checkbox } from "@/components/ui/input";
 import { saveNotificationPreferences } from "@/features/notifications/services/preferences.commands";
+import type { DeliveryMode } from "@/features/notifications/services/delivery-rules";
 
 /**
  * Email preferences.
@@ -28,34 +29,70 @@ export interface PreferenceValues {
   quiet_hours_start: number | null;
   quiet_hours_end: number | null;
   digest_hour: number;
+  digest_weekday: number;
   timezone: string;
+  category_modes: Partial<Record<string, DeliveryMode>>;
+  muted_project_ids: string[];
 }
 
-const CATEGORY_SWITCHES: {
-  name: keyof PreferenceValues;
+const CATEGORIES: {
+  key: "assignment" | "mention" | "announcement" | "due_date";
   label: string;
   hint: string;
+  legacy: keyof PreferenceValues;
 }[] = [
   {
-    name: "email_assignments",
+    key: "assignment",
     label: "Work assigned to me",
-    hint: "A task or review lands in your queue.",
+    hint: "Tasks, reviews, and decisions. Approvals follow this choice.",
+    legacy: "email_assignments",
   },
   {
-    name: "email_mentions",
+    key: "mention",
     label: "Mentions and replies",
-    hint: "Someone names you in a message or answers your thread.",
+    hint: "Someone names you, or answers a thread you started.",
+    legacy: "email_mentions",
   },
   {
-    name: "email_announcements",
+    key: "announcement",
     label: "Announcements",
     hint: "Workspace-wide posts. Ones that require acknowledgement always arrive.",
+    legacy: "email_announcements",
   },
   {
-    name: "email_due_dates",
+    key: "due_date",
     label: "Due dates",
-    hint: "A daily reminder about work due today, tomorrow, or overdue.",
+    hint: "Work due today, tomorrow, or overdue.",
+    legacy: "email_due_dates",
   },
+];
+
+const MODES: { value: DeliveryMode; label: string }[] = [
+  { value: "immediate", label: "Immediately" },
+  { value: "daily", label: "Daily digest" },
+  { value: "weekly", label: "Weekly digest" },
+  { value: "off", label: "Don't email" },
+];
+
+function modeFor(
+  values: PreferenceValues,
+  category: (typeof CATEGORIES)[number],
+): DeliveryMode {
+  const stored = values.category_modes?.[category.key];
+  if (stored) return stored;
+  const flag = values[category.legacy];
+  if (flag === false) return "off";
+  return values.email_digest ? "daily" : "immediate";
+}
+
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
 ];
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => ({
@@ -89,7 +126,8 @@ function Switch({
     <label className="flex cursor-pointer items-start gap-3 py-3">
       <Checkbox
         name={name}
-        defaultChecked={defaultChecked} className="mt-0.5"
+        defaultChecked={defaultChecked}
+        className="mt-0.5"
       />
       <span className="min-w-0">
         <span className="block text-[13.5px] font-medium">{label}</span>
@@ -102,15 +140,18 @@ function Switch({
 export function NotificationPreferencesForm({
   values,
   timezoneOptions = TIMEZONES,
+  projects = [],
 }: {
   values: PreferenceValues;
   timezoneOptions?: string[];
+  projects?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
-  const [message, setMessage] = React.useState<
-    { tone: "ok" | "error"; text: string } | null
-  >(null);
+  const [message, setMessage] = React.useState<{
+    tone: "ok" | "error";
+    text: string;
+  } | null>(null);
 
   const [quietEnabled, setQuietEnabled] = React.useState(
     values.quiet_hours_start !== null && values.quiet_hours_end !== null,
@@ -130,14 +171,17 @@ export function NotificationPreferencesForm({
 
     const result = await saveNotificationPreferences({
       emailCritical: form.get("email_critical") === "on",
-      emailDigest: form.get("email_digest") === "on",
-      emailAssignments: form.get("email_assignments") === "on",
-      emailMentions: form.get("email_mentions") === "on",
-      emailAnnouncements: form.get("email_announcements") === "on",
-      emailDueDates: form.get("email_due_dates") === "on",
+      categoryModes: {
+        assignment: String(form.get("mode_assignment")) as DeliveryMode,
+        mention: String(form.get("mode_mention")) as DeliveryMode,
+        announcement: String(form.get("mode_announcement")) as DeliveryMode,
+        due_date: String(form.get("mode_due_date")) as DeliveryMode,
+      },
+      mutedProjectIds: form.getAll("muted_project").map(String),
       quietHoursStart: quietOn ? Number(form.get("quiet_hours_start")) : null,
       quietHoursEnd: quietOn ? Number(form.get("quiet_hours_end")) : null,
       digestHour: Number(form.get("digest_hour")),
+      digestWeekday: Number(form.get("digest_weekday")),
       timezone: String(form.get("timezone")),
     });
 
@@ -157,19 +201,37 @@ export function NotificationPreferencesForm({
           What to email me about
         </h2>
         <div className="divide-y divide-line">
-          {CATEGORY_SWITCHES.map((entry) => (
-            <Switch
-              key={entry.name}
-              name={entry.name}
-              label={entry.label}
-              hint={entry.hint}
-              defaultChecked={Boolean(values[entry.name])}
-            />
+          {CATEGORIES.map((entry) => (
+            <div
+              key={entry.key}
+              className="flex flex-wrap items-center gap-3 py-3"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13.5px] font-medium">
+                  {entry.label}
+                </span>
+                <span className="block text-[12.5px] text-muted">
+                  {entry.hint}
+                </span>
+              </span>
+              <Select
+                name={`mode_${entry.key}`}
+                aria-label={entry.label}
+                defaultValue={modeFor(values, entry)}
+                className="w-44"
+              >
+                {MODES.map((mode) => (
+                  <option key={mode.value} value={mode.value}>
+                    {mode.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
           ))}
           <Switch
             name="email_critical"
             label="Reach me straight away for urgent work"
-            hint="Urgent items are sent immediately, even during quiet hours."
+            hint="Urgent items set to arrive immediately still come during quiet hours. A daily or weekly category waits for the digest. Security notices always arrive."
             defaultChecked={values.email_critical}
           />
         </div>
@@ -184,7 +246,8 @@ export function NotificationPreferencesForm({
             <Checkbox
               name="quiet_enabled"
               defaultChecked={quietEnabled}
-              onChange={(event) => setQuietEnabled(event.currentTarget.checked)} className="mt-0.5"
+              onChange={(event) => setQuietEnabled(event.currentTarget.checked)}
+              className="mt-0.5"
             />
             <span className="min-w-0">
               <span className="block text-[13.5px] font-medium">
@@ -234,16 +297,14 @@ export function NotificationPreferencesForm({
 
       <section aria-labelledby="prefs-digest">
         <h2 id="prefs-digest" className="section-heading mb-3">
-          Daily digest
+          When digests go out
         </h2>
         <div className="card px-4 py-3">
-          <Switch
-            name="email_digest"
-            label="Send one summary a day instead of separate emails for routine items"
-            hint="Nothing is sent on a day with nothing to report."
-            defaultChecked={values.email_digest}
-          />
-          <div className="mt-2 grid grid-cols-1 gap-3 sm:max-w-sm sm:grid-cols-2">
+          <p className="pb-3 text-[12.5px] text-muted">
+            Daily categories send every day at this hour. Weekly categories send
+            on the chosen day. Nothing is sent when there is nothing to report.
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <Label htmlFor="digest_hour">Send at</Label>
               <Select
@@ -259,8 +320,26 @@ export function NotificationPreferencesForm({
               </Select>
             </div>
             <div>
+              <Label htmlFor="digest_weekday">Weekly on</Label>
+              <Select
+                id="digest_weekday"
+                name="digest_weekday"
+                defaultValue={String(values.digest_weekday ?? 1)}
+              >
+                {WEEKDAYS.map((label, index) => (
+                  <option key={label} value={String(index)}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
               <Label htmlFor="timezone">Time zone</Label>
-              <Select id="timezone" name="timezone" defaultValue={values.timezone}>
+              <Select
+                id="timezone"
+                name="timezone"
+                defaultValue={values.timezone}
+              >
                 {zones.map((zone) => (
                   <option key={zone} value={zone}>
                     {zone.replace(/_/g, " ")}
@@ -269,9 +348,39 @@ export function NotificationPreferencesForm({
               </Select>
             </div>
           </div>
-          <FieldHint>
-            Quiet hours and the digest both use this zone.
-          </FieldHint>
+          <FieldHint>Quiet hours and the digest both use this zone.</FieldHint>
+        </div>
+      </section>
+
+      <section aria-labelledby="prefs-mute">
+        <h2 id="prefs-mute" className="section-heading mb-3">
+          Muted projects
+        </h2>
+        <div className="card px-4 py-3">
+          <p className="pb-2 text-[12.5px] text-muted">
+            Non-critical mail and inbox items from a muted project stay quiet.
+            Security notices and required announcements still arrive.
+          </p>
+          {projects.length === 0 ? (
+            <p className="text-[13px] text-muted">No projects to mute.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {projects.map((project) => (
+                <li key={project.id}>
+                  <label className="flex cursor-pointer items-center gap-3 py-2 text-[13.5px]">
+                    <Checkbox
+                      name="muted_project"
+                      value={project.id}
+                      defaultChecked={values.muted_project_ids.includes(
+                        project.id,
+                      )}
+                    />
+                    {project.name}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </section>
 

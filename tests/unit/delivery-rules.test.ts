@@ -4,12 +4,14 @@ import {
   decideDelivery,
   hourIn,
   inQuietWindow,
+  isDigestDue,
   isDigestHour,
   isMandatory,
   secondsUntilQuietEnds,
   withPreferenceDefaults,
   type DeliveryPreferences,
 } from "@/features/notifications/services/delivery-rules";
+import { channelMuteAllows, inboxItemVisible } from "@/features/notifications/services/mute";
 
 /**
  * These rules decide whether a person is interrupted, so the tests are written
@@ -254,5 +256,110 @@ describe("withPreferenceDefaults", () => {
     expect(merged.email_digest).toBe(true);
     expect(merged.digest_hour).toBe(6);
     expect(merged.email_assignments).toBe(true);
+  });
+
+  it("treats a missing mute list as nothing muted", () => {
+    const merged = withPreferenceDefaults({ muted_project_ids: undefined });
+    expect(merged.muted_project_ids).toEqual([]);
+    expect(merged.category_modes).toEqual({});
+  });
+});
+
+const PROJECT = "11111111-1111-1111-1111-111111111111";
+
+describe("category modes and mutes", () => {
+  it("holds a weekly category out of immediate mail, even when the work is urgent", () => {
+    const decision = decideDelivery(
+      { category: "assignment", urgency: "critical" },
+      prefs({
+        category_modes: { assignment: "weekly" },
+        email_critical: true,
+      }),
+      AFTERNOON,
+      EMAIL,
+    );
+    expect(decision).toEqual({ action: "suppress", reason: "digest-only:weekly" });
+  });
+
+  it("holds a daily category the same way", () => {
+    const decision = decideDelivery(
+      { category: "mention", urgency: "normal" },
+      prefs({ category_modes: { mention: "daily" } }),
+      AFTERNOON,
+      EMAIL,
+    );
+    expect(decision).toEqual({ action: "suppress", reason: "digest-only:daily" });
+  });
+
+  it("still sends a required notice when that project is muted", () => {
+    const decision = decideDelivery(
+      { category: "security", urgency: "low", projectId: PROJECT },
+      prefs({ muted_project_ids: [PROJECT], category_modes: { assignment: "off" } }),
+      NIGHT,
+      EMAIL,
+    );
+    expect(decision).toEqual({ action: "send" });
+  });
+
+  it("suppresses ordinary mail for a muted project or thread", () => {
+    const muted = prefs({ muted_project_ids: [PROJECT], muted_thread_ids: ["thread-1"] });
+    expect(
+      decideDelivery(
+        { category: "assignment", urgency: "normal", projectId: PROJECT },
+        muted,
+        AFTERNOON,
+        EMAIL,
+      ),
+    ).toEqual({ action: "suppress", reason: "muted-project" });
+    expect(
+      decideDelivery(
+        { category: "reply", urgency: "normal", threadId: "thread-1" },
+        muted,
+        AFTERNOON,
+        EMAIL,
+      ),
+    ).toEqual({ action: "suppress", reason: "muted-thread" });
+  });
+
+  it("sends a weekly digest only on the chosen weekday", () => {
+    const weekly = prefs({
+      digest_hour: 14,
+      digest_weekday: 3,
+      category_modes: { assignment: "weekly" },
+      timezone: "America/Toronto",
+    });
+    // 14:00 in Toronto on Wednesday 19 Aug 2026.
+    expect(isDigestDue(weekly, AFTERNOON)).toBe(true);
+    expect(isDigestDue(weekly, new Date("2026-08-18T18:00:00Z"))).toBe(false);
+  });
+});
+
+describe("inbox and channel mute", () => {
+  it("hides a muted project in the inbox and keeps a required announcement", () => {
+    expect(
+      inboxItemVisible({
+        category: "assignment",
+        urgency: "normal",
+        projectId: PROJECT,
+        mutedProjectIds: [PROJECT],
+        mutedThreadIds: [],
+      }),
+    ).toBe(false);
+    expect(
+      inboxItemVisible({
+        category: "announcement",
+        urgency: "critical",
+        projectId: PROJECT,
+        mutedProjectIds: [PROJECT],
+        mutedThreadIds: [],
+      }),
+    ).toBe(true);
+  });
+
+  it("drops a reply when the channel is set to mentions only", () => {
+    expect(channelMuteAllows("mentions", "mention")).toBe(true);
+    expect(channelMuteAllows("mentions", "reply")).toBe(false);
+    expect(channelMuteAllows("muted", "mention")).toBe(false);
+    expect(channelMuteAllows("all", "reply")).toBe(true);
   });
 });

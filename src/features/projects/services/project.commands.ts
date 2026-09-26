@@ -9,6 +9,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { parseLabelledLinks } from "@/lib/links";
 import { slugify } from "@/lib/utils";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 
 const createProjectSchema = z.object({
   name: requiredText("A project needs a name.", 200),
@@ -495,7 +496,8 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
   ].filter((userId) => userId !== session.userId);
 
   if (recipients.length > 0) {
-    await supabase.from("notification").upsert(
+    await createNotifications(
+      supabase,
       recipients.map((userId) => ({
         user_id: userId,
         organization_id: session.organizationId,
@@ -505,9 +507,11 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
         source_type: "project",
         source_id: projectId,
         link: `/projects/${projectId}`,
-        dedupe_key: `project-closed:${projectId}`,
+        reason: "project closed",
+        context: project.name as string,
+        project_id: projectId,
+        dedupe_key: notificationDedupeKey("project", projectId, userId, "closed"),
       })),
-      { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
     );
   }
 

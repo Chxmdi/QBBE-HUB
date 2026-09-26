@@ -62,7 +62,9 @@ export default async function ProjectsPage({
       .eq("status", "active")
       .order("name"),
   ]);
-  const templates = templateStructures.map((t) => ({ id: t.id, name: t.name }));
+  const templates = templateStructures
+    .filter((t) => t.approved_at)
+    .map((t) => ({ id: t.id, name: t.name }));
   const projectList = portfolio.rows;
 
   return (
