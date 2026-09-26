@@ -121,7 +121,7 @@ const MATRIX: Row[] = [
 
 // Reached by every signed-in role; what is on them is scoped by the database.
 const EVERYONE = ["/", "/my-work", "/board", "/programs", "/projects", "/people", "/channels", "/settings"];
-const STAFF_ONLY = ["/crm", "/reports", "/approvals"];
+const STAFF_ONLY = ["/crm", "/reports", "/finance/receipts", "/approvals"];
 const ADMIN_ONLY = ["/admin", "/admin/access", "/people/overview", "/admin/approvals"];
 
 function idsByName(table: "project" | "program"): Record<string, string> {
