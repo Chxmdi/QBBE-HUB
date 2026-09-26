@@ -9,14 +9,9 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { parseMoneyToCents } from "@/features/ledger/money";
-import {
-  EmailSendError,
-  recipientIsAllowed,
-  sendEmail,
-} from "@/features/notifications/services/email-provider";
+import { emailAcknowledgement } from "@/features/gifts/services/gift.email";
 import {
   LANGUAGES,
-  letterBodyHtml,
   renderAnnualStatement,
   renderGiftAcknowledgement,
 } from "@/features/gifts/acknowledgement";
@@ -227,59 +222,23 @@ const deliverySchema = z
 
 type Delivery = z.infer<typeof deliverySchema>;
 
-/**
- * Emails an issued letter through the app's sender. The non-production
- * recipient allowlist (EMAIL_RECIPIENT_ALLOWLIST) is checked first so a
- * blocked address is recorded as blocked rather than as a failure, and an
- * address the provider reported as bounced or complained is never mailed.
- */
 async function deliverByEmail(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   ack: { id: string; to: string; subject: string; text: string },
 ): Promise<ActionResult> {
-  const mark = (fields: Record<string, unknown>) =>
-    supabase.from("gift_acknowledgement").update(fields).eq("id", ack.id);
-
-  if (!recipientIsAllowed(ack.to)) {
-    await mark({
-      email_status: "blocked",
-      email_error: "Recipient is not on this environment's email allowlist; nothing was sent.",
-    });
-    return {
-      ok: false,
-      id: ack.id,
-      error: "The acknowledgement was saved, but this environment only emails allowlisted addresses, so nothing was sent.",
-    };
-  }
-  const service = createSupabaseServiceClient();
-  const { data: suppressed } = await service
-    .from("email_suppression")
-    .select("reason")
-    .eq("address", ack.to.trim().toLowerCase())
-    .maybeSingle();
-  if (suppressed) {
-    await mark({ email_status: "blocked", email_error: `Address ${suppressed.reason as string}; not mailed again.` });
-    return {
-      ok: false,
-      id: ack.id,
-      error: "The acknowledgement was saved, but this address previously bounced or complained, so it was not emailed.",
-    };
-  }
-  try {
-    await sendEmail({
-      idempotencyKey: `gift-ack:${ack.id}`,
-      to: ack.to,
-      subject: ack.subject,
-      text: ack.text,
-      html: `<!doctype html><html><body style="font-family:Georgia,serif;font-size:15px;line-height:1.55;color:black;max-width:40rem;margin:0 auto;padding:24px">${letterBodyHtml(ack.text)}</body></html>`,
-    });
-  } catch (err) {
-    const message = err instanceof EmailSendError ? err.message : "The email provider did not accept the message.";
-    await mark({ email_status: "failed", email_error: message.slice(0, 500) });
-    return { ok: false, id: ack.id, error: "The acknowledgement was saved, but the email could not be sent. Try again from the gift page." };
-  }
-  await mark({ email_status: "sent", sent_at: new Date().toISOString(), email_error: null });
-  return { ok: true, id: ack.id };
+  return emailAcknowledgement(ack, {
+    mark: async (fields) => {
+      await supabase.from("gift_acknowledgement").update(fields).eq("id", ack.id);
+    },
+    suppressedReason: async (address) => {
+      const { data } = await createSupabaseServiceClient()
+        .from("email_suppression")
+        .select("reason")
+        .eq("address", address)
+        .maybeSingle();
+      return (data?.reason as string | undefined) ?? null;
+    },
+  });
 }
 
 async function issue(
