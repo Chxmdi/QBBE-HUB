@@ -87,7 +87,7 @@ export async function grantReportReminders({ db, definition, now }: JobContext):
   const soonFloor = addDays(nowDate, -1);
   const horizon = addDays(nowDate, UPCOMING_DAYS + 1);
   const select =
-    "id, organization_id, grant_id, title, due_on, last_reminder_kind, last_reminded_at, grant:grant_id(title, status, responsible_user_id)";
+    "id, organization_id, grant_id, title, due_on, last_reminder_kind, last_reminded_at, grant:grant_award!grant_report_organization_id_grant_id_fkey(title, status, responsible_user_id)";
 
   const [{ data: soon, error }, { data: overdue, error: overdueError }] = await Promise.all([
     db

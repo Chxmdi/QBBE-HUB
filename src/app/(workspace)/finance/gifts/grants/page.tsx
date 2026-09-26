@@ -49,7 +49,7 @@ export default async function GrantsPage() {
   const [{ data: grants }, { data: payments }, { data: reports }] = await Promise.all([
     supabase
       .from("grant_award")
-      .select("id, title, amount_awarded_cents, starts_on, ends_on, status, funder:funder_crm_organization_id(name), fund:fund_id(code, name)")
+      .select("id, title, amount_awarded_cents, starts_on, ends_on, status, funder:funder_crm_organization_id(name), fund:ledger_fund!grant_award_organization_id_fund_id_fkey(code, name)")
       .eq("organization_id", session.organizationId)
       .order("status")
       .order("title"),

@@ -59,7 +59,7 @@ export default async function GrantPage({ params }: { params: Promise<{ id: stri
       .select(
         `id, funder_crm_organization_id, funder_contact_id, title, funder_reference, amount_awarded_cents, awarded_on,
          starts_on, ends_on, fund_id, program_id, restrictions, responsible_user_id, status,
-         funder:funder_crm_organization_id(name), contact:funder_contact_id(full_name), fund:fund_id(id, code, name),
+         funder:funder_crm_organization_id(name), contact:funder_contact_id(full_name), fund:ledger_fund!grant_award_organization_id_fund_id_fkey(id, code, name),
          program:program_id(name), responsible:responsible_user_id(full_name)`,
       )
       .eq("organization_id", session.organizationId)

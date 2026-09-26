@@ -12,11 +12,11 @@ export const GIFT_SELECT = `id, gift_number, gift_type, received_on, amount_cent
   journal_entry_id, void_entry_id, grant_id, crm_contact_id, crm_organization_id,
   contact:crm_contact_id(id, full_name, email),
   crm_org:crm_organization_id(id, name),
-  fund:fund_id(id, code, name, restriction),
+  fund:ledger_fund!gift_organization_id_fund_id_fkey(id, code, name, restriction),
   program:program_id(id, name),
-  grant:grant_id(id, title),
-  entry:journal_entry_id(id, entry_number),
-  void_entry:void_entry_id(id, entry_number)`;
+  grant:grant_award!gift_organization_id_grant_id_fkey(id, title),
+  entry:journal_entry!gift_organization_id_journal_entry_id_fkey(id, entry_number),
+  void_entry:journal_entry!gift_organization_id_void_entry_id_fkey(id, entry_number)`;
 
 export interface GiftRow {
   id: string;
