@@ -146,7 +146,22 @@ export const test = base.extend({
 
     page.goto = async (url, options) => {
       await settle();
-      const response = await goto(url, options);
+      let response;
+      try {
+        response = await goto(url, options);
+      } catch (error) {
+        // settle() cannot close one window: a router.refresh() whose RSC
+        // response has arrived (so it is no longer "in flight") but whose
+        // commit has not, and which then rewrites the address to the page
+        // being refreshed. A goto started in between is reported as
+        // "interrupted by another navigation" to that page. Seen as
+        // task-core's `/my-work?task=…` and `/my-work?create=task` interrupted
+        // by `/my-work` (#134, #135). The app did nothing wrong, so try the
+        // same navigation once more; a second interruption is a real failure.
+        if (!String(error).includes("is interrupted by another navigation")) throw error;
+        await settle();
+        response = await goto(url, options);
+      }
       await waitUntilInteractive(page);
       return response;
     };
