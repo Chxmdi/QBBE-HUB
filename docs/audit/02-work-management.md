@@ -1,5 +1,30 @@
 # Audit 02 — Work management (tasks, projects, programs, milestones, dashboards, Gantt)
 
+> ## Status on 2026-09-26 (supersedes the findings below)
+>
+> This audit was written against the master spec before
+> `20260912040000_prd_workstream_completion.sql` and the later epic 02–07
+> work. The findings below are kept as the historical record; this table is the
+> current state, checked against `main`. Scope and acceptance live in
+> `docs/acceptance-matrix.md` (PRD-v2), which does not carry every master-spec
+> item this audit graded.
+>
+> | Audit finding | Now |
+> |---|---|
+> | TSK-01 estimates, labels, contributors | Fixed. `estimate_hours` feeds the workload view; labels (`task-labels.tsx`) and task roles (`task-roles.tsx`) ship. Task attachments are scoped to P0-COM-05 / P1-FIL-02 (epic 03). |
+> | TSK-06 one-hop cycle check, no milestone blocking | Fixed. Cycles rejected at any depth by trigger (`20260908045748_enforce_task_dependency_cycles.sql`); milestone dependencies in `20260921170000_planning_dependencies_and_series.sql`; `work-planning.spec.ts` covers "a cycle is never offered". |
+> | TSK-07 no series, non-idempotent spawn | Fixed. Series entity and stop/detach (`20260912040000`, `20260921170000`); `work-planning.spec.ts` recurring-series tests. |
+> | TSK-08 checklist delete/order/progress | Fixed. `removeChecklistItem`, persisted order and count; `work-planning.spec.ts` checklist test. |
+> | TSK-09 filters; board unfilterable | Fixed. Board and My Work read filters and saved views (`listSavedViews`). |
+> | DASH-01..05, 07 home, KPIs, attention, workload, saved views | Fixed in epic 04 (#130): role lens, portfolio counts with drill-down, attention queue, workload with overload, shared saved views. The inbox is P0-NOT-01 (epic 05). |
+> | DASH-06 configurable widgets; GNT-01..03 master schedule / Gantt | Not in PRD-v2 scope. The PRD-v2 schedule surface is P1-TSK-12 (calendar view), delivered. |
+> | PRJ-01 program team/detail | Fixed. `program_membership` and scoped program reads (`20260910030005`), program overview (#72). |
+> | PRJ-03 project detail team, meetings, channel | Fixed. The detail page reads members, meetings and the project channel. |
+> | PRJ-04 next response required | Adverse health requires a reason in the database (`enforce_active_project_prerequisites`); a separate "next response" field is not a PRD-v2 criterion. |
+> | PRJ-06 intake defer / return for clarification | Fixed. `deferred` and returned states (`20260912040000`); `projects.spec.ts` "a returned request goes back to its author". |
+> | PRJ-07 template structure, program templates, approval | Fixed. Template items, program templates and approval (`programs.spec.ts`, `projects.spec.ts`). |
+
+
 <!-- progress: 35 of 35 assessed -->
 
 Families assessed: `P0-TSK-*` (5), `P1-TSK-*` (4), `P0-PRJ-*` (5), `P1-PRJ-*` (3),
