@@ -34,6 +34,7 @@ export interface NotificationDraft {
 }
 
 const CHUNK = 200;
+const UNIQUE_VIOLATION = "23505";
 
 const URGENCY_RANK: Record<NotificationUrgency, number> = {
   low: 0,
@@ -199,21 +200,29 @@ export async function createNotifications(
 
     if (fresh.length === 0) continue;
 
-    // No representation is asked for: a person may create a notification
-    // for someone else but may not read it back, and asking for the row would
-    // make row-level security refuse the whole insert. The count comes from
-    // the response header instead.
-    const { count, error } = await db
-      .from("notification")
-      .upsert(fresh.map(rowPayload), {
-        onConflict: "user_id,dedupe_key",
-        ignoreDuplicates: true,
-        count: "exact",
-      });
-
-    if (error)
+    // A plain insert, never an upsert and never a read-back. A person may
+    // create a notification for someone else but may not read it, and both
+    // ON CONFLICT and RETURNING need the new row to pass the read policy, so
+    // either makes row-level security refuse the whole write. A duplicate
+    // (the same person and event) fails the unique key instead; when that
+    // happens the chunk is retried a row at a time and duplicates are skipped.
+    const rows = fresh.map(rowPayload);
+    const { error } = await db.from("notification").insert(rows);
+    if (!error) {
+      inserted += rows.length;
+    } else if (error.code === UNIQUE_VIOLATION) {
+      for (const row of rows) {
+        const { error: rowError } = await db.from("notification").insert(row);
+        if (!rowError) inserted += 1;
+        else if (rowError.code !== UNIQUE_VIOLATION) {
+          throw new Error(
+            `could not create notifications: ${rowError.message}`,
+          );
+        }
+      }
+    } else {
       throw new Error(`could not create notifications: ${error.message}`);
-    inserted += count ?? 0;
+    }
   }
 
   return inserted;

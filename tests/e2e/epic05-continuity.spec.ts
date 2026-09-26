@@ -49,7 +49,9 @@ test("channel access provenance is visible and history survives archive", async 
   ).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByText(`History line 0 ${stamp}`)).toBeVisible();
+  await expect(
+    page.getByText(`History line 0 ${stamp}`, { exact: true }),
+  ).toBeVisible();
 
   const accessSummary = page
     .locator("summary")
@@ -79,7 +81,9 @@ test("channel access provenance is visible and history survives archive", async 
   expect(Number(messageCount)).toBeGreaterThanOrEqual(3);
 
   await page.reload();
-  await expect(page.getByText(`History line 0 ${stamp}`)).toBeVisible({
+  await expect(
+    page.getByText(`History line 0 ${stamp}`, { exact: true }),
+  ).toBeVisible({
     timeout: 30_000,
   });
   await expect(page.getByText(/This channel is archived/i)).toBeVisible();
@@ -198,7 +202,10 @@ test("a deactivated member cannot read a private channel", async () => {
   `);
 
   function asUser(userId: string, body: string) {
+    // One transaction, so the role and claims set here are still in force
+    // when the body runs; each statement outside one is its own transaction.
     return sql(`
+      begin;
       select set_config('role', 'authenticated', true);
       select set_config('request.jwt.claim.sub', '${userId}', true);
       select set_config('request.jwt.claim.role', 'authenticated', true);
@@ -208,8 +215,7 @@ test("a deactivated member cannot read a private channel", async () => {
         true
       );
       ${body}
-      select set_config('role', 'postgres', true);
-      select set_config('request.jwt.claims', '', true);
+      commit;
     `);
   }
 

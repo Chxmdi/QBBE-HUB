@@ -17,14 +17,24 @@ test("inbox filters, weekly modes, mutes, and one actionable email", async ({
   await signIn(page, "owner");
 
   await page.goto("/inbox");
-  await expect(page.getByRole("link", { name: "Due dates", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Approvals", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Decisions", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Due dates", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Approvals", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Decisions", exact: true }),
+  ).toBeVisible();
 
   await page.goto("/settings/notifications");
   await expect(page.getByLabel("Work assigned to me")).toBeVisible();
-  await expect(page.getByLabel("Work assigned to me")).toContainText("Weekly digest");
-  await expect(page.getByRole("heading", { name: "Muted projects" })).toBeVisible();
+  await expect(page.getByLabel("Work assigned to me")).toContainText(
+    "Weekly digest",
+  );
+  await expect(
+    page.getByRole("heading", { name: "Muted projects" }),
+  ).toBeVisible();
 
   const stamp = String(Date.now());
   const title = `Review the brief ${stamp}`;
@@ -75,13 +85,18 @@ test("inbox filters, weekly modes, mutes, and one actionable email", async ({
 
   await page.goto("/inbox");
   await expect(page.getByText(title, { exact: true })).toBeVisible();
-  await expect(page.getByText(`Muted project ${stamp}`, { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText(`Muted project ${stamp}`, { exact: true }),
+  ).toHaveCount(0);
 
   if (!JOB_SECRET) {
     throw new Error("CRON_JOB_SECRET is not set; the drain cannot be called.");
   }
   const drain = await request.post("/api/jobs/drain-notifications", {
-    headers: { "x-job-secret": JOB_SECRET, Authorization: `Bearer ${JOB_SECRET}` },
+    headers: {
+      "x-job-secret": JOB_SECRET,
+      Authorization: `Bearer ${JOB_SECRET}`,
+    },
   });
   expect(drain.ok()).toBeTruthy();
 
@@ -103,8 +118,21 @@ test("inbox filters, weekly modes, mutes, and one actionable email", async ({
   );
   expect(search.ok()).toBeTruthy();
   const found = (await search.json()) as { messages?: { ID: string }[] };
-  expect(found.messages?.length ?? 0).toBeGreaterThan(0);
-  const source = await request.get(`${MAILPIT}/api/v1/message/${found.messages![0].ID}`);
+  // When nothing arrived, say why: the drain records each send failure on the
+  // delivery row, and that is the only place the provider's reason survives.
+  const delivery = sql(`
+    select status || ' ' || coalesce(last_error, '')
+    from email_delivery
+    where dedupe_key like 'email:e2e-not-${stamp}:%'
+    limit 1;
+  `);
+  expect(
+    found.messages?.length ?? 0,
+    `delivery: ${delivery || "no row"}`,
+  ).toBeGreaterThan(0);
+  const source = await request.get(
+    `${MAILPIT}/api/v1/message/${found.messages![0].ID}`,
+  );
   const mail = (await source.json()) as { Text?: string; HTML?: string };
   const body = `${mail.Text ?? ""}\n${mail.HTML ?? ""}`;
   expect(body).toContain("Action: asked to review");

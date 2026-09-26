@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createNotifications } from "@/features/jobs/services/notify";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -20,11 +21,16 @@ import {
  * that project.
  */
 
-export async function recordProjectDecision(input: unknown): Promise<ActionResult> {
+export async function recordProjectDecision(
+  input: unknown,
+): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = recordProjectDecisionSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    };
   }
   const data = parsed.data;
   const supabase = await createSupabaseServerClient();
@@ -45,7 +51,10 @@ export async function recordProjectDecision(input: unknown): Promise<ActionResul
     .single();
 
   if (error || !decision) {
-    return { ok: false, error: "You don't have permission to record a decision on this project." };
+    return {
+      ok: false,
+      error: "You don't have permission to record a decision on this project.",
+    };
   }
 
   if (data.requestId) {
@@ -55,7 +64,10 @@ export async function recordProjectDecision(input: unknown): Promise<ActionResul
       .eq("id", data.requestId)
       .eq("status", "open");
     if (requestError) {
-      return { ok: false, error: "The decision was saved, but the request could not be closed." };
+      return {
+        ok: false,
+        error: "The decision was saved, but the request could not be closed.",
+      };
     }
   }
 
@@ -77,7 +89,10 @@ export async function reopenDecision(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = reopenDecisionSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    };
   }
   const supabase = await createSupabaseServerClient();
   const { data: updated, error } = await supabase
@@ -86,7 +101,8 @@ export async function reopenDecision(input: unknown): Promise<ActionResult> {
     .eq("id", parsed.data.decisionId)
     .select("id, project_id, title")
     .maybeSingle();
-  if (error || !updated) return { ok: false, error: "Could not reopen the decision." };
+  if (error || !updated)
+    return { ok: false, error: "Could not reopen the decision." };
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,
@@ -102,11 +118,16 @@ export async function reopenDecision(input: unknown): Promise<ActionResult> {
   return { ok: true, id: updated.id as string };
 }
 
-export async function createDecisionRequest(input: unknown): Promise<ActionResult> {
+export async function createDecisionRequest(
+  input: unknown,
+): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = createDecisionRequestSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    };
   }
   const data = parsed.data;
   const supabase = await createSupabaseServerClient();
@@ -129,14 +150,21 @@ export async function createDecisionRequest(input: unknown): Promise<ActionResul
     if (message.includes("allowed to read")) {
       return {
         ok: false,
-        error: "That person is not allowed to read this project, so they cannot be asked to decide.",
+        error:
+          "That person is not allowed to read this project, so they cannot be asked to decide.",
       };
     }
-    return { ok: false, error: "You don't have permission to request a decision on this project." };
+    return {
+      ok: false,
+      error: "You don't have permission to request a decision on this project.",
+    };
   }
 
   if (data.assigneeId !== session.userId) {
-    await supabase.from("notification").upsert(
+    // Through the shared path: an upsert needs the new row to pass the read
+    // policy, which a notification for someone else never does, so this one
+    // was refused and the person asked was never told.
+    await createNotifications(supabase, [
       {
         user_id: data.assigneeId,
         organization_id: session.organizationId,
@@ -149,19 +177,23 @@ export async function createDecisionRequest(input: unknown): Promise<ActionResul
         urgency: "high",
         dedupe_key: `decision-request:${request.id}`,
       },
-      { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
-    );
+    ]);
   }
 
   revalidatePath(`/projects/${data.projectId}`);
   return { ok: true, id: request.id as string };
 }
 
-export async function declineDecisionRequest(input: unknown): Promise<ActionResult> {
+export async function declineDecisionRequest(
+  input: unknown,
+): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = declineDecisionRequestSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+    };
   }
   const supabase = await createSupabaseServerClient();
   const { data: updated, error } = await supabase
@@ -171,7 +203,8 @@ export async function declineDecisionRequest(input: unknown): Promise<ActionResu
     .eq("status", "open")
     .select("id, project_id")
     .maybeSingle();
-  if (error || !updated) return { ok: false, error: "Could not decline the request." };
+  if (error || !updated)
+    return { ok: false, error: "Could not decline the request." };
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,
