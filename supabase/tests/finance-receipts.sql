@@ -28,8 +28,16 @@ begin
   insert into storage.objects (bucket_id, name, owner_id)
   values ('receipts', v_org::text || '/' || v_other_staff::text || '/theirs.jpg', v_other_staff::text);
 
-  -- Staff submit their own upload.
+  -- Before a receipt is saved, the uploader can see their own upload (so a
+  -- refused save can remove it) but not anyone else's.
   perform tests.authenticate(v_staff, 'aal1');
+  select count(*) into v_count from storage.objects where bucket_id = 'receipts' and name = v_path;
+  perform tests.ok(v_count = 1, 'an uploader sees their own unregistered upload, so a refused save can remove it');
+  select count(*) into v_count from storage.objects
+  where bucket_id = 'receipts' and name = v_org::text || '/' || v_other_staff::text || '/theirs.jpg';
+  perform tests.ok(v_count = 0, 'nobody sees another person''s unregistered upload');
+
+  -- Staff submit their own upload.
   insert into public.finance_receipt (organization_id, document_date, vendor, total_cents,
     gst_cents, qst_cents, storage_path, file_name, mime_type, size_bytes)
   values (v_org, current_date, 'Staples', 4218, 183, 365, v_path, 'receipt.jpg', 'image/jpeg', 1234)

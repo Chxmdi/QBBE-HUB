@@ -58,6 +58,7 @@ const FILES = [
   "supabase/tests/dashboard-task-summary.sql",
   "supabase/tests/my-open-task-count.sql",
   "supabase/tests/finance-receipts.sql",
+  "supabase/tests/forms-esign.sql",
   "supabase/tests/team-overview.sql",
   "supabase/tests/member-profile-read-equivalence.sql",
   "supabase/tests/channel-read-equivalence.sql",

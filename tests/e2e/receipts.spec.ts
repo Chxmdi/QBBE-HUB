@@ -34,6 +34,13 @@ test("staff submit a receipt; finance reviews and exports it", async ({ page }) 
   });
   await dialog.getByLabel("Paid to").fill(vendor);
 
+  const receiptFiles = () =>
+    sql(
+      `select count(*) from storage.objects o join auth.users u on u.id::text = o.owner_id
+       where o.bucket_id = 'receipts' and u.email = 'qa-staff@example.com';`,
+    ).trim();
+  const filesBefore = receiptFiles();
+
   // A figure that could be read two ways is refused, not guessed.
   await dialog.getByLabel("Total").fill("4.567");
   await dialog.getByRole("button", { name: "Submit", exact: true }).click();
@@ -42,6 +49,8 @@ test("staff submit a receipt; finance reviews and exports it", async ({ page }) 
     sql(`select count(*) from finance_receipt where vendor = '${vendor}';`).trim(),
     "a refused submission leaves no record",
   ).toBe("0");
+  // ...and no file: the dialog removes the upload the server refused.
+  await expect.poll(receiptFiles, { timeout: 30_000 }).toBe(filesBefore);
 
   await dialog.getByLabel("Total").fill("1 234,56 $");
   await dialog.getByLabel("GST").fill("53.69");
