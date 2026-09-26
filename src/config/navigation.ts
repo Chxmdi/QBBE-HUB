@@ -6,8 +6,10 @@ import {
   CalendarRange,
   ClipboardCheck,
   ClipboardList,
+  ClipboardPen,
   FolderKanban,
   FolderOpen,
+  FileSignature,
   Handshake,
   Home,
   Inbox,
@@ -49,6 +51,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // Member-level on purpose: intake that only staff can reach is not
       // intake. Policies decide whether you see the queue or only your own.
       { label: "Requests", href: "/requests", icon: ClipboardCheck, access: "member" },
+      { label: "Forms", href: "/forms", icon: ClipboardPen, access: "member" },
       { label: "Projects", href: "/projects", icon: FolderKanban, access: "member" },
       { label: "Programs", href: "/programs", icon: Layers, access: "member" },
     ],
@@ -75,6 +78,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Master Schedule", href: "/schedule", icon: CalendarRange, access: "member" },
       { label: "Meetings", href: "/meetings", icon: Presentation, access: "member" },
       { label: "Events", href: "/events", icon: Building2, access: "member" },
+      { label: "Signatures", href: "/signatures", icon: FileSignature, access: "member" },
       { label: "Relationships", href: "/crm", icon: Handshake, access: "staff" },
       { label: "Reports", href: "/reports", icon: BarChart3, access: "staff" },
       { label: "Documents", href: "/documents", icon: FolderOpen, access: "member" },

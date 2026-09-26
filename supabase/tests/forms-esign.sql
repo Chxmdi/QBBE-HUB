@@ -137,7 +137,17 @@ begin
   insert into storage.objects (bucket_id, name, owner_id)
   values ('form-files', v_org::text || '/' || v_other_staff::text || '/theirs.png', v_other_staff::text);
 
+  -- Before it is registered, an upload is visible to its uploader only (so a
+  -- failed submission can clean it up), never to anyone else.
+  perform tests.authenticate(v_other_staff, 'aal2');
+  select count(*) into v_count from storage.objects where bucket_id = 'form-files' and name = v_path;
+  perform tests.clear_auth();
+  reset role;
+  perform tests.ok(v_count = 0, 'nobody else sees an unregistered upload');
+
   perform tests.authenticate(v_staff, 'aal1');
+  select count(*) into v_count from storage.objects where bucket_id = 'form-files' and name = v_path;
+  perform tests.ok(v_count = 1, 'the uploader sees their own unregistered upload, to clean it up');
   -- Answers are checked against the fields.
   begin
     perform public.submit_form(v_form, '{"name":"Ana","day":"2026-10-01","agree":true}'::jsonb, 'Ana', false);
@@ -360,11 +370,20 @@ begin
   exception when insufficient_privilege then
     perform tests.ok(true, 'an uploader cannot supply the file hash');
   end;
-  insert into public.signing_document (organization_id, title, storage_path, file_name)
-  values (v_org, 'Volunteer agreement', v_doc_path, 'agreement.pdf')
-  returning id into v_doc;
-  insert into public.signing_document_signer (document_id, organization_id, user_id)
-  values (v_doc, v_org, v_volunteer), (v_doc, v_org, v_staff);
+  -- A non-member signer rolls the whole document back.
+  begin
+    perform public.send_for_signature(v_org, 'Volunteer agreement', '', v_doc_path, 'agreement.pdf',
+      array[v_volunteer, gen_random_uuid()]);
+    perform tests.ok(false, 'a document with a non-member signer is refused');
+  exception when check_violation or foreign_key_violation then
+    perform tests.ok(true, 'a document with a non-member signer is refused');
+  end;
+  select count(*) into v_count from public.signing_document where storage_path = v_doc_path;
+  perform tests.ok(v_count = 0, 'a refused document leaves nothing behind');
+  v_doc := public.send_for_signature(v_org, 'Volunteer agreement', 'Please sign', v_doc_path,
+    'agreement.pdf', array[v_volunteer, v_staff, v_staff]);
+  select count(*) into v_count from public.signing_document_signer where document_id = v_doc;
+  perform tests.ok(v_count = 2, 'each signer is asked once');
   perform tests.clear_auth();
   reset role;
   perform tests.ok(v_doc is not null, 'an admin with MFA sends a document to two signers');

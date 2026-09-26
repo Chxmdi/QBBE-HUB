@@ -637,6 +637,31 @@ for insert to authenticated with check (
 grant select, insert on public.signing_document, public.signing_document_signer to authenticated;
 grant all on public.signing_document, public.signing_document_signer to service_role;
 
+-- Register an uploaded PDF and the people asked to sign it in one
+-- transaction, so a document is never left without its signers. Runs as the
+-- caller: row-level security and the triggers above decide.
+create or replace function public.send_for_signature(
+  p_organization_id uuid, p_title text, p_message text, p_storage_path text, p_file_name text,
+  p_signer_ids uuid[]
+) returns uuid
+language plpgsql security invoker set search_path = '' as $$
+declare
+  v_id uuid;
+begin
+  if coalesce(cardinality(p_signer_ids), 0) = 0 then
+    raise exception 'Choose at least one person to sign' using errcode = '23514';
+  end if;
+  insert into public.signing_document (organization_id, title, message, storage_path, file_name)
+  values (p_organization_id, p_title, nullif(btrim(p_message), ''), p_storage_path, p_file_name)
+  returning id into v_id;
+  insert into public.signing_document_signer (document_id, organization_id, user_id)
+  select v_id, p_organization_id, s from (select distinct unnest(p_signer_ids) as s) x;
+  return v_id;
+end;
+$$;
+revoke all on function public.send_for_signature(uuid, text, text, text, text, uuid[]) from public, anon;
+grant execute on function public.send_for_signature(uuid, text, text, text, text, uuid[]) to authenticated;
+
 -- ---------------------------------------------------------------------------
 -- Signatures
 -- ---------------------------------------------------------------------------
@@ -849,6 +874,17 @@ for select to authenticated using (
   )
 );
 
+-- Storage deletes only what the caller can see, so an uploader must see their
+-- own upload until it is registered, or the cleanup after a refused
+-- submission silently removes nothing. Once registered, the rule above
+-- takes over.
+create policy "form files read own unregistered" on storage.objects
+for select to authenticated using (
+  bucket_id = 'form-files'
+  and owner_id = (select auth.uid())::text
+  and not exists (select 1 from public.form_file f where f.storage_path = storage.objects.name)
+);
+
 create policy "form files delete own unregistered" on storage.objects
 for delete to authenticated using (
   bucket_id = 'form-files'
@@ -878,6 +914,13 @@ for select to authenticated using (
         where s.document_id = d.id and s.user_id = (select auth.uid())
           and app.is_org_member(s.organization_id)))
   )
+);
+
+create policy "signing documents read own unregistered" on storage.objects
+for select to authenticated using (
+  bucket_id = 'signing-documents'
+  and owner_id = (select auth.uid())::text
+  and not exists (select 1 from public.signing_document d where d.storage_path = storage.objects.name)
 );
 
 create policy "signing documents delete own unregistered" on storage.objects
