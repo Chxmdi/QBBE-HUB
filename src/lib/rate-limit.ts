@@ -49,6 +49,7 @@ export const RATE_LIMITS = {
   // row-level security, and nobody legitimately needs a dozen an hour.
   "export:request": { limit: 10, windowSeconds: 3600 },
   "job:run": { limit: 240, windowSeconds: 60 },
+  "approval:submit": { limit: 60, windowSeconds: 3600 },
 } as const;
 
 export type RateLimitedAction = keyof typeof RATE_LIMITS;

@@ -1,0 +1,206 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { authorizeAdminAction, requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { ActionResult } from "@/features/tasks/services/task.commands";
+import {
+  approvalRuleSchema,
+  commentApprovalSchema,
+  decideApprovalSchema,
+  submitApprovalSchema,
+  withdrawApprovalSchema,
+} from "@/features/approvals/schemas";
+
+/**
+ * Approval writes (#143).
+ *
+ * Items, steps and the trail are written only by database functions, which
+ * enforce the rules (no self-approval, one person per step, admins only with
+ * MFA) and write the notification and audit event in the same transaction.
+ * This file validates input and turns refusals into sentences.
+ */
+
+interface DbError {
+  code?: string;
+  message?: string;
+}
+
+/** The database's own messages for refusals are written for people. */
+function explain(error: DbError, fallback: string): string {
+  if (error.code === "42501" || error.code === "22023") return error.message ?? fallback;
+  if (error.code === "23505") return "That record already has an approval waiting.";
+  if (error.code === "23514") return "Check the amount and program, then try again.";
+  return fallback;
+}
+
+function firstIssue(error: z.ZodError, fallback: string): string {
+  return error.issues[0]?.message ?? fallback;
+}
+
+function refresh() {
+  revalidatePath("/approvals");
+}
+
+export async function submitApproval(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Only staff can submit items for approval." };
+  const limited = await enforceRateLimit("approval:submit", session.userId);
+  if (limited) return limited;
+  const parsed = submitApprovalSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the request.") };
+  const data = parsed.data;
+
+  const supabase = await createSupabaseServerClient();
+  const { data: id, error } = await supabase.rpc("submit_approval", {
+    p_organization: session.organizationId,
+    p_subject_type: data.subjectType,
+    p_title: data.title,
+    p_amount_cents: data.amount,
+    p_program_id: data.programId,
+    p_description: data.description || null,
+    p_subject_id: null,
+  });
+  if (error || !id) return { ok: false, error: explain(error ?? {}, "Could not submit it. Try again.") };
+  refresh();
+  return { ok: true, id: id as string };
+}
+
+export async function decideApproval(input: unknown): Promise<ActionResult> {
+  await requireSession();
+  const parsed = decideApprovalSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the decision.") };
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("decide_approval", {
+    p_item: parsed.data.itemId,
+    p_decision: parsed.data.decision,
+    p_note: parsed.data.note || null,
+  });
+  if (error) return { ok: false, error: explain(error, "Could not record the decision. Try again.") };
+  refresh();
+  return { ok: true, id: parsed.data.itemId };
+}
+
+export async function commentOnApproval(input: unknown): Promise<ActionResult> {
+  await requireSession();
+  const parsed = commentApprovalSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Write a comment.") };
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("comment_on_approval", {
+    p_item: parsed.data.itemId,
+    p_note: parsed.data.note,
+  });
+  if (error) return { ok: false, error: explain(error, "Could not post the comment. Try again.") };
+  refresh();
+  return { ok: true, id: parsed.data.itemId };
+}
+
+export async function withdrawApproval(input: unknown): Promise<ActionResult> {
+  await requireSession();
+  const parsed = withdrawApprovalSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the request.") };
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("withdraw_approval", {
+    p_item: parsed.data.itemId,
+    p_note: parsed.data.note || null,
+  });
+  if (error) return { ok: false, error: explain(error, "Could not withdraw it. Try again.") };
+  refresh();
+  return { ok: true, id: parsed.data.itemId };
+}
+
+// ---------------------------------------------------------------------------
+// Rules (Admin → Approvals)
+// ---------------------------------------------------------------------------
+
+async function auditRule(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  organizationId: string,
+  actorId: string,
+  action: string,
+  ruleId: string,
+  metadata: Record<string, unknown> = {},
+) {
+  await supabase.from("audit_event").insert({
+    organization_id: organizationId,
+    actor_id: actorId,
+    event_type: "approval",
+    action,
+    object_type: "approval_rule",
+    object_id: ruleId,
+    metadata,
+  });
+}
+
+export async function createApprovalRule(input: unknown): Promise<ActionResult> {
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const { session } = authorization;
+  const parsed = approvalRuleSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the rule.") };
+  const data = parsed.data;
+
+  const supabase = await createSupabaseServerClient();
+  const { data: row, error } = await supabase
+    .from("approval_rule")
+    .insert({
+      organization_id: session.organizationId,
+      label: data.label,
+      step: data.step,
+      subject_type: data.subjectType,
+      program_id: data.programId,
+      min_amount_cents: data.minAmount ?? 0,
+      max_amount_cents: data.maxAmount,
+      approver_kind: data.approverKind,
+      approver_user_id: data.approverKind === "person" ? data.approverUserId : null,
+    })
+    .select("id")
+    .single();
+  if (error || !row) {
+    return {
+      ok: false,
+      error:
+        error?.code === "23514"
+          ? "The approver must be an active staff member or administrator, and the program must be in this organization."
+          : "Could not save the rule. Try again.",
+    };
+  }
+  await auditRule(supabase, session.organizationId, session.userId, "rule_created", row.id as string, {
+    label: data.label,
+  });
+  revalidatePath("/admin/approvals");
+  return { ok: true, id: row.id as string };
+}
+
+export async function setApprovalRuleActive(ruleId: string, active: boolean): Promise<ActionResult> {
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const { session } = authorization;
+  if (!z.string().uuid().safeParse(ruleId).success) return { ok: false, error: "Rule not found." };
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase
+    .from("approval_rule")
+    .update({ active })
+    .eq("id", ruleId)
+    .select("id");
+  if (error || !data?.length) return { ok: false, error: "Could not update the rule." };
+  await auditRule(supabase, session.organizationId, session.userId,
+    active ? "rule_enabled" : "rule_disabled", ruleId);
+  revalidatePath("/admin/approvals");
+  return { ok: true, id: ruleId };
+}
+
+export async function deleteApprovalRule(ruleId: string): Promise<ActionResult> {
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const { session } = authorization;
+  if (!z.string().uuid().safeParse(ruleId).success) return { ok: false, error: "Rule not found." };
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.from("approval_rule").delete().eq("id", ruleId).select("id");
+  if (error || !data?.length) return { ok: false, error: "Could not delete the rule." };
+  await auditRule(supabase, session.organizationId, session.userId, "rule_deleted", ruleId);
+  revalidatePath("/admin/approvals");
+  return { ok: true, id: ruleId };
+}
