@@ -41,6 +41,7 @@ const FILES = [
   "supabase/tests/project-lifecycle.sql",
   "supabase/tests/document-scanning-meetings.sql",
   "supabase/tests/document-links.sql",
+  "supabase/tests/document-library.sql",
   "supabase/tests/work-planning.sql",
   "supabase/tests/raid-decisions.sql",
   "supabase/tests/crm-continuity.sql",
@@ -61,6 +62,7 @@ const FILES = [
   "supabase/tests/member-profile-read-equivalence.sql",
   "supabase/tests/channel-read-equivalence.sql",
   "supabase/tests/project-program-read-equivalence.sql",
+  "supabase/tests/record-retention.sql",
   "supabase/tests/user-locale.sql",
   // Last: it opens its own sessions, which only see committed rows, so it
   // must not run inside a transaction an earlier file left open.
