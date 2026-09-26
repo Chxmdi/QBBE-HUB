@@ -46,6 +46,7 @@ const FILES = [
   "supabase/tests/crm-continuity.sql",
   "supabase/tests/export-scope.sql",
   "supabase/tests/epic4-completion.sql",
+  "supabase/tests/meetings-comments.sql",
   "supabase/tests/events.sql",
   "supabase/tests/drive-integration-access.sql",
   "supabase/tests/email-suppression.sql",

@@ -25,7 +25,7 @@ import { requireSession } from "@/lib/auth";
 import { hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, relativeTime } from "@/lib/utils";
-import { RecordComments } from "@/features/comments/components/record-comments";
+import { CommentThread } from "@/features/comments/components/comment-thread";
 import { DecisionLog } from "@/features/risks/components/decision-log";
 import { RaidLogPanel } from "@/features/risks/components/raid-log";
 import { getProjectDecisions } from "@/features/risks/services/decision.queries";
@@ -87,7 +87,6 @@ export default async function ProjectDetailPage({
     options,
     raidLog,
     decisionLog,
-    { data: comments },
     { data: grants },
     { data: documents },
     { data: meetings },
@@ -135,13 +134,6 @@ export default async function ProjectDetailPage({
     getPickerOptions(),
     getRaidLog(id, session.timeZone),
     getProjectDecisions(id),
-    supabase
-      .from("record_comment")
-      .select("id, body, author_id, created_at, resolved_at, deleted_at")
-      .eq("parent_type", "project")
-      .eq("parent_id", id)
-      .order("created_at", { ascending: true })
-      .limit(50),
     // P0-PRJ-03 names team, files, meetings and the project channel. All four
     // are stored against the project and none of them was read on this page.
     supabase
@@ -827,18 +819,7 @@ export default async function ProjectDetailPage({
         </>
       ) : null}
 
-      <RecordComments
-        parentType="project"
-        parentId={project.id}
-        comments={(comments ?? []) as {
-          id: string;
-          body: string;
-          author_id: string;
-          created_at: string;
-          resolved_at: string | null;
-          deleted_at: string | null;
-        }[]}
-      />
+      <CommentThread parentType="project" parentId={project.id} />
       <Suspense fallback={null}>
         <TaskDrawer people={options.people} isStaff={canCollaborate || canManage} />
       </Suspense>
