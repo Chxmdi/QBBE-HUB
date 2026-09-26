@@ -41,16 +41,29 @@ import type {
 export const metadata: Metadata = { title: "Project" };
 export const dynamic = "force-dynamic";
 
+const PROJECT_TASK_ROW_LIMIT = 25;
+
 export default async function ProjectDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; risk?: string; issue?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    risk?: string;
+    issue?: string;
+    all?: string;
+  }>;
 }) {
   const session = await requireSession();
   const { id } = await params;
-  const { tab: tabParam, risk: riskParam, issue: issueParam } = await searchParams;
+  const {
+    tab: tabParam,
+    risk: riskParam,
+    issue: issueParam,
+    all: allParam,
+  } = await searchParams;
+  const showAllTasks = allParam === "1";
   const highlightRiskId = riskParam ?? null;
   const highlightIssueId = issueParam ?? null;
   // A search result carries ?tab=risks with it, but a link that has lost the
@@ -237,6 +250,19 @@ export default async function ProjectDetailPage({
     (t) => t.status !== "completed" && t.status !== "cancelled",
   );
   const doneTasks = taskList.filter((t) => t.status === "completed");
+  // Drawing every row made a busy project one of the heaviest pages in the
+  // 50-user test (#115). The counts stay whole; the full list is one link away.
+  const shownOpenTasks = showAllTasks
+    ? openTasks
+    : openTasks.slice(0, PROJECT_TASK_ROW_LIMIT);
+  const shownDoneTasks = showAllTasks
+    ? doneTasks
+    : doneTasks.slice(0, PROJECT_TASK_ROW_LIMIT);
+  const hiddenTaskCount =
+    openTasks.length -
+    shownOpenTasks.length +
+    doneTasks.length -
+    shownDoneTasks.length;
 
   return (
     <div>
@@ -496,7 +522,7 @@ export default async function ProjectDetailPage({
               />
             ) : (
               <div className="card overflow-hidden">
-                {openTasks.map((task) => (
+                {shownOpenTasks.map((task) => (
                   <TaskRow key={task.id} task={task} timeZone={session.timeZone} />
                 ))}
                 {doneTasks.length > 0 ? (
@@ -504,7 +530,7 @@ export default async function ProjectDetailPage({
                     <summary className="cursor-pointer border-t border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-medium text-muted">
                       Completed ({doneTasks.length})
                     </summary>
-                    {doneTasks.map((task) => (
+                    {shownDoneTasks.map((task) => (
                       <TaskRow
                         key={task.id}
                         task={task}
@@ -513,6 +539,14 @@ export default async function ProjectDetailPage({
                       />
                     ))}
                   </details>
+                ) : null}
+                {hiddenTaskCount > 0 ? (
+                  <Link
+                    href={`/projects/${project.id}?tab=tasks&all=1`}
+                    className="block border-t border-line px-3 py-2 text-[12.5px] font-medium text-brand-fg hover:bg-surface-soft"
+                  >
+                    Show all {taskList.length} tasks
+                  </Link>
                 ) : null}
               </div>
             )}

@@ -112,6 +112,56 @@ export async function getDashboardData(
     new Date(now.getTime() + 86400_000);
   const sixtyDaysAgo = new Date(Date.now() - 60 * 86400_000).toISOString();
 
+  // Second wave: reference-dashboard surfaces (Today, program health,
+  // activity charts, events, announcements rail). It needs nothing from
+  // the first, so it starts now rather than after it (#115).
+  const secondWave = Promise.all([
+    supabase
+      .from("task")
+      .select(TASK_SELECT)
+      .eq("assignee_id", userId)
+      .in("status", OPEN_STATUSES)
+      .is("archived_at", null)
+      .lte("due_at", today)
+      .order("due_at")
+      .limit(6),
+    supabase
+      .from("meeting")
+      .select(
+        "id, program_id, project_id, title, purpose, organizer_id, starts_at, ends_at, location, meeting_link, status, notes, channel_id, project:project_id(id, name)",
+      )
+      .gte("starts_at", dayStart.toISOString())
+      .lt("starts_at", dayEnd.toISOString())
+      .neq("status", "cancelled")
+      .order("starts_at")
+      .limit(4),
+    supabase
+      .from("event")
+      .select(
+        "id, program_id, project_id, name, description, owner_id, event_type, starts_at, ends_at, location, status, volunteer_need",
+      )
+      .gte("starts_at", new Date().toISOString())
+      .neq("status", "cancelled")
+      .order("starts_at")
+      .limit(4),
+    supabase
+      .from("program")
+      .select("id, name, projects:project(health, stage, archived_at)")
+      .eq("status", "active")
+      .order("name")
+      .limit(8),
+    supabase
+      .from("channel")
+      .select("id")
+      .eq("type", "announcements")
+      .eq("is_mandatory", true)
+      .maybeSingle(),
+    supabase
+      .from("organization_membership")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active"),
+  ]);
+
   const [
     programsRes,
     projectsRes,
@@ -178,7 +228,7 @@ export async function getDashboardData(
       .limit(5),
     supabase
       .from("project")
-      .select("id, name, health, health_reason, stage, target_date, owner:owner_id(id, full_name, email, avatar_url, title, timezone)")
+      .select("id, name, health, health_reason, stage, target_date, owner:owner_id(id, full_name, avatar_url)")
       .in("health", ["at_risk", "off_track"])
       .is("archived_at", null)
       .limit(5),
@@ -198,7 +248,7 @@ export async function getDashboardData(
     supabase
       .from("activity_event")
       .select(
-        "id, actor_id, verb, source_type, source_id, summary, created_at, actor:actor_id(id, full_name, email, avatar_url, title, timezone)",
+        "id, actor_id, verb, source_type, source_id, summary, created_at, actor:actor_id(id, full_name, avatar_url)",
       )
       .order("created_at", { ascending: false })
       .limit(10),
@@ -244,8 +294,6 @@ export async function getDashboardData(
     healthCounts[row.health] = (healthCounts[row.health] ?? 0) + 1;
   }
 
-  // Second wave: reference-dashboard surfaces (Today, program health,
-  // activity charts, events, announcements rail).
   const [
     todayTasksRes,
     todayMeetingsRes,
@@ -253,52 +301,7 @@ export async function getDashboardData(
     programsRes2,
     annChannelRes,
     activeMembersRes,
-  ] = await Promise.all([
-    supabase
-      .from("task")
-      .select(TASK_SELECT)
-      .eq("assignee_id", userId)
-      .in("status", OPEN_STATUSES)
-      .is("archived_at", null)
-      .lte("due_at", today)
-      .order("due_at")
-      .limit(6),
-    supabase
-      .from("meeting")
-      .select(
-        "id, program_id, project_id, title, purpose, organizer_id, starts_at, ends_at, location, meeting_link, status, notes, channel_id, project:project_id(id, name)",
-      )
-      .gte("starts_at", dayStart.toISOString())
-      .lt("starts_at", dayEnd.toISOString())
-      .neq("status", "cancelled")
-      .order("starts_at")
-      .limit(4),
-    supabase
-      .from("event")
-      .select(
-        "id, program_id, project_id, name, description, owner_id, event_type, starts_at, ends_at, location, status, volunteer_need",
-      )
-      .gte("starts_at", new Date().toISOString())
-      .neq("status", "cancelled")
-      .order("starts_at")
-      .limit(4),
-    supabase
-      .from("program")
-      .select("id, name, projects:project(health, stage, archived_at)")
-      .eq("status", "active")
-      .order("name")
-      .limit(8),
-    supabase
-      .from("channel")
-      .select("id")
-      .eq("type", "announcements")
-      .eq("is_mandatory", true)
-      .maybeSingle(),
-    supabase
-      .from("organization_membership")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "active"),
-  ]);
+  ] = await secondWave;
 
   // Mutually exclusive donut buckets, counted by dashboard_task_summary:
   // overdue trumps status; otherwise not-started (and ready) vs started;
@@ -325,6 +328,77 @@ export async function getDashboardData(
     name: string;
     projects: { health: string; stage: string; archived_at: string | null }[];
   }[];
+  // The announcements rail and the program counts are independent reads,
+  // so they run side by side.
+  const announcementRailPromise = (async (): Promise<AnnouncementRail> => {
+    let announcementRail: AnnouncementRail = {
+      channelId: (annChannelRes.data?.id as string | undefined) ?? null,
+      latest: null,
+      recentMessages: [],
+    };
+    if (annChannelRes.data) {
+      const [latestAnnRes, recentMsgRes] = await Promise.all([
+        supabase
+          .from("announcement")
+          .select(
+            "id, message_id, title, priority, requires_ack, ack_deadline, publish_at, expires_at, created_by, created_at, " +
+              "message:message_id(id, channel_id, conversation_id, thread_root_id, author_id, body, is_system, created_at, edited_at, deleted_at), " +
+              "author:created_by(id, full_name, avatar_url)",
+          )
+          .lte("publish_at", new Date().toISOString())
+          .order("publish_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("message")
+          .select(
+            "id, channel_id, conversation_id, thread_root_id, author_id, body, is_system, created_at, edited_at, deleted_at, " +
+              "author:author_id(id, full_name, avatar_url), reactions:message_reaction(message_id, user_id, emoji)",
+          )
+          .eq("channel_id", annChannelRes.data.id)
+          .is("thread_root_id", null)
+          .order("created_at", { ascending: false })
+          .limit(4),
+      ]);
+
+      if (latestAnnRes.data) {
+        const ann = latestAnnRes.data as unknown as Announcement & {
+          author?: { full_name: string } | null;
+        };
+        const [{ count: ackCount }, { data: myAck }] = await Promise.all([
+          supabase
+            .from("announcement_acknowledgment")
+            .select("user_id", { count: "exact", head: true })
+            .eq("announcement_id", ann.id),
+          supabase
+            .from("announcement_acknowledgment")
+            .select("user_id")
+            .eq("announcement_id", ann.id)
+            .eq("user_id", userId)
+            .maybeSingle(),
+        ]);
+        announcementRail = {
+          channelId: annChannelRes.data.id as string,
+          latest: {
+            ...ann,
+            ackCount: ackCount ?? 0,
+            totalRecipients: activeMembersRes.count ?? 0,
+            acknowledgedByMe: Boolean(myAck),
+            authorName: ann.author?.full_name ?? "Leadership",
+          },
+          recentMessages: (
+            (recentMsgRes.data ?? []) as unknown as Message[]
+          ).reverse(),
+        };
+      } else {
+        announcementRail.recentMessages = (
+          (recentMsgRes.data ?? []) as unknown as Message[]
+        ).reverse();
+      }
+    }
+    return announcementRail;
+  })();
+
   const programTaskCounts = await Promise.all(
     shownPrograms.map(async (program) => {
       const tasksIn = () =>
@@ -371,71 +445,8 @@ export async function getDashboardData(
   ).length;
 
   // Announcements rail: latest announcement with acknowledgment progress.
-  let announcementRail: AnnouncementRail = {
-    channelId: (annChannelRes.data?.id as string | undefined) ?? null,
-    latest: null,
-    recentMessages: [],
-  };
-  if (annChannelRes.data) {
-    const [latestAnnRes, recentMsgRes] = await Promise.all([
-      supabase
-        .from("announcement")
-        .select(
-          "id, message_id, title, priority, requires_ack, ack_deadline, publish_at, expires_at, created_by, created_at, " +
-            "message:message_id(id, channel_id, conversation_id, thread_root_id, author_id, body, is_system, created_at, edited_at, deleted_at), " +
-            "author:created_by(id, full_name, email, avatar_url, title, timezone)",
-        )
-        .lte("publish_at", new Date().toISOString())
-        .order("publish_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("message")
-        .select(
-          "id, channel_id, conversation_id, thread_root_id, author_id, body, is_system, created_at, edited_at, deleted_at, " +
-            "author:author_id(id, full_name, email, avatar_url, title, timezone), reactions:message_reaction(message_id, user_id, emoji)",
-        )
-        .eq("channel_id", annChannelRes.data.id)
-        .is("thread_root_id", null)
-        .order("created_at", { ascending: false })
-        .limit(4),
-    ]);
 
-    if (latestAnnRes.data) {
-      const ann = latestAnnRes.data as unknown as Announcement & {
-        author?: { full_name: string } | null;
-      };
-      const [{ count: ackCount }, { data: myAck }] = await Promise.all([
-        supabase
-          .from("announcement_acknowledgment")
-          .select("user_id", { count: "exact", head: true })
-          .eq("announcement_id", ann.id),
-        supabase
-          .from("announcement_acknowledgment")
-          .select("user_id")
-          .eq("announcement_id", ann.id)
-          .eq("user_id", userId)
-          .maybeSingle(),
-      ]);
-      announcementRail = {
-        channelId: annChannelRes.data.id as string,
-        latest: {
-          ...ann,
-          ackCount: ackCount ?? 0,
-          totalRecipients: activeMembersRes.count ?? 0,
-          acknowledgedByMe: Boolean(myAck),
-          authorName: ann.author?.full_name ?? "Leadership",
-        },
-        recentMessages: (
-          (recentMsgRes.data ?? []) as unknown as Message[]
-        ).reverse(),
-      };
-    } else {
-      announcementRail.recentMessages = (
-        (recentMsgRes.data ?? []) as unknown as Message[]
-      ).reverse();
-    }
-  }
+  const announcementRail = await announcementRailPromise;
 
   const ackedIds = new Set(
     (myAcksRes.data ?? []).map((a) => a.announcement_id as string),

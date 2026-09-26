@@ -4,10 +4,6 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
 
-const OPEN_STATUSES = [
-  "not_started", "ready", "in_progress", "waiting", "blocked", "in_review",
-];
-
 export default async function WorkspaceLayout({
   children,
 }: {
@@ -52,7 +48,7 @@ export default async function WorkspaceLayout({
   const [
     { count: unreadCount },
     { data: memberships },
-    { count: myWorkCount },
+    { data: myWorkCount },
     { data: programs },
   ] = await Promise.all([
     supabase
@@ -63,12 +59,11 @@ export default async function WorkspaceLayout({
       .from("channel_member")
       .select("last_read_at, channel:channel_id(id, slug, archived_at)")
       .eq("user_id", session.userId),
-    supabase
-      .from("task")
-      .select("id", { count: "exact", head: true })
-      .eq("assignee_id", session.userId)
-      .in("status", OPEN_STATUSES)
-      .is("archived_at", null),
+    // Counted by a function rather than through the task read rule on every
+    // page: for your own tasks that rule is only organization membership, and
+    // evaluating the whole rule made this the costliest query in the 50-user
+    // test (#115). supabase/tests/my-open-task-count.sql keeps them equal.
+    supabase.rpc("my_open_task_count"),
     supabase
       .from("program")
       .select("id, name")
@@ -119,7 +114,7 @@ export default async function WorkspaceLayout({
       unreadCount={unreadCount ?? 0}
       channels={channels}
       programs={(programs ?? []).map((p) => ({ id: p.id, name: p.name }))}
-      counts={{ myWork: myWorkCount ?? 0, inbox: unreadCount ?? 0 }}
+      counts={{ myWork: Number(myWorkCount ?? 0), inbox: unreadCount ?? 0 }}
       density={(profile?.display_density as "comfortable" | "compact") ?? "comfortable"}
       reduceMotion={profile?.reduce_motion === true}
     >

@@ -420,105 +420,114 @@ export function MessageItem({
         </div>
       ) : null}
 
+      {/* Each dialog exists only while open. A channel draws up to 100
+          messages, and three closed dialogs apiece made the channel the
+          largest page in the 50-user test (#115). */}
       {/* Add to agenda (P0-LINK-03) */}
-      <Dialog
-        open={dialog === "agenda"}
-        onClose={() => setDialog(null)}
-        title="Add to meeting agenda"
-      >
-        <form onSubmit={handleAgendaSubmit} className="space-y-4">
-          <p className="rounded-(--radius-sm) bg-surface-soft px-3 py-2 text-[13px] text-muted">
-            “{message.body.slice(0, 160)}
-            {message.body.length > 160 ? "…" : ""}”
-          </p>
-          {meetings.length === 0 ? (
-            <p className="text-[13.5px] text-muted">
-              No upcoming meetings. Schedule one first, then convert this
-              message into an agenda item.
+      {dialog === "agenda" ? (
+        <Dialog
+          open={dialog === "agenda"}
+          onClose={() => setDialog(null)}
+          title="Add to meeting agenda"
+        >
+          <form onSubmit={handleAgendaSubmit} className="space-y-4">
+            <p className="rounded-(--radius-sm) bg-surface-soft px-3 py-2 text-[13px] text-muted">
+              “{message.body.slice(0, 160)}
+              {message.body.length > 160 ? "…" : ""}”
             </p>
-          ) : (
-            <div>
-              <Label htmlFor={`${fieldId}-meeting`}>Meeting</Label>
-              <Select id={`${fieldId}-meeting`} name="meetingId" required>
-                {meetings.map((meeting) => (
-                  <option key={meeting.id} value={meeting.id}>
-                    {meeting.title} · {formatDateTime(meeting.starts_at)}
-                  </option>
-                ))}
-              </Select>
+            {meetings.length === 0 ? (
+              <p className="text-[13.5px] text-muted">
+                No upcoming meetings. Schedule one first, then convert this
+                message into an agenda item.
+              </p>
+            ) : (
+              <div>
+                <Label htmlFor={`${fieldId}-meeting`}>Meeting</Label>
+                <Select id={`${fieldId}-meeting`} name="meetingId" required>
+                  {meetings.map((meeting) => (
+                    <option key={meeting.id} value={meeting.id}>
+                      {meeting.title} · {formatDateTime(meeting.starts_at)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setDialog(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={saving} disabled={meetings.length === 0}>
+                Add agenda item
+              </Button>
             </div>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setDialog(null)}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={saving} disabled={meetings.length === 0}>
-              Add agenda item
-            </Button>
-          </div>
-        </form>
-      </Dialog>
+          </form>
+        </Dialog>
+      ) : null}
 
       {/* Record as decision (P0-LINK-04) */}
-      <Dialog
-        open={dialog === "decision"}
-        onClose={() => setDialog(null)}
-        title="Record decision"
-      >
-        <form onSubmit={handleDecisionSubmit} className="space-y-4">
-          <p className="rounded-(--radius-sm) bg-surface-soft px-3 py-2 text-[13px] text-muted">
-            “{message.body.slice(0, 160)}
-            {message.body.length > 160 ? "…" : ""}”
-          </p>
-          <div>
-            <Label htmlFor={`${fieldId}-detail`}>
-              Context <span className="font-normal text-muted">(optional)</span>
-            </Label>
-            <Textarea
-              id={`${fieldId}-detail`}
-              name="detail"
-              rows={3}
-              placeholder="Why was this decided, and what does it affect?"
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setDialog(null)}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={saving}>
-              Record decision
-            </Button>
-          </div>
-        </form>
-      </Dialog>
+      {dialog === "decision" ? (
+        <Dialog
+          open={dialog === "decision"}
+          onClose={() => setDialog(null)}
+          title="Record decision"
+        >
+          <form onSubmit={handleDecisionSubmit} className="space-y-4">
+            <p className="rounded-(--radius-sm) bg-surface-soft px-3 py-2 text-[13px] text-muted">
+              “{message.body.slice(0, 160)}
+              {message.body.length > 160 ? "…" : ""}”
+            </p>
+            <div>
+              <Label htmlFor={`${fieldId}-detail`}>
+                Context <span className="font-normal text-muted">(optional)</span>
+              </Label>
+              <Textarea
+                id={`${fieldId}-detail`}
+                name="detail"
+                rows={3}
+                placeholder="Why was this decided, and what does it affect?"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setDialog(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={saving}>
+                Record decision
+              </Button>
+            </div>
+          </form>
+        </Dialog>
+      ) : null}
 
       {/* Pin to channel (P0-RES-02) */}
-      <Dialog
-        open={dialog === "pin"}
-        onClose={() => setDialog(null)}
-        title="Pin to channel resources"
-      >
-        <form onSubmit={handlePinSubmit} className="space-y-4">
-          <div>
-            <Label htmlFor={`${fieldId}-title`}>Resource title</Label>
-            <Input
-              id={`${fieldId}-title`}
-              name="title"
-              required
-              maxLength={200}
-              defaultValue={message.body.split("\n")[0].slice(0, 80)}
-            />
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setDialog(null)}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={saving}>
-              Pin resource
-            </Button>
-          </div>
-        </form>
-      </Dialog>
+      {dialog === "pin" ? (
+        <Dialog
+          open={dialog === "pin"}
+          onClose={() => setDialog(null)}
+          title="Pin to channel resources"
+        >
+          <form onSubmit={handlePinSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor={`${fieldId}-title`}>Resource title</Label>
+              <Input
+                id={`${fieldId}-title`}
+                name="title"
+                required
+                maxLength={200}
+                defaultValue={message.body.split("\n")[0].slice(0, 80)}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={() => setDialog(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={saving}>
+                Pin resource
+              </Button>
+            </div>
+          </form>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
