@@ -860,6 +860,38 @@ end;
 $$;
 revoke all on function app.finance_bill_needs_approval(public.finance_bill) from public, anon, authenticated;
 
+-- The latest approval for this bill at its current total: 'pending',
+-- 'approved', 'rejected', 'withdrawn', or null when there is none or the
+-- approvals engine is not installed.
+create or replace function public.finance_bill_approval_status(p_bill uuid)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  b public.finance_bill;
+  v_status text;
+begin
+  select * into b from public.finance_bill where id = p_bill;
+  if not found or not app.is_org_staff(b.organization_id) then
+    return null;
+  end if;
+  if to_regclass('public.approval_item') is null then
+    return null;
+  end if;
+  execute 'select a.status from public.approval_item a
+             where a.organization_id = $1 and a.subject_type = ''bill'' and a.subject_id = $2
+               and a.amount_cents = $3
+             order by a.created_at desc limit 1'
+    into v_status using b.organization_id, b.id, b.total_cents;
+  return v_status;
+end;
+$$;
+revoke all on function public.finance_bill_approval_status(uuid) from public, anon;
+grant execute on function public.finance_bill_approval_status(uuid) to authenticated, service_role;
+
 -- Sends a draft bill to the approvals engine (#143). Returns the approval
 -- item's id. Refused with a clear message where the engine is not installed.
 create or replace function public.finance_request_bill_approval(p_bill uuid)

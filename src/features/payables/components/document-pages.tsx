@@ -318,16 +318,9 @@ export async function DocumentDetailPage({
       .eq("organization_id", session.organizationId)
       .maybeSingle();
     threshold = data?.bill_approval_threshold_cents ?? null;
-    // The approvals engine (#143) may not be installed; a missing table reads as no approval.
-    const { data: items } = await supabase
-      .from("approval_item")
-      .select("status, amount_cents, created_at")
-      .eq("subject_type", "bill")
-      .eq("subject_id", record.id)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    const latest = (items ?? [])[0] as { status: string; amount_cents: number } | undefined;
-    approval = latest && Number(latest.amount_cents) === record.total_cents ? { status: latest.status } : null;
+    // Null when there is no approval for this total, or approvals (#143) are not installed.
+    const { data: approvalStatus } = await supabase.rpc("finance_bill_approval_status", { p_bill: record.id });
+    approval = typeof approvalStatus === "string" ? { status: approvalStatus } : null;
   }
   let organizationName = "";
   if (!isBill) {

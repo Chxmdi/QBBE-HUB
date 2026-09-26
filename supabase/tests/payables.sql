@@ -410,6 +410,9 @@ begin
     perform tests.clear_auth(); reset role;
     perform tests.ok(exists (select 1 from public.approval_item where subject_type = 'bill' and subject_id = v_bill
       and status = 'pending' and amount_cents = 250000), 'the bill is sent to approvals for its total');
+    perform tests.authenticate(v_staff, 'aal1');
+    perform tests.ok(public.finance_bill_approval_status(v_bill) = 'pending', 'staff see the approval is pending');
+    perform tests.clear_auth(); reset role;
     perform tests.authenticate(v_admin, 'aal2');
     execute 'select public.decide_approval((select id from public.approval_item where subject_id = $1), ''approve'')'
       using v_bill;
@@ -421,6 +424,7 @@ begin
     perform tests.authenticate(v_staff, 'aal1');
     perform tests.ap_raises(format('select public.finance_request_bill_approval(%L)', v_bill),
       'not available', 'without the approvals engine, asking for approval says so');
+    perform tests.ok(public.finance_bill_approval_status(v_bill) is null, 'without the approvals engine, there is no approval status');
     perform tests.clear_auth(); reset role;
     perform tests.authenticate(v_admin, 'aal2');
     perform public.finance_post_bill(v_bill);
