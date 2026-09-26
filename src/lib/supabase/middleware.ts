@@ -58,12 +58,13 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && (path === "/sign-in" || path === "/sign-up")) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
+  // A signed-in person who opens /sign-in or /sign-up is sent on by those
+  // pages themselves, not here. The proxy cannot tell a real visit from
+  // Next's background prefetch of a link (Next hides those headers from it),
+  // and a redirect answered to a prefetch is never read by the router: after
+  // sign-in the page's "Sign up" link was prefetched, redirected to "/", and
+  // left a request open indefinitely. A page's own redirect() travels inside
+  // the response the router expects.
 
   return supabaseResponse;
 }
