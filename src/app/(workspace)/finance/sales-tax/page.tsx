@@ -134,14 +134,22 @@ export default async function SalesTaxPage() {
                   <TableCell className="tabular-nums">{netLabel(p.gst_collected_cents, p.gst_claimed_cents)}</TableCell>
                   <TableCell className="tabular-nums">{netLabel(p.qst_collected_cents, p.qst_claimed_cents)}</TableCell>
                   <TableCell className="text-right">
-                    <Link className="underline" href={`/finance/sales-tax/worksheet?period=${p.id}`}>
-                      Worksheet<span className="sr-only"> for {p.starts_on} to {p.ends_on}</span>
+                    <Link
+                      className="underline"
+                      href={`/finance/sales-tax/worksheet?period=${p.id}`}
+                      aria-label={`Worksheet for ${p.starts_on} to ${p.ends_on}`}
+                    >
+                      Worksheet
                     </Link>
                     {p.closing_entry_id ? (
                       <>
                         {" · "}
-                        <Link className="underline" href={`/finance/ledger/journal/${p.closing_entry_id}`}>
-                          Closing entry<span className="sr-only"> for {p.starts_on} to {p.ends_on}</span>
+                        <Link
+                          className="underline"
+                          href={`/finance/ledger/journal/${p.closing_entry_id}`}
+                          aria-label={`Closing entry for ${p.starts_on} to ${p.ends_on}`}
+                        >
+                          Closing entry
                         </Link>
                       </>
                     ) : null}

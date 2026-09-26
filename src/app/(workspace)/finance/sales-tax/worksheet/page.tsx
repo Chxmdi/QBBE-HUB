@@ -43,9 +43,12 @@ function ReturnTable({ title, lines, from, to }: { title: string; lines: ReturnL
                 <TableCell className={l.isTotal ? "font-semibold" : undefined}>{l.label}</TableCell>
                 <TableCell className={`text-right tabular-nums ${l.isTotal ? "font-semibold" : ""}`}>
                   {query ? (
-                    <Link className="underline" href={`/finance/sales-tax/lines?${query}`}>
+                    <Link
+                      className="underline"
+                      href={`/finance/sales-tax/lines?${query}`}
+                      aria-label={`${formatCents(l.cents)}, show the lines behind line ${l.line}`}
+                    >
                       {formatCents(l.cents)}
-                      <span className="sr-only"> — show the lines behind line {l.line}</span>
                     </Link>
                   ) : (
                     formatCents(l.cents)
