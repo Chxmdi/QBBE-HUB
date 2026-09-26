@@ -228,6 +228,13 @@ begin
     format('every line matched: the difference is zero (%s)', f.difference_cents));
   perform tests.ok(f.ledger_balance_cents = 988805 and f.outstanding_cents = -5000 and f.outstanding_count = 1,
     format('the outstanding cheque explains ledger vs bank (%s, %s)', f.ledger_balance_cents, f.outstanding_cents));
+  perform tests.ok((select count(*) from public.bank_reconciliation_outstanding(v_rec)
+      where entry_id = v_entry and amount_cents = -5000) = 1
+    and (select count(*) from public.bank_reconciliation_outstanding(v_rec)) = 1,
+    'the outstanding list holds exactly the uncashed cheque');
+  perform tests.ok((select count(*) from public.bank_statement_lines(v_account, date '2026-10-01', date '2026-10-31')
+      where entry_id is not null) = 4,
+    'the statement lines list shows each line with its ledger entry');
 
   -- A wrong closing balance is refused, through the function and directly.
   perform public.bank_update_reconciliation(v_rec, 1000000, 993800);

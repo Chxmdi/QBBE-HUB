@@ -85,5 +85,5 @@ export function reconciliationCsv(r: ReportInput): string {
     ["Date", "Ledger entry", "Memo", "Amount"],
     ...r.outstanding.map((o) => [o.entry_date, o.entry_number, o.memo, amount(o.amount_cents)]),
   ];
-  return `﻿${rows.map((row) => row.map(cellText).join(",")).join("\r\n")}\r\n`;
+  return `\uFEFF${rows.map((row) => row.map(cellText).join(",")).join("\r\n")}\r\n`;
 }

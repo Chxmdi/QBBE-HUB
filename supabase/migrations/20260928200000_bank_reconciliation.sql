@@ -1032,7 +1032,7 @@ as $$
 declare
   b public.bank_account;
 begin
-  select * into b from public.bank_account where id = p_bank_account;
+  select * into b from public.bank_account ba where ba.id = p_bank_account;
   if not found or not app.can_read_ledger(b.organization_id) then
     raise exception 'Bank account not found' using errcode = 'P0002';
   end if;
