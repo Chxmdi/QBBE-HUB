@@ -71,9 +71,11 @@ test("channel access provenance is visible and history survives archive", async 
     .getByRole("menuitem", { name: "Archive channel", exact: true })
     .click();
 
-  await expect(page.getByText(/This channel is archived/i)).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(page.getByText(/This channel is archived/i).first()).toBeVisible(
+    {
+      timeout: 30_000,
+    },
+  );
 
   const messageCount = sql(`
     select count(*)::text from message where channel_id = '${channelId}';
@@ -86,7 +88,9 @@ test("channel access provenance is visible and history survives archive", async 
   ).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByText(/This channel is archived/i)).toBeVisible();
+  await expect(
+    page.getByText(/This channel is archived/i).first(),
+  ).toBeVisible();
 });
 
 test("a failed workflow execution retries into one notification", async () => {
@@ -231,7 +235,7 @@ test("a deactivated member cannot read a private channel", async () => {
 
   sql(`
     update organization_membership
-    set status = 'inactive'
+    set status = 'deactivated'
     where user_id = '${STAFF}';
   `);
 
