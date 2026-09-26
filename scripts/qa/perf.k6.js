@@ -46,18 +46,27 @@ export const options = {
   },
   summaryTrendStats: ["avg", "med", "p(90)", "p(95)", "max"],
 };
-// A threshold that always passes, only so the summary reports each screen's
-// page size on its own line.
+// Thresholds that always pass, only so the summary reports each screen's page
+// size on its own line, and each screen's time on a person's first visit
+// apart from later ones: a first visit meets a cold server, a later one does
+// not, and one slow group can hide inside a single 95th percentile.
 for (const screen of SCREENS) {
   options.thresholds[`page_bytes{screen:${screen}}`] = ["avg>=0"];
+  options.thresholds[`http_req_duration{screen:${screen},visit:first}`] = ["avg>=0"];
+  options.thresholds[`http_req_duration{screen:${screen},visit:repeat}`] = ["avg>=0"];
 }
 
 function visit(path, screen, cookie) {
   const response = http.get(`${BASE_URL}${path}`, {
     headers: { cookie },
     redirects: 0,
-    tags: { screen },
+    tags: { screen, visit: __ITER === 0 ? "first" : "repeat" },
   });
+  // A redirect is not a failed request to k6, so say where it went: that is
+  // the difference between a sign-in bounce, the MFA gate and onboarding.
+  if (response.status !== 200) {
+    console.warn(`${screen} answered ${response.status} -> ${response.headers.Location ?? "(no location)"} (VU ${__VU}, iteration ${__ITER})`);
+  }
   pageBytes.add(String(response.body ?? "").length, { screen });
   check(response, {
     [`${screen} answers 200`]: (r) => r.status === 200,
@@ -71,6 +80,11 @@ export default function () {
   const { users, projects, channel } = fixture[0];
   const me = users[(__VU - 1) % users.length];
   const project = projects[(__VU + __ITER) % projects.length];
+
+  // People do not all open the app in the same millisecond. Without this all
+  // fifty first requests land on the dashboard at once, and that burst, not
+  // the dashboard, sets its 95th percentile. Same spread as between clicks.
+  if (__ITER === 0) sleep(Math.random() * 3);
 
   visit("/", "dashboard", me.cookie);
   visit("/my-work", "my-work", me.cookie);
