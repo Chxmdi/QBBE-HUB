@@ -173,7 +173,14 @@ jobs:
             -e SESSIONS=${{ github.workspace }}/perf-sessions.json \
             -e DURATION=${{ inputs.duration || '2m' }} \
             --summary-export=perf-summary.json \
+            --log-output=file=k6.log \
             scripts/qa/perf.k6.js
+
+      # Redirects are not failures to k6, so the summary only counts them. The
+      # script logs each one's status and destination; print them in one place.
+      - name: Non-200 answers during the run
+        if: always()
+        run: grep -h 'answered' k6.log | sed 's/.*msg="//; s/" source=.*//' | sort | uniq -c | sort -rn | head -20 || echo "none"
 
       - name: CPU by process during the run
         if: always()
