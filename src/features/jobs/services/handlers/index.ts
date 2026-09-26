@@ -11,6 +11,7 @@ import { gmailPushSync } from "./gmail-push-sync";
 import { gmailWatchRenew } from "./gmail-watch-renew";
 import { googleSync } from "./google-sync";
 import { purgeJobHistory } from "./purge-job-history";
+import { reportRecordRetention } from "./report-record-retention";
 import { retryFailedEmails } from "./retry-failed-emails";
 import { retryWorkflowExecutions } from "./retry-workflow-executions";
 import { runExports } from "./run-exports";
@@ -54,6 +55,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   // Housekeeping
   "purge-job-history": purgeJobHistory,
   "apply-retention": applyRetention,
+  "report-record-retention": reportRecordRetention,
 };
 
 export const JOB_NAMES = Object.keys(JOB_HANDLERS);
