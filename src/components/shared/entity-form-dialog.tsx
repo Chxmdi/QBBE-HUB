@@ -57,7 +57,8 @@ export function EntityFormDialog({
     e.preventDefault();
     setError(null);
     setSaving(true);
-    const form = new FormData(e.currentTarget);
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
     const values: Record<string, string> = { ...extraValues };
     for (const field of fields) {
       const value = (form.get(field.name) as string) ?? "";
@@ -70,6 +71,9 @@ export function EntityFormDialog({
       setError(result.error ?? "Something went wrong. Try again.");
       return;
     }
+    // The native <dialog> stays mounted when closed, so without a reset the
+    // next "Add" would silently reuse the last entry's values.
+    formElement.reset();
     setOpen(false);
     router.refresh();
   }
