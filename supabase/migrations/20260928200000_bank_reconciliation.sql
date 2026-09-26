@@ -1002,3 +1002,93 @@ end;
 $$;
 revoke all on function public.bank_set_reconciliation_status(uuid, text) from public, anon;
 grant execute on function public.bank_set_reconciliation_status(uuid, text) to authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- Read helpers for the screens and the report: ledger readers only.
+-- ---------------------------------------------------------------------------
+
+-- Statement lines of an account between two dates, with what each is matched to.
+create or replace function public.bank_statement_lines(p_bank_account uuid, p_from date, p_to date)
+returns table (
+  id uuid,
+  posted_on date,
+  amount_cents bigint,
+  description text,
+  reference text,
+  import_id uuid,
+  journal_line_id uuid,
+  match_method text,
+  entry_id uuid,
+  entry_number integer,
+  entry_date date,
+  entry_memo text,
+  locked boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  b public.bank_account;
+begin
+  select * into b from public.bank_account where id = p_bank_account;
+  if not found or not app.can_read_ledger(b.organization_id) then
+    raise exception 'Bank account not found' using errcode = 'P0002';
+  end if;
+  return query
+  select t.id, t.posted_on, t.amount_cents, t.description, t.reference, t.import_id,
+    m.journal_line_id, m.method, e.id, e.entry_number, e.entry_date, e.memo,
+    app.bank_day_locked(b.id, t.posted_on)
+  from public.bank_transaction t
+  left join public.bank_match m on m.bank_transaction_id = t.id
+  left join public.journal_line l on l.id = m.journal_line_id
+  left join public.journal_entry e on e.id = l.entry_id
+  where t.bank_account_id = b.id and t.posted_on between p_from and p_to
+  order by t.posted_on, t.created_at, t.id;
+end;
+$$;
+revoke all on function public.bank_statement_lines(uuid, date, date) from public, anon;
+grant execute on function public.bank_statement_lines(uuid, date, date) to authenticated, service_role;
+
+-- Ledger lines on the cash account, dated on or before the statement's end,
+-- that the bank has not cleared by then: the outstanding items.
+create or replace function public.bank_reconciliation_outstanding(p_reconciliation uuid)
+returns table (
+  journal_line_id uuid,
+  entry_id uuid,
+  entry_number integer,
+  entry_date date,
+  memo text,
+  amount_cents bigint
+)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  r public.bank_reconciliation;
+  b public.bank_account;
+begin
+  select * into r from public.bank_reconciliation where id = p_reconciliation;
+  if not found or not app.can_read_ledger(r.organization_id) then
+    raise exception 'Reconciliation not found' using errcode = 'P0002';
+  end if;
+  select * into b from public.bank_account where id = r.bank_account_id;
+  return query
+  select l.id, e.id, e.entry_number, e.entry_date, e.memo, l.debit_cents - l.credit_cents
+  from public.journal_line l
+  join public.journal_entry e on e.id = l.entry_id
+  left join public.bank_match m on m.journal_line_id = l.id
+  left join public.bank_transaction t on t.id = m.bank_transaction_id and t.posted_on <= r.statement_end
+  where l.organization_id = b.organization_id
+    and l.account_id = b.ledger_account_id
+    and e.status = 'posted'
+    and e.entry_date <= r.statement_end
+    and not (e.kind = 'opening' or e.entry_date < b.reconcile_from or t.id is not null)
+  order by e.entry_date, e.entry_number;
+end;
+$$;
+revoke all on function public.bank_reconciliation_outstanding(uuid) from public, anon;
+grant execute on function public.bank_reconciliation_outstanding(uuid) to authenticated, service_role;
