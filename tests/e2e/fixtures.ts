@@ -146,7 +146,7 @@ export const test = base.extend({
 
     page.goto = async (url, options) => {
       await settle();
-      let response;
+      let response: Awaited<ReturnType<typeof goto>> = null;
       try {
         response = await goto(url, options);
       } catch (error) {
@@ -156,11 +156,25 @@ export const test = base.extend({
         // being refreshed. A goto started in between is reported as
         // "interrupted by another navigation" to that page. Seen as
         // task-core's `/my-work?task=…` and `/my-work?create=task` interrupted
-        // by `/my-work` (#134, #135). The app did nothing wrong, so try the
-        // same navigation once more; a second interruption is a real failure.
-        if (!String(error).includes("is interrupted by another navigation")) throw error;
-        await settle();
-        response = await goto(url, options);
+        // by `/my-work` (#134, #135). A server action that revalidates and a
+        // client `router.refresh()` after it can land as two such refreshes
+        // back to back, which also interrupts a single retry (#160, #164).
+        // The app did nothing wrong, so wait for the page to settle and try
+        // again, up to three times; anything past that is a real failure.
+        let lastError = error;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          if (!String(lastError).includes("is interrupted by another navigation")) throw lastError;
+          await page.waitForLoadState("load").catch(() => {});
+          await settle();
+          try {
+            response = await goto(url, options);
+            lastError = null;
+            break;
+          } catch (retryError) {
+            lastError = retryError;
+          }
+        }
+        if (lastError) throw lastError;
       }
       await waitUntilInteractive(page);
       return response;
