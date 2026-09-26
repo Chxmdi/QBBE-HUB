@@ -44,6 +44,7 @@ export const RATE_LIMITS = {
   "access-grant:project": { limit: 120, windowSeconds: 3600 },
   "announcement:publish": { limit: 20, windowSeconds: 3600 },
   "document:upload": { limit: 60, windowSeconds: 3600 },
+  "receipt:submit": { limit: 60, windowSeconds: 3600 },
   "form:submit": { limit: 60, windowSeconds: 3600 },
   "report:generate": { limit: 30, windowSeconds: 3600 },
   // Tighter than the rest: each one copies sensitive data out of the reach of
