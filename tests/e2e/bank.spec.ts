@@ -1,7 +1,19 @@
-import { expect, test } from "./fixtures";
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Page } from "./fixtures";
 import { signIn, signOut } from "./auth";
 import { sql } from "./db";
 import { clickWhenInteractive } from "./interactive";
+
+/** Serious or critical WCAG 2.2 AA violations on the current page. */
+async function axeProblems(page: Page): Promise<string[]> {
+  await page.waitForLoadState("networkidle");
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
+    .analyze();
+  return results.violations
+    .filter((v) => v.impact === "critical" || v.impact === "serious")
+    .map((v) => `[${v.impact}] ${v.id}: ${v.help} ${v.nodes[0]?.html?.slice(0, 160)}`);
+}
 
 /**
  * Bank import and reconciliation (#151): the owner adds a bank account tied
@@ -69,6 +81,7 @@ test("the owner imports a statement, matches it and reconciles the month at a ze
 
   await page.goto(`${accountUrl}?month=2031-03`);
   await expect(page.getByText("2 lines, 2 not matched.")).toBeVisible();
+  expect(await axeProblems(page), "account screen accessibility").toEqual([]);
 
   // Lines the ledger does not have become entries, posted and matched.
   for (const [line, account] of [
@@ -100,6 +113,7 @@ test("the owner imports a statement, matches it and reconciles the month at a ze
   });
   await expect(page.getByText(/The difference is \$0\.01; it must be zero/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Mark reconciled" })).toBeDisabled();
+  expect(await axeProblems(page), "reconciliation screen accessibility").toEqual([]);
 
   await page.getByLabel("Statement closing balance").fill("92.50");
   await clickWhenInteractive(page.getByRole("button", { name: "Save balances" }));
