@@ -33,6 +33,8 @@ const ROUTES = [
   { path: "/reports", name: "reports" },
   { path: "/documents", name: "documents" },
   { path: "/finance/receipts", name: "receipts" },
+  { path: "/forms", name: "forms" },
+  { path: "/signatures", name: "signatures" },
   { path: "/admin", name: "admin" },
   { path: "/admin/records", name: "admin-records" },
   // Every primitive in every state (UI-008), so the sweep covers them.
