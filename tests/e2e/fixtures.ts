@@ -147,30 +147,38 @@ export const test = base.extend({
     page.goto = async (url, options) => {
       await settle();
       let response: Awaited<ReturnType<typeof goto>> = null;
-      try {
-        response = await goto(url, options);
-      } catch (error) {
-        // settle() cannot close one window: a router.refresh() whose RSC
-        // response has arrived (so it is no longer "in flight") but whose
-        // commit has not, and which then rewrites the address to the page
-        // being refreshed. A goto started in between is reported as
-        // "interrupted by another navigation" to that page. Seen as
-        // task-core's `/my-work?task=…` and `/my-work?create=task` interrupted
-        // by `/my-work` (#134, #135).
-        //
-        // Retrying in place is not enough (#165's first attempt retried three
-        // times and all three were interrupted, on #160, #162 and #164). The
-        // interruption comes from the page being left: until the new
-        // document commits, the old one is still running, and a refresh it
-        // commits rewrites the address, which Chromium treats as a
-        // same-document navigation that cancels the pending one. So on an
-        // interruption, leave for about:blank first (no script left to
-        // interfere; cookies and the session are kept), then navigate. A
-        // second interruption after that is a real failure.
-        if (!String(error).includes("is interrupted by another navigation")) throw error;
-        await goto("about:blank");
-        pending.clear();
-        response = await goto(url, options);
+      // Two different things are reported as "interrupted by another
+      // navigation", and a goto can meet one and then the other:
+      //
+      // - 'Navigation to "X" is interrupted by another navigation to "Y"':
+      //   the page being left committed a router.refresh() (its RSC response
+      //   had arrived, so settle() no longer saw it in flight) and rewrote the
+      //   address to Y before X committed. Seen as task-core's
+      //   `/my-work?task=…` interrupted by `/my-work` (#134, #135). The app
+      //   did nothing wrong: settle and navigate again.
+      // - '... to "X" is interrupted by another navigation to "X"': the page
+      //   did arrive at X, and Next's client router wrote X to the address
+      //   again while it was still loading (a same-document history update).
+      //   Playwright stops waiting for "load" on the first. That is a
+      //   successful navigation: wait for the load state asked for and go on.
+      //
+      // Up to three attempts; anything past that is a real failure.
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          response = await goto(url, options);
+          break;
+        } catch (error) {
+          const message = String(error);
+          const match = /Navigation to "([^"]+)" is interrupted by another navigation to "([^"]+)"/.exec(message);
+          if (!match || attempt >= 3) throw error;
+          if (match[1] === match[2]) {
+            await page.waitForLoadState(
+              options?.waitUntil === "commit" ? "domcontentloaded" : (options?.waitUntil ?? "load"),
+            );
+            break;
+          }
+          await settle();
+        }
       }
       await waitUntilInteractive(page);
       return response;
