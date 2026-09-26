@@ -120,11 +120,21 @@ jobs:
           npm run db:seed
           docker exec -i supabase_db_workspace psql -U postgres -v ON_ERROR_STOP=1 -q < supabase/tests/perf-fixture.sql
 
+      # Three app instances behind a round-robin proxy on :3000. One `next
+      # start` is a single Node.js thread, and on 2026-09-26 it was pinned at
+      # 94% of one core while the rest of the stack used about 1.5 of the other
+      # three (#115). Production runs many instances; one process measured the
+      # process, not the app. This remains a regression signal: the acceptance
+      # figure is the same script against staging.
       - name: Build and start the production app
         run: |
           npm run build
-          npx next start -p 3000 -H 127.0.0.1 &
-          npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
+          for port in 3001 3002 3003; do
+            npx next start -p "$port" -H 127.0.0.1 &
+          done
+          npx wait-on --timeout 90000 http-get://127.0.0.1:3001/sign-in http-get://127.0.0.1:3002/sign-in http-get://127.0.0.1:3003/sign-in
+          node scripts/qa/round-robin.mjs 3000 3001 3002 3003 &
+          npx wait-on --timeout 30000 http-get://127.0.0.1:3000/sign-in
 
       - name: Sign in the 50 people
         run: node scripts/qa/perf-sessions.mjs perf-sessions.json
