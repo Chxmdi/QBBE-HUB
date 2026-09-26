@@ -148,6 +148,35 @@ begin
   from public.record_template
   where id = v_template and approved_at is not null;
   perform tests.ok(n = 1, 'administrator can approve a record_template');
+
+  -- Once approved, staff can neither rewrite nor remove it.
+  perform tests.authenticate(v_staff);
+  failed := false;
+  begin
+    update public.record_template
+    set structure = '{"title":"Rewritten"}'::jsonb
+    where id = v_template;
+  exception when insufficient_privilege then
+    failed := true;
+  end;
+  perform tests.ok(failed, 'staff cannot edit an approved record_template');
+
+  failed := false;
+  begin
+    delete from public.record_template where id = v_template;
+  exception when insufficient_privilege then
+    failed := true;
+  end;
+  perform tests.ok(failed, 'staff cannot delete an approved record_template');
+
+  perform tests.authenticate(v_owner);
+  update public.record_template
+  set name = 'Epic05 task template (revised)'
+  where id = v_template;
+  select count(*) into n
+  from public.record_template
+  where id = v_template and name = 'Epic05 task template (revised)';
+  perform tests.ok(n = 1, 'administrator can revise an approved record_template');
 end;
 $$;
 

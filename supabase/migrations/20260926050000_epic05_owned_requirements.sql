@@ -95,7 +95,9 @@ create policy record_template_write on public.record_template
 comment on table public.record_template is
   'Approved structure for a task, event, update, or report. Instantiation copies structure only.';
 
--- Approval is an administrator act. Staff may draft; they may not approve.
+-- Approval is an administrator act. Staff may draft; they may not approve,
+-- and once a template is approved only an administrator may change or remove
+-- it — otherwise an approved template could be rewritten and stay approved.
 create or replace function app.guard_template_approval()
 returns trigger
 language plpgsql
@@ -103,6 +105,22 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
+  if tg_op = 'DELETE' then
+    if old.approved_at is not null
+       and auth.uid() is not null
+       and not app.is_org_admin(old.organization_id) then
+      raise exception 'Only an administrator can remove an approved template'
+        using errcode = '42501';
+    end if;
+    return old;
+  end if;
+  if tg_op = 'UPDATE'
+     and old.approved_at is not null
+     and auth.uid() is not null
+     and not app.is_org_admin(old.organization_id) then
+    raise exception 'Only an administrator can change an approved template'
+      using errcode = '42501';
+  end if;
   if new.approved_at is not null
      and (tg_op = 'INSERT' or new.approved_at is distinct from old.approved_at)
      and not app.is_org_admin(new.organization_id) then
@@ -124,17 +142,17 @@ revoke all on function app.guard_template_approval() from public, anon, authenti
 
 drop trigger if exists project_template_approval_guard on public.project_template;
 create trigger project_template_approval_guard
-  before insert or update on public.project_template
+  before insert or update or delete on public.project_template
   for each row execute function app.guard_template_approval();
 
 drop trigger if exists agenda_template_approval_guard on public.agenda_template;
 create trigger agenda_template_approval_guard
-  before insert or update on public.agenda_template
+  before insert or update or delete on public.agenda_template
   for each row execute function app.guard_template_approval();
 
 drop trigger if exists record_template_approval_guard on public.record_template;
 create trigger record_template_approval_guard
-  before insert or update on public.record_template
+  before insert or update or delete on public.record_template
   for each row execute function app.guard_template_approval();
 
 alter table public.workflow_execution
@@ -345,3 +363,39 @@ drop trigger if exists document_archive_audited on public.document;
 create trigger document_archive_audited
   after update or delete on public.document
   for each row execute function app.audit_document_archive();
+
+-- A project template's items are part of what was approved, so the same rule
+-- holds for them: on an approved template only an administrator may add,
+-- change, or remove an item.
+create or replace function app.guard_approved_template_item()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_row public.project_template_item;
+  v_org uuid;
+  v_approved timestamptz;
+begin
+  v_row := case when tg_op = 'DELETE' then old else new end;
+  select organization_id, approved_at into v_org, v_approved
+  from public.project_template
+  where id = v_row.project_template_id;
+  -- No signed-in user means a system operation, such as a cascade.
+  if v_approved is not null
+     and auth.uid() is not null
+     and not app.is_org_admin(v_org) then
+    raise exception 'Only an administrator can change an approved template'
+      using errcode = '42501';
+  end if;
+  return v_row;
+end;
+$$;
+
+revoke all on function app.guard_approved_template_item() from public, anon, authenticated;
+
+drop trigger if exists project_template_item_approval_guard on public.project_template_item;
+create trigger project_template_item_approval_guard
+  before insert or update or delete on public.project_template_item
+  for each row execute function app.guard_approved_template_item();
