@@ -9,6 +9,8 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { instantToWallTime } from "@/lib/time";
 import { AgendaTriage } from "@/features/meetings/components/agenda-triage";
+import { AgendaItemControls } from "@/features/meetings/components/agenda-item-controls";
+import { CommentThread } from "@/features/comments/components/comment-thread";
 import { AttendeeList } from "@/features/meetings/components/attendee-list";
 import { CancelMeetingButton } from "@/features/meetings/components/cancel-meeting-button";
 import { CompleteMeetingButton } from "@/features/meetings/components/complete-meeting-button";
@@ -17,6 +19,7 @@ import {
   addAgendaItem,
   addMeetingAction,
   recordDecision,
+  updateAgendaItem,
   updateMeeting,
 } from "@/features/meetings/services/meeting.commands";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
@@ -42,7 +45,40 @@ const AGENDA_STATUS_BADGE: Record<
   deferred: { label: "Deferred", tone: "neutral" },
   declined: { label: "Declined", tone: "danger" },
   done: { label: "Done", tone: "success" },
+  combined: { label: "Combined", tone: "neutral" },
 };
+
+type AgendaRow = AgendaItem & {
+  proposed_by: string | null;
+  carried_from_id: string | null;
+  combined_into_id: string | null;
+  linked_task_id: string | null;
+  linked_milestone_id: string | null;
+  linked_risk_id: string | null;
+  linked_issue_id: string | null;
+  linked_event_id: string | null;
+  linked_decision_id: string | null;
+  linked_contact_id: string | null;
+};
+
+const LINK_KINDS = [
+  "task",
+  "milestone",
+  "risk",
+  "issue",
+  "event",
+  "decision",
+  "contact",
+] as const;
+
+/** The item's one linked record, as the `kind:id` value the form uses. */
+function agendaLinkValue(item: AgendaRow): string {
+  for (const kind of LINK_KINDS) {
+    const id = item[`linked_${kind}_id`];
+    if (id) return `${kind}:${id}`;
+  }
+  return "";
+}
 
 const KIND_TONES = {
   information: "info",
@@ -62,7 +98,7 @@ export default async function MeetingDetailPage({
   const { data: meetingRow } = await supabase
     .from("meeting")
     .select(
-      "id, title, purpose, organizer_id, starts_at, ends_at, location, meeting_link, status, notes, channel_id, project_id, summary_posted_at, " +
+      "id, title, purpose, organizer_id, starts_at, ends_at, location, meeting_link, status, notes, channel_id, project_id, series_id, summary_posted_at, " +
         "organizer:organizer_id(id, full_name, avatar_url), project:project_id(id, name)",
     )
     .eq("id", id)
@@ -81,43 +117,204 @@ export default async function MeetingDetailPage({
     status: string;
     notes: string | null;
     project_id: string | null;
+    series_id: string | null;
     summary_posted_at: string | null;
     organizer: { full_name: string; avatar_url: string | null } | null;
     project: { id: string; name: string } | null;
   };
 
-  const [{ data: agenda }, { data: actions }, { data: decisions }, options, { data: attendeeRows }, { data: calendarLink }] =
+  const [
+    { data: agenda },
+    { data: actions },
+    { data: decisions },
+    options,
+    { data: attendeeRows },
+    { data: calendarLink },
+  ] = await Promise.all([
+    supabase
+      .from("agenda_item")
+      .select(
+        "id, meeting_id, title, kind, owner_id, desired_outcome, time_box_minutes, sort_key, status, proposed_by, carried_from_id, combined_into_id, linked_task_id, linked_milestone_id, linked_risk_id, linked_issue_id, linked_event_id, linked_decision_id, linked_contact_id, owner:owner_id(id, full_name, avatar_url)",
+      )
+      .eq("meeting_id", id)
+      .order("sort_key"),
+    supabase
+      .from("meeting_action")
+      .select(
+        "id, meeting_id, task_id, title, owner_id, due_at, owner:owner_id(id, full_name, avatar_url)",
+      )
+      .eq("meeting_id", id)
+      .order("created_at"),
+    supabase
+      .from("decision")
+      .select(
+        "id, project_id, meeting_id, title, detail, decided_at, decided_by",
+      )
+      .eq("meeting_id", id)
+      .order("decided_at"),
+    getPickerOptions(),
+    supabase
+      .from("meeting_attendee")
+      .select("user_id, user:user_id(id, full_name, avatar_url)")
+      .eq("meeting_id", id),
+    supabase
+      .from("calendar_event_link")
+      .select("html_link")
+      .eq("meeting_id", id)
+      .maybeSingle(),
+  ]);
+
+  // Later meetings an unfinished item can be carried to: the rest of this
+  // series, or other upcoming meetings on the same project (P1-AGD-06).
+  const laterQuery = supabase
+    .from("meeting")
+    .select("id, title, starts_at")
+    .gt("starts_at", meeting.starts_at)
+    .in("status", ["scheduled", "in_progress"])
+    .order("starts_at")
+    .limit(12);
+  const [{ data: laterRows }, { data: seriesRows }, linkOptions] =
     await Promise.all([
-      supabase
-        .from("agenda_item")
-        .select(
-          "id, meeting_id, title, kind, owner_id, desired_outcome, time_box_minutes, sort_key, status, owner:owner_id(id, full_name, avatar_url)",
-        )
-        .eq("meeting_id", id)
-        .order("sort_key"),
-      supabase
-        .from("meeting_action")
-        .select(
-          "id, meeting_id, task_id, title, owner_id, due_at, owner:owner_id(id, full_name, avatar_url)",
-        )
-        .eq("meeting_id", id)
-        .order("created_at"),
-      supabase
-        .from("decision")
-        .select("id, project_id, meeting_id, title, detail, decided_at, decided_by")
-        .eq("meeting_id", id)
-        .order("decided_at"),
-      getPickerOptions(),
-      supabase
-        .from("meeting_attendee")
-        .select("user_id, user:user_id(id, full_name, avatar_url)")
-        .eq("meeting_id", id),
-      supabase
-        .from("calendar_event_link")
-        .select("html_link")
-        .eq("meeting_id", id)
-        .maybeSingle(),
+      meeting.series_id
+        ? laterQuery.eq("series_id", meeting.series_id)
+        : meeting.project_id
+          ? laterQuery.eq("project_id", meeting.project_id)
+          : Promise.resolve({ data: [] }),
+      meeting.series_id
+        ? supabase
+            .from("meeting")
+            .select("id, starts_at, status")
+            .eq("series_id", meeting.series_id)
+            .order("starts_at")
+        : Promise.resolve({ data: [] }),
+      // Records an agenda item can link to (P0-AGD-04), from the meeting's project.
+      meeting.project_id
+        ? Promise.all([
+            supabase
+              .from("task")
+              .select("id, title")
+              .eq("project_id", meeting.project_id)
+              .is("archived_at", null)
+              .order("created_at", { ascending: false })
+              .limit(30),
+            supabase
+              .from("milestone")
+              .select("id, name")
+              .eq("project_id", meeting.project_id)
+              .order("due_date")
+              .limit(30),
+            supabase
+              .from("risk")
+              .select("id, title")
+              .eq("project_id", meeting.project_id)
+              .limit(30),
+            supabase
+              .from("issue")
+              .select("id, title")
+              .eq("project_id", meeting.project_id)
+              .limit(30),
+            supabase
+              .from("decision")
+              .select("id, title")
+              .eq("project_id", meeting.project_id)
+              .order("decided_at", { ascending: false })
+              .limit(30),
+          ]).then(([tasks, milestones, risks, issues, projectDecisions]) => [
+            ...((tasks.data ?? []) as { id: string; title: string }[]).map(
+              (r) => ({ value: `task:${r.id}`, label: `Task: ${r.title}` }),
+            ),
+            ...((milestones.data ?? []) as { id: string; name: string }[]).map(
+              (r) => ({
+                value: `milestone:${r.id}`,
+                label: `Milestone: ${r.name}`,
+              }),
+            ),
+            ...((risks.data ?? []) as { id: string; title: string }[]).map(
+              (r) => ({ value: `risk:${r.id}`, label: `Risk: ${r.title}` }),
+            ),
+            ...((issues.data ?? []) as { id: string; title: string }[]).map(
+              (r) => ({ value: `issue:${r.id}`, label: `Issue: ${r.title}` }),
+            ),
+            ...(
+              (projectDecisions.data ?? []) as { id: string; title: string }[]
+            ).map((r) => ({
+              value: `decision:${r.id}`,
+              label: `Decision: ${r.title}`,
+            })),
+          ])
+        : Promise.resolve([] as { value: string; label: string }[]),
     ]);
+  const laterMeetings = (
+    (laterRows ?? []) as { id: string; title: string; starts_at: string }[]
+  )
+    .filter((row) => row.id !== meeting.id)
+    .map((row) => ({
+      id: row.id,
+      label: `${row.title} · ${formatDateTime(row.starts_at)}`,
+    }));
+  const series = (seriesRows ?? []) as {
+    id: string;
+    starts_at: string;
+    status: string;
+  }[];
+  const linkLabels = new Map(
+    linkOptions.map((option) => [option.value, option.label]),
+  );
+  const agendaRows = (agenda ?? []) as unknown as AgendaRow[];
+  const agendaTitles = new Map(agendaRows.map((row) => [row.id, row.title]));
+  const agendaFields = (item?: AgendaRow) => [
+    {
+      name: "title",
+      label: "Item",
+      type: "text" as const,
+      required: true,
+      defaultValue: item?.title,
+    },
+    {
+      name: "kind",
+      label: "Type",
+      type: "select" as const,
+      required: true,
+      colSpan: 1 as const,
+      defaultValue: item?.kind ?? "discussion",
+      options: [
+        { value: "information", label: "Information" },
+        { value: "discussion", label: "Discussion" },
+        { value: "decision", label: "Decision" },
+      ],
+    },
+    {
+      name: "timeBoxMinutes",
+      label: "Time box (minutes)",
+      type: "number" as const,
+      colSpan: 1 as const,
+      defaultValue: item?.time_box_minutes
+        ? String(item.time_box_minutes)
+        : undefined,
+    },
+    {
+      name: "ownerId",
+      label: "Owner",
+      type: "select" as const,
+      colSpan: 1 as const,
+      defaultValue: item?.owner_id ?? undefined,
+      options: options.people.map((p) => ({ value: p.id, label: p.label })),
+    },
+    {
+      name: "link",
+      label: "Linked record",
+      type: "select" as const,
+      colSpan: 1 as const,
+      defaultValue: item ? agendaLinkValue(item) : undefined,
+      options: linkOptions,
+    },
+    {
+      name: "desiredOutcome",
+      label: "Desired outcome",
+      type: "textarea" as const,
+      defaultValue: item?.desired_outcome ?? undefined,
+    },
+  ];
 
   type AttendeeRow = {
     user_id: string;
@@ -151,7 +348,12 @@ export default async function MeetingDetailPage({
         items={[
           { label: "Meetings", href: "/meetings" },
           ...(meeting.project
-            ? [{ label: meeting.project.name, href: `/projects/${meeting.project.id}` }]
+            ? [
+                {
+                  label: meeting.project.name,
+                  href: `/projects/${meeting.project.id}`,
+                },
+              ]
             : []),
           { label: meeting.title },
         ]}
@@ -171,11 +373,56 @@ export default async function MeetingDetailPage({
                 action={updateMeeting}
                 extraValues={{ meetingId: meeting.id }}
                 fields={[
-                  { name: "title", label: "Title", type: "text", required: true, defaultValue: meeting.title },
-                  { name: "purpose", label: "Purpose", type: "textarea", defaultValue: meeting.purpose ?? "" },
-                  { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1, defaultValue: instantToWallTime(meeting.starts_at, session.timeZone) },
-                  { name: "durationMinutes", label: "Duration (minutes)", type: "number", required: true, colSpan: 1, defaultValue: String(Math.max(15, Math.round(((meeting.ends_at ? new Date(meeting.ends_at).getTime() : new Date(meeting.starts_at).getTime() + 3_600_000) - new Date(meeting.starts_at).getTime()) / 60_000))) },
-                  { name: "location", label: "Location", type: "text", defaultValue: meeting.location ?? "" },
+                  {
+                    name: "title",
+                    label: "Title",
+                    type: "text",
+                    required: true,
+                    defaultValue: meeting.title,
+                  },
+                  {
+                    name: "purpose",
+                    label: "Purpose",
+                    type: "textarea",
+                    defaultValue: meeting.purpose ?? "",
+                  },
+                  {
+                    name: "startsAt",
+                    label: "Starts",
+                    type: "datetime-local",
+                    required: true,
+                    colSpan: 1,
+                    defaultValue: instantToWallTime(
+                      meeting.starts_at,
+                      session.timeZone,
+                    ),
+                  },
+                  {
+                    name: "durationMinutes",
+                    label: "Duration (minutes)",
+                    type: "number",
+                    required: true,
+                    colSpan: 1,
+                    defaultValue: String(
+                      Math.max(
+                        15,
+                        Math.round(
+                          ((meeting.ends_at
+                            ? new Date(meeting.ends_at).getTime()
+                            : new Date(meeting.starts_at).getTime() +
+                              3_600_000) -
+                            new Date(meeting.starts_at).getTime()) /
+                            60_000,
+                        ),
+                      ),
+                    ),
+                  },
+                  {
+                    name: "location",
+                    label: "Location",
+                    type: "text",
+                    defaultValue: meeting.location ?? "",
+                  },
                 ]}
               />
               <CancelMeetingButton meetingId={meeting.id} />
@@ -195,7 +442,11 @@ export default async function MeetingDetailPage({
       <div className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-(--radius-md) border border-line bg-surface px-4 py-3">
         {organizer ? (
           <span className="flex items-center gap-2 text-[13.5px]">
-            <Avatar name={organizer.full_name} src={organizer.avatar_url} size="sm" />
+            <Avatar
+              name={organizer.full_name}
+              src={organizer.avatar_url}
+              size="sm"
+            />
             <span>
               <span className="font-medium">{organizer.full_name}</span>
               <span className="meta ml-1.5">Organizer</span>
@@ -233,7 +484,8 @@ export default async function MeetingDetailPage({
             rel="noreferrer noopener"
             className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-brand-fg hover:underline"
           >
-            View in Google Calendar <ExternalLink className="size-3.5" aria-hidden />
+            View in Google Calendar{" "}
+            <ExternalLink className="size-3.5" aria-hidden />
           </a>
         ) : null}
       </div>
@@ -268,28 +520,7 @@ export default async function MeetingDetailPage({
                   submitLabel="Add item"
                   action={addAgendaItem}
                   extraValues={{ meetingId: meeting.id }}
-                  fields={[
-                    { name: "title", label: "Item", type: "text", required: true },
-                    {
-                      name: "kind",
-                      label: "Type",
-                      type: "select",
-                      required: true,
-                      colSpan: 1,
-                      defaultValue: "discussion",
-                      options: [
-                        { value: "information", label: "Information" },
-                        { value: "discussion", label: "Discussion" },
-                        { value: "decision", label: "Decision" },
-                      ],
-                    },
-                    {
-                      name: "timeBoxMinutes",
-                      label: "Time box (minutes)",
-                      type: "number",
-                      colSpan: 1,
-                    },
-                  ]}
+                  fields={agendaFields()}
                 />
               ) : null}
             </div>
@@ -300,39 +531,135 @@ export default async function MeetingDetailPage({
               </p>
             ) : (
               <ol className="card divide-y divide-line">
-                {((agenda ?? []) as unknown as AgendaItem[]).map((item, index) => (
-                  <li key={item.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="w-5 text-center text-[12.5px] font-semibold text-muted">
-                      {index + 1}
-                    </span>
-                    <span className="min-w-0 flex-1 text-[13.5px] font-medium">
-                      {item.title}
-                    </span>
-                    {item.time_box_minutes ? (
-                      <span className="meta whitespace-nowrap">
-                        {item.time_box_minutes} min
+                {agendaRows.map((item, index) => {
+                  const link = agendaLinkValue(item);
+                  return (
+                    <li key={item.id} className="px-4 py-2.5">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="w-5 text-center text-[12.5px] font-semibold text-muted">
+                          {index + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 text-[13.5px] font-medium">
+                          {item.title}
+                        </span>
+                        {item.time_box_minutes ? (
+                          <span className="meta whitespace-nowrap">
+                            {item.time_box_minutes} min
+                          </span>
+                        ) : null}
+                        <Badge tone={KIND_TONES[item.kind]}>{item.kind}</Badge>
+                        {AGENDA_STATUS_BADGE[item.status] ? (
+                          <Badge tone={AGENDA_STATUS_BADGE[item.status].tone}>
+                            {AGENDA_STATUS_BADGE[item.status].label}
+                          </Badge>
+                        ) : null}
+                        {session.isStaff && isActive ? (
+                          <AgendaTriage
+                            agendaItemId={item.id}
+                            status={item.status}
+                            title={item.title}
+                            canMoveUp={index > 0}
+                            canMoveDown={index < agendaRows.length - 1}
+                          />
+                        ) : null}
+                      </div>
+                      <div className="mt-1 ml-8 space-y-0.5 text-[12.5px] text-muted">
+                        {item.owner ? (
+                          <p>Owner: {item.owner.full_name}</p>
+                        ) : null}
+                        {item.desired_outcome ? (
+                          <p className="whitespace-pre-wrap">
+                            Outcome: {item.desired_outcome}
+                          </p>
+                        ) : null}
+                        {link ? (
+                          <p>Linked: {linkLabels.get(link) ?? "a record"}</p>
+                        ) : null}
+                        {item.carried_from_id ? (
+                          <p>Carried forward from an earlier meeting</p>
+                        ) : null}
+                        {item.combined_into_id ? (
+                          <p>
+                            Combined into:{" "}
+                            {agendaTitles.get(item.combined_into_id) ??
+                              "another item"}
+                          </p>
+                        ) : null}
+                      </div>
+                      {isActive &&
+                      (session.isStaff ||
+                        item.proposed_by === session.userId) ? (
+                        <div className="mt-1 ml-8 flex flex-wrap items-center gap-1">
+                          <EntityFormDialog
+                            triggerLabel="Edit item"
+                            triggerVariant="secondary"
+                            title="Edit agenda item"
+                            submitLabel="Save item"
+                            action={updateAgendaItem}
+                            extraValues={{ agendaItemId: item.id }}
+                            fields={agendaFields(item)}
+                          />
+                          {session.isStaff ? (
+                            <AgendaItemControls
+                              agendaItemId={item.id}
+                              title={item.title}
+                              status={item.status}
+                              otherItems={agendaRows
+                                .filter(
+                                  (other) =>
+                                    other.id !== item.id &&
+                                    other.status !== "combined",
+                                )
+                                .map((other) => ({
+                                  id: other.id,
+                                  label: other.title,
+                                }))}
+                              laterMeetings={laterMeetings}
+                            />
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+          </section>
+
+          {series.length > 1 ? (
+            <section aria-labelledby="series-heading">
+              <h2 id="series-heading" className="section-heading mb-3">
+                Series
+              </h2>
+              <p className="meta mb-2">
+                Occurrence{" "}
+                {series.findIndex((row) => row.id === meeting.id) + 1} of{" "}
+                {series.length}. Editing this meeting changes only this
+                occurrence.
+              </p>
+              <ol className="card divide-y divide-line">
+                {series.map((row) => (
+                  <li key={row.id} className="px-4 py-2 text-[13px]">
+                    {row.id === meeting.id ? (
+                      <span className="font-medium">
+                        {formatDateTime(row.starts_at)} (this one)
                       </span>
-                    ) : null}
-                    <Badge tone={KIND_TONES[item.kind]}>{item.kind}</Badge>
-                    {AGENDA_STATUS_BADGE[item.status] ? (
-                      <Badge tone={AGENDA_STATUS_BADGE[item.status].tone}>
-                        {AGENDA_STATUS_BADGE[item.status].label}
-                      </Badge>
-                    ) : null}
-                    {session.isStaff && isActive ? (
-                      <AgendaTriage
-                        agendaItemId={item.id}
-                        status={item.status}
-                        title={item.title}
-                        canMoveUp={index > 0}
-                        canMoveDown={index < (agenda ?? []).length - 1}
-                      />
+                    ) : (
+                      <Link
+                        href={`/meetings/${row.id}`}
+                        className="hover:underline"
+                      >
+                        {formatDateTime(row.starts_at)}
+                      </Link>
+                    )}
+                    {row.status === "cancelled" ? (
+                      <span className="meta ml-2">cancelled</span>
                     ) : null}
                   </li>
                 ))}
               </ol>
-            )}
-          </section>
+            </section>
+          ) : null}
 
           {/* Notes */}
           <section aria-labelledby="notes-heading">
@@ -340,7 +667,10 @@ export default async function MeetingDetailPage({
               Notes
             </h2>
             {session.isStaff && !isCancelled ? (
-              <MeetingNotesForm meetingId={meeting.id} initialNotes={meeting.notes} />
+              <MeetingNotesForm
+                meetingId={meeting.id}
+                initialNotes={meeting.notes}
+              />
             ) : meeting.notes ? (
               <p className="card p-4 text-[13.5px] whitespace-pre-wrap">
                 {meeting.notes}
@@ -357,7 +687,10 @@ export default async function MeetingDetailPage({
           {/* Decisions (P0-MTG-02) */}
           <section aria-labelledby="decisions-heading">
             <div className="mb-3 flex items-center justify-between">
-              <h2 id="decisions-heading" className="section-heading flex items-center gap-1.5">
+              <h2
+                id="decisions-heading"
+                className="section-heading flex items-center gap-1.5"
+              >
                 <Gavel className="size-4 text-muted" aria-hidden />
                 Decisions
               </h2>
@@ -370,7 +703,12 @@ export default async function MeetingDetailPage({
                   action={recordDecision}
                   extraValues={{ meetingId: meeting.id }}
                   fields={[
-                    { name: "title", label: "Decision", type: "text", required: true },
+                    {
+                      name: "title",
+                      label: "Decision",
+                      type: "text",
+                      required: true,
+                    },
                     { name: "detail", label: "Context", type: "textarea" },
                   ]}
                 />
@@ -382,14 +720,18 @@ export default async function MeetingDetailPage({
               </p>
             ) : (
               <ul className="card divide-y divide-line">
-                {((decisions ?? []) as unknown as Decision[]).map((decision) => (
-                  <li key={decision.id} className="px-4 py-2.5">
-                    <p className="text-[13.5px] font-medium">{decision.title}</p>
-                    {decision.detail ? (
-                      <p className="meta mt-0.5">{decision.detail}</p>
-                    ) : null}
-                  </li>
-                ))}
+                {((decisions ?? []) as unknown as Decision[]).map(
+                  (decision) => (
+                    <li key={decision.id} className="px-4 py-2.5">
+                      <p className="text-[13.5px] font-medium">
+                        {decision.title}
+                      </p>
+                      {decision.detail ? (
+                        <p className="meta mt-0.5">{decision.detail}</p>
+                      ) : null}
+                    </li>
+                  ),
+                )}
               </ul>
             )}
           </section>
@@ -397,7 +739,10 @@ export default async function MeetingDetailPage({
           {/* Actions → tasks (CAL-004) */}
           <section aria-labelledby="actions-heading">
             <div className="mb-3 flex items-center justify-between">
-              <h2 id="actions-heading" className="section-heading flex items-center gap-1.5">
+              <h2
+                id="actions-heading"
+                className="section-heading flex items-center gap-1.5"
+              >
                 <ListChecks className="size-4 text-muted" aria-hidden />
                 Actions
               </h2>
@@ -410,15 +755,28 @@ export default async function MeetingDetailPage({
                   action={addMeetingAction}
                   extraValues={{ meetingId: meeting.id }}
                   fields={[
-                    { name: "title", label: "Action", type: "text", required: true },
+                    {
+                      name: "title",
+                      label: "Action",
+                      type: "text",
+                      required: true,
+                    },
                     {
                       name: "ownerId",
                       label: "Owner",
                       type: "select",
                       colSpan: 1,
-                      options: options.people.map((p) => ({ value: p.id, label: p.label })),
+                      options: options.people.map((p) => ({
+                        value: p.id,
+                        label: p.label,
+                      })),
                     },
-                    { name: "dueAt", label: "Due date", type: "date", colSpan: 1 },
+                    {
+                      name: "dueAt",
+                      label: "Due date",
+                      type: "date",
+                      colSpan: 1,
+                    },
                   ]}
                 />
               ) : null}
@@ -429,28 +787,36 @@ export default async function MeetingDetailPage({
               </p>
             ) : (
               <ul className="card divide-y divide-line">
-                {((actions ?? []) as unknown as MeetingAction[]).map((action) => (
-                  <li key={action.id} className="flex items-center gap-3 px-4 py-2.5">
-                    <span className="min-w-0 flex-1 text-[13.5px]">{action.title}</span>
-                    {action.due_at ? (
-                      <span className="meta whitespace-nowrap">
-                        {formatDate(action.due_at)}
+                {((actions ?? []) as unknown as MeetingAction[]).map(
+                  (action) => (
+                    <li
+                      key={action.id}
+                      className="flex items-center gap-3 px-4 py-2.5"
+                    >
+                      <span className="min-w-0 flex-1 text-[13.5px]">
+                        {action.title}
                       </span>
-                    ) : null}
-                    {action.owner ? (
-                      <Avatar
-                        name={action.owner.full_name}
-                        src={action.owner.avatar_url}
-                        size="sm"
-                      />
-                    ) : null}
-                  </li>
-                ))}
+                      {action.due_at ? (
+                        <span className="meta whitespace-nowrap">
+                          {formatDate(action.due_at)}
+                        </span>
+                      ) : null}
+                      {action.owner ? (
+                        <Avatar
+                          name={action.owner.full_name}
+                          src={action.owner.avatar_url}
+                          size="sm"
+                        />
+                      ) : null}
+                    </li>
+                  ),
+                )}
               </ul>
             )}
           </section>
         </div>
       </div>
+      <CommentThread parentType="meeting" parentId={meeting.id} />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CommentThread } from "@/features/comments/components/comment-thread";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -554,6 +555,7 @@ export default async function CrmDetailPage({
         </div>
       </div>
       <DeepLinkScroll targetId={highlightContact ? `contact-${highlightContact}` : null} />
+      <CommentThread parentType="organization" parentId={id} />
     </div>
   );
 }

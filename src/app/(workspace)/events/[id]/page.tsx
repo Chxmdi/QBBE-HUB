@@ -1,4 +1,5 @@
 import { instantToWallTime } from "@/lib/time";
+import { CommentThread } from "@/features/comments/components/comment-thread";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
@@ -265,6 +266,7 @@ export default async function EventDetailPage({
           </ul>
         )}
       </section>
+      <CommentThread parentType="event" parentId={id} />
     </div>
   );
 }

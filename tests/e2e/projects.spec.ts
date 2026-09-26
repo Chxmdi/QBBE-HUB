@@ -61,7 +61,7 @@ test("a project's full detail is reachable at creation and survives a reload", a
   // Visible-only: the same name also sits in the closed edit dialog's sponsor
   // picker as an <option>, which matches a text locator but is never on screen.
   await expect(
-    page.getByText("QA Staff").filter({ visible: true }),
+    page.getByText("QA Staff").filter({ visible: true }).first(),
   ).toBeVisible({ timeout: 30_000 });
 
   // updateProject was dead code: nothing in the application called it.
