@@ -117,8 +117,12 @@ jobs:
   database-security:
     name: Database security
     runs-on: ubuntu-latest
-    # Three browsers take roughly three times as long as one.
-    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 90 || 30 }}
+    # Three browsers take roughly three times as long as one. With the request
+    # proxy running (#135) every request, prefetches included, makes an Auth
+    # round trip first, and the chromium job went from ~19 to ~29.5 minutes;
+    # 30 left no margin. Raised by half until the proxy's per-request check
+    # is made cheaper (verifying the session token locally instead).
+    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 135 || 45 }}
     env:
       SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
     steps:
