@@ -102,7 +102,7 @@ export default async function LedgerPeriodsPage() {
         </DataTable>
       )}
       <p className="meta mt-3">
-        Year-end closing entries are not automated yet; the accountant prepares them as ordinary journal entries.
+        Closing a whole fiscal year, with its closing entry, is on the Year-end tab.
       </p>
     </div>
   );

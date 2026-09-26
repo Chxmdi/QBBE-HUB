@@ -12,6 +12,10 @@ const SECTIONS = [
   { href: "/finance/ledger/accounts", label: "Accounts" },
   { href: "/finance/ledger/funds", label: "Funds" },
   { href: "/finance/ledger/periods", label: "Periods" },
+  { href: "/finance/ledger/statements", label: "Statements" },
+  { href: "/finance/ledger/receipts", label: "Receipts" },
+  { href: "/finance/ledger/year-end", label: "Year-end" },
+  { href: "/finance/ledger/returns", label: "Returns" },
 ];
 
 /** Sections of the ledger, as plain links so each is its own page and URL. */
