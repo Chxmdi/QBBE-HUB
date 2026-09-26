@@ -1,9 +1,5 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import {
-  VERIFIED_USER_HEADER,
-  encodeVerifiedUser,
-} from "@/lib/verified-user-header";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
@@ -16,9 +12,6 @@ const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth", "/account-inactive", "/fo
  */
 export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  // Only this proxy may say who the verified user is. Whatever a client sent
-  // under that name is dropped before anything else, on every path.
-  request.headers.delete(VERIFIED_USER_HEADER);
   // Cron/job routes authenticate with CRON_JOB_SECRET, not a user session;
   // provider webhooks authenticate with their own signatures.
   if (
@@ -72,18 +65,5 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (!user) return supabaseResponse;
-
-  // Hand the verified user to server components so they need not ask Auth a
-  // second time. The forwarded request is rebuilt to carry the header, with
-  // any refreshed session cookies copied across.
-  request.headers.set(
-    VERIFIED_USER_HEADER,
-    encodeVerifiedUser({ id: user.id, email: user.email ?? "" }),
-  );
-  const response = NextResponse.next({ request });
-  for (const cookie of supabaseResponse.cookies.getAll()) {
-    response.cookies.set(cookie);
-  }
-  return response;
+  return supabaseResponse;
 }

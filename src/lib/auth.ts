@@ -1,14 +1,9 @@
 import { DEFAULT_TIME_ZONE } from "@/lib/time";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
 import type { OrgRole, Profile } from "@/types/entities";
-import {
-  VERIFIED_USER_HEADER,
-  decodeVerifiedUser,
-} from "@/lib/verified-user-header";
 
 export const ADMIN_ACCESS_REQUIRED_ERROR = "Admin access required.";
 export const OWNER_ACCESS_REQUIRED_ERROR = "Only the Primary Owner can perform this action.";
@@ -53,14 +48,9 @@ export interface SessionContext {
 export const getSessionContext = cache(
   async (): Promise<SessionContext | null> => {
     const supabase = await createSupabaseServerClient();
-    // The request proxy has already verified this session with Auth and
-    // passed the result on; asking again cost every page a second round trip
-    // (#115). Without it (a path the proxy does not see), verify here.
-    const verified = decodeVerifiedUser(
-      (await headers()).get(VERIFIED_USER_HEADER),
-    );
-    const user =
-      verified ?? (await supabase.auth.getUser()).data.user ?? null;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return null;
 
     const { data: membership, error: membershipError } = await supabase
