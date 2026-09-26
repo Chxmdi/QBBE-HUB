@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Checkbox, FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { centsToDecimal } from "@/features/ledger/money";
 import {
   FILING_FREQUENCIES,
   FILING_FREQUENCY_LABEL,
@@ -17,6 +16,7 @@ import {
   type FilingFrequency,
   type TaxCode,
 } from "@/features/sales-tax/return-lines";
+import type { LineValues } from "@/features/sales-tax/line-values";
 import {
   closeTaxPeriod,
   createTaxPeriod,
@@ -205,21 +205,6 @@ export function ImportReceiptsForm({ from, to }: { from: string; to: string }) {
   );
 }
 
-export interface LineValues {
-  id?: string;
-  direction: Direction;
-  taxCode: TaxCode;
-  transactionDate: string;
-  counterparty: string;
-  reference: string;
-  description: string;
-  amount: string;
-  gst: string;
-  qst: string;
-  itc: string;
-  itr: string;
-}
-
 /** Adds or edits one tax line in a dialog. */
 export function TaxLineDialog({
   initial,
@@ -352,36 +337,6 @@ export function TaxLineDialog({
       </Dialog>
     </>
   );
-}
-
-export function lineValues(line: {
-  id: string;
-  direction: Direction;
-  tax_code: TaxCode;
-  transaction_date: string;
-  counterparty: string;
-  reference: string | null;
-  description: string | null;
-  amount_cents: number;
-  gst_cents: number;
-  qst_cents: number;
-  itc_cents: number;
-  itr_cents: number;
-}): LineValues {
-  return {
-    id: line.id,
-    direction: line.direction,
-    taxCode: line.tax_code,
-    transactionDate: line.transaction_date,
-    counterparty: line.counterparty,
-    reference: line.reference ?? "",
-    description: line.description ?? "",
-    amount: centsToDecimal(line.amount_cents),
-    gst: centsToDecimal(line.gst_cents),
-    qst: centsToDecimal(line.qst_cents),
-    itc: centsToDecimal(line.itc_cents),
-    itr: centsToDecimal(line.itr_cents),
-  };
 }
 
 export function DeleteTaxLineButton({ lineId, label }: { lineId: string; label: string }) {

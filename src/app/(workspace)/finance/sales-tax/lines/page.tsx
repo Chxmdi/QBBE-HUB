@@ -13,8 +13,8 @@ import {
   DeleteTaxLineButton,
   ImportReceiptsForm,
   TaxLineDialog,
-  lineValues,
 } from "@/features/sales-tax/components/tax-forms";
+import { lineValues } from "@/features/sales-tax/line-values";
 import { TaxTabs } from "@/features/sales-tax/components/tax-tabs";
 import { TAX_CODES, TAX_CODE_LABEL, type Direction, type TaxCode } from "@/features/sales-tax/return-lines";
 import {
