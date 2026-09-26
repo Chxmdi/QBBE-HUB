@@ -1,0 +1,286 @@
+/**
+ * English interface text — the source catalogue (#141).
+ *
+ * Every other catalogue is typed against this one, so adding a key here and
+ * not in French is a compile error, and `i18n.test.ts` repeats the check for
+ * placeholders. Group keys by screen; `common` is for words that really are
+ * shared. Placeholders are written `{name}`.
+ */
+export const en = {
+  common: {
+    appName: "QBBE Hub",
+    tryAgain: "Try again",
+    backToSignIn: "Back to sign in",
+    backToHome: "Back to Home",
+    email: "Email",
+    password: "Password",
+    save: "Save",
+    saving: "Saving…",
+    saved: "Saved",
+    cancel: "Cancel",
+    unknown: "Unknown",
+    never: "never",
+    system: "System",
+    noSubject: "(no subject)",
+    unreadPrefix: "Unread. ",
+    openItems: " open items",
+    internalWorkspace: "Internal operations workspace",
+  },
+  meta: {
+    description:
+      "The Quebec Board of Black Educators' internal operating and communication system.",
+  },
+  language: {
+    label: "Language",
+    english: "English",
+    french: "Français",
+    followBrowser: "Follow my browser",
+    switcher: "Choose a language",
+    settingsTitle: "Language",
+    settingsDescription:
+      "The language QBBE Hub uses for you. Dates, numbers and amounts follow the same choice.",
+    saveError: "Could not save your language. Try again.",
+    invalid: "Choose a supported language.",
+    reviewNote: "French wording is awaiting review by a fluent speaker.",
+  },
+  nav: {
+    main: "Main navigation",
+    primary: "Primary",
+    groups: {
+      work: "Work",
+      communication: "Communication",
+      organization: "Organization",
+    },
+    items: {
+      home: "Home",
+      myWork: "My Work",
+      board: "Board",
+      requests: "Requests",
+      projects: "Projects",
+      programs: "Programs",
+      inbox: "Inbox",
+      channels: "Channels",
+      messages: "Messages",
+      saved: "Saved",
+      announcements: "Announcements",
+      calendar: "Calendar",
+      schedule: "Master Schedule",
+      meetings: "Meetings",
+      events: "Events",
+      relationships: "Relationships",
+      reports: "Reports",
+      documents: "Documents",
+      people: "People",
+      admin: "Admin",
+    },
+    more: "More",
+    homeLink: "QBBE Hub home",
+    openNavigation: "Open navigation",
+    closeNavigation: "Close navigation",
+    navigation: "Navigation",
+    channelsHeading: "Channels",
+    programsHeading: "Programs",
+    managePrograms: "Add or manage programs",
+    viewAllPrograms: "View all programs",
+    unreadMessages: "Unread messages",
+  },
+  topbar: {
+    searchPlaceholder: "Search or jump to…",
+    quickCreate: "Quick create",
+    create: {
+      task: "New task",
+      project: "New project",
+      program: "New program",
+      meeting: "New meeting",
+      event: "New event",
+      channel: "New channel",
+      crmOrganization: "New CRM organization",
+      crmContact: "New CRM contact",
+      crmFollowUp: "New CRM follow-up",
+      announcement: "New announcement",
+    },
+    notifications: "Notifications",
+    notificationsUnread: "Notifications ({count} unread)",
+    markAllRead: "Mark all read",
+    allCaughtUp: "You're all caught up.",
+    needsYou: "Needs you",
+    forInformation: "For information",
+    openInbox: "Open Inbox",
+    switchDensity: "Switch to {density} density",
+    densityTitle: "{density} density",
+    density: {
+      comfortable: "comfortable",
+      compact: "compact",
+      comfortableTitle: "Comfortable",
+      compactTitle: "Compact",
+    },
+    toggleTheme: "Toggle color theme",
+    accountMenu: "Account menu",
+    accountSettings: "Account settings",
+    emailPreferences: "Email preferences",
+    signOut: "Sign out",
+  },
+  palette: {
+    label: "Command palette",
+    placeholder: "Search tasks, projects, people, documents, risks…",
+    search: "Search",
+    searching: "Searching…",
+    goTo: "Go to",
+    seeAll: "See all results for “{query}”",
+    noMatches: "No matching records you have access to.",
+    prompt: "Type to search, or pick a destination.",
+  },
+  auth: {
+    tagline:
+      "Secure work, communication and program operations for the Quebec Board of Black Educators.",
+    signIn: {
+      title: "Sign in",
+      submit: "Sign in",
+      badCredentials:
+        "That email and password combination didn't match. Check both and try again.",
+      forgot: "Forgot your password?",
+      newHere: "New to QBBE Hub?",
+      createAccount: "Create an account",
+    },
+    signUp: {
+      title: "Create account",
+      fullName: "Full name",
+      passwordHint: "At least 8 characters.",
+      submit: "Create account",
+      haveAccount: "Already have an account?",
+      signIn: "Sign in",
+      checkFailed: "Could not check whether sign-up is open. Try again.",
+      inviteOnly:
+        "This workspace is invite-only. Ask an administrator to send you an invitation.",
+      checkEmail: "Check your email",
+      confirmationSent:
+        "We sent a confirmation link to {email}. Follow it to finish creating your account.",
+    },
+    recovery: {
+      requestTitle: "Recover account",
+      resetTitle: "Reset password",
+      requestHeading: "Recover your account",
+      resetHeading: "Choose a new password",
+      requestDone:
+        "If this address belongs to an account, a recovery link will arrive shortly. Open it in this browser.",
+      resetDone: "Your password has been changed. Sign in with your new password.",
+      passwordRules:
+        "Use at least 12 characters. Your workspace may require additional password safeguards.",
+      newPassword: "New password",
+      confirmPassword: "Confirm password",
+      sendLink: "Send recovery link",
+      savePassword: "Save password",
+      requestFailed: "Could not request recovery. Wait a moment and try again.",
+      mismatch: "The passwords do not match.",
+      updateFailed:
+        "Could not change your password. Check the password requirements or request a new recovery link.",
+      failed: "Could not complete recovery. Please try again.",
+      sessionMissing: "Your recovery session is missing or has expired.",
+      requestNewLink: "Request a new recovery link",
+    },
+  },
+  errors: {
+    rootTitle: "The Hub couldn't load",
+    rootBody:
+      "Something failed before the page could be built. Your data is safe — try again, and if this keeps happening let an administrator know",
+    workspaceTitle: "Something went wrong",
+    workspaceBody:
+      "The page hit an unexpected error. Your data is safe — try again, and if this keeps happening let an administrator know",
+    reference: " (reference: {digest})",
+    notFoundTitle: "Not found — or not yours to see",
+    notFoundBody:
+      "This record doesn't exist, was archived, or your access doesn't include it. Deep links always re-check authorization.",
+  },
+  due: {
+    none: "No due date",
+    overdueDays: "Overdue {days}d",
+    today: "Due today",
+    tomorrow: "Due tomorrow",
+  },
+  settings: {
+    title: "Account settings",
+    eyebrow: "Account",
+    heading: "Settings",
+    description:
+      "Manage how QBBE Hub notifies you. Workspace admins manage organization-wide defaults separately.",
+  },
+  home: {
+    title: "Home",
+    greeting: {
+      morning: "Good morning",
+      afternoon: "Good afternoon",
+      evening: "Good evening",
+    },
+    greetingLine: "{greeting}, {name}",
+    attentionToday: "Here's what needs your attention today.",
+    overview: "Your assigned work, announcements, and upcoming schedule.",
+  },
+  myWork: {
+    title: "My Work",
+    eyebrow: "Command center",
+    description:
+      "Everything you own or must review, grouped by urgency. Select rows for bulk changes, or open a task for full detail.",
+    buckets: {
+      overdue: "Overdue",
+      today: "Due today",
+      thisWeek: "This week",
+      later: "Later / unscheduled",
+    },
+    loadFailed: "Your work could not be loaded.",
+    loadFailedDetail:
+      "This is a loading failure, not an empty workload — nothing has been changed or lost.",
+    reviewHeading: "Waiting for your review",
+    reviewQueue: "Review queue",
+    blocked: "Blocked",
+    noMatchTitle: "No tasks match these filters",
+    noMatchBody: "Try widening a filter — or clear them to see all of your open work.",
+    clearTitle: "Your workload is clear",
+    clearBody:
+      "When tasks are assigned to you — from projects, meetings, or conversations — they appear here grouped by due date.",
+    upcomingMeetings: "Upcoming meetings",
+  },
+  inbox: {
+    title: "Inbox",
+    eyebrow: "Unified triage",
+    description:
+      "Platform notifications, mentions, assignments, replies, and announcements in one place.",
+    filtersLabel: "Inbox filters",
+    filters: {
+      all: "All",
+      mention: "Mentions",
+      assignment: "Assignments",
+      reply: "Replies",
+      announcement: "Announcements",
+      mail: "Mail",
+    },
+    notificationsLabel: "Notifications",
+    gmailNotConnectedTitle: "Gmail is not connected",
+    gmailConnectPrompt:
+      "Connect your QBBE Google account to list mail and securely reply without storing message bodies in QBBE Hub.",
+    gmailNotConfigured:
+      "Gmail stays disconnected until an administrator sets GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and the redirect URI. This is not a fake inbox.",
+    noMailTitle: "No mail synced yet",
+    noMailBody:
+      "After a successful Gmail sync, thread metadata appears here. Message bodies are not stored in logs.",
+    zeroTitle: "Inbox zero",
+    zeroBody:
+      "Notifications about mentions, assignments, replies, and announcements will arrive here.",
+    fromTo: "From: {from} · To: {to}",
+    noBody: "No plain-text body was supplied by Gmail.",
+    unreadSummary: "{unread} unread of {shown} shown",
+    connectedEmail: "Connected email",
+    connected: "Connected",
+    notConnected: "Not connected",
+    lastSync: "Last sync: {when}",
+    reconnectRequired: "Reconnect required: {error}",
+    connectedHelp:
+      "Compose new mail here or open a synced message to read it on demand and reply through Gmail. Existing connections using the older modify scope should reconnect to receive the narrower read + send grant.",
+    connectHelp: "Connect Gmail to list mail and send/reply from a selected message.",
+    configHelp:
+      "Gmail integration requires a QBBE-approved Google OAuth configuration. Once credentials exist, Connect appears here.",
+    connectGmail: "Connect Gmail",
+    setupDocs: "See docs/runbooks/integrations.md for setup.",
+  },
+};
+
+export type Messages = typeof en;
