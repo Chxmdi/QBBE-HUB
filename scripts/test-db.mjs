@@ -58,13 +58,14 @@ const FILES = [
   "supabase/tests/dashboard-task-summary.sql",
   "supabase/tests/my-open-task-count.sql",
   "supabase/tests/finance-receipts.sql",
+  "supabase/tests/forms-esign.sql",
   "supabase/tests/team-overview.sql",
   "supabase/tests/member-profile-read-equivalence.sql",
   "supabase/tests/channel-read-equivalence.sql",
   "supabase/tests/project-program-read-equivalence.sql",
+  "supabase/tests/record-retention.sql",
   "supabase/tests/ledger-core.sql",
   "supabase/tests/payables.sql",
-  "supabase/tests/record-retention.sql",
   // Last: it opens its own sessions, which only see committed rows, so it
   // must not run inside a transaction an earlier file left open.
   "supabase/tests/concurrency.sql",
