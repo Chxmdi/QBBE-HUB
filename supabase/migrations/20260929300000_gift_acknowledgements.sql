@@ -704,7 +704,8 @@ begin
     coalesce(max(c.full_name), max(o.name)),
     max(c.email),
     count(*),
-    coalesce(sum(g.amount_cents), 0)::bigint,
+    -- Money received; a value a donor put on an in-kind gift is not money.
+    coalesce(sum(g.amount_cents) filter (where g.gift_type <> 'in_kind'), 0)::bigint,
     count(*) filter (where g.gift_type = 'in_kind'),
     min(g.received_on),
     max(g.received_on)

@@ -159,7 +159,7 @@ export async function grantReportReminders({ db, definition, now }: JobContext):
             : `Grant report due ${report.due_on}.`,
         source_type: "grant_report",
         source_id: report.id,
-        link: `/finance/grants/${report.grant_id}`,
+        link: `/finance/gifts/grants/${report.grant_id}`,
         urgency: kind === "upcoming" ? "normal" : "high",
         dedupe_key: `grant-report:${report.id}:${kind}:${today}`,
         reason: "grant report due",

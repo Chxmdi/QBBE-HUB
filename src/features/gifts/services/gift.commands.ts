@@ -39,7 +39,7 @@ import {
  */
 
 const GIFTS = "/finance/gifts";
-const GRANTS = "/finance/grants";
+const GRANTS = "/finance/gifts/grants";
 
 type DbError = { code?: string; message: string } | null;
 
@@ -271,7 +271,7 @@ async function deliverByEmail(
       to: ack.to,
       subject: ack.subject,
       text: ack.text,
-      html: `<!doctype html><html><body style="font-family:Georgia,serif;font-size:15px;line-height:1.55;color:#111;max-width:40rem;margin:0 auto;padding:24px">${letterBodyHtml(ack.text)}</body></html>`,
+      html: `<!doctype html><html><body style="font-family:Georgia,serif;font-size:15px;line-height:1.55;color:black;max-width:40rem;margin:0 auto;padding:24px">${letterBodyHtml(ack.text)}</body></html>`,
     });
   } catch (err) {
     const message = err instanceof EmailSendError ? err.message : "The email provider did not accept the message.";

@@ -144,7 +144,7 @@ function giftLine(gift: AckGift, language: AckLanguage): string {
   return gift.type === "grant_payment" ? t.grantPayment(amount, gift.grantTitle) : t.donation(amount);
 }
 
-function useLine(gift: AckGift, language: AckLanguage): string {
+function restrictionLine(gift: AckGift, language: AckLanguage): string {
   const t = T[language];
   if (gift.fundRestriction === "unrestricted" && !gift.programName && !gift.donorRestriction) {
     return t.unrestricted;
@@ -173,7 +173,7 @@ export function renderGiftAcknowledgement(input: {
     t.thanks(organizationName, formatLongDate(gift.receivedOn, language)),
     "",
     giftLine(gift, language),
-    useLine(gift, language),
+    restrictionLine(gift, language),
     t.reference(gift.number),
     "",
     t.impact,
@@ -260,7 +260,7 @@ export function letterBodyHtml(text: string): string {
     .map((p) => `<p style="margin:0 0 14px">${p.split("\n").map(escapeHtml).join("<br>")}</p>`)
     .join("\n");
   const box = disclaimer
-    ? `<div class="disclaimer" style="margin-top:24px;padding:12px 14px;border:1px solid #999;font-size:13px;line-height:1.5">${disclaimer
+    ? `<div class="disclaimer" style="margin-top:24px;padding:12px 14px;border:1px solid gray;font-size:13px;line-height:1.5">${disclaimer
         .trim()
         .split("\n")
         .map((line, i) => (i < 2 ? `<strong>${escapeHtml(line)}</strong>` : escapeHtml(line)))
@@ -278,9 +278,9 @@ export function letterDocument(input: { subject: string; text: string; language:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(input.subject)}</title>
 <style>
-  body { font: 15px/1.55 Georgia, "Times New Roman", serif; color: #111; background: #fff; margin: 0; }
+  body { font: 15px/1.55 Georgia, "Times New Roman", serif; color: black; background: white; margin: 0; }
   main { max-width: 42rem; margin: 2.5rem auto; padding: 0 1.25rem; }
-  .hint { font: 13px/1.4 system-ui, sans-serif; color: #555; border-bottom: 1px solid #ddd; padding-bottom: .75rem; margin-bottom: 2rem; }
+  .hint { font: 13px/1.4 system-ui, sans-serif; color: dimgray; border-bottom: 1px solid lightgray; padding-bottom: .75rem; margin-bottom: 2rem; }
   @media print { .hint { display: none; } main { margin: 0 auto; } }
 </style>
 </head>
