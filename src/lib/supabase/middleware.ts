@@ -58,12 +58,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && (path === "/sign-in" || path === "/sign-up")) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
+  // A signed-in person who opens /sign-in or /sign-up gets the form, as they
+  // always have: signing in as someone else from there is a real use (a
+  // shared computer) and the browser suite relies on it. A redirect here
+  // also broke sign-in outright: Next hides whether a request is a real visit
+  // or a background prefetch of a link, and a redirected prefetch of the
+  // page's "Sign up" link left a request open indefinitely.
 
   return supabaseResponse;
 }
