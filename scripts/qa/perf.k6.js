@@ -28,10 +28,17 @@ const fixture = new SharedArray("fixture", () => [JSON.parse(open(__ENV.SESSIONS
 
 export const options = {
   scenarios: {
+    // People arrive over 30 s, then all fifty keep working for DURATION.
+    // Starting all fifty in the same instant put every first request on the
+    // dashboard at once, a burst no real morning produces, and that burst
+    // alone set the dashboard's 95th percentile (#115).
     fifty_people: {
-      executor: "constant-vus",
-      vus: 50,
-      duration: __ENV.DURATION || "2m",
+      executor: "ramping-vus",
+      startVUs: 0,
+      stages: [
+        { duration: "30s", target: 50 },
+        { duration: __ENV.DURATION || "2m", target: 50 },
+      ],
     },
   },
   thresholds: {
@@ -80,11 +87,6 @@ export default function () {
   const { users, projects, channel } = fixture[0];
   const me = users[(__VU - 1) % users.length];
   const project = projects[(__VU + __ITER) % projects.length];
-
-  // People do not all open the app in the same millisecond. Without this all
-  // fifty first requests land on the dashboard at once, and that burst, not
-  // the dashboard, sets its 95th percentile. Same spread as between clicks.
-  if (__ITER === 0) sleep(Math.random() * 3);
 
   visit("/", "dashboard", me.cookie);
   visit("/my-work", "my-work", me.cookie);
