@@ -74,6 +74,7 @@ export const en = {
       reports: "Reports",
       documents: "Documents",
       receipts: "Receipts",
+      ledger: "Ledger",
       people: "People",
       admin: "Admin",
     },

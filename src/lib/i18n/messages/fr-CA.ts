@@ -78,6 +78,7 @@ export const frCA: Messages = {
       reports: "Rapports",
       documents: "Documents",
       receipts: "Reçus",
+      ledger: "Grand livre",
       people: "Personnes",
       admin: "Administration",
     },
