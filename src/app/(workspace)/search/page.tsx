@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { SearchX } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn } from "@/lib/utils";
 import {
   searchTypeLabel,
   searchTypeOrder,
 } from "@/features/search/result-types";
 import type { SearchResult } from "@/types/entities";
+import { resolveCommentPath } from "@/features/comments/comment-links";
 
 export const metadata: Metadata = { title: "Search" };
 export const dynamic = "force-dynamic";
@@ -24,16 +26,23 @@ export const dynamic = "force-dynamic";
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; comment?: string }>;
 }) {
   await requireSession();
   const params = await searchParams;
+
+  // Mention emails link to `?comment=<id>`: open the record the comment is on.
+  // A comment the reader cannot see falls through to the ordinary page.
+  if (params.comment && /^[0-9a-f-]{36}$/i.test(params.comment)) {
+    const path = await resolveCommentPath(await createSupabasePageClient(), params.comment);
+    if (path) redirect(path);
+  }
   const query = (params.q ?? "").trim();
   const typeFilter = params.type ?? "";
 
   let results: SearchResult[] = [];
   if (query.length >= 2) {
-    const supabase = await createSupabaseServerClient();
+    const supabase = await createSupabasePageClient();
     const { data } = await supabase.rpc("global_search", {
       p_query: query,
       p_limit: 60,

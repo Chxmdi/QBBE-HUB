@@ -6,6 +6,8 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { SaveViewButton } from "@/features/tasks/components/save-view-button";
+import { SavedViews } from "@/features/tasks/components/saved-views";
+import { listSavedViews } from "@/features/tasks/services/saved-view.queries";
 import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
 import { TaskDrawer } from "@/features/tasks/components/task-drawer";
 import { FilterConflictNotice } from "@/features/tasks/components/filter-conflict-notice";
@@ -45,9 +47,10 @@ export default async function MyWorkPage({
   const filters = parseTaskFilters(params);
   const today = calendarDateInZone(new Date(), session.timeZone) ?? "";
 
-  const [work, options, archivedTasks] = await Promise.all([
+  const [work, options, savedViews, archivedTasks] = await Promise.all([
     getMyWork(session.userId, filters, today),
     getPickerOptions(),
+    listSavedViews("/my-work"),
     params.archived === "1" ? getArchivedTasks() : Promise.resolve([]),
   ]);
 
@@ -97,6 +100,10 @@ export default async function MyWorkPage({
           </div>
         }
       />
+
+      <Suspense fallback={null}>
+        <SavedViews views={savedViews} />
+      </Suspense>
 
       <Suspense fallback={<div className="mb-5 h-9" />}>
         <TaskFilterBar

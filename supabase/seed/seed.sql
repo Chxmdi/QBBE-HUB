@@ -127,12 +127,12 @@ begin
           now() + interval '21 days', now() + interval '21 days 3 hours', 'Community Center — Hall B', 'planning', 6, v_user);
 
   -- CRM
-  insert into crm_organization (organization_id, name, category, owner_id, created_by)
-  values (v_org, 'Fondation Horizon', 'funder', v_user, v_user)
+  insert into crm_organization (organization_id, name, category, owner_id, created_by, next_action_at)
+  values (v_org, 'Fondation Horizon', 'funder', v_user, v_user, current_date + 14)
   returning id into v_crm;
 
-  insert into crm_organization (organization_id, name, category, owner_id, created_by)
-  values (v_org, 'McGill University — Faculty of Education', 'university', v_user, v_user);
+  insert into crm_organization (organization_id, name, category, owner_id, created_by, next_action_at)
+  values (v_org, 'McGill University — Faculty of Education', 'university', v_user, v_user, current_date + 21);
 
   insert into crm_contact (organization_id, crm_organization_id, full_name, role_title, email, owner_id)
   values (v_org, v_crm, 'Program Officer (seed contact)', 'Program Officer', 'contact@example.org', v_user);

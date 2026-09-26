@@ -53,7 +53,8 @@ function psql(file, label) {
   if (notices) console.log(notices);
 }
 
-psql("supabase/tests/qa-users.sql", "1/2 QA fixture users");
-psql("supabase/seed/seed.sql", "2/2 Workspace seed data");
+psql("supabase/tests/qa-users.sql", "1/3 QA fixture users");
+psql("supabase/seed/seed.sql", "2/3 Workspace seed data");
+psql("supabase/tests/qa-scoped-grants.sql", "3/3 Scoped-role grants");
 
 console.log("\nSeeded. Sign in as qa-owner@example.com / QaTest!2026");

@@ -2,6 +2,10 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  // Refuse to start when the address this build talks to Supabase on does not
+  // answer. See the file for why that is a property of the build rather than
+  // of the environment, and what it has cost twice.
+  globalSetup: "./tests/e2e/supabase-preflight.ts",
   fullyParallel: false,
   workers: 1,
   // The watchdog turns a server that exited mid-run into a stated server
@@ -31,5 +35,18 @@ export default defineConfig({
     } },
     { name: "firefox", use: { ...devices["Desktop Firefox"] } },
     { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    // Phone emulation (#114): touch, a mobile user agent and device pixel
+    // ratio, not only a narrow window. Nightly runs qa-matrix and the public
+    // routes on these; real handsets stay with the operator sign-off.
+    {
+      name: "mobile-chrome",
+      use: {
+        ...devices["Pixel 7"],
+        launchOptions: process.env.QA_CHROME_PATH
+          ? { executablePath: process.env.QA_CHROME_PATH }
+          : undefined,
+      },
+    },
+    { name: "mobile-safari", use: { ...devices["iPhone 14"] } },
   ],
 });

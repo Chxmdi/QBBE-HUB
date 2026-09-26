@@ -1,5 +1,5 @@
 -- QA fixture users (docs/runbooks/qa.md). Idempotent. Never run in production.
--- Password for all five: QaTest!2026
+-- Password for all of them: QaTest!2026
 --
 -- One user per organization role, because the permission matrix is only
 -- meaningful if every role in it is actually represented: owner, admin, staff,
@@ -80,12 +80,20 @@ cross join (values
   ('qa-staff@example.com', 'staff'),
   ('qa-volunteer@example.com', 'volunteer'),
   ('qa-admin@example.com', 'admin'),
-  ('qa-guest@example.com', 'guest')
+  ('qa-guest@example.com', 'guest'),
+  -- Scoped roles (#110). Their org role is deliberately ordinary: what they
+  -- can reach beyond it comes from the grants in qa-scoped-grants.sql, which
+  -- is the thing the role matrix exists to prove.
+  ('qa-lead@example.com', 'staff'),
+  ('qa-pm@example.com', 'staff'),
+  ('qa-contributor@example.com', 'volunteer'),
+  ('qa-readonly@example.com', 'volunteer')
 ) as v(email, role)
 where not exists (
   select 1 from invitation i where i.email = v.email and i.accepted_at is null
 )
-limit 4;
+and not exists (select 1 from auth.users u where u.email = v.email)
+limit 8;
 
 select tests.ensure_auth_user(
   'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
@@ -110,6 +118,27 @@ select tests.ensure_auth_user(
   'QA Guest'
 );
 
+select tests.ensure_auth_user(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6',
+  'qa-lead@example.com',
+  'QA Program Lead'
+);
+select tests.ensure_auth_user(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa7',
+  'qa-pm@example.com',
+  'QA Project Manager'
+);
+select tests.ensure_auth_user(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa8',
+  'qa-contributor@example.com',
+  'QA Contributor'
+);
+select tests.ensure_auth_user(
+  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa9',
+  'qa-readonly@example.com',
+  'QA Read Only'
+);
+
 -- Force intended roles in case the trigger ran before the invitation existed.
 update organization_membership
   set role = 'staff'
@@ -123,6 +152,12 @@ update organization_membership
 update organization_membership
   set role = 'guest'
   where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5';
+update organization_membership
+  set role = 'staff'
+  where user_id in ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa7');
+update organization_membership
+  set role = 'volunteer'
+  where user_id in ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa8', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa9');
 
 -- QA users skip first-run onboarding so authenticated Playwright can reach the workspace.
 update user_profile
@@ -132,5 +167,9 @@ update user_profile
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2',
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3',
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4',
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5'
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa7',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa8',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa9'
   );

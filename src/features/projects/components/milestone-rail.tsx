@@ -212,9 +212,9 @@ export function MilestoneRail({
                       all. The database refuses the rest — a longer loop that
                       runs through a project this viewer cannot open — and its
                       message is what surfaces here. */}
-                  <select
+                  <Select
                     id={`blocker-${milestone.id}`}
-                    className="rounded border border-line bg-surface px-1.5 py-1 text-[12.5px]"
+                    className="h-8 w-auto px-1.5 text-[12.5px]"
                     defaultValue=""
                     disabled={busy === milestone.id}
                     onChange={(e) => {
@@ -235,7 +235,7 @@ export function MilestoneRail({
                         {option.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               ) : null}
 

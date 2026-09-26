@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { SendHorizonal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/error-state";
 import { MessageItem } from "@/features/channels/components/message-item";
 import { markChannelRead } from "@/features/channels/services/channel.commands";
 import {
@@ -11,20 +12,18 @@ import {
   sendMessage,
 } from "@/features/channels/services/message.commands";
 import { setThreadMuted } from "@/features/notifications/services/preferences.commands";
-import { CHANNEL_HISTORY_PAGE_SIZE } from "@/features/channels/history";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  CHANNEL_HISTORY_PAGE_SIZE,
+  mergeMessages,
+  olderPage,
+} from "@/features/channels/history";
+import { authorizeRealtime, createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Message } from "@/types/entities";
 
 const MESSAGE_SELECT =
   "id, channel_id, conversation_id, thread_root_id, author_id, body, is_system, created_at, edited_at, deleted_at, " +
   "author:author_id(id, full_name, email, avatar_url, title, timezone), reactions:message_reaction(message_id, user_id, emoji)";
-
-function mergeByCreatedAt(left: Message[], right: Message[]): Message[] {
-  const byId = new Map<string, Message>();
-  for (const message of [...left, ...right]) byId.set(message.id, message);
-  return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
-}
 
 export function Composer({
   placeholder,
@@ -147,8 +146,14 @@ export function ChannelView({
   const [mutedThreads, setMutedThreads] = useState<Set<string>>(
     () => new Set(mutedThreadIds),
   );
+  const [olderFailed, setOlderFailed] = useState(false);
   const [threadRootId, setThreadRootId] = useState<string | null>(null);
-  const [connection, setConnection] = useState<"live" | "reconnecting">("live");
+  // "connecting" until Realtime is listening to Postgres; shown the same as
+  // "live", but it is not live yet, and a message sent in that window is only
+  // picked up by the refetch on going live (#113).
+  const [connection, setConnection] = useState<"connecting" | "live" | "reconnecting">(
+    "connecting",
+  );
   const savedMessageIds = new Set(initialSavedMessageIds);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToLatestRef = useRef(true);
@@ -166,9 +171,10 @@ export function ChannelView({
       .select(MESSAGE_SELECT)
       .eq(container.column, container.id)
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .limit(CHANNEL_HISTORY_PAGE_SIZE);
     const latest = ([...((data ?? []) as unknown as Message[])] as Message[]).reverse();
-    setMessages((current) => mergeByCreatedAt(current, latest));
+    setMessages((current) => mergeMessages(current, latest));
   }, [container.column, container.id]);
 
   const loadOlder = useCallback(async () => {
@@ -177,17 +183,43 @@ export function ChannelView({
     stickToLatestRef.current = false;
     const oldest = messages[0];
     const supabase = createSupabaseBrowserClient();
-    const { data } = await supabase
-      .from("message")
-      .select(MESSAGE_SELECT)
-      .eq(container.column, container.id)
-      .lt("created_at", oldest.created_at)
-      .order("created_at", { ascending: false })
-      .limit(CHANNEL_HISTORY_PAGE_SIZE);
-    const older = ([...((data ?? []) as unknown as Message[])] as Message[]).reverse();
+    // Keyset on (created_at, id): a timestamp-only cursor skipped every
+    // message sharing the oldest one's timestamp. See olderPage.
+    const [sameInstant, earlier] = await Promise.all([
+      supabase
+        .from("message")
+        .select(MESSAGE_SELECT)
+        .eq(container.column, container.id)
+        .eq("created_at", oldest.created_at)
+        .lt("id", oldest.id)
+        .order("id", { ascending: false })
+        .limit(CHANNEL_HISTORY_PAGE_SIZE),
+      supabase
+        .from("message")
+        .select(MESSAGE_SELECT)
+        .eq(container.column, container.id)
+        .lt("created_at", oldest.created_at)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(CHANNEL_HISTORY_PAGE_SIZE),
+    ]);
+    // A failed read used to come back empty, conclude there was no older
+    // history, and remove the button for good. Keep it, and say so.
+    if (sameInstant.error || earlier.error) {
+      setOlderFailed(true);
+      setLoadingOlder(false);
+      return;
+    }
+    setOlderFailed(false);
+    const older = olderPage(
+      (sameInstant.data ?? []) as unknown as Message[],
+      (earlier.data ?? []) as unknown as Message[],
+      oldest,
+      CHANNEL_HISTORY_PAGE_SIZE,
+    );
     setHasOlder(older.length >= CHANNEL_HISTORY_PAGE_SIZE);
     if (older.length) {
-      setMessages((current) => mergeByCreatedAt(older, current));
+      setMessages((current) => mergeMessages(older, current));
     }
     setLoadingOlder(false);
   }, [container.column, container.id, loadingOlder, messages]);
@@ -196,36 +228,54 @@ export function ChannelView({
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
     const topic = `messages:${container.id}`;
-    const subscription = supabase
-      .channel(topic)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "message",
-          filter: `${container.column}=eq.${container.id}`,
-        },
-        () => {
-          void refresh();
-          if (channelId) void markChannelRead(channelId);
-          if (conversationId) void markConversationRead(conversationId);
-        },
-      )
-      .subscribe((status) => {
-        // Visible but not alarming reconnect state (§14.3). On recovery we
-        // refetch so nothing missed during the gap stays missing.
-        if (status === "SUBSCRIBED") {
-          setConnection((previous) => {
-            if (previous === "reconnecting") void refresh();
-            return "live";
-          });
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          setConnection("reconnecting");
-        }
-      });
+    let cancelled = false;
+    let subscription: ReturnType<typeof supabase.channel> | null = null;
+    void authorizeRealtime(supabase).then(() => {
+      if (cancelled) return;
+      subscription = supabase
+        .channel(topic)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "message",
+            filter: `${container.column}=eq.${container.id}`,
+          },
+          () => {
+            void refresh();
+            if (channelId) void markChannelRead(channelId);
+            if (conversationId) void markConversationRead(conversationId);
+          },
+        )
+        // "Subscribed" only means the socket joined the topic. Realtime starts
+        // listening to Postgres afterwards (2 s locally, longer under load)
+        // and says so with this system message; a change committed in between
+        // is never sent. So the page is live, and refetches what it may have
+        // missed, only from here (#113).
+        .on("system", {}, (payload: { extension?: string; status?: string }) => {
+          if (payload.extension !== "postgres_changes") return;
+          if (payload.status === "ok") {
+            setConnection((previous) => {
+              if (previous !== "live") void refresh();
+              return "live";
+            });
+          } else {
+            setConnection("reconnecting");
+          }
+        })
+        .subscribe((status) => {
+          // Visible but not alarming reconnect state (§14.3). A rejoin goes
+          // live again through the system message above, which refetches, so
+          // nothing sent while the socket was not listening stays missing.
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            setConnection("reconnecting");
+          }
+        });
+    });
     return () => {
-      void supabase.removeChannel(subscription);
+      cancelled = true;
+      if (subscription) void supabase.removeChannel(subscription);
     };
   }, [container.column, container.id, channelId, conversationId, refresh]);
 
@@ -296,7 +346,7 @@ export function ChannelView({
   }
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1" data-realtime={connection}>
       {/* Main column */}
       <div className={cn("flex min-w-0 flex-1 flex-col", threadRoot && "hidden md:flex")}>
         {connection === "reconnecting" ? (
@@ -315,7 +365,13 @@ export function ChannelView({
           aria-label="Messages"
           className="min-h-0 flex-1 overflow-y-auto py-3"
         >
-          {hasOlder ? (
+          {olderFailed ? (
+            <ErrorState
+              className="mb-2"
+              message="Older messages couldn't be loaded."
+              onRetry={() => void loadOlder()}
+            />
+          ) : hasOlder ? (
             <div className="mb-2 flex justify-center">
               <button
                 type="button"

@@ -3,7 +3,7 @@
 import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input, Textarea } from "@/components/ui/input";
+import { Input, Select, Textarea } from "@/components/ui/input";
 import {
   createAgendaTemplate,
   createRecordTemplate,
@@ -57,7 +57,10 @@ function CatalogSection({
   title: string;
   empty: string;
   rows: NamedRow[];
-  onApproval: (id: string, approved: boolean) => Promise<{ ok: boolean; error?: string }>;
+  onApproval: (
+    id: string,
+    approved: boolean,
+  ) => Promise<{ ok: boolean; error?: string }>;
 }) {
   return (
     <section aria-labelledby={title}>
@@ -65,7 +68,9 @@ function CatalogSection({
         {title}
       </h2>
       {rows.length === 0 ? (
-        <p className="card px-4 py-6 text-center text-[13px] text-muted">{empty}</p>
+        <p className="card px-4 py-6 text-center text-[13px] text-muted">
+          {empty}
+        </p>
       ) : (
         <ul className="card divide-y divide-line">
           {rows.map((row) => (
@@ -83,7 +88,10 @@ function ApprovalRow({
   extra,
 }: {
   row: NamedRow;
-  onApproval: (id: string, approved: boolean) => Promise<{ ok: boolean; error?: string }>;
+  onApproval: (
+    id: string,
+    approved: boolean,
+  ) => Promise<{ ok: boolean; error?: string }>;
   extra?: ReactNode;
 }) {
   const router = useRouter();
@@ -106,14 +114,17 @@ function ApprovalRow({
           setError(null);
           start(async () => {
             const result = await onApproval(row.id, !approved);
-            if (!result.ok) setError(result.error ?? "Could not update approval.");
+            if (!result.ok)
+              setError(result.error ?? "Could not update approval.");
             else router.refresh();
           });
         }}
       >
         {approved ? "Withdraw" : "Approve"}
       </Button>
-      {error ? <p className="basis-full text-[12.5px] text-danger">{error}</p> : null}
+      {error ? (
+        <p className="basis-full text-[12.5px] text-danger">{error}</p>
+      ) : null}
     </li>
   );
 }
@@ -166,7 +177,11 @@ function AgendaSection({ agendas }: { agendas: NamedRow[] }) {
       ) : (
         <ul className="card divide-y divide-line">
           {agendas.map((row) => (
-            <ApprovalRow key={row.id} row={row} onApproval={setAgendaTemplateApproval} />
+            <ApprovalRow
+              key={row.id}
+              row={row}
+              onApproval={setAgendaTemplateApproval}
+            />
           ))}
         </ul>
       )}
@@ -218,12 +233,12 @@ function RecordSection({
       >
         <label className="block text-[13px] font-medium">
           Kind
-          <select name="kind" className="mt-1 h-9.5 w-full rounded-(--radius-sm) border border-line bg-surface px-3 text-sm">
+          <Select name="kind" className="mt-1">
             <option value="task">Task</option>
             <option value="event">Event</option>
             <option value="update">Update</option>
             <option value="report">Report</option>
-          </select>
+          </Select>
         </label>
         <label className="block text-[13px] font-medium">
           Template name
@@ -235,13 +250,13 @@ function RecordSection({
         </label>
         <label className="block text-[13px] font-medium">
           Priority (tasks)
-          <select name="priority" className="mt-1 h-9.5 w-full rounded-(--radius-sm) border border-line bg-surface px-3 text-sm">
+          <Select name="priority" className="mt-1">
             <option value="">Default</option>
             <option value="low">Low</option>
             <option value="medium">Medium</option>
             <option value="high">High</option>
             <option value="critical">Critical</option>
-          </select>
+          </Select>
         </label>
         <label className="block text-[13px] font-medium sm:col-span-2">
           Description
@@ -259,7 +274,9 @@ function RecordSection({
           Update summary
           <Textarea name="progressSummary" rows={2} className="mt-1" />
         </label>
-        {error ? <p className="text-[12.5px] text-danger sm:col-span-2">{error}</p> : null}
+        {error ? (
+          <p className="text-[12.5px] text-danger sm:col-span-2">{error}</p>
+        ) : null}
         <div>
           <Button type="submit" size="sm" loading={pending}>
             Save draft
@@ -309,12 +326,15 @@ function InstantiateButton({
 
   return (
     <span className="flex flex-wrap items-center gap-2">
-      {kind === "update" || kind === "task" || kind === "event" || kind === "report" ? (
-        <select
+      {kind === "update" ||
+      kind === "task" ||
+      kind === "event" ||
+      kind === "report" ? (
+        <Select
           aria-label="Project for the new record"
           value={projectId}
           onChange={(event) => setProjectId(event.target.value)}
-          className="h-8 rounded-(--radius-sm) border border-line bg-surface px-2 text-[13px]"
+          className="h-8 w-auto px-2 text-[13px]"
         >
           <option value="">No project</option>
           {projects.map((project) => (
@@ -322,7 +342,7 @@ function InstantiateButton({
               {project.name}
             </option>
           ))}
-        </select>
+        </Select>
       ) : null}
       <Button
         size="sm"
@@ -331,15 +351,21 @@ function InstantiateButton({
         onClick={() => {
           setError(null);
           start(async () => {
-            const result = await instantiateRecordTemplate({ templateId, projectId });
-            if (!result.ok) setError(result.error ?? "Could not use this template.");
+            const result = await instantiateRecordTemplate({
+              templateId,
+              projectId,
+            });
+            if (!result.ok)
+              setError(result.error ?? "Could not use this template.");
             else router.refresh();
           });
         }}
       >
         {approved ? "Use" : "Try to use"}
       </Button>
-      {error ? <span className="basis-full text-[12.5px] text-danger">{error}</span> : null}
+      {error ? (
+        <span className="basis-full text-[12.5px] text-danger">{error}</span>
+      ) : null}
     </span>
   );
 }

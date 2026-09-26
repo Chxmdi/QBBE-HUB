@@ -6,6 +6,7 @@ import { dailyDigest } from "./daily-digest";
 import { drainNotifications } from "./drain-notifications";
 import { dueDateReminders } from "./due-date-reminders";
 import { expireExports } from "./expire-exports";
+import { gmailPushSync } from "./gmail-push-sync";
 import { gmailWatchRenew } from "./gmail-watch-renew";
 import { googleSync } from "./google-sync";
 import { purgeJobHistory } from "./purge-job-history";
@@ -38,6 +39,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
 
   // External integrations
   "google-sync": googleSync,
+  "gmail-push-sync": gmailPushSync,
   "gmail-watch-renew": gmailWatchRenew,
   "vms-sync": vmsSync,
 

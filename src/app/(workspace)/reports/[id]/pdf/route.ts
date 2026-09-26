@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getReportSnapshot } from "@/features/reports/services/report.queries";
 import { buildSimplePdf, type PdfSection } from "@/lib/simple-pdf";
+import { snapshotSections } from "@/features/reports/snapshot-view";
 
 function list(
   title: string,
@@ -46,26 +47,7 @@ export async function GET(
       heading: "Metrics",
       lines: Object.entries(metrics).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`),
     },
-    list(
-      "Delivered work",
-      ((snapshot.delivered_work ?? snapshot.tasks ?? []) as { title?: string; completed_at?: string }[]).map(
-        (w) => ({ primary: String(w.title ?? ""), secondary: w.completed_at }),
-      ),
-    ),
-    list(
-      "Milestones",
-      ((snapshot.milestones ?? []) as { name?: string; due_date?: string }[]).map((m) => ({
-        primary: String(m.name ?? ""),
-        secondary: m.due_date,
-      })),
-    ),
-    list(
-      "Blockers",
-      ((snapshot.blockers ?? []) as { title?: string; reason?: string }[]).map((b) => ({
-        primary: String(b.title ?? ""),
-        secondary: b.reason,
-      })),
-    ),
+    ...snapshotSections(snapshot).map((section) => list(section.title, section.rows)),
   ];
 
   const bytes = buildSimplePdf(

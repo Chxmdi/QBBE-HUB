@@ -21,7 +21,9 @@
     "test:a11y": "playwright test public-routes",
     "test:db": "node scripts/test-db.mjs",
     "db:seed": "node scripts/seed-local.mjs",
-    "db:types": "supabase gen types typescript --local > src/types/database.ts"
+    "db:types": "supabase gen types typescript --local > src/types/database.ts",
+    "qa:perf-sessions": "node scripts/qa/perf-sessions.mjs",
+    "qa:realtime-latency": "node scripts/qa/realtime-latency.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

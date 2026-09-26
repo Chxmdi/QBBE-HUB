@@ -8,6 +8,7 @@ import {
   addMeetingAttendee,
   removeMeetingAttendee,
 } from "@/features/meetings/services/meeting.commands";
+import { Select } from "@/components/ui/input";
 
 export interface Attendee {
   userId: string;
@@ -115,11 +116,11 @@ export function AttendeeList({
             <label htmlFor="attendee-picker" className="meta mb-1 block">
               Invite someone
             </label>
-            <select
+            <Select
               id="attendee-picker"
               name="userId"
               defaultValue=""
-              className="h-9 w-full rounded-md border border-line bg-surface px-2 text-[13px] text-ink"
+              className="h-9 px-2 text-[13px]"
             >
               <option value="" disabled>
                 Choose a person…
@@ -129,7 +130,7 @@ export function AttendeeList({
                   {person.label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <Button type="submit" variant="secondary" loading={pending !== null}>
             Invite

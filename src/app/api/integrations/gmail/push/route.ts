@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { gmailPushClaimsAreValid, parseGmailPushNotification } from "@/features/inbox/services/gmail-sync";
+import { enqueue } from "@/features/jobs/services/queue";
+import { runJob } from "@/features/jobs/services/runner";
 
 export const dynamic = "force-dynamic";
 
@@ -36,16 +38,50 @@ export async function POST(request: Request) {
   try { supabase = createSupabaseServiceClient(); }
   catch { return NextResponse.json({ error: "Service role is not configured." }, { status: 503 }); }
   const { data: connections, error } = await supabase.from("integration_connection")
-    .select("id")
+    .select("id, organization_id, user_id")
     .eq("provider", "gmail")
     .eq("status", "connected")
     .eq("external_account_id", notification.emailAddress);
   if (error) return NextResponse.json({ error: "Could not locate Gmail connection." }, { status: 500 });
+  let queued = 0;
   for (const connection of connections ?? []) {
     const { error: updateError } = await supabase.from("integration_secret")
       .update({ gmail_pending_history_id: notification.historyId, gmail_last_push_at: new Date().toISOString() })
       .eq("connection_id", connection.id);
-    if (updateError) return NextResponse.json({ error: "Could not record Gmail notification." }, { status: 500 });
+    if (updateError) {
+      return NextResponse.json({ error: "Could not record Gmail notification." }, { status: 500 });
+    }
+
+    try {
+      await enqueue(supabase, "integrations", {
+        kind: "gmail_push",
+        connection_id: connection.id,
+        history_id: notification.historyId,
+      });
+      queued += 1;
+    } catch {
+      // The pending history id is already durable. A non-2xx response asks
+      // Pub/Sub to redeliver, so queue failure cannot silently lose the push.
+      return NextResponse.json({ error: "Could not queue Gmail reconciliation." }, { status: 503 });
+    }
   }
+
+  if (queued > 0) {
+    // Run promptly after the webhook response. The queue plus the one-minute
+    // scheduled worker remains the durable fallback if this process ends.
+    after(async () => {
+      try {
+        const outcome = await runJob("gmail-push-sync");
+        if (outcome.status === "failed") {
+          console.error("Gmail push worker failed", { runId: outcome.runId, error: outcome.error });
+        }
+      } catch (cause) {
+        console.error("Gmail push worker could not start", {
+          error: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
+    });
+  }
+
   return new NextResponse(null, { status: 204 });
 }

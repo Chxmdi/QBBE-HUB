@@ -118,6 +118,7 @@ export function OpportunityPipeline({
               name: "decisionExpectedAt",
               label: "Decision expected",
               type: "date",
+              required: true,
               colSpan: 1,
             },
             {

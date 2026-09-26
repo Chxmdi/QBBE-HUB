@@ -18,6 +18,7 @@ export function ProjectEditDialog({
   project,
   programs,
   people,
+  funders = [],
 }: {
   project: {
     id: string;
@@ -31,9 +32,11 @@ export function ProjectEditDialog({
     target_date: string | null;
     priority: string | null;
     reporting_cadence: string | null;
+    funding_source_id: string | null;
   };
   programs: Option[];
   people: Option[];
+  funders?: Option[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -58,6 +61,7 @@ export function ProjectEditDialog({
         targetDate: form.get("targetDate"),
         priority: form.get("priority"),
         reportingCadence: form.get("reportingCadence"),
+        fundingSourceId: form.get("fundingSourceId"),
       });
       if (!result.ok) {
         setError(result.error ?? "Could not save the project.");
@@ -199,6 +203,19 @@ export function ProjectEditDialog({
                 <option value="monthly">Monthly</option>
               </Select>
             </div>
+          </div>
+          <div>
+            <Label htmlFor="edit-project-funding">Funding source</Label>
+            <Select
+              id="edit-project-funding"
+              name="fundingSourceId"
+              defaultValue={project.funding_source_id ?? ""}
+            >
+              <option value="">None</option>
+              {funders.map((funder) => (
+                <option key={funder.id} value={funder.id}>{funder.label}</option>
+              ))}
+            </Select>
           </div>
           <p className="text-sm text-muted">
             Health is set by publishing a status update, so that marking a

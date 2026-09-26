@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getReportSnapshot } from "@/features/reports/services/report.queries";
+import { snapshotSections } from "@/features/reports/snapshot-view";
 
 function csvEscape(value: unknown): string {
   const str = value === null || value === undefined ? "" : String(value);
@@ -47,23 +48,21 @@ export async function GET(
     rows.push(["metric", csvEscape(key), csvEscape(value), ""].join(","));
   }
 
-  const tasks = (snapshot.tasks ?? snapshot.delivered_work ?? []) as Record<string, unknown>[];
-  for (const task of tasks) {
-    rows.push(
-      [
-        "task",
-        csvEscape(task.title),
-        csvEscape(task.status ?? "completed"),
-        csvEscape(task.due_at ?? task.completed_at ?? ""),
-      ].join(","),
-    );
-  }
-
-  const decisions = (snapshot.decisions ?? []) as Record<string, unknown>[];
-  for (const decision of decisions) {
-    rows.push(
-      ["decision", csvEscape(decision.title), "", csvEscape(decision.decided_at ?? "")].join(","),
-    );
+  for (const section of snapshotSections(snapshot)) {
+    if (section.rows.length === 0) {
+      rows.push([csvEscape(section.title.toLowerCase()), "", "None in this snapshot.", ""].join(","));
+      continue;
+    }
+    for (const row of section.rows) {
+      rows.push(
+        [
+          csvEscape(section.title.toLowerCase()),
+          csvEscape(row.primary),
+          csvEscape(row.secondary ?? ""),
+          "",
+        ].join(","),
+      );
+    }
   }
 
   // Audit the export (SEC-005).

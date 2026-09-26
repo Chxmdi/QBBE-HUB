@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { mapVmsSnapshot } from "@/features/admin/services/vms";
 
 export async function disconnectIntegration(
   provider: "gmail" | "google_calendar" | "google_drive" | "volunteer_system",
@@ -53,9 +54,13 @@ export async function disconnectIntegration(
     }
   }
   if (provider === "volunteer_system") {
+    await supabase
+      .from("vms_assignment_reference")
+      .delete()
+      .eq("organization_id", session.organizationId);
     const { error: clearError } = await supabase.rpc("clear_org_vms_ids");
     if (clearError) {
-      await supabase.from("user_profile").update({ vms_id: null }).eq("id", session.userId);
+      return { ok: false, error: "VMS disconnected, but linked identity cleanup failed." };
     }
   }
 
@@ -102,6 +107,13 @@ export async function connectVolunteerSystem(): Promise<ActionResult> {
         error: `VMS responded ${response.status}. Connection was not recorded.`,
       };
     }
+    const snapshot = mapVmsSnapshot(await response.json());
+    if (!snapshot.recognized) {
+      return {
+        ok: false,
+        error: "VMS responded, but its payload did not match the configured identity/assignment contract.",
+      };
+    }
   } catch {
     return {
       ok: false,
@@ -116,7 +128,7 @@ export async function connectVolunteerSystem(): Promise<ActionResult> {
       provider: "volunteer_system",
       status: "connected",
       last_error: null,
-      last_sync_at: new Date().toISOString(),
+      last_sync_at: null,
     },
     { onConflict: "organization_id,provider,user_id" },
   );
@@ -124,7 +136,7 @@ export async function connectVolunteerSystem(): Promise<ActionResult> {
     // Unique index on (org, provider) WHERE user_id IS NULL may be the match.
     const { error: updateError } = await supabase
       .from("integration_connection")
-      .update({ status: "connected", last_error: null, last_sync_at: new Date().toISOString() })
+      .update({ status: "connected", last_error: null, last_sync_at: null })
       .eq("organization_id", session.organizationId)
       .eq("provider", "volunteer_system")
       .is("user_id", null);
@@ -133,7 +145,7 @@ export async function connectVolunteerSystem(): Promise<ActionResult> {
         organization_id: session.organizationId,
         provider: "volunteer_system",
         status: "connected",
-        last_sync_at: new Date().toISOString(),
+        last_sync_at: null,
       });
       if (insertError) return { ok: false, error: "Could not record the VMS connection." };
     }
@@ -155,14 +167,52 @@ export async function linkVmsIdentity(
 ): Promise<ActionResult> {
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
+  const normalized = vmsId.trim();
+  if (normalized.length > 200) return { ok: false, error: "VMS id is too long." };
+
   const supabase = await createSupabaseServerClient();
+  const { data: membership, error: membershipError } = await supabase
+    .from("organization_membership")
+    .select("id")
+    .eq("organization_id", session.organizationId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (membershipError || !membership) {
+    return { ok: false, error: "Only active members of this organization can be linked to VMS identities." };
+  }
+
   const { data: updated, error } = await supabase
     .from("user_profile")
-    .update({ vms_id: vmsId.trim() || null })
+    .update({
+      vms_id: normalized || null,
+      vms_availability: "unknown",
+      vms_synced_at: null,
+    })
     .eq("id", userId)
     .select("id")
     .maybeSingle();
   if (error || !updated) return { ok: false, error: "Could not store the VMS id." };
+
+  if (!normalized) {
+    await supabase
+      .from("vms_assignment_reference")
+      .delete()
+      .eq("organization_id", session.organizationId)
+      .eq("user_id", userId);
+  }
+
+  await supabase.from("audit_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    event_type: "integration",
+    action: normalized ? "vms_identity_linked" : "vms_identity_unlinked",
+    object_type: "user_profile",
+    object_id: userId,
+    metadata: normalized ? { vms_id: normalized } : {},
+  });
+
   revalidatePath("/admin");
   revalidatePath("/people");
   return { ok: true };

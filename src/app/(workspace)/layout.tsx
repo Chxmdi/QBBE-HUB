@@ -43,7 +43,7 @@ export default async function WorkspaceLayout({
   // (§10.18).
   const { data: profile } = await supabase
     .from("user_profile")
-    .select("onboarded_at, display_density")
+    .select("onboarded_at, display_density, reduce_motion")
     .eq("id", session.userId)
     .maybeSingle();
   if (profile && !profile.onboarded_at) redirect("/welcome");
@@ -87,17 +87,19 @@ export default async function WorkspaceLayout({
     .slice(0, 10);
 
   // Unread flag per channel: any message newer than the member's last-read
-  // cursor (MSG-007).
+  // cursor (MSG-007). It asks for one row, not a count: an exact count reads
+  // and access-checks every unread message, on every page, for every channel
+  // in the sidebar, where the flag only needs to know that one exists (#115).
   const unreadFlags = await Promise.all(
     channelRows.map(async (m) => {
-      const { count } = await supabase
+      const { data } = await supabase
         .from("message")
-        .select("id", { count: "exact", head: true })
+        .select("id")
         .eq("channel_id", m.channel!.id)
         .gt("created_at", m.last_read_at)
         .neq("author_id", session.userId)
         .limit(1);
-      return (count ?? 0) > 0;
+      return (data?.length ?? 0) > 0;
     }),
   );
 
@@ -119,6 +121,7 @@ export default async function WorkspaceLayout({
       programs={(programs ?? []).map((p) => ({ id: p.id, name: p.name }))}
       counts={{ myWork: myWorkCount ?? 0, inbox: unreadCount ?? 0 }}
       density={(profile?.display_density as "comfortable" | "compact") ?? "comfortable"}
+      reduceMotion={profile?.reduce_motion === true}
     >
       {children}
     </WorkspaceShell>

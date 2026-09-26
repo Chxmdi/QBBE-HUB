@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { classifyIntegrationFailure } from "@/features/admin/services/integration-health";
 import { refreshGoogleAccessToken } from "@/features/inbox/services/gmail-sync";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 
@@ -24,6 +26,73 @@ type CalendarLink = {
 
 export function calendarLinkRecordFields(record: LinkedHubRecord) {
   return record.kind === "meeting" ? { meeting_id: record.id } : { event_id: record.id };
+}
+
+/**
+ * Google permits caller-supplied event ids using base32hex characters. A
+ * deterministic id makes a retry safe even if Google accepted the first POST
+ * but Hub crashed before persisting calendar_event_link.
+ */
+export function calendarExternalId(record: LinkedHubRecord): string {
+  return `qbbe${createHash("sha256")
+    .update(`${record.kind}:${record.id}`)
+    .digest("hex")
+    .slice(0, 48)}`;
+}
+
+type GoogleEventBody = {
+  summary: string;
+  description?: string;
+  location?: string;
+  start: { dateTime: string };
+  end: { dateTime: string };
+};
+
+type GoogleEventResponse = {
+  id?: string;
+  htmlLink?: string;
+  updated?: string;
+};
+
+function googleEventBody(input: CalendarRecordInput): GoogleEventBody {
+  return {
+    summary: input.title,
+    description: input.description ?? undefined,
+    location: input.location ?? undefined,
+    start: { dateTime: input.startsAt },
+    end: { dateTime: input.endsAt },
+  };
+}
+
+/**
+ * Creates the deterministic Hub-owned event. HTTP 409 means an earlier retry
+ * already created that same id, so converge by PATCHing the existing event.
+ */
+export async function createOrRecoverGoogleCalendarEvent(
+  accessToken: string,
+  externalId: string,
+  body: GoogleEventBody,
+): Promise<GoogleEventResponse> {
+  const create = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=none", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ id: externalId, ...body }),
+  });
+
+  let response = create;
+  if (create.status === 409) {
+    response = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(externalId)}?sendUpdates=none`,
+      {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+  }
+
+  if (!response.ok) throw new Error(`Google Calendar rejected the event (${response.status}).`);
+  return await response.json() as GoogleEventResponse;
 }
 
 async function findCalendarLink(
@@ -81,7 +150,7 @@ async function calendarAccessToken(
 
 /** Creates an event that Hub owns and can safely reconcile later. It never
  * updates arbitrary Calendar items imported into the overlay. */
-async function createGoogleCalendarRecord(input: CalendarRecordInput) {
+async function createGoogleCalendarRecord(input: CalendarRecordInput): Promise<string | null> {
   const supabase = createSupabaseServiceClient();
   const { data: connection, error: connectionError } = await supabase
     .from("integration_connection")
@@ -94,27 +163,28 @@ async function createGoogleCalendarRecord(input: CalendarRecordInput) {
   if (connectionError) throw new Error(`Could not load Calendar connection: ${connectionError.message}`);
   if (!connection) return null;
 
+  const existingLink = await findCalendarLink(
+    supabase,
+    input.organizationId,
+    input.userId,
+    input.record,
+  );
+  if (existingLink) return updateGoogleCalendarRecord(input);
+
   const token = await calendarAccessToken(supabase, connection.id);
-  const response = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      summary: input.title,
-      description: input.description ?? undefined,
-      location: input.location ?? undefined,
-      start: { dateTime: input.startsAt },
-      end: { dateTime: input.endsAt },
-    }),
-  });
-  if (!response.ok) throw new Error(`Google Calendar rejected the event (${response.status}).`);
-  const event = await response.json() as { id?: string; htmlLink?: string; updated?: string };
-  if (!event.id) throw new Error("Google Calendar returned no event id.");
+  const externalId = calendarExternalId(input.record);
+  const event = await createOrRecoverGoogleCalendarEvent(
+    token,
+    externalId,
+    googleEventBody(input),
+  );
+  const returnedId = event.id ?? externalId;
 
   const { error: linkError } = await supabase.from("calendar_event_link").upsert({
     organization_id: input.organizationId,
     user_id: input.userId,
     connection_id: connection.id,
-    external_id: event.id,
+    external_id: returnedId,
     title: input.title,
     starts_at: input.startsAt,
     ends_at: input.endsAt,
@@ -128,27 +198,34 @@ async function createGoogleCalendarRecord(input: CalendarRecordInput) {
 
 /** Updates only a Hub-owned Calendar link. Attendee-managed fields remain in
  * Google Calendar and are never sent by QBBE Hub. */
-async function updateGoogleCalendarRecord(input: CalendarRecordInput) {
+async function updateGoogleCalendarRecord(input: CalendarRecordInput): Promise<string | null> {
   const supabase = createSupabaseServiceClient();
   const link = await findCalendarLink(supabase, input.organizationId, input.userId, input.record);
-  if (!link) return null;
+  // No link means the record was saved while Calendar was disconnected or
+  // failing. Creating it now is what makes a reconnect catch up on the next
+  // edit; create returns null again if Calendar is still not connected.
+  if (!link) return createGoogleCalendarRecord(input);
   const token = await calendarAccessToken(supabase, link.connection_id);
   const response = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(link.external_id)}?sendUpdates=none`,
     {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        summary: input.title,
-        description: input.description ?? "",
-        location: input.location ?? "",
-        start: { dateTime: input.startsAt },
-        end: { dateTime: input.endsAt },
-      }),
+      body: JSON.stringify(googleEventBody(input)),
     },
   );
+  if (response.status === 404) {
+    const { error: staleLinkError } = await supabase
+      .from("calendar_event_link")
+      .delete()
+      .eq("id", link.id);
+    if (staleLinkError) {
+      throw new Error(`Could not clear the stale Calendar link: ${staleLinkError.message}`);
+    }
+    return createGoogleCalendarRecord(input);
+  }
   if (!response.ok) throw new Error(`Google Calendar rejected the update (${response.status}).`);
-  const event = await response.json() as { htmlLink?: string; updated?: string };
+  const event = await response.json() as GoogleEventResponse;
   const { error } = await supabase.from("calendar_event_link").update({
     title: input.title,
     starts_at: input.startsAt,
@@ -158,6 +235,16 @@ async function updateGoogleCalendarRecord(input: CalendarRecordInput) {
   }).eq("id", link.id);
   if (error) throw new Error(`Could not save the updated Calendar link: ${error.message}`);
   return event.htmlLink ?? null;
+}
+
+/**
+ * The connection status a failed Hub-owned Calendar write should leave behind.
+ * A revoked or expired authorization must read "Authentication expired" so an
+ * admin knows to reconnect; a provider outage reads "Synchronization delayed"
+ * and clears on the next successful sync.
+ */
+export function calendarFailureStatus(error: unknown, fallback: string) {
+  return classifyIntegrationFailure(error instanceof Error ? error.message : fallback);
 }
 
 /** A missing Google event is a successful terminal state for a cancellation. */

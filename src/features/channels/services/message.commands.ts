@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
@@ -514,17 +515,19 @@ export async function startConversation(input: unknown): Promise<ActionResult> {
   );
 
   const supabase = await createSupabaseServerClient();
-  const { data: conversation, error } = await supabase
-    .from("conversation")
-    .insert({
-      organization_id: session.organizationId,
-      is_group: memberIds.length > 2,
-      created_by: session.userId,
-    })
-    .select("id")
-    .single();
+  // The id is chosen here, not read back: conversation's read policy is
+  // membership, and the members are only added below, so
+  // insert(...).select() failed row-level security and no conversation could
+  // be started (#112).
+  const conversation = { id: randomUUID() };
+  const { error } = await supabase.from("conversation").insert({
+    id: conversation.id,
+    organization_id: session.organizationId,
+    is_group: memberIds.length > 2,
+    created_by: session.userId,
+  });
 
-  if (error || !conversation) {
+  if (error) {
     return { ok: false, error: "Could not start the conversation." };
   }
 

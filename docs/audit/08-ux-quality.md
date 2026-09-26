@@ -2,6 +2,17 @@
 
 **Complete — 20 of 20 assessed.**
 
+**Epic 07 update (2026-09-24).** The findings below are the original audit.
+The gaps it names were closed by PRs #104–#107; evidence per requirement is in
+`docs/acceptance-matrix.md` under "UX and quality (epic 07, #17)". In short:
+`qa-matrix` now runs in CI (it ran nowhere at audit time) with axe in both
+themes and with overlays open; failed loads are errors with retry, not empty
+lists; Checkbox and Switch primitives exist and a test forbids bare controls;
+z-index and type tokens exist and a test forbids literals; saved views can be
+listed and applied; breadcrumbs, palette create actions and an in-app reduced
+motion setting were added; and an admin component gallery stands in for
+Storybook. Outstanding: a manual screen-reader pass and brand sign-off.
+
 **The shape of this family:** the design system is real where it is visible and
 thin where it is not. Colour is thoroughly tokenized (43 of 54 tokens), the
 layout vocabulary is varied rather than a wall of cards, deep links are

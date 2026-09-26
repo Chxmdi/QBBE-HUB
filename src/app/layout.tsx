@@ -11,6 +11,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Browser chrome colour. A <meta> value cannot read CSS variables, so
+  // these repeat --color-canvas for each theme (globals.css); keep in step.
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f7f8fc" },
     { media: "(prefers-color-scheme: dark)", color: "#10172f" },

@@ -14,6 +14,20 @@ import {
   taskDependencySchema,
 } from "@/features/tasks/schemas";
 
+/**
+ * The four checklist commands below do not revalidate anything, and that is
+ * deliberate.
+ *
+ * `checklist_item` is read in exactly one place — the task drawer, from the
+ * browser — so no server component's output depends on it. Calling
+ * `revalidatePath("/", "layout")` here re-rendered every route's layout for
+ * data none of them read, and the cost of that grew with the size of the page
+ * underneath the drawer. The drawer re-reads its own data through `onChanged`
+ * when a command succeeds, which is what actually puts the change on screen.
+ *
+ * If a checklist count is ever shown outside the drawer, this has to come
+ * back — narrowed to the route that shows it.
+ */
 export async function addChecklistItem(input: unknown): Promise<ActionResult> {
   await requireSession();
   const parsed = checklistItemSchema.safeParse(input);
@@ -30,7 +44,6 @@ export async function addChecklistItem(input: unknown): Promise<ActionResult> {
     .select("id")
     .single();
   if (error || !data) return { ok: false, error: "Could not add the checklist item." };
-  revalidatePath("/", "layout");
   return { ok: true, id: data.id as string };
 }
 
@@ -45,7 +58,6 @@ export async function toggleChecklistItem(
     .update({ completed_at: completed ? new Date().toISOString() : null })
     .eq("id", itemId);
   if (error) return { ok: false, error: "Could not update the checklist item." };
-  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -62,7 +74,6 @@ export async function removeChecklistItem(itemId: string): Promise<ActionResult>
     .select("id");
   if (error) return { ok: false, error: "Could not remove the checklist item." };
   if (!data?.length) return { ok: false, error: "That checklist item is no longer yours to remove." };
-  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -102,7 +113,6 @@ export async function reorderChecklist(input: unknown): Promise<ActionResult> {
       .eq("task_id", taskId);
     if (error) return { ok: false, error: "Could not reorder the checklist. Please retry." };
   }
-  revalidatePath("/", "layout");
   return { ok: true };
 }
 

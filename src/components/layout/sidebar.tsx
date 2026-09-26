@@ -25,13 +25,14 @@ export interface SidebarCounts {
   inbox: number;
 }
 
+// Tokens (globals.css), used as inline background values.
 const PROGRAM_DOT_COLORS = [
-  "#E8B36D",
-  "#7185D2",
-  "#56A57A",
-  "#8E72BE",
-  "#D9834E",
-  "#D65F78",
+  "var(--color-program-dot-1)",
+  "var(--color-program-dot-2)",
+  "var(--color-program-dot-3)",
+  "var(--color-program-dot-4)",
+  "var(--color-program-dot-5)",
+  "var(--color-program-dot-6)",
 ];
 
 function programDot(name: string): string {
@@ -102,9 +103,9 @@ export function Sidebar({
               className={cn(
                 "px-2 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] uppercase",
                 groupIndex % 3 === 0
-                  ? "text-[#F3C88E]"
+                  ? "text-nav-label-gold"
                   : groupIndex % 3 === 1
-                    ? "text-[#C9D2FF]"
+                    ? "text-nav-label-blue"
                     : "text-white/72",
               )}
             >
@@ -144,8 +145,8 @@ export function Sidebar({
                           className={cn(
                             "ml-auto rounded-full px-1.5 py-0.5 text-[10.5px] leading-none font-bold",
                             active
-                              ? "bg-accent text-[#253460]"
-                              : "bg-accent/95 text-[#253460]",
+                              ? "bg-accent text-on-accent"
+                              : "bg-accent/95 text-on-accent",
                           )}
                         >
                           {badge > 99 ? "99+" : badge}
@@ -162,7 +163,7 @@ export function Sidebar({
 
         {channels.length > 0 ? (
           <div>
-            <p className="px-2 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] text-[#C9D2FF] uppercase">
+            <p className="px-2 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] text-nav-label-blue uppercase">
               Channels
             </p>
             <ul className="space-y-0.5">
@@ -208,7 +209,7 @@ export function Sidebar({
 
         {isStaff && programs.length > 0 ? (
           <div>
-            <p className="flex items-center justify-between px-2 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] text-[#F3C88E] uppercase">
+            <p className="flex items-center justify-between px-2 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] text-nav-label-gold uppercase">
               Programs
               <Link
                 href="/programs"
@@ -343,7 +344,7 @@ function MobileNavDrawer({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 lg:hidden">
+    <div className="fixed inset-0 z-(--z-overlay) lg:hidden">
       <button
         type="button"
         aria-hidden

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FieldHint, Label, Select } from "@/components/ui/input";
+import { FieldHint, Label, Select, Checkbox } from "@/components/ui/input";
 import { saveNotificationPreferences } from "@/features/notifications/services/preferences.commands";
 import type { DeliveryMode } from "@/features/notifications/services/delivery-rules";
 
@@ -35,7 +35,12 @@ export interface PreferenceValues {
   muted_project_ids: string[];
 }
 
-const CATEGORIES: { key: "assignment" | "mention" | "announcement" | "due_date"; label: string; hint: string; legacy: keyof PreferenceValues }[] = [
+const CATEGORIES: {
+  key: "assignment" | "mention" | "announcement" | "due_date";
+  label: string;
+  hint: string;
+  legacy: keyof PreferenceValues;
+}[] = [
   {
     key: "assignment",
     label: "Work assigned to me",
@@ -69,7 +74,10 @@ const MODES: { value: DeliveryMode; label: string }[] = [
   { value: "off", label: "Don't email" },
 ];
 
-function modeFor(values: PreferenceValues, category: (typeof CATEGORIES)[number]): DeliveryMode {
+function modeFor(
+  values: PreferenceValues,
+  category: (typeof CATEGORIES)[number],
+): DeliveryMode {
   const stored = values.category_modes?.[category.key];
   if (stored) return stored;
   const flag = values[category.legacy];
@@ -77,7 +85,15 @@ function modeFor(values: PreferenceValues, category: (typeof CATEGORIES)[number]
   return values.email_digest ? "daily" : "immediate";
 }
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const WEEKDAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => ({
   value: String(hour),
@@ -108,11 +124,10 @@ function Switch({
 }) {
   return (
     <label className="flex cursor-pointer items-start gap-3 py-3">
-      <input
-        type="checkbox"
+      <Checkbox
         name={name}
         defaultChecked={defaultChecked}
-        className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
+        className="mt-0.5"
       />
       <span className="min-w-0">
         <span className="block text-[13.5px] font-medium">{label}</span>
@@ -133,9 +148,10 @@ export function NotificationPreferencesForm({
 }) {
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
-  const [message, setMessage] = React.useState<
-    { tone: "ok" | "error"; text: string } | null
-  >(null);
+  const [message, setMessage] = React.useState<{
+    tone: "ok" | "error";
+    text: string;
+  } | null>(null);
 
   const [quietEnabled, setQuietEnabled] = React.useState(
     values.quiet_hours_start !== null && values.quiet_hours_end !== null,
@@ -186,10 +202,17 @@ export function NotificationPreferencesForm({
         </h2>
         <div className="divide-y divide-line">
           {CATEGORIES.map((entry) => (
-            <div key={entry.key} className="flex flex-wrap items-center gap-3 py-3">
+            <div
+              key={entry.key}
+              className="flex flex-wrap items-center gap-3 py-3"
+            >
               <span className="min-w-0 flex-1">
-                <span className="block text-[13.5px] font-medium">{entry.label}</span>
-                <span className="block text-[12.5px] text-muted">{entry.hint}</span>
+                <span className="block text-[13.5px] font-medium">
+                  {entry.label}
+                </span>
+                <span className="block text-[12.5px] text-muted">
+                  {entry.hint}
+                </span>
               </span>
               <Select
                 name={`mode_${entry.key}`}
@@ -220,12 +243,11 @@ export function NotificationPreferencesForm({
         </h2>
         <div className="card px-4 py-3">
           <label className="flex cursor-pointer items-start gap-3 pb-1">
-            <input
-              type="checkbox"
+            <Checkbox
               name="quiet_enabled"
               defaultChecked={quietEnabled}
               onChange={(event) => setQuietEnabled(event.currentTarget.checked)}
-              className="mt-0.5 size-4 shrink-0 accent-[var(--color-brand)]"
+              className="mt-0.5"
             />
             <span className="min-w-0">
               <span className="block text-[13.5px] font-medium">
@@ -313,7 +335,11 @@ export function NotificationPreferencesForm({
             </div>
             <div>
               <Label htmlFor="timezone">Time zone</Label>
-              <Select id="timezone" name="timezone" defaultValue={values.timezone}>
+              <Select
+                id="timezone"
+                name="timezone"
+                defaultValue={values.timezone}
+              >
                 {zones.map((zone) => (
                   <option key={zone} value={zone}>
                     {zone.replace(/_/g, " ")}
@@ -342,12 +368,12 @@ export function NotificationPreferencesForm({
               {projects.map((project) => (
                 <li key={project.id}>
                   <label className="flex cursor-pointer items-center gap-3 py-2 text-[13.5px]">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       name="muted_project"
                       value={project.id}
-                      defaultChecked={values.muted_project_ids.includes(project.id)}
-                      className="size-4 accent-[var(--color-brand)]"
+                      defaultChecked={values.muted_project_ids.includes(
+                        project.id,
+                      )}
                     />
                     {project.name}
                   </label>

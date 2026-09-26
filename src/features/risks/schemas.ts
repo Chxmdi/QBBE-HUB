@@ -80,6 +80,7 @@ export const createRiskSchema = z.object({
   likelihood: z.enum(RISK_LIKELIHOODS).default("medium"),
   impact: z.enum(RISK_IMPACTS).default("medium"),
   mitigation: z.string().trim().max(5000).optional(),
+  trigger: z.string().trim().max(2000).optional(),
   ownerId: z.string().uuid().optional(),
   reviewAt: z.string().optional(),
 });
@@ -93,6 +94,7 @@ export const updateRiskSchema = z
     impact: z.enum(RISK_IMPACTS).optional(),
     status: z.enum(RISK_STATUSES).optional(),
     mitigation: z.string().trim().max(5000).optional(),
+    trigger: z.string().trim().max(2000).optional(),
     ownerId: z.string().uuid().nullable().optional(),
     reviewAt: z.string().nullable().optional(),
   })
@@ -111,6 +113,8 @@ export const createIssueSchema = z.object({
   riskId: z.string().uuid().optional(),
   title: requiredText("An issue needs a title.", 300),
   description: z.string().trim().max(5000).optional(),
+  impact: z.string().trim().max(5000).optional(),
+  resolutionPlan: z.string().trim().max(5000).optional(),
   severity: z.enum(ISSUE_SEVERITIES).default("medium"),
   ownerId: z.string().uuid().optional(),
   dueAt: z.string().optional(),
@@ -121,6 +125,8 @@ export const updateIssueSchema = z
     issueId: z.string().uuid(),
     title: z.string().trim().min(1).max(300).optional(),
     description: z.string().trim().max(5000).optional(),
+    impact: z.string().trim().max(5000).optional(),
+    resolutionPlan: z.string().trim().max(5000).optional(),
     severity: z.enum(ISSUE_SEVERITIES).optional(),
     status: z.enum(ISSUE_STATUSES).optional(),
     resolution: z.string().trim().max(5000).optional(),
@@ -140,3 +146,40 @@ export const escalateRiskSchema = z.object({
   severity: z.enum(ISSUE_SEVERITIES).default("high"),
   description: z.string().trim().max(5000).optional(),
 });
+
+export const DECISION_REQUEST_STATUSES = ["open", "decided", "declined"] as const;
+export type DecisionRequestStatus = (typeof DECISION_REQUEST_STATUSES)[number];
+
+export const recordProjectDecisionSchema = z.object({
+  projectId: z.string().uuid(),
+  title: requiredText("A decision needs a statement.", 300),
+  detail: z.string().trim().max(5000).optional(),
+  alternatives: z.string().trim().max(5000).optional(),
+  affectedRecords: z.string().trim().max(5000).optional(),
+  reopenConditions: z.string().trim().max(5000).optional(),
+  requestId: z.string().uuid().optional(),
+});
+
+export const reopenDecisionSchema = z.object({
+  decisionId: z.string().uuid(),
+});
+
+export const createDecisionRequestSchema = z.object({
+  projectId: z.string().uuid(),
+  assigneeId: z.string().uuid(),
+  dueAt: requiredText("A decision request needs a due date."),
+  context: requiredText("Say what needs deciding.", 5000),
+});
+
+export const declineDecisionRequestSchema = z.object({
+  requestId: z.string().uuid(),
+});
+
+/** One affected record per line, stored as a JSON array of those lines. */
+export function affectedRecordList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}

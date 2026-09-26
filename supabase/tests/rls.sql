@@ -202,8 +202,8 @@ begin
   returning id into v_other_task;
   insert into label (organization_id, name) values (v_other_org, 'Private label')
   returning id into v_other_label;
-  insert into crm_organization (organization_id, name, created_by)
-  values (v_other_org, 'Private CRM organization', v_owner)
+  insert into crm_organization (organization_id, name, created_by, owner_id, next_action_at)
+  values (v_other_org, 'Private CRM organization', v_owner, v_owner, current_date + 7)
   returning id into v_other_crm;
 
   -- The communication and document surfaces were scoped later than the rest,
@@ -231,8 +231,8 @@ begin
   insert into issue (organization_id, project_id, title, severity, created_by)
   values (v_other_org, v_other_project, 'Private issue', 'critical', v_owner)
   returning id into v_other_issue;
-  insert into opportunity (organization_id, crm_organization_id, title, owner_id, created_by)
-  values (v_other_org, v_other_crm, 'Private opportunity', v_owner, v_owner)
+  insert into opportunity (organization_id, crm_organization_id, title, owner_id, created_by, decision_expected_at)
+  values (v_other_org, v_other_crm, 'Private opportunity', v_owner, v_owner, current_date + 30)
   returning id into v_other_opportunity;
 
   perform tests.authenticate(v_vol);
@@ -895,14 +895,15 @@ begin
   perform tests.authenticate(v_staff);
   set local role authenticated;
 
-  insert into crm_organization (organization_id, name, category, created_by)
-  values (v_org, 'RLS fixture funder', 'funder', v_staff)
+  insert into crm_organization (organization_id, name, category, created_by, owner_id, next_action_at)
+  values (v_org, 'RLS fixture funder', 'funder', v_staff, v_staff, current_date + 7)
   returning id into v_crm;
 
   insert into opportunity (organization_id, crm_organization_id, title,
-                           kind, stage, amount_requested, owner_id, created_by)
+                           kind, stage, amount_requested, owner_id, created_by,
+                           decision_expected_at)
   values (v_org, v_crm, 'RLS fixture grant', 'grant', 'submitted',
-          10000, v_staff, v_staff)
+          10000, v_staff, v_staff, current_date + 30)
   returning id into v_opportunity;
 
   select count(*) into n from opportunity where id = v_opportunity;
@@ -930,8 +931,9 @@ begin
   perform tests.authenticate(v_guest);
   begin
     set local role authenticated;
-    insert into opportunity (organization_id, crm_organization_id, title, owner_id)
-    values (v_org, v_crm, 'Guest bid', v_guest);
+    -- A valid row, so it is row-level security that refuses it.
+    insert into opportunity (organization_id, crm_organization_id, title, owner_id, decision_expected_at)
+    values (v_org, v_crm, 'Guest bid', v_guest, current_date + 30);
     perform tests.ok(false, 'guest should not be able to record an opportunity');
   exception
     when insufficient_privilege or check_violation then

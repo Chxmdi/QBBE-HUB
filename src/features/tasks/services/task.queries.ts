@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import {
   applyTaskFilters,
   taskSelectFor,
@@ -169,7 +170,8 @@ export async function getPickerOptions(): Promise<{
   milestones: MilestoneSelectOption[];
   labels: SelectOption[];
 }> {
-  const supabase = await createSupabaseServerClient();
+  // Empty pickers would read as "nobody to assign"; a failure must say so.
+  const supabase = await createSupabasePageClient();
   const [
     { data: projects },
     { data: members },

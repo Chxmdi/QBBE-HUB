@@ -42,7 +42,24 @@ const FILES = [
   "supabase/tests/document-scanning-meetings.sql",
   "supabase/tests/document-links.sql",
   "supabase/tests/work-planning.sql",
+  "supabase/tests/raid-decisions.sql",
+  "supabase/tests/crm-continuity.sql",
+  "supabase/tests/export-scope.sql",
+  "supabase/tests/epic4-completion.sql",
   "supabase/tests/epic-05.sql",
+  "supabase/tests/events.sql",
+  "supabase/tests/drive-integration-access.sql",
+  "supabase/tests/email-suppression.sql",
+  "supabase/tests/channel-history-access.sql",
+  "supabase/tests/creator-visibility.sql",
+  "supabase/tests/task-read-equivalence.sql",
+  "supabase/tests/dashboard-task-summary.sql",
+  "supabase/tests/member-profile-read-equivalence.sql",
+  "supabase/tests/channel-read-equivalence.sql",
+  "supabase/tests/project-program-read-equivalence.sql",
+  // Last: it opens its own sessions, which only see committed rows, so it
+  // must not run inside a transaction an earlier file left open.
+  "supabase/tests/concurrency.sql",
 ];
 
 // Docker needs sudo on some Linux installs and never on Windows or macOS.
@@ -63,7 +80,18 @@ if (run(["inspect", CONTAINER]).status !== 0) {
 
 // One session for all of them, exactly as the previous `cat | psql` did: the
 // helpers rls.sql defines have to still be there when the later files call them.
-const sql = FILES.map((file) => readFileSync(file, "utf8")).join("\n");
+// concurrency.sql races two extra sessions through dblink. They connect over
+// the container's own network address, where the password is checked (dblink
+// refuses a connection whose password was never verified), so pass it in.
+const raceHost = run(["exec", CONTAINER, "hostname", "-i"]).stdout.trim().split(/\s+/)[0];
+if (!raceHost) {
+  console.error("Could not read the database container's address for concurrency.sql.");
+  process.exit(1);
+}
+const sql = [
+  `select set_config('tests.race_host', '${raceHost}', false);`,
+  ...FILES.map((file) => readFileSync(file, "utf8")),
+].join("\n");
 const result = run(
   ["exec", "-i", CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
   sql,

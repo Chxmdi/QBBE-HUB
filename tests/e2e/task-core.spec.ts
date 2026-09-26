@@ -87,6 +87,11 @@ test("blocking a task asks for a reason in a dialog, and unblocking clears it", 
   // before because the reload usually beat the router's replace. CI run
   // 35875933334 is what it looks like when it loses: three minutes of waiting
   // for a dialog that was never going to open.
+  // Wait for that replace to land first. Next may not have started it when
+  // the test moves on, so there is no request yet for the fixture to wait
+  // for, and WebKit then cancels our navigation in favour of the app's
+  // ("interrupted by another navigation to /my-work", #114).
+  await expect(page).not.toHaveURL(/[?&]task=/, { timeout: 15_000 });
   await page.goto(`/my-work?task=${taskId}`);
   await page
     .getByRole("dialog")
@@ -206,11 +211,13 @@ test("an approver can be named after the task exists, and the change is in its h
   ).toHaveValue(sql(`select approver_id::text from task where id = '${taskId}'`));
 
   // Before #76 the history said "updated" with empty metadata for this, because
-  // approver was not one of the five tracked fields.
+  // approver was not one of the five tracked fields. Match the change itself:
+  // the task's title also contains "Approver", so '%Approver%' matched the
+  // "created task" event too, and `limit 1` picked either row.
   const summary = sql(
     `select summary from activity_event
      where source_type = 'task' and source_id = '${taskId}'
-       and summary like '%Approver%' limit 1`,
+       and summary like '%set Approver to%' limit 1`,
   );
   expect(summary).toContain("set Approver to QA Staff");
 });
