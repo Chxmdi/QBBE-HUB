@@ -123,6 +123,7 @@ const MATRIX: Row[] = [
 const EVERYONE = ["/", "/my-work", "/board", "/programs", "/projects", "/people", "/channels", "/settings", "/forms", "/signatures"];
 const STAFF_ONLY = ["/crm", "/reports", "/finance/receipts"];
 STAFF_ONLY.push("/finance/ledger");
+STAFF_ONLY.push("/finance/ledger/statements", "/finance/ledger/year-end", "/finance/ledger/returns");
 const ADMIN_ONLY = ["/admin", "/admin/access", "/admin/records", "/people/overview", "/forms/new"];
 
 function idsByName(table: "project" | "program"): Record<string, string> {
