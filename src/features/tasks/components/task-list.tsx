@@ -17,6 +17,9 @@ import { cn, dueLabel } from "@/lib/utils";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import type { Task, TaskStatus } from "@/types/entities";
 
+/** Rows drawn per group before "Show more" (#115: every row costs render time). */
+export const TASK_LIST_ROW_LIMIT = 25;
+
 type BulkAction = "status" | "assignee" | "priority" | "due" | "archive";
 
 /**
@@ -47,8 +50,17 @@ export function TaskList({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState<BulkAction | null>(null);
   const [applying, setApplying] = useState(false);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
-  const allTasks = groups.flatMap((g) => g.tasks);
+  const shownGroups = groups.map((group) => ({
+    ...group,
+    shown: expanded.has(group.key)
+      ? group.tasks
+      : group.tasks.slice(0, TASK_LIST_ROW_LIMIT),
+  }));
+  // "Select all" means every row on screen: a bulk change never reaches a row
+  // the person has not seen.
+  const allTasks = shownGroups.flatMap((g) => g.shown);
   const allSelected = allTasks.length > 0 && selected.size === allTasks.length;
 
   function toggle(id: string) {
@@ -144,8 +156,9 @@ export function TaskList({
       ) : null}
 
       <div className="space-y-7">
-        {groups.map((group) => {
+        {shownGroups.map((group) => {
           if (group.tasks.length === 0) return null;
+          const hiddenCount = group.tasks.length - group.shown.length;
           return (
             <section
               key={group.key}
@@ -162,7 +175,7 @@ export function TaskList({
                 </h2>
               ) : null}
               <div className="card overflow-hidden">
-                {group.tasks.map((task) => {
+                {group.shown.map((task) => {
                   const due = dueLabel(task.due_at, timeZone);
                   const isSelected = selected.has(task.id);
                   return (
@@ -226,6 +239,17 @@ export function TaskList({
                     </div>
                   );
                 })}
+                {hiddenCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpanded((current) => new Set(current).add(group.key))
+                    }
+                    className="w-full border-t border-line px-3 py-2 text-left text-[12.5px] font-medium text-brand-fg hover:bg-surface-soft"
+                  >
+                    Show {hiddenCount} more
+                  </button>
+                ) : null}
               </div>
             </section>
           );

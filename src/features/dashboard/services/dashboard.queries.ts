@@ -178,7 +178,7 @@ export async function getDashboardData(
       .limit(5),
     supabase
       .from("project")
-      .select("id, name, health, health_reason, stage, target_date, owner:owner_id(id, full_name, email, avatar_url, title, timezone)")
+      .select("id, name, health, health_reason, stage, target_date, owner:owner_id(id, full_name, avatar_url)")
       .in("health", ["at_risk", "off_track"])
       .is("archived_at", null)
       .limit(5),
@@ -198,7 +198,7 @@ export async function getDashboardData(
     supabase
       .from("activity_event")
       .select(
-        "id, actor_id, verb, source_type, source_id, summary, created_at, actor:actor_id(id, full_name, email, avatar_url, title, timezone)",
+        "id, actor_id, verb, source_type, source_id, summary, created_at, actor:actor_id(id, full_name, avatar_url)",
       )
       .order("created_at", { ascending: false })
       .limit(10),
@@ -383,7 +383,7 @@ export async function getDashboardData(
         .select(
           "id, message_id, title, priority, requires_ack, ack_deadline, publish_at, expires_at, created_by, created_at, " +
             "message:message_id(id, channel_id, conversation_id, thread_root_id, author_id, body, is_system, created_at, edited_at, deleted_at), " +
-            "author:created_by(id, full_name, email, avatar_url, title, timezone)",
+            "author:created_by(id, full_name, avatar_url)",
         )
         .lte("publish_at", new Date().toISOString())
         .order("publish_at", { ascending: false })
@@ -393,7 +393,7 @@ export async function getDashboardData(
         .from("message")
         .select(
           "id, channel_id, conversation_id, thread_root_id, author_id, body, is_system, created_at, edited_at, deleted_at, " +
-            "author:author_id(id, full_name, email, avatar_url, title, timezone), reactions:message_reaction(message_id, user_id, emoji)",
+            "author:author_id(id, full_name, avatar_url), reactions:message_reaction(message_id, user_id, emoji)",
         )
         .eq("channel_id", annChannelRes.data.id)
         .is("thread_root_id", null)

@@ -7,11 +7,18 @@ import {
 } from "@/features/tasks/filters";
 import type { Meeting, Task } from "@/types/entities";
 
+/**
+ * What a task row, card or list needs, and no more. Every list page serializes
+ * these rows into its HTML twice (the markup and the data the browser hydrates
+ * from), so the description and the assignee's contact details, which no list
+ * shows, cost every page that lists tasks (#115). The drawer reads the full
+ * task itself.
+ */
 export const TASK_SELECT =
-  "id, program_id, project_id, milestone_id, title, description, status, priority, " +
+  "id, program_id, project_id, milestone_id, title, status, priority, " +
   "assignee_id, reviewer_id, start_at, due_at, blocked_reason, sort_key, completed_at, " +
   "created_at, archived_at, " +
-  "assignee:assignee_id(id, full_name, email, avatar_url, title, timezone), " +
+  "assignee:assignee_id(id, full_name, avatar_url), " +
   "project:project_id(id, name)";
 
 /**

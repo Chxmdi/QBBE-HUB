@@ -35,6 +35,13 @@ const COLUMN_DOTS: Record<TaskStatus, string> = {
 };
 
 /**
+ * Cards drawn per column before "Show more". A busy workspace puts hundreds of
+ * cards on the board, and drawing every one made the board the heaviest page
+ * in the 50-user test (#115); the column count still reports the full total.
+ */
+export const BOARD_CARD_LIMIT = 25;
+
+/**
  * Kanban board — a projection of the same durable task records as the list
  * view (WORK-003). Pointer drag has a keyboard alternative via the status
  * select on every card (A11Y-002). Visual changes here do not alter the
@@ -61,6 +68,7 @@ export function TaskBoard({
     title: string;
   } | null>(null);
   const [pending, startTransition] = useTransition();
+  const [expanded, setExpanded] = useState<Set<TaskStatus>>(() => new Set());
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -127,6 +135,10 @@ export function TaskBoard({
             const columnTasks = optimisticTasks.filter(
               (t) => t.status === column,
             );
+            const shownTasks = expanded.has(column)
+              ? columnTasks
+              : columnTasks.slice(0, BOARD_CARD_LIMIT);
+            const hiddenCount = columnTasks.length - shownTasks.length;
             return (
               <section
                 key={column}
@@ -161,7 +173,7 @@ export function TaskBoard({
                   </span>
                 </header>
                 <div className="space-y-2.5">
-                  {columnTasks.map((task) => {
+                  {shownTasks.map((task) => {
                     const due = dueLabel(task.due_at, timeZone);
                     return (
                       <article
@@ -231,6 +243,17 @@ export function TaskBoard({
                       </article>
                     );
                   })}
+                  {hiddenCount > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpanded((current) => new Set(current).add(column))
+                      }
+                      className="w-full rounded-(--radius-sm) border border-dashed border-line bg-surface/45 px-1.5 py-2 text-center text-[12.5px] font-medium text-brand-fg hover:bg-surface"
+                    >
+                      Show {hiddenCount} more
+                    </button>
+                  ) : null}
                   {columnTasks.length === 0 ? (
                     <p className="rounded-(--radius-sm) border border-dashed border-line bg-surface/45 px-1.5 py-5 text-center text-[12px] text-muted/80">
                       No tasks
