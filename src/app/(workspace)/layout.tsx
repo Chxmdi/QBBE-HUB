@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/layout/workspace-shell";
+import { LocaleSync } from "@/features/preferences/components/locale-sync";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
@@ -118,6 +119,7 @@ export default async function WorkspaceLayout({
       density={(profile?.display_density as "comfortable" | "compact") ?? "comfortable"}
       reduceMotion={profile?.reduce_motion === true}
     >
+      <LocaleSync saved={session.profile.locale} />
       {children}
     </WorkspaceShell>
   );

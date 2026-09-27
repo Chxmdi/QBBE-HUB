@@ -20,6 +20,7 @@ import { HealthBadge } from "@/components/shared/status-badges";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { AcknowledgeButton } from "@/features/announcements/components/acknowledge-button";
+import { AccountantHomeCard } from "@/features/ledger/components/accountant-home-card";
 import {
   ProgressBar,
   StatusDonut,
@@ -42,11 +43,15 @@ import {
   relativeTime,
 } from "@/lib/utils";
 import type { ProjectHealth, Task } from "@/types/entities";
+import { getLocale, getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
-export const metadata: Metadata = { title: "Home" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("home.title") };
+}
 export const dynamic = "force-dynamic";
 
-function greetingFor(timezone: string): string {
+function greetingFor(timezone: string, t: TranslateFn): string {
   const hour = Number(
     new Intl.DateTimeFormat("en-CA", {
       hour: "numeric",
@@ -54,9 +59,9 @@ function greetingFor(timezone: string): string {
       timeZone: timezone,
     }).format(new Date()),
   );
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
+  if (hour < 12) return t("home.greeting.morning");
+  if (hour < 17) return t("home.greeting.afternoon");
+  return t("home.greeting.evening");
 }
 
 function AttentionLink({
@@ -119,6 +124,7 @@ function AttentionTask({ task, reason }: { task: Task; reason: string }) {
 
 export default async function HomePage() {
   const session = await requireSession();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const lens = dashboardLens(session.role);
   const showPortfolio = lens !== "volunteer";
   const [data, portfolio, workload, outcomes, commitments] = await Promise.all([
@@ -139,7 +145,7 @@ export default async function HomePage() {
   const todayInZone =
     calendarDateInZone(new Date(), session.timeZone) ??
     new Date().toISOString().slice(0, 10);
-  const firstName = session.profile.full_name.split(" ")[0] || "there";
+  const firstName = session.profile.full_name.split(" ")[0] ?? "";
   // Two zones, deliberately, because the page answers two kinds of question.
   //
   // `timezone` is the viewer's own: a greeting depends on whether it is morning
@@ -188,14 +194,18 @@ export default async function HomePage() {
     <div className="grid grid-cols-1 gap-8 2xl:grid-cols-[1fr_360px]">
       {/* ============ Main column ============ */}
       <div className="min-w-0">
+        <AccountantHomeCard session={session} />
         <header className="mb-6">
           <h1 className="page-title">
-            {greetingFor(timezone)}, {firstName} <span aria-hidden>👋</span>
+            {firstName
+              ? t("home.greetingLine", { greeting: greetingFor(timezone, t), name: firstName })
+              : greetingFor(timezone, t)}{" "}
+            <span aria-hidden>👋</span>
           </h1>
           <p className="mt-1.5 text-[14.5px] text-muted">
             {session.isStaff
-              ? "Here's what needs your attention today."
-              : "Your assigned work, announcements, and upcoming schedule."}
+              ? t("home.attentionToday")
+              : t("home.overview")}
           </p>
         </header>
 
@@ -336,7 +346,7 @@ export default async function HomePage() {
           {/* TODAY */}
           <section aria-labelledby="today-heading" className="card p-5">
             <h2 id="today-heading" className="eyebrow mb-4">
-              Today
+              {t("home.sections.today")}
             </h2>
             {data.todayTasks.length === 0 && data.todayMeetings.length === 0 ? (
               <p className="py-6 text-center text-[13.5px] text-muted">
@@ -362,7 +372,7 @@ export default async function HomePage() {
                         </span>
                       </span>
                       <time className="text-[12.5px] font-medium whitespace-nowrap text-brand-fg">
-                        {formatTime(meeting.starts_at)}
+                        {formatTime(meeting.starts_at, undefined, locale)}
                       </time>
                     </Link>
                   </li>
@@ -421,7 +431,7 @@ export default async function HomePage() {
               className="card p-5"
             >
               <h2 id="program-health-heading" className="eyebrow mb-4">
-                Program health
+                {t("home.sections.programHealth")}
               </h2>
               {data.programHealth.length === 0 ? (
                 <p className="py-6 text-center text-[13.5px] text-muted">
@@ -486,7 +496,7 @@ export default async function HomePage() {
               className="card p-5"
             >
               <h2 id="activity-overview-heading" className="eyebrow mb-4">
-                Activity overview
+                {t("home.sections.activityOverview")}
               </h2>
               <div className="mb-4 flex items-baseline gap-3">
                 <p className="text-[30px] leading-none font-semibold">
@@ -555,7 +565,7 @@ export default async function HomePage() {
           >
             <div className="mb-4 flex items-center justify-between">
               <h2 id="upcoming-events-heading" className="eyebrow">
-                Upcoming events
+                {t("home.sections.upcomingEvents")}
               </h2>
               <Link
                 href="/calendar"
@@ -603,7 +613,7 @@ export default async function HomePage() {
                             {event.name}
                           </span>
                           <span className="meta block truncate">
-                            {formatTime(event.starts_at)}
+                            {formatTime(event.starts_at, undefined, locale)}
                             {event.location ? ` · ${event.location}` : ""}
                           </span>
                         </span>
@@ -631,7 +641,7 @@ export default async function HomePage() {
         {showPortfolio ? (
           <section aria-labelledby="workload-heading" className="mt-8">
             <h2 id="workload-heading" className="section-heading mb-3">
-              Workload
+              {t("home.sections.workload")}
             </h2>
             {workload.people.length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
@@ -732,7 +742,7 @@ export default async function HomePage() {
 
         <section aria-labelledby="commitments-heading" className="mt-8">
           <h2 id="commitments-heading" className="section-heading mb-3">
-            Commitments
+            {t("home.sections.commitments")}
           </h2>
           {commitments.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
@@ -760,7 +770,7 @@ export default async function HomePage() {
         {showPortfolio ? (
           <section aria-labelledby="outcomes-heading" className="mt-8">
             <h2 id="outcomes-heading" className="section-heading mb-3">
-              Outcomes
+              {t("home.sections.outcomes")}
             </h2>
             {outcomes.length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
@@ -785,7 +795,7 @@ export default async function HomePage() {
         {/* Needs attention (P0-DASH-03) */}
         <section aria-labelledby="attention-heading" className="mt-8">
           <h2 id="attention-heading" className="section-heading mb-3">
-            Needs attention
+            {t("home.sections.needsAttention")}
           </h2>
           {attentionEmpty ? (
             <div className="card px-5 py-6 text-center">
@@ -965,7 +975,7 @@ export default async function HomePage() {
         {/* Recent activity */}
         <section aria-labelledby="activity-heading" className="mt-8">
           <h2 id="activity-heading" className="section-heading mb-3">
-            Recent activity
+            {t("home.sections.recentActivity")}
           </h2>
           {data.recentActivity.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
@@ -995,7 +1005,7 @@ export default async function HomePage() {
                       </span>{" "}
                       {event.summary}
                     </p>
-                    <p className="meta">{relativeTime(event.created_at)}</p>
+                    <p className="meta">{relativeTime(event.created_at, locale)}</p>
                   </div>
                 </li>
               ))}
@@ -1031,7 +1041,7 @@ export default async function HomePage() {
                   Organization announcement
                 </span>
                 <span className="meta ml-auto">
-                  {relativeTime(latestAnn.publish_at)}
+                  {relativeTime(latestAnn.publish_at, locale)}
                 </span>
               </p>
               <p className="text-[14.5px] leading-snug font-semibold">
@@ -1101,7 +1111,7 @@ export default async function HomePage() {
                             {message.author?.full_name ?? "Unknown"}
                           </span>
                           <span className="meta shrink-0">
-                            {relativeTime(message.created_at)}
+                            {relativeTime(message.created_at, locale)}
                           </span>
                         </p>
                         <p className="line-clamp-2 text-[13px]">

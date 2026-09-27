@@ -1,4 +1,4 @@
--- Payroll import (#155; migration 20260929200000). Proves that only admins
+-- Payroll import (#155; migration 20260929900000). Proves that only admins
 -- with MFA import, map, allocate, post, reverse and delete; that ledger
 -- readers see runs but cannot change them and everyone else sees nothing;
 -- that tables refuse direct writes; that importing the same run twice adds

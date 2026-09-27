@@ -1,0 +1,4 @@
+{
+  "staffOnly": ["/finance/sales-tax"],
+  "qa": [{ "path": "/finance/sales-tax/worksheet", "name": "sales-tax-worksheet" }]
+}

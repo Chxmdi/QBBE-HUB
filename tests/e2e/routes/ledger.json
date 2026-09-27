@@ -1,0 +1,7 @@
+{
+  "staffOnly": ["/finance/ledger"],
+  "qa": [
+    { "path": "/finance/ledger", "name": "ledger" },
+    { "path": "/finance/ledger/journal/new", "name": "ledger-entry" }
+  ]
+}

@@ -1,6 +1,6 @@
 /**
  * Payroll categories (#155). The same fifteen figures the database stores on
- * a pay run (supabase/migrations/20260929200000_payroll_import.sql,
+ * a pay run (supabase/migrations/20260929900000_payroll_import.sql,
  * app.payroll_categories), in the same order.
  */
 

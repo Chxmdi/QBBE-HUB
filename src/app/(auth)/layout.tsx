@@ -1,10 +1,13 @@
 import { QbbeLogo } from "@/components/layout/qbbe-logo";
+import { LanguageToggle } from "@/features/preferences/components/language-switcher";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export default function AuthLayout({
+export default async function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   return (
     <main className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-10">
       <div
@@ -16,16 +19,19 @@ export default function AuthLayout({
           <QbbeLogo />
           <div className="qbbe-brand-rule mt-3" aria-hidden />
           <p className="mt-2 text-[11px] font-semibold tracking-[0.05em] text-white/72">
-            INTERNAL OPERATIONS WORKSPACE
+            {t("common.internalWorkspace").toUpperCase()}
           </p>
         </div>
         <div className="mb-5 text-center">
           <h1 className="page-title text-[26px] md:text-[30px]">QBBE Hub</h1>
           <p className="mt-2 text-[13.5px] text-muted">
-            Secure work, communication and program operations for the Quebec Board of Black Educators.
+            {t("auth.tagline")}
           </p>
         </div>
         {children}
+        <div className="mt-5">
+          <LanguageToggle current={locale} />
+        </div>
       </div>
     </main>
   );

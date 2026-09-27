@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "./fixtures";
 import AxeBuilder from "@axe-core/playwright";
 import { signIn } from "./auth";
+import { featureQaRoutes } from "./feature-routes";
 
 /**
  * Visual QA + accessibility matrix (Part II §16.1):
@@ -29,17 +30,9 @@ const ROUTES = [
   { path: "/approvals", name: "approvals" },
   { path: "/admin/approvals", name: "approval-rules" },
   { path: "/crm", name: "crm" },
-  { path: "/finance/ledger", name: "ledger" },
-  { path: "/finance/ledger/journal/new", name: "ledger-entry" },
-  { path: "/finance/budgets", name: "budgets" },
-  { path: "/finance/budgets/programs", name: "budgets-programs" },
-  { path: "/finance/sales-tax/worksheet", name: "sales-tax-worksheet" },
-  { path: "/finance/bank", name: "bank" },
-  { path: "/finance/payroll", name: "payroll" },
   { path: "/reports", name: "reports" },
   { path: "/documents", name: "documents" },
   { path: "/finance/receipts", name: "receipts" },
-  { path: "/finance/payables/aging", name: "payables-aging" },
   { path: "/forms", name: "forms" },
   { path: "/signatures", name: "signatures" },
   { path: "/admin", name: "admin" },
@@ -47,6 +40,8 @@ const ROUTES = [
   // Every primitive in every state (UI-008), so the sweep covers them.
   { path: "/admin/design-system", name: "design-system" },
   { path: "/search?q=workshop", name: "search" },
+  // New features add their routes in tests/e2e/routes/<feature>.json.
+  ...featureQaRoutes(),
 ];
 
 const WIDTHS = [
