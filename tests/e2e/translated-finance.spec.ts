@@ -74,7 +74,7 @@ function recordedText(): string[] {
     "gift_acknowledgement", "grant_award", "grant_report", "journal_entry", "journal_line",
     "ledger_account", "ledger_accountant_grant", "ledger_fund", "ledger_settings",
     "ledger_year_close", "payroll_run", "sales_tax_line", "sales_tax_period",
-    "sales_tax_settings", "program", "project", "user_profile", "organization",
+    "sales_tax_settings", "program", "project", "channel", "user_profile", "organization",
     "crm_organization", "crm_contact",
   ];
   const values = new Set<string>();
@@ -84,8 +84,9 @@ function recordedText(): string[] {
     );
     for (const row of JSON.parse(json || "[]") as Record<string, unknown>[]) {
       for (const value of Object.values(row)) {
-        // Everything people or specs stored is data (names, memos, slugs such
-        // as "program-template-program-1790541347522", file names), except
+        // Everything people or specs stored is data (names, memos, file names,
+        // and channel slugs such as "program-program-lead-1790545044645",
+        // which the sidebar lists for every program created), except
         // enum codes ("posted", "net_assets"), which must not hide an
         // untranslated status label.
         if (
