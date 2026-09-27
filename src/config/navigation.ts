@@ -24,6 +24,7 @@ import {
   Receipt,
   Settings,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,6 +58,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Forms", href: "/forms", icon: ClipboardPen, access: "member" },
       { label: "Projects", href: "/projects", icon: FolderKanban, access: "member" },
       { label: "Programs", href: "/programs", icon: Layers, access: "member" },
+      { label: "Approvals", href: "/approvals", icon: ClipboardCheck, access: "staff" },
     ],
   },
   {
@@ -89,6 +91,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Reports", href: "/reports", icon: BarChart3, access: "staff" },
       { label: "Documents", href: "/documents", icon: FolderOpen, access: "member" },
       { label: "Receipts", href: "/finance/receipts", icon: Receipt, access: "staff" },
+      { label: "Bills & invoices", href: "/finance/payables", icon: Wallet, access: "staff" },
       { label: "People", href: "/people", icon: Users, access: "member" },
       { label: "Admin", href: "/admin", icon: Settings, access: "admin" },
     ],
