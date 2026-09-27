@@ -39,7 +39,10 @@
   --color-accent-fg: #80501c;
   --color-success-fg: #12693d;
   --color-warning-fg: #854c0b;
-  --color-danger-fg: #b83343;
+  /* Darker than it once was: #b83343 read at 4.37:1 as the "Critical"
+     priority badge on a tinted My Work row (qa-matrix axe sweep). #a82d3c
+     is 5.05:1 there and 6.76:1 on white. */
+  --color-danger-fg: #a82d3c;
   --color-info-fg: #304e9c;
 
   /* Light theme neutrals. */
