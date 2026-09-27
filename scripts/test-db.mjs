@@ -66,6 +66,9 @@ const FILES = [
   "supabase/tests/record-retention.sql",
   "supabase/tests/approvals.sql",
   "supabase/tests/ledger-core.sql",
+  "supabase/tests/year-end.sql",
+  "supabase/tests/budgets.sql",
+  "supabase/tests/sales-tax.sql",
   "supabase/tests/payables.sql",
   "supabase/tests/bank-reconciliation.sql",
   // Last: it opens its own sessions, which only see committed rows, so it
