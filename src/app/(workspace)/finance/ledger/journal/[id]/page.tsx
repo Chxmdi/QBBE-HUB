@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { groupApprovalChain, sourceHasApprovals, type ApprovalChainRow } from "@/features/ledger/approval-chain";
+import { ApprovalChainSection } from "@/features/ledger/components/approval-chain";
 import { DraftActions, ReverseEntryButton } from "@/features/ledger/components/entry-actions";
 import { EntryForm } from "@/features/ledger/components/entry-form";
 import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
@@ -75,7 +77,13 @@ export default async function JournalEntryPage({
   const id = uuidParam(rawId);
   if (!id) notFound();
 
-  const [{ data: entryData }, { data: lineData }, { data: reversals }, { data: trailData }] = await Promise.all([
+  const [
+    { data: entryData },
+    { data: lineData },
+    { data: reversals },
+    { data: trailData },
+    { data: approvalData },
+  ] = await Promise.all([
     supabase
       .from("journal_entry")
       .select(
@@ -92,7 +100,9 @@ export default async function JournalEntryPage({
       .order("line_no"),
     supabase.from("journal_entry").select("id, entry_number").eq("reverses_entry_id", id),
     supabase.rpc("ledger_entry_trail", { p_entry: id }),
+    supabase.rpc("ledger_entry_approvals", { p_entry: id }),
   ]);
+  const approvals = groupApprovalChain((approvalData ?? []) as ApprovalChainRow[]);
   const trail = (trailData ?? []) as { occurred_at: string; action: string; actor_name: string }[];
   const entry = entryData as unknown as Entry | null;
   if (!entry) notFound();
@@ -237,6 +247,13 @@ export default async function JournalEntryPage({
           </TableRow>
         </tbody>
       </DataTable>
+
+      {approvals.length > 0 || sourceHasApprovals(entry.source_type) ? (
+        <ApprovalChainSection
+          chains={approvals}
+          sourceLabel={entry.source_type === "finance_payment" ? "payment" : "bill"}
+        />
+      ) : null}
 
       <section className="mt-6" aria-labelledby="trail-heading">
         <h2 id="trail-heading" className="mb-2 text-base font-semibold">

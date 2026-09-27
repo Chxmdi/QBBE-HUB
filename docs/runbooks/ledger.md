@@ -94,6 +94,13 @@ Every accountant sign-in that opens the books, every grant and revocation,
 and every export is written to the audit log. The last twenty sign-ins are
 listed on the Accountant access page.
 
+Each journal entry's page shows its **Approval** section when the entry came
+from a vendor bill or a payment: who submitted it, who approved or rejected
+it at each step (with their note), and any step still waiting. A reversal
+shows the chain of the entry it reverses. The accountant sees this chain for
+entries they can open, but still cannot open or decide anything on the
+Approvals screen.
+
 ## Year-end
 
 1. **Close every month** on the Periods page, except the last month of the

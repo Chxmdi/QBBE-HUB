@@ -8,7 +8,8 @@ import { clickWhenInteractive } from "./interactive";
  * year-end package and returns checklist, and the importable exports; then
  * grants the QA Guest time-limited accountant access. The Guest opens the
  * books from Home, is made to set up MFA first, reads the ledger and exports
- * it, and can change nothing. Revoking the grant closes the books again.
+ * it, reviews an entry posted from a bill together with that bill's approval
+ * chain, and can change nothing. Revoking the grant closes the books again.
  *
  * Closing a fiscal year is not exercised here: it is permanent on the shared
  * QA database and would freeze the months other ledger specs post into. The
@@ -26,6 +27,28 @@ test("statements, exports and the accountant's read-only access", async ({ page 
        select '${orgId}', to_char(m, 'YYYY-MM'), m::date, (m + interval '1 month' - interval '1 day')::date
        from generate_series(date '2026-10-01', date '2027-09-01', interval '1 month') as m
        where not exists (select 1 from ledger_period p where p.organization_id = '${orgId}' and p.starts_on = m::date)`);
+
+  // An entry that came from a bill, and the bill's approval: submitted by
+  // staff, approved by the admin as treasurer. A draft in a month of its own,
+  // so no other ledger spec meets it; removed again below.
+  const staffId = sql(`select id::text from user_profile where email = 'qa-staff@example.com'`);
+  const adminId = sql(`select id::text from user_profile where email = 'qa-admin@example.com'`);
+  const billId = sql(`select gen_random_uuid()::text`);
+  const marker = `E2E approval chain ${Date.now()}`;
+  sql(`insert into ledger_period (organization_id, name, starts_on, ends_on)
+       select '${orgId}', '2031-02', date '2031-02-01', date '2031-02-28'
+       where not exists (select 1 from ledger_period p where p.organization_id = '${orgId}' and p.starts_on = date '2031-02-01')`);
+  const itemId = sql(`insert into approval_item (organization_id, subject_type, subject_id, title, amount_cents,
+       requested_by, status, decided_by, decided_at)
+     values ('${orgId}', 'bill', '${billId}', '${marker}', 42000, '${staffId}', 'approved', '${adminId}', now())
+     returning id::text`);
+  sql(`insert into approval_step (item_id, organization_id, step, label, approver_kind, approver_id, status, decided_by, decided_at)
+       values ('${itemId}', '${orgId}', 1, 'Treasurer', 'person', '${adminId}', 'approved', '${adminId}', now())`);
+  sql(`insert into approval_event (item_id, organization_id, actor_id, kind, step, note, created_at) values
+       ('${itemId}', '${orgId}', '${staffId}', 'submitted', null, null, now() - interval '1 hour'),
+       ('${itemId}', '${orgId}', '${adminId}', 'approved', 1, 'Matches the quote', now())`);
+  const entryId = sql(`insert into journal_entry (organization_id, entry_date, memo, source_type, source_id)
+     values ('${orgId}', date '2031-02-10', '${marker}', 'finance_bill', '${billId}') returning id::text`);
 
   try {
     await signIn(page, "owner");
@@ -83,6 +106,16 @@ test("statements, exports and the accountant's read-only access", async ({ page 
     await expect(page.getByText("You do not have access to the ledger")).toBeVisible();
     expect((await page.request.get("/api/finance/ledger/export/journal?from=2026-10-01&to=2027-09-30")).status()).toBe(200);
 
+    // An entry is reviewed with the approval chain of the bill it came from,
+    // and nothing on the page can change either.
+    await page.goto(`/finance/ledger/journal/${entryId}`);
+    const chain = page.getByRole("list", { name: `Approval chain: ${marker}` });
+    await expect(chain.getByText("Submitted by QA Staff")).toBeVisible();
+    await expect(chain.getByText("Approved by QA Admin")).toBeVisible();
+    await expect(chain.getByText("Step 1, Treasurer")).toBeVisible();
+    await expect(chain.getByText("“Matches the quote”")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Post|Reverse|Approve|Reject|Delete/ })).toHaveCount(0);
+
     // The rest of the workspace stays closed to a Guest.
     await page.goto("/crm");
     await page.waitForURL((url) => url.pathname === "/");
@@ -98,6 +131,7 @@ test("statements, exports and the accountant's read-only access", async ({ page 
     await page.waitForURL((url) => url.pathname === "/");
     expect((await page.request.get("/api/finance/ledger/export/journal")).status()).toBe(403);
   } finally {
+    sql(`delete from journal_entry where id = '${entryId}' and status = 'draft'`);
     sql(`update ledger_accountant_grant set revoked_at = now() where user_id = '${guestId}' and revoked_at is null`);
     sql(`delete from auth.mfa_factors where user_id = '${guestId}'`);
   }
