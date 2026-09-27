@@ -71,8 +71,16 @@ Supporting fixes merged the same day:
 - [ ] Test receipt reading in Safari/WebKit and Firefox, and on real phone
   photos of real receipts. So far only Chromium and synthetic images.
 - [ ] #142 v2 remainder: a forwarding email address for invoices.
-- [ ] Close issues whose work has merged: #143, #149 and #141. Confirm #144 and
-  #147 against their acceptance criteria before closing.
+- [ ] Make the signed-in browser spec list in `.github/workflows/ci.yml`
+  automatic (read it from `tests/e2e/routes/*.json` or a glob). Every new
+  feature still edits that one shared line, so parallel branches conflict.
+- [ ] #143 approvals: delegation while an approver is away. Not built.
+- [ ] #149 fund accounting: a statement of changes in fund balances, and
+  releasing restricted money to unrestricted when its conditions are met.
+  Neither is built; the acceptance tests themselves pass.
+- [ ] Close #143 and #149 once the items above land. #141 stays open until the
+  finance screens are translated and a French reviewer signs off. Confirm #144
+  and #147 against their acceptance criteria before closing.
 - [ ] Record in the accountant runbook that a granted accountant can read bank
   statement lines and donor gift records. They read through the same
   `can_read_ledger` rule.
