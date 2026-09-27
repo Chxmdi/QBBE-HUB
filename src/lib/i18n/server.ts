@@ -1,6 +1,5 @@
 import { cookies, headers } from "next/headers";
 import { cache } from "react";
-import { getSessionContext } from "@/lib/auth";
 import {
   isLocale,
   LOCALE_COOKIE,
@@ -13,21 +12,17 @@ import { formattersFor } from "@/lib/i18n/format";
 /**
  * The language for this request, resolved once.
  *
- * Order: the person's saved choice, then the cookie (set when they choose on
- * the sign-in screen or in settings), then the browser's Accept-Language, then
- * English. The session lookup is the same cached call the workspace layout
- * makes, so signed-in pages pay nothing extra for it.
+ * Order: the `qbbe-locale` cookie, then the browser's Accept-Language, then
+ * English. Neither needs a network call. This runs in the root layout and in
+ * every page's metadata, and reading the session here cost each page an Auth
+ * round trip and a membership query: CI's signed-in sweeps ran about 1.5x
+ * slower than main until it went.
+ *
+ * The saved profile choice is still the record. Saving it writes the cookie
+ * too, and `LocaleSync` in the workspace re-syncs the cookie from the profile
+ * on a device that does not have it yet.
  */
 export const getLocale = cache(async (): Promise<Locale> => {
-  try {
-    const session = await getSessionContext();
-    const saved = session?.profile.locale;
-    if (isLocale(saved)) return saved;
-  } catch {
-    // A failed session read is handled, loudly, by the page that needs the
-    // session. Choosing a language must not be what takes a page down.
-  }
-
   const jar = await cookies();
   const fromCookie = jar.get(LOCALE_COOKIE)?.value;
   if (isLocale(fromCookie)) return fromCookie;

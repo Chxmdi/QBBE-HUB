@@ -93,6 +93,13 @@ test.describe("a signed-in person who chooses French", () => {
     const results = await new AxeBuilder({ page }).withTags(WCAG).analyze();
     expect(results.violations.filter((v) => v.id.includes("lang"))).toEqual([]);
 
+    // The profile is the record: a browser without the cookie (a new device)
+    // is brought to French after its first page.
+    await page.context().clearCookies({ name: "qbbe-locale" });
+    await page.goto("/my-work");
+    await expect(page.locator("html")).toHaveAttribute("lang", "fr-CA", { timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Mon travail", level: 1 })).toBeVisible();
+
     // And back: English is one click away and applies at once.
     await page.goto("/settings");
     await clickWhenInteractive(page.getByRole("radio", { name: "English" }));
