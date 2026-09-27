@@ -65,22 +65,27 @@ Supporting fixes merged the same day:
 
 ### B. Follow-ups found during review
 - [ ] Split or shard the Database security CI job. It reached 45 minutes with
-  today's features; 60 is a stopgap.
+  today's features, and running every signed-in spec adds more; 80 is a stopgap.
 - [ ] Translate the approvals, payables, bank, GST/QST, budgets, year-end and
   gifts screens. v1 translates the sidebar and main screens only.
 - [ ] Test receipt reading in Safari/WebKit and Firefox, and on real phone
   photos of real receipts. So far only Chromium and synthetic images.
 - [ ] #142 v2 remainder: a forwarding email address for invoices.
-- [ ] Make the signed-in browser spec list in `.github/workflows/ci.yml`
+- [x] Make the signed-in browser spec list in `.github/workflows/ci.yml`
   automatic (read it from `tests/e2e/routes/*.json` or a glob). Every new
   feature still edits that one shared line, so parallel branches conflict.
 - [ ] #143 approvals: delegation while an approver is away. Not built.
 - [ ] #149 fund accounting: a statement of changes in fund balances, and
   releasing restricted money to unrestricted when its conditions are met.
   Neither is built; the acceptance tests themselves pass.
+- [ ] #144 e-signatures, v1 is in-app only: external signers by emailed link,
+  ordered or parallel routing, the signer's IP address, and a certificate on a
+  sealed PDF are not built. Build-or-buy and counsel's review come first.
+- [ ] #147 document library: search does not look inside PDFs or scans (its
+  acceptance test), and letter/contract templates are not built.
 - [ ] Close #143 and #149 once the items above land. #141 stays open until the
-  finance screens are translated and a French reviewer signs off. Confirm #144
-  and #147 against their acceptance criteria before closing.
+  finance screens are translated and a French reviewer signs off. #144 and
+  #147 stay open for the gaps listed.
 - [ ] Record in the accountant runbook that a granted accountant can read bank
   statement lines and donor gift records. They read through the same
   `can_read_ledger` rule.
