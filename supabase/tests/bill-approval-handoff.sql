@@ -1,5 +1,5 @@
 -- Approved bills hand off to the ledger (#143, #150; migration
--- 20260929300000). Proves: only the bill's own approval request unlocks
+-- 20260930150000). Proves: only the bill's own approval request unlocks
 -- posting; changing what was approved needs a fresh approval, while changing
 -- the bookkeeping coding does not; sending a changed bill again withdraws the
 -- older waiting request; the people who post are told when a bill is ready;
