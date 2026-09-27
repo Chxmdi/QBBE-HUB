@@ -1,3 +1,7 @@
+import type { Locale } from "@/lib/i18n/config";
+import { formatCurrency } from "@/lib/i18n/format";
+import type { MessageKey } from "@/lib/i18n/translate";
+
 /**
  * Money and labels for the general ledger (#148). Amounts are integer cents
  * end to end; floats never touch a stored figure.
@@ -31,19 +35,24 @@ export function parseMoneyToCents(input: string): number | null {
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
-const formatter = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
-
-export function formatCents(cents: number): string {
-  return formatter.format(cents / 100);
+/**
+ * "$1,234.56" in English, "1 234,56 $" in French (#141). Pass the reader's
+ * language; English is the default so spreadsheets and logs stay stable.
+ */
+export function formatCents(cents: number, locale: Locale = "en"): string {
+  return formatCurrency(cents / 100, locale);
 }
 
 /**
  * A balance stored as debits minus credits, shown the way an accountant reads
- * it: "$1,200.00 Dr" or "$300.00 Cr". Zero has no side.
+ * it: "$1,200.00 Dr" or "$300.00 Cr" — in French "1 200,00 $ Dt" or
+ * "300,00 $ Ct". Zero has no side.
  */
-export function formatBalance(cents: number): string {
-  if (cents === 0) return formatCents(0);
-  return `${formatCents(Math.abs(cents))} ${cents > 0 ? "Dr" : "Cr"}`;
+export function formatBalance(cents: number, locale: Locale = "en"): string {
+  if (cents === 0) return formatCents(0, locale);
+  const side =
+    locale === "fr-CA" ? (cents > 0 ? "Dt" : "Ct") : cents > 0 ? "Dr" : "Cr";
+  return `${formatCents(Math.abs(cents), locale)} ${side}`;
 }
 
 /** Plain decimal for spreadsheets: 4218 → "42.18", -5 → "-0.05". */
@@ -78,6 +87,15 @@ export const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {
   expense: "Expense",
 };
 
+/** The catalogue key for each account type, for `t()` (#141). */
+export const ACCOUNT_TYPE_KEY: Record<AccountType, MessageKey> = {
+  asset: "finance.common.accountTypes.asset",
+  liability: "finance.common.accountTypes.liability",
+  net_assets: "finance.common.accountTypes.net_assets",
+  revenue: "finance.common.accountTypes.revenue",
+  expense: "finance.common.accountTypes.expense",
+};
+
 export const FUND_RESTRICTIONS = [
   "unrestricted",
   "internally_restricted",
@@ -91,11 +109,24 @@ export const FUND_RESTRICTION_LABEL: Record<FundRestriction, string> = {
   externally_restricted: "Externally restricted",
 };
 
+export const FUND_RESTRICTION_KEY: Record<FundRestriction, MessageKey> = {
+  unrestricted: "finance.common.fundRestrictions.unrestricted",
+  internally_restricted: "finance.common.fundRestrictions.internally_restricted",
+  externally_restricted: "finance.common.fundRestrictions.externally_restricted",
+};
+
 export const ENTRY_KIND_LABEL: Record<string, string> = {
   standard: "Journal entry",
   opening: "Opening balances",
   reversal: "Reversal",
   closing: "Year-end closing",
+};
+
+export const ENTRY_KIND_KEY: Record<string, MessageKey> = {
+  standard: "finance.common.entryKinds.standard",
+  opening: "finance.common.entryKinds.opening",
+  reversal: "finance.common.entryKinds.reversal",
+  closing: "finance.common.entryKinds.closing",
 };
 
 /** Debits and credits of a set of lines, and whether they balance. */

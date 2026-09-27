@@ -1,0 +1,52 @@
+/**
+ * English text shared by every finance area (#141). Mounted at
+ * `finance.common`. Area-specific text belongs in that area's own file.
+ */
+export const commonEn = {
+  title: "Finance",
+  accountTypes: {
+    asset: "Asset",
+    liability: "Liability",
+    net_assets: "Net assets",
+    revenue: "Revenue",
+    expense: "Expense",
+  },
+  fundRestrictions: {
+    unrestricted: "Unrestricted",
+    internally_restricted: "Internally restricted",
+    externally_restricted: "Externally restricted",
+  },
+  entryKinds: {
+    standard: "Journal entry",
+    opening: "Opening balances",
+    reversal: "Reversal",
+    closing: "Year-end closing",
+  },
+  debit: "Debit",
+  credit: "Credit",
+  debits: "Debits",
+  credits: "Credits",
+  total: "Total",
+  amount: "Amount",
+  date: "Date",
+  memo: "Memo",
+  account: "Account",
+  fund: "Fund",
+  status: "Status",
+  description: "Description",
+  notes: "Notes",
+  actions: "Actions",
+  optional: "Optional",
+  program: "Program",
+  vendor: "Vendor",
+  gst: "GST",
+  qst: "QST",
+  downloadCsv: "Download CSV",
+  exportCsv: "Export CSV",
+  print: "Print",
+  save: "Save",
+  saving: "Saving…",
+  cancel: "Cancel",
+  none: "None",
+  all: "All",
+};

@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useT } from "@/lib/i18n/client";
 
 export interface Crumb {
   label: string;
@@ -11,8 +14,9 @@ export interface Crumb {
  * is not a link.
  */
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
+  const t = useT();
   return (
-    <nav aria-label="Breadcrumb" className="mb-2">
+    <nav aria-label={t("ui.breadcrumb")} className="mb-2">
       <ol className="flex flex-wrap items-center gap-1 text-[12.5px] text-muted">
         {items.map((item, index) => {
           const last = index === items.length - 1;

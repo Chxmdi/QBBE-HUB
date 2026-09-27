@@ -3,6 +3,7 @@
 import * as React from "react";
 import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 export interface MenuItem {
   label: string;
@@ -19,7 +20,7 @@ export interface MenuItem {
  */
 export function Menu({
   items,
-  label = "More actions",
+  label,
   trigger,
   align = "right",
 }: {
@@ -28,6 +29,8 @@ export function Menu({
   trigger?: React.ReactNode;
   align?: "left" | "right";
 }) {
+  const t = useT();
+  const menuLabel = label ?? t("ui.moreActions");
   const [open, setOpen] = React.useState(false);
   const [activeIndex, setActiveIndex] = React.useState(0);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -82,7 +85,7 @@ export function Menu({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={label}
+        aria-label={menuLabel}
         onClick={() => {
           setActiveIndex(0);
           setOpen((v) => !v);
@@ -94,7 +97,7 @@ export function Menu({
       {open ? (
         <div
           role="menu"
-          aria-label={label}
+          aria-label={menuLabel}
           onKeyDown={handleKeyDown}
           className={cn(
             "absolute z-(--z-overlay) mt-1 min-w-48 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)",

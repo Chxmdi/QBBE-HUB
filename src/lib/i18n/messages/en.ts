@@ -1,3 +1,15 @@
+import { commonEn } from "@/lib/i18n/messages/finance/common.en";
+import { approvalsEn } from "@/lib/i18n/messages/finance/approvals.en";
+import { receiptsEn } from "@/lib/i18n/messages/finance/receipts.en";
+import { payablesEn } from "@/lib/i18n/messages/finance/payables.en";
+import { bankEn } from "@/lib/i18n/messages/finance/bank.en";
+import { salesTaxEn } from "@/lib/i18n/messages/finance/salesTax.en";
+import { budgetsEn } from "@/lib/i18n/messages/finance/budgets.en";
+import { ledgerEn } from "@/lib/i18n/messages/finance/ledger.en";
+import { ledgerReportsEn } from "@/lib/i18n/messages/finance/ledgerReports.en";
+import { giftsEn } from "@/lib/i18n/messages/finance/gifts.en";
+import { payrollEn } from "@/lib/i18n/messages/finance/payroll.en";
+
 /**
  * English interface text — the source catalogue (#141).
  *
@@ -311,6 +323,35 @@ export const en = {
       "Gmail integration requires a QBBE-approved Google OAuth configuration. Once credentials exist, Connect appears here.",
     connectGmail: "Connect Gmail",
     setupDocs: "See docs/runbooks/integrations.md for setup.",
+  },
+  ui: {
+    closeDialog: "Close dialog",
+    closePanel: "Close panel",
+    moreActions: "More actions",
+    sections: "Sections",
+    breadcrumb: "Breadcrumb",
+    loadFailed: "This couldn't be loaded.",
+    somethingWrong: "Something went wrong. Try again.",
+    toast: {
+      success: "Success",
+      warning: "Warning",
+      error: "Error",
+      info: "Information",
+      dismiss: "Dismiss notification",
+    },
+  },
+  finance: {
+    common: commonEn,
+    approvals: approvalsEn,
+    receipts: receiptsEn,
+    payables: payablesEn,
+    bank: bankEn,
+    salesTax: salesTaxEn,
+    budgets: budgetsEn,
+    ledger: ledgerEn,
+    ledgerReports: ledgerReportsEn,
+    gifts: giftsEn,
+    payroll: payrollEn,
   },
 };
 
