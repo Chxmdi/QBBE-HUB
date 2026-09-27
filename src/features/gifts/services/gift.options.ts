@@ -1,8 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RecordGiftOptions } from "@/features/gifts/components/record-gift-dialog";
 import type { GrantOptions } from "@/features/gifts/components/grant-forms";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 
-/** Choices for the gift and grant forms, read with the admin's own client. */
+/**
+ * Choices for the gift and grant forms, read with the admin's own client.
+ * `t` translates the few labels built here; it defaults to English.
+ */
 
 const LIMIT = 1000;
 
@@ -10,6 +14,7 @@ export async function recordGiftOptions(
   supabase: SupabaseClient,
   organizationId: string,
   today: string,
+  t: TranslateFn = createTranslator("en"),
 ): Promise<RecordGiftOptions> {
   const [contacts, orgs, funds, programs, grants, accounts] = await Promise.all([
     supabase.from("crm_contact").select("id, full_name").eq("organization_id", organizationId).order("full_name").limit(LIMIT),
@@ -46,7 +51,7 @@ export async function recordGiftOptions(
     organizations: ((orgs.data ?? []) as { id: string; name: string }[]).map((o) => ({ id: o.id, label: o.name })),
     funds: fundList.map((f) => ({
       id: f.id,
-      label: `${f.code} · ${f.name}${f.restriction === "unrestricted" ? "" : " (restricted)"}`,
+      label: `${f.code} · ${f.name}${f.restriction === "unrestricted" ? "" : t("finance.gifts.restrictedSuffix")}`,
     })),
     programs: ((programs.data ?? []) as { id: string; name: string }[]).map((p) => ({ id: p.id, label: p.name })),
     grants: (
@@ -69,7 +74,11 @@ export async function recordGiftOptions(
   };
 }
 
-export async function grantOptions(supabase: SupabaseClient, organizationId: string): Promise<GrantOptions> {
+export async function grantOptions(
+  supabase: SupabaseClient,
+  organizationId: string,
+  t: TranslateFn = createTranslator("en"),
+): Promise<GrantOptions> {
   const [orgs, contacts, funds, programs, members] = await Promise.all([
     supabase.from("crm_organization").select("id, name").eq("organization_id", organizationId).order("name").limit(LIMIT),
     supabase.from("crm_contact").select("id, full_name").eq("organization_id", organizationId).order("full_name").limit(LIMIT),
@@ -93,7 +102,7 @@ export async function grantOptions(supabase: SupabaseClient, organizationId: str
     staff: (
       (members.data ?? []) as unknown as { user_id: string; user_profile: { full_name: string; email: string } | null }[]
     )
-      .map((m) => ({ id: m.user_id, label: m.user_profile?.full_name || m.user_profile?.email || "Staff member" }))
+      .map((m) => ({ id: m.user_id, label: m.user_profile?.full_name || m.user_profile?.email || t("finance.gifts.staffMember") }))
       .sort((a, b) => a.label.localeCompare(b.label)),
   };
 }

@@ -2,20 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/translate";
 import { cn } from "@/lib/utils";
 
-const SECTIONS = [
-  { href: "/finance/gifts", label: "Gifts" },
-  { href: "/finance/gifts/donors", label: "Donors" },
-  { href: "/finance/gifts/statement", label: "Annual statements" },
-  { href: "/finance/gifts/grants", label: "Grants" },
+const SECTIONS: { href: string; label: MessageKey }[] = [
+  { href: "/finance/gifts", label: "finance.gifts.tabs.gifts" },
+  { href: "/finance/gifts/donors", label: "finance.gifts.tabs.donors" },
+  { href: "/finance/gifts/statement", label: "finance.gifts.tabs.statements" },
+  { href: "/finance/gifts/grants", label: "finance.gifts.tabs.grants" },
 ];
 
 /** Sections of gifts and grants (#156), as plain links. */
 export function GiftTabs() {
   const pathname = usePathname();
+  const t = useT();
   return (
-    <nav aria-label="Gift sections" className="mb-6 -mx-4 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
+    <nav aria-label={t("finance.gifts.tabs.ariaLabel")} className="mb-6 -mx-4 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
       <ul className="flex gap-1">
         {SECTIONS.map((s) => {
           const active =
@@ -32,7 +35,7 @@ export function GiftTabs() {
                   active ? "border-brand text-ink" : "border-transparent text-muted hover:text-ink",
                 )}
               >
-                {s.label}
+                {t(s.label)}
               </Link>
             </li>
           );

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AckGift, GiftType } from "@/features/gifts/acknowledgement";
+import type { MessageKey } from "@/lib/i18n/translate";
 
 /**
  * Reads shared by the gift pages and actions (#156). They go through the
@@ -46,8 +47,9 @@ export interface GiftRow {
   void_entry: { id: string; entry_number: number | null } | null;
 }
 
-export function donorName(row: Pick<GiftRow, "contact" | "crm_org">): string {
-  return row.contact?.full_name ?? row.crm_org?.name ?? "Unknown donor";
+/** `unknown` is shown when neither CRM record came back; pages pass it translated. */
+export function donorName(row: Pick<GiftRow, "contact" | "crm_org">, unknown: string = "Unknown donor"): string {
+  return row.contact?.full_name ?? row.crm_org?.name ?? unknown;
 }
 
 export function toAckGift(row: GiftRow): AckGift {
@@ -97,10 +99,10 @@ export function donorKey(row: { crm_contact_id: string | null; crm_organization_
   return row.crm_contact_id ? `contact:${row.crm_contact_id}` : `organization:${row.crm_organization_id}`;
 }
 
-export const GIFT_TYPE_LABEL: Record<GiftType, string> = {
-  donation: "Donation",
-  grant_payment: "Grant payment",
-  in_kind: "In-kind gift",
+export const GIFT_TYPE_KEY: Record<GiftType, MessageKey> = {
+  donation: "finance.gifts.types.donation",
+  grant_payment: "finance.gifts.types.grant_payment",
+  in_kind: "finance.gifts.types.in_kind",
 };
 
 /** A row of public.gift_donor_statement. */

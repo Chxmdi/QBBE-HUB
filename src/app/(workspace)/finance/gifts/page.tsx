@@ -13,10 +13,13 @@ import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.acce
 import { GiftTabs } from "@/features/gifts/components/gift-tabs";
 import { NotAReceiptNotice } from "@/features/gifts/components/not-a-receipt-notice";
 import { RecordGiftDialog } from "@/features/gifts/components/record-gift-dialog";
-import { GIFT_SELECT, GIFT_TYPE_LABEL, donorName, type GiftRow } from "@/features/gifts/services/gift.data";
+import { GIFT_SELECT, GIFT_TYPE_KEY, donorName, type GiftRow } from "@/features/gifts/services/gift.data";
 import { recordGiftOptions } from "@/features/gifts/services/gift.options";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Gifts" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.gifts.list.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function GiftsPage({
@@ -25,17 +28,18 @@ export default async function GiftsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const params = await searchParams;
   const today = todayIn(session.timeZone);
   const currentYear = Number(today.slice(0, 4));
   const year = /^\d{4}$/.test(params.year ?? "") ? Number(params.year) : currentYear;
-  const options = canManage ? await recordGiftOptions(supabase, session.organizationId, today) : null;
+  const options = canManage ? await recordGiftOptions(supabase, session.organizationId, today, t) : null;
 
   const header = (
     <PageHeader
-      eyebrow="Finance"
-      title="Gifts and grants"
-      description="Donations, grant payments and in-kind gifts, each linked to a donor in Relationships and, when it has a dollar amount, to its ledger entry."
+      eyebrow={t("finance.common.title")}
+      title={t("finance.gifts.title")}
+      description={t("finance.gifts.list.description")}
       actions={options ? <RecordGiftDialog options={options} /> : undefined}
     />
   );
@@ -76,47 +80,50 @@ export default async function GiftsPage({
       {header}
       <GiftTabs />
       <NotAReceiptNotice />
-      <form method="get" className="mb-4 flex flex-wrap items-end gap-2" aria-label="Choose the year">
+      <form method="get" className="mb-4 flex flex-wrap items-end gap-2" aria-label={t("finance.gifts.list.yearFormLabel")}>
         <div>
-          <Label htmlFor="gifts-year">Year received</Label>
+          <Label htmlFor="gifts-year">{t("finance.gifts.list.yearReceived")}</Label>
           <Input id="gifts-year" name="year" type="number" min={2000} max={2100} defaultValue={year} className="w-28" />
         </div>
         <Button type="submit" variant="secondary">
-          Show
+          {t("finance.gifts.list.show")}
         </Button>
         <p className="ml-auto text-[13.5px] text-muted">
-          {recorded.length} gift{recorded.length === 1 ? "" : "s"} · {formatCents(total)} received in money
+          {t(recorded.length === 1 ? "finance.gifts.list.summaryOne" : "finance.gifts.list.summaryOther", {
+            count: recorded.length,
+            total: formatCents(total, locale),
+          })}
         </p>
       </form>
       {gifts.length === 0 ? (
-        <EmptyState icon={<Gift />} title={`No gifts recorded in ${year}`} description="Recorded gifts appear here." />
+        <EmptyState icon={<Gift />} title={t("finance.gifts.list.emptyTitle", { year })} description={t("finance.gifts.list.emptyDescription")} />
       ) : (
         <DataTable minWidth="760px">
           <TableHead>
-            <TableHeader>Gift</TableHeader>
-            <TableHeader>Received</TableHeader>
-            <TableHeader>Donor</TableHeader>
-            <TableHeader>Fund</TableHeader>
-            <TableHeader className="text-right">Amount</TableHeader>
+            <TableHeader>{t("finance.gifts.list.colGift")}</TableHeader>
+            <TableHeader>{t("finance.gifts.list.colReceived")}</TableHeader>
+            <TableHeader>{t("finance.gifts.list.colDonor")}</TableHeader>
+            <TableHeader>{t("finance.common.fund")}</TableHeader>
+            <TableHeader className="text-right">{t("finance.common.amount")}</TableHeader>
           </TableHead>
           <tbody>
             {gifts.map((g) => (
               <TableRow key={g.id}>
                 <TableCell>
                   <Link href={`/finance/gifts/${g.id}`} className="font-medium hover:underline">
-                    Gift {g.gift_number}
+                    {t("finance.gifts.list.giftNumber", { number: g.gift_number })}
                   </Link>
-                  <p className="meta">{GIFT_TYPE_LABEL[g.gift_type]}</p>
-                  {g.status === "voided" ? <Badge tone="danger" className="mt-1">Void</Badge> : null}
+                  <p className="meta">{t(GIFT_TYPE_KEY[g.gift_type])}</p>
+                  {g.status === "voided" ? <Badge tone="danger" className="mt-1">{t("finance.gifts.list.void")}</Badge> : null}
                 </TableCell>
                 <TableCell>{g.received_on}</TableCell>
-                <TableCell>{donorName(g)}</TableCell>
+                <TableCell>{donorName(g, t("finance.gifts.unknownDonor"))}</TableCell>
                 <TableCell className="text-[13px]">
                   {g.fund ? `${g.fund.code} · ${g.fund.name}` : ""}
                   {g.program ? <p className="meta">{g.program.name}</p> : null}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {g.amount_cents === null ? <span className="text-muted">No value</span> : formatCents(Number(g.amount_cents))}
+                  {g.amount_cents === null ? <span className="text-muted">{t("finance.gifts.list.noValue")}</span> : formatCents(Number(g.amount_cents), locale)}
                 </TableCell>
               </TableRow>
             ))}
