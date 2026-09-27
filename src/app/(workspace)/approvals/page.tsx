@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCheck } from "lucide-react";
+import { CheckCheck, UserRoundCheck } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { LinkTabs } from "@/components/shared/link-tabs";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ApprovalActions } from "@/features/approvals/components/approval-controls";
+import {
+  ApprovalActions,
+  EndDelegationButton,
+} from "@/features/approvals/components/approval-controls";
 import {
   EVENT_LABELS,
   STATUS_LABELS,
@@ -15,14 +18,21 @@ import {
   SUBJECT_TYPE_LABELS,
   formatAmount,
 } from "@/features/approvals/schemas";
-import { submitApproval } from "@/features/approvals/services/approval.commands";
 import {
+  setApprovalDelegation,
+  submitApproval,
+} from "@/features/approvals/services/approval.commands";
+import {
+  getApprovalDelegations,
   getApprovalDetail,
   getApprovalInbox,
   getMyApprovalRequests,
   getVisibleApprovals,
 } from "@/features/approvals/services/approval.queries";
-import type { ApprovalItemRow } from "@/features/approvals/services/approval.queries";
+import type {
+  ApprovalDelegationRow,
+  ApprovalItemRow,
+} from "@/features/approvals/services/approval.queries";
 import { requireStaff } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
@@ -57,17 +67,34 @@ export default async function ApprovalsPage({
   const session = await requireStaff();
   const params = await searchParams;
   const tab =
-    params.tab === "mine" || (params.tab === "all" && session.isAdmin) ? params.tab : "inbox";
+    params.tab === "mine" || params.tab === "away" || (params.tab === "all" && session.isAdmin)
+      ? params.tab
+      : "inbox";
   const itemId = params.item && UUID.test(params.item) ? params.item : null;
 
   const supabase = await createSupabasePageClient();
-  const [inbox, mine, all, detail, { data: programRows }] = await Promise.all([
-    getApprovalInbox(),
-    getMyApprovalRequests(session.userId),
-    tab === "all" ? getVisibleApprovals(null) : Promise.resolve([]),
-    itemId ? getApprovalDetail(itemId) : Promise.resolve(null),
-    supabase.from("program").select("id, name").eq("status", "active").order("name"),
-  ]);
+  const [inbox, mine, all, detail, { data: programRows }, delegations, { data: memberRows }] =
+    await Promise.all([
+      getApprovalInbox(),
+      getMyApprovalRequests(session.userId),
+      tab === "all" ? getVisibleApprovals(null) : Promise.resolve([]),
+      itemId ? getApprovalDetail(itemId) : Promise.resolve(null),
+      supabase.from("program").select("id, name").eq("status", "active").order("name"),
+      tab === "away" ? getApprovalDelegations() : Promise.resolve([]),
+      tab === "away"
+        ? supabase
+            .from("organization_membership")
+            .select("user_id, user_profile:user_id(full_name)")
+            .eq("status", "active")
+            .in("role", ["owner", "admin", "staff"])
+        : Promise.resolve({ data: [] }),
+    ]);
+  const people = ((memberRows ?? []) as unknown as {
+    user_id: string;
+    user_profile: { full_name: string } | null;
+  }[])
+    .map((row) => ({ value: row.user_id, label: row.user_profile?.full_name ?? "Unnamed" }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   const rows = tab === "inbox" ? inbox : tab === "mine" ? mine : all;
   const programOptions = (programRows ?? []).map((row) => ({
@@ -144,10 +171,18 @@ export default async function ApprovalsPage({
           ...(session.isAdmin
             ? [{ id: "all", label: "All", href: "/approvals?tab=all" }]
             : []),
+          { id: "away", label: "Away cover", href: "/approvals?tab=away" },
         ]}
       />
 
-      {rows.length === 0 ? (
+      {tab === "away" ? (
+        <AwayCover
+          delegations={delegations}
+          people={people}
+          userId={session.userId}
+          isAdmin={session.isAdmin}
+        />
+      ) : rows.length === 0 ? (
         <EmptyState
           icon={<CheckCheck />}
           title={tab === "inbox" ? "Nothing waiting on you" : "No requests yet"}
@@ -257,7 +292,9 @@ function ApprovalDetail({
             </Badge>
             {step.decider && step.decided_at ? (
               <span className="meta">
-                by {step.decider.full_name}, {formatDateTime(step.decided_at)}
+                by {step.decider.full_name}
+                {step.on_behalf ? ` on behalf of ${step.on_behalf.full_name}` : ""},{" "}
+                {formatDateTime(step.decided_at)}
               </span>
             ) : null}
           </li>
@@ -271,6 +308,7 @@ function ApprovalDetail({
             <span className="font-medium">{EVENT_LABELS[event.kind] ?? event.kind}</span>
             {" by "}
             {event.actor?.full_name ?? "someone"}
+            {event.on_behalf ? ` on behalf of ${event.on_behalf.full_name}` : ""}
             <span className="meta"> · {formatDateTime(event.created_at)}</span>
             {event.note ? <p className="text-muted whitespace-pre-wrap">{event.note}</p> : null}
           </li>
@@ -280,6 +318,98 @@ function ApprovalDetail({
       {pending ? (
         <ApprovalActions itemId={item.id} canDecide={canDecide} canWithdraw={own} />
       ) : null}
+    </section>
+  );
+}
+
+/**
+ * Away cover: while an approver is away, the delegate they name decides the
+ * steps waiting on them, and the trail says on whose behalf. The database
+ * decides who may set one, refuses chains and overlaps, and ends each at the
+ * end of its last day.
+ */
+function AwayCover({
+  delegations,
+  people,
+  userId,
+  isAdmin,
+}: {
+  delegations: ApprovalDelegationRow[];
+  people: { value: string; label: string }[];
+  userId: string;
+  isAdmin: boolean;
+}) {
+  return (
+    <section aria-label="Away cover">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <p className="meta min-w-0 flex-1">
+          Going away? Name someone to decide the approvals waiting on you. They can never approve
+          their own requests, and it ends by itself after the last day.
+        </p>
+        <EntityFormDialog
+          triggerLabel="Set a delegate"
+          triggerVariant="secondary"
+          title="Set a delegate while away"
+          submitLabel="Save delegate"
+          action={setApprovalDelegation}
+          fields={[
+            ...(isAdmin
+              ? [
+                  {
+                    name: "approverId",
+                    label: "Approver who is away",
+                    type: "select" as const,
+                    options: people,
+                    hint: "Leave empty for yourself. Setting it for someone else needs MFA.",
+                  },
+                ]
+              : []),
+            {
+              name: "delegateId",
+              label: "Delegate",
+              type: "select",
+              required: true,
+              options: people.filter((person) => isAdmin || person.value !== userId),
+            },
+            { name: "startsOn", label: "First day", type: "date", required: true, colSpan: 1 },
+            { name: "endsOn", label: "Last day", type: "date", required: true, colSpan: 1 },
+            { name: "note", label: "Note", type: "text", placeholder: "Vacation" },
+          ]}
+        />
+      </div>
+      {delegations.length === 0 ? (
+        <EmptyState
+          icon={<UserRoundCheck />}
+          title="No one is covering"
+          description="Delegations you set, or that name you as the delegate, appear here."
+        />
+      ) : (
+        <ul className="space-y-2" aria-label="Delegations">
+          {delegations.map((row) => {
+            const started = row.active;
+            const canEnd = row.approver_id === userId || isAdmin;
+            return (
+              <li key={row.id} className="card flex flex-wrap items-center gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13.5px] font-medium">
+                    {row.delegate?.full_name ?? "Someone"} decides for{" "}
+                    {row.approver?.full_name ?? "someone"}
+                  </p>
+                  <p className="meta">
+                    {/* Calendar dates, not instants: read them in UTC so they do not shift a day. */}
+                    {formatDate(row.starts_on, "UTC")} to {formatDate(row.ends_on, "UTC")}
+                    {row.note ? ` · ${row.note}` : ""}
+                  </p>
+                </div>
+                <Badge tone={started ? "success" : "neutral"}>{started ? "Active" : "Upcoming"}</Badge>
+                {canEnd ? (
+                  <EndDelegationButton delegationId={row.id} label={started ? "End now" : "Cancel"} />
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }

@@ -35,6 +35,7 @@ export interface ApprovalStepRow {
   note: string | null;
   approver: { full_name: string } | null;
   decider: { full_name: string } | null;
+  on_behalf: { full_name: string } | null;
 }
 
 export interface ApprovalEventRow {
@@ -44,6 +45,21 @@ export interface ApprovalEventRow {
   note: string | null;
   created_at: string;
   actor: { full_name: string } | null;
+  on_behalf: { full_name: string } | null;
+}
+
+export interface ApprovalDelegationRow {
+  id: string;
+  approver_id: string;
+  delegate_id: string;
+  starts_on: string;
+  ends_on: string;
+  starts_at: string;
+  note: string | null;
+  /** Started already (it would not be listed if it had ended). */
+  active: boolean;
+  approver: { full_name: string } | null;
+  delegate: { full_name: string } | null;
 }
 
 export interface ApprovalRuleRow {
@@ -114,14 +130,16 @@ export async function getApprovalDetail(itemId: string): Promise<{
     supabase
       .from("approval_step")
       .select(
-        "id, step, label, approver_kind, approver_id, status, decided_at, note, approver:user_profile!approval_step_approver_id_fkey(full_name), decider:user_profile!approval_step_decided_by_fkey(full_name)",
+        "id, step, label, approver_kind, approver_id, status, decided_at, note, approver:user_profile!approval_step_approver_id_fkey(full_name), decider:user_profile!approval_step_decided_by_fkey(full_name), on_behalf:user_profile!approval_step_on_behalf_of_fkey(full_name)",
       )
       .eq("item_id", itemId)
       .order("step")
       .order("created_at"),
     supabase
       .from("approval_event")
-      .select("id, kind, step, note, created_at, actor:actor_id(full_name)")
+      .select(
+        "id, kind, step, note, created_at, actor:user_profile!approval_event_actor_id_fkey(full_name), on_behalf:user_profile!approval_event_on_behalf_of_fkey(full_name)",
+      )
       .eq("item_id", itemId)
       .order("created_at"),
     supabase.rpc("approval_inbox").select("id").eq("id", itemId).throwOnError(),
@@ -146,4 +164,26 @@ export async function getApprovalRules(): Promise<ApprovalRuleRow[]> {
     .order("min_amount_cents")
     .order("created_at");
   return (data ?? []) as unknown as ApprovalRuleRow[];
+}
+
+/**
+ * Delegations that are running or still to come. Row-level security shows
+ * the approver and the delegate their own, and owners/admins with MFA all.
+ */
+export async function getApprovalDelegations(): Promise<ApprovalDelegationRow[]> {
+  const supabase = await createSupabasePageClient();
+  const { data } = await supabase
+    .from("approval_delegation")
+    .select(
+      "id, approver_id, delegate_id, starts_on, ends_on, starts_at, note, approver:user_profile!approval_delegation_approver_id_fkey(full_name), delegate:user_profile!approval_delegation_delegate_id_fkey(full_name)",
+    )
+    .is("ended_at", null)
+    .gt("ends_at", new Date().toISOString())
+    .order("starts_on")
+    .limit(200);
+  const now = Date.now();
+  return ((data ?? []) as unknown as Omit<ApprovalDelegationRow, "active">[]).map((row) => ({
+    ...row,
+    active: new Date(row.starts_at).getTime() <= now,
+  }));
 }
