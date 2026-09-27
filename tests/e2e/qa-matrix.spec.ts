@@ -26,6 +26,8 @@ const ROUTES = [
   { path: "/events", name: "events" },
   { path: "/people", name: "people" },
   { path: "/people/overview", name: "team-overview" },
+  { path: "/approvals", name: "approvals" },
+  { path: "/admin/approvals", name: "approval-rules" },
   { path: "/crm", name: "crm" },
   { path: "/finance/ledger", name: "ledger" },
   { path: "/finance/ledger/journal/new", name: "ledger-entry" },

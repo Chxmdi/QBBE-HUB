@@ -56,6 +56,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Forms", href: "/forms", icon: ClipboardPen, access: "member" },
       { label: "Projects", href: "/projects", icon: FolderKanban, access: "member" },
       { label: "Programs", href: "/programs", icon: Layers, access: "member" },
+      { label: "Approvals", href: "/approvals", icon: ClipboardCheck, access: "staff" },
     ],
   },
   {
