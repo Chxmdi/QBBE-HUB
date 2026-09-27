@@ -1,0 +1,4 @@
+{
+  "staffOnly": ["/finance/ledger/statements", "/finance/ledger/year-end", "/finance/ledger/returns"],
+  "qa": [{ "path": "/finance/ledger/year-end", "name": "ledger-year-end" }]
+}

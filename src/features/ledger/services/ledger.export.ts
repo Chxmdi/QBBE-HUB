@@ -1,15 +1,16 @@
-import { requireStaff, type SessionContext } from "@/lib/auth";
+import { requireSession, type SessionContext } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
 /**
- * Gate for the ledger CSV routes: staff reach them, and the database decides
- * whether they may read the books (the settings row is readable exactly when
- * `app.can_read_ledger` holds). Null means refuse.
+ * Gate for the ledger CSV routes: the database decides whether the caller
+ * may read the books (the settings row is readable exactly when
+ * `app.can_read_ledger` holds: admins with MFA, named ledger readers, and the
+ * external accountant with MFA). Null means refuse.
  */
 export async function authorizeLedgerExport(): Promise<{ session: SessionContext; supabase: Client } | null> {
-  const session = await requireStaff();
+  const session = await requireSession();
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("ledger_settings")
