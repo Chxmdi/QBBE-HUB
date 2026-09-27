@@ -22,6 +22,8 @@ import {
   updateReconciliationBalances,
 } from "@/features/banking/services/bank.commands";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { INSTITUTION_KEY } from "@/features/banking/labels";
+import { useT } from "@/lib/i18n/client";
 
 export interface Choice {
   id: string;
@@ -29,6 +31,7 @@ export interface Choice {
 }
 
 function useAction() {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [pending, setPending] = useState(false);
@@ -39,7 +42,7 @@ function useAction() {
     const result = await action();
     setPending(false);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong. Try again.");
+      setError(result.error ?? t("ui.somethingWrong"));
       router.refresh();
       return null;
     }
@@ -61,15 +64,6 @@ function FormError({ error }: { error: string | null }) {
 // ---------------------------------------------------------------------------
 // Bank accounts
 // ---------------------------------------------------------------------------
-
-export const INSTITUTION_LABEL: Record<string, string> = {
-  desjardins: "Desjardins",
-  national_bank: "National Bank",
-  rbc: "RBC Royal Bank",
-  td: "TD Canada Trust",
-  bmo: "BMO Bank of Montreal",
-  other: "Other bank",
-};
 
 export interface BankAccountValue {
   id: string;
@@ -93,6 +87,7 @@ export function BankAccountDialog({
   funds: Choice[];
   defaultFundId: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const { pending, error, run } = useAction();
   return (
@@ -100,15 +95,15 @@ export function BankAccountDialog({
       {account ? (
         <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
           <Pencil className="size-4" aria-hidden />
-          Edit account
+          {t("finance.bank.forms.accountDialog.edit")}
         </Button>
       ) : (
         <Button onClick={() => setOpen(true)}>
           <Plus className="size-4" aria-hidden />
-          Add bank account
+          {t("finance.bank.forms.accountDialog.add")}
         </Button>
       )}
-      <Dialog open={open} onClose={() => setOpen(false)} title={account ? `Edit ${account.name}` : "Add a bank account"}>
+      <Dialog open={open} onClose={() => setOpen(false)} title={account ? t("finance.bank.forms.accountDialog.editTitle", { name: account.name }) : t("finance.bank.forms.accountDialog.addTitle")}>
         <form
           className="space-y-4"
           onSubmit={async (e) => {
@@ -126,28 +121,28 @@ export function BankAccountDialog({
                   reconcileFrom: form.get("reconcileFrom"),
                   isActive: account ? form.get("isActive") === "on" : true,
                 }),
-              "Bank account saved.",
+              t("finance.bank.forms.accountDialog.saved"),
             );
             if (ok) setOpen(false);
           }}
         >
           <div>
-            <Label htmlFor="bank-name">Name</Label>
-            <Input id="bank-name" name="name" maxLength={120} required defaultValue={account?.name} placeholder="Chequing" />
+            <Label htmlFor="bank-name">{t("finance.bank.forms.accountDialog.name")}</Label>
+            <Input id="bank-name" name="name" maxLength={120} required defaultValue={account?.name} placeholder={t("finance.bank.forms.accountDialog.namePlaceholder")} />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="bank-institution">Bank</Label>
+              <Label htmlFor="bank-institution">{t("finance.bank.forms.accountDialog.bank")}</Label>
               <Select id="bank-institution" name="institution" defaultValue={account?.institution ?? "desjardins"}>
-                {Object.entries(INSTITUTION_LABEL).map(([value, label]) => (
+                {Object.entries(INSTITUTION_KEY).map(([value, key]) => (
                   <option key={value} value={value}>
-                    {label}
+                    {t(key)}
                   </option>
                 ))}
               </Select>
             </div>
             <div>
-              <Label htmlFor="bank-last4">Last four digits</Label>
+              <Label htmlFor="bank-last4">{t("finance.bank.forms.accountDialog.last4")}</Label>
               <Input
                 id="bank-last4"
                 name="accountLast4"
@@ -156,13 +151,13 @@ export function BankAccountDialog({
                 maxLength={4}
                 defaultValue={account?.account_last4 ?? ""}
               />
-              <FieldHint>Only the last four; the full number is never stored.</FieldHint>
+              <FieldHint>{t("finance.bank.forms.accountDialog.last4Hint")}</FieldHint>
             </div>
           </div>
           <div>
-            <Label htmlFor="bank-ledger">Ledger cash account</Label>
+            <Label htmlFor="bank-ledger">{t("finance.bank.forms.accountDialog.ledgerAccount")}</Label>
             <Select id="bank-ledger" name="ledgerAccountId" required defaultValue={account?.ledger_account_id ?? ""}>
-              <option value="">Choose…</option>
+              <option value="">{t("finance.bank.choose")}</option>
               {cashAccounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.label}
@@ -172,7 +167,7 @@ export function BankAccountDialog({
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="bank-fund">Fund for entries created here</Label>
+              <Label htmlFor="bank-fund">{t("finance.bank.forms.accountDialog.fund")}</Label>
               <Select id="bank-fund" name="defaultFundId" required defaultValue={account?.default_fund_id ?? defaultFundId}>
                 {funds.map((f) => (
                   <option key={f.id} value={f.id}>
@@ -182,7 +177,7 @@ export function BankAccountDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="bank-from">Reconcile from</Label>
+              <Label htmlFor="bank-from">{t("finance.bank.forms.accountDialog.reconcileFrom")}</Label>
               <Input
                 id="bank-from"
                 name="reconcileFrom"
@@ -190,22 +185,22 @@ export function BankAccountDialog({
                 required
                 defaultValue={account?.reconcile_from ?? "2026-10-01"}
               />
-              <FieldHint>Ledger lines before this day made up the opening balance.</FieldHint>
+              <FieldHint>{t("finance.bank.forms.accountDialog.reconcileFromHint")}</FieldHint>
             </div>
           </div>
           {account ? (
             <label className="flex items-center gap-2 text-[13.5px]">
               <Checkbox name="isActive" defaultChecked={account.is_active} />
-              Active (statements can be imported)
+              {t("finance.bank.forms.accountDialog.active")}
             </label>
           ) : null}
           <FormError error={error} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.common.cancel")}
             </Button>
             <Button type="submit" loading={pending}>
-              Save
+              {t("finance.common.save")}
             </Button>
           </div>
         </form>
@@ -231,6 +226,7 @@ async function readStatementText(file: File): Promise<string> {
 const COLUMN_NONE = "-1";
 
 export function ImportStatementForm({ bankAccountId, institution }: { bankAccountId: string; institution: string }) {
+  const t = useT();
   const { pending, error, setError, run } = useAction();
   const defaultLayout = CSV_PRESETS.some((p) => p.id === institution) ? institution : "custom";
   const [layout, setLayout] = useState(defaultLayout);
@@ -244,7 +240,7 @@ export function ImportStatementForm({ bankAccountId, institution }: { bankAccoun
       onSubmit={async (e) => {
         e.preventDefault();
         if (!file) {
-          setError("Choose a statement file.");
+          setError(t("finance.bank.forms.import.chooseFile"));
           return;
         }
         const form = new FormData(e.currentTarget);
@@ -267,21 +263,29 @@ export function ImportStatementForm({ bankAccountId, institution }: { bankAccoun
             skipRows: form.get("hasHeader") === "on" ? 1 : 0,
           };
           if (mapping.dateColumn < 0 || mapping.descriptionColumns[0] < 0 || (signed < 0 && (withdrawal < 0 || deposit < 0))) {
-            setError("Choose the date, description and amount columns.");
+            setError(t("finance.bank.forms.import.chooseColumns"));
             return;
           }
         }
         await run(
           () => importStatement({ bankAccountId, fileName: file.name, text: file.text, layout, mapping }),
           (r) =>
-            `Imported ${r.added} new line${r.added === 1 ? "" : "s"}` +
-            (r.skipped ? `; ${r.skipped} already imported were skipped.` : "."),
+            t(
+              r.skipped
+                ? r.added === 1
+                  ? "finance.bank.forms.import.importedOneSkipped"
+                  : "finance.bank.forms.import.importedOtherSkipped"
+                : r.added === 1
+                  ? "finance.bank.forms.import.importedOne"
+                  : "finance.bank.forms.import.importedOther",
+              { added: String(r.added), skipped: String(r.skipped) },
+            ),
         );
       }}
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <Label htmlFor="statement-file">Statement file (CSV, OFX or QFX)</Label>
+          <Label htmlFor="statement-file">{t("finance.bank.forms.import.file")}</Label>
           <Input
             id="statement-file"
             type="file"
@@ -296,7 +300,7 @@ export function ImportStatementForm({ bankAccountId, institution }: { bankAccoun
               }
               if (chosen.size > 900_000) {
                 setFile(null);
-                setError("The file is too large. Export a shorter date range.");
+                setError(t("finance.bank.forms.import.tooLarge"));
                 return;
               }
               const text = await readStatementText(chosen);
@@ -304,58 +308,58 @@ export function ImportStatementForm({ bankAccountId, institution }: { bankAccoun
               setHeader(readCsv(text.split(/\r?\n/).slice(0, 12).join("\n"))[0] ?? []);
             }}
           />
-          <FieldHint>Download it from online banking. Importing a file twice adds nothing twice.</FieldHint>
+          <FieldHint>{t("finance.bank.forms.import.fileHint")}</FieldHint>
         </div>
         <div>
-          <Label htmlFor="statement-layout">File layout</Label>
+          <Label htmlFor="statement-layout">{t("finance.bank.forms.import.layout")}</Label>
           <Select
             id="statement-layout"
             value={isOfx ? "ofx" : layout}
             disabled={isOfx}
             onChange={(e) => setLayout(e.currentTarget.value)}
           >
-            {isOfx ? <option value="ofx">OFX / QFX (read automatically)</option> : null}
+            {isOfx ? <option value="ofx">{t("finance.bank.forms.import.ofx")}</option> : null}
             {CSV_PRESETS.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.label} CSV
+                {t("finance.bank.forms.import.presetCsv", { bank: t(`finance.bank.presets.${p.institution}`) })}
               </option>
             ))}
-            <option value="custom">Other CSV: choose the columns</option>
+            <option value="custom">{t("finance.bank.forms.import.custom")}</option>
           </Select>
         </div>
       </div>
 
       {layout === "custom" && !isOfx ? (
         <fieldset className="space-y-3 rounded-(--radius-sm) border border-line p-3">
-          <legend className="px-1 text-[13px] font-medium">Columns</legend>
+          <legend className="px-1 text-[13px] font-medium">{t("finance.bank.forms.import.columns")}</legend>
           {header.length === 0 ? (
-            <p className="text-[13px] text-muted">Choose a file to list its columns.</p>
+            <p className="text-[13px] text-muted">{t("finance.bank.forms.import.chooseFileForColumns")}</p>
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-3">
-                <ColumnSelect name="dateColumn" label="Date" header={header} />
+                <ColumnSelect name="dateColumn" label={t("finance.bank.forms.import.date")} header={header} />
                 <div>
-                  <Label htmlFor="col-dateOrder">Date order</Label>
+                  <Label htmlFor="col-dateOrder">{t("finance.bank.forms.import.dateOrder")}</Label>
                   <Select id="col-dateOrder" name="dateOrder" defaultValue="ymd">
-                    <option value="ymd">Year, month, day</option>
-                    <option value="mdy">Month, day, year</option>
-                    <option value="dmy">Day, month, year</option>
+                    <option value="ymd">{t("finance.bank.forms.import.ymd")}</option>
+                    <option value="mdy">{t("finance.bank.forms.import.mdy")}</option>
+                    <option value="dmy">{t("finance.bank.forms.import.dmy")}</option>
                   </Select>
                 </div>
-                <ColumnSelect name="descriptionColumn" label="Description" header={header} />
-                <ColumnSelect name="amountColumn" label="Signed amount" header={header} optional />
-                <ColumnSelect name="withdrawalColumn" label="Or: withdrawals" header={header} optional />
-                <ColumnSelect name="depositColumn" label="and deposits" header={header} optional />
-                <ColumnSelect name="referenceColumn" label="Reference (optional)" header={header} optional />
+                <ColumnSelect name="descriptionColumn" label={t("finance.bank.forms.import.description")} header={header} />
+                <ColumnSelect name="amountColumn" label={t("finance.bank.forms.import.signedAmount")} header={header} optional />
+                <ColumnSelect name="withdrawalColumn" label={t("finance.bank.forms.import.withdrawals")} header={header} optional />
+                <ColumnSelect name="depositColumn" label={t("finance.bank.forms.import.deposits")} header={header} optional />
+                <ColumnSelect name="referenceColumn" label={t("finance.bank.forms.import.reference")} header={header} optional />
               </div>
               <div className="flex flex-wrap gap-4 text-[13.5px]">
                 <label className="flex items-center gap-2">
                   <Checkbox name="hasHeader" defaultChecked />
-                  The first row is a header
+                  {t("finance.bank.forms.import.hasHeader")}
                 </label>
                 <label className="flex items-center gap-2">
                   <Checkbox name="negate" />
-                  Withdrawals are positive in the signed column
+                  {t("finance.bank.forms.import.negate")}
                 </label>
               </div>
             </>
@@ -366,7 +370,7 @@ export function ImportStatementForm({ bankAccountId, institution }: { bankAccoun
       <FormError error={error} />
       <Button type="submit" loading={pending} disabled={!file}>
         <Upload className="size-4" aria-hidden />
-        Import statement
+        {t("finance.bank.forms.import.submit")}
       </Button>
     </form>
   );
@@ -383,14 +387,17 @@ function ColumnSelect({
   header: string[];
   optional?: boolean;
 }) {
+  const t = useT();
   return (
     <div>
       <Label htmlFor={`col-${name}`}>{label}</Label>
       <Select id={`col-${name}`} name={name} defaultValue={COLUMN_NONE}>
-        <option value={COLUMN_NONE}>{optional ? "None" : "Choose…"}</option>
+        <option value={COLUMN_NONE}>{optional ? t("finance.common.none") : t("finance.bank.choose")}</option>
         {header.map((h, i) => (
           <option key={i} value={String(i)}>
-            {`Column ${i + 1}${h ? `: ${h.slice(0, 30)}` : ""}`}
+            {h
+              ? t("finance.bank.forms.import.columnWithHeader", { number: i + 1, header: h.slice(0, 30) })
+              : t("finance.bank.forms.import.column", { number: i + 1 })}
           </option>
         ))}
       </Select>
@@ -399,6 +406,7 @@ function ColumnSelect({
 }
 
 export function DeleteImportButton({ importId, fileName }: { importId: string; fileName: string }) {
+  const t = useT();
   const { pending, error, run } = useAction();
   return (
     <div className="flex flex-col items-end gap-1">
@@ -406,13 +414,13 @@ export function DeleteImportButton({ importId, fileName }: { importId: string; f
         size="sm"
         variant="ghost"
         loading={pending}
-        aria-label={`Delete import ${fileName}`}
+        aria-label={t("finance.bank.forms.import.deleteLabel", { file: fileName })}
         onClick={() => {
-          if (!window.confirm(`Delete the lines imported from ${fileName}?`)) return;
-          void run(() => deleteImport(importId), "Import deleted.");
+          if (!window.confirm(t("finance.bank.forms.import.deleteConfirm", { file: fileName }))) return;
+          void run(() => deleteImport(importId), t("finance.bank.forms.import.deleted"));
         }}
       >
-        Delete
+        {t("finance.bank.delete")}
       </Button>
       <FormError error={error} />
     </div>
@@ -429,6 +437,7 @@ export interface MatchOption {
 }
 
 export function AcceptSuggestionsButton({ pairs }: { pairs: { transactionId: string; journalLineId: string }[] }) {
+  const t = useT();
   const { pending, error, run } = useAction();
   return (
     <div className="flex flex-col items-end gap-1">
@@ -437,10 +446,16 @@ export function AcceptSuggestionsButton({ pairs }: { pairs: { transactionId: str
         loading={pending}
         disabled={pairs.length === 0}
         onClick={() =>
-          void run(() => acceptSuggestions(pairs), (r) => `Matched ${r.matched} line${r.matched === 1 ? "" : "s"}.`)
+          void run(
+            () => acceptSuggestions(pairs),
+            (r) =>
+              t(r.matched === 1 ? "finance.bank.forms.matching.matchedOne" : "finance.bank.forms.matching.matchedOther", {
+                count: String(r.matched),
+              }),
+          )
         }
       >
-        Accept all {pairs.length} suggestions
+        {t("finance.bank.forms.matching.acceptAll", { count: pairs.length })}
       </Button>
       <FormError error={error} />
     </div>
@@ -470,20 +485,21 @@ export function StatementLineActions({
   programs: Choice[];
   defaultFundId: string;
 }) {
+  const t = useT();
   const { pending, error, run } = useAction();
   const [choice, setChoice] = useState("");
   const [creating, setCreating] = useState(false);
-  if (locked) return <span className="meta">Reconciled</span>;
+  if (locked) return <span className="meta">{t("finance.bank.reconciled")}</span>;
   if (matched) {
     return (
       <Button
         size="sm"
         variant="ghost"
         loading={pending}
-        aria-label={`Unmatch ${description}`}
-        onClick={() => void run(() => unmatchLine(transactionId), "Match undone.")}
+        aria-label={t("finance.bank.forms.matching.unmatchLabel", { description })}
+        onClick={() => void run(() => unmatchLine(transactionId), t("finance.bank.forms.matching.unmatched"))}
       >
-        Unmatch
+        {t("finance.bank.forms.matching.unmatch")}
       </Button>
     );
   }
@@ -494,21 +510,26 @@ export function StatementLineActions({
           <Button
             size="sm"
             loading={pending}
-            aria-label={`Accept suggested match for ${description}`}
-            onClick={() => void run(() => matchLine(transactionId, suggestion.journalLineId, "suggested"), "Matched.")}
+            aria-label={t("finance.bank.forms.matching.acceptLabel", { description })}
+            onClick={() =>
+              void run(
+                () => matchLine(transactionId, suggestion.journalLineId, "suggested"),
+                t("finance.bank.forms.matching.matched"),
+              )
+            }
           >
-            Accept
+            {t("finance.bank.forms.matching.accept")}
           </Button>
         ) : null}
         {options.length > 0 ? (
           <>
             <Select
-              aria-label={`Ledger line for ${description}`}
+              aria-label={t("finance.bank.forms.matching.lineLabel", { description })}
               className="h-8 w-44 text-[13px]"
               value={choice}
               onChange={(e) => setChoice(e.currentTarget.value)}
             >
-              <option value="">Match to…</option>
+              <option value="">{t("finance.bank.forms.matching.matchTo")}</option>
               {options.map((o) => (
                 <option key={o.journalLineId} value={o.journalLineId}>
                   {o.label}
@@ -519,20 +540,20 @@ export function StatementLineActions({
               size="sm"
               variant="secondary"
               disabled={!choice || pending}
-              aria-label={`Match ${description}`}
-              onClick={() => void run(() => matchLine(transactionId, choice, "manual"), "Matched.")}
+              aria-label={t("finance.bank.forms.matching.matchLabel", { description })}
+              onClick={() => void run(() => matchLine(transactionId, choice, "manual"), t("finance.bank.forms.matching.matched"))}
             >
-              Match
+              {t("finance.bank.forms.matching.match")}
             </Button>
           </>
         ) : null}
         <Button
           size="sm"
           variant="secondary"
-          aria-label={`Create entry for ${description}`}
+          aria-label={t("finance.bank.forms.matching.createLabel", { description })}
           onClick={() => setCreating(true)}
         >
-          Create entry
+          {t("finance.bank.forms.matching.create")}
         </Button>
       </div>
       <FormError error={error} />
@@ -569,9 +590,10 @@ function CreateEntryDialog({
   programs: Choice[];
   defaultFundId: string;
 }) {
+  const t = useT();
   const { pending, error, run } = useAction();
   return (
-    <Dialog open={open} onClose={onClose} title="Create a ledger entry">
+    <Dialog open={open} onClose={onClose} title={t("finance.bank.forms.entry.title")}>
       <form
         className="space-y-4"
         onSubmit={async (e) => {
@@ -586,19 +608,16 @@ function CreateEntryDialog({
                 programId: form.get("programId") ?? "",
                 memo: form.get("memo") ?? "",
               }),
-            "Entry posted and matched.",
+            t("finance.bank.forms.entry.posted"),
           );
           if (ok) onClose();
         }}
       >
-        <p className="text-[13.5px] text-muted">
-          Posts a two-line entry on the statement date, against the bank&apos;s cash account, and matches it to this
-          line. It is permanent; a mistake is corrected by reversing the entry in the journal.
-        </p>
+        <p className="text-[13.5px] text-muted">{t("finance.bank.forms.entry.explanation")}</p>
         <div>
-          <Label htmlFor={`entry-account-${transactionId}`}>Other account</Label>
+          <Label htmlFor={`entry-account-${transactionId}`}>{t("finance.bank.forms.entry.otherAccount")}</Label>
           <Select id={`entry-account-${transactionId}`} name="accountId" required defaultValue="">
-            <option value="">Choose…</option>
+            <option value="">{t("finance.bank.choose")}</option>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
@@ -608,7 +627,7 @@ function CreateEntryDialog({
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor={`entry-fund-${transactionId}`}>Fund</Label>
+            <Label htmlFor={`entry-fund-${transactionId}`}>{t("finance.common.fund")}</Label>
             <Select id={`entry-fund-${transactionId}`} name="fundId" defaultValue={defaultFundId}>
               {funds.map((f) => (
                 <option key={f.id} value={f.id}>
@@ -618,9 +637,9 @@ function CreateEntryDialog({
             </Select>
           </div>
           <div>
-            <Label htmlFor={`entry-program-${transactionId}`}>Program (optional)</Label>
+            <Label htmlFor={`entry-program-${transactionId}`}>{t("finance.bank.forms.entry.program")}</Label>
             <Select id={`entry-program-${transactionId}`} name="programId" defaultValue="">
-              <option value="">None</option>
+              <option value="">{t("finance.common.none")}</option>
               {programs.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -630,16 +649,16 @@ function CreateEntryDialog({
           </div>
         </div>
         <div>
-          <Label htmlFor={`entry-memo-${transactionId}`}>Memo</Label>
+          <Label htmlFor={`entry-memo-${transactionId}`}>{t("finance.common.memo")}</Label>
           <Input id={`entry-memo-${transactionId}`} name="memo" maxLength={500} defaultValue={description} />
         </div>
         <FormError error={error} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
+            {t("finance.common.cancel")}
           </Button>
           <Button type="submit" loading={pending}>
-            Post and match
+            {t("finance.bank.forms.entry.submit")}
           </Button>
         </div>
       </form>
@@ -662,6 +681,7 @@ export function StartReconciliationForm({
   defaultEnd: string;
   defaultOpening: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const { pending, error, run } = useAction();
   return (
@@ -679,29 +699,29 @@ export function StartReconciliationForm({
               openingBalance: form.get("openingBalance"),
               closingBalance: form.get("closingBalance"),
             }),
-          "Reconciliation started.",
+          t("finance.bank.forms.reconcile.started"),
         );
         if (result?.id) router.push(`/finance/bank/reconciliations/${result.id}`);
       }}
     >
       <div>
-        <Label htmlFor="rec-start">Statement from</Label>
+        <Label htmlFor="rec-start">{t("finance.bank.forms.reconcile.from")}</Label>
         <Input id="rec-start" name="statementStart" type="date" required defaultValue={defaultStart} />
       </div>
       <div>
-        <Label htmlFor="rec-end">Statement to</Label>
+        <Label htmlFor="rec-end">{t("finance.bank.forms.reconcile.to")}</Label>
         <Input id="rec-end" name="statementEnd" type="date" required defaultValue={defaultEnd} />
       </div>
       <div>
-        <Label htmlFor="rec-opening">Opening balance</Label>
+        <Label htmlFor="rec-opening">{t("finance.bank.forms.reconcile.opening")}</Label>
         <Input id="rec-opening" name="openingBalance" inputMode="decimal" required defaultValue={defaultOpening} />
       </div>
       <div>
-        <Label htmlFor="rec-closing">Closing balance</Label>
-        <Input id="rec-closing" name="closingBalance" inputMode="decimal" required placeholder="From the statement" />
+        <Label htmlFor="rec-closing">{t("finance.bank.forms.reconcile.closing")}</Label>
+        <Input id="rec-closing" name="closingBalance" inputMode="decimal" required placeholder={t("finance.bank.forms.reconcile.closingPlaceholder")} />
       </div>
       <Button type="submit" loading={pending}>
-        Start reconciliation
+        {t("finance.bank.forms.reconcile.start")}
       </Button>
       <div className="sm:col-span-5">
         <FormError error={error} />
@@ -719,6 +739,7 @@ export function ReconciliationBalancesForm({
   opening: string;
   closing: string;
 }) {
+  const t = useT();
   const { pending, error, run } = useAction();
   return (
     <form
@@ -733,20 +754,20 @@ export function ReconciliationBalancesForm({
               openingBalance: form.get("openingBalance"),
               closingBalance: form.get("closingBalance"),
             }),
-          "Balances saved.",
+          t("finance.bank.forms.reconcile.balancesSaved"),
         );
       }}
     >
       <div>
-        <Label htmlFor="bal-opening">Statement opening balance</Label>
+        <Label htmlFor="bal-opening">{t("finance.bank.reconciliation.figures.opening")}</Label>
         <Input id="bal-opening" name="openingBalance" inputMode="decimal" required defaultValue={opening} />
       </div>
       <div>
-        <Label htmlFor="bal-closing">Statement closing balance</Label>
+        <Label htmlFor="bal-closing">{t("finance.bank.reconciliation.figures.closing")}</Label>
         <Input id="bal-closing" name="closingBalance" inputMode="decimal" required defaultValue={closing} />
       </div>
       <Button type="submit" variant="secondary" loading={pending}>
-        Save balances
+        {t("finance.bank.forms.reconcile.saveBalances")}
       </Button>
       <div className="sm:col-span-3">
         <FormError error={error} />
@@ -766,6 +787,7 @@ export function ReconciliationStatusActions({
   canClose: boolean;
   bankAccountId: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const { pending, error, run } = useAction();
   return (
@@ -777,19 +799,24 @@ export function ReconciliationStatusActions({
               variant="ghost"
               disabled={pending}
               onClick={async () => {
-                if (!window.confirm("Delete this reconciliation? Matches stay as they are.")) return;
-                const ok = await run(() => deleteReconciliation(reconciliationId), "Reconciliation deleted.");
+                if (!window.confirm(t("finance.bank.forms.reconcile.deleteConfirm"))) return;
+                const ok = await run(() => deleteReconciliation(reconciliationId), t("finance.bank.forms.reconcile.deleted"));
                 if (ok) router.push(`/finance/bank/${bankAccountId}`);
               }}
             >
-              Delete
+              {t("finance.bank.delete")}
             </Button>
             <Button
               loading={pending}
               disabled={!canClose}
-              onClick={() => void run(() => setReconciliationStatus(reconciliationId, "reconciled"), "Statement reconciled.")}
+              onClick={() =>
+                void run(
+                  () => setReconciliationStatus(reconciliationId, "reconciled"),
+                  t("finance.bank.forms.reconcile.reconciled"),
+                )
+              }
             >
-              Mark reconciled
+              {t("finance.bank.forms.reconcile.markReconciled")}
             </Button>
           </>
         ) : (
@@ -797,11 +824,11 @@ export function ReconciliationStatusActions({
             variant="secondary"
             loading={pending}
             onClick={() => {
-              if (!window.confirm("Reopen this statement? Its lines can then be changed again.")) return;
-              void run(() => setReconciliationStatus(reconciliationId, "open"), "Statement reopened.");
+              if (!window.confirm(t("finance.bank.forms.reconcile.reopenConfirm"))) return;
+              void run(() => setReconciliationStatus(reconciliationId, "open"), t("finance.bank.forms.reconcile.reopened"));
             }}
           >
-            Reopen
+            {t("finance.bank.forms.reconcile.reopen")}
           </Button>
         )}
       </div>

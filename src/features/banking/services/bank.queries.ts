@@ -1,5 +1,6 @@
 import type { LedgerAccess } from "@/features/ledger/services/ledger.access";
 import { formatCents } from "@/features/finance/money";
+import type { Locale } from "@/lib/i18n/config";
 
 type Client = LedgerAccess["supabase"];
 
@@ -151,8 +152,8 @@ export async function loadOutstanding(supabase: Client, reconciliationId: string
 }
 
 /** Signed amount the way a statement shows it: deposits plain, withdrawals with a minus. */
-export function formatSigned(cents: number): string {
-  return cents < 0 ? `−${formatCents(-cents)}` : formatCents(cents);
+export function formatSigned(cents: number, locale: Locale = "en"): string {
+  return cents < 0 ? `−${formatCents(-cents, locale)}` : formatCents(cents, locale);
 }
 
 /** First and last day of the month holding `day` (YYYY-MM-DD). */

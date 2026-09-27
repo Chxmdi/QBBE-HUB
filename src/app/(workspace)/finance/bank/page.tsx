@@ -5,22 +5,27 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BankAccountDialog, INSTITUTION_LABEL } from "@/features/banking/components/bank-forms";
+import { BankAccountDialog } from "@/features/banking/components/bank-forms";
+import { institutionLabel } from "@/features/banking/labels";
 import { loadBankAccounts, loadCashAccountChoices } from "@/features/banking/services/bank.queries";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { getLedgerAccess } from "@/features/ledger/services/ledger.access";
 import { loadEntryChoices } from "@/features/ledger/services/ledger.queries";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Bank accounts" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.bank.list.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function BankAccountsPage() {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
+  const t = await getT();
   const header = (
     <PageHeader
-      eyebrow="Bookkeeping"
-      title="Bank"
-      description="Import bank statements, match each line to the ledger, and reconcile every account month by month."
+      eyebrow={t("finance.bank.eyebrow")}
+      title={t("finance.bank.title")}
+      description={t("finance.bank.list.description")}
     />
   );
   if (!canRead) {
@@ -53,9 +58,9 @@ export default async function BankAccountsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Bookkeeping"
-        title="Bank"
-        description="Import bank statements, match each line to the ledger, and reconcile every account month by month."
+        eyebrow={t("finance.bank.eyebrow")}
+        title={t("finance.bank.title")}
+        description={t("finance.bank.list.description")}
         actions={
           canManage && choices ? (
             <BankAccountDialog cashAccounts={cashAccounts} funds={choices.funds} defaultFundId={choices.defaultFundId} />
@@ -65,16 +70,16 @@ export default async function BankAccountsPage() {
       {accounts.length === 0 ? (
         <EmptyState
           icon={<Landmark />}
-          title="No bank accounts yet"
-          description="Add each bank account and the ledger cash account it feeds, then import its statements."
+          title={t("finance.bank.list.emptyTitle")}
+          description={t("finance.bank.list.emptyDescription")}
         />
       ) : (
         <DataTable minWidth="640px">
           <TableHead>
-            <TableHeader>Account</TableHeader>
-            <TableHeader>Bank</TableHeader>
-            <TableHeader>Ledger account</TableHeader>
-            <TableHeader>Reconciled to</TableHeader>
+            <TableHeader>{t("finance.common.account")}</TableHeader>
+            <TableHeader>{t("finance.bank.list.bank")}</TableHeader>
+            <TableHeader>{t("finance.bank.list.ledgerAccount")}</TableHeader>
+            <TableHeader>{t("finance.bank.list.reconciledTo")}</TableHeader>
           </TableHead>
           <tbody>
             {accounts.map((a) => (
@@ -84,24 +89,21 @@ export default async function BankAccountsPage() {
                     {a.name}
                     {a.account_last4 ? ` ···${a.account_last4}` : ""}
                   </Link>{" "}
-                  {a.is_active ? null : <Badge>Inactive</Badge>}
+                  {a.is_active ? null : <Badge>{t("finance.bank.list.inactive")}</Badge>}
                 </TableCell>
-                <TableCell>{INSTITUTION_LABEL[a.institution] ?? a.institution}</TableCell>
+                <TableCell>{institutionLabel(t, a.institution)}</TableCell>
                 <TableCell>
                   {a.ledger_account ? `${a.ledger_account.code} ${a.ledger_account.name}` : "—"}
                 </TableCell>
                 <TableCell className="tabular-nums">
-                  {lastReconciled.get(a.id) ?? <span className="text-muted">Not yet</span>}
+                  {lastReconciled.get(a.id) ?? <span className="text-muted">{t("finance.bank.list.notYet")}</span>}
                 </TableCell>
               </TableRow>
             ))}
           </tbody>
         </DataTable>
       )}
-      <p className="meta mt-3">
-        Statements are uploaded as CSV, OFX or QFX files downloaded from online banking. No bank password or live
-        connection is ever stored.
-      </p>
+      <p className="meta mt-3">{t("finance.bank.list.footnote")}</p>
     </div>
   );
 }
