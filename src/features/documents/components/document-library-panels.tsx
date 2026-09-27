@@ -9,7 +9,12 @@ import { Dialog } from "@/components/ui/dialog";
 import { Checkbox, FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { Tabs, TabPanel } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
-import { getDocumentDownloadUrl } from "@/features/documents/services/document.commands";
+import {
+  getDocumentDownloadUrl,
+  saveDocumentText,
+} from "@/features/documents/services/document.commands";
+import { useFileTextReader } from "@/features/documents/text-extract/use-file-text-reader";
+import { TextReadingStatus } from "@/features/documents/text-extract/text-reading-status";
 import {
   acknowledgeDocument,
   addDocumentVersion,
@@ -124,6 +129,13 @@ export function NewVersionDialog({
   const [tab, setTab] = useState<string>(currentKind);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // Each version's words are read and stored for search (#147).
+  const reader = useFileTextReader();
+
+  function close() {
+    reader.reset();
+    setOpen(false);
+  }
 
   async function handleFile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -156,12 +168,16 @@ export function NewVersionDialog({
       mimeType: file.type || undefined,
       sizeBytes: file.size,
     });
-    setSaving(false);
     if (!result.ok) {
+      setSaving(false);
       await supabase.storage.from("documents").remove([path]);
       setError(result.error ?? "Could not save the new version.");
       return;
     }
+    // The file's words, once the version exists. Never fails the upload.
+    const found = result.id ? await reader.result() : null;
+    if (found && result.id) await saveDocumentText({ id: result.id, ...found });
+    setSaving(false);
     finish(result.id, "New version uploaded. It opens once its security check passes.");
   }
 
@@ -184,7 +200,7 @@ export function NewVersionDialog({
 
   function finish(id: string | undefined, message: string) {
     toast(message);
-    setOpen(false);
+    close();
     router.push(`/documents/${id ?? currentId}`);
     router.refresh();
   }
@@ -197,7 +213,7 @@ export function NewVersionDialog({
         </p>
       ) : null}
       <div className="flex justify-end gap-2 pt-1">
-        <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+        <Button type="button" variant="secondary" onClick={close}>
           Cancel
         </Button>
         <Button type="submit" loading={saving}>
@@ -213,7 +229,7 @@ export function NewVersionDialog({
         <Upload className="size-4" aria-hidden />
         Upload new version
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Upload a new version">
+      <Dialog open={open} onClose={close} title="Upload a new version">
         <p className="meta mb-3">
           The current version is kept in the history and stays openable. The new
           version keeps this document&apos;s title, folder, audience and tags.
@@ -230,8 +246,18 @@ export function NewVersionDialog({
           <form onSubmit={handleFile} className="space-y-4">
             <div>
               <Label htmlFor="version-file">File</Label>
-              <Input id="version-file" name="file" type="file" required />
-              <FieldHint>Up to 25 MB. It opens once its security check passes.</FieldHint>
+              <Input
+                id="version-file"
+                name="file"
+                type="file"
+                required
+                onChange={(e) => reader.read(e.target.files?.[0])}
+              />
+              <FieldHint>
+                Up to 25 MB. It opens once its security check passes. Its words are
+                read on this device so search can find them.
+              </FieldHint>
+              <TextReadingStatus state={reader.state} onSkip={reader.skip} />
             </div>
             {footer("Upload version")}
           </form>

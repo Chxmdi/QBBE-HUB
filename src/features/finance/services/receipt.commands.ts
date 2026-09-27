@@ -171,3 +171,28 @@ export async function openReceiptFile(
   });
   return { ok: true, url: signed.signedUrl };
 }
+
+const receiptTextSchema = z.object({
+  id: z.string().uuid(),
+  text: z.string().max(400_000),
+  source: z.enum(["pdf_text", "ocr"]),
+});
+
+/**
+ * Stores the words read out of a receipt's file, so library search finds the
+ * receipt by what is printed on it (#147). Search only: the figures are what
+ * the submitter typed, never this text.
+ */
+export async function saveReceiptText(input: unknown): Promise<ActionResult> {
+  await requireStaff();
+  const parsed = receiptTextSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Could not store the receipt's text." };
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("set_receipt_text", {
+    p_receipt: parsed.data.id,
+    p_text: parsed.data.text,
+    p_source: parsed.data.source,
+  });
+  if (error) return { ok: false, error: "Could not store the receipt's text." };
+  return { ok: true, id: parsed.data.id };
+}

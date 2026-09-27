@@ -33,6 +33,7 @@ import {
 } from "@/features/documents/services/document.commands";
 import { formatDate } from "@/lib/utils";
 import { folderLabel, type LibraryFolder } from "@/features/documents/services/library";
+import { SearchSnippet } from "@/features/documents/components/search-snippet";
 
 export interface DocumentRow {
   id: string;
@@ -79,9 +80,12 @@ export function DocumentList({
   canManage,
   highlightId = null,
   archived = false,
+  snippets,
 }: {
   documents: DocumentRow[];
   canManage: boolean;
+  /** Search passages found inside files, by document id (#147). */
+  snippets?: Record<string, string>;
   /** Deep-linked from search: this row is anchored and marked. */
   highlightId?: string | null;
   archived?: boolean;
@@ -208,6 +212,7 @@ export function DocumentList({
                         {doc.description}
                       </span>
                     ) : null}
+                    {snippets?.[doc.id] ? <SearchSnippet snippet={snippets[doc.id]} /> : null}
                     <span className="meta">
                       {doc.kind === "link" ? "External link" : formatSize(doc.size_bytes)}
                       {doc.version_number > 1 ? ` · Version ${doc.version_number}` : ""}

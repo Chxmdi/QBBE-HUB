@@ -57,7 +57,9 @@ test("staff submit a receipt; finance reviews and exports it", async ({ page }) 
   await dialog.getByLabel("GST").fill("53.69");
   await dialog.getByLabel("QST").fill("107.10");
   await dialog.getByRole("button", { name: "Submit", exact: true }).click();
-  await expect(dialog).toBeHidden({ timeout: 30_000 });
+  // Submitting waits for the photo's words to be read, for library search
+  // (#147); on a slow runner the reader may still be loading at this point.
+  await expect(dialog).toBeHidden({ timeout: 120_000 });
 
   await expect
     .poll(
@@ -270,7 +272,7 @@ test("a receipt photo is read on the device and suggests the empty fields", asyn
     .toBe(`${receiptDate}|4599|200|399`);
 });
 
-test("reading can be skipped, and a PDF is not read, without blocking a manual submission", async ({ page }) => {
+test("reading can be skipped, and a PDF is not read for figures, without blocking a manual submission", async ({ page }) => {
   test.setTimeout(180_000);
   const vendor = `OCR skip QA ${Date.now()}`;
 
@@ -281,14 +283,20 @@ test("reading can be skipped, and a PDF is not read, without blocking a manual s
   const dialog = page.getByRole("dialog", { name: "Submit a receipt or bill" });
   await expect(dialog).toBeVisible({ timeout: 30_000 });
 
-  // A PDF: no reading starts at all.
+  // A PDF: nothing is read for figures. Its words are read for library
+  // search only (#147), in their own status line; this one is not a real PDF,
+  // so that reading fails quietly and fills nothing in.
   await dialog.getByLabel("Photo or PDF").setInputFiles({
     name: "bill.pdf",
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n%%EOF\n"),
   });
+  await expect(dialog.getByRole("status").nth(1)).toContainText(/could not be read|No words could be read/, {
+    timeout: 60_000,
+  });
   await expect(dialog.getByRole("button", { name: "Skip reading" })).toHaveCount(0);
-  await expect(dialog.getByRole("status")).toBeEmpty();
+  await expect(dialog.getByRole("status").first()).toBeEmpty();
+  await expect(dialog.getByText("Suggested — check before submitting")).toHaveCount(0);
 
   // A photo, skipped from the keyboard straight away.
   const image = await receiptImage(page, ["CAFE IMAGINAIRE", "TOTAL 12,34"]);

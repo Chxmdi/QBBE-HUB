@@ -17,7 +17,10 @@ import {
   useReceiptReader,
   type ReaderState,
 } from "@/features/finance/receipt-ocr/use-receipt-reader";
-import { registerReceipt } from "@/features/finance/services/receipt.commands";
+import { registerReceipt, saveReceiptText } from "@/features/finance/services/receipt.commands";
+import { useFileTextReader } from "@/features/documents/text-extract/use-file-text-reader";
+import { normalizeExtractedText } from "@/features/documents/text-extract/text";
+import { TextReadingStatus } from "@/features/documents/text-extract/text-reading-status";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 
@@ -111,6 +114,10 @@ export function ReceiptSubmitDialog({
     );
   });
 
+  // A PDF receipt is not read for figures, but its words are read for
+  // library search (#147), from its text layer or, for a scan, with OCR.
+  const pdfReader = useFileTextReader();
+
   function setField(field: Field, value: string) {
     setValues((v) => ({ ...v, [field]: value }));
     if (field === "documentDate") setDateTouched(true);
@@ -138,11 +145,14 @@ export function ReceiptSubmitDialog({
     setOutcome(null);
     if (file && file.type.startsWith("image/") && file.size <= MAX_BYTES) reader.read(file);
     else reader.reset();
+    if (file && file.type === "application/pdf" && file.size <= MAX_BYTES) pdfReader.read(file);
+    else pdfReader.reset();
   }
 
   function close() {
     // Closing stops any reading in progress; what was typed stays.
     reader.reset();
+    pdfReader.reset();
     setOutcome(null);
     setOpen(false);
   }
@@ -212,11 +222,25 @@ export function ReceiptSubmitDialog({
       setError(result.error ?? "Could not save the receipt.");
       return;
     }
+    // The words on the receipt, for search. Never fails the submission: Skip
+    // settles reading at once, and a failed save only means no words.
+    if (result.id) {
+      setSaving(true);
+      setProgress("Reading the receipt's words for search…");
+      const [photoText, pdfText] = await Promise.all([reader.result(), pdfReader.result()]);
+      const found = photoText
+        ? { text: normalizeExtractedText(photoText), source: "ocr" as const }
+        : pdfText;
+      if (found?.text) await saveReceiptText({ id: result.id, ...found });
+      setSaving(false);
+      setProgress(null);
+    }
     toast("Receipt submitted. The file opens once its security check passes.");
     setOpen(false);
     setProgramId("");
     // The next receipt starts from a clean form.
     reader.reset();
+    pdfReader.reset();
     formRef.current?.reset();
     setValues(blank);
     setDateTouched(false);
@@ -246,9 +270,11 @@ export function ReceiptSubmitDialog({
             <FieldHint>
               On a phone this opens the camera. Up to 25 MB. Keep the paper until
               the file shows as checked. A photo is read on this device to suggest
-              the figures; a PDF is not.
+              the figures; a PDF is not. The words on either are kept so library
+              search can find the receipt.
             </FieldHint>
             <ReadingStatus state={reader.state} outcome={outcome} onSkip={reader.skip} />
+            <TextReadingStatus state={pdfReader.state} onSkip={pdfReader.skip} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
