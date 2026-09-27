@@ -52,6 +52,7 @@ export const RATE_LIMITS = {
   "export:request": { limit: 10, windowSeconds: 3600 },
   "job:run": { limit: 240, windowSeconds: 60 },
   "approval:submit": { limit: 60, windowSeconds: 3600 },
+  "approval:delegate": { limit: 30, windowSeconds: 3600 },
   "ledger:write": { limit: 240, windowSeconds: 60 },
   "gift:write": { limit: 240, windowSeconds: 60 },
   "gift:email": { limit: 60, windowSeconds: 3600 },

@@ -177,3 +177,24 @@ export function describeRange(min: number, max: number | null): string {
   if (max === null) return `${formatAmount(min)} and over`;
   return `${formatAmount(min)} up to ${formatAmount(max)}`;
 }
+
+const isoDate = (message: string) =>
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, message);
+
+/**
+ * Away cover: while an approver is away, their delegate decides their steps.
+ * Without an approver, the signed-in person delegates their own approvals;
+ * naming someone else takes an owner or administrator with MFA.
+ */
+export const approvalDelegationSchema = z
+  .object({
+    approverId: optionalUuid,
+    delegateId: z.string({ required_error: "Choose who covers." }).uuid("Choose who covers."),
+    startsOn: isoDate("Choose the first day."),
+    endsOn: isoDate("Choose the last day."),
+    note: z.string().trim().max(500).optional(),
+  })
+  .refine((v) => v.endsOn >= v.startsOn, {
+    message: "The last day must be on or after the first day.",
+    path: ["endsOn"],
+  });
