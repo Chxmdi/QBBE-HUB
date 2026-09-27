@@ -13,10 +13,12 @@ import {
   setPeriodStatus,
 } from "@/features/ledger/services/ledger.commands";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { useT } from "@/lib/i18n/client";
 
 function useAction() {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function run(action: () => Promise<ActionResult>, success: string) {
@@ -25,14 +27,14 @@ function useAction() {
     const result = await action();
     setPending(false);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong. Try again.");
+      setError(result.error ?? t("finance.ledger.setup.genericError"));
       return false;
     }
     toast(success, { tone: "success" });
     router.refresh();
     return true;
   }
-  return { pending, error, run };
+  return { pending, error, run, t };
 }
 
 function FormError({ error }: { error: string | null }) {
@@ -45,7 +47,7 @@ function FormError({ error }: { error: string | null }) {
 
 /** Records the accountant's approval of the chart of accounts (#148). */
 export function ChartApprovalForm({ today }: { today: string }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   return (
     <form
       className="grid gap-3 sm:grid-cols-[1fr_12rem_auto] sm:items-end"
@@ -58,20 +60,20 @@ export function ChartApprovalForm({ today }: { today: string }) {
               approvedByName: form.get("approvedByName"),
               approvedOn: form.get("approvedOn"),
             }),
-          "Chart approval recorded. Entries can now be posted.",
+          t("finance.ledger.setup.approvalRecorded"),
         );
       }}
     >
       <div>
-        <Label htmlFor="approved-by">Accountant who approved it</Label>
-        <Input id="approved-by" name="approvedByName" maxLength={200} required placeholder="Name, designation" />
+        <Label htmlFor="approved-by">{t("finance.ledger.setup.approvedBy")}</Label>
+        <Input id="approved-by" name="approvedByName" maxLength={200} required placeholder={t("finance.ledger.setup.approvedByPlaceholder")} />
       </div>
       <div>
-        <Label htmlFor="approved-on">Approved on</Label>
+        <Label htmlFor="approved-on">{t("finance.ledger.setup.approvedOn")}</Label>
         <Input id="approved-on" name="approvedOn" type="date" max={today} required />
       </div>
       <Button type="submit" loading={pending}>
-        Record approval
+        {t("finance.ledger.setup.recordApproval")}
       </Button>
       <div className="sm:col-span-3">
         <FormError error={error} />
@@ -93,12 +95,12 @@ export function LedgerReaders({
   readers: StaffOption[];
   candidates: StaffOption[];
 }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   const [choice, setChoice] = useState("");
   return (
     <div className="space-y-3">
       {readers.length === 0 ? (
-        <p className="text-[13.5px] text-muted">No staff member has read access yet.</p>
+        <p className="text-[13.5px] text-muted">{t("finance.ledger.setup.noReaders")}</p>
       ) : (
         <ul className="divide-y divide-line rounded-(--radius-sm) border border-line">
           {readers.map((r) => (
@@ -108,9 +110,9 @@ export function LedgerReaders({
                 size="sm"
                 variant="secondary"
                 disabled={pending}
-                onClick={() => void run(() => revokeLedgerReader(r.id), `${r.name} can no longer read the ledger.`)}
+                onClick={() => void run(() => revokeLedgerReader(r.id), t("finance.ledger.setup.readerRemoved", { name: r.name }))}
               >
-                Remove
+                {t("finance.ledger.setup.remove")}
               </Button>
             </li>
           ))}
@@ -122,15 +124,15 @@ export function LedgerReaders({
           onSubmit={(e) => {
             e.preventDefault();
             if (!choice) return;
-            void run(() => grantLedgerReader(choice), "Read access granted.").then((ok) => {
+            void run(() => grantLedgerReader(choice), t("finance.ledger.setup.readGranted")).then((ok) => {
               if (ok) setChoice("");
             });
           }}
         >
           <div className="min-w-56 flex-1">
-            <Label htmlFor="reader">Give read-only access to</Label>
+            <Label htmlFor="reader">{t("finance.ledger.setup.giveAccessTo")}</Label>
             <Select id="reader" value={choice} onChange={(e) => setChoice(e.target.value)}>
-              <option value="">Choose a staff member</option>
+              <option value="">{t("finance.ledger.setup.chooseStaff")}</option>
               {candidates.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -139,7 +141,7 @@ export function LedgerReaders({
             </Select>
           </div>
           <Button type="submit" variant="secondary" loading={pending} disabled={!choice}>
-            Grant access
+            {t("finance.ledger.setup.grantAccess")}
           </Button>
         </form>
       ) : null}
@@ -150,7 +152,7 @@ export function LedgerReaders({
 
 /** Creates the twelve monthly periods of a fiscal year. */
 export function FiscalYearForm({ defaultMonth }: { defaultMonth: string }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   return (
     <form
       className="flex flex-wrap items-end gap-2"
@@ -159,17 +161,17 @@ export function FiscalYearForm({ defaultMonth }: { defaultMonth: string }) {
         const form = new FormData(e.currentTarget);
         void run(
           () => createFiscalYear({ startMonth: form.get("startMonth") }),
-          "Fiscal year periods created.",
+          t("finance.ledger.setup.fiscalYearCreated"),
         );
       }}
     >
       <div>
-        <Label htmlFor="start-month">First month of the fiscal year</Label>
+        <Label htmlFor="start-month">{t("finance.ledger.setup.firstMonth")}</Label>
         <Input id="start-month" name="startMonth" type="month" defaultValue={defaultMonth} required />
-        <FieldHint>Creates one open period per month for twelve months.</FieldHint>
+        <FieldHint>{t("finance.ledger.setup.firstMonthHint")}</FieldHint>
       </div>
       <Button type="submit" loading={pending} className="mb-6">
-        Add fiscal year
+        {t("finance.ledger.setup.addFiscalYear")}
       </Button>
       <div className="w-full">
         <FormError error={error} />
@@ -187,7 +189,7 @@ export function PeriodStatusButton({
   name: string;
   status: "open" | "closed";
 }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   const next = status === "open" ? "closed" : "open";
   return (
     <div className="flex flex-col items-end gap-1">
@@ -195,18 +197,18 @@ export function PeriodStatusButton({
         size="sm"
         variant="secondary"
         loading={pending}
-        aria-label={`${next === "closed" ? "Close" : "Reopen"} ${name}`}
+        aria-label={t(next === "closed" ? "finance.ledger.setup.closeAria" : "finance.ledger.setup.reopenAria", { name })}
         onClick={() => {
           if (
             next === "open" &&
-            !window.confirm(`Reopen ${name}? Entries could then be added to a month that was already closed.`)
+            !window.confirm(t("finance.ledger.setup.reopenConfirm", { name }))
           ) {
             return;
           }
-          void run(() => setPeriodStatus(periodId, next), `${name} ${next === "closed" ? "closed" : "reopened"}.`);
+          void run(() => setPeriodStatus(periodId, next), t(next === "closed" ? "finance.ledger.setup.periodClosed" : "finance.ledger.setup.periodReopened", { name }));
         }}
       >
-        {next === "closed" ? "Close" : "Reopen"}
+        {next === "closed" ? t("finance.ledger.setup.close") : t("finance.ledger.setup.reopen")}
       </Button>
       <FormError error={error} />
     </div>

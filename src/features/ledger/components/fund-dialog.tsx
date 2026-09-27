@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Checkbox, FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { FUND_RESTRICTIONS, FUND_RESTRICTION_LABEL, type FundRestriction } from "@/features/ledger/money";
+import { FUND_RESTRICTIONS, FUND_RESTRICTION_KEY, type FundRestriction } from "@/features/ledger/money";
 import { saveFund } from "@/features/ledger/services/ledger.commands";
+import { useT } from "@/lib/i18n/client";
 
 export interface FundFormValue {
   id: string;
@@ -34,6 +35,7 @@ export function FundDialog({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,16 +45,16 @@ export function FundDialog({
   return (
     <>
       {fund ? (
-        <Button size="sm" variant="ghost" onClick={() => setOpen(true)} aria-label={`Edit fund ${fund.code}`}>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(true)} aria-label={t("finance.ledger.fundDialog.editTitle", { code: fund.code })}>
           <Pencil className="size-4" aria-hidden />
         </Button>
       ) : (
         <Button onClick={() => setOpen(true)}>
           <Plus className="size-4" aria-hidden />
-          Add fund
+          {t("finance.ledger.fundDialog.add")}
         </Button>
       )}
-      <Dialog open={open} onClose={() => setOpen(false)} title={fund ? `Edit fund ${fund.code}` : "Add a fund"}>
+      <Dialog open={open} onClose={() => setOpen(false)} title={fund ? t("finance.ledger.fundDialog.editTitle", { code: fund.code }) : t("finance.ledger.fundDialog.addTitle")}>
         <form
           className="space-y-4"
           onSubmit={async (e) => {
@@ -74,17 +76,17 @@ export function FundDialog({
             });
             setSaving(false);
             if (!result.ok) {
-              setError(result.error ?? "Could not save the fund.");
+              setError(result.error ?? t("finance.ledger.fundDialog.saveFailed"));
               return;
             }
-            toast(fund ? "Fund saved." : "Fund added.", { tone: "success" });
+            toast(fund ? t("finance.ledger.fundDialog.saved") : t("finance.ledger.fundDialog.added"), { tone: "success" });
             setOpen(false);
             router.refresh();
           }}
         >
           <div className="grid gap-4 sm:grid-cols-[9rem_1fr]">
             <div>
-              <Label htmlFor="fund-code">Code</Label>
+              <Label htmlFor="fund-code">{t("finance.ledger.code")}</Label>
               <Input
                 id="fund-code"
                 name="code"
@@ -96,17 +98,17 @@ export function FundDialog({
               />
             </div>
             <div>
-              <Label htmlFor="fund-name">Name</Label>
+              <Label htmlFor="fund-name">{t("finance.ledger.name")}</Label>
               <Input id="fund-name" name="name" maxLength={200} defaultValue={fund?.name} required />
             </div>
           </div>
           <div>
-            <Label htmlFor="fund-restriction">Restriction</Label>
+            <Label htmlFor="fund-restriction">{t("finance.ledger.fundDialog.restriction")}</Label>
             {locked ? (
               <>
                 <input type="hidden" name="restriction" value={restriction} />
-                <Input id="fund-restriction" value={FUND_RESTRICTION_LABEL[restriction]} readOnly />
-                <FieldHint>This fund has entries, so its code and restriction stay as they are.</FieldHint>
+                <Input id="fund-restriction" value={t(FUND_RESTRICTION_KEY[restriction])} readOnly />
+                <FieldHint>{t("finance.ledger.fundDialog.lockedHint")}</FieldHint>
               </>
             ) : (
               <>
@@ -118,36 +120,34 @@ export function FundDialog({
                 >
                   {FUND_RESTRICTIONS.map((r) => (
                     <option key={r} value={r}>
-                      {FUND_RESTRICTION_LABEL[r]}
+                      {t(FUND_RESTRICTION_KEY[r])}
                     </option>
                   ))}
                 </Select>
-                <FieldHint>
-                  Externally restricted: a funder set conditions. Internally restricted: the board set it aside.
-                </FieldHint>
+                <FieldHint>{t("finance.ledger.fundDialog.restrictionHint")}</FieldHint>
               </>
             )}
           </div>
           <div>
-            <Label htmlFor="fund-funder">Funder (optional)</Label>
+            <Label htmlFor="fund-funder">{t("finance.ledger.fundDialog.funder")}</Label>
             <Input id="fund-funder" name="funder" maxLength={200} defaultValue={fund?.funder ?? ""} />
           </div>
           {restriction !== "unrestricted" ? (
             <>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="fund-starts">Spend from (optional)</Label>
+                  <Label htmlFor="fund-starts">{t("finance.ledger.fundDialog.spendFrom")}</Label>
                   <Input id="fund-starts" name="startsOn" type="date" defaultValue={fund?.starts_on ?? ""} />
                 </div>
                 <div>
-                  <Label htmlFor="fund-ends">Spend until (optional)</Label>
+                  <Label htmlFor="fund-ends">{t("finance.ledger.fundDialog.spendUntil")}</Label>
                   <Input id="fund-ends" name="endsOn" type="date" defaultValue={fund?.ends_on ?? ""} />
                 </div>
               </div>
               <fieldset>
-                <legend className="mb-1.5 text-[13px] font-medium">Programs it may pay for</legend>
+                <legend className="mb-1.5 text-[13px] font-medium">{t("finance.ledger.fundDialog.programsLegend")}</legend>
                 {programs.length === 0 ? (
-                  <p className="text-[13px] text-muted">No active programs.</p>
+                  <p className="text-[13px] text-muted">{t("finance.ledger.fundDialog.noPrograms")}</p>
                 ) : (
                   <div className="grid max-h-40 gap-1.5 overflow-y-auto sm:grid-cols-2">
                     {programs.map((p) => (
@@ -158,20 +158,17 @@ export function FundDialog({
                     ))}
                   </div>
                 )}
-                <FieldHint>
-                  Expenses charged to this fund must be inside these dates and name one of these programs. None
-                  ticked means any program.
-                </FieldHint>
+                <FieldHint>{t("finance.ledger.fundDialog.programsHint")}</FieldHint>
               </fieldset>
             </>
           ) : null}
           <div>
-            <Label htmlFor="fund-description">Conditions and notes (optional)</Label>
+            <Label htmlFor="fund-description">{t("finance.ledger.fundDialog.conditions")}</Label>
             <Textarea id="fund-description" name="description" maxLength={1000} defaultValue={fund?.description ?? ""} />
           </div>
           <label className="flex items-center gap-2 text-[13.5px]">
             <Checkbox name="isActive" defaultChecked={fund?.is_active ?? true} />
-            Active (inactive funds cannot be used in new entries)
+            {t("finance.ledger.fundDialog.active")}
           </label>
           {error ? (
             <p role="alert" className="text-[13px] text-danger-fg">
@@ -180,10 +177,10 @@ export function FundDialog({
           ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.common.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              Save
+              {t("finance.common.save")}
             </Button>
           </div>
         </form>
