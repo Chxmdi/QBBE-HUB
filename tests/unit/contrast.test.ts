@@ -82,6 +82,49 @@ describe("colored text meets WCAG AA in both themes", () => {
   }
 });
 
+/** `fill` laid over `base` at `alpha`, the way `bg-danger/12` renders. */
+function tint(fill: string, base: string, alpha: number): string {
+  const f = fill.replace("#", "").match(/\w\w/g)!.map((p) => parseInt(p, 16));
+  const b = base.replace("#", "").match(/\w\w/g)!.map((p) => parseInt(p, 16));
+  return `#${f
+    .map((c, i) => Math.round(c * alpha + b[i] * (1 - alpha)).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+describe("badge text on its own tinted background", () => {
+  // Badge puts `text-<status>-fg` on `bg-<status>/12` (accent: /15; see
+  // src/components/ui/badge.tsx). The tint darkens the background, so a text
+  // colour that passes on a plain surface can fail inside the badge: the
+  // "Critical" badge on My Work measured 4.37:1 on surface-soft.
+  const BADGES = [
+    { fill: "color-success", fg: "color-success-fg", alpha: 0.12 },
+    { fill: "color-warning", fg: "color-warning-fg", alpha: 0.12 },
+    { fill: "color-danger", fg: "color-danger-fg", alpha: 0.12 },
+    { fill: "color-info", fg: "color-info-fg", alpha: 0.12 },
+    { fill: "color-accent", fg: "color-accent-fg", alpha: 0.15 },
+  ];
+  for (const scope of ["light", "dark"] as const) {
+    const surfaces = ["color-surface", "color-canvas", "color-surface-soft"].map((name) =>
+      token(name, scope),
+    );
+    for (const badge of BADGES) {
+      it(`${badge.fg} on ${badge.fill} tint, ${scope}`, () => {
+        // Status fills are defined once, in the light block, for both themes.
+        const fill = token(badge.fill, "light");
+        const color = token(badge.fg, scope);
+        for (const surface of surfaces) {
+          const background = tint(fill, surface, badge.alpha);
+          const ratio = contrastRatio(color, background);
+          expect(
+            ratio,
+            `${badge.fg} (${color}) on ${background} is ${ratio.toFixed(2)}:1`,
+          ).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+        }
+      });
+    }
+  }
+});
+
 describe("white text on filled brand and status surfaces", () => {
   // Buttons put white text on these fills; they must clear AA as well.
   for (const fill of ["color-brand", "color-danger"]) {
