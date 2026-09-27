@@ -104,22 +104,24 @@ async function overflowCulprits(page: Page): Promise<string> {
 }
 
 test.describe("QA matrix", () => {
-  // The responsive sweep visits 240 authenticated route/theme/viewport
-  // combinations. It is intentionally broader than the default unit-style
-  // Playwright timeout and runs outside the regular CI unit suite.
+  // Each responsive sweep test visits every route at one theme and width.
+  // It is intentionally broader than the default unit-style Playwright
+  // timeout and runs outside the regular CI unit suite.
   test.setTimeout(10 * 60_000);
 
   test.beforeEach(async ({ page }) => {
     await signIn(page, "owner");
   });
 
-  test("every route renders in both themes without horizontal overflow", async ({
-    page,
-  }) => {
-    const failures: string[] = [];
-
-    for (const theme of ["light", "dark"] as const) {
-      for (const size of WIDTHS) {
+  // One test per theme and width, so each has the whole timeout for the
+  // route list: as a single test the sweep outgrew ten minutes once the
+  // finance screens were added, and every new route pushed it further.
+  for (const theme of ["light", "dark"] as const) {
+    for (const size of WIDTHS) {
+      test(`every route renders without horizontal overflow: ${theme} @${size.name}`, async ({
+        page,
+      }) => {
+        const failures: string[] = [];
         await page.setViewportSize({ width: size.w, height: size.h });
         for (const route of ROUTES) {
           await page.goto(route.path);
@@ -139,11 +141,10 @@ test.describe("QA matrix", () => {
             );
           }
         }
-      }
+        expect(failures, failures.join("\n")).toEqual([]);
+      });
     }
-
-    expect(failures, failures.join("\n")).toEqual([]);
-  });
+  }
 
   test("no critical or serious accessibility violations", async ({ page }) => {
     const violations: string[] = [];
