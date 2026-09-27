@@ -84,6 +84,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Signatures", href: "/signatures", icon: FileSignature, access: "member" },
       { label: "Relationships", href: "/crm", icon: Handshake, access: "staff" },
       { label: "Ledger", href: "/finance/ledger", icon: Landmark, access: "staff" },
+      { label: "Bank", href: "/finance/bank", icon: Landmark, access: "staff" },
       { label: "Reports", href: "/reports", icon: BarChart3, access: "staff" },
       { label: "Documents", href: "/documents", icon: FolderOpen, access: "member" },
       { label: "Receipts", href: "/finance/receipts", icon: Receipt, access: "staff" },
