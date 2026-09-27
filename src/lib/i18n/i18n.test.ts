@@ -69,8 +69,8 @@ describe("translator", () => {
       }
       for (const item of group.items) {
         const label = navItemLabel(t, item);
-        // "Documents", "Messages" and "Signatures" are the same word in both languages.
-        if (!["Documents", "Messages", "Signatures"].includes(item.label)) {
+        // "Budgets", "Documents", "Messages" and "Signatures" are the same word in both languages.
+        if (!["Budgets", "Documents", "Messages", "Signatures"].includes(item.label)) {
           expect(label, item.href).not.toBe(item.label);
         }
       }

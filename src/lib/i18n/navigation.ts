@@ -35,6 +35,10 @@ const ITEM_KEYS: Record<string, MessageKey> = {
   "/finance/receipts": "nav.items.receipts",
   "/finance/ledger": "nav.items.ledger",
   "/finance/bank": "nav.items.bank",
+  "/finance/payables": "nav.items.payables",
+  "/finance/sales-tax": "nav.items.salesTax",
+  "/finance/gifts": "nav.items.gifts",
+  "/finance/budgets": "nav.items.budgets",
   "/people": "nav.items.people",
   "/admin": "nav.items.admin",
 };
