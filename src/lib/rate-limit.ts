@@ -53,6 +53,7 @@ export const RATE_LIMITS = {
   "job:run": { limit: 240, windowSeconds: 60 },
   "ledger:write": { limit: 240, windowSeconds: 60 },
   "payables:write": { limit: 240, windowSeconds: 60 },
+  "bank:write": { limit: 240, windowSeconds: 60 },
 } as const;
 
 export type RateLimitedAction = keyof typeof RATE_LIMITS;

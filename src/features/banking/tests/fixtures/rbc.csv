@@ -1,0 +1,4 @@
+Account Type,Account Number,Transaction Date,Cheque Number,Description 1,Description 2,CAD$,USD$
+Chequing,00000-0000000,10/2/2026,,DEPOSIT,MEMBERSHIP FEES,150.00,
+Chequing,00000-0000000,10/9/2026,102,CHEQUE,,-300.00,
+Chequing,00000-0000000,10/31/2026,,MONTHLY FEE,,-4.00,
