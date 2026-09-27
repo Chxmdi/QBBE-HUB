@@ -4,6 +4,9 @@
  * (revenue coming in, expense going out).
  */
 import { centsToDecimal, csvField } from "@/features/ledger/money";
+import { intlLocale, type Locale } from "@/lib/i18n/config";
+import { formatNumber } from "@/lib/i18n/format";
+import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
 
 export const MONTHS_IN_YEAR = 12;
 
@@ -30,17 +33,20 @@ export function fiscalMonths(fiscalYearStart: string): string[] {
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** "2026-10" → "Oct 2026". */
-export function monthLabel(month: string): string {
+/** "2026-10" → "Oct 2026" (French: "oct. 2026"). */
+export function monthLabel(month: string, locale: Locale = "en"): string {
   const [y, m] = month.split("-").map(Number);
-  return `${MONTH_NAMES[m - 1]} ${y}`;
+  if (locale === "en") return `${MONTH_NAMES[m - 1]} ${y}`;
+  return new Intl.DateTimeFormat(intlLocale(locale), { month: "short", year: "numeric", timeZone: "UTC" }).format(
+    Date.UTC(y, m - 1, 1),
+  );
 }
 
 /** "2026-10-01" → "FY 2026-27" (a calendar-year budget reads "FY 2027"). */
-export function fiscalYearLabel(fiscalYearStart: string): string {
+export function fiscalYearLabel(fiscalYearStart: string, locale: Locale = "en"): string {
   const [year, month] = fiscalYearStart.split("-").map(Number);
-  if (month === 1) return `FY ${year}`;
-  return `FY ${year}-${String((year + 1) % 100).padStart(2, "0")}`;
+  const years = month === 1 ? String(year) : `${year}-${String((year + 1) % 100).padStart(2, "0")}`;
+  return createTranslator(locale)("finance.budgets.fiscalYear", { years });
 }
 
 /**
@@ -74,9 +80,13 @@ export function variance(
   return { cents, percent };
 }
 
-export function formatPercent(percent: number | null): string {
+export function formatPercent(percent: number | null, locale: Locale = "en"): string {
   if (percent === null) return "—";
-  return `${percent > 0 ? "+" : ""}${percent.toFixed(1)}%`;
+  const sign = percent > 0 ? "+" : "";
+  if (locale === "en") return `${sign}${percent.toFixed(1)}%`;
+  // French: decimal comma and a non-breaking space before the percent sign.
+  const digits = formatNumber(percent, locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return `${sign}${digits}\u00a0%`;
 }
 
 export interface BudgetReportRow {
@@ -139,12 +149,24 @@ export function netTotals(rows: BudgetReportRow[]): Totals {
   };
 }
 
-const TYPE_LABEL: Record<BudgetAccountType, string> = { revenue: "Revenue", expense: "Expense" };
+const TYPE_LABEL: Record<BudgetAccountType, MessageKey> = {
+  revenue: "finance.common.accountTypes.revenue",
+  expense: "finance.common.accountTypes.expense",
+};
 
-/** The report as a spreadsheet: one row per account, then totals. */
+const TOTAL_LABEL: Record<BudgetAccountType, MessageKey> = {
+  revenue: "finance.budgets.totalRevenue",
+  expense: "finance.budgets.totalExpense",
+};
+
+/**
+ * The report as a spreadsheet: one row per account, then totals. Headings
+ * follow `t`'s language (English by default); figures stay plain decimals.
+ */
 export function budgetReportCsv(
   rows: BudgetReportRow[],
   heading: { budget: string; month: string; filters: string },
+  t: TranslateFn = createTranslator("en"),
 ): string {
   const line = (label: [string, string, string], t: Totals, type: BudgetAccountType) => {
     const m = variance(type, t.month_budget_cents, t.month_actual_cents);
@@ -163,32 +185,32 @@ export function budgetReportCsv(
     ];
   };
   const out: (string | number)[][] = [
-    [`Budget against actual: ${heading.budget}`],
-    [`Month ${heading.month}; year to date from the start of the fiscal year. ${heading.filters}`],
-    ["Variance is positive when favourable: revenue above budget or spending below it."],
+    [t("finance.budgets.csv.title", { budget: heading.budget })],
+    [t("finance.budgets.csv.period", { month: heading.month, filters: heading.filters })],
+    [t("finance.budgets.csv.varianceNote")],
     [],
     [
-      "Account",
-      "Name",
-      "Type",
-      "Month budget",
-      "Month actual",
-      "Month variance",
-      "Month variance %",
-      "YTD budget",
-      "YTD actual",
-      "YTD variance",
-      "YTD variance %",
-      "Annual budget",
+      t("finance.budgets.csv.colAccount"),
+      t("finance.budgets.csv.colName"),
+      t("finance.budgets.csv.colType"),
+      t("finance.budgets.csv.colMonthBudget"),
+      t("finance.budgets.csv.colMonthActual"),
+      t("finance.budgets.csv.colMonthVariance"),
+      t("finance.budgets.csv.colMonthVariancePercent"),
+      t("finance.budgets.csv.colYtdBudget"),
+      t("finance.budgets.csv.colYtdActual"),
+      t("finance.budgets.csv.colYtdVariance"),
+      t("finance.budgets.csv.colYtdVariancePercent"),
+      t("finance.budgets.csv.colAnnualBudget"),
     ],
   ];
-  for (const r of rows) out.push(line([r.code, r.name, TYPE_LABEL[r.account_type]], r, r.account_type));
+  for (const r of rows) out.push(line([r.code, r.name, t(TYPE_LABEL[r.account_type])], r, r.account_type));
   for (const type of ["revenue", "expense"] as const) {
     const group = rows.filter((r) => r.account_type === type);
-    if (group.length) out.push(line(["", `Total ${type}`, TYPE_LABEL[type]], sumRows(group), type));
+    if (group.length) out.push(line(["", t(TOTAL_LABEL[type]), t(TYPE_LABEL[type])], sumRows(group), type));
   }
   // Net behaves like revenue: more is better.
-  out.push(line(["", "Net (revenue less expense)", ""], netTotals(rows), "revenue"));
+  out.push(line(["", t("finance.budgets.netRevenueLessExpense"), ""], netTotals(rows), "revenue"));
   return csvRows(out);
 }
 

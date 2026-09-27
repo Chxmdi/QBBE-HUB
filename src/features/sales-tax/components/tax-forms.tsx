@@ -27,10 +27,12 @@ import {
   saveTaxSettings,
 } from "@/features/sales-tax/services/sales-tax.commands";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { useT } from "@/lib/i18n/client";
 
 function useAction() {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function run<T extends ActionResult>(action: () => Promise<T>, success: string | ((r: T) => string)) {
@@ -39,14 +41,14 @@ function useAction() {
     const result = await action();
     setPending(false);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong. Try again.");
+      setError(result.error ?? t("finance.salesTax.genericError"));
       return false;
     }
     toast(typeof success === "function" ? success(result) : success, { tone: "success" });
     router.refresh();
     return true;
   }
-  return { pending, error, run };
+  return { pending, error, run, t };
 }
 
 function FormError({ error }: { error: string | null }) {
@@ -69,7 +71,7 @@ export interface SettingsValues {
 
 /** Registration, filing frequency and the claimable share (#152). */
 export function TaxSettingsForm({ initial }: { initial: SettingsValues }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   return (
     <form
       className="grid gap-4 sm:grid-cols-2"
@@ -87,60 +89,55 @@ export function TaxSettingsForm({ initial }: { initial: SettingsValues }) {
               claimPercent: form.get("claimPercent"),
               showPsbRebate: form.get("showPsbRebate") === "on",
             }),
-          "Tax settings saved.",
+          t("finance.salesTax.settingsForm.saved"),
         );
       }}
     >
       <fieldset className="space-y-2">
-        <legend className="text-[13.5px] font-medium">GST</legend>
+        <legend className="text-[13.5px] font-medium">{t("finance.common.gst")}</legend>
         <label className="flex items-center gap-2 text-[13.5px]">
           <Checkbox name="gstRegistered" defaultChecked={initial.gstRegistered} />
-          Registered for GST
+          {t("finance.salesTax.settingsForm.gstRegistered")}
         </label>
         <div>
-          <Label htmlFor="gst-number">GST registration number</Label>
+          <Label htmlFor="gst-number">{t("finance.salesTax.settingsForm.gstNumber")}</Label>
           <Input id="gst-number" name="gstNumber" maxLength={40} defaultValue={initial.gstNumber} placeholder="123456789 RT0001" />
         </div>
       </fieldset>
       <fieldset className="space-y-2">
-        <legend className="text-[13.5px] font-medium">QST</legend>
+        <legend className="text-[13.5px] font-medium">{t("finance.common.qst")}</legend>
         <label className="flex items-center gap-2 text-[13.5px]">
           <Checkbox name="qstRegistered" defaultChecked={initial.qstRegistered} />
-          Registered for QST
+          {t("finance.salesTax.settingsForm.qstRegistered")}
         </label>
         <div>
-          <Label htmlFor="qst-number">QST registration number</Label>
+          <Label htmlFor="qst-number">{t("finance.salesTax.settingsForm.qstNumber")}</Label>
           <Input id="qst-number" name="qstNumber" maxLength={40} defaultValue={initial.qstNumber} placeholder="1234567890 TQ0001" />
         </div>
       </fieldset>
       <div>
-        <Label htmlFor="filing-frequency">Filing frequency</Label>
+        <Label htmlFor="filing-frequency">{t("finance.salesTax.overview.filingFrequency")}</Label>
         <Select id="filing-frequency" name="filingFrequency" defaultValue={initial.filingFrequency}>
           {FILING_FREQUENCIES.map((f) => (
             <option key={f} value={f}>
-              {FILING_FREQUENCY_LABEL[f]}
+              {t(FILING_FREQUENCY_LABEL[f])}
             </option>
           ))}
         </Select>
       </div>
       <div>
-        <Label htmlFor="claim-percent">Share of tax paid claimed back (%)</Label>
+        <Label htmlFor="claim-percent">{t("finance.salesTax.settingsForm.claimPercent")}</Label>
         <Input id="claim-percent" name="claimPercent" inputMode="decimal" defaultValue={initial.claimPercent} required />
-        <FieldHint>
-          100 unless the accountant says otherwise. Organizations with exempt activities often claim less.
-        </FieldHint>
+        <FieldHint>{t("finance.salesTax.settingsForm.claimPercentHint")}</FieldHint>
       </div>
       <label className="flex items-start gap-2 text-[13.5px] sm:col-span-2">
         <Checkbox name="showPsbRebate" defaultChecked={initial.showPsbRebate} className="mt-0.5" />
-        <span>
-          Show the public service body rebate worksheet. Turn this on only once the accountant has confirmed QBBE
-          qualifies.
-        </span>
+        <span>{t("finance.salesTax.settingsForm.showPsbRebate")}</span>
       </label>
       <div className="flex items-center justify-end gap-3 sm:col-span-2">
         <FormError error={error} />
         <Button type="submit" loading={pending}>
-          Save tax settings
+          {t("finance.salesTax.settingsForm.submit")}
         </Button>
       </div>
     </form>
@@ -149,7 +146,7 @@ export function TaxSettingsForm({ initial }: { initial: SettingsValues }) {
 
 /** Adds a reporting period. */
 export function TaxPeriodForm({ defaultStart, defaultEnd }: { defaultStart: string; defaultEnd: string }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   return (
     <form
       className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
@@ -158,20 +155,20 @@ export function TaxPeriodForm({ defaultStart, defaultEnd }: { defaultStart: stri
         const form = new FormData(e.currentTarget);
         void run(
           () => createTaxPeriod({ startsOn: form.get("startsOn"), endsOn: form.get("endsOn") }),
-          "Tax period added.",
+          t("finance.salesTax.periodForm.added"),
         );
       }}
     >
       <div>
-        <Label htmlFor="period-start">Period starts</Label>
+        <Label htmlFor="period-start">{t("finance.salesTax.periodForm.starts")}</Label>
         <Input id="period-start" name="startsOn" type="date" defaultValue={defaultStart} required />
       </div>
       <div>
-        <Label htmlFor="period-end">Period ends</Label>
+        <Label htmlFor="period-end">{t("finance.salesTax.periodForm.ends")}</Label>
         <Input id="period-end" name="endsOn" type="date" defaultValue={defaultEnd} required />
       </div>
       <Button type="submit" loading={pending}>
-        Add tax period
+        {t("finance.salesTax.periodForm.submit")}
       </Button>
       <div className="sm:col-span-3">
         <FormError error={error} />
@@ -182,7 +179,7 @@ export function TaxPeriodForm({ defaultStart, defaultEnd }: { defaultStart: stri
 
 /** Brings reviewed receipts with GST or QST in as purchases. */
 export function ImportReceiptsForm({ from, to }: { from: string; to: string }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   return (
     <form
       className="flex flex-wrap items-center gap-3"
@@ -190,16 +187,22 @@ export function ImportReceiptsForm({ from, to }: { from: string; to: string }) {
         e.preventDefault();
         void run(
           () => importReceipts({ from, to }),
-          (r) => (r.count ? `${r.count} receipt${r.count === 1 ? "" : "s"} brought in.` : "No new receipts to bring in."),
+          (r) =>
+            r.count
+              ? t(
+                  r.count === 1
+                    ? "finance.salesTax.importForm.broughtInOne"
+                    : "finance.salesTax.importForm.broughtInOther",
+                  { count: r.count },
+                )
+              : t("finance.salesTax.importForm.noneToBringIn"),
         );
       }}
     >
       <Button type="submit" variant="secondary" loading={pending}>
-        Bring in reviewed receipts
+        {t("finance.salesTax.importForm.submit")}
       </Button>
-      <span className="meta">
-        Reviewed receipts dated {from} to {to} that show GST or QST, once each.
-      </span>
+      <span className="meta">{t("finance.salesTax.importForm.hint", { from, to })}</span>
       <FormError error={error} />
     </form>
   );
@@ -216,7 +219,7 @@ export function TaxLineDialog({
   const [open, setOpen] = useState(false);
   const [direction, setDirection] = useState<Direction>(initial.direction);
   const [taxCode, setTaxCode] = useState<TaxCode>(initial.taxCode);
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   const taxed = taxCode === "standard";
   const idp = initial.id ? `line-${initial.id.slice(0, 8)}` : "line-new";
 
@@ -225,7 +228,7 @@ export function TaxLineDialog({
       <Button variant={trigger.variant ?? "primary"} onClick={() => setOpen(true)}>
         {trigger.label}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title={initial.id ? "Edit tax line" : "Add a tax line"}>
+      <Dialog open={open} onClose={() => setOpen(false)} title={initial.id ? t("finance.salesTax.lineDialog.editTitle") : t("finance.salesTax.lineDialog.addTitle")}>
         <form
           className="grid gap-3 sm:grid-cols-2"
           onSubmit={async (e) => {
@@ -247,75 +250,77 @@ export function TaxLineDialog({
                   itc: taxed && direction === "purchase" ? (form.get("itc") ?? undefined) : undefined,
                   itr: taxed && direction === "purchase" ? (form.get("itr") ?? undefined) : undefined,
                 }),
-              "Tax line saved.",
+              t("finance.salesTax.lineDialog.saved"),
             );
             if (ok) setOpen(false);
           }}
         >
           <div>
-            <Label htmlFor={`${idp}-direction`}>Sale or purchase</Label>
+            <Label htmlFor={`${idp}-direction`}>{t("finance.salesTax.lineDialog.direction")}</Label>
             <Select
               id={`${idp}-direction`}
               value={direction}
               onChange={(e) => setDirection(e.target.value as Direction)}
             >
-              <option value="sale">Sale (tax collected)</option>
-              <option value="purchase">Purchase (tax paid)</option>
+              <option value="sale">{t("finance.salesTax.lineDialog.saleOption")}</option>
+              <option value="purchase">{t("finance.salesTax.lineDialog.purchaseOption")}</option>
             </Select>
           </div>
           <div>
-            <Label htmlFor={`${idp}-code`}>Tax code</Label>
+            <Label htmlFor={`${idp}-code`}>{t("finance.salesTax.lineDialog.taxCode")}</Label>
             <Select id={`${idp}-code`} value={taxCode} onChange={(e) => setTaxCode(e.target.value as TaxCode)}>
               {TAX_CODES.map((c) => (
                 <option key={c} value={c}>
-                  {TAX_CODE_LABEL[c]}
+                  {t(TAX_CODE_LABEL[c])}
                 </option>
               ))}
             </Select>
-            <FieldHint>{TAX_CODE_HELP[taxCode]}</FieldHint>
+            <FieldHint>{t(TAX_CODE_HELP[taxCode])}</FieldHint>
           </div>
           <div>
-            <Label htmlFor={`${idp}-date`}>Date</Label>
+            <Label htmlFor={`${idp}-date`}>{t("finance.common.date")}</Label>
             <Input id={`${idp}-date`} name="transactionDate" type="date" defaultValue={initial.transactionDate} required />
           </div>
           <div>
-            <Label htmlFor={`${idp}-counterparty`}>{direction === "sale" ? "Customer" : "Supplier"}</Label>
+            <Label htmlFor={`${idp}-counterparty`}>{direction === "sale" ? t("finance.salesTax.lineDialog.customer") : t("finance.salesTax.lineDialog.supplier")}</Label>
             <Input id={`${idp}-counterparty`} name="counterparty" maxLength={200} defaultValue={initial.counterparty} required />
           </div>
           <div>
-            <Label htmlFor={`${idp}-reference`}>Invoice or reference (optional)</Label>
+            <Label htmlFor={`${idp}-reference`}>{t("finance.salesTax.lineDialog.reference")}</Label>
             <Input id={`${idp}-reference`} name="reference" maxLength={100} defaultValue={initial.reference} />
           </div>
           <div>
-            <Label htmlFor={`${idp}-amount`}>Amount before tax</Label>
+            <Label htmlFor={`${idp}-amount`}>{t("finance.salesTax.lineDialog.amount")}</Label>
             <Input id={`${idp}-amount`} name="amount" inputMode="decimal" defaultValue={initial.amount} required />
           </div>
           <div className="sm:col-span-2">
-            <Label htmlFor={`${idp}-description`}>Description (optional)</Label>
+            <Label htmlFor={`${idp}-description`}>{t("finance.salesTax.lineDialog.description")}</Label>
             <Input id={`${idp}-description`} name="description" maxLength={500} defaultValue={initial.description} />
           </div>
           {taxed ? (
             <>
               <div>
-                <Label htmlFor={`${idp}-gst`}>{direction === "sale" ? "GST charged" : "GST paid"}</Label>
+                <Label htmlFor={`${idp}-gst`}>{direction === "sale" ? t("finance.salesTax.lineDialog.gstCharged") : t("finance.salesTax.lineDialog.gstPaid")}</Label>
                 <Input id={`${idp}-gst`} name="gst" inputMode="decimal" defaultValue={initial.gst} />
                 <FieldHint>
-                  {direction === "sale" ? "Blank: calculated at the rate on that date." : "As shown on the invoice."}
+                  {direction === "sale"
+                    ? t("finance.salesTax.lineDialog.saleTaxHint")
+                    : t("finance.salesTax.lineDialog.purchaseTaxHint")}
                 </FieldHint>
               </div>
               <div>
-                <Label htmlFor={`${idp}-qst`}>{direction === "sale" ? "QST charged" : "QST paid"}</Label>
+                <Label htmlFor={`${idp}-qst`}>{direction === "sale" ? t("finance.salesTax.lineDialog.qstCharged") : t("finance.salesTax.lineDialog.qstPaid")}</Label>
                 <Input id={`${idp}-qst`} name="qst" inputMode="decimal" defaultValue={initial.qst} />
               </div>
               {direction === "purchase" ? (
                 <>
                   <div>
-                    <Label htmlFor={`${idp}-itc`}>GST claimed back (ITC)</Label>
+                    <Label htmlFor={`${idp}-itc`}>{t("finance.salesTax.lineDialog.itc")}</Label>
                     <Input id={`${idp}-itc`} name="itc" inputMode="decimal" defaultValue={initial.itc} />
-                    <FieldHint>Blank: GST paid times the claimable share in the settings.</FieldHint>
+                    <FieldHint>{t("finance.salesTax.lineDialog.itcHint")}</FieldHint>
                   </div>
                   <div>
-                    <Label htmlFor={`${idp}-itr`}>QST claimed back (ITR)</Label>
+                    <Label htmlFor={`${idp}-itr`}>{t("finance.salesTax.lineDialog.itr")}</Label>
                     <Input id={`${idp}-itr`} name="itr" inputMode="decimal" defaultValue={initial.itr} />
                   </div>
                 </>
@@ -327,10 +332,10 @@ export function TaxLineDialog({
           </div>
           <div className="flex justify-end gap-2 sm:col-span-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.common.cancel")}
             </Button>
             <Button type="submit" loading={pending}>
-              Save tax line
+              {t("finance.salesTax.lineDialog.submit")}
             </Button>
           </div>
         </form>
@@ -340,19 +345,19 @@ export function TaxLineDialog({
 }
 
 export function DeleteTaxLineButton({ lineId, label }: { lineId: string; label: string }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   return (
     <span className="inline-flex flex-col items-end gap-1">
       <Button
         variant="ghost"
         loading={pending}
-        aria-label={`Delete ${label}`}
+        aria-label={t("finance.salesTax.deleteLine.aria", { label })}
         onClick={() => {
-          if (!window.confirm(`Delete ${label}? It will no longer count on the return.`)) return;
-          void run(() => deleteTaxLine(lineId), "Tax line deleted.");
+          if (!window.confirm(t("finance.salesTax.deleteLine.confirm", { label }))) return;
+          void run(() => deleteTaxLine(lineId), t("finance.salesTax.deleteLine.deleted"));
         }}
       >
-        Delete
+        {t("finance.salesTax.deleteLine.button")}
       </Button>
       <FormError error={error} />
     </span>
@@ -361,23 +366,21 @@ export function DeleteTaxLineButton({ lineId, label }: { lineId: string; label: 
 
 /** Closes a period: freezes its lines and posts its net tax to the ledger. */
 export function CloseTaxPeriodButton({ periodId, label }: { periodId: string; label: string }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   return (
     <div className="flex flex-col items-end gap-2">
       <Button
         loading={pending}
         onClick={() => {
           if (
-            !window.confirm(
-              `Close the tax period ${label}? Its lines will be frozen and one journal entry will post its net GST and QST to the ledger. Undoing it needs a reversing entry.`,
-            )
+            !window.confirm(t("finance.salesTax.closePeriod.confirm", { label }))
           ) {
             return;
           }
-          void run(() => closeTaxPeriod(periodId), "Tax period closed and net tax posted to the ledger.");
+          void run(() => closeTaxPeriod(periodId), t("finance.salesTax.closePeriod.closed"));
         }}
       >
-        Close period and post net tax
+        {t("finance.salesTax.closePeriod.button")}
       </Button>
       <FormError error={error} />
     </div>
@@ -397,13 +400,13 @@ export function ReopenTaxPeriodButton({
   minDate: string;
 }) {
   const [open, setOpen] = useState(false);
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   return (
     <>
       <Button variant="secondary" onClick={() => setOpen(true)}>
-        Reopen period
+        {t("finance.salesTax.reopenPeriod.button")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title={`Reopen ${label}`}>
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("finance.salesTax.reopenPeriod.title", { label })}>
         <form
           className="space-y-4"
           onSubmit={async (e) => {
@@ -411,27 +414,24 @@ export function ReopenTaxPeriodButton({
             const form = new FormData(e.currentTarget);
             const ok = await run(
               () => reopenTaxPeriod({ periodId, reversalDate: form.get("reversalDate") }),
-              "Tax period reopened; its closing entry was reversed.",
+              t("finance.salesTax.reopenPeriod.reopened"),
             );
             if (ok) setOpen(false);
           }}
         >
-          <p className="text-[13.5px] text-muted">
-            Reopening posts a reversal of the closing entry, so the ledger no longer shows this period&apos;s net tax.
-            The original entry stays in the books. Close the period again once the lines are corrected.
-          </p>
+          <p className="text-[13.5px] text-muted">{t("finance.salesTax.reopenPeriod.explanation")}</p>
           <div>
-            <Label htmlFor="reopen-date">Date of the reversing entry</Label>
+            <Label htmlFor="reopen-date">{t("finance.salesTax.reopenPeriod.date")}</Label>
             <Input id="reopen-date" name="reversalDate" type="date" defaultValue={defaultDate} min={minDate} required />
-            <FieldHint>Must be in an open ledger period, on or after {minDate}.</FieldHint>
+            <FieldHint>{t("finance.salesTax.reopenPeriod.dateHint", { date: minDate })}</FieldHint>
           </div>
           <FormError error={error} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.common.cancel")}
             </Button>
             <Button type="submit" loading={pending}>
-              Reopen and reverse
+              {t("finance.salesTax.reopenPeriod.submit")}
             </Button>
           </div>
         </form>

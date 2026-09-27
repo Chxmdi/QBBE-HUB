@@ -35,21 +35,24 @@
  *      CONFIRM ELIGIBILITY WITH YOUR ACCOUNTANT before using the rebate figures.
  */
 
+import type { MessageKey } from "@/lib/i18n/translate";
+
 export const TAX_CODES = ["standard", "zero_rated", "exempt", "out_of_scope"] as const;
 export type TaxCode = (typeof TAX_CODES)[number];
 
-export const TAX_CODE_LABEL: Record<TaxCode, string> = {
-  standard: "Standard-rated",
-  zero_rated: "Zero-rated",
-  exempt: "Exempt",
-  out_of_scope: "Out of scope",
+/** Catalogue keys; translate with `t()` where shown. */
+export const TAX_CODE_LABEL: Record<TaxCode, MessageKey> = {
+  standard: "finance.salesTax.taxCodes.standard",
+  zero_rated: "finance.salesTax.taxCodes.zero_rated",
+  exempt: "finance.salesTax.taxCodes.exempt",
+  out_of_scope: "finance.salesTax.taxCodes.out_of_scope",
 };
 
-export const TAX_CODE_HELP: Record<TaxCode, string> = {
-  standard: "Taxable at the GST and QST rates.",
-  zero_rated: "Taxable at 0 %. Counts as a taxable supply; no tax charged.",
-  exempt: "No tax, and no credit for the tax paid to make it.",
-  out_of_scope: "Not a supply at all, for example a grant or a donation.",
+export const TAX_CODE_HELP: Record<TaxCode, MessageKey> = {
+  standard: "finance.salesTax.taxCodeHelp.standard",
+  zero_rated: "finance.salesTax.taxCodeHelp.zero_rated",
+  exempt: "finance.salesTax.taxCodeHelp.exempt",
+  out_of_scope: "finance.salesTax.taxCodeHelp.out_of_scope",
 };
 
 export type Direction = "sale" | "purchase";
@@ -57,10 +60,10 @@ export type Direction = "sale" | "purchase";
 export const FILING_FREQUENCIES = ["monthly", "quarterly", "annual"] as const;
 export type FilingFrequency = (typeof FILING_FREQUENCIES)[number];
 
-export const FILING_FREQUENCY_LABEL: Record<FilingFrequency, string> = {
-  monthly: "Monthly",
-  quarterly: "Quarterly",
-  annual: "Annual",
+export const FILING_FREQUENCY_LABEL: Record<FilingFrequency, MessageKey> = {
+  monthly: "finance.salesTax.frequencies.monthly",
+  quarterly: "finance.salesTax.frequencies.quarterly",
+  annual: "finance.salesTax.frequencies.annual",
 };
 
 /** One row of `sales_tax_totals`. */
@@ -117,7 +120,8 @@ export interface LineSource {
 
 export interface ReturnLine {
   line: string;
-  label: string;
+  /** Catalogue key of the line's wording. */
+  label: MessageKey;
   cents: number;
   /** Absent for lines that are sums of other lines, or always zero in v1. */
   source?: LineSource;
@@ -142,14 +146,14 @@ export function gstReturnLines(rows: TaxTotalsRow[]): ReturnLine[] {
   const line107 = 0;
   const line108 = line106 + line107;
   return [
-    { line: "101", label: "Sales and other revenue", cents: line101, source: { direction: "sale", codes: LINE_101_CODES } },
-    { line: "103", label: "GST collected or collectible", cents: line103, source: { direction: "sale", codes: ["standard"] } },
-    { line: "104", label: "Adjustments to GST collected", cents: line104 },
-    { line: "105", label: "Total GST and adjustments for the period (103 + 104)", cents: line105, isTotal: true },
-    { line: "106", label: "Input tax credits (ITCs)", cents: line106, source: { direction: "purchase", codes: ["standard"] } },
-    { line: "107", label: "Adjustments to ITCs", cents: line107 },
-    { line: "108", label: "Total ITCs and adjustments (106 + 107)", cents: line108, isTotal: true },
-    { line: "109", label: "Net tax (105 − 108). Negative is a refund.", cents: line105 - line108, isTotal: true },
+    { line: "101", label: "finance.salesTax.returnLines.l101", cents: line101, source: { direction: "sale", codes: LINE_101_CODES } },
+    { line: "103", label: "finance.salesTax.returnLines.l103", cents: line103, source: { direction: "sale", codes: ["standard"] } },
+    { line: "104", label: "finance.salesTax.returnLines.l104", cents: line104 },
+    { line: "105", label: "finance.salesTax.returnLines.l105", cents: line105, isTotal: true },
+    { line: "106", label: "finance.salesTax.returnLines.l106", cents: line106, source: { direction: "purchase", codes: ["standard"] } },
+    { line: "107", label: "finance.salesTax.returnLines.l107", cents: line107 },
+    { line: "108", label: "finance.salesTax.returnLines.l108", cents: line108, isTotal: true },
+    { line: "109", label: "finance.salesTax.returnLines.l109", cents: line105 - line108, isTotal: true },
   ];
 }
 
@@ -161,13 +165,13 @@ export function qstReturnLines(rows: TaxTotalsRow[]): ReturnLine[] {
   const line207 = 0;
   const line208 = line206 + line207;
   return [
-    { line: "203", label: "QST collected or collectible", cents: line203, source: { direction: "sale", codes: ["standard"] } },
-    { line: "204", label: "Adjustments to QST collected", cents: line204 },
-    { line: "205", label: "Total QST and adjustments (203 + 204)", cents: line205, isTotal: true },
-    { line: "206", label: "Input tax refunds (ITRs)", cents: line206, source: { direction: "purchase", codes: ["standard"] } },
-    { line: "207", label: "Adjustments to ITRs", cents: line207 },
-    { line: "208", label: "Total ITRs and adjustments (206 + 207)", cents: line208, isTotal: true },
-    { line: "209", label: "Net tax (205 − 208). Negative is a refund.", cents: line205 - line208, isTotal: true },
+    { line: "203", label: "finance.salesTax.returnLines.l203", cents: line203, source: { direction: "sale", codes: ["standard"] } },
+    { line: "204", label: "finance.salesTax.returnLines.l204", cents: line204 },
+    { line: "205", label: "finance.salesTax.returnLines.l205", cents: line205, isTotal: true },
+    { line: "206", label: "finance.salesTax.returnLines.l206", cents: line206, source: { direction: "purchase", codes: ["standard"] } },
+    { line: "207", label: "finance.salesTax.returnLines.l207", cents: line207 },
+    { line: "208", label: "finance.salesTax.returnLines.l208", cents: line208, isTotal: true },
+    { line: "209", label: "finance.salesTax.returnLines.l209", cents: line205 - line208, isTotal: true },
   ];
 }
 

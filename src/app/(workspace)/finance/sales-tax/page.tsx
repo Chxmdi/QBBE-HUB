@@ -13,23 +13,32 @@ import { TaxTabs } from "@/features/sales-tax/components/tax-tabs";
 import { suggestNextPeriod } from "@/features/sales-tax/periods";
 import { FILING_FREQUENCY_LABEL } from "@/features/sales-tax/return-lines";
 import { getTaxSettings, listTaxPeriods } from "@/features/sales-tax/services/sales-tax.queries";
+import { formatNumber } from "@/lib/i18n/format";
+import { getLocale, getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
+import type { Locale } from "@/lib/i18n/config";
 
-export const metadata: Metadata = { title: "GST and QST" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.salesTax.title") };
+}
 export const dynamic = "force-dynamic";
 
-function netLabel(collected: number | null, claimed: number | null): string {
+function netLabel(t: TranslateFn, locale: Locale, collected: number | null, claimed: number | null): string {
   if (collected === null || claimed === null) return "";
   const net = collected - claimed;
-  return net < 0 ? `${formatCents(-net)} refund` : `${formatCents(net)} owing`;
+  return net < 0
+    ? t("finance.salesTax.overview.netRefund", { amount: formatCents(-net, locale) })
+    : t("finance.salesTax.overview.netOwing", { amount: formatCents(net, locale) });
 }
 
 export default async function SalesTaxPage() {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const header = (
     <PageHeader
-      eyebrow="Finance"
-      title="GST and QST"
-      description="Tax collected on sales and paid on purchases, the figures for each return, and the net tax posted to the ledger. Nothing is filed from here."
+      eyebrow={t("finance.common.title")}
+      title={t("finance.salesTax.title")}
+      description={t("finance.salesTax.overview.description")}
     />
   );
   if (!canRead) {
@@ -48,6 +57,7 @@ export default async function SalesTaxPage() {
   const frequency = settings?.filing_frequency ?? "annual";
   const next = suggestNextPeriod(periods[0]?.ends_on ?? null, frequency);
   const claimPercent = ((settings?.itc_claim_bp ?? 10000) / 100).toString();
+  const range = (from: string, to: string) => t("finance.salesTax.periodRange", { from, to });
 
   return (
     <div>
@@ -56,7 +66,7 @@ export default async function SalesTaxPage() {
 
       <section aria-labelledby="tax-settings" className="card mb-6 p-4">
         <h2 id="tax-settings" className="mb-3 text-[15px] font-semibold">
-          Registration and filing
+          {t("finance.salesTax.overview.settingsHeading")}
         </h2>
         {canManage ? (
           <TaxSettingsForm
@@ -73,32 +83,41 @@ export default async function SalesTaxPage() {
         ) : (
           <dl className="grid gap-2 text-[13.5px] sm:grid-cols-2">
             <div>
-              <dt className="meta">GST</dt>
-              <dd>{settings?.gst_registered ? `Registered ${settings.gst_number ?? ""}` : "Not registered"}</dd>
+              <dt className="meta">{t("finance.common.gst")}</dt>
+              <dd>
+                {settings?.gst_registered
+                  ? t("finance.salesTax.overview.registered", { number: settings.gst_number ?? "" })
+                  : t("finance.salesTax.overview.notRegistered")}
+              </dd>
             </div>
             <div>
-              <dt className="meta">QST</dt>
-              <dd>{settings?.qst_registered ? `Registered ${settings.qst_number ?? ""}` : "Not registered"}</dd>
+              <dt className="meta">{t("finance.common.qst")}</dt>
+              <dd>
+                {settings?.qst_registered
+                  ? t("finance.salesTax.overview.registered", { number: settings.qst_number ?? "" })
+                  : t("finance.salesTax.overview.notRegistered")}
+              </dd>
             </div>
             <div>
-              <dt className="meta">Filing frequency</dt>
-              <dd>{FILING_FREQUENCY_LABEL[frequency]}</dd>
+              <dt className="meta">{t("finance.salesTax.overview.filingFrequency")}</dt>
+              <dd>{t(FILING_FREQUENCY_LABEL[frequency])}</dd>
             </div>
             <div>
-              <dt className="meta">Share of tax paid claimed back</dt>
-              <dd>{claimPercent} %</dd>
+              <dt className="meta">{t("finance.salesTax.overview.claimShare")}</dt>
+              <dd>
+                {t("finance.salesTax.overview.percentValue", {
+                  percent: formatNumber((settings?.itc_claim_bp ?? 10000) / 100, locale),
+                })}
+              </dd>
             </div>
           </dl>
         )}
-        <p className="meta mt-3">
-          Whether QBBE is registered, how often it files and what share it can claim back are the accountant&apos;s
-          decisions. Rates in force: GST 5 %, QST 9.975 % (on the price before GST).
-        </p>
+        <p className="meta mt-3">{t("finance.salesTax.overview.settingsNote")}</p>
       </section>
 
       <section aria-labelledby="tax-periods">
         <h2 id="tax-periods" className="mb-3 text-[15px] font-semibold">
-          Tax periods
+          {t("finance.salesTax.overview.periodsHeading")}
         </h2>
         {canManage ? (
           <div className="card mb-4 p-4">
@@ -108,38 +127,42 @@ export default async function SalesTaxPage() {
         {periods.length === 0 ? (
           <EmptyState
             icon={<CalendarRange />}
-            title="No tax periods yet"
-            description="Add the first reporting period once the accountant confirms the filing frequency."
+            title={t("finance.salesTax.overview.noPeriodsTitle")}
+            description={t("finance.salesTax.overview.noPeriodsDescription")}
           />
         ) : (
           <DataTable minWidth="640px">
             <TableHead>
-              <TableHeader>Period</TableHeader>
-              <TableHeader>Status</TableHeader>
-              <TableHeader>Net GST</TableHeader>
-              <TableHeader>Net QST</TableHeader>
+              <TableHeader>{t("finance.salesTax.overview.colPeriod")}</TableHeader>
+              <TableHeader>{t("finance.common.status")}</TableHeader>
+              <TableHeader>{t("finance.salesTax.overview.colNetGst")}</TableHeader>
+              <TableHeader>{t("finance.salesTax.overview.colNetQst")}</TableHeader>
               <TableHeader className="text-right">
-                <span className="sr-only">Links</span>
+                <span className="sr-only">{t("finance.salesTax.overview.colLinks")}</span>
               </TableHeader>
             </TableHead>
             <tbody>
               {periods.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium tabular-nums">
-                    {p.starts_on} to {p.ends_on}
+                    {range(p.starts_on, p.ends_on)}
                   </TableCell>
                   <TableCell>
-                    {p.status === "open" ? <Badge tone="success">Open</Badge> : <Badge>Closed</Badge>}
+                    {p.status === "open" ? (
+                      <Badge tone="success">{t("finance.salesTax.open")}</Badge>
+                    ) : (
+                      <Badge>{t("finance.salesTax.closed")}</Badge>
+                    )}
                   </TableCell>
-                  <TableCell className="tabular-nums">{netLabel(p.gst_collected_cents, p.gst_claimed_cents)}</TableCell>
-                  <TableCell className="tabular-nums">{netLabel(p.qst_collected_cents, p.qst_claimed_cents)}</TableCell>
+                  <TableCell className="tabular-nums">{netLabel(t, locale, p.gst_collected_cents, p.gst_claimed_cents)}</TableCell>
+                  <TableCell className="tabular-nums">{netLabel(t, locale, p.qst_collected_cents, p.qst_claimed_cents)}</TableCell>
                   <TableCell className="text-right">
                     <Link
                       className="underline"
                       href={`/finance/sales-tax/worksheet?period=${p.id}`}
-                      aria-label={`Worksheet for ${p.starts_on} to ${p.ends_on}`}
+                      aria-label={t("finance.salesTax.overview.worksheetFor", { from: p.starts_on, to: p.ends_on })}
                     >
-                      Worksheet
+                      {t("finance.salesTax.overview.worksheet")}
                     </Link>
                     {p.closing_entry_id ? (
                       <>
@@ -147,9 +170,12 @@ export default async function SalesTaxPage() {
                         <Link
                           className="underline"
                           href={`/finance/ledger/journal/${p.closing_entry_id}`}
-                          aria-label={`Closing entry for ${p.starts_on} to ${p.ends_on}`}
+                          aria-label={t("finance.salesTax.overview.closingEntryFor", {
+                            from: p.starts_on,
+                            to: p.ends_on,
+                          })}
                         >
-                          Closing entry
+                          {t("finance.salesTax.overview.closingEntry")}
                         </Link>
                       </>
                     ) : null}

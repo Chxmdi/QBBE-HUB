@@ -1,5 +1,6 @@
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
 import { centsToDecimal, csvDocument } from "@/features/ledger/money";
+import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
 import {
   TAX_CODE_LABEL,
   closingFigures,
@@ -162,11 +163,15 @@ export function buildWorksheet(rows: TaxTotalsRow[]): Worksheet {
   };
 }
 
-export const DIRECTION_LABEL: Record<Direction, string> = { sale: "Sale", purchase: "Purchase" };
+export const DIRECTION_LABEL: Record<Direction, MessageKey> = {
+  sale: "finance.salesTax.directions.sale",
+  purchase: "finance.salesTax.directions.purchase",
+};
 
 /**
  * The worksheet and every line behind it, for the accountant. Figures are
- * plain decimals so a spreadsheet can re-add them.
+ * plain decimals so a spreadsheet can re-add them. Headings follow `t`'s
+ * language (English by default).
  */
 export function worksheetCsv(
   from: string,
@@ -174,46 +179,55 @@ export function worksheetCsv(
   worksheet: Worksheet,
   lines: TaxLine[],
   includeRebate: boolean,
+  t: TranslateFn = createTranslator("en"),
 ): string {
+  const gst = t("finance.common.gst");
+  const qst = t("finance.common.qst");
   const rows: (string | number | null)[][] = [
-    ["GST/QST return worksheet", `${from} to ${to}`],
-    ["Prepared from the app's records; needs accountant review before filing. Nothing has been filed."],
+    [t("finance.salesTax.csv.title"), t("finance.salesTax.periodRange", { from, to })],
+    [t("finance.salesTax.csv.note")],
     [],
-    ["Return", "Line", "Description", "Amount"],
-    ...worksheet.gst.map((l) => ["GST", l.line, l.label, centsToDecimal(l.cents)]),
-    ...worksheet.qst.map((l) => ["QST", l.line, l.label, centsToDecimal(l.cents)]),
+    [
+      t("finance.salesTax.csv.colReturn"),
+      t("finance.salesTax.csv.colLine"),
+      t("finance.salesTax.csv.colDescription"),
+      t("finance.salesTax.csv.colAmount"),
+    ],
+    ...worksheet.gst.map((l) => [gst, l.line, t(l.label), centsToDecimal(l.cents)]),
+    ...worksheet.qst.map((l) => [qst, l.line, t(l.label), centsToDecimal(l.cents)]),
   ];
   if (includeRebate) {
+    const rebate = t("finance.salesTax.csv.rebate");
     rows.push(
       [],
-      ["Public service body rebate: confirm eligibility with your accountant"],
-      ["Rebate", "", "GST paid and not claimed", centsToDecimal(worksheet.rebate.gstPaidNotClaimed)],
-      ["Rebate", "", "GST rebate", centsToDecimal(worksheet.rebate.gstRebate)],
-      ["Rebate", "", "QST paid and not claimed", centsToDecimal(worksheet.rebate.qstPaidNotClaimed)],
-      ["Rebate", "", "QST rebate", centsToDecimal(worksheet.rebate.qstRebate)],
+      [t("finance.salesTax.csv.rebateHeading")],
+      [rebate, "", t("finance.salesTax.csv.gstPaidNotClaimed"), centsToDecimal(worksheet.rebate.gstPaidNotClaimed)],
+      [rebate, "", t("finance.salesTax.csv.gstRebate"), centsToDecimal(worksheet.rebate.gstRebate)],
+      [rebate, "", t("finance.salesTax.csv.qstPaidNotClaimed"), centsToDecimal(worksheet.rebate.qstPaidNotClaimed)],
+      [rebate, "", t("finance.salesTax.csv.qstRebate"), centsToDecimal(worksheet.rebate.qstRebate)],
     );
   }
   rows.push(
     [],
     [
-      "Date",
-      "Direction",
-      "Tax code",
-      "Counterparty",
-      "Reference",
-      "Description",
-      "Amount before tax",
-      "GST",
-      "QST",
-      "ITC claimed",
-      "ITR claimed",
-      "Source",
-      "Source id",
+      t("finance.salesTax.csv.colDate"),
+      t("finance.salesTax.csv.colDirection"),
+      t("finance.salesTax.csv.colTaxCode"),
+      t("finance.salesTax.csv.colCounterparty"),
+      t("finance.salesTax.csv.colReference"),
+      t("finance.salesTax.csv.colDescription"),
+      t("finance.salesTax.csv.colAmountBeforeTax"),
+      t("finance.salesTax.csv.colGst"),
+      t("finance.salesTax.csv.colQst"),
+      t("finance.salesTax.csv.colItc"),
+      t("finance.salesTax.csv.colItr"),
+      t("finance.salesTax.csv.colSource"),
+      t("finance.salesTax.csv.colSourceId"),
     ],
     ...lines.map((l) => [
       l.transaction_date,
-      DIRECTION_LABEL[l.direction],
-      TAX_CODE_LABEL[l.tax_code],
+      t(DIRECTION_LABEL[l.direction]),
+      t(TAX_CODE_LABEL[l.tax_code]),
       l.counterparty,
       l.reference,
       l.description,
