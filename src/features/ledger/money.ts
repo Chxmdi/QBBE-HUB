@@ -95,6 +95,7 @@ export const ENTRY_KIND_LABEL: Record<string, string> = {
   standard: "Journal entry",
   opening: "Opening balances",
   reversal: "Reversal",
+  closing: "Year-end closing",
 };
 
 /** Debits and credits of a set of lines, and whether they balance. */

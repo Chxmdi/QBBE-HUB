@@ -1,4 +1,5 @@
-import { requireStaff, type SessionContext } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { requireSession, type SessionContext } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 
 export interface LedgerSettings {
@@ -14,28 +15,59 @@ export interface LedgerAccess {
   canRead: boolean;
   /** Owners/admins with MFA. The database checks this again on every write. */
   canManage: boolean;
+  /** A Guest holding a current external accountant grant (#154). */
+  isAccountant: boolean;
   settings: LedgerSettings | null;
 }
 
+type PageClient = Awaited<ReturnType<typeof createSupabasePageClient>>;
+
 /**
- * Route gate for the ledger screens. Staff reach the pages; whether they see
- * the books is the database's answer: the settings row is readable exactly
- * when `app.can_read_ledger` is true for the caller.
+ * Whether the caller holds a current accountant grant. The grantee can read
+ * their own grant before completing MFA; the books open only after it.
+ */
+export async function hasAccountantGrant(supabase: PageClient, session: SessionContext): Promise<boolean> {
+  const { data } = await supabase
+    .from("ledger_accountant_grant")
+    .select("id")
+    .eq("organization_id", session.organizationId)
+    .eq("user_id", session.userId)
+    .is("revoked_at", null)
+    .lte("starts_at", new Date().toISOString())
+    .gt("expires_at", new Date().toISOString())
+    .limit(1);
+  return (data ?? []).length > 0;
+}
+
+/**
+ * Route gate for the ledger screens. Staff, and a Guest holding a current
+ * accountant grant, reach the pages; everyone else is sent home. Whether they
+ * see the books is the database's answer: the settings row is readable
+ * exactly when `app.can_read_ledger` is true for the caller. An accountant
+ * who has not completed MFA is sent to do so first, and each accountant
+ * session that opens the books is written to the audit log once.
  */
 export async function getLedgerAccess(): Promise<LedgerAccess> {
-  const session = await requireStaff();
+  const session = await requireSession();
   const supabase = await createSupabasePageClient();
+  const isAccountant = !session.isStaff && (await hasAccountantGrant(supabase, session));
+  if (!session.isStaff && !isAccountant) redirect("/");
   const { data } = await supabase
     .from("ledger_settings")
     .select("chart_approved_on, chart_approved_by_name, chart_approval_recorded_at")
     .eq("organization_id", session.organizationId)
     .maybeSingle();
   const canRead = Boolean(data);
+  if (isAccountant) {
+    if (!canRead) redirect("/mfa?next=/finance/ledger");
+    await supabase.rpc("ledger_note_accountant_session", { p_organization: session.organizationId });
+  }
   return {
     session,
     supabase,
     canRead,
     canManage: canRead && session.isAdmin,
+    isAccountant,
     settings: (data as LedgerSettings | null) ?? null,
   };
 }

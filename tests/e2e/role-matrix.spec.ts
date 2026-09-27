@@ -123,6 +123,7 @@ const MATRIX: Row[] = [
 const EVERYONE = ["/", "/my-work", "/board", "/programs", "/projects", "/people", "/channels", "/settings", "/forms", "/signatures"];
 const STAFF_ONLY = ["/crm", "/reports", "/finance/receipts", "/approvals"];
 STAFF_ONLY.push("/finance/ledger");
+STAFF_ONLY.push("/finance/ledger/statements", "/finance/ledger/year-end", "/finance/ledger/returns");
 STAFF_ONLY.push("/finance/budgets", "/finance/budgets/programs");
 STAFF_ONLY.push("/finance/sales-tax");
 STAFF_ONLY.push("/finance/payables");

@@ -31,6 +31,7 @@ const ROUTES = [
   { path: "/crm", name: "crm" },
   { path: "/finance/ledger", name: "ledger" },
   { path: "/finance/ledger/journal/new", name: "ledger-entry" },
+  { path: "/finance/ledger/year-end", name: "ledger-year-end" },
   { path: "/finance/budgets", name: "budgets" },
   { path: "/finance/budgets/programs", name: "budgets-programs" },
   { path: "/finance/sales-tax/worksheet", name: "sales-tax-worksheet" },
