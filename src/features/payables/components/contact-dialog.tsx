@@ -9,11 +9,13 @@ import { Checkbox, Input, Label, Select, Textarea } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast";
 import { saveContact } from "@/features/payables/services/payables.commands";
 import type { ContactRow } from "@/features/payables/services/payables.queries";
+import { useT } from "@/lib/i18n/client";
 
 /** Add a vendor or customer, or edit one. */
 export function ContactDialog({ contact }: { contact?: ContactRow }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,16 +23,29 @@ export function ContactDialog({ contact }: { contact?: ContactRow }) {
   return (
     <>
       {contact ? (
-        <Button size="sm" variant="ghost" onClick={() => setOpen(true)} aria-label={`Edit ${contact.name}`}>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setOpen(true)}
+          aria-label={t("finance.payables.contactDialog.editContact", { name: contact.name })}
+        >
           <Pencil className="size-4" aria-hidden />
         </Button>
       ) : (
         <Button onClick={() => setOpen(true)}>
           <Plus className="size-4" aria-hidden />
-          Add contact
+          {t("finance.payables.contactDialog.addContact")}
         </Button>
       )}
-      <Dialog open={open} onClose={() => setOpen(false)} title={contact ? `Edit ${contact.name}` : "Add a vendor or customer"}>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title={
+          contact
+            ? t("finance.payables.contactDialog.editContact", { name: contact.name })
+            : t("finance.payables.contactDialog.addTitle")
+        }
+      >
         <form
           className="space-y-4"
           onSubmit={async (e) => {
@@ -55,67 +70,70 @@ export function ContactDialog({ contact }: { contact?: ContactRow }) {
             });
             setSaving(false);
             if (!result.ok) {
-              setError(result.error ?? "Could not save the contact.");
+              setError(result.error ?? t("finance.payables.contactDialog.couldNotSave"));
               return;
             }
-            toast(contact ? "Contact saved." : "Contact added.", { tone: "success" });
+            toast(
+              contact ? t("finance.payables.contactDialog.saved") : t("finance.payables.contactDialog.added"),
+              { tone: "success" },
+            );
             setOpen(false);
             router.refresh();
           }}
         >
           <div>
-            <Label htmlFor="contact-name">Name</Label>
+            <Label htmlFor="contact-name">{t("finance.payables.contactDialog.name")}</Label>
             <Input id="contact-name" name="name" maxLength={200} defaultValue={contact?.name} required />
           </div>
           <fieldset className="flex flex-wrap gap-5">
-            <legend className="mb-1 text-[13px] font-medium">This contact is</legend>
+            <legend className="mb-1 text-[13px] font-medium">{t("finance.payables.contactDialog.thisContactIs")}</legend>
             <label className="flex items-center gap-2 text-[13.5px]">
               <Checkbox name="isVendor" defaultChecked={contact?.is_vendor ?? true} />
-              A vendor (sends us bills)
+              {t("finance.payables.contactDialog.isVendor")}
             </label>
             <label className="flex items-center gap-2 text-[13.5px]">
               <Checkbox name="isCustomer" defaultChecked={contact?.is_customer ?? false} />
-              A customer or funder (we invoice them)
+              {t("finance.payables.contactDialog.isCustomer")}
             </label>
           </fieldset>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="contact-email">Email (optional)</Label>
+              <Label htmlFor="contact-email">{t("finance.payables.contactDialog.email")}</Label>
               <Input id="contact-email" name="email" type="email" maxLength={320} defaultValue={contact?.email ?? ""} />
             </div>
             <div>
-              <Label htmlFor="contact-phone">Phone (optional)</Label>
+              <Label htmlFor="contact-phone">{t("finance.payables.contactDialog.phone")}</Label>
               <Input id="contact-phone" name="phone" maxLength={50} defaultValue={contact?.phone ?? ""} />
             </div>
           </div>
           <div>
-            <Label htmlFor="contact-address">Address (optional, printed on invoices)</Label>
+            <Label htmlFor="contact-address">{t("finance.payables.contactDialog.address")}</Label>
             <Textarea id="contact-address" name="address" maxLength={1000} defaultValue={contact?.address ?? ""} />
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <Label htmlFor="contact-language">Invoice language</Label>
+              <Label htmlFor="contact-language">{t("finance.payables.contactDialog.invoiceLanguage")}</Label>
               <Select id="contact-language" name="language" defaultValue={contact?.language ?? "fr"}>
-                <option value="fr">French</option>
-                <option value="en">English</option>
+                <option value="fr">{t("finance.payables.languages.fr")}</option>
+                <option value="en">{t("finance.payables.languages.en")}</option>
               </Select>
             </div>
             <div>
-              <Label htmlFor="contact-gst">GST number (optional)</Label>
+              <Label htmlFor="contact-gst">{t("finance.payables.contactDialog.gstNumber")}</Label>
               <Input id="contact-gst" name="gstNumber" maxLength={30} defaultValue={contact?.gst_number ?? ""} />
             </div>
             <div>
-              <Label htmlFor="contact-qst">QST number (optional)</Label>
+              <Label htmlFor="contact-qst">{t("finance.payables.contactDialog.qstNumber")}</Label>
               <Input id="contact-qst" name="qstNumber" maxLength={30} defaultValue={contact?.qst_number ?? ""} />
             </div>
           </div>
           <div>
-            <Label htmlFor="contact-notes">Notes (optional)</Label>
+            <Label htmlFor="contact-notes">{t("finance.payables.contactDialog.notes")}</Label>
             <Textarea id="contact-notes" name="notes" maxLength={2000} defaultValue={contact?.notes ?? ""} />
           </div>
           <label className="flex items-center gap-2 text-[13.5px]">
             <Checkbox name="isActive" defaultChecked={contact?.is_active ?? true} />
-            Active (inactive contacts are not offered on new bills and invoices)
+            {t("finance.payables.contactDialog.active")}
           </label>
           {error ? (
             <p role="alert" className="text-[13px] text-danger-fg">
@@ -124,10 +142,10 @@ export function ContactDialog({ contact }: { contact?: ContactRow }) {
           ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.payables.contactDialog.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              Save
+              {t("finance.payables.contactDialog.save")}
             </Button>
           </div>
         </form>

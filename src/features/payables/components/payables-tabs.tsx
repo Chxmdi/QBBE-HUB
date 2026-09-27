@@ -2,20 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/translate";
 import { cn } from "@/lib/utils";
 
-const SECTIONS = [
-  { href: "/finance/payables", label: "Bills" },
-  { href: "/finance/payables/invoices", label: "Invoices" },
-  { href: "/finance/payables/contacts", label: "Vendors and customers" },
-  { href: "/finance/payables/aging", label: "Aging" },
+const SECTIONS: { href: string; label: MessageKey }[] = [
+  { href: "/finance/payables", label: "finance.payables.tabs.bills" },
+  { href: "/finance/payables/invoices", label: "finance.payables.tabs.invoices" },
+  { href: "/finance/payables/contacts", label: "finance.payables.tabs.contacts" },
+  { href: "/finance/payables/aging", label: "finance.payables.tabs.aging" },
 ];
 
 /** Sections of payables and receivables, as plain links. */
 export function PayablesTabs() {
   const pathname = usePathname();
+  const t = useT();
   return (
-    <nav aria-label="Bills and invoices sections" className="mb-6 -mx-4 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
+    <nav aria-label={t("finance.payables.tabs.ariaLabel")} className="mb-6 -mx-4 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
       <ul className="flex gap-1">
         {SECTIONS.map((s) => {
           const active =
@@ -32,7 +35,7 @@ export function PayablesTabs() {
                   active ? "border-brand text-ink" : "border-transparent text-muted hover:text-ink",
                 )}
               >
-                {s.label}
+                {t(s.label)}
               </Link>
             </li>
           );

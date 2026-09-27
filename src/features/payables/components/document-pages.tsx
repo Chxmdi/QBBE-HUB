@@ -20,12 +20,12 @@ import { InvoiceSheet, PrintButton } from "@/features/payables/components/invoic
 import { PayablesTabs } from "@/features/payables/components/payables-tabs";
 import { ThresholdForm } from "@/features/payables/components/threshold-form";
 import {
-  INVOICE_WORDS,
   PAYMENT_METHOD_LABEL,
   STATUS_LABEL,
   STATUS_TONE,
   addDays,
   invoiceLabel,
+  invoiceTranslator,
   type DocumentKind,
   type DocumentStatus,
   type PaymentMethod,
@@ -38,18 +38,20 @@ import {
   loadPostingChoices,
   type DocumentRecord,
 } from "@/features/payables/services/payables.queries";
+import { getLocale, getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 
 /**
  * What the bill page says about its approval (#143). Posting needs the bill's
  * own request approved while the bill still matches what was sent.
  */
-const APPROVAL_NOTE: Record<string, string> = {
-  none: "Send it for approval; it can be posted once approved.",
-  pending: "It is waiting for approval.",
-  approved: "It is approved and ready to post.",
-  rejected: "Its approval was rejected. Change it if needed, then send it again.",
-  withdrawn: "Its approval request was withdrawn. Send it again when it is ready.",
-  changed: "It changed after it was sent for approval, so it needs to be sent again.",
+const APPROVAL_NOTE: Record<string, MessageKey> = {
+  none: "finance.payables.detail.approvalNotes.none",
+  pending: "finance.payables.detail.approvalNotes.pending",
+  approved: "finance.payables.detail.approvalNotes.approved",
+  rejected: "finance.payables.detail.approvalNotes.rejected",
+  withdrawn: "finance.payables.detail.approvalNotes.withdrawn",
+  changed: "finance.payables.detail.approvalNotes.changed",
 };
 
 const linkButton =
@@ -61,8 +63,8 @@ function paths(kind: DocumentKind) {
     : { list: "/finance/payables/invoices", base: "/finance/payables/invoices" };
 }
 
-function referenceLabel(kind: DocumentKind, reference: string | null): string {
-  if (kind === "invoice") return invoiceLabel(reference === null ? null : Number(reference));
+function referenceLabel(kind: DocumentKind, reference: string | null, draft: string): string {
+  if (kind === "invoice") return invoiceLabel(reference === null ? null : Number(reference), draft);
   return reference ?? "—";
 }
 
@@ -78,6 +80,7 @@ export async function DocumentListPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { session, supabase, canPost } = await getPayablesAccess();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const params = await searchParams;
   const status = (["draft", "posted", "paid", "void"] as const).includes(params.status as DocumentStatus)
     ? (params.status as DocumentStatus)
@@ -93,61 +96,66 @@ export async function DocumentListPage({
       .maybeSingle();
     threshold = data?.bill_approval_threshold_cents ?? null;
   }
+  const draft = t("finance.payables.draftNumber");
 
   return (
     <div>
       <PageHeader
-        eyebrow="Finance"
-        title="Bills and invoices"
+        eyebrow={t("finance.common.title")}
+        title={t("finance.payables.heading")}
         description={
-          isBill
-            ? "Bills from vendors. Staff enter them; an administrator posts them to the ledger and records each payment. A bill can never be paid beyond its total."
-            : "Invoices to partners, funders and members, in French or English. Posting records the amount owed; each payment received reduces it."
+          isBill ? t("finance.payables.list.billsDescription") : t("finance.payables.list.invoicesDescription")
         }
         actions={
           <Link href={`${paths(kind).base}/new`} className={linkButton}>
             <Plus className="size-4" aria-hidden />
-            {isBill ? "New bill" : "New invoice"}
+            {isBill ? t("finance.payables.list.newBill") : t("finance.payables.list.newInvoice")}
           </Link>
         }
       />
       <PayablesTabs />
-      <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4" aria-label="Filter">
+      <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4" aria-label={t("finance.payables.list.filter")}>
         <div>
-          <Label htmlFor="doc-status">Status</Label>
+          <Label htmlFor="doc-status">{t("finance.payables.list.status")}</Label>
           <Select id="doc-status" name="status" defaultValue={status}>
-            <option value="">Any status</option>
-            <option value="draft">Draft</option>
-            <option value="posted">Open</option>
-            <option value="paid">Paid</option>
-            <option value="void">Void</option>
+            <option value="">{t("finance.payables.list.anyStatus")}</option>
+            <option value="draft">{t(STATUS_LABEL.draft)}</option>
+            <option value="posted">{t(STATUS_LABEL.posted)}</option>
+            <option value="paid">{t(STATUS_LABEL.paid)}</option>
+            <option value="void">{t(STATUS_LABEL.void)}</option>
           </Select>
         </div>
         <Button type="submit" variant="secondary">
-          Apply
+          {t("finance.payables.list.apply")}
         </Button>
       </form>
 
       {rows.length === 0 ? (
         <EmptyState
           icon={<FileText />}
-          title={status ? "Nothing with this status" : isBill ? "No bills yet" : "No invoices yet"}
+          title={
+            status
+              ? t("finance.payables.list.emptyStatus")
+              : isBill
+                ? t("finance.payables.list.emptyBills")
+                : t("finance.payables.list.emptyInvoices")
+          }
           description={
             isBill
-              ? "Enter a vendor bill, or turn a captured bill from Receipts into one."
-              : "Create an invoice for a grant installment, a membership fee or a partner."
+              ? t("finance.payables.list.emptyBillsDescription")
+              : t("finance.payables.list.emptyInvoicesDescription")
           }
         />
       ) : (
         <DataTable minWidth="760px">
           <TableHead>
-            <TableHeader className="w-28">Date</TableHeader>
-            <TableHeader>{isBill ? "Vendor" : "Customer"}</TableHeader>
-            <TableHeader className="w-32">{isBill ? "Vendor no." : "Invoice"}</TableHeader>
-            <TableHeader className="w-28">Due</TableHeader>
-            <TableHeader className="w-24">Status</TableHeader>
-            <TableHeader className="w-32 text-right">Total</TableHeader>
-            <TableHeader className="w-32 text-right">Owing</TableHeader>
+            <TableHeader className="w-28">{t("finance.payables.list.date")}</TableHeader>
+            <TableHeader>{isBill ? t("finance.payables.vendor") : t("finance.payables.customer")}</TableHeader>
+            <TableHeader className="w-32">{isBill ? t("finance.payables.vendorNo") : t("finance.payables.invoice")}</TableHeader>
+            <TableHeader className="w-28">{t("finance.payables.due")}</TableHeader>
+            <TableHeader className="w-24">{t("finance.payables.list.status")}</TableHeader>
+            <TableHeader className="w-32 text-right">{t("finance.payables.total")}</TableHeader>
+            <TableHeader className="w-32 text-right">{t("finance.payables.list.owing")}</TableHeader>
           </TableHead>
           <tbody>
             {rows.map((r) => (
@@ -158,14 +166,14 @@ export async function DocumentListPage({
                     {r.contact_name}
                   </Link>
                 </TableCell>
-                <TableCell className="tabular-nums">{referenceLabel(kind, r.reference)}</TableCell>
+                <TableCell className="tabular-nums">{referenceLabel(kind, r.reference, draft)}</TableCell>
                 <TableCell className="tabular-nums">{r.due_date}</TableCell>
                 <TableCell>
-                  <Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
+                  <Badge tone={STATUS_TONE[r.status]}>{t(STATUS_LABEL[r.status])}</Badge>
                 </TableCell>
-                <TableCell className="text-right tabular-nums">{formatCents(r.total_cents)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatCents(r.total_cents, locale)}</TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {r.status === "posted" ? formatCents(r.total_cents - r.paid_cents) : "—"}
+                  {r.status === "posted" ? formatCents(r.total_cents - r.paid_cents, locale) : "—"}
                 </TableCell>
               </TableRow>
             ))}
@@ -183,6 +191,7 @@ export async function DocumentListPage({
 
 async function editorProps(kind: DocumentKind, record: DocumentRecord | null) {
   const { session, supabase, canPost } = await getPayablesAccess();
+  const locale = await getLocale();
   const [choices, contacts, receipts] = await Promise.all([
     loadPostingChoices(supabase, session.organizationId),
     loadContacts(supabase, session.organizationId),
@@ -254,7 +263,10 @@ async function editorProps(kind: DocumentKind, record: DocumentRecord | null) {
       .map((c) => ({ id: c.id, label: c.name, language: c.language })),
     receipts: ((receipts.data ?? []) as { id: string; vendor: string; document_date: string; total_cents: number }[])
       .filter((r) => !usedReceipts.has(r.id) || r.id === record?.receipt_id)
-      .map((r) => ({ id: r.id, label: `${r.document_date} ${r.vendor} ${formatCents(Number(r.total_cents))}` })),
+      .map((r) => ({
+        id: r.id,
+        label: `${r.document_date} ${r.vendor} ${formatCents(Number(r.total_cents), locale)}`,
+      })),
     accounts: choices.accounts.filter((a) => lineTypes.includes(a.accountType)),
     controlAccounts: choices.accounts.filter((a) => a.accountType === controlType),
     funds: choices.funds,
@@ -264,15 +276,16 @@ async function editorProps(kind: DocumentKind, record: DocumentRecord | null) {
 
 export async function NewDocumentPage({ kind }: { kind: DocumentKind }) {
   const props = await editorProps(kind, null);
+  const t = await getT();
   return (
     <div>
       <PageHeader
-        eyebrow="Bills and invoices"
-        title={kind === "bill" ? "New bill" : "New invoice"}
+        eyebrow={t("finance.payables.editor.eyebrow")}
+        title={kind === "bill" ? t("finance.payables.list.newBill") : t("finance.payables.list.newInvoice")}
         description={
           kind === "bill"
-            ? "Enter the bill as the vendor wrote it. Staff can leave the accounts for finance to choose before posting."
-            : "The customer sees the descriptions, amounts and taxes, in the language chosen."
+            ? t("finance.payables.editor.newBillDescription")
+            : t("finance.payables.editor.newInvoiceDescription")
         }
       />
       <PayablesTabs />
@@ -297,19 +310,23 @@ export async function DocumentDetailPage({
   const { id } = await params;
   const query = await searchParams;
   const { session, supabase, canPost } = await getPayablesAccess();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const record = await loadDocument(supabase, kind, id);
   if (!record) notFound();
   const isBill = kind === "bill";
-  const noun = isBill ? "bill" : "invoice";
   const canEdit = record.status === "draft" && (record.created_by === session.userId || canPost);
   const today = todayIn(session.timeZone);
+  const money = (cents: number) => formatCents(cents, locale);
 
   if (query.edit === "1" && canEdit) {
     const props = await editorProps(kind, record);
     return (
       <div>
-        <PageHeader eyebrow="Bills and invoices" title={`Edit draft ${noun}`} />
+        <PageHeader
+          eyebrow={t("finance.payables.editor.eyebrow")}
+          title={isBill ? t("finance.payables.editor.editDraftBill") : t("finance.payables.editor.editDraftInvoice")}
+        />
         <PayablesTabs />
         <DocumentForm {...props} />
       </div>
@@ -349,70 +366,77 @@ export async function DocumentDetailPage({
   const needsApproval = threshold !== null && record.total_cents >= threshold;
   const owing = record.total_cents - record.paid_cents;
   const title = isBill
-    ? `Bill from ${record.contact_name}${record.reference ? ` #${record.reference}` : ""}`
-    : `${invoiceLabel(record.invoice_number)} to ${record.contact_name}`;
+    ? record.reference
+      ? t("finance.payables.detail.billTitleWithReference", { vendor: record.contact_name, reference: record.reference })
+      : t("finance.payables.detail.billTitle", { vendor: record.contact_name })
+    : t("finance.payables.detail.invoiceTitle", {
+        number: invoiceLabel(record.invoice_number, t("finance.payables.draftNumber")),
+        customer: record.contact_name,
+      });
 
   return (
     <div>
       <div className="no-print">
         <PageHeader
-          eyebrow="Bills and invoices"
+          eyebrow={t("finance.payables.detail.eyebrow")}
           title={title}
           description={record.memo ?? undefined}
-          actions={<Badge tone={STATUS_TONE[record.status]}>{STATUS_LABEL[record.status]}</Badge>}
+          actions={<Badge tone={STATUS_TONE[record.status]}>{t(STATUS_LABEL[record.status])}</Badge>}
         />
         <PayablesTabs />
 
         <div className="card mb-5 grid gap-4 p-4 text-[14px] sm:grid-cols-4">
           <div>
-            <p className="meta">{isBill ? "Bill date" : "Invoice date"}</p>
+            <p className="meta">{isBill ? t("finance.payables.detail.billDate") : t("finance.payables.detail.invoiceDate")}</p>
             <p className="tabular-nums">{record.document_date}</p>
           </div>
           <div>
-            <p className="meta">Due</p>
+            <p className="meta">{t("finance.payables.detail.due")}</p>
             <p className="tabular-nums">{record.due_date}</p>
           </div>
           <div>
-            <p className="meta">Fund</p>
-            <p>{record.fund_id ? (fundLabel.get(record.fund_id) ?? "—") : "Not chosen"}</p>
+            <p className="meta">{t("finance.payables.detail.fund")}</p>
+            <p>{record.fund_id ? (fundLabel.get(record.fund_id) ?? "—") : t("finance.payables.detail.notChosen")}</p>
           </div>
           <div>
-            <p className="meta">{isBill ? "Payable account" : "Receivable account"}</p>
+            <p className="meta">
+              {isBill ? t("finance.payables.detail.payableAccount") : t("finance.payables.detail.receivableAccount")}
+            </p>
             <p>
               {record.control_account_id
                 ? (accountLabel.get(record.control_account_id) ?? "—")
                 : isBill
-                  ? "2000 Accounts payable (default)"
-                  : "1100 Accounts receivable (default)"}
+                  ? t("finance.payables.form.defaultPayable")
+                  : t("finance.payables.form.defaultReceivable")}
             </p>
           </div>
           <div>
-            <p className="meta">Total</p>
-            <p className="font-semibold tabular-nums">{formatCents(record.total_cents)}</p>
+            <p className="meta">{t("finance.payables.detail.total")}</p>
+            <p className="font-semibold tabular-nums">{money(record.total_cents)}</p>
           </div>
           <div>
-            <p className="meta">Paid</p>
-            <p className="tabular-nums">{formatCents(record.paid_cents)}</p>
+            <p className="meta">{t("finance.payables.detail.paid")}</p>
+            <p className="tabular-nums">{money(record.paid_cents)}</p>
           </div>
           <div>
-            <p className="meta">Still owing</p>
-            <p className="font-semibold tabular-nums">{record.status === "void" ? "—" : formatCents(owing)}</p>
+            <p className="meta">{t("finance.payables.detail.stillOwing")}</p>
+            <p className="font-semibold tabular-nums">{record.status === "void" ? "—" : money(owing)}</p>
           </div>
           <div>
-            <p className="meta">Ledger</p>
+            <p className="meta">{t("finance.payables.detail.ledger")}</p>
             <p>
               {record.journal_entry_id ? (
                 <Link href={`/finance/ledger/journal/${record.journal_entry_id}`} className="text-brand-fg underline">
-                  Posted entry
+                  {t("finance.payables.detail.postedEntry")}
                 </Link>
               ) : (
-                "Not posted"
+                t("finance.payables.detail.notPosted")
               )}
               {record.void_entry_id ? (
                 <>
                   {" · "}
                   <Link href={`/finance/ledger/journal/${record.void_entry_id}`} className="text-brand-fg underline">
-                    Void entry ({record.voided_on})
+                    {t("finance.payables.detail.voidEntry", { date: record.voided_on ?? "" })}
                   </Link>
                 </>
               ) : null}
@@ -424,13 +448,13 @@ export async function DocumentDetailPage({
           <div className="mb-5 space-y-3">
             {isBill && needsApproval ? (
               <p className="rounded-(--radius-sm) border border-line bg-surface-soft p-3 text-[13.5px]">
-                This bill is at or above the approval threshold of {formatCents(threshold ?? 0)}.{" "}
-                {APPROVAL_NOTE[approval?.status ?? "none"] ?? APPROVAL_NOTE.none}
+                {t("finance.payables.detail.thresholdNotice", { amount: money(threshold ?? 0) })}{" "}
+                {t(APPROVAL_NOTE[approval?.status ?? "none"] ?? APPROVAL_NOTE.none)}
                 {approval?.approvalItemId ? (
                   <>
                     {" "}
                     <Link href={`/approvals?tab=mine&item=${approval.approvalItemId}`} className="text-brand-fg underline">
-                      See the approval
+                      {t("finance.payables.detail.seeApproval")}
                     </Link>
                   </>
                 ) : null}
@@ -465,42 +489,44 @@ export async function DocumentDetailPage({
 
         {isBill ? (
           <>
-            <h2 className="mb-2 text-[15px] font-semibold">Lines</h2>
+            <h2 className="mb-2 text-[15px] font-semibold">{t("finance.payables.detail.lines")}</h2>
             <DataTable minWidth="640px">
               <TableHead>
-                <TableHeader>Description</TableHeader>
-                <TableHeader>Account</TableHeader>
-                <TableHeader>Program</TableHeader>
-                <TableHeader className="w-36 text-right">Amount</TableHeader>
+                <TableHeader>{t("finance.payables.detail.description")}</TableHeader>
+                <TableHeader>{t("finance.payables.detail.account")}</TableHeader>
+                <TableHeader>{t("finance.payables.detail.program")}</TableHeader>
+                <TableHeader className="w-36 text-right">{t("finance.payables.detail.amount")}</TableHeader>
               </TableHead>
               <tbody>
                 {record.lines.map((l) => (
                   <TableRow key={l.line_no}>
                     <TableCell>{l.description ?? "—"}</TableCell>
-                    <TableCell>{l.account_id ? (accountLabel.get(l.account_id) ?? "—") : "Not chosen"}</TableCell>
+                    <TableCell>
+                      {l.account_id ? (accountLabel.get(l.account_id) ?? "—") : t("finance.payables.detail.notChosen")}
+                    </TableCell>
                     <TableCell>{l.program_id ? (programLabel.get(l.program_id) ?? "—") : "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCents(Number(l.amount_cents))}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(Number(l.amount_cents))}</TableCell>
                   </TableRow>
                 ))}
                 <TableRow>
-                  <TableCell>GST</TableCell>
-                  <TableCell>1200 GST receivable</TableCell>
+                  <TableCell>{t("finance.payables.detail.gst")}</TableCell>
+                  <TableCell>{t("finance.payables.detail.gstAccount")}</TableCell>
                   <TableCell>—</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(record.gst_cents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(record.gst_cents)}</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell>QST</TableCell>
-                  <TableCell>1210 QST receivable</TableCell>
+                  <TableCell>{t("finance.payables.detail.qst")}</TableCell>
+                  <TableCell>{t("finance.payables.detail.qstAccount")}</TableCell>
                   <TableCell>—</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(record.qst_cents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(record.qst_cents)}</TableCell>
                 </TableRow>
               </tbody>
             </DataTable>
             {record.receipt_id ? (
               <p className="mt-2 text-[13px] text-muted">
-                Entered from a captured bill in{" "}
+                {t("finance.payables.detail.enteredFromReceiptBefore")}{" "}
                 <Link href="/finance/receipts" className="text-brand-fg underline">
-                  Receipts
+                  {t("finance.payables.detail.receiptsLink")}
                 </Link>
                 .
               </p>
@@ -508,40 +534,57 @@ export async function DocumentDetailPage({
           </>
         ) : (
           <p className="mb-2 text-[13.5px] text-muted">
-            Below is the invoice as the customer sees it, in {record.language === "fr" ? "French" : "English"}. Revenue
-            accounts: {record.lines.map((l) => (l.account_id ? accountLabel.get(l.account_id) : "not chosen")).join(", ")}.
+            {t(
+              record.language === "fr"
+                ? "finance.payables.detail.invoicePreviewFr"
+                : "finance.payables.detail.invoicePreviewEn",
+              {
+                accounts: record.lines
+                  .map((l) =>
+                    l.account_id ? accountLabel.get(l.account_id) : t("finance.payables.detail.accountNotChosen"),
+                  )
+                  .join(", "),
+              },
+            )}
           </p>
         )}
 
         {record.payments.length > 0 ? (
           <>
-            <h2 className="mt-6 mb-2 text-[15px] font-semibold">Payments</h2>
+            <h2 className="mt-6 mb-2 text-[15px] font-semibold">{t("finance.payables.detail.payments")}</h2>
             <DataTable minWidth="640px">
               <TableHead>
-                <TableHeader className="w-28">Date</TableHeader>
-                <TableHeader>Method</TableHeader>
-                <TableHeader>Reference</TableHeader>
-                <TableHeader className="w-32 text-right">Amount</TableHeader>
-                <TableHeader className="w-40">Status</TableHeader>
+                <TableHeader className="w-28">{t("finance.payables.detail.date")}</TableHeader>
+                <TableHeader>{t("finance.payables.detail.method")}</TableHeader>
+                <TableHeader>{t("finance.payables.detail.reference")}</TableHeader>
+                <TableHeader className="w-32 text-right">{t("finance.payables.detail.amount")}</TableHeader>
+                <TableHeader className="w-40">{t("finance.payables.detail.status")}</TableHeader>
               </TableHead>
               <tbody>
-                {record.payments.map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="tabular-nums">{p.paid_on}</TableCell>
-                    <TableCell>{PAYMENT_METHOD_LABEL[p.method as PaymentMethod] ?? p.method}</TableCell>
-                    <TableCell>{p.reference ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCents(Number(p.amount_cents))}</TableCell>
-                    <TableCell>
-                      {p.reversed_on ? (
-                        <Badge tone="neutral">Reversed {p.reversed_on}</Badge>
-                      ) : canPost && record.status !== "void" ? (
-                        <ReversePaymentButton paymentId={p.id} minDate={p.paid_on} defaultDate={today < p.paid_on ? p.paid_on : today} />
-                      ) : (
-                        <Badge tone="success">Posted</Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {record.payments.map((p) => {
+                  const methodKey = PAYMENT_METHOD_LABEL[p.method as PaymentMethod] as MessageKey | undefined;
+                  return (
+                    <TableRow key={p.id}>
+                      <TableCell className="tabular-nums">{p.paid_on}</TableCell>
+                      <TableCell>{methodKey ? t(methodKey) : p.method}</TableCell>
+                      <TableCell>{p.reference ?? "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{money(Number(p.amount_cents))}</TableCell>
+                      <TableCell>
+                        {p.reversed_on ? (
+                          <Badge tone="neutral">{t("finance.payables.detail.reversedOn", { date: p.reversed_on })}</Badge>
+                        ) : canPost && record.status !== "void" ? (
+                          <ReversePaymentButton
+                            paymentId={p.id}
+                            minDate={p.paid_on}
+                            defaultDate={today < p.paid_on ? p.paid_on : today}
+                          />
+                        ) : (
+                          <Badge tone="success">{t("finance.payables.detail.posted")}</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </tbody>
             </DataTable>
           </>
@@ -551,7 +594,11 @@ export async function DocumentDetailPage({
       {!isBill ? (
         <div className="mt-6">
           <div className="no-print mb-2 flex justify-end">
-            <PrintButton label={`Print ${INVOICE_WORDS[record.language].invoice.toLowerCase()}`} />
+            <PrintButton
+              label={t("finance.payables.detail.printDocument", {
+                document: invoiceTranslator(record.language)("finance.payables.invoiceSheet.invoice").toLowerCase(),
+              })}
+            />
           </div>
           <InvoiceSheet record={record} organizationName={organizationName} />
         </div>

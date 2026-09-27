@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { getT } from "@/lib/i18n/server";
 import { NewDocumentPage } from "@/features/payables/components/document-pages";
 
-export const metadata: Metadata = { title: "New invoice" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.payables.meta.newInvoice") };
+}
 export const dynamic = "force-dynamic";
 
 export default function NewInvoicePage() {
