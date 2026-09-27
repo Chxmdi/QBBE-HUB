@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import { getT } from "@/lib/i18n/server";
 import { DocumentListPage } from "@/features/payables/components/document-pages";
 
-export const metadata: Metadata = { title: "Bills" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.payables.meta.bills") };
+}
 export const dynamic = "force-dynamic";
 
 export default function BillsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {

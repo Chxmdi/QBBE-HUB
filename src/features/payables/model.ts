@@ -3,17 +3,18 @@
  * are integer cents end to end, as in the ledger.
  */
 import { centsToDecimal, csvDocument } from "@/features/ledger/money";
+import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
 
 export const DOCUMENT_KINDS = ["bill", "invoice"] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
 
 export type DocumentStatus = "draft" | "posted" | "paid" | "void";
 
-export const STATUS_LABEL: Record<DocumentStatus, string> = {
-  draft: "Draft",
-  posted: "Open",
-  paid: "Paid",
-  void: "Void",
+export const STATUS_LABEL: Record<DocumentStatus, MessageKey> = {
+  draft: "finance.payables.status.draft",
+  posted: "finance.payables.status.posted",
+  paid: "finance.payables.status.paid",
+  void: "finance.payables.status.void",
 };
 
 export const STATUS_TONE: Record<DocumentStatus, "warning" | "info" | "success" | "neutral"> = {
@@ -26,23 +27,23 @@ export const STATUS_TONE: Record<DocumentStatus, "warning" | "info" | "success" 
 export const PAYMENT_METHODS = ["eft", "cheque", "card", "cash", "other"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
-export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
-  eft: "Bank transfer (EFT)",
-  cheque: "Cheque",
-  card: "Card",
-  cash: "Cash",
-  other: "Other",
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, MessageKey> = {
+  eft: "finance.payables.paymentMethods.eft",
+  cheque: "finance.payables.paymentMethods.cheque",
+  card: "finance.payables.paymentMethods.card",
+  cash: "finance.payables.paymentMethods.cash",
+  other: "finance.payables.paymentMethods.other",
 };
 
 export const AGING_BUCKETS = ["current", "1-30", "31-60", "61-90", "90+"] as const;
 export type AgingBucket = (typeof AGING_BUCKETS)[number];
 
-export const AGING_BUCKET_LABEL: Record<AgingBucket, string> = {
-  current: "Not yet due",
-  "1-30": "1–30 days",
-  "31-60": "31–60 days",
-  "61-90": "61–90 days",
-  "90+": "Over 90 days",
+export const AGING_BUCKET_LABEL: Record<AgingBucket, MessageKey> = {
+  current: "finance.payables.agingBuckets.current",
+  "1-30": "finance.payables.agingBuckets.days1to30",
+  "31-60": "finance.payables.agingBuckets.days31to60",
+  "61-90": "finance.payables.agingBuckets.days61to90",
+  "90+": "finance.payables.agingBuckets.over90",
 };
 
 export interface AgingRow {
@@ -88,21 +89,27 @@ export function summarizeAging(rows: AgingRow[]): {
   return { totals, contacts };
 }
 
-export function agingCsv(kind: DocumentKind, asOf: string, rows: AgingRow[]): string {
+/** The aging as CSV. Headings follow `t` (the requester's language); amounts stay machine-readable. */
+export function agingCsv(
+  kind: DocumentKind,
+  asOf: string,
+  rows: AgingRow[],
+  t: TranslateFn = createTranslator("en"),
+): string {
   const { totals } = summarizeAging(rows);
-  const title = kind === "bill" ? "Accounts payable aging" : "Accounts receivable aging";
+  const title = t(kind === "bill" ? "finance.payables.csv.payablesTitle" : "finance.payables.csv.receivablesTitle");
   return csvDocument([
-    [title, `As at ${asOf}`],
+    [title, t("finance.payables.csv.asAt", { date: asOf })],
     [],
     [
-      kind === "bill" ? "Vendor" : "Customer",
-      kind === "bill" ? "Vendor invoice" : "Invoice",
-      "Date",
-      "Due",
-      "Days past due",
-      "Bucket",
-      "Total",
-      "Open",
+      t(kind === "bill" ? "finance.payables.csv.vendor" : "finance.payables.csv.customer"),
+      t(kind === "bill" ? "finance.payables.csv.vendorInvoice" : "finance.payables.csv.invoice"),
+      t("finance.payables.csv.date"),
+      t("finance.payables.csv.due"),
+      t("finance.payables.csv.daysPastDue"),
+      t("finance.payables.csv.bucket"),
+      t("finance.payables.csv.total"),
+      t("finance.payables.csv.open"),
     ],
     ...rows.map((r) => [
       r.contact_name,
@@ -110,13 +117,13 @@ export function agingCsv(kind: DocumentKind, asOf: string, rows: AgingRow[]): st
       r.document_date,
       r.due_date,
       r.days_past_due,
-      AGING_BUCKET_LABEL[r.bucket],
+      t(AGING_BUCKET_LABEL[r.bucket]),
       centsToDecimal(Number(r.total_cents)),
       centsToDecimal(Number(r.open_cents)),
     ]),
     [],
-    ...AGING_BUCKETS.map((b) => ["", "", "", "", "", AGING_BUCKET_LABEL[b], "", centsToDecimal(totals[b])]),
-    ["", "", "", "", "", "Total", "", centsToDecimal(totals.total)],
+    ...AGING_BUCKETS.map((b) => ["", "", "", "", "", t(AGING_BUCKET_LABEL[b]), "", centsToDecimal(totals[b])]),
+    ["", "", "", "", "", t("finance.payables.csv.total"), "", centsToDecimal(totals.total)],
   ]);
 }
 
@@ -127,48 +134,19 @@ export function addDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** "INV-0042" for invoice number 42. */
-export function invoiceLabel(number: number | null): string {
-  return number === null ? "Draft" : `INV-${String(number).padStart(4, "0")}`;
+/** "INV-0042" for invoice number 42; `draft` (translated by the caller) before it has one. */
+export function invoiceLabel(number: number | null, draft: string = "Draft"): string {
+  return number === null ? draft : `INV-${String(number).padStart(4, "0")}`;
 }
 
-/** Wording of a printed invoice, in the customer's language. */
-export const INVOICE_WORDS = {
-  fr: {
-    invoice: "Facture",
-    number: "Numéro",
-    date: "Date",
-    due: "Échéance",
-    billTo: "Facturé à",
-    description: "Description",
-    amount: "Montant",
-    subtotal: "Sous-total",
-    gst: "TPS",
-    qst: "TVQ",
-    total: "Total",
-    paid: "Payé",
-    balance: "Solde dû",
-    draft: "Brouillon — non émise",
-    void: "Annulée",
-  },
-  en: {
-    invoice: "Invoice",
-    number: "Number",
-    date: "Date",
-    due: "Due",
-    billTo: "Bill to",
-    description: "Description",
-    amount: "Amount",
-    subtotal: "Subtotal",
-    gst: "GST",
-    qst: "QST",
-    total: "Total",
-    paid: "Paid",
-    balance: "Balance due",
-    draft: "Draft — not issued",
-    void: "Void",
-  },
-} as const;
+
+/**
+ * `t()` for the wording of a printed invoice (`finance.payables.invoiceSheet`),
+ * in the customer's language whatever language the reader uses.
+ */
+export function invoiceTranslator(language: "fr" | "en"): TranslateFn {
+  return createTranslator(language === "fr" ? "fr-CA" : "en");
+}
 
 export function formatCentsIn(language: "fr" | "en", cents: number): string {
   return new Intl.NumberFormat(language === "fr" ? "fr-CA" : "en-CA", {

@@ -18,6 +18,7 @@ import {
   reversePayment,
   voidDocument,
 } from "@/features/payables/services/payables.commands";
+import { useLocale, useT } from "@/lib/i18n/client";
 
 function ErrorLine({ error }: { error: string | null }) {
   return error ? (
@@ -46,9 +47,10 @@ export function DraftActions({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [pending, setPending] = useState<null | "post" | "delete" | "approval">(null);
   const [error, setError] = useState<string | null>(null);
-  const noun = kind === "bill" ? "bill" : "invoice";
+  const isBill = kind === "bill";
 
   return (
     <div className="flex flex-col items-end gap-2">
@@ -59,28 +61,31 @@ export function DraftActions({
               href={`${base(kind)}/${id}?edit=1`}
               className="inline-flex h-9.5 items-center rounded-(--radius-sm) border border-line bg-surface px-4 text-sm font-medium hover:bg-surface-soft"
             >
-              Edit draft
+              {t("finance.payables.actions.editDraft")}
             </Link>
             <Button
               variant="danger"
               loading={pending === "delete"}
               disabled={pending !== null}
               onClick={async () => {
-                if (!window.confirm(`Delete this draft ${noun}? Nothing has been posted, so nothing else changes.`)) return;
+                const question = isBill
+                  ? t("finance.payables.actions.confirmDeleteBill")
+                  : t("finance.payables.actions.confirmDeleteInvoice");
+                if (!window.confirm(question)) return;
                 setPending("delete");
                 setError(null);
                 const result = await deleteDraft({ kind, id });
                 setPending(null);
                 if (!result.ok) {
-                  setError(result.error ?? "Could not delete the draft.");
+                  setError(result.error ?? t("finance.payables.actions.couldNotDelete"));
                   return;
                 }
-                toast("Draft deleted.", { tone: "success" });
+                toast(t("finance.payables.actions.draftDeleted"), { tone: "success" });
                 router.push(listPath(kind));
                 router.refresh();
               }}
             >
-              Delete draft
+              {t("finance.payables.actions.deleteDraft")}
             </Button>
           </>
         ) : null}
@@ -95,14 +100,14 @@ export function DraftActions({
               const result = await requestBillApproval(id);
               setPending(null);
               if (!result.ok) {
-                setError(result.error ?? "Could not send the bill for approval.");
+                setError(result.error ?? t("finance.payables.actions.couldNotSendForApproval"));
                 return;
               }
-              toast("Sent for approval.", { tone: "success" });
+              toast(t("finance.payables.actions.sentForApproval"), { tone: "success" });
               router.refresh();
             }}
           >
-            Send for approval
+            {t("finance.payables.actions.sendForApproval")}
           </Button>
         ) : null}
         {canPost ? (
@@ -110,20 +115,26 @@ export function DraftActions({
             loading={pending === "post"}
             disabled={pending !== null}
             onClick={async () => {
-              if (!window.confirm(`Post this ${noun} to the ledger? Once posted it can only be voided, not changed.`)) return;
+              const question = isBill
+                ? t("finance.payables.actions.confirmPostBill")
+                : t("finance.payables.actions.confirmPostInvoice");
+              if (!window.confirm(question)) return;
               setPending("post");
               setError(null);
               const result = await postDocument({ kind, id });
               setPending(null);
               if (!result.ok) {
-                setError(result.error ?? "Could not post.");
+                setError(result.error ?? t("finance.payables.actions.couldNotPost"));
                 return;
               }
-              toast(kind === "bill" ? "Bill posted." : "Invoice posted.", { tone: "success" });
+              toast(
+                isBill ? t("finance.payables.actions.billPosted") : t("finance.payables.actions.invoicePosted"),
+                { tone: "success" },
+              );
               router.refresh();
             }}
           >
-            Post {noun}
+            {isBill ? t("finance.payables.actions.postBill") : t("finance.payables.actions.postInvoice")}
           </Button>
         ) : null}
       </div>
@@ -150,10 +161,13 @@ export function PaymentDialog({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const title = kind === "bill" ? "Record a payment" : "Record a payment received";
+  const title =
+    kind === "bill" ? t("finance.payables.actions.recordPayment") : t("finance.payables.actions.recordPaymentReceived");
 
   return (
     <>
@@ -177,25 +191,26 @@ export function PaymentDialog({
             });
             setSaving(false);
             if (!result.ok) {
-              setError(result.error ?? "Could not record the payment.");
+              setError(result.error ?? t("finance.payables.actions.couldNotRecordPayment"));
               return;
             }
-            toast("Payment recorded and posted.", { tone: "success" });
+            toast(t("finance.payables.actions.paymentRecorded"), { tone: "success" });
             setOpen(false);
             router.refresh();
           }}
         >
           <p className="text-[13.5px] text-muted">
-            Still owing: <strong className="tabular-nums text-ink">{formatCents(owingCents)}</strong>. The payment
-            posts to the ledger at once. It cannot be more than what is owing.
+            {t("finance.payables.actions.stillOwingLabel")}{" "}
+            <strong className="tabular-nums text-ink">{formatCents(owingCents, locale)}</strong>.{" "}
+            {t("finance.payables.actions.paymentNote")}
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="payment-date">Date</Label>
+              <Label htmlFor="payment-date">{t("finance.payables.actions.date")}</Label>
               <Input id="payment-date" name="paidOn" type="date" defaultValue={defaultDate} min={minDate} required />
             </div>
             <div>
-              <Label htmlFor="payment-amount">Amount</Label>
+              <Label htmlFor="payment-amount">{t("finance.payables.actions.amount")}</Label>
               <Input
                 id="payment-amount"
                 name="amount"
@@ -206,7 +221,9 @@ export function PaymentDialog({
               />
             </div>
             <div>
-              <Label htmlFor="payment-bank">{kind === "bill" ? "Paid from" : "Deposited to"}</Label>
+              <Label htmlFor="payment-bank">
+                {kind === "bill" ? t("finance.payables.actions.paidFrom") : t("finance.payables.actions.depositedTo")}
+              </Label>
               <Select id="payment-bank" name="bankAccountId" defaultValue={bankAccounts[0]?.id} required>
                 {bankAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -216,27 +233,32 @@ export function PaymentDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="payment-method">Method</Label>
+              <Label htmlFor="payment-method">{t("finance.payables.actions.method")}</Label>
               <Select id="payment-method" name="method" defaultValue="eft">
                 {PAYMENT_METHODS.map((m) => (
                   <option key={m} value={m}>
-                    {PAYMENT_METHOD_LABEL[m]}
+                    {t(PAYMENT_METHOD_LABEL[m])}
                   </option>
                 ))}
               </Select>
             </div>
           </div>
           <div>
-            <Label htmlFor="payment-reference">Reference (optional)</Label>
-            <Input id="payment-reference" name="reference" maxLength={100} placeholder="Cheque number or transfer ID" />
+            <Label htmlFor="payment-reference">{t("finance.payables.actions.referenceOptional")}</Label>
+            <Input
+              id="payment-reference"
+              name="reference"
+              maxLength={100}
+              placeholder={t("finance.payables.actions.referencePlaceholder")}
+            />
           </div>
           <ErrorLine error={error} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.payables.actions.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              Record payment
+              {t("finance.payables.actions.submitPayment")}
             </Button>
           </div>
         </form>
@@ -259,17 +281,23 @@ export function VoidDialog({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const noun = kind === "bill" ? "bill" : "invoice";
+  const isBill = kind === "bill";
+  const voidLabel = isBill ? t("finance.payables.actions.voidBill") : t("finance.payables.actions.voidInvoice");
 
   return (
     <>
       <Button variant="danger" onClick={() => setOpen(true)}>
-        Void {noun}
+        {voidLabel}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title={`Void this ${noun}`}>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title={isBill ? t("finance.payables.actions.voidBillTitle") : t("finance.payables.actions.voidInvoiceTitle")}
+      >
         <form
           className="space-y-4"
           onSubmit={async (e) => {
@@ -285,34 +313,35 @@ export function VoidDialog({
             });
             setSaving(false);
             if (!result.ok) {
-              setError(result.error ?? "Could not void it.");
+              setError(result.error ?? t("finance.payables.actions.couldNotVoid"));
               return;
             }
-            toast(`The ${noun} is void.`, { tone: "success" });
+            toast(isBill ? t("finance.payables.actions.billVoided") : t("finance.payables.actions.invoiceVoided"), {
+              tone: "success",
+            });
             setOpen(false);
             router.refresh();
           }}
         >
           <p className="text-[13.5px] text-muted">
-            This posts a reversing entry that cancels the {noun} in the ledger. The {noun} stays on file, marked void.
-            It cannot be undone.
+            {isBill ? t("finance.payables.actions.voidBillNote") : t("finance.payables.actions.voidInvoiceNote")}
           </p>
           <div>
-            <Label htmlFor="void-date">Date of the void</Label>
+            <Label htmlFor="void-date">{t("finance.payables.actions.voidDate")}</Label>
             <Input id="void-date" name="date" type="date" defaultValue={defaultDate} min={minDate} required />
-            <FieldHint>Must be in an open period.</FieldHint>
+            <FieldHint>{t("finance.payables.actions.openPeriodHint")}</FieldHint>
           </div>
           <div>
-            <Label htmlFor="void-reason">Reason</Label>
+            <Label htmlFor="void-reason">{t("finance.payables.actions.reason")}</Label>
             <Input id="void-reason" name="reason" maxLength={400} required />
           </div>
           <ErrorLine error={error} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.payables.actions.cancel")}
             </Button>
             <Button type="submit" variant="danger" loading={saving}>
-              Void {noun}
+              {voidLabel}
             </Button>
           </div>
         </form>
@@ -333,6 +362,7 @@ export function ReversePaymentButton({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -340,9 +370,9 @@ export function ReversePaymentButton({
   return (
     <>
       <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
-        Reverse
+        {t("finance.payables.actions.reverse")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Reverse this payment">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("finance.payables.actions.reverseTitle")}>
         <form
           className="space-y-4"
           onSubmit={async (e) => {
@@ -357,33 +387,30 @@ export function ReversePaymentButton({
             });
             setSaving(false);
             if (!result.ok) {
-              setError(result.error ?? "Could not reverse the payment.");
+              setError(result.error ?? t("finance.payables.actions.couldNotReverse"));
               return;
             }
-            toast("Payment reversed.", { tone: "success" });
+            toast(t("finance.payables.actions.paymentReversed"), { tone: "success" });
             setOpen(false);
             router.refresh();
           }}
         >
-          <p className="text-[13.5px] text-muted">
-            This posts a reversing entry and puts the amount back as owing. Use it for a payment recorded by mistake
-            or a returned cheque.
-          </p>
+          <p className="text-[13.5px] text-muted">{t("finance.payables.actions.reverseNote")}</p>
           <div>
-            <Label htmlFor="reverse-payment-date">Date of the reversal</Label>
+            <Label htmlFor="reverse-payment-date">{t("finance.payables.actions.reversalDate")}</Label>
             <Input id="reverse-payment-date" name="date" type="date" defaultValue={defaultDate} min={minDate} required />
           </div>
           <div>
-            <Label htmlFor="reverse-payment-reason">Reason (optional)</Label>
+            <Label htmlFor="reverse-payment-reason">{t("finance.payables.actions.reasonOptional")}</Label>
             <Input id="reverse-payment-reason" name="reason" maxLength={400} />
           </div>
           <ErrorLine error={error} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.payables.actions.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              Reverse payment
+              {t("finance.payables.actions.reversePayment")}
             </Button>
           </div>
         </form>
