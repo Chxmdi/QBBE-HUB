@@ -74,7 +74,8 @@ Supporting fixes merged the same day:
 - [x] Make the signed-in browser spec list in `.github/workflows/ci.yml`
   automatic (read it from `tests/e2e/routes/*.json` or a glob). Every new
   feature still edits that one shared line, so parallel branches conflict.
-- [ ] #143 approvals: delegation while an approver is away. Not built.
+- [x] #143 approvals: delegation while an approver is away (Approvals, Away
+  cover tab; migration `20260930160000_approval_delegation.sql`).
 - [x] #149 fund accounting: a statement of changes in fund balances
   (Statements page and CSV), and releasing restricted money to unrestricted
   when its conditions are met (Funds, then Release restricted money).

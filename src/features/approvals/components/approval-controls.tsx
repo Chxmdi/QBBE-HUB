@@ -9,6 +9,7 @@ import {
   commentOnApproval,
   decideApproval,
   deleteApprovalRule,
+  endApprovalDelegation,
   setApprovalRuleActive,
   withdrawApproval,
 } from "@/features/approvals/services/approval.commands";
@@ -159,5 +160,30 @@ export function RuleControls({ ruleId, active }: { ruleId: string; active: boole
         Delete
       </Button>
     </div>
+  );
+}
+
+/** Ends a delegation now, or cancels one that has not started. */
+export function EndDelegationButton({ delegationId, label }: { delegationId: string; label: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [busy, setBusy] = React.useState(false);
+
+  async function end() {
+    setBusy(true);
+    const result = await endApprovalDelegation(delegationId);
+    setBusy(false);
+    if (!result.ok) {
+      toast.toast(result.error ?? "That didn't work. Try again.", { tone: "error" });
+      return;
+    }
+    toast.toast("Delegation ended.", { tone: "success" });
+    router.refresh();
+  }
+
+  return (
+    <Button size="sm" variant="secondary" disabled={busy} onClick={() => void end()}>
+      {label}
+    </Button>
   );
 }

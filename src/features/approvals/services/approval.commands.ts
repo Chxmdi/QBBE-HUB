@@ -7,6 +7,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
+  approvalDelegationSchema,
   approvalRuleSchema,
   commentApprovalSchema,
   decideApprovalSchema,
@@ -109,6 +110,57 @@ export async function withdrawApproval(input: unknown): Promise<ActionResult> {
   if (error) return { ok: false, error: explain(error, "Could not withdraw it. Try again.") };
   refresh();
   return { ok: true, id: parsed.data.itemId };
+}
+
+// ---------------------------------------------------------------------------
+// Away cover (delegation)
+// ---------------------------------------------------------------------------
+
+/**
+ * Name a delegate for a date range. The database checks who may set it (the
+ * approver, or an owner/admin with MFA for anyone), refuses chains and
+ * overlaps, and writes the audit event.
+ */
+export async function setApprovalDelegation(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: "Only staff can set a delegate." };
+  const limited = await enforceRateLimit("approval:delegate", session.userId);
+  if (limited) return limited;
+  const parsed = approvalDelegationSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the dates.") };
+  const data = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { data: id, error } = await supabase.rpc("set_approval_delegation", {
+    p_organization: session.organizationId,
+    p_approver: data.approverId ?? session.userId,
+    p_delegate: data.delegateId,
+    p_starts_on: data.startsOn,
+    p_ends_on: data.endsOn,
+    p_note: data.note || null,
+  });
+  if (error || !id) {
+    return {
+      ok: false,
+      error:
+        error?.code === "23514"
+          ? (error.message ?? "Check the people and dates.")
+          : explain(error ?? {}, "Could not set the delegate. Try again."),
+    };
+  }
+  refresh();
+  return { ok: true, id: id as string };
+}
+
+export async function endApprovalDelegation(delegationId: string): Promise<ActionResult> {
+  await requireSession();
+  if (!z.string().uuid().safeParse(delegationId).success) {
+    return { ok: false, error: "Delegation not found." };
+  }
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("end_approval_delegation", { p_delegation: delegationId });
+  if (error) return { ok: false, error: explain(error, "Could not end the delegation. Try again.") };
+  refresh();
+  return { ok: true, id: delegationId };
 }
 
 // ---------------------------------------------------------------------------
