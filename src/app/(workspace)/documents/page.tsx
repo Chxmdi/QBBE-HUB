@@ -171,7 +171,7 @@ export default async function DocumentsPage({
         title="Documents"
         description="The organization's library: files and links filed by folder, with version history and required reading. Files are stored privately and opened through short-lived links."
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               href={showingArchived ? "/documents" : "/documents?archived=1"}
               className="text-[13px] font-medium text-brand-fg hover:underline"
