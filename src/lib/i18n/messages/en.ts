@@ -81,6 +81,7 @@ export const en = {
       salesTax: "GST and QST",
       gifts: "Gifts and grants",
       budgets: "Budgets",
+      payroll: "Payroll",
       people: "People",
       admin: "Admin",
     },

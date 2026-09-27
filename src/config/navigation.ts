@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Banknote,
   Bookmark,
   Building2,
   CalendarDays,
@@ -96,6 +97,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Receipts", href: "/finance/receipts", icon: Receipt, access: "staff" },
       { label: "Gifts and grants", href: "/finance/gifts", icon: Gift, access: "staff" },
       { label: "Bills & invoices", href: "/finance/payables", icon: Wallet, access: "staff" },
+      { label: "Payroll", href: "/finance/payroll", icon: Banknote, access: "staff" },
       { label: "People", href: "/people", icon: Users, access: "member" },
       { label: "Admin", href: "/admin", icon: Settings, access: "admin" },
     ],

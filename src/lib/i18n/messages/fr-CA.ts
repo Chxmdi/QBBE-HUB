@@ -85,6 +85,7 @@ export const frCA: Messages = {
       salesTax: "TPS et TVQ",
       gifts: "Dons et subventions",
       budgets: "Budgets",
+      payroll: "Paie",
       people: "Personnes",
       admin: "Administration",
     },
