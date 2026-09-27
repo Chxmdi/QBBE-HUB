@@ -127,6 +127,7 @@ STAFF_ONLY.push("/finance/budgets", "/finance/budgets/programs");
 STAFF_ONLY.push("/finance/sales-tax");
 STAFF_ONLY.push("/finance/payables");
 STAFF_ONLY.push("/finance/bank");
+STAFF_ONLY.push("/finance/payroll");
 const ADMIN_ONLY = ["/admin", "/admin/access", "/admin/records", "/people/overview", "/forms/new", "/admin/approvals"];
 
 function idsByName(table: "project" | "program"): Record<string, string> {

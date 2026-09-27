@@ -70,6 +70,7 @@ const FILES = [
   "supabase/tests/sales-tax.sql",
   "supabase/tests/payables.sql",
   "supabase/tests/bank-reconciliation.sql",
+  "supabase/tests/payroll.sql",
   // Last: it opens its own sessions, which only see committed rows, so it
   // must not run inside a transaction an earlier file left open.
   "supabase/tests/concurrency.sql",

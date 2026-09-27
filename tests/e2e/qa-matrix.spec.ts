@@ -35,6 +35,7 @@ const ROUTES = [
   { path: "/finance/budgets/programs", name: "budgets-programs" },
   { path: "/finance/sales-tax/worksheet", name: "sales-tax-worksheet" },
   { path: "/finance/bank", name: "bank" },
+  { path: "/finance/payroll", name: "payroll" },
   { path: "/reports", name: "reports" },
   { path: "/documents", name: "documents" },
   { path: "/finance/receipts", name: "receipts" },
