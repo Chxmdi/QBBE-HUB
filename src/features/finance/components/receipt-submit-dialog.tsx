@@ -17,7 +17,10 @@ import {
   useReceiptReader,
   type ReaderState,
 } from "@/features/finance/receipt-ocr/use-receipt-reader";
-import { registerReceipt } from "@/features/finance/services/receipt.commands";
+import { registerReceipt, saveReceiptText } from "@/features/finance/services/receipt.commands";
+import { useFileTextReader } from "@/features/documents/text-extract/use-file-text-reader";
+import { normalizeExtractedText } from "@/features/documents/text-extract/text";
+import { TextReadingStatus } from "@/features/documents/text-extract/text-reading-status";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/translate";
@@ -117,6 +120,10 @@ export function ReceiptSubmitDialog({
     );
   });
 
+  // A PDF receipt is not read for figures, but its words are read for
+  // library search (#147), from its text layer or, for a scan, with OCR.
+  const pdfReader = useFileTextReader();
+
   function setField(field: Field, value: string) {
     setValues((v) => ({ ...v, [field]: value }));
     if (field === "documentDate") setDateTouched(true);
@@ -144,11 +151,14 @@ export function ReceiptSubmitDialog({
     setOutcome(null);
     if (file && file.type.startsWith("image/") && file.size <= MAX_BYTES) reader.read(file);
     else reader.reset();
+    if (file && file.type === "application/pdf" && file.size <= MAX_BYTES) pdfReader.read(file);
+    else pdfReader.reset();
   }
 
   function close() {
     // Closing stops any reading in progress; what was typed stays.
     reader.reset();
+    pdfReader.reset();
     setOutcome(null);
     setOpen(false);
   }
@@ -216,11 +226,25 @@ export function ReceiptSubmitDialog({
       setError(result.error ?? t("finance.receipts.submit.saveFailed"));
       return;
     }
+    // The words on the receipt, for search. Never fails the submission: Skip
+    // settles reading at once, and a failed save only means no words.
+    if (result.id) {
+      setSaving(true);
+      setProgress(t("finance.receipts.submit.progressWords"));
+      const [photoText, pdfText] = await Promise.all([reader.result(), pdfReader.result()]);
+      const found = photoText
+        ? { text: normalizeExtractedText(photoText), source: "ocr" as const }
+        : pdfText;
+      if (found?.text) await saveReceiptText({ id: result.id, ...found });
+      setSaving(false);
+      setProgress(null);
+    }
     toast(t("finance.receipts.submit.submitted"));
     setOpen(false);
     setProgramId("");
     // The next receipt starts from a clean form.
     reader.reset();
+    pdfReader.reset();
     formRef.current?.reset();
     setValues(blank);
     setDateTouched(false);
@@ -249,6 +273,7 @@ export function ReceiptSubmitDialog({
             />
             <FieldHint>{t("finance.receipts.submit.fileHint")}</FieldHint>
             <ReadingStatus state={reader.state} outcome={outcome} onSkip={reader.skip} />
+            <TextReadingStatus state={pdfReader.state} onSkip={pdfReader.skip} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>

@@ -81,7 +81,7 @@ export const receiptsEn = {
     dialogTitle: "Submit a receipt or bill",
     fileLabel: "Photo or PDF",
     fileHint:
-      "On a phone this opens the camera. Up to 25 MB. Keep the paper until the file shows as checked. A photo is read on this device to suggest the figures; a PDF is not.",
+      "On a phone this opens the camera. Up to 25 MB. Keep the paper until the file shows as checked. A photo is read on this device to suggest the figures; a PDF is not. The words on either are kept so library search can find the receipt.",
     typeLabel: "Type",
     typeReceipt: "Receipt (already paid)",
     typeBill: "Bill or invoice (to pay)",
@@ -107,6 +107,7 @@ export const receiptsEn = {
     readFailed: "This photo could not be read automatically. Type the figures in.",
     readTimedOut: "Reading took too long on this device and was stopped. Type the figures in.",
     readSkipped: "Automatic reading skipped. Type the figures in.",
+    progressWords: "Reading the receipt's words for search…",
     progressReading: "Reading the receipt",
     progressPreparing: "Preparing to read the receipt",
     skip: "Skip reading",

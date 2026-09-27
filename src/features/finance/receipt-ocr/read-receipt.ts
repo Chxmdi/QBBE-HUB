@@ -31,7 +31,7 @@ export class OcrCancelled extends Error {
  * can show, HEIC on Safari included, and applies the camera's rotation); a
  * scaled-down PNG is what the OCR engine gets.
  */
-async function prepareImage(file: File): Promise<Blob> {
+export async function prepareImage(file: File): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   try {
     const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
@@ -59,11 +59,25 @@ export async function readReceiptText(
   file: File,
   { signal, onProgress }: { signal: AbortSignal; onProgress: (p: OcrProgress) => void },
 ): Promise<string> {
+  if (signal.aborted) throw new OcrCancelled();
+  onProgress({ stage: "loading", percent: 0 });
+  const image = await prepareImage(file);
+  return recognizeImages([image], { signal, onProgress });
+}
+
+/**
+ * Reads the text off one or more images (already decoded to PNG or similar)
+ * with one worker, in order, joined by blank lines. Document search (#147)
+ * uses this for photos and for the pages of a scanned PDF. Cancels exactly as
+ * readReceiptText does.
+ */
+export async function recognizeImages(
+  images: Blob[],
+  { signal, onProgress }: { signal: AbortSignal; onProgress: (p: OcrProgress) => void },
+): Promise<string> {
   const cancelled = () => {
     if (signal.aborted) throw new OcrCancelled();
   };
-  onProgress({ stage: "loading", percent: 0 });
-  const image = await prepareImage(file);
   cancelled();
 
   const { createWorker, OEM } = await import("tesseract.js");
@@ -79,6 +93,7 @@ export async function readReceiptText(
     else signal.addEventListener("abort", stop, { once: true });
   });
 
+  let page = 0;
   const work = (async () => {
     const worker = await createWorker(["eng", "fra"], OEM.LSTM_ONLY, {
       workerPath: `${ASSETS}/worker.min.js`,
@@ -92,7 +107,9 @@ export async function readReceiptText(
       cachePath: `qbbe-ocr-${OCR_VERSION}`,
       logger: (m) => {
         if (m.status === "recognizing text") {
-          onProgress({ stage: "reading", percent: Math.round(m.progress * 100) });
+          // Several pages share one bar: each page is an equal slice of it.
+          const overall = (page + m.progress) / images.length;
+          onProgress({ stage: "reading", percent: Math.round(overall * 100) });
         } else {
           onProgress({ stage: "loading", percent: Math.round(m.progress * 100) });
         }
@@ -104,8 +121,13 @@ export async function readReceiptText(
       throw new OcrCancelled();
     }
     try {
-      const { data } = await worker.recognize(image);
-      return data.text;
+      const texts: string[] = [];
+      for (const image of images) {
+        const { data } = await worker.recognize(image);
+        texts.push(data.text);
+        page += 1;
+      }
+      return texts.join("\n\n");
     } finally {
       terminate = null;
       void worker.terminate();

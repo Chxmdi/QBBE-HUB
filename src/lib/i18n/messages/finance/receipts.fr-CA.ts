@@ -84,7 +84,7 @@ export const receiptsFrCA: typeof receiptsEn = {
     dialogTitle: "Soumettre un reçu ou une facture",
     fileLabel: "Photo ou PDF",
     fileHint:
-      "Sur un téléphone, la caméra s’ouvre. Jusqu’à 25 Mo. Gardez le papier jusqu’à ce que le fichier soit indiqué comme vérifié. Une photo est lue sur cet appareil pour suggérer les montants; un PDF ne l’est pas.",
+      "Sur un téléphone, la caméra s’ouvre. Jusqu’à 25 Mo. Gardez le papier jusqu’à ce que le fichier soit indiqué comme vérifié. Une photo est lue sur cet appareil pour suggérer les montants; un PDF ne l’est pas. Les mots de l’un ou de l’autre sont conservés pour que la recherche dans la bibliothèque puisse trouver le reçu.",
     typeLabel: "Type",
     typeReceipt: "Reçu (déjà payé)",
     typeBill: "Facture (à payer)",
@@ -111,6 +111,7 @@ export const receiptsFrCA: typeof receiptsEn = {
     readTimedOut:
       "La lecture a pris trop de temps sur cet appareil et a été arrêtée. Saisissez les montants.",
     readSkipped: "Lecture automatique ignorée. Saisissez les montants.",
+    progressWords: "Lecture des mots du reçu pour la recherche…",
     progressReading: "Lecture du reçu",
     progressPreparing: "Préparation de la lecture du reçu",
     skip: "Ignorer la lecture",

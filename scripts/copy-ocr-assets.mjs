@@ -11,6 +11,13 @@
 // sha512 integrity hashes in package-lock.json, which `npm ci` verifies. The
 // output is generated, so public/ocr is gitignored. Runs before `dev` and
 // `build`; safe to run repeatedly.
+//
+// The PDF reader for document search (#147) is copied the same way, into
+// public/pdf/<pdfjs-dist version>/:
+//
+//   pdf.worker.min.mjs                 pdf.js web worker (text layer, page
+//                                      rendering for scanned PDFs)
+//   wasm/{openjpeg,jbig2,qcms_bg}.wasm image decoders scans commonly use
 
 import { copyFileSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -45,3 +52,24 @@ for (const [from, to] of files) {
   copyFileSync(join(modules, from), target);
 }
 console.log(`OCR assets for tesseract.js ${version} copied to public/ocr/${version}`);
+
+// PDF reader for document search (#147).
+const { version: pdfVersion } = JSON.parse(
+  readFileSync(join(modules, "pdfjs-dist", "package.json"), "utf8"),
+);
+const pdfBase = join(root, "public", "pdf");
+const pdfOut = join(pdfBase, pdfVersion);
+rmSync(pdfBase, { recursive: true, force: true });
+const pdfFiles = [
+  ["pdfjs-dist/build/pdf.worker.min.mjs", "pdf.worker.min.mjs"],
+  ...["openjpeg.wasm", "jbig2.wasm", "qcms_bg.wasm"].map((name) => [
+    `pdfjs-dist/wasm/${name}`,
+    `wasm/${name}`,
+  ]),
+];
+for (const [from, to] of pdfFiles) {
+  const target = join(pdfOut, to);
+  mkdirSync(dirname(target), { recursive: true });
+  copyFileSync(join(modules, from), target);
+}
+console.log(`PDF reader assets for pdfjs-dist ${pdfVersion} copied to public/pdf/${pdfVersion}`);

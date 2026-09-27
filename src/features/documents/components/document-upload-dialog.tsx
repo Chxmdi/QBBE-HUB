@@ -11,7 +11,10 @@ import { useToast } from "@/components/ui/toast";
 import {
   createDocumentLink,
   registerUploadedDocument,
+  saveDocumentText,
 } from "@/features/documents/services/document.commands";
+import { useFileTextReader } from "@/features/documents/text-extract/use-file-text-reader";
+import { TextReadingStatus } from "@/features/documents/text-extract/text-reading-status";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import {
@@ -49,6 +52,14 @@ export function DocumentUploadDialog({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  // The words in the chosen file are read on this device while the form is
+  // filled in, so search can find the file by them (#147).
+  const reader = useFileTextReader();
+
+  function close() {
+    reader.reset();
+    setOpen(false);
+  }
 
   function contextFields(form: FormData) {
     return {
@@ -111,9 +122,21 @@ export function DocumentUploadDialog({
       setError(result.error ?? "Could not save the document record.");
       return;
     }
+    await storeText(result.id);
     toast("Document uploaded. Downloads become available after the security check.");
-    setOpen(false);
+    close();
     router.refresh();
+  }
+
+  /** Saves the file's words once its record exists. Never fails the upload. */
+  async function storeText(documentId: string | undefined) {
+    if (!documentId) return;
+    setSaving(true);
+    setProgress("Reading the words in the file for search…");
+    const found = await reader.result();
+    if (found) await saveDocumentText({ id: documentId, ...found });
+    setSaving(false);
+    setProgress(null);
   }
 
   async function handleLink(e: React.FormEvent<HTMLFormElement>) {
@@ -132,7 +155,7 @@ export function DocumentUploadDialog({
       return;
     }
     toast("Resource added.");
-    setOpen(false);
+    close();
     router.refresh();
   }
 
@@ -211,7 +234,7 @@ export function DocumentUploadDialog({
         <Plus className="size-4" aria-hidden />
         Add resource
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Add a resource">
+      <Dialog open={open} onClose={close} title="Add a resource">
         <Tabs
           tabs={[
             { id: "file", label: "Upload file" },
@@ -225,11 +248,19 @@ export function DocumentUploadDialog({
           <form onSubmit={handleUpload} className="space-y-4">
             <div>
               <Label htmlFor="doc-file">File</Label>
-              <Input id="doc-file" name="file" type="file" required />
+              <Input
+                id="doc-file"
+                name="file"
+                type="file"
+                required
+                onChange={(e) => reader.read(e.target.files?.[0])}
+              />
               <FieldHint>
                 Up to 25 MB. Files stay private and unavailable for download until
-                their security check passes.
+                their security check passes. The words in a PDF, photo or scan are
+                read on this device so search can find them.
               </FieldHint>
+              <TextReadingStatus state={reader.state} onSkip={reader.skip} />
             </div>
             <div>
               <Label htmlFor="doc-file-title">Title</Label>
@@ -248,7 +279,7 @@ export function DocumentUploadDialog({
             ) : null}
             <div className="flex items-center justify-end gap-2 pt-1">
               {progress ? <span className="meta">{progress}</span> : null}
-              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+              <Button type="button" variant="secondary" onClick={close}>
                 Cancel
               </Button>
               <Button type="submit" loading={saving}>
@@ -289,7 +320,7 @@ export function DocumentUploadDialog({
               </p>
             ) : null}
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+              <Button type="button" variant="secondary" onClick={close}>
                 Cancel
               </Button>
               <Button type="submit" loading={saving}>
