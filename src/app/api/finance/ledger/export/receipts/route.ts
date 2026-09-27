@@ -1,6 +1,7 @@
 import { dateParam, todayIn } from "@/features/ledger/services/ledger.access";
 import { authorizeLedgerExport, csvResponse } from "@/features/ledger/services/ledger.export";
 import { receiptsCsv, type ReceiptExportRow } from "@/features/ledger/year-end";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Receipts and bills dated between two dates, with whether each file can be
@@ -15,7 +16,8 @@ const LIMIT = 10000;
 
 export async function GET(request: Request) {
   const access = await authorizeLedgerExport();
-  if (!access) return new Response("You do not have access to the ledger.", { status: 403 });
+  const t = await getT();
+  if (!access) return new Response(t("finance.ledgerReports.api.noAccess"), { status: 403 });
   const { session, supabase } = access;
   const url = new URL(request.url);
   const to = dateParam(url.searchParams.get("to") ?? undefined, todayIn(session.timeZone));
@@ -31,13 +33,13 @@ export async function GET(request: Request) {
       .order("document_date")
       .order("id")
       .range(offset, offset + 999);
-    if (error) return new Response("Could not export the receipts. Try again.", { status: 500 });
+    if (error) return new Response(t("finance.ledgerReports.api.receiptsFailed"), { status: 500 });
     const page = (data ?? []) as ReceiptExportRow[];
     rows.push(...page.map((r) => ({ ...r, total_cents: Number(r.total_cents), gst_cents: Number(r.gst_cents), qst_cents: Number(r.qst_cents) })));
     if (page.length < 1000) break;
   }
-  if (rows.length >= LIMIT) return new Response("Too many receipts for one file. Export a shorter period.", { status: 413 });
-  return csvResponse(supabase, session, "receipts_list_exported", receiptsCsv(rows), `receipts-${from}-to-${to}.csv`, {
+  if (rows.length >= LIMIT) return new Response(t("finance.ledgerReports.api.tooManyReceipts"), { status: 413 });
+  return csvResponse(supabase, session, "receipts_list_exported", receiptsCsv(rows, t), `receipts-${from}-to-${to}.csv`, {
     from,
     to,
     rows: rows.length,

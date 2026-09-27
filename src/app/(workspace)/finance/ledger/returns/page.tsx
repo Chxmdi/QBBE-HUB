@@ -12,20 +12,25 @@ import { formatCents } from "@/features/ledger/money";
 import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
 import { loadFiscalYears, pickYear, yearStatements } from "@/features/ledger/services/year-end.queries";
 import { returnFigures, sixMonthsAfter, T1044_THRESHOLDS } from "@/features/ledger/year-end";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Annual returns" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledgerReports.returns.title") };
+}
 export const dynamic = "force-dynamic";
 
-function Figure({ label, cents }: { label: string; cents: number | null }) {
+async function Figure({ label, cents }: { label: string; cents: number | null }) {
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   return (
     <div className="flex justify-between gap-4 border-b border-line py-1.5 last:border-0">
       <dt className="text-muted">{label}</dt>
-      <dd className="tabular-nums">{cents === null ? "No prior year in the books" : formatCents(cents)}</dd>
+      <dd className="tabular-nums">{cents === null ? t("finance.ledgerReports.returns.noPriorYear") : formatCents(cents, locale)}</dd>
     </div>
   );
 }
 
-function ReturnCard({
+async function ReturnCard({
   code,
   title,
   agency,
@@ -38,16 +43,17 @@ function ReturnCard({
   due: string;
   children: React.ReactNode;
 }) {
+  const t = await getT();
   return (
     <section className="card p-4 text-[13.5px]" aria-labelledby={`return-${code}`}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h2 id={`return-${code}`} className="text-base font-semibold">
           {code} · {title}
         </h2>
-        <Badge tone="warning">Needs accountant review</Badge>
+        <Badge tone="warning">{t("finance.ledgerReports.returns.needsReview")}</Badge>
       </div>
       <p className="meta mb-3">
-        {agency}. Usually due within six months of the year end: {due}. The accountant confirms the deadline and files it.
+        {t("finance.ledgerReports.returns.dueNote", { agency, due })}
       </p>
       {children}
     </section>
@@ -67,11 +73,13 @@ export default async function ReturnsPage({
 }) {
   const { session, supabase, canRead } = await getLedgerAccess();
   const params = await searchParams;
+  const t = await getT();
+  const locale: Locale = await getLocale();
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Annual returns"
-      description="A checklist of the returns a Quebec non-profit files each year, with the figures from the books."
+      eyebrow={t("finance.ledgerReports.eyebrow")}
+      title={t("finance.ledgerReports.returns.title")}
+      description={t("finance.ledgerReports.returns.description")}
       actions={<PrintButton />}
     />
   );
@@ -90,7 +98,11 @@ export default async function ReturnsPage({
       <div>
         {header}
         <LedgerTabs />
-        <EmptyState icon={<ClipboardCheck />} title="No fiscal year yet" description="Add a fiscal year on the Periods tab first." />
+        <EmptyState
+          icon={<ClipboardCheck />}
+          title={t("finance.ledgerReports.noFiscalYearTitle")}
+          description={t("finance.ledgerReports.addFiscalYearFirst")}
+        />
       </div>
     );
   }
@@ -100,43 +112,43 @@ export default async function ReturnsPage({
   const due = sixMonthsAfter(year.endsOn);
   const common = (
     <dl className="mb-3">
-      <Figure label="Total revenue" cents={f.totalRevenue} />
-      <Figure label="Total expenses" cents={f.totalExpenses} />
-      <Figure label="Excess (deficiency) of revenue over expenses" cents={f.excess} />
-      <Figure label={`Total assets at ${year.endsOn}`} cents={f.totalAssets} />
-      <Figure label={`Total liabilities at ${year.endsOn}`} cents={f.totalLiabilities} />
-      <Figure label={`Net assets at ${year.endsOn}`} cents={f.netAssets} />
+      <Figure label={t("finance.ledgerReports.returns.totalRevenue")} cents={f.totalRevenue} />
+      <Figure label={t("finance.ledgerReports.returns.totalExpenses")} cents={f.totalExpenses} />
+      <Figure label={t("finance.ledgerReports.returns.excess")} cents={f.excess} />
+      <Figure label={t("finance.ledgerReports.returns.totalAssetsAt", { date: year.endsOn })} cents={f.totalAssets} />
+      <Figure label={t("finance.ledgerReports.returns.totalLiabilitiesAt", { date: year.endsOn })} cents={f.totalLiabilities} />
+      <Figure label={t("finance.ledgerReports.returns.netAssetsAt", { date: year.endsOn })} cents={f.netAssets} />
     </dl>
   );
   const thresholds = (
     <>
       <dl className="mb-3">
-        <Figure label="Dividends, interest, rentals and royalties this year" cents={f.investmentIncome} />
-        <Figure label="Total assets at the end of the preceding fiscal year" cents={f.priorYearAssets} />
+        <Figure label={t("finance.ledgerReports.returns.investmentIncome")} cents={f.investmentIncome} />
+        <Figure label={t("finance.ledgerReports.returns.priorYearAssets")} cents={f.priorYearAssets} />
       </dl>
-      <p className="mb-2">It is required when any one of these is true (the accountant decides):</p>
+      <p className="mb-2">{t("finance.ledgerReports.returns.requiredWhen")}</p>
       <ul className="mb-3 list-disc space-y-1 pl-5">
         <li>
-          Dividends, interest, rentals or royalties received or receivable in the year total more than{" "}
-          {formatCents(T1044_THRESHOLDS.investmentIncomeCents)}.{" "}
-          <strong>{f.t1044.investmentIncomeOver ? "The books show more." : "The books show less."}</strong>
+          {t("finance.ledgerReports.returns.investmentThreshold", { amount: formatCents(T1044_THRESHOLDS.investmentIncomeCents, locale) })}{" "}
+          <strong>{t(f.t1044.investmentIncomeOver ? "finance.ledgerReports.returns.booksShowMore" : "finance.ledgerReports.returns.booksShowLess")}</strong>
         </li>
         <li>
-          Total assets at the end of the preceding fiscal year were more than{" "}
-          {formatCents(T1044_THRESHOLDS.priorYearAssetsCents)}.{" "}
+          {t("finance.ledgerReports.returns.assetsThreshold", { amount: formatCents(T1044_THRESHOLDS.priorYearAssetsCents, locale) })}{" "}
           <strong>
-            {f.t1044.priorAssetsOver === null
-              ? "The preceding year is not in the books; use the accountant's figures."
-              : f.t1044.priorAssetsOver
-                ? "The books show more."
-                : "The books show less."}
+            {t(
+              f.t1044.priorAssetsOver === null
+                ? "finance.ledgerReports.returns.precedingNotInBooks"
+                : f.t1044.priorAssetsOver
+                  ? "finance.ledgerReports.returns.booksShowMore"
+                  : "finance.ledgerReports.returns.booksShowLess",
+            )}
           </strong>
         </li>
-        <li>The organization had to file this return for any earlier year. The books cannot tell; the accountant knows.</li>
+        <li>{t("finance.ledgerReports.returns.filedEarlier")}</li>
       </ul>
       <p className="meta">
-        Investment income counted from revenue accounts named like interest, dividends, rent or royalties:{" "}
-        {f.investmentAccounts.length ? f.investmentAccounts.join(", ") : "none this year"}.
+        {t("finance.ledgerReports.returns.investmentAccounts")}{" "}
+        {f.investmentAccounts.length ? f.investmentAccounts.join(", ") : t("finance.ledgerReports.returns.noneThisYear")}.
       </p>
     </>
   );
@@ -152,50 +164,44 @@ export default async function ReturnsPage({
         <YearPicker years={years} selected={year.startsOn} />
       </div>
       <p className="mb-4 text-[13.5px]">
-        Fiscal year {year.startsOn} to {year.endsOn}. Figures come from{" "}
+        {t("finance.ledgerReports.returns.introBefore", { from: year.startsOn, to: year.endsOn })}{" "}
         <Link className="text-brand-fg hover:underline" href={`/finance/ledger/statements?year=${year.startsOn}`}>
-          the financial statements
+          {t("finance.ledgerReports.returns.introLink")}
         </Link>{" "}
-        (posted entries only). QBBE is a non-profit organization, not a registered charity, so the T3010 charity
-        return does not apply. How each figure maps to a line of a form is for the accountant to confirm.
+        {t("finance.ledgerReports.returns.introAfter")}
       </p>
       <div className="grid gap-4 lg:grid-cols-2">
-        <ReturnCard code="T2" title="Corporation Income Tax Return" agency="Canada Revenue Agency" due={due}>
-          <p className="mb-2">
-            An incorporated non-profit files a T2 every year even when its income is exempt under paragraph 149(1)(l)
-            of the Income Tax Act. The financial statement figures go on the GIFI schedules (100 balance sheet, 125
-            income statement).
-          </p>
+        <ReturnCard code="T2" title={t("finance.ledgerReports.returns.t2Title")} agency={t("finance.ledgerReports.returns.cra")} due={due}>
+          <p className="mb-2">{t("finance.ledgerReports.returns.t2Body")}</p>
           {common}
         </ReturnCard>
-        <ReturnCard code="T1044" title="Non-Profit Organization Information Return" agency="Canada Revenue Agency" due={due}>
+        <ReturnCard code="T1044" title={t("finance.ledgerReports.returns.t1044Title")} agency={t("finance.ledgerReports.returns.cra")} due={due}>
           {thresholds}
         </ReturnCard>
-        <ReturnCard code="CO-17" title="Corporation Income Tax Return" agency="Revenu Québec" due={due}>
-          <p className="mb-2">
-            A corporation with an establishment in Quebec files a Quebec return every year. Exempt non-profits may
-            file a version for tax-exempt corporations; the accountant chooses the form.
-          </p>
+        <ReturnCard code="CO-17" title={t("finance.ledgerReports.returns.co17Title")} agency={t("finance.ledgerReports.returns.revenuQuebec")} due={due}>
+          <p className="mb-2">{t("finance.ledgerReports.returns.co17Body")}</p>
           {common}
         </ReturnCard>
-        <ReturnCard code="TP-997.1" title="Information Return for Non-Profit Organizations" agency="Revenu Québec" due={due}>
-          <p className="mb-2">
-            Quebec&apos;s counterpart of the T1044. Its conditions are understood to follow the federal ones below;
-            the accountant confirms.
-          </p>
+        <ReturnCard
+          code="TP-997.1"
+          title={t("finance.ledgerReports.returns.tp9971Title")}
+          agency={t("finance.ledgerReports.returns.revenuQuebec")}
+          due={due}
+        >
+          <p className="mb-2">{t("finance.ledgerReports.returns.tp9971Body")}</p>
           {thresholds}
         </ReturnCard>
       </div>
       <section className="card mt-4 p-4 text-[13.5px]" aria-labelledby="checklist-heading">
         <h2 id="checklist-heading" className="mb-2 text-base font-semibold">
-          Before the accountant prepares the returns
+          {t("finance.ledgerReports.returns.checklistHeading")}
         </h2>
         <ol className="list-decimal space-y-1 pl-5">
-          <li>Every month of the year is reconciled and closed (Periods tab).</li>
-          <li>The year is closed and the closing entry reviewed (Year-end tab).</li>
-          <li>The accountant has the year-end package: statements, trial balance, general ledger and receipts.</li>
-          <li>The accountant confirms which of the four returns apply and their deadlines.</li>
-          <li>The accountant files them. Nothing is filed from QBBE Hub.</li>
+          <li>{t("finance.ledgerReports.returns.checklist1")}</li>
+          <li>{t("finance.ledgerReports.returns.checklist2")}</li>
+          <li>{t("finance.ledgerReports.returns.checklist3")}</li>
+          <li>{t("finance.ledgerReports.returns.checklist4")}</li>
+          <li>{t("finance.ledgerReports.returns.checklist5")}</li>
         </ol>
       </section>
     </div>

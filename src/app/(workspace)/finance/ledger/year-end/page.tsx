@@ -11,8 +11,11 @@ import { CloseYearButton, ReopenYearForm } from "@/features/ledger/components/ye
 import { NotFiledNotice, YearPicker } from "@/features/ledger/components/year-picker";
 import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
 import { loadFiscalYears, pickYear, type YearStatus } from "@/features/ledger/services/year-end.queries";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Year-end" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledgerReports.yearEnd.title") };
+}
 export const dynamic = "force-dynamic";
 
 function monthsOf(year: YearStatus): { from: string; to: string; label: string }[] {
@@ -45,15 +48,16 @@ export default async function YearEndPage({
 }) {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
   const params = await searchParams;
+  const t = await getT();
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Year-end"
-      description="Close a fiscal year, and hand the accountant everything they need for the financial statements and returns."
+      eyebrow={t("finance.ledgerReports.eyebrow")}
+      title={t("finance.ledgerReports.yearEnd.title")}
+      description={t("finance.ledgerReports.yearEnd.description")}
       actions={
         canManage ? (
           <Link href="/finance/ledger/accountant" className="text-[13.5px] font-medium text-brand-fg hover:underline">
-            Accountant access
+            {t("finance.ledgerReports.yearEnd.accountantAccess")}
           </Link>
         ) : undefined
       }
@@ -76,8 +80,8 @@ export default async function YearEndPage({
         <LedgerTabs />
         <EmptyState
           icon={<CalendarCheck />}
-          title="No fiscal year yet"
-          description="Add a fiscal year on the Periods tab first."
+          title={t("finance.ledgerReports.noFiscalYearTitle")}
+          description={t("finance.ledgerReports.addFiscalYearFirst")}
         />
       </div>
     );
@@ -90,16 +94,16 @@ export default async function YearEndPage({
       {header}
       <LedgerTabs />
 
-      <h2 className="mb-2 text-base font-semibold">Fiscal years</h2>
+      <h2 className="mb-2 text-base font-semibold">{t("finance.ledgerReports.yearEnd.fiscalYears")}</h2>
       <DataTable minWidth="680px">
         <TableHead>
-          <TableHeader>Fiscal year</TableHeader>
-          <TableHeader>Periods</TableHeader>
-          <TableHeader>Status</TableHeader>
-          <TableHeader>Closing entry</TableHeader>
+          <TableHeader>{t("finance.ledgerReports.yearEnd.fiscalYear")}</TableHeader>
+          <TableHeader>{t("finance.ledgerReports.yearEnd.periods")}</TableHeader>
+          <TableHeader>{t("finance.common.status")}</TableHeader>
+          <TableHeader>{t("finance.ledgerReports.yearEnd.closingEntry")}</TableHeader>
           {canManage ? (
             <TableHeader className="text-right">
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("finance.common.actions")}</span>
             </TableHeader>
           ) : null}
         </TableHead>
@@ -108,32 +112,34 @@ export default async function YearEndPage({
             <TableRow key={y.startsOn}>
               <TableCell className="font-medium tabular-nums">
                 <Link className="text-brand-fg hover:underline" href={`/finance/ledger/year-end?year=${y.startsOn}`}>
-                  {y.startsOn} to {y.endsOn}
+                  {t("finance.ledgerReports.dateRange", { from: y.startsOn, to: y.endsOn })}
                 </Link>
               </TableCell>
               <TableCell className="text-[13px]">
-                {y.periods} of 12{y.openPeriods ? `, ${y.openPeriods} open` : ""}
+                {y.openPeriods
+                  ? t("finance.ledgerReports.yearEnd.periodsOfOpen", { count: y.periods, open: y.openPeriods })
+                  : t("finance.ledgerReports.yearEnd.periodsOf", { count: y.periods })}
               </TableCell>
               <TableCell>
                 {y.close ? (
                   <span>
-                    <Badge tone="success">Closed</Badge>
+                    <Badge tone="success">{t("finance.ledgerReports.yearEnd.closed")}</Badge>
                     <span className="meta block">
                       {y.close.closed_at.slice(0, 10)}
-                      {y.close.closer ? ` by ${y.close.closer.full_name}` : ""}
+                      {y.close.closer ? t("finance.ledgerReports.yearEnd.closedBy", { name: y.close.closer.full_name }) : ""}
                     </span>
                   </span>
                 ) : (
-                  <Badge>Open</Badge>
+                  <Badge>{t("finance.ledgerReports.yearEnd.open")}</Badge>
                 )}
               </TableCell>
               <TableCell className="text-[13px]">
                 {y.close?.closing_entry_id ? (
                   <Link className="text-brand-fg hover:underline" href={`/finance/ledger/journal/${y.close.closing_entry_id}`}>
-                    View closing entry
+                    {t("finance.ledgerReports.yearEnd.viewClosingEntry")}
                   </Link>
                 ) : y.close ? (
-                  "None needed (no revenue or expenses)"
+                  t("finance.ledgerReports.yearEnd.noneNeeded")
                 ) : (
                   "—"
                 )}
@@ -141,12 +147,12 @@ export default async function YearEndPage({
               {canManage ? (
                 <TableCell className="text-right">
                   {y.close ? (
-                    <ReopenYearForm startsOn={y.startsOn} label={`${y.startsOn} to ${y.endsOn}`} />
+                    <ReopenYearForm startsOn={y.startsOn} label={t("finance.ledgerReports.dateRange", { from: y.startsOn, to: y.endsOn })} />
                   ) : y.periods === 12 && oldestOpen?.startsOn === y.startsOn ? (
-                    <CloseYearButton startsOn={y.startsOn} label={`${y.startsOn} to ${y.endsOn}`} />
+                    <CloseYearButton startsOn={y.startsOn} label={t("finance.ledgerReports.dateRange", { from: y.startsOn, to: y.endsOn })} />
                   ) : (
                     <span className="text-[13px] text-muted">
-                      {y.periods < 12 ? "Periods missing" : "Close earlier years first"}
+                      {t(y.periods < 12 ? "finance.ledgerReports.yearEnd.periodsMissing" : "finance.ledgerReports.yearEnd.closeEarlierFirst")}
                     </span>
                   )}
                 </TableCell>
@@ -156,14 +162,11 @@ export default async function YearEndPage({
         </tbody>
       </DataTable>
       <p className="meta mt-2">
-        Closing posts one entry on the last day of the year that moves every revenue and expense balance into the
-        fund&apos;s net assets (3000 unrestricted, 3100 internally restricted, 3200 externally restricted), then
-        closes all twelve periods. It is undone only by reopening the year, which posts a reopening entry. Both
-        steps are recorded in the audit log.
+        {t("finance.ledgerReports.yearEnd.closingNote")}
       </p>
 
       <h2 className="mt-8 mb-2 text-base font-semibold" id="package">
-        Year-end package
+        {t("finance.ledgerReports.yearEnd.package")}
       </h2>
       <NotFiledNotice />
       <div className="card mb-4 p-4">
@@ -172,47 +175,47 @@ export default async function YearEndPage({
       <div className="card grid gap-6 p-4 text-[13.5px] md:grid-cols-2">
         <section aria-labelledby="pkg-statements">
           <h3 id="pkg-statements" className="mb-2 font-semibold">
-            Statements and balances
+            {t("finance.ledgerReports.yearEnd.statementsAndBalances")}
           </h3>
           <ul className="space-y-2">
             <li>
               <Link className="text-brand-fg hover:underline" href={`/finance/ledger/statements?year=${year.startsOn}`}>
-                Financial statements (printable)
+                {t("finance.ledgerReports.yearEnd.statementsPrintable")}
               </Link>
             </li>
             <li>
               <DownloadLink href={`/api/finance/ledger/statements?year=${year.startsOn}&statement=position`}>
-                Statement of financial position CSV
+                {t("finance.ledgerReports.yearEnd.positionCsv")}
               </DownloadLink>
             </li>
             <li>
               <DownloadLink href={`/api/finance/ledger/statements?year=${year.startsOn}&statement=operations`}>
-                Statement of operations CSV
+                {t("finance.ledgerReports.yearEnd.operationsCsv")}
               </DownloadLink>
             </li>
             <li>
               <DownloadLink href={`/api/finance/ledger/export/trial-balance?as_of=${year.endsOn}`}>
-                Trial balance at {year.endsOn} (import CSV)
+                {t("finance.ledgerReports.yearEnd.trialBalanceImport", { date: year.endsOn })}
               </DownloadLink>
             </li>
             <li>
               <DownloadLink href={`/api/finance/ledger/export/journal?${q}`}>
-                General ledger for the year (import CSV)
+                {t("finance.ledgerReports.yearEnd.generalLedgerImport")}
               </DownloadLink>
             </li>
             <li>
-              <DownloadLink href={`/api/finance/ledger/export/receipts?${q}`}>Receipts and bills CSV</DownloadLink>
+              <DownloadLink href={`/api/finance/ledger/export/receipts?${q}`}>{t("finance.ledgerReports.yearEnd.receiptsCsv")}</DownloadLink>
             </li>
             <li>
               <Link className="text-brand-fg hover:underline" href={`/finance/ledger/returns?year=${year.startsOn}`}>
-                Annual returns checklist
+                {t("finance.ledgerReports.yearEnd.returnsChecklist")}
               </Link>
             </li>
           </ul>
         </section>
         <section aria-labelledby="pkg-periods">
           <h3 id="pkg-periods" className="mb-2 font-semibold">
-            General ledger by period (import CSV)
+            {t("finance.ledgerReports.yearEnd.byPeriod")}
           </h3>
           <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {monthsOf(year).map((m) => (
@@ -222,27 +225,31 @@ export default async function YearEndPage({
             ))}
           </ul>
           <p className="meta mt-3">
-            Columns: date, entry no, account code, account name, fund, program, description, debit, credit. Each
-            entry&apos;s receipt and trail are on its page in the Journal.
+            {t("finance.ledgerReports.yearEnd.columnsNote")}
           </p>
         </section>
       </div>
 
       {year.history.some((c) => c.reopened_at) ? (
         <>
-          <h2 className="mt-8 mb-2 text-base font-semibold">Reopenings of this year</h2>
+          <h2 className="mt-8 mb-2 text-base font-semibold">{t("finance.ledgerReports.yearEnd.reopenings")}</h2>
           <ul className="card divide-y divide-line text-[13.5px]">
             {year.history
               .filter((c) => c.reopened_at)
               .map((c) => (
                 <li key={c.id} className="px-4 py-2">
-                  Reopened {c.reopened_at?.slice(0, 10)}
-                  {c.reopener ? ` by ${c.reopener.full_name}` : ""}: {c.reopen_reason}
+                  {c.reopener
+                    ? t("finance.ledgerReports.yearEnd.reopenedBy", {
+                        date: c.reopened_at?.slice(0, 10) ?? "",
+                        name: c.reopener.full_name,
+                        reason: c.reopen_reason ?? "",
+                      })
+                    : t("finance.ledgerReports.yearEnd.reopened", { date: c.reopened_at?.slice(0, 10) ?? "", reason: c.reopen_reason ?? "" })}
                   {c.reopening_entry_id ? (
                     <>
                       {" "}
                       <Link className="text-brand-fg hover:underline" href={`/finance/ledger/journal/${c.reopening_entry_id}`}>
-                        Reopening entry
+                        {t("finance.ledgerReports.yearEnd.reopeningEntry")}
                       </Link>
                     </>
                   ) : null}
