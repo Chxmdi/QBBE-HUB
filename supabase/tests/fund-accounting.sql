@@ -1,5 +1,5 @@
 -- Statement of changes in fund balances and releases of restricted money
--- (#149; migration 20260930200000). Proves: the statement's closing balance
+-- (#149; migration 20261001200000). Proves: the statement's closing balance
 -- for every fund equals ledger_fund_balances, the funds together equal the
 -- ledger's net assets, and each row adds up; only an owner or admin with MFA
 -- releases, only from a restricted fund to an unrestricted one, never more
