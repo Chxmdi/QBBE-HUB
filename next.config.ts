@@ -46,6 +46,13 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
+      // Receipt reading (#142 v2) runs Tesseract.js in a web worker loaded
+      // from /ocr on this origin. This was already the effective rule (it
+      // falls back to script-src, which has no blob:); it is stated so a
+      // blob: worker or a CDN script cannot slip in unnoticed. The worker's
+      // WebAssembly is compiled under the 'unsafe-eval' script-src already
+      // has, and it fetches its language data from 'self' (connect-src).
+      "worker-src 'self'",
       [
         "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
         ...supabaseOrigins(),
