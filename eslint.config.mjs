@@ -44,6 +44,8 @@ const eslintConfig = [
       "coverage/**",
       "next-env.d.ts",
       "supabase/.temp/**",
+      // OCR engine copied out of node_modules (scripts/copy-ocr-assets.mjs).
+      "public/ocr/**",
       // Agent worktrees and local tool state; never source.
       ".claude/**",
     ],

@@ -56,3 +56,7 @@ supabase/.branches
 # The governing specification, staged for the coverage audit only.
 # NOT committed: this repository is public and the spec is an internal document.
 docs/audit/.spec-source.md
+
+# In-browser OCR runtime (receipt reading), copied out of node_modules by
+# scripts/copy-ocr-assets.mjs before dev and build.
+/public/ocr/
