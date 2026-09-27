@@ -8,6 +8,12 @@ import {
   type StatementTotalRow,
   type Statements,
 } from "@/features/ledger/year-end";
+import {
+  buildFundChanges,
+  normalizeFundChangeRow,
+  type FundChangeRow,
+  type FundChanges,
+} from "@/features/ledger/fund-changes";
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -108,6 +114,21 @@ export async function yearStatements(supabase: Client, organizationId: string, y
     priorYear: prior,
     error: current.error ?? previous.error,
   };
+}
+
+/** The statement of changes in fund balances for a year. Row-level security applies. */
+export async function yearFundChanges(
+  supabase: Client,
+  organizationId: string,
+  year: FiscalYear,
+): Promise<{ changes: FundChanges; error: string | null }> {
+  const { data, error } = await supabase.rpc("ledger_fund_changes", {
+    p_organization: organizationId,
+    p_from: year.startsOn,
+    p_to: year.endsOn,
+  });
+  const rows = ((data ?? []) as FundChangeRow[]).map(normalizeFundChangeRow);
+  return { changes: buildFundChanges(rows, year.startsOn, year.endsOn), error: error?.message ?? null };
 }
 
 /** Every posted line between two dates, fetched a page at a time. */

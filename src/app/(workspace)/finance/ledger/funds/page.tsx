@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label } from "@/components/ui/input";
@@ -38,7 +39,19 @@ export default async function LedgerFundsPage({
       eyebrow="Ledger"
       title="Funds"
       description="Every journal line belongs to a fund. Restricted money is tracked separately from the general fund, and each fund balances on its own."
-      actions={canRead && canManage ? <FundDialog programs={programList} /> : undefined}
+      actions={
+        canRead ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/finance/ledger/funds/release"
+              className="inline-flex h-9.5 items-center gap-2 rounded-(--radius-sm) border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-soft"
+            >
+              {canManage ? "Release restricted money" : "Releases"}
+            </Link>
+            {canManage ? <FundDialog programs={programList} /> : null}
+          </div>
+        ) : undefined
+      }
     />
   );
   if (!canRead) {

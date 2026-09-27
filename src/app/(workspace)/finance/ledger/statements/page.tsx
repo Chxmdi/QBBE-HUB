@@ -5,11 +5,11 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
-import { OperationsTable, PositionTable } from "@/features/ledger/components/statement-tables";
+import { FundChangesTable, OperationsTable, PositionTable } from "@/features/ledger/components/statement-tables";
 import { PrintButton } from "@/features/ledger/components/year-end-forms";
 import { NotFiledNotice, YearPicker } from "@/features/ledger/components/year-picker";
 import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
-import { loadFiscalYears, pickYear, yearStatements } from "@/features/ledger/services/year-end.queries";
+import { loadFiscalYears, pickYear, yearFundChanges, yearStatements } from "@/features/ledger/services/year-end.queries";
 
 export const metadata: Metadata = { title: "Financial statements" };
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export default async function StatementsPage({
     <PageHeader
       eyebrow="Ledger"
       title="Financial statements"
-      description="Statement of financial position and statement of operations from posted entries, by fund class, with the prior year when there is one."
+      description="Statement of financial position, statement of operations and statement of changes in fund balances from posted entries, with the prior year when there is one."
     />
   );
   if (!canRead) {
@@ -52,8 +52,11 @@ export default async function StatementsPage({
       </div>
     );
   }
-  const { current, prior, error } = await yearStatements(supabase, session.organizationId, year);
-  if (error) throw new Error(`Could not load the statements: ${error}`);
+  const [{ current, prior, error }, fundChanges] = await Promise.all([
+    yearStatements(supabase, session.organizationId, year),
+    yearFundChanges(supabase, session.organizationId, year),
+  ]);
+  if (error ?? fundChanges.error) throw new Error(`Could not load the statements: ${error ?? fundChanges.error}`);
   const csv = (statement: string) => `/api/finance/ledger/statements?year=${year.startsOn}&statement=${statement}`;
 
   return (
@@ -82,6 +85,14 @@ export default async function StatementsPage({
             <Download className="size-4" aria-hidden />
             Operations CSV
           </Link>
+          <Link
+            href={csv("fund-changes")}
+            prefetch={false}
+            className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
+          >
+            <Download className="size-4" aria-hidden />
+            Changes in fund balances CSV
+          </Link>
           <PrintButton />
         </div>
       </div>
@@ -104,6 +115,16 @@ export default async function StatementsPage({
               Statement of operations, {current.from} to {current.to}
             </h2>
             <OperationsTable current={current} prior={prior} />
+          </section>
+          <section aria-labelledby="fund-changes-heading">
+            <h2 id="fund-changes-heading" className="mb-2 text-base font-semibold">
+              Statement of changes in fund balances, {current.from} to {current.to}
+            </h2>
+            <FundChangesTable changes={fundChanges.changes} />
+            <p className="meta mt-2">
+              Each fund&apos;s balance at the end is its balance on the Funds page for {current.to}. Transfers and
+              releases move net assets between funds, so across all funds they add up to zero.
+            </p>
           </section>
           <p className="meta">
             Presented by fund class (unrestricted, internally restricted, externally restricted) from the ledger&apos;s

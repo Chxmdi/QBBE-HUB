@@ -75,9 +75,9 @@ Supporting fixes merged the same day:
   automatic (read it from `tests/e2e/routes/*.json` or a glob). Every new
   feature still edits that one shared line, so parallel branches conflict.
 - [ ] #143 approvals: delegation while an approver is away. Not built.
-- [ ] #149 fund accounting: a statement of changes in fund balances, and
-  releasing restricted money to unrestricted when its conditions are met.
-  Neither is built; the acceptance tests themselves pass.
+- [x] #149 fund accounting: a statement of changes in fund balances
+  (Statements page and CSV), and releasing restricted money to unrestricted
+  when its conditions are met (Funds, then Release restricted money).
 - [ ] #144 e-signatures, v1 is in-app only: external signers by emailed link,
   ordered or parallel routing, the signer's IP address, and a certificate on a
   sealed PDF are not built. Build-or-buy and counsel's review come first.

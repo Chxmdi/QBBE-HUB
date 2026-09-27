@@ -1,6 +1,7 @@
 import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FUND_RESTRICTIONS, FUND_RESTRICTION_LABEL, formatCents } from "@/features/ledger/money";
 import type { ByClass, StatementLine, Statements } from "@/features/ledger/year-end";
+import type { FundChanges } from "@/features/ledger/fund-changes";
 import { cn } from "@/lib/utils";
 
 const amount = (cents: number) => (cents < 0 ? `(${formatCents(-cents)})` : formatCents(cents));
@@ -156,6 +157,46 @@ export function OperationsTable({ current, prior }: { current: Statements; prior
         {totalRow("Net assets, beginning of year", c.beginning, prior?.changes.beginning.total)}
         {totalRow("Transfers and direct entries to net assets", c.direct, prior?.changes.direct.total)}
         {totalRow("Net assets, end of year", c.ending, prior?.changes.ending.total)}
+      </tbody>
+    </DataTable>
+  );
+}
+
+/** Statement of changes in fund balances (#149): one row per fund, then all funds. */
+export function FundChangesTable({ changes }: { changes: FundChanges }) {
+  const t = changes.totals;
+  return (
+    <DataTable minWidth="860px">
+      <TableHead>
+        <TableHeader>Fund</TableHeader>
+        <TableHeader className="w-32 text-right">Balance {changes.from}</TableHeader>
+        <TableHeader className="w-32 text-right">Revenue</TableHeader>
+        <TableHeader className="w-32 text-right">Expenses</TableHeader>
+        <TableHeader className="w-32 text-right">Transfers and releases</TableHeader>
+        <TableHeader className="w-32 text-right">Balance {changes.to}</TableHeader>
+      </TableHead>
+      <tbody>
+        {changes.funds.map((f) => (
+          <TableRow key={f.fund_id}>
+            <TableCell>
+              <span className="font-mono">{f.code}</span> {f.name}
+              <p className="meta">{FUND_RESTRICTION_LABEL[f.restriction]}</p>
+            </TableCell>
+            <AmountCell cents={f.opening_cents} />
+            <AmountCell cents={f.revenue_cents} />
+            <AmountCell cents={f.expenses_cents} />
+            <AmountCell cents={f.transfers_cents} />
+            <AmountCell cents={f.closing_cents} strong />
+          </TableRow>
+        ))}
+        <TableRow>
+          <TableCell className="font-semibold">All funds</TableCell>
+          <AmountCell cents={t.opening_cents} strong />
+          <AmountCell cents={t.revenue_cents} strong />
+          <AmountCell cents={t.expenses_cents} strong />
+          <AmountCell cents={t.transfers_cents} strong />
+          <AmountCell cents={t.closing_cents} strong />
+        </TableRow>
       </tbody>
     </DataTable>
   );
