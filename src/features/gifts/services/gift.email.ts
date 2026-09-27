@@ -4,11 +4,13 @@ import {
   sendEmail,
 } from "@/features/notifications/services/email-provider";
 import { letterBodyHtml } from "@/features/gifts/acknowledgement";
+import type { MessageKey } from "@/lib/i18n/translate";
 
 export interface EmailOutcome {
   ok: boolean;
   id: string;
-  error?: string;
+  /** A catalogue key; the calling action translates it for the person. */
+  error?: MessageKey;
 }
 
 export interface EmailDeps {
@@ -44,7 +46,7 @@ export async function emailAcknowledgement(
     return {
       ok: false,
       id: ack.id,
-      error: "The acknowledgement was saved, but this environment only emails allowlisted addresses, so nothing was sent.",
+      error: "finance.gifts.email.notAllowlisted",
     };
   }
   const suppressed = await deps.suppressedReason(ack.to.trim().toLowerCase());
@@ -53,7 +55,7 @@ export async function emailAcknowledgement(
     return {
       ok: false,
       id: ack.id,
-      error: "The acknowledgement was saved, but this address previously bounced or complained, so it was not emailed.",
+      error: "finance.gifts.email.suppressed",
     };
   }
   try {
@@ -70,7 +72,7 @@ export async function emailAcknowledgement(
     return {
       ok: false,
       id: ack.id,
-      error: "The acknowledgement was saved, but the email could not be sent. Try again from the gift page.",
+      error: "finance.gifts.email.sendFailed",
     };
   }
   await deps.mark({ email_status: "sent", sent_at: new Date().toISOString(), email_error: null });

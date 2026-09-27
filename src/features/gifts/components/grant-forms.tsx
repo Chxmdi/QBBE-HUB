@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { useT } from "@/lib/i18n/client";
 import {
   addGrantReport,
   deleteGrantReport,
@@ -48,6 +49,7 @@ export interface GrantOptions {
 export function GrantDialog({ grant, options }: { grant?: GrantFormValue; options: GrantOptions }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,17 +59,17 @@ export function GrantDialog({ grant, options }: { grant?: GrantFormValue; option
       {grant ? (
         <Button variant="secondary" onClick={() => setOpen(true)}>
           <Pencil className="size-4" aria-hidden />
-          Edit grant
+          {t("finance.gifts.grantDialog.edit")}
         </Button>
       ) : (
         <Button onClick={() => setOpen(true)}>
           <Plus className="size-4" aria-hidden />
-          Add a grant
+          {t("finance.gifts.grantDialog.add")}
         </Button>
       )}
-      <Dialog open={open} onClose={() => setOpen(false)} title={grant ? "Edit grant" : "Add a grant"} className="max-w-2xl">
+      <Dialog open={open} onClose={() => setOpen(false)} title={grant ? t("finance.gifts.grantDialog.edit") : t("finance.gifts.grantDialog.add")} className="max-w-2xl">
         {options.funders.length === 0 ? (
-          <p className="text-[13.5px] text-muted">Add the funder to Relationships (the CRM) as an organization first.</p>
+          <p className="text-[13.5px] text-muted">{t("finance.gifts.grantDialog.noFunders")}</p>
         ) : (
           <form
             className="space-y-4"
@@ -98,24 +100,24 @@ export function GrantDialog({ grant, options }: { grant?: GrantFormValue; option
               });
               setSaving(false);
               if (!result.ok) {
-                setError(result.error ?? "Could not save the grant.");
+                setError(result.error ?? t("finance.gifts.grantDialog.couldNotSave"));
                 return;
               }
-              toast(grant ? "Grant saved." : "Grant added.", { tone: "success" });
+              toast(grant ? t("finance.gifts.grantDialog.saved") : t("finance.gifts.grantDialog.added"), { tone: "success" });
               setOpen(false);
               if (!grant) router.push(`/finance/gifts/grants/${result.id}`);
               router.refresh();
             }}
           >
             <div>
-              <Label htmlFor="grant-title">Grant name</Label>
+              <Label htmlFor="grant-title">{t("finance.gifts.grantDialog.name")}</Label>
               <Input id="grant-title" name="title" maxLength={200} defaultValue={grant?.title} required />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="grant-funder">Funder</Label>
+                <Label htmlFor="grant-funder">{t("finance.gifts.grantDialog.funder")}</Label>
                 <Select id="grant-funder" name="funderId" defaultValue={grant?.funder_crm_organization_id ?? ""} required>
-                  <option value="">Choose from the CRM</option>
+                  <option value="">{t("finance.gifts.grantDialog.chooseFromCrm")}</option>
                   {options.funders.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.label}
@@ -124,9 +126,9 @@ export function GrantDialog({ grant, options }: { grant?: GrantFormValue; option
                 </Select>
               </div>
               <div>
-                <Label htmlFor="grant-contact">Funder contact (optional)</Label>
+                <Label htmlFor="grant-contact">{t("finance.gifts.grantDialog.contactOptional")}</Label>
                 <Select id="grant-contact" name="funderContactId" defaultValue={grant?.funder_contact_id ?? ""}>
-                  <option value="">None</option>
+                  <option value="">{t("finance.common.none")}</option>
                   {options.contacts.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.label}
@@ -137,45 +139,45 @@ export function GrantDialog({ grant, options }: { grant?: GrantFormValue; option
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="grant-amount">Amount awarded</Label>
+                <Label htmlFor="grant-amount">{t("finance.gifts.grantDialog.amountAwarded")}</Label>
                 <Input id="grant-amount" name="amount" inputMode="decimal" defaultValue={grant?.amount} required />
               </div>
               <div>
-                <Label htmlFor="grant-reference">Funder&apos;s file number (optional)</Label>
+                <Label htmlFor="grant-reference">{t("finance.gifts.grantDialog.referenceOptional")}</Label>
                 <Input id="grant-reference" name="funderReference" maxLength={100} defaultValue={grant?.funder_reference ?? ""} />
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
-                <Label htmlFor="grant-awarded">Awarded on</Label>
+                <Label htmlFor="grant-awarded">{t("finance.gifts.grantDialog.awardedOn")}</Label>
                 <Input id="grant-awarded" name="awardedOn" type="date" defaultValue={grant?.awarded_on ?? ""} />
               </div>
               <div>
-                <Label htmlFor="grant-starts">Starts</Label>
+                <Label htmlFor="grant-starts">{t("finance.gifts.grantDialog.starts")}</Label>
                 <Input id="grant-starts" name="startsOn" type="date" defaultValue={grant?.starts_on ?? ""} />
               </div>
               <div>
-                <Label htmlFor="grant-ends">Ends</Label>
+                <Label htmlFor="grant-ends">{t("finance.gifts.grantDialog.ends")}</Label>
                 <Input id="grant-ends" name="endsOn" type="date" defaultValue={grant?.ends_on ?? ""} />
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="grant-fund">Fund</Label>
+                <Label htmlFor="grant-fund">{t("finance.common.fund")}</Label>
                 <Select id="grant-fund" name="fundId" defaultValue={grant?.fund_id ?? ""} required>
-                  <option value="">Choose a fund</option>
+                  <option value="">{t("finance.gifts.grantDialog.chooseFund")}</option>
                   {options.funds.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.label}
                     </option>
                   ))}
                 </Select>
-                <FieldHint>Usually an externally restricted fund set up in Ledger, Funds.</FieldHint>
+                <FieldHint>{t("finance.gifts.grantDialog.fundHint")}</FieldHint>
               </div>
               <div>
-                <Label htmlFor="grant-program">Program (optional)</Label>
+                <Label htmlFor="grant-program">{t("finance.gifts.grantDialog.programOptional")}</Label>
                 <Select id="grant-program" name="programId" defaultValue={grant?.program_id ?? ""}>
-                  <option value="">Any program</option>
+                  <option value="">{t("finance.gifts.grantDialog.anyProgram")}</option>
                   {options.programs.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.label}
@@ -185,28 +187,28 @@ export function GrantDialog({ grant, options }: { grant?: GrantFormValue; option
               </div>
             </div>
             <div>
-              <Label htmlFor="grant-restrictions">Restrictions and conditions</Label>
+              <Label htmlFor="grant-restrictions">{t("finance.gifts.grantDialog.restrictions")}</Label>
               <Textarea id="grant-restrictions" name="restrictions" maxLength={2000} defaultValue={grant?.restrictions ?? ""} />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="grant-responsible">Responsible for reports</Label>
+                <Label htmlFor="grant-responsible">{t("finance.gifts.grantDialog.responsible")}</Label>
                 <Select id="grant-responsible" name="responsibleUserId" defaultValue={grant?.responsible_user_id ?? ""}>
-                  <option value="">Owners and admins</option>
+                  <option value="">{t("finance.gifts.grantDialog.ownersAndAdmins")}</option>
                   {options.staff.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.label}
                     </option>
                   ))}
                 </Select>
-                <FieldHint>Gets the report reminders.</FieldHint>
+                <FieldHint>{t("finance.gifts.grantDialog.responsibleHint")}</FieldHint>
               </div>
               {grant ? (
                 <div>
-                  <Label htmlFor="grant-status">Status</Label>
+                  <Label htmlFor="grant-status">{t("finance.common.status")}</Label>
                   <Select id="grant-status" name="status" defaultValue={grant.status}>
-                    <option value="active">Active</option>
-                    <option value="closed">Closed (no more reminders)</option>
+                    <option value="active">{t("finance.gifts.grantDialog.active")}</option>
+                    <option value="closed">{t("finance.gifts.grantDialog.closedNoReminders")}</option>
                   </Select>
                 </div>
               ) : null}
@@ -218,10 +220,10 @@ export function GrantDialog({ grant, options }: { grant?: GrantFormValue; option
             ) : null}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-                Cancel
+                {t("finance.common.cancel")}
               </Button>
               <Button type="submit" loading={saving}>
-                Save grant
+                {t("finance.gifts.grantDialog.save")}
               </Button>
             </div>
           </form>
@@ -234,12 +236,13 @@ export function GrantDialog({ grant, options }: { grant?: GrantFormValue; option
 export function AddReportForm({ grantId }: { grantId: string }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
     <form
       className="flex flex-wrap items-end gap-2"
-      aria-label="Add a report due date"
+      aria-label={t("finance.gifts.reportForm.formLabel")}
       onSubmit={async (e) => {
         e.preventDefault();
         const formEl = e.currentTarget;
@@ -249,24 +252,24 @@ export function AddReportForm({ grantId }: { grantId: string }) {
         const result = await addGrantReport({ grantId, title: form.get("title"), dueOn: form.get("dueOn") });
         setSaving(false);
         if (!result.ok) {
-          setError(result.error ?? "Could not add the report.");
+          setError(result.error ?? t("finance.gifts.reportForm.couldNotAdd"));
           return;
         }
         formEl.reset();
-        toast("Report due date added.", { tone: "success" });
+        toast(t("finance.gifts.reportForm.added"), { tone: "success" });
         router.refresh();
       }}
     >
       <div className="min-w-48 flex-1">
-        <Label htmlFor="report-title">Report</Label>
-        <Input id="report-title" name="title" maxLength={200} placeholder="Interim report" required />
+        <Label htmlFor="report-title">{t("finance.gifts.reportForm.report")}</Label>
+        <Input id="report-title" name="title" maxLength={200} placeholder={t("finance.gifts.reportForm.placeholder")} required />
       </div>
       <div>
-        <Label htmlFor="report-due">Due</Label>
+        <Label htmlFor="report-due">{t("finance.gifts.reportForm.due")}</Label>
         <Input id="report-due" name="dueOn" type="date" required />
       </div>
       <Button type="submit" loading={saving}>
-        Add
+        {t("finance.gifts.reportForm.add")}
       </Button>
       {error ? (
         <p role="alert" className="w-full text-[13px] text-danger-fg">
@@ -288,34 +291,35 @@ export function ReportControls({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [pending, setPending] = useState(false);
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
     setPending(true);
     const result = await fn();
     setPending(false);
-    toast(result.ok ? done : (result.error ?? "Could not update the report."), { tone: result.ok ? "success" : "error" });
+    toast(result.ok ? done : (result.error ?? t("finance.gifts.reportForm.couldNotUpdate")), { tone: result.ok ? "success" : "error" });
     router.refresh();
   };
   return (
     <div className="flex flex-wrap justify-end gap-2">
       {submitted ? (
-        <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => setGrantReportSubmitted({ reportId, submittedOn: "" }), "Marked as not submitted.")}>
-          Undo submitted
+        <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => setGrantReportSubmitted({ reportId, submittedOn: "" }), t("finance.gifts.reportForm.markedNotSubmitted"))}>
+          {t("finance.gifts.reportForm.undoSubmitted")}
         </Button>
       ) : (
         <>
-          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => setGrantReportSubmitted({ reportId, submittedOn: today }), "Marked as submitted.")}>
-            Mark submitted
+          <Button size="sm" variant="secondary" disabled={pending} onClick={() => run(() => setGrantReportSubmitted({ reportId, submittedOn: today }), t("finance.gifts.reportForm.markedSubmitted"))}>
+            {t("finance.gifts.reportForm.markSubmitted")}
           </Button>
           <Button
             size="sm"
             variant="ghost"
             disabled={pending}
             onClick={() => {
-              if (window.confirm("Remove this report due date?")) void run(() => deleteGrantReport(reportId), "Report removed.");
+              if (window.confirm(t("finance.gifts.reportForm.confirmRemove"))) void run(() => deleteGrantReport(reportId), t("finance.gifts.reportForm.removed"));
             }}
           >
-            Remove
+            {t("finance.gifts.reportForm.remove")}
           </Button>
         </>
       )}

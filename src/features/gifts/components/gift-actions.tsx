@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { useT } from "@/lib/i18n/client";
 import {
   issueAnnualStatement,
   issueGiftAcknowledgement,
@@ -23,6 +24,7 @@ type Target = { kind: "gift"; giftId: string } | { kind: "statement"; donor: str
 export function AcknowledgeForm({ target, defaultEmail }: { target: Target; defaultEmail: string | null }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [channel, setChannel] = useState<"print" | "email">("print");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function AcknowledgeForm({ target, defaultEmail }: { target: Target; defa
   return (
     <form
       className="space-y-3"
-      aria-label={target.kind === "gift" ? "Issue a thank-you acknowledgement" : "Issue the annual statement"}
+      aria-label={t(target.kind === "gift" ? "finance.gifts.ackForm.formLabelGift" : "finance.gifts.ackForm.formLabelStatement")}
       onSubmit={async (e) => {
         e.preventDefault();
         setError(null);
@@ -48,14 +50,14 @@ export function AcknowledgeForm({ target, defaultEmail }: { target: Target; defa
             : await issueAnnualStatement({ ...delivery, donor: target.donor, year: target.year });
         setSaving(false);
         if (!result.ok) {
-          setError(result.error ?? "Could not issue the letter.");
+          setError(result.error ?? t("finance.gifts.ackForm.couldNotIssue"));
           if (result.id) router.refresh();
           return;
         }
         if (channel === "print" && result.id) {
           window.open(`/api/finance/gifts/acknowledgements/${result.id}`, "_blank", "noopener");
         }
-        toast(channel === "email" ? "Letter emailed." : "Letter issued. It opens in a new tab for printing.", {
+        toast(channel === "email" ? t("finance.gifts.ackForm.emailed") : t("finance.gifts.ackForm.issuedForPrint"), {
           tone: "success",
         });
         router.refresh();
@@ -63,27 +65,27 @@ export function AcknowledgeForm({ target, defaultEmail }: { target: Target; defa
     >
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <Label htmlFor={`${prefix}-language`}>Language</Label>
+          <Label htmlFor={`${prefix}-language`}>{t("finance.gifts.ackForm.language")}</Label>
           <Select id={`${prefix}-language`} name="language" defaultValue="fr">
-            <option value="fr">Français</option>
-            <option value="en">English</option>
+            <option value="fr">{t("finance.gifts.languages.fr")}</option>
+            <option value="en">{t("finance.gifts.languages.en")}</option>
           </Select>
         </div>
         <div>
-          <Label htmlFor={`${prefix}-channel`}>Send by</Label>
+          <Label htmlFor={`${prefix}-channel`}>{t("finance.gifts.ackForm.sendBy")}</Label>
           <Select
             id={`${prefix}-channel`}
             value={channel}
             onChange={(e) => setChannel(e.target.value as "print" | "email")}
           >
-            <option value="print">Print or save (HTML)</option>
-            <option value="email">Email</option>
+            <option value="print">{t("finance.gifts.ackForm.printOrSave")}</option>
+            <option value="email">{t("finance.gifts.ackForm.email")}</option>
           </Select>
         </div>
       </div>
       {channel === "email" ? (
         <div>
-          <Label htmlFor={`${prefix}-email`}>Donor&apos;s email</Label>
+          <Label htmlFor={`${prefix}-email`}>{t("finance.gifts.ackForm.donorEmail")}</Label>
           <Input
             id={`${prefix}-email`}
             name="recipientEmail"
@@ -92,7 +94,7 @@ export function AcknowledgeForm({ target, defaultEmail }: { target: Target; defa
             defaultValue={defaultEmail ?? ""}
             required
           />
-          <FieldHint>Taken from the CRM. Outside production, only allowlisted addresses are emailed.</FieldHint>
+          <FieldHint>{t("finance.gifts.ackForm.emailHint")}</FieldHint>
         </div>
       ) : null}
       {error ? (
@@ -101,7 +103,7 @@ export function AcknowledgeForm({ target, defaultEmail }: { target: Target; defa
         </p>
       ) : null}
       <Button type="submit" loading={saving}>
-        {target.kind === "gift" ? "Issue thank-you letter" : "Issue statement"}
+        {t(target.kind === "gift" ? "finance.gifts.ackForm.issueLetter" : "finance.gifts.ackForm.issueStatement")}
       </Button>
     </form>
   );
@@ -110,6 +112,7 @@ export function AcknowledgeForm({ target, defaultEmail }: { target: Target; defa
 export function ResendButton({ ackId }: { ackId: string }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [pending, setPending] = useState(false);
   return (
     <Button
@@ -120,13 +123,13 @@ export function ResendButton({ ackId }: { ackId: string }) {
         setPending(true);
         const result = await resendAcknowledgement(ackId);
         setPending(false);
-        toast(result.ok ? "Letter emailed." : (result.error ?? "Could not send the email."), {
+        toast(result.ok ? t("finance.gifts.ackForm.emailed") : (result.error ?? t("finance.gifts.ackForm.couldNotSend")), {
           tone: result.ok ? "success" : "error",
         });
         router.refresh();
       }}
     >
-      Try email again
+      {t("finance.gifts.ackForm.tryEmailAgain")}
     </Button>
   );
 }
@@ -135,15 +138,16 @@ export function ResendButton({ ackId }: { ackId: string }) {
 export function VoidGiftDialog({ giftId, today }: { giftId: string; today: string }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
     <>
       <Button variant="danger" onClick={() => setOpen(true)}>
-        Void gift
+        {t("finance.gifts.voidDialog.button")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Void this gift">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("finance.gifts.voidDialog.title")}>
         <form
           className="space-y-4"
           onSubmit={async (e) => {
@@ -154,25 +158,22 @@ export function VoidGiftDialog({ giftId, today }: { giftId: string; today: strin
             const result = await voidGift({ giftId, voidOn: form.get("voidOn"), reason: form.get("reason") });
             setSaving(false);
             if (!result.ok) {
-              setError(result.error ?? "Could not void the gift.");
+              setError(result.error ?? t("finance.gifts.voidDialog.couldNotVoid"));
               return;
             }
-            toast("Gift voided and its ledger entry reversed.", { tone: "success" });
+            toast(t("finance.gifts.voidDialog.voided"), { tone: "success" });
             setOpen(false);
             router.refresh();
           }}
         >
-          <p className="text-[13.5px] text-muted">
-            The gift stays on record, marked void, and a reversing entry is posted to the ledger. This cannot be undone:
-            to restore it, record the gift again.
-          </p>
+          <p className="text-[13.5px] text-muted">{t("finance.gifts.voidDialog.explanation")}</p>
           <div>
-            <Label htmlFor="void-date">Date of the reversing entry</Label>
+            <Label htmlFor="void-date">{t("finance.gifts.voidDialog.date")}</Label>
             <Input id="void-date" name="voidOn" type="date" defaultValue={today} required />
-            <FieldHint>Must be in an open period, on or after the date the gift was received.</FieldHint>
+            <FieldHint>{t("finance.gifts.voidDialog.dateHint")}</FieldHint>
           </div>
           <div>
-            <Label htmlFor="void-reason">Reason</Label>
+            <Label htmlFor="void-reason">{t("finance.gifts.voidDialog.reason")}</Label>
             <Input id="void-reason" name="reason" maxLength={500} required />
           </div>
           {error ? (
@@ -182,10 +183,10 @@ export function VoidGiftDialog({ giftId, today }: { giftId: string; today: strin
           ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.common.cancel")}
             </Button>
             <Button type="submit" variant="danger" loading={saving}>
-              Void and reverse
+              {t("finance.gifts.voidDialog.submit")}
             </Button>
           </div>
         </form>

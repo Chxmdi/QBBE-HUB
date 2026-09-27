@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Checkbox, FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { useT } from "@/lib/i18n/client";
 import { recordGift } from "@/features/gifts/services/gift.commands";
 
 export interface Option {
@@ -34,6 +35,7 @@ type GiftType = "donation" | "grant_payment" | "in_kind";
 export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,13 +55,11 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus className="size-4" aria-hidden />
-        Record a gift
+        {t("finance.gifts.recordDialog.button")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Record a gift" className="max-w-2xl">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("finance.gifts.recordDialog.button")} className="max-w-2xl">
         {noDonors ? (
-          <p className="text-[13.5px] text-muted">
-            Add the donor to Relationships (the CRM) first. Gifts are always linked to a CRM contact or organization.
-          </p>
+          <p className="text-[13.5px] text-muted">{t("finance.gifts.recordDialog.noDonors")}</p>
         ) : (
           <form
             className="space-y-4"
@@ -89,10 +89,10 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
               });
               setSaving(false);
               if (!result.ok) {
-                setError(result.error ?? "Could not record the gift.");
+                setError(result.error ?? t("finance.gifts.recordDialog.couldNotRecord"));
                 return;
               }
-              toast(posts ? "Gift recorded and posted to the ledger." : "Gift recorded.", { tone: "success" });
+              toast(posts ? t("finance.gifts.recordDialog.recordedAndPosted") : t("finance.gifts.recordDialog.recorded"), { tone: "success" });
               setOpen(false);
               router.push(`/finance/gifts/${result.id}`);
               router.refresh();
@@ -100,39 +100,39 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="gift-type">Kind of gift</Label>
+                <Label htmlFor="gift-type">{t("finance.gifts.recordDialog.kind")}</Label>
                 <Select id="gift-type" value={type} onChange={(e) => setType(e.target.value as GiftType)}>
-                  <option value="donation">Donation (money)</option>
-                  <option value="grant_payment">Grant payment</option>
-                  <option value="in_kind">In-kind gift (goods or services)</option>
+                  <option value="donation">{t("finance.gifts.recordDialog.typeDonation")}</option>
+                  <option value="grant_payment">{t("finance.gifts.recordDialog.typeGrantPayment")}</option>
+                  <option value="in_kind">{t("finance.gifts.recordDialog.typeInKind")}</option>
                 </Select>
               </div>
               <div>
-                <Label htmlFor="gift-received">Date received</Label>
+                <Label htmlFor="gift-received">{t("finance.gifts.recordDialog.dateReceived")}</Label>
                 <Input id="gift-received" name="receivedOn" type="date" max={options.today} defaultValue={options.today} required />
               </div>
             </div>
 
             {type === "grant_payment" ? (
               <div>
-                <Label htmlFor="gift-grant">Grant</Label>
+                <Label htmlFor="gift-grant">{t("finance.gifts.recordDialog.grant")}</Label>
                 <Select id="gift-grant" value={grantId} onChange={(e) => setGrantId(e.target.value)} required>
-                  <option value="">Choose a grant</option>
+                  <option value="">{t("finance.gifts.recordDialog.chooseGrant")}</option>
                   {options.grants.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.label}
                     </option>
                   ))}
                 </Select>
-                <FieldHint>The payment comes from the grant&apos;s funder and goes to the grant&apos;s fund.</FieldHint>
+                <FieldHint>{t("finance.gifts.recordDialog.grantHint")}</FieldHint>
               </div>
             ) : (
               <div>
-                <Label htmlFor="gift-donor">Donor</Label>
+                <Label htmlFor="gift-donor">{t("finance.gifts.recordDialog.donor")}</Label>
                 <Select id="gift-donor" name="donor" required defaultValue="">
-                  <option value="">Choose from the CRM</option>
+                  <option value="">{t("finance.gifts.recordDialog.chooseFromCrm")}</option>
                   {options.contacts.length ? (
-                    <optgroup label="People">
+                    <optgroup label={t("finance.gifts.recordDialog.people")}>
                       {options.contacts.map((c) => (
                         <option key={c.id} value={`contact:${c.id}`}>
                           {c.label}
@@ -141,7 +141,7 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
                     </optgroup>
                   ) : null}
                   {options.organizations.length ? (
-                    <optgroup label="Organizations">
+                    <optgroup label={t("finance.gifts.recordDialog.organizations")}>
                       {options.organizations.map((o) => (
                         <option key={o.id} value={`organization:${o.id}`}>
                           {o.label}
@@ -150,13 +150,13 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
                     </optgroup>
                   ) : null}
                 </Select>
-                <FieldHint>Not listed? Add them in Relationships first.</FieldHint>
+                <FieldHint>{t("finance.gifts.recordDialog.notListed")}</FieldHint>
               </div>
             )}
 
             {type === "in_kind" ? (
               <div>
-                <Label htmlFor="gift-description">What was given</Label>
+                <Label htmlFor="gift-description">{t("finance.gifts.recordDialog.whatWasGiven")}</Label>
                 <Textarea id="gift-description" name="inKindDescription" maxLength={1000} required />
               </div>
             ) : null}
@@ -164,13 +164,13 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="gift-amount">
-                  {type === "in_kind" ? "Value stated by the donor (optional)" : "Amount received"}
+                  {type === "in_kind" ? t("finance.gifts.recordDialog.valueOptional") : t("finance.gifts.recordDialog.amountReceived")}
                 </Label>
                 <Input
                   id="gift-amount"
                   name="amount"
                   inputMode="decimal"
-                  placeholder="0.00"
+                  placeholder={t("finance.gifts.recordDialog.amountPlaceholder")}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   required={type !== "in_kind"}
@@ -179,7 +179,7 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
               {type === "in_kind" ? (
                 <label className="mt-6 flex items-start gap-2 text-[13.5px]">
                   <Checkbox checked={valueByDonor} onChange={(e) => setValueByDonor(e.target.checked)} />
-                  <span>The donor supplied this value. QBBE does not put a value on in-kind gifts itself.</span>
+                  <span>{t("finance.gifts.recordDialog.donorSuppliedValue")}</span>
                 </label>
               ) : null}
             </div>
@@ -187,7 +187,7 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
             <div className="grid gap-4 sm:grid-cols-2">
               {type === "grant_payment" ? null : (
                 <div>
-                  <Label htmlFor="gift-fund">Fund</Label>
+                  <Label htmlFor="gift-fund">{t("finance.common.fund")}</Label>
                   <Select id="gift-fund" name="fundId" required defaultValue={options.funds[0]?.id ?? ""}>
                     {options.funds.map((f) => (
                       <option key={f.id} value={f.id}>
@@ -195,13 +195,13 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
                       </option>
                     ))}
                   </Select>
-                  <FieldHint>General fund for unrestricted gifts; a restricted fund when the donor set conditions.</FieldHint>
+                  <FieldHint>{t("finance.gifts.recordDialog.fundHint")}</FieldHint>
                 </div>
               )}
               <div>
-                <Label htmlFor="gift-program">Restricted to a program (optional)</Label>
+                <Label htmlFor="gift-program">{t("finance.gifts.recordDialog.programOptional")}</Label>
                 <Select id="gift-program" name="programId" defaultValue="">
-                  <option value="">No program restriction</option>
+                  <option value="">{t("finance.gifts.recordDialog.noProgramRestriction")}</option>
                   {options.programs.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label}
@@ -211,16 +211,16 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
               </div>
             </div>
             <div>
-              <Label htmlFor="gift-restriction">Donor&apos;s own words about how it may be used (optional)</Label>
+              <Label htmlFor="gift-restriction">{t("finance.gifts.recordDialog.donorWords")}</Label>
               <Input id="gift-restriction" name="donorRestriction" maxLength={1000} />
             </div>
 
             {posts ? (
               <fieldset className="rounded-(--radius-sm) border border-line p-3">
-                <legend className="px-1 text-[13px] font-medium">Ledger entry</legend>
+                <legend className="px-1 text-[13px] font-medium">{t("finance.gifts.recordDialog.ledgerEntry")}</legend>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <Label htmlFor="gift-debit">Debit</Label>
+                    <Label htmlFor="gift-debit">{t("finance.common.debit")}</Label>
                     <Select id="gift-debit" name="debitAccountId" key={`d-${type}`} defaultValue={defaultDebit} required>
                       {options.debitAccounts.map((a) => (
                         <option key={a.id} value={a.id}>
@@ -230,7 +230,7 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
                     </Select>
                   </div>
                   <div>
-                    <Label htmlFor="gift-credit">Credit</Label>
+                    <Label htmlFor="gift-credit">{t("finance.common.credit")}</Label>
                     <Select id="gift-credit" name="creditAccountId" key={`c-${type}`} defaultValue={defaultCredit} required>
                       {options.creditAccounts.map((a) => (
                         <option key={a.id} value={a.id}>
@@ -240,16 +240,14 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
                     </Select>
                   </div>
                 </div>
-                <FieldHint>
-                  Posted at once, dated the day received. A posted entry never changes; to correct it, void the gift.
-                </FieldHint>
+                <FieldHint>{t("finance.gifts.recordDialog.postingHint")}</FieldHint>
               </fieldset>
             ) : (
-              <p className="text-[13px] text-muted">No dollar value, so nothing is posted to the ledger.</p>
+              <p className="text-[13px] text-muted">{t("finance.gifts.recordDialog.nothingPosted")}</p>
             )}
 
             <div>
-              <Label htmlFor="gift-note">Internal note (optional)</Label>
+              <Label htmlFor="gift-note">{t("finance.gifts.recordDialog.noteOptional")}</Label>
               <Input id="gift-note" name="note" maxLength={1000} />
             </div>
 
@@ -260,10 +258,10 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
             ) : null}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-                Cancel
+                {t("finance.common.cancel")}
               </Button>
               <Button type="submit" loading={saving}>
-                {posts ? "Record and post" : "Record gift"}
+                {posts ? t("finance.gifts.recordDialog.recordAndPost") : t("finance.gifts.recordDialog.recordGift")}
               </Button>
             </div>
           </form>

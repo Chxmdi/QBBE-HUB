@@ -10,8 +10,11 @@ import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { formatCents } from "@/features/ledger/money";
 import { dateParam, getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
 import { GiftTabs } from "@/features/gifts/components/gift-tabs";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Donors" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.gifts.donors.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 interface DonorRow {
@@ -32,15 +35,16 @@ export default async function DonorsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { session, supabase, canRead } = await getLedgerAccess();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const params = await searchParams;
   const today = todayIn(session.timeZone);
   const from = dateParam(params.from, `${today.slice(0, 4)}-01-01`);
   const to = dateParam(params.to, today);
   const header = (
     <PageHeader
-      eyebrow="Gifts"
-      title="Donors"
-      description="Everyone who gave in the period, with their totals. Donor information is personal: every view and export of this list is recorded in the audit log."
+      eyebrow={t("finance.gifts.tabs.gifts")}
+      title={t("finance.gifts.donors.metaTitle")}
+      description={t("finance.gifts.donors.description")}
     />
   );
   if (!canRead) {
@@ -69,46 +73,46 @@ export default async function DonorsPage({
     <div>
       {header}
       <GiftTabs />
-      <form method="get" className="mb-4 flex flex-wrap items-end gap-2" aria-label="Choose the period">
+      <form method="get" className="mb-4 flex flex-wrap items-end gap-2" aria-label={t("finance.gifts.donors.periodFormLabel")}>
         <div>
-          <Label htmlFor="donors-from">From</Label>
+          <Label htmlFor="donors-from">{t("finance.gifts.donors.from")}</Label>
           <Input id="donors-from" name="from" type="date" defaultValue={from} />
         </div>
         <div>
-          <Label htmlFor="donors-to">To</Label>
+          <Label htmlFor="donors-to">{t("finance.gifts.donors.to")}</Label>
           <Input id="donors-to" name="to" type="date" defaultValue={to} />
         </div>
         <Button type="submit" variant="secondary">
-          Show
+          {t("finance.gifts.list.show")}
         </Button>
         <a
           href={`/api/finance/gifts/donors/export?from=${from}&to=${to}`}
           className="ml-auto inline-flex h-9.5 items-center gap-2 rounded-(--radius-sm) border border-line bg-surface px-4 text-sm font-medium hover:bg-surface-soft"
         >
           <Download className="size-4" aria-hidden />
-          Export CSV
+          {t("finance.common.exportCsv")}
         </a>
       </form>
       {from > to ? (
         <p role="alert" className="mb-4 text-[13px] text-danger-fg">
-          The start date must be on or before the end date.
+          {t("finance.gifts.donors.badRange")}
         </p>
       ) : null}
       {error ? (
         <p role="alert" className="mb-4 text-[13px] text-danger-fg">
-          Could not load donors. Try again.
+          {t("finance.gifts.donors.loadError")}
         </p>
       ) : donors.length === 0 ? (
-        <EmptyState icon={<Users />} title="No gifts in this period" />
+        <EmptyState icon={<Users />} title={t("finance.gifts.donors.empty")} />
       ) : (
         <DataTable minWidth="720px">
           <TableHead>
-            <TableHeader>Donor</TableHeader>
-            <TableHeader className="text-right">Gifts</TableHeader>
-            <TableHeader className="text-right">Received in money</TableHeader>
-            <TableHeader>Last gift</TableHeader>
+            <TableHeader>{t("finance.gifts.donors.colDonor")}</TableHeader>
+            <TableHeader className="text-right">{t("finance.gifts.donors.colGifts")}</TableHeader>
+            <TableHeader className="text-right">{t("finance.gifts.donors.colReceivedMoney")}</TableHeader>
+            <TableHeader>{t("finance.gifts.donors.colLastGift")}</TableHeader>
             <TableHeader>
-              <span className="sr-only">Statement</span>
+              <span className="sr-only">{t("finance.gifts.donors.colStatement")}</span>
             </TableHeader>
           </TableHead>
           <tbody>
@@ -116,20 +120,20 @@ export default async function DonorsPage({
               <TableRow key={`${d.donor_kind}:${d.donor_id}`}>
                 <TableCell>
                   {d.donor_name}
-                  <p className="meta">{d.donor_kind === "contact" ? "Person" : "Organization"}</p>
+                  <p className="meta">{t(d.donor_kind === "contact" ? "finance.gifts.donors.person" : "finance.gifts.donors.organization")}</p>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {Number(d.gift_count)}
-                  {Number(d.in_kind_count) > 0 ? <p className="meta">{Number(d.in_kind_count)} in kind</p> : null}
+                  {Number(d.in_kind_count) > 0 ? <p className="meta">{t("finance.gifts.donors.inKindCount", { count: Number(d.in_kind_count) })}</p> : null}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">{formatCents(Number(d.total_cents))}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatCents(Number(d.total_cents), locale)}</TableCell>
                 <TableCell>{d.last_gift_on}</TableCell>
                 <TableCell className="text-right">
                   <Link
                     href={`/finance/gifts/statement?donor=${d.donor_kind}:${d.donor_id}&year=${year}`}
                     className="text-[13px] underline"
                   >
-                    {year} statement
+                    {t("finance.gifts.donors.statementLink", { year })}
                   </Link>
                 </TableCell>
               </TableRow>

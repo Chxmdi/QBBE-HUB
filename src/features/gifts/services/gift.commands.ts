@@ -8,6 +8,8 @@ import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 import { parseMoneyToCents } from "@/features/ledger/money";
 import { emailAcknowledgement } from "@/features/gifts/services/gift.email";
 import {
@@ -42,11 +44,11 @@ type DbError = { code?: string; message: string } | null;
 // else (row-level security, a network failure) gets a generic message.
 const READABLE_CODES = new Set(["23514", "22023", "42501", "23505", "P0002"]);
 
-function dbMessage(error: DbError, fallback: string): string {
+function dbMessage(error: DbError, fallback: MessageKey): string {
   if (!error) return fallback;
-  if (error.code === "23503") return "An account, fund, donor, program or grant is not in this organization.";
+  if (error.code === "23503") return "finance.gifts.errors.notInOrganization";
   if (error.code === "23514" && /violates check constraint/i.test(error.message)) {
-    return "Check the values entered.";
+    return "finance.gifts.errors.checkValues";
   }
   if (
     error.code &&
@@ -68,7 +70,7 @@ async function authorize(
   return { ok: true, organizationId: auth.session.organizationId, userId: auth.session.userId };
 }
 
-const isoDate = (message: string) => requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message);
+const isoDate = (message: MessageKey) => requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message);
 const optionalUuid = z
   .string()
   .trim()
@@ -85,9 +87,21 @@ const optionalText = (max: number) =>
 const optionalDate = z
   .string()
   .trim()
-  .regex(/^(\d{4}-\d{2}-\d{2})?$/, "Enter dates as YYYY-MM-DD.")
+  .regex(/^(\d{4}-\d{2}-\d{2})?$/, "finance.gifts.errors.dateFormat")
   .optional()
   .transform((v) => v || null);
+
+/**
+ * Messages in this file are catalogue keys (finance.gifts.errors.*), so each
+ * action's error is translated here, once, into the person's language. A
+ * message that is not a key (one raised by the database, or by the shared
+ * sign-in and rate-limit checks) comes back unchanged.
+ */
+async function translated(result: ActionResult): Promise<ActionResult> {
+  if (result.ok || !result.error) return result;
+  const t = await getT();
+  return { ...result, error: t(result.error as MessageKey) };
+}
 
 function todayInToronto(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
@@ -99,9 +113,9 @@ function todayInToronto(): string {
 
 const giftSchema = z
   .object({
-    giftType: z.enum(["donation", "grant_payment", "in_kind"], { message: "Choose the kind of gift." }),
-    donor: requiredText("Choose the donor from the CRM."),
-    receivedOn: isoDate("Enter the date the gift was received."),
+    giftType: z.enum(["donation", "grant_payment", "in_kind"], { message: "finance.gifts.errors.chooseKind" }),
+    donor: requiredText("finance.gifts.errors.chooseDonorFromCrm"),
+    receivedOn: isoDate("finance.gifts.errors.enterReceivedOn"),
     amount: z.string().trim().optional(),
     inKindDescription: optionalText(1000),
     valueSuppliedByDonor: z.boolean().default(false),
@@ -115,36 +129,36 @@ const giftSchema = z
   })
   .superRefine((g, ctx) => {
     if (g.giftType === "in_kind" && !g.inKindDescription) {
-      ctx.addIssue({ code: "custom", message: "Describe the in-kind gift.", path: ["inKindDescription"] });
+      ctx.addIssue({ code: "custom", message: "finance.gifts.errors.describeInKind", path: ["inKindDescription"] });
     }
     if (g.giftType === "grant_payment" && !g.grantId) {
-      ctx.addIssue({ code: "custom", message: "Choose the grant this payment is for.", path: ["grantId"] });
+      ctx.addIssue({ code: "custom", message: "finance.gifts.errors.chooseGrantForPayment", path: ["grantId"] });
     }
     if (g.giftType !== "grant_payment" && !g.fundId) {
-      ctx.addIssue({ code: "custom", message: "Choose the fund the gift belongs to.", path: ["fundId"] });
+      ctx.addIssue({ code: "custom", message: "finance.gifts.errors.chooseGiftFund", path: ["fundId"] });
     }
   });
 
-export async function recordGift(input: unknown): Promise<ActionResult> {
+async function recordGiftImpl(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
   const parsed = giftSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
   const g = parsed.data;
   const donor = parseDonorKey(g.donor);
-  if (!donor) return { ok: false, error: "Choose the donor from the CRM." };
+  if (!donor) return { ok: false, error: "finance.gifts.errors.chooseDonorFromCrm" };
 
   let amountCents: number | null = null;
   if (g.amount) {
     amountCents = parseMoneyToCents(g.amount);
     if (amountCents === null || amountCents <= 0) {
-      return { ok: false, error: "Enter the amount as dollars and cents, for example 250.00." };
+      return { ok: false, error: "finance.gifts.errors.amountFormat" };
     }
   }
   if (g.giftType === "in_kind" && amountCents !== null && !g.valueSuppliedByDonor) {
     return {
       ok: false,
-      error: "Leave the value blank unless the donor told you what the in-kind gift is worth.",
+      error: "finance.gifts.errors.inKindValueBlank",
     };
   }
   const posts = amountCents !== null;
@@ -169,7 +183,7 @@ export async function recordGift(input: unknown): Promise<ActionResult> {
       note: g.note,
     },
   });
-  if (error || !data) return { ok: false, error: dbMessage(error, "Could not record the gift. Try again.") };
+  if (error || !data) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotRecord") };
   revalidatePath(GIFTS, "layout");
   revalidatePath("/finance/ledger", "layout");
   if (g.grantId) revalidatePath(GRANTS, "layout");
@@ -177,12 +191,12 @@ export async function recordGift(input: unknown): Promise<ActionResult> {
 }
 
 const voidSchema = z.object({
-  giftId: z.string().uuid({ message: "Gift not found." }),
-  voidOn: isoDate("Enter the date of the correction."),
-  reason: requiredText("Give the reason for voiding the gift.", 500),
+  giftId: z.string().uuid({ message: "finance.gifts.errors.giftNotFound" }),
+  voidOn: isoDate("finance.gifts.errors.enterCorrectionDate"),
+  reason: requiredText("finance.gifts.errors.giveVoidReason", 500),
 });
 
-export async function voidGift(input: unknown): Promise<ActionResult> {
+async function voidGiftImpl(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
   const parsed = voidSchema.safeParse(input);
@@ -193,7 +207,7 @@ export async function voidGift(input: unknown): Promise<ActionResult> {
     p_date: parsed.data.voidOn,
     p_reason: parsed.data.reason,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not void the gift. Try again.") };
+  if (error) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotVoid") };
   revalidatePath(GIFTS, "layout");
   revalidatePath("/finance/ledger", "layout");
   return { ok: true };
@@ -205,18 +219,18 @@ export async function voidGift(input: unknown): Promise<ActionResult> {
 
 const deliverySchema = z
   .object({
-    language: z.enum(LANGUAGES, { message: "Choose English or French." }),
-    channel: z.enum(["print", "email"], { message: "Choose print or email." }),
+    language: z.enum(LANGUAGES, { message: "finance.gifts.errors.chooseLanguage" }),
+    channel: z.enum(["print", "email"], { message: "finance.gifts.errors.chooseChannel" }),
     recipientEmail: z
       .string()
       .trim()
       .max(320)
       .optional()
       .transform((v) => v || null)
-      .pipe(z.string().email("Enter a valid email address.").nullable()),
+      .pipe(z.string().email("finance.gifts.errors.validEmail").nullable()),
   })
   .refine((d) => d.channel !== "email" || d.recipientEmail, {
-    message: "Enter the donor's email address.",
+    message: "finance.gifts.errors.enterDonorEmail",
     path: ["recipientEmail"],
   });
 
@@ -261,7 +275,7 @@ async function issue(
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: dbMessage(error, "Could not issue the acknowledgement. Try again.") };
+  if (error || !data) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotIssue") };
   const id = data.id as string;
   if (delivery.channel === "email" && delivery.recipientEmail) {
     return deliverByEmail(supabase, { id, to: delivery.recipientEmail, subject: letter.subject, text: letter.text });
@@ -269,10 +283,10 @@ async function issue(
   return { ok: true, id };
 }
 
-const giftAckSchema = z.object({ giftId: z.string().uuid({ message: "Gift not found." }) });
+const giftAckSchema = z.object({ giftId: z.string().uuid({ message: "finance.gifts.errors.giftNotFound" }) });
 
 /** Builds the thank-you letter from the recorded gift, stores it as issued, and prints or emails it. */
-export async function issueGiftAcknowledgement(input: unknown): Promise<ActionResult> {
+async function issueGiftAcknowledgementImpl(input: unknown): Promise<ActionResult> {
   const parsedDelivery = deliverySchema.safeParse(input);
   if (!parsedDelivery.success) return { ok: false, error: parsedDelivery.error.issues[0]?.message };
   const parsed = giftAckSchema.safeParse(input);
@@ -282,8 +296,8 @@ export async function issueGiftAcknowledgement(input: unknown): Promise<ActionRe
 
   const supabase = await createSupabaseServerClient();
   const gift = await loadGift(supabase, auth.organizationId, parsed.data.giftId);
-  if (!gift) return { ok: false, error: "Gift not found." };
-  if (gift.status !== "recorded") return { ok: false, error: "A voided gift is not acknowledged." };
+  if (!gift) return { ok: false, error: "finance.gifts.errors.giftNotFound" };
+  if (gift.status !== "recorded") return { ok: false, error: "finance.gifts.errors.voidedNotAcknowledged" };
   const org = await organizationName(supabase, auth.organizationId);
   const letter = renderGiftAcknowledgement({
     language: parsedDelivery.data.language,
@@ -310,18 +324,18 @@ export async function issueGiftAcknowledgement(input: unknown): Promise<ActionRe
 }
 
 const statementSchema = z.object({
-  donor: requiredText("Choose the donor."),
+  donor: requiredText("finance.gifts.errors.chooseDonor"),
   year: z.coerce.number().int().min(2000).max(2100),
 });
 
 /** Issues a donor's annual statement of gifts for one calendar year. */
-export async function issueAnnualStatement(input: unknown): Promise<ActionResult> {
+async function issueAnnualStatementImpl(input: unknown): Promise<ActionResult> {
   const parsedDelivery = deliverySchema.safeParse(input);
   if (!parsedDelivery.success) return { ok: false, error: parsedDelivery.error.issues[0]?.message };
   const parsed = statementSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Choose the donor and the year." };
+  if (!parsed.success) return { ok: false, error: "finance.gifts.errors.chooseDonorAndYear" };
   const donor = parseDonorKey(parsed.data.donor);
-  if (!donor) return { ok: false, error: "Choose the donor." };
+  if (!donor) return { ok: false, error: "finance.gifts.errors.chooseDonor" };
   const auth = await authorize(parsedDelivery.data.channel === "email" ? "gift:email" : "gift:write");
   if (!auth.ok) return auth.result;
 
@@ -336,8 +350,8 @@ export async function issueAnnualStatement(input: unknown): Promise<ActionResult
     donorDisplayName(supabase, donor),
     organizationName(supabase, auth.organizationId),
   ]);
-  if (error) return { ok: false, error: dbMessage(error, "Could not read the donor's gifts. Try again.") };
-  if (!name) return { ok: false, error: "Donor not found." };
+  if (error) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotReadGifts") };
+  if (!name) return { ok: false, error: "finance.gifts.errors.donorNotFound" };
   const letter = renderAnnualStatement({
     language: parsedDelivery.data.language,
     organizationName: org,
@@ -376,8 +390,8 @@ async function donorDisplayName(
 }
 
 /** Tries the email again for an acknowledgement that was issued but not delivered. */
-export async function resendAcknowledgement(ackId: string): Promise<ActionResult> {
-  if (!z.string().uuid().safeParse(ackId).success) return { ok: false, error: "Acknowledgement not found." };
+async function resendAcknowledgementImpl(ackId: string): Promise<ActionResult> {
+  if (!z.string().uuid().safeParse(ackId).success) return { ok: false, error: "finance.gifts.errors.ackNotFound" };
   const auth = await authorize("gift:email");
   if (!auth.ok) return auth.result;
   const supabase = await createSupabaseServerClient();
@@ -388,9 +402,9 @@ export async function resendAcknowledgement(ackId: string): Promise<ActionResult
     .eq("id", ackId)
     .maybeSingle();
   if (!data || data.channel !== "email" || !data.recipient_email) {
-    return { ok: false, error: "Acknowledgement not found." };
+    return { ok: false, error: "finance.gifts.errors.ackNotFound" };
   }
-  if (data.email_status === "sent") return { ok: false, error: "This acknowledgement was already sent." };
+  if (data.email_status === "sent") return { ok: false, error: "finance.gifts.errors.alreadySent" };
   const result = await deliverByEmail(supabase, {
     id: data.id as string,
     to: data.recipient_email as string,
@@ -408,26 +422,26 @@ export async function resendAcknowledgement(ackId: string): Promise<ActionResult
 const grantSchema = z
   .object({
     id: z.string().uuid().optional(),
-    funderId: z.string().uuid({ message: "Choose the funder from the CRM." }),
+    funderId: z.string().uuid({ message: "finance.gifts.errors.chooseFunder" }),
     funderContactId: optionalUuid,
-    title: requiredText("Enter the grant's name.", 200),
+    title: requiredText("finance.gifts.errors.enterGrantName", 200),
     funderReference: optionalText(100),
-    amount: requiredText("Enter the amount awarded."),
+    amount: requiredText("finance.gifts.errors.enterAmountAwarded"),
     awardedOn: optionalDate,
     startsOn: optionalDate,
     endsOn: optionalDate,
-    fundId: z.string().uuid({ message: "Choose the fund that tracks this grant." }),
+    fundId: z.string().uuid({ message: "finance.gifts.errors.chooseGrantFund" }),
     programId: optionalUuid,
     restrictions: optionalText(2000),
     responsibleUserId: optionalUuid,
     status: z.enum(["active", "closed"]).default("active"),
   })
   .refine((g) => !g.startsOn || !g.endsOn || g.startsOn <= g.endsOn, {
-    message: "The end date must be on or after the start date.",
+    message: "finance.gifts.errors.endAfterStart",
     path: ["endsOn"],
   });
 
-export async function saveGrant(input: unknown): Promise<ActionResult> {
+async function saveGrantImpl(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
   const parsed = grantSchema.safeParse(input);
@@ -435,7 +449,7 @@ export async function saveGrant(input: unknown): Promise<ActionResult> {
   const g = parsed.data;
   const amount = parseMoneyToCents(g.amount);
   if (amount === null || amount <= 0) {
-    return { ok: false, error: "Enter the amount awarded as dollars and cents, for example 30000.00." };
+    return { ok: false, error: "finance.gifts.errors.amountAwardedFormat" };
   }
   const row = {
     funder_crm_organization_id: g.funderId,
@@ -466,19 +480,19 @@ export async function saveGrant(input: unknown): Promise<ActionResult> {
         .insert({ ...row, organization_id: auth.organizationId })
         .select("id")
         .single();
-  if (error || !data) return { ok: false, error: dbMessage(error, "Could not save the grant. Try again.") };
+  if (error || !data) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotSaveGrant") };
   revalidatePath(GRANTS, "layout");
   return { ok: true, id: data.id as string };
 }
 
 const reportSchema = z.object({
-  grantId: z.string().uuid({ message: "Grant not found." }),
-  title: requiredText("Name the report, for example Interim report.", 200),
-  dueOn: isoDate("Enter the date the report is due."),
+  grantId: z.string().uuid({ message: "finance.gifts.errors.grantNotFound" }),
+  title: requiredText("finance.gifts.errors.nameReport", 200),
+  dueOn: isoDate("finance.gifts.errors.enterReportDue"),
   notes: optionalText(2000),
 });
 
-export async function addGrantReport(input: unknown): Promise<ActionResult> {
+async function addGrantReportImpl(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
   const parsed = reportSchema.safeParse(input);
@@ -495,17 +509,17 @@ export async function addGrantReport(input: unknown): Promise<ActionResult> {
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: dbMessage(error, "Could not add the report. Try again.") };
+  if (error || !data) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotAddReport") };
   revalidatePath(`${GRANTS}/${parsed.data.grantId}`);
   return { ok: true, id: data.id as string };
 }
 
 const submittedSchema = z.object({
-  reportId: z.string().uuid({ message: "Report not found." }),
+  reportId: z.string().uuid({ message: "finance.gifts.errors.reportNotFound" }),
   submittedOn: optionalDate,
 });
 
-export async function setGrantReportSubmitted(input: unknown): Promise<ActionResult> {
+async function setGrantReportSubmittedImpl(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
   const parsed = submittedSchema.safeParse(input);
@@ -518,13 +532,13 @@ export async function setGrantReportSubmitted(input: unknown): Promise<ActionRes
     .eq("organization_id", auth.organizationId)
     .select("grant_id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: dbMessage(error, "Could not update the report. Try again.") };
+  if (error || !data) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotUpdateReport") };
   revalidatePath(`${GRANTS}/${data.grant_id as string}`);
   return { ok: true };
 }
 
-export async function deleteGrantReport(reportId: string): Promise<ActionResult> {
-  if (!z.string().uuid().safeParse(reportId).success) return { ok: false, error: "Report not found." };
+async function deleteGrantReportImpl(reportId: string): Promise<ActionResult> {
+  if (!z.string().uuid().safeParse(reportId).success) return { ok: false, error: "finance.gifts.errors.reportNotFound" };
   const auth = await authorize();
   if (!auth.ok) return auth.result;
   const supabase = await createSupabaseServerClient();
@@ -536,8 +550,48 @@ export async function deleteGrantReport(reportId: string): Promise<ActionResult>
     .select("grant_id")
     .maybeSingle();
   if (error || !data) {
-    return { ok: false, error: dbMessage(error, "Only a report not yet submitted can be removed.") };
+    return { ok: false, error: dbMessage(error, "finance.gifts.errors.onlyUnsubmittedRemovable") };
   }
   revalidatePath(`${GRANTS}/${data.grant_id as string}`);
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// The actions, each with its error translated
+// ---------------------------------------------------------------------------
+
+export async function recordGift(input: unknown): Promise<ActionResult> {
+  return translated(await recordGiftImpl(input));
+}
+
+export async function voidGift(input: unknown): Promise<ActionResult> {
+  return translated(await voidGiftImpl(input));
+}
+
+export async function issueGiftAcknowledgement(input: unknown): Promise<ActionResult> {
+  return translated(await issueGiftAcknowledgementImpl(input));
+}
+
+export async function issueAnnualStatement(input: unknown): Promise<ActionResult> {
+  return translated(await issueAnnualStatementImpl(input));
+}
+
+export async function resendAcknowledgement(ackId: string): Promise<ActionResult> {
+  return translated(await resendAcknowledgementImpl(ackId));
+}
+
+export async function saveGrant(input: unknown): Promise<ActionResult> {
+  return translated(await saveGrantImpl(input));
+}
+
+export async function addGrantReport(input: unknown): Promise<ActionResult> {
+  return translated(await addGrantReportImpl(input));
+}
+
+export async function setGrantReportSubmitted(input: unknown): Promise<ActionResult> {
+  return translated(await setGrantReportSubmittedImpl(input));
+}
+
+export async function deleteGrantReport(reportId: string): Promise<ActionResult> {
+  return translated(await deleteGrantReportImpl(reportId));
 }
