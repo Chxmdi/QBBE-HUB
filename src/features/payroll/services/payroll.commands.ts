@@ -6,6 +6,8 @@ import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { parseMoneyToCents } from "@/features/finance/money";
 import { CATEGORY_KEYS, totalsAddUp, type RunCents } from "@/features/payroll/categories";
@@ -41,6 +43,14 @@ function dbMessage(error: DbError, fallback: string): string {
   return fallback;
 }
 
+/**
+ * A schema message is a catalogue key; anything else (a message zod wrote
+ * itself) is shown as it is, since `t()` falls back to the text it was given.
+ */
+function issueMessage(t: TranslateFn, message: string | undefined): string | undefined {
+  return message === undefined ? undefined : t(message as MessageKey, { max: MAX_RUNS });
+}
+
 async function authorize(): Promise<
   { ok: true; organizationId: string } | { ok: false; result: ActionResult }
 > {
@@ -52,7 +62,7 @@ async function authorize(): Promise<
 }
 
 const id = z.string().uuid();
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "A pay run needs its dates.");
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "finance.payroll.errors.runDates" satisfies MessageKey);
 const cents = z.number().int().min(0).max(10_000_000_000_000);
 
 const runSchema = z
@@ -66,16 +76,19 @@ const runSchema = z
   // Only these keys: anything else in the payload is dropped, never stored.
   .strip()
   .refine((r) => totalsAddUp(r.cents as RunCents), {
-    message: "A pay run does not add up: gross wages less employee deductions must equal net pay.",
+    message: "finance.payroll.errors.runDoesNotAddUp" satisfies MessageKey,
   });
 
 const importSchema = z.object({
   provider: z.enum(["nethris", "employeur_d", "adp_wfn", "ceridian_powerpay", "other"], {
-    message: "Choose the payroll provider.",
+    message: "finance.payroll.errors.chooseProvider" satisfies MessageKey,
   }),
-  fileName: requiredText("Choose a payroll file.", 200),
+  fileName: requiredText("finance.payroll.import.chooseFile" satisfies MessageKey, 200),
   fileSha256: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
-  runs: z.array(runSchema).min(1, "The file has no pay runs.").max(MAX_RUNS, `A file can hold at most ${MAX_RUNS} pay runs.`),
+  runs: z
+    .array(runSchema)
+    .min(1, "finance.payroll.errors.noRuns" satisfies MessageKey)
+    .max(MAX_RUNS, "finance.payroll.errors.maxRuns" satisfies MessageKey),
 });
 
 export interface ImportResult extends ActionResult {
@@ -87,8 +100,9 @@ export interface ImportResult extends ActionResult {
 export async function importPayrollRuns(input: unknown): Promise<ImportResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = importSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(t, parsed.error.issues[0]?.message) };
   const d = parsed.data;
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("payroll_import_runs", {
@@ -104,7 +118,7 @@ export async function importPayrollRuns(input: unknown): Promise<ImportResult> {
       ...Object.fromEntries(CATEGORY_KEYS.map((k) => [`${k}_cents`, r.cents[k]])),
     })),
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not import the pay runs. Try again.") };
+  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.importFailed")) };
   revalidatePath(PAYROLL, "layout");
   const result = data as { added: number; skipped: number; ids: string[] };
   return { ok: true, added: result.added, skipped: result.skipped, ids: result.ids };
@@ -121,8 +135,9 @@ const mapSchema = z.array(
 export async function savePayrollAccountMap(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = mapSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Choose an account for each category." };
+  if (!parsed.success) return { ok: false, error: t("finance.payroll.errors.chooseAccounts") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("payroll_save_account_map", {
     p_organization: auth.organizationId,
@@ -132,7 +147,7 @@ export async function savePayrollAccountMap(input: unknown): Promise<ActionResul
       credit_account_id: m.creditAccountId,
     })),
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not save the account mapping. Try again.") };
+  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.saveMapFailed")) };
   revalidatePath(PAYROLL, "layout");
   return { ok: true };
 }
@@ -143,7 +158,7 @@ const allocationSchema = z.object({
   shares: z
     .array(
       z.object({
-        fundId: z.string().uuid("Choose a fund for every share."),
+        fundId: z.string().uuid("finance.payroll.errors.chooseFundEveryShare" satisfies MessageKey),
         programId: z
           .string()
           .optional()
@@ -153,33 +168,34 @@ const allocationSchema = z.object({
         value: z.string().trim(),
       }),
     )
-    .max(20, "Split a run into at most 20 shares."),
+    .max(20, "finance.payroll.errors.maxShares" satisfies MessageKey),
 });
 
 export async function savePayrollAllocation(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = allocationSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(t, parsed.error.issues[0]?.message) };
   const { runId, mode, shares } = parsed.data;
   const allocation: Record<string, string | number | null>[] = [];
   for (const [i, s] of shares.entries()) {
     if (mode === "percent") {
       if (!/^\d{1,3}([.,]\d{1,2})?$/.test(s.value)) {
-        return { ok: false, error: `Share ${i + 1}: enter a percentage like 62.5, with at most two decimals.` };
+        return { ok: false, error: t("finance.payroll.errors.sharePercent", { number: i + 1 }) };
       }
       allocation.push({ fund_id: s.fundId, program_id: s.programId, share_percent: s.value.replace(",", ".") });
     } else {
       const amount = parseMoneyToCents(s.value);
       if (amount === null || amount === 0) {
-        return { ok: false, error: `Share ${i + 1}: enter an amount of gross wages like 1250.00.` };
+        return { ok: false, error: t("finance.payroll.errors.shareAmount", { number: i + 1 }) };
       }
       allocation.push({ fund_id: s.fundId, program_id: s.programId, share_cents: amount });
     }
   }
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("payroll_save_allocation", { p_run: runId, p_allocation: allocation });
-  if (error) return { ok: false, error: dbMessage(error, "Could not save the allocation. Try again.") };
+  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.saveAllocationFailed")) };
   revalidatePath(`${PAYROLL}/${runId}`);
   return { ok: true };
 }
@@ -187,10 +203,11 @@ export async function savePayrollAllocation(input: unknown): Promise<ActionResul
 export async function postPayrollRun(runId: string): Promise<ActionResult & { entryNumber?: number }> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!id.safeParse(runId).success) return { ok: false, error: "Pay run not found." };
+  const t = await getT();
+  if (!id.safeParse(runId).success) return { ok: false, error: t("finance.payroll.errors.runNotFound") };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("payroll_post_run", { p_run: runId });
-  if (error) return { ok: false, error: dbMessage(error, "Could not post the pay run. Try again.") };
+  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.postFailed")) };
   revalidatePath(PAYROLL, "layout");
   revalidatePath("/finance/ledger", "layout");
   return { ok: true, entryNumber: data as number };
@@ -205,15 +222,16 @@ const reverseSchema = z.object({
 export async function reversePayrollRun(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = reverseSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Choose the date of the reversal." };
+  if (!parsed.success) return { ok: false, error: t("finance.payroll.errors.chooseReversalDate") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("payroll_reverse_run", {
     p_run: parsed.data.runId,
     p_entry_date: parsed.data.entryDate,
     p_memo: parsed.data.memo || null,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not reverse the pay run. Try again.") };
+  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.reverseFailed")) };
   revalidatePath(PAYROLL, "layout");
   revalidatePath("/finance/ledger", "layout");
   return { ok: true };
@@ -222,10 +240,11 @@ export async function reversePayrollRun(input: unknown): Promise<ActionResult> {
 export async function deletePayrollDraft(runId: string): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!id.safeParse(runId).success) return { ok: false, error: "Pay run not found." };
+  const t = await getT();
+  if (!id.safeParse(runId).success) return { ok: false, error: t("finance.payroll.errors.runNotFound") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("payroll_delete_draft", { p_run: runId });
-  if (error) return { ok: false, error: dbMessage(error, "Could not delete the draft. Try again.") };
+  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.deleteFailed")) };
   revalidatePath(PAYROLL, "layout");
   return { ok: true };
 }
