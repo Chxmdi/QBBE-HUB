@@ -19,6 +19,9 @@ export type ReaderState =
 export function useReceiptReader(onText: (text: string) => void) {
   const [state, setState] = useState<ReaderState>({ kind: "idle" });
   const current = useRef<{ controller: AbortController; timer: number; timedOut: boolean } | null>(null);
+  // The latest photo's text, or null when reading failed or was stopped, for
+  // storing with the receipt so library search finds it by its words (#147).
+  const latest = useRef<Promise<string | null>>(Promise.resolve(null));
   const onTextRef = useRef(onText);
   useEffect(() => {
     onTextRef.current = onText;
@@ -51,12 +54,17 @@ export function useReceiptReader(onText: (text: string) => void) {
       current.current = run;
       setState({ kind: "running", progress: { stage: "loading", percent: 0 } });
 
-      readReceiptText(file, {
+      const reading = readReceiptText(file, {
         signal: run.controller.signal,
         onProgress: (progress) => {
           if (current.current === run) setState({ kind: "running", progress });
         },
-      }).then(
+      });
+      latest.current = reading.then(
+        (text) => text,
+        () => null,
+      );
+      reading.then(
         (text) => {
           if (current.current !== run) return;
           window.clearTimeout(run.timer);
@@ -82,8 +90,11 @@ export function useReceiptReader(onText: (text: string) => void) {
 
   const reset = useCallback(() => {
     stop();
+    latest.current = Promise.resolve(null);
     setState({ kind: "idle" });
   }, [stop]);
 
-  return { state, read, skip, reset };
+  const result = useCallback(() => latest.current, []);
+
+  return { state, read, skip, reset, result };
 }
