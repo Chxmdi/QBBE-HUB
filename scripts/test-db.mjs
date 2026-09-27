@@ -64,6 +64,7 @@ const FILES = [
   "supabase/tests/channel-read-equivalence.sql",
   "supabase/tests/project-program-read-equivalence.sql",
   "supabase/tests/record-retention.sql",
+  "supabase/tests/approvals.sql",
   "supabase/tests/ledger-core.sql",
   "supabase/tests/year-end.sql",
   "supabase/tests/bank-reconciliation.sql",
