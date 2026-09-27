@@ -126,7 +126,10 @@ jobs:
     # this job, and by #172 the chromium run reached 45 minutes with every test
     # still passing (cancelled mid qa-matrix). 60 keeps a margin until the job
     # is split or sharded.
-    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 135 || 60 }}
+    # 60 -> 80: the signed-in spec list is now built from the folder, which adds
+    # eight finance specs that never ran before. Splitting the job is tracked in
+    # docs/plans/paperless-bookkeeping-plan.md section B.
+    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 150 || 80 }}
     env:
       SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
     steps:
@@ -248,7 +251,13 @@ jobs:
         run: |
           npx next start -p 3000 -H 127.0.0.1 &
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
-          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core work-planning documents events error-states role-matrix realtime-delivery crm reports raid-decisions portfolio-search collaboration meetings-comments notifications epic05-administration epic05-continuity forms-esign records-retention approvals french-ui gifts payroll $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+          # Every signed-in spec runs: the list is built from the folder, so a new
+          # feature's spec is picked up without editing this line. public-routes
+          # and qa-matrix run in their own steps. Until this, eight finance specs
+          # (bank, budgets, ledger, payables, receipts, sales-tax, team-overview,
+          # year-end) were never added by hand and never ran in CI.
+          SPECS=$(ls tests/e2e/*.spec.ts | grep -vE '/(public-routes|qa-matrix)\.spec\.ts$')
+          npx playwright test $SPECS $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
 
       - name: Signed-in accessibility, responsive and keyboard matrix
         # WCAG 2.2 AA axe scans in both themes, a 6-width x 2-theme overflow

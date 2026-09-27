@@ -65,13 +65,13 @@ Supporting fixes merged the same day:
 
 ### B. Follow-ups found during review
 - [ ] Split or shard the Database security CI job. It reached 45 minutes with
-  today's features; 60 is a stopgap.
+  today's features, and running every signed-in spec adds more; 80 is a stopgap.
 - [ ] Translate the approvals, payables, bank, GST/QST, budgets, year-end and
   gifts screens. v1 translates the sidebar and main screens only.
 - [ ] Test receipt reading in Safari/WebKit and Firefox, and on real phone
   photos of real receipts. So far only Chromium and synthetic images.
 - [ ] #142 v2 remainder: a forwarding email address for invoices.
-- [ ] Make the signed-in browser spec list in `.github/workflows/ci.yml`
+- [x] Make the signed-in browser spec list in `.github/workflows/ci.yml`
   automatic (read it from `tests/e2e/routes/*.json` or a glob). Every new
   feature still edits that one shared line, so parallel branches conflict.
 - [ ] #143 approvals: delegation while an approver is away. Not built.
