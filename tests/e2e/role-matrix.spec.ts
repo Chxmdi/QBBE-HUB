@@ -124,6 +124,7 @@ const EVERYONE = ["/", "/my-work", "/board", "/programs", "/projects", "/people"
 const STAFF_ONLY = ["/crm", "/reports", "/finance/receipts", "/approvals"];
 STAFF_ONLY.push("/finance/ledger");
 STAFF_ONLY.push("/finance/ledger/statements", "/finance/ledger/year-end", "/finance/ledger/returns");
+STAFF_ONLY.push("/finance/sales-tax");
 STAFF_ONLY.push("/finance/payables");
 STAFF_ONLY.push("/finance/bank");
 const ADMIN_ONLY = ["/admin", "/admin/access", "/admin/records", "/people/overview", "/forms/new", "/admin/approvals"];
