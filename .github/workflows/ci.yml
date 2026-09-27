@@ -122,7 +122,11 @@ jobs:
     # round trip first, and the chromium job went from ~19 to ~29.5 minutes;
     # 30 left no margin. Raised by half until the proxy's per-request check
     # is made cheaper (verifying the session token locally instead).
-    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 135 || 45 }}
+    # 45 -> 60: every bookkeeping feature added database and browser tests to
+    # this job, and by #172 the chromium run reached 45 minutes with every test
+    # still passing (cancelled mid qa-matrix). 60 keeps a margin until the job
+    # is split or sharded.
+    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 135 || 60 }}
     env:
       SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
     steps:
