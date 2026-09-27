@@ -13,12 +13,28 @@ import { formatSigned, loadReconciliationView } from "@/features/banking/service
 import { centsToDecimal } from "@/features/finance/money";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { getLedgerAccess, uuidParam } from "@/features/ledger/services/ledger.access";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocale, getT } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = { title: "Bank reconciliation" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.bank.reconciliation.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
-function Figure({ label, cents, strong, tone }: { label: string; cents: number; strong?: boolean; tone?: "ok" | "bad" }) {
+function Figure({
+  label,
+  cents,
+  locale,
+  strong,
+  tone,
+}: {
+  label: string;
+  cents: number;
+  locale: Locale;
+  strong?: boolean;
+  tone?: "ok" | "bad";
+}) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1.5">
       <dt className={cn("text-[13.5px]", strong ? "font-semibold" : "text-muted")}>{label}</dt>
@@ -30,7 +46,7 @@ function Figure({ label, cents, strong, tone }: { label: string; cents: number; 
           tone === "bad" && "text-danger-fg",
         )}
       >
-        {formatSigned(cents)}
+        {formatSigned(cents, locale)}
       </dd>
     </div>
   );
@@ -39,10 +55,11 @@ function Figure({ label, cents, strong, tone }: { label: string; cents: number; 
 export default async function ReconciliationPage({ params }: { params: Promise<{ id: string }> }) {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
   const { id: rawId } = await params;
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   if (!canRead) {
     return (
       <div>
-        <PageHeader eyebrow="Bank" title="Reconciliation" />
+        <PageHeader eyebrow={t("finance.bank.account.eyebrow")} title={t("finance.bank.reconciliation.title")} />
         <NoLedgerAccess isAdmin={session.isAdmin} />
       </div>
     );
@@ -56,18 +73,24 @@ export default async function ReconciliationPage({ params }: { params: Promise<{
   const problems: string[] = [];
   if (figures.unmatched_count > 0) {
     problems.push(
-      `${figures.unmatched_count} statement line${figures.unmatched_count === 1 ? " is" : "s are"} not matched to the ledger.`,
+      t(
+        figures.unmatched_count === 1
+          ? "finance.bank.reconciliation.unmatchedOne"
+          : "finance.bank.reconciliation.unmatchedOther",
+        { count: figures.unmatched_count },
+      ),
     );
   }
   if (figures.statement_gap_cents !== 0) {
     problems.push(
-      `The statement lines add up to ${formatSigned(figures.statement_lines_cents)}, but the balances say ${formatSigned(
-        rec.closing_balance_cents - rec.opening_balance_cents,
-      )}. A line is missing or the balances were typed wrong.`,
+      t("finance.bank.reconciliation.gap", {
+        lines: formatSigned(figures.statement_lines_cents, locale),
+        balances: formatSigned(rec.closing_balance_cents - rec.opening_balance_cents, locale),
+      }),
     );
   }
   if (figures.difference_cents !== 0) {
-    problems.push(`The difference is ${formatSigned(figures.difference_cents)}; it must be zero.`);
+    problems.push(t("finance.bank.reconciliation.difference", { amount: formatSigned(figures.difference_cents, locale) }));
   }
   const canClose = problems.length === 0;
   const accountLink = `/finance/bank/${account.id}?month=${rec.statement_start.slice(0, 7)}&show=unmatched`;
@@ -75,20 +98,20 @@ export default async function ReconciliationPage({ params }: { params: Promise<{
   return (
     <div>
       <PageHeader
-        eyebrow={`Bank · ${account.name}`}
-        title={`Reconciliation ${rec.statement_start} to ${rec.statement_end}`}
-        description="The statement's closing balance must equal the ledger balance the bank has seen. Outstanding cheques and deposits explain the rest of the ledger balance."
+        eyebrow={t("finance.bank.reconciliation.eyebrow", { account: account.name })}
+        title={t("finance.bank.reconciliation.heading", { start: rec.statement_start, end: rec.statement_end })}
+        description={t("finance.bank.reconciliation.description")}
         actions={
           <>
             <Link href={`/finance/bank/${account.id}`} className="text-[13.5px] text-muted underline underline-offset-2">
-              Back to {account.name}
+              {t("finance.bank.reconciliation.backTo", { account: account.name })}
             </Link>
             <a
               href={`/api/finance/bank/reconciliations/${rec.id}`}
               className="inline-flex h-9.5 items-center gap-2 rounded-(--radius-sm) border border-line bg-surface px-4 text-sm hover:bg-surface-soft"
             >
               <Download className="size-4" aria-hidden />
-              Report (CSV)
+              {t("finance.bank.reconciliation.report")}
             </a>
           </>
         }
@@ -98,23 +121,24 @@ export default async function ReconciliationPage({ params }: { params: Promise<{
         <section className="card p-4" aria-labelledby="figures-heading">
           <div className="mb-2 flex items-center justify-between gap-3">
             <h2 id="figures-heading" className="text-[15px] font-semibold">
-              Bank and ledger
+              {t("finance.bank.reconciliation.figuresHeading")}
             </h2>
             {rec.status === "reconciled" ? (
-              <Badge tone="success">Reconciled</Badge>
+              <Badge tone="success">{t("finance.bank.reconciled")}</Badge>
             ) : (
-              <Badge tone="warning">Open</Badge>
+              <Badge tone="warning">{t("finance.bank.open")}</Badge>
             )}
           </div>
           <dl className="divide-y divide-line">
-            <Figure label="Statement opening balance" cents={rec.opening_balance_cents} />
-            <Figure label="Statement lines in the period" cents={figures.statement_lines_cents} />
-            <Figure label="Statement closing balance" cents={rec.closing_balance_cents} strong />
-            <Figure label="Ledger balance at statement end" cents={figures.ledger_balance_cents} />
-            <Figure label="Less outstanding ledger items" cents={figures.outstanding_cents} />
-            <Figure label="Cleared ledger balance" cents={figures.cleared_balance_cents} strong />
+            <Figure locale={locale} label={t("finance.bank.reconciliation.figures.opening")} cents={rec.opening_balance_cents} />
+            <Figure locale={locale} label={t("finance.bank.reconciliation.figures.lines")} cents={figures.statement_lines_cents} />
+            <Figure locale={locale} label={t("finance.bank.reconciliation.figures.closing")} cents={rec.closing_balance_cents} strong />
+            <Figure locale={locale} label={t("finance.bank.reconciliation.figures.ledger")} cents={figures.ledger_balance_cents} />
+            <Figure locale={locale} label={t("finance.bank.reconciliation.figures.outstanding")} cents={figures.outstanding_cents} />
+            <Figure locale={locale} label={t("finance.bank.reconciliation.figures.cleared")} cents={figures.cleared_balance_cents} strong />
             <Figure
-              label="Difference"
+              locale={locale}
+              label={t("finance.bank.reconciliation.figures.difference")}
               cents={figures.difference_cents}
               strong
               tone={figures.difference_cents === 0 ? "ok" : "bad"}
@@ -124,15 +148,14 @@ export default async function ReconciliationPage({ params }: { params: Promise<{
 
         <section className="card p-4" aria-labelledby="close-heading">
           <h2 id="close-heading" className="mb-3 text-[15px] font-semibold">
-            {rec.status === "reconciled" ? "Reconciled" : "Before it can be marked reconciled"}
+            {rec.status === "reconciled" ? t("finance.bank.reconciled") : t("finance.bank.reconciliation.closeHeading")}
           </h2>
           {rec.status === "reconciled" ? (
             <p className="mb-3 text-[13.5px] text-muted">
-              Reconciled {rec.reconciled_at?.slice(0, 10)}. Its statement lines and matches are locked; reopen it to
-              change them.
+              {t("finance.bank.reconciliation.reconciledNote", { date: rec.reconciled_at?.slice(0, 10) ?? "" })}
             </p>
           ) : canClose ? (
-            <p className="mb-3 text-[13.5px] text-success-fg">Everything matches and the difference is zero.</p>
+            <p className="mb-3 text-[13.5px] text-success-fg">{t("finance.bank.reconciliation.allClear")}</p>
           ) : (
             <ul className="mb-3 list-disc space-y-1 pl-5 text-[13.5px]">
               {problems.map((p) => (
@@ -141,7 +164,7 @@ export default async function ReconciliationPage({ params }: { params: Promise<{
               {figures.unmatched_count > 0 ? (
                 <li>
                   <Link href={accountLink} className="underline underline-offset-2">
-                    Match the remaining lines
+                    {t("finance.bank.reconciliation.matchRemaining")}
                   </Link>
                 </li>
               ) : null}
@@ -169,16 +192,16 @@ export default async function ReconciliationPage({ params }: { params: Promise<{
 
       <section className="mb-8" aria-labelledby="outstanding-heading">
         <h2 id="outstanding-heading" className="mb-3 text-[15px] font-semibold">
-          Outstanding ledger items ({outstanding.length})
+          {t("finance.bank.reconciliation.outstandingHeading", { count: outstanding.length })}
         </h2>
         {outstanding.length === 0 ? (
-          <p className="text-[13.5px] text-muted">Nothing in the ledger is waiting on the bank.</p>
+          <p className="text-[13.5px] text-muted">{t("finance.bank.reconciliation.nothingOutstanding")}</p>
         ) : (
           <DataTable minWidth="560px">
             <TableHead>
-              <TableHeader>Date</TableHeader>
-              <TableHeader>Entry</TableHeader>
-              <TableHeader className="text-right">Amount</TableHeader>
+              <TableHeader>{t("finance.common.date")}</TableHeader>
+              <TableHeader>{t("finance.bank.reconciliation.entry")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.common.amount")}</TableHeader>
             </TableHead>
             <tbody>
               {outstanding.map((o) => (
@@ -186,11 +209,11 @@ export default async function ReconciliationPage({ params }: { params: Promise<{
                   <TableCell className="tabular-nums">{o.entry_date}</TableCell>
                   <TableCell>
                     <Link href={`/finance/ledger/journal/${o.entry_id}`} className="underline underline-offset-2">
-                      Entry {o.entry_number}
+                      {t("finance.bank.entryNumber", { number: o.entry_number })}
                     </Link>{" "}
                     {o.memo}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatSigned(o.amount_cents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatSigned(o.amount_cents, locale)}</TableCell>
                 </TableRow>
               ))}
             </tbody>
@@ -200,31 +223,31 @@ export default async function ReconciliationPage({ params }: { params: Promise<{
 
       <section aria-labelledby="stmt-heading">
         <h2 id="stmt-heading" className="mb-3 text-[15px] font-semibold">
-          Statement lines ({lines.length})
+          {t("finance.bank.reconciliation.linesHeading", { count: lines.length })}
         </h2>
         {lines.length === 0 ? (
-          <p className="text-[13.5px] text-muted">No statement lines in these dates yet. Import the statement first.</p>
+          <p className="text-[13.5px] text-muted">{t("finance.bank.reconciliation.noLines")}</p>
         ) : (
           <DataTable minWidth="640px">
             <TableHead>
-              <TableHeader>Date</TableHeader>
-              <TableHeader>Description</TableHeader>
-              <TableHeader className="text-right">Amount</TableHeader>
-              <TableHeader>Ledger</TableHeader>
+              <TableHeader>{t("finance.common.date")}</TableHeader>
+              <TableHeader>{t("finance.common.description")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.common.amount")}</TableHeader>
+              <TableHeader>{t("finance.bank.account.ledger")}</TableHeader>
             </TableHead>
             <tbody>
               {lines.map((l) => (
                 <TableRow key={l.id}>
                   <TableCell className="tabular-nums whitespace-nowrap">{l.posted_on}</TableCell>
                   <TableCell>{l.description}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatSigned(l.amount_cents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatSigned(l.amount_cents, locale)}</TableCell>
                   <TableCell>
                     {l.entry_id ? (
                       <Link href={`/finance/ledger/journal/${l.entry_id}`} className="underline underline-offset-2">
-                        Entry {l.entry_number}
+                        {t("finance.bank.entryNumber", { number: l.entry_number ?? "" })}
                       </Link>
                     ) : (
-                      <Badge tone="warning">Not matched</Badge>
+                      <Badge tone="warning">{t("finance.bank.notMatched")}</Badge>
                     )}
                   </TableCell>
                 </TableRow>

@@ -1,4 +1,6 @@
 import { parseMoneyToCents } from "@/features/finance/money";
+import { bankEn } from "@/lib/i18n/messages/finance/bank.en";
+import { interpolate, type MessageKey, type MessageVars, type TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Bank statement parsers (#151). Pure functions, shared by the server (which
@@ -30,7 +32,54 @@ export interface ParsedStatement {
   accountLast4?: string | null;
 }
 
-export type ParseResult = { ok: true; statement: ParsedStatement } | { ok: false; error: string };
+/**
+ * Why a file was refused, as a catalogue key (#141), so the screen can show it
+ * in the reader's language. `keyVars` are placeholders whose values are
+ * themselves catalogue keys (a bank's name, a layout hint).
+ */
+export interface ParseMessage {
+  key: MessageKey;
+  vars?: MessageVars;
+  keyVars?: Record<string, MessageKey>;
+}
+
+/** `error` is the English text; `message` lets the screen translate it. */
+export type ParseResult =
+  | { ok: true; statement: ParsedStatement }
+  | { ok: false; error: string; message?: ParseMessage };
+
+type ParserText = keyof typeof bankEn.parsers;
+type LayoutHint = Extract<ParserText, `hint${string}`>;
+
+function fail(name: ParserText, vars?: MessageVars, keyVars?: Record<string, MessageKey>): ParseResult {
+  const english: MessageVars = { ...vars };
+  for (const [k, key] of Object.entries(keyVars ?? {})) {
+    english[k] = lookupEnglish(key);
+  }
+  return {
+    ok: false,
+    error: interpolate(bankEn.parsers[name], english),
+    message: { key: `finance.bank.parsers.${name}`, vars, keyVars },
+  };
+}
+
+/** The English text of a `finance.bank.*` key, without loading every catalogue. */
+function lookupEnglish(key: MessageKey): string {
+  let node: unknown = bankEn;
+  for (const part of key.replace(/^finance\.bank\./, "").split(".")) {
+    node = (node as Record<string, unknown> | undefined)?.[part];
+  }
+  return typeof node === "string" ? node : key;
+}
+
+/** A refusal in the reader's language, from the parser's message. */
+export function translateParseError(t: TranslateFn, result: { error: string; message?: ParseMessage }): string {
+  const m = result.message;
+  if (!m) return result.error;
+  const vars: MessageVars = { ...m.vars };
+  for (const [k, key] of Object.entries(m.keyVars ?? {})) vars[k] = t(key);
+  return t(m.key, vars);
+}
 
 export const MAX_LINES = 5000;
 
@@ -176,7 +225,7 @@ export interface CsvPreset {
   label: string;
   institution: "desjardins" | "national_bank" | "rbc" | "td" | "bmo";
   /** Finds the header row (if any) and returns the mapping for this file. */
-  resolve: (rows: string[][]) => CsvMapping | string;
+  resolve: (rows: string[][]) => CsvMapping | LayoutHint;
 }
 
 const norm = (s: string) =>
@@ -212,7 +261,7 @@ export const CSV_PRESETS: CsvPreset[] = [
     institution: "desjardins",
     resolve: (rows) => {
       const ok = rows.length > 0 && rows.every((r) => r.length >= 9 && parseStatementDate(r[3], "ymd") !== null);
-      if (!ok) return "Expected the AccèsD layout: no header, the date (YYYY/MM/DD) in the 4th column.";
+      if (!ok) return "hintDesjardins";
       return {
         dateColumn: 3,
         dateOrder: "ymd",
@@ -230,7 +279,7 @@ export const CSV_PRESETS: CsvPreset[] = [
     institution: "national_bank",
     resolve: (rows) => {
       const h = findHeader(rows, [["date"], ["description"], ["debit", "withdrawal"], ["credit", "deposit"]]);
-      if (!h) return "Expected a header with Date, Description, Débit and Crédit.";
+      if (!h) return "hintNationalBank";
       return {
         dateColumn: h.cols[0],
         dateOrder: "ymd",
@@ -254,7 +303,7 @@ export const CSV_PRESETS: CsvPreset[] = [
         ["cad$", "cad"],
         ["cheque number"],
       ]);
-      if (!h) return "Expected the RBC header: Transaction Date, Description 1, Description 2, CAD$.";
+      if (!h) return "hintRbc";
       return {
         dateColumn: h.cols[0],
         dateOrder: "mdy",
@@ -272,7 +321,7 @@ export const CSV_PRESETS: CsvPreset[] = [
     institution: "td",
     resolve: (rows) => {
       const ok = rows.length > 0 && rows.every((r) => r.length >= 4 && parseStatementDate(r[0], "mdy") !== null);
-      if (!ok) return "Expected the TD layout: no header, the date (MM/DD/YYYY) in the 1st column.";
+      if (!ok) return "hintTd";
       return {
         dateColumn: 0,
         dateOrder: "mdy",
@@ -290,7 +339,7 @@ export const CSV_PRESETS: CsvPreset[] = [
     institution: "bmo",
     resolve: (rows) => {
       const h = findHeader(rows, [["date posted"], ["transaction amount"], ["description"]]);
-      if (!h) return "Expected the BMO header: Date Posted, Transaction Amount, Description.";
+      if (!h) return "hintBmo";
       return {
         dateColumn: h.cols[0],
         dateOrder: "ymd",
@@ -313,15 +362,15 @@ function cell(row: string[], index: number | null | undefined): string {
 /** Applies a mapping to CSV rows. Any unreadable row refuses the whole file. */
 export function parseCsvRows(rows: string[][], mapping: CsvMapping, layout: string): ParseResult {
   const body = rows.slice(mapping.skipRows);
-  if (body.length === 0) return { ok: false, error: "The file has no statement lines." };
-  if (body.length > MAX_LINES) return { ok: false, error: `A file can hold at most ${MAX_LINES} lines.` };
+  if (body.length === 0) return fail("noLines");
+  if (body.length > MAX_LINES) return fail("tooManyLines", { max: MAX_LINES });
   const lines: StatementLine[] = [];
   const seen = new Map<string, number>();
   for (let i = 0; i < body.length; i++) {
     const row = body[i];
     const rowNo = i + mapping.skipRows + 1;
     const postedOn = parseStatementDate(cell(row, mapping.dateColumn), mapping.dateOrder);
-    if (!postedOn) return { ok: false, error: `Row ${rowNo}: "${cell(row, mapping.dateColumn)}" is not a date.` };
+    if (!postedOn) return fail("rowNotDate", { row: rowNo, value: cell(row, mapping.dateColumn) });
     let amountCents: number | null;
     if (mapping.amount.kind === "signed") {
       amountCents = parseSignedCents(cell(row, mapping.amount.column));
@@ -335,7 +384,7 @@ export function parseCsvRows(rows: string[][], mapping: CsvMapping, layout: stri
         outCents === null || inCents === null ? null : inCents - outCents;
     }
     if (amountCents === null) {
-      return { ok: false, error: `Row ${rowNo}: the amount could not be read without guessing.` };
+      return fail("rowAmount", { row: rowNo });
     }
     if (amountCents === 0) continue; // information rows, e.g. a zero-amount notice
     const description = normalizeDescription(
@@ -349,21 +398,26 @@ export function parseCsvRows(rows: string[][], mapping: CsvMapping, layout: stri
     seen.set(base, occurrence + 1);
     lines.push({ postedOn, amountCents, description: description || "(no description)", reference, key: `${base}|${occurrence}` });
   }
-  if (lines.length === 0) return { ok: false, error: "The file has no statement lines." };
+  if (lines.length === 0) return fail("noLines");
   return { ok: true, statement: { format: "csv", layout, lines } };
 }
 
 export function parseCsvStatement(text: string, layout: string, custom?: CsvMapping): ParseResult {
   const rows = readCsv(text);
-  if (rows.length === 0) return { ok: false, error: "The file is empty." };
+  if (rows.length === 0) return fail("empty");
   if (layout === "custom") {
-    if (!custom) return { ok: false, error: "Choose which column holds each value." };
+    if (!custom) return fail("chooseColumns");
     return parseCsvRows(rows, custom, "custom");
   }
   const preset = presetById(layout);
-  if (!preset) return { ok: false, error: "Choose the bank's file layout." };
+  if (!preset) return fail("chooseLayout");
   const mapping = preset.resolve(rows);
-  if (typeof mapping === "string") return { ok: false, error: `This does not look like a ${preset.label} file. ${mapping}` };
+  if (typeof mapping === "string") {
+    return fail("wrongLayout", undefined, {
+      bank: `finance.bank.presets.${preset.institution}`,
+      hint: `finance.bank.parsers.${mapping}`,
+    });
+  }
   return parseCsvRows(rows, mapping, preset.id);
 }
 
@@ -388,19 +442,19 @@ function ofxValue(block: string, tag: string): string | null {
 }
 
 export function parseOfxStatement(text: string): ParseResult {
-  if (!/<OFX>/i.test(text)) return { ok: false, error: "This is not an OFX or QFX file." };
+  if (!/<OFX>/i.test(text)) return fail("notOfx");
   const blocks = [...text.matchAll(/<STMTTRN>([\s\S]*?)(?=<\/STMTTRN>|<STMTTRN>|<\/BANKTRANLIST>)/gi)].map((m) => m[1]);
-  if (blocks.length === 0) return { ok: false, error: "The file has no statement lines." };
-  if (blocks.length > MAX_LINES) return { ok: false, error: `A file can hold at most ${MAX_LINES} lines.` };
+  if (blocks.length === 0) return fail("noLines");
+  if (blocks.length > MAX_LINES) return fail("tooManyLines", { max: MAX_LINES });
   const lines: StatementLine[] = [];
   const seen = new Map<string, number>();
   for (let i = 0; i < blocks.length; i++) {
     const b = blocks[i];
     const postedOn = parseStatementDate(ofxValue(b, "DTPOSTED") ?? "", "ymd");
-    if (!postedOn) return { ok: false, error: `Transaction ${i + 1}: the date could not be read.` };
+    if (!postedOn) return fail("transactionDate", { number: i + 1 });
     const amountCents = parseSignedCents(ofxValue(b, "TRNAMT") ?? "");
     if (amountCents === null) {
-      return { ok: false, error: `Transaction ${i + 1}: the amount could not be read without guessing.` };
+      return fail("transactionAmount", { number: i + 1 });
     }
     if (amountCents === 0) continue;
     const name = ofxValue(b, "NAME") ?? "";
@@ -422,7 +476,7 @@ export function parseOfxStatement(text: string): ParseResult {
     }
     lines.push({ postedOn, amountCents, description, reference, key });
   }
-  if (lines.length === 0) return { ok: false, error: "The file has no statement lines." };
+  if (lines.length === 0) return fail("noLines");
 
   const balBlock = /<LEDGERBAL>([\s\S]*?)(?:<\/LEDGERBAL>|<AVAILBAL>|<\/STMTRS>)/i.exec(text)?.[1] ?? "";
   const balCents = balBlock ? parseSignedCents(ofxValue(balBlock, "BALAMT") ?? "") : null;
