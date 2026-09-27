@@ -1,6 +1,9 @@
 import { clsx, type ClassValue } from "clsx";
 import { DEFAULT_TIME_ZONE, formatInZone, zonedDueInfo } from "@/lib/time";
 import { formatDistanceToNowStrict, parseISO } from "date-fns";
+import { frCA } from "date-fns/locale";
+import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
+import { createTranslator } from "@/lib/i18n/translate";
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -15,9 +18,12 @@ export function initials(name: string): string {
     .join("");
 }
 
-export function relativeTime(iso: string): string {
+export function relativeTime(iso: string, locale: Locale = DEFAULT_LOCALE): string {
   try {
-    return formatDistanceToNowStrict(parseISO(iso), { addSuffix: true });
+    return formatDistanceToNowStrict(parseISO(iso), {
+      addSuffix: true,
+      locale: locale === "fr-CA" ? frCA : undefined,
+    });
   } catch {
     return "";
   }
@@ -40,43 +46,50 @@ export function relativeTime(iso: string): string {
 export function formatDate(
   iso: string | null | undefined,
   timeZone: string = DEFAULT_TIME_ZONE,
+  locale: Locale = DEFAULT_LOCALE,
 ): string {
-  return formatInZone(iso, timeZone, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return formatInZone(
+    iso,
+    timeZone,
+    { month: "short", day: "numeric", year: "numeric" },
+    locale,
+  );
+}
+
+/**
+ * Quebec French reads the clock on 24 hours ("14 h 30"); English keeps the
+ * 12-hour clock it has always shown.
+ */
+function clockOptions(locale: Locale): Intl.DateTimeFormatOptions {
+  return locale === "fr-CA"
+    ? { hour: "numeric", minute: "2-digit", hourCycle: "h23" }
+    : { hour: "numeric", minute: "2-digit", hour12: true };
 }
 
 export function formatDateTime(
   iso: string | null | undefined,
   timeZone: string = DEFAULT_TIME_ZONE,
+  locale: Locale = DEFAULT_LOCALE,
 ): string {
   if (!iso) return "—";
-  const day = formatInZone(iso, timeZone, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  const day = formatInZone(
+    iso,
+    timeZone,
+    { weekday: "short", month: "short", day: "numeric" },
+    locale,
+  );
   if (day === "—") return "—";
-  const time = formatInZone(iso, timeZone, {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const time = formatInZone(iso, timeZone, clockOptions(locale), locale);
   return `${day} · ${time}`;
 }
 
 export function formatTime(
   iso: string | null | undefined,
   timeZone: string = DEFAULT_TIME_ZONE,
+  locale: Locale = DEFAULT_LOCALE,
 ): string {
   if (!iso) return "";
-  const shown = formatInZone(iso, timeZone, {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const shown = formatInZone(iso, timeZone, clockOptions(locale), locale);
   return shown === "—" ? "" : shown;
 }
 
@@ -91,22 +104,27 @@ export function formatTime(
 export function dueLabel(
   iso: string | null | undefined,
   timeZone: string = DEFAULT_TIME_ZONE,
+  locale: Locale = DEFAULT_LOCALE,
 ): {
   label: string;
   tone: "danger" | "warning" | "muted";
 } {
+  const t = createTranslator(locale);
   const info = zonedDueInfo(iso, timeZone);
-  if (!info) return { label: "No due date", tone: "muted" };
+  if (!info) return { label: t("due.none"), tone: "muted" };
   if (info.days < 0) {
-    return { label: `Overdue ${Math.abs(info.days)}d`, tone: "danger" };
+    return { label: t("due.overdueDays", { days: Math.abs(info.days) }), tone: "danger" };
   }
-  if (info.days === 0) return { label: "Due today", tone: "warning" };
-  if (info.days === 1) return { label: "Due tomorrow", tone: "warning" };
+  if (info.days === 0) return { label: t("due.today"), tone: "warning" };
+  if (info.days === 1) return { label: t("due.tomorrow"), tone: "warning" };
   if (info.withinThisWeek) {
-    return { label: formatInZone(iso, timeZone, { weekday: "long" }), tone: "muted" };
+    return {
+      label: formatInZone(iso, timeZone, { weekday: "long" }, locale),
+      tone: "muted",
+    };
   }
   return {
-    label: formatInZone(iso, timeZone, { month: "short", day: "numeric" }),
+    label: formatInZone(iso, timeZone, { month: "short", day: "numeric" }, locale),
     tone: "muted",
   };
 }

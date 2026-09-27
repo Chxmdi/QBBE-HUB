@@ -51,6 +51,8 @@ export interface Profile {
   avatar_url: string | null;
   title: string | null;
   timezone: string | null;
+  /** Chosen interface language; null follows the browser (#141). */
+  locale?: string | null;
 }
 
 export interface Membership {

@@ -11,6 +11,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { ToastProvider } from "@/components/ui/toast";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Persistent application shell (P0-UX-01): sidebar, topbar, command
@@ -43,6 +44,7 @@ export function WorkspaceShell({
   reduceMotion?: boolean;
   children: React.ReactNode;
 }) {
+  const t = useT();
   const [navOpen, setNavOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -72,7 +74,7 @@ export function WorkspaceShell({
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-(--z-toast) focus:rounded-md focus:bg-surface focus:px-4 focus:py-2 focus:text-[14px] focus:font-semibold focus:text-ink focus:shadow-lg"
       >
-        Skip to main content
+        {t("common.skipToContent")}
       </a>
       <Sidebar
         isAdmin={isAdmin}

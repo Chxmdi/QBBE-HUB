@@ -8,8 +8,10 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Run on all paths except static assets.
+     * Run on all paths except static assets. /ocr/ holds the open-source
+     * receipt-reading engine (public/ocr, copied from node_modules): no
+     * session is needed to serve it, and it is ~15 MB.
      */
-    "/((?!_next/static|_next/image|favicon.ico|brand|images|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|brand|images|ocr/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
