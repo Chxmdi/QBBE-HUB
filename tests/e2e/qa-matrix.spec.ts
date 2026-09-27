@@ -37,6 +37,7 @@ const ROUTES = [
   { path: "/reports", name: "reports" },
   { path: "/documents", name: "documents" },
   { path: "/finance/receipts", name: "receipts" },
+  { path: "/finance/payables/aging", name: "payables-aging" },
   { path: "/forms", name: "forms" },
   { path: "/signatures", name: "signatures" },
   { path: "/admin", name: "admin" },
