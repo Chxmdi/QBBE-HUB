@@ -235,3 +235,29 @@ export async function restoreDocument(documentId: string): Promise<ActionResult>
   revalidatePath("/documents");
   return { ok: true };
 }
+
+const textSchema = z.object({
+  id: z.string().uuid(),
+  text: z.string().max(400_000),
+  source: z.enum(["pdf_text", "ocr"]),
+});
+
+/**
+ * Stores the words the browser read out of an uploaded file, for search
+ * (#147). The database decides who may (whoever added or manages the
+ * document), cleans the text, and never uses it for anything but search.
+ * A failure here is not the upload's failure: the file is saved either way.
+ */
+export async function saveDocumentText(input: unknown): Promise<ActionResult> {
+  await requireSession();
+  const parsed = textSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Could not store the file's text." };
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("set_document_text", {
+    p_document: parsed.data.id,
+    p_text: parsed.data.text,
+    p_source: parsed.data.source,
+  });
+  if (error) return { ok: false, error: "Could not store the file's text." };
+  return { ok: true, id: parsed.data.id };
+}

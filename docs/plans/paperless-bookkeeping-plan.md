@@ -82,11 +82,15 @@ Supporting fixes merged the same day:
 - [ ] #144 e-signatures, v1 is in-app only: external signers by emailed link,
   ordered or parallel routing, the signer's IP address, and a certificate on a
   sealed PDF are not built. Build-or-buy and counsel's review come first.
-- [ ] #147 document library: search does not look inside PDFs or scans (its
-  acceptance test), and letter/contract templates are not built.
+- [x] #147 document library: search looks inside PDFs (text layer) and
+  scans/photos (in-browser Tesseract), receipts included, in French and
+  English, returning only what the searcher may open; letter, contract and
+  acknowledgement templates generate PDFs into the library (migration
+  20261001100000, `supabase/tests/document-search-templates.sql`,
+  `tests/e2e/document-search.spec.ts`).
 - [ ] Close #143 and #149 once the items above land. #141 stays open until the
-  finance screens are translated and a French reviewer signs off. #144 and
-  #147 stay open for the gaps listed.
+  finance screens are translated and a French reviewer signs off. #144 stays
+  open for the gaps listed; #147 can close once this lands.
 - [ ] Record in the accountant runbook that a granted accountant can read bank
   statement lines and donor gift records. They read through the same
   `can_read_ledger` rule.

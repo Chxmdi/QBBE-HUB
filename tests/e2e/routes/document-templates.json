@@ -1,0 +1,4 @@
+{
+  "staffOnly": ["/documents/templates"],
+  "qa": [{ "path": "/documents/templates", "name": "document-templates" }]
+}
