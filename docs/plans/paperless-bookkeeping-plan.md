@@ -78,9 +78,14 @@ Supporting fixes merged the same day:
 - [ ] #149 fund accounting: a statement of changes in fund balances, and
   releasing restricted money to unrestricted when its conditions are met.
   Neither is built; the acceptance tests themselves pass.
+- [ ] #144 e-signatures, v1 is in-app only: external signers by emailed link,
+  ordered or parallel routing, the signer's IP address, and a certificate on a
+  sealed PDF are not built. Build-or-buy and counsel's review come first.
+- [ ] #147 document library: search does not look inside PDFs or scans (its
+  acceptance test), and letter/contract templates are not built.
 - [ ] Close #143 and #149 once the items above land. #141 stays open until the
-  finance screens are translated and a French reviewer signs off. Confirm #144
-  and #147 against their acceptance criteria before closing.
+  finance screens are translated and a French reviewer signs off. #144 and
+  #147 stay open for the gaps listed.
 - [ ] Record in the accountant runbook that a granted accountant can read bank
   statement lines and donor gift records. They read through the same
   `can_read_ledger` rule.
