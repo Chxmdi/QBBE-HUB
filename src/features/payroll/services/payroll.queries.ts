@@ -1,4 +1,5 @@
 import type { createSupabasePageClient } from "@/lib/supabase/page";
+import type { MessageKey } from "@/lib/i18n/translate";
 import {
   CATEGORY_KEYS,
   type AccountType,
@@ -11,10 +12,10 @@ type Client = Awaited<ReturnType<typeof createSupabasePageClient>>;
 
 export type RunStatus = "draft" | "posted" | "reversed";
 
-export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
-  draft: "Draft",
-  posted: "Posted",
-  reversed: "Reversed",
+export const RUN_STATUS_KEY: Record<RunStatus, MessageKey> = {
+  draft: "finance.payroll.status.draft",
+  posted: "finance.payroll.status.posted",
+  reversed: "finance.payroll.status.reversed",
 };
 
 export interface PayrollRun {
@@ -161,15 +162,19 @@ export async function payrollOptions(supabase: Client, organizationId: string): 
   };
 }
 
-/** The lines posting would create, or the reason it cannot yet. */
+/**
+ * The lines posting would create, or the reason it cannot yet. The database
+ * explains itself for the checks it knows; anything else gets `fallback`.
+ */
 export async function previewLines(
   supabase: Client,
   runId: string,
+  fallback: string,
 ): Promise<{ lines: PreviewLine[]; error: string | null }> {
   const { data, error } = await supabase.rpc("payroll_run_lines", { p_run: runId });
   if (error) {
     const readable = error.code === "22023" || error.code === "P0002";
-    return { lines: [], error: readable ? error.message : "The entry could not be prepared." };
+    return { lines: [], error: readable ? error.message : fallback };
   }
   return {
     lines: ((data ?? []) as PreviewLine[]).map((l) => ({

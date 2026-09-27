@@ -7,24 +7,29 @@ import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { formatCents } from "@/features/finance/money";
 import { getLedgerAccess, uuidParam } from "@/features/ledger/services/ledger.access";
 import {
-  GROUP_LABEL,
   PAYROLL_CATEGORIES,
-  PROVIDER_LABEL,
   categoryLabel,
+  categoryShortKey,
   employeeDeductions,
   employerContributions,
+  groupKey,
+  providerShortLabel,
 } from "@/features/payroll/categories";
 import { AccountMapDialog, AllocationForm, RunActions } from "@/features/payroll/components/payroll-forms";
 import { NoPayrollAccess } from "@/features/payroll/components/no-payroll-access";
 import {
-  RUN_STATUS_LABEL,
+  RUN_STATUS_KEY,
   getAccountMap,
   getRun,
   payrollOptions,
   previewLines,
 } from "@/features/payroll/services/payroll.queries";
+import { getLocale, getT } from "@/lib/i18n/server";
+import { formatNumber } from "@/lib/i18n/format";
 
-export const metadata: Metadata = { title: "Pay run" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.payroll.run.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 interface EntryLine {
@@ -41,11 +46,13 @@ const STATUS_TONE = { draft: "warning", posted: "success", reversed: "neutral" }
 
 export default async function PayrollRunPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
+  const money = (cents: number) => formatCents(cents, locale);
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
   if (!canRead) {
     return (
       <div>
-        <PageHeader eyebrow="Payroll" title="Pay run" />
+        <PageHeader eyebrow={t("finance.payroll.title")} title={t("finance.payroll.run.metaTitle")} />
         <NoPayrollAccess isAdmin={session.isAdmin} />
       </div>
     );
@@ -61,7 +68,7 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
   const { run, allocation, entryNumbers } = found;
   const draft = run.status === "draft";
   // Posted runs show the entry that was posted; drafts, the one posting would make.
-  const preview = draft ? await previewLines(supabase, run.id) : null;
+  const preview = draft ? await previewLines(supabase, run.id, t("finance.payroll.run.previewFailed")) : null;
   const { data: postedLines } = draft
     ? { data: null }
     : await supabase
@@ -88,9 +95,16 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
   return (
     <div>
       <PageHeader
-        eyebrow="Payroll"
-        title={`Pay run of ${run.pay_date}`}
-        description={`Period ${run.period_start} to ${run.period_end}${run.run_reference ? ` · run ${run.run_reference}` : ""} · ${PROVIDER_LABEL[run.provider].replace(/ \(.*\)$/, "")}${run.file_name ? ` · ${run.file_name}` : ""}`}
+        eyebrow={t("finance.payroll.title")}
+        title={t("finance.payroll.run.heading", { date: run.pay_date })}
+        description={[
+          t("finance.payroll.run.descriptionPeriod", { start: run.period_start, end: run.period_end }),
+          run.run_reference ? t("finance.payroll.run.descriptionRun", { reference: run.run_reference }) : null,
+          providerShortLabel(run.provider, t),
+          run.file_name,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
         actions={
           canManage ? (
             <RunActions runId={run.id} status={run.status} payDate={run.pay_date} canPost={!preview?.error} />
@@ -98,75 +112,81 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
         }
       />
       <div className="mb-6 flex flex-wrap items-center gap-3 text-[13.5px]">
-        <Badge tone={STATUS_TONE[run.status]}>{RUN_STATUS_LABEL[run.status]}</Badge>
+        <Badge tone={STATUS_TONE[run.status]}>{t(RUN_STATUS_KEY[run.status])}</Badge>
         {run.journal_entry_id ? (
           <Link className="font-medium text-brand-fg hover:underline" href={`/finance/ledger/journal/${run.journal_entry_id}`}>
-            Journal entry {entryNumber ?? ""}
+            {t("finance.payroll.run.journalEntry", { number: entryNumber ?? "" })}
           </Link>
         ) : null}
         {run.reversal_entry_id ? (
           <Link className="font-medium text-brand-fg hover:underline" href={`/finance/ledger/journal/${run.reversal_entry_id}`}>
-            Reversed by entry {reversalNumber ?? ""}
+            {t("finance.payroll.run.reversedBy", { number: reversalNumber ?? "" })}
           </Link>
         ) : null}
         <Link className="text-muted hover:underline" href="/finance/payroll">
-          All pay runs
+          {t("finance.payroll.run.allRuns")}
         </Link>
       </div>
 
       <section aria-labelledby="totals" className="mb-8">
         <h2 id="totals" className="mb-2 text-[15px] font-semibold">
-          Totals
+          {t("finance.payroll.run.totalsHeading")}
         </h2>
         <DataTable minWidth="420px">
           <TableHead>
-            <TableHeader>Category</TableHeader>
-            <TableHeader className="w-40 text-right">Amount</TableHeader>
+            <TableHeader>{t("finance.payroll.run.category")}</TableHeader>
+            <TableHeader className="w-40 text-right">{t("finance.common.amount")}</TableHeader>
           </TableHead>
           <tbody>
             {(["wages", "employee", "employer", "net"] as const).map((group) => [
               ...PAYROLL_CATEGORIES.filter((c) => c.group === group).map((c) => (
                 <TableRow key={c.key}>
                   <TableCell>
-                    {group === "wages" || group === "net" ? c.label : `${GROUP_LABEL[group]}: ${c.label}`}
+                    {group === "wages" || group === "net"
+                      ? t(categoryShortKey(c.key))
+                      : t("finance.payroll.run.groupedCategory", {
+                          group: t(groupKey(group)),
+                          category: t(categoryShortKey(c.key)),
+                        })}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(run.cents[c.key])}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(run.cents[c.key])}</TableCell>
                 </TableRow>
               )),
               group === "employee" || group === "employer" ? (
                 <TableRow key={`total-${group}`} className="font-semibold">
-                  <TableCell>Total {GROUP_LABEL[group].toLowerCase()}</TableCell>
+                  <TableCell>{t(`finance.payroll.groupTotals.${group}`)}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatCents(group === "employee" ? employeeDeductions(run.cents) : employerContributions(run.cents))}
+                    {money(group === "employee" ? employeeDeductions(run.cents) : employerContributions(run.cents))}
                   </TableCell>
                 </TableRow>
               ) : null,
             ])}
           </tbody>
         </DataTable>
-        <p className="mt-2 text-[12.5px] text-muted">
-          Run totals only. Employee names, social insurance numbers and per-employee lines were discarded when the file
-          was read and are not stored.
-        </p>
+        <p className="mt-2 text-[12.5px] text-muted">{t("finance.payroll.run.totalsNote")}</p>
       </section>
 
       <section aria-labelledby="allocation" className="mb-8">
         <h2 id="allocation" className="mb-2 text-[15px] font-semibold">
-          Allocation to funds and programs
+          {t("finance.payroll.run.allocationHeading")}
         </h2>
         {draft && canManage ? (
           <div className="card p-4">
             <AllocationForm runId={run.id} grossCents={run.cents.gross_wages} allocation={allocation} options={options} />
           </div>
         ) : allocation.length === 0 ? (
-          <p className="text-[13.5px] text-muted">The whole run goes to the general fund (GEN) with no program.</p>
+          <p className="text-[13.5px] text-muted">{t("finance.payroll.run.allocationNone")}</p>
         ) : (
           <ul className="space-y-1 text-[13.5px]">
             {allocation.map((a) => (
               <li key={a.share_no}>
                 {fund.get(a.fund_id)?.code} {fund.get(a.fund_id)?.name}
                 {a.program_id ? ` · ${program.get(a.program_id)?.name ?? ""}` : ""} ·{" "}
-                {a.share_cents !== null ? formatCents(a.share_cents) : `${(a.share_basis_points ?? 0) / 100}%`}
+                {a.share_cents !== null
+                  ? money(a.share_cents)
+                  : t("finance.payroll.run.sharePercent", {
+                      value: formatNumber((a.share_basis_points ?? 0) / 100, locale),
+                    })}
               </li>
             ))}
           </ul>
@@ -176,15 +196,15 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
       <section aria-labelledby="mapping" className="mb-8">
         <div className="mb-2 flex items-center justify-between gap-3">
           <h2 id="mapping" className="text-[15px] font-semibold">
-            Account mapping
+            {t("finance.payroll.run.mappingHeading")}
           </h2>
           {canManage && draft ? <AccountMapDialog map={map} options={options} /> : null}
         </div>
         <DataTable minWidth="560px">
           <TableHead>
-            <TableHeader>Category</TableHeader>
-            <TableHeader>Debit</TableHeader>
-            <TableHeader>Credit</TableHeader>
+            <TableHeader>{t("finance.payroll.run.category")}</TableHeader>
+            <TableHeader>{t("finance.common.debit")}</TableHeader>
+            <TableHeader>{t("finance.common.credit")}</TableHeader>
           </TableHead>
           <tbody>
             {map.map((m) => {
@@ -193,12 +213,12 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
               const spec = PAYROLL_CATEGORIES.find((x) => x.key === m.category)!;
               return (
                 <TableRow key={m.category}>
-                  <TableCell>{categoryLabel(m.category)}</TableCell>
+                  <TableCell>{categoryLabel(m.category, t)}</TableCell>
                   <TableCell className="text-[13px]">
-                    {spec.debit ? (d ? `${d.code} ${d.name}` : <span className="text-danger-fg">Not mapped</span>) : ""}
+                    {spec.debit ? (d ? `${d.code} ${d.name}` : <span className="text-danger-fg">{t("finance.payroll.run.notMapped")}</span>) : ""}
                   </TableCell>
                   <TableCell className="text-[13px]">
-                    {spec.credit ? (c ? `${c.code} ${c.name}` : <span className="text-danger-fg">Not mapped</span>) : ""}
+                    {spec.credit ? (c ? `${c.code} ${c.name}` : <span className="text-danger-fg">{t("finance.payroll.run.notMapped")}</span>) : ""}
                   </TableCell>
                 </TableRow>
               );
@@ -209,7 +229,7 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
 
       <section aria-labelledby="entry">
         <h2 id="entry" className="mb-2 text-[15px] font-semibold">
-          {draft ? "Journal entry to post" : "Posted journal entry"}
+          {draft ? t("finance.payroll.run.entryToPost") : t("finance.payroll.run.postedEntry")}
         </h2>
         {preview?.error ? (
           <p role="alert" className="text-[13.5px] text-danger-fg">
@@ -218,13 +238,13 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
         ) : (
           <DataTable minWidth="760px">
             <TableHead>
-              <TableHeader className="w-12">#</TableHeader>
-              <TableHeader>Account</TableHeader>
-              <TableHeader className="w-28">Fund</TableHeader>
-              <TableHeader>Program</TableHeader>
-              <TableHeader>Description</TableHeader>
-              <TableHeader className="w-32 text-right">Debit</TableHeader>
-              <TableHeader className="w-32 text-right">Credit</TableHeader>
+              <TableHeader className="w-12">{t("finance.payroll.run.lineNumber")}</TableHeader>
+              <TableHeader>{t("finance.common.account")}</TableHeader>
+              <TableHeader className="w-28">{t("finance.common.fund")}</TableHeader>
+              <TableHeader>{t("finance.common.program")}</TableHeader>
+              <TableHeader>{t("finance.common.description")}</TableHeader>
+              <TableHeader className="w-32 text-right">{t("finance.common.debit")}</TableHeader>
+              <TableHeader className="w-32 text-right">{t("finance.common.credit")}</TableHeader>
             </TableHead>
             <tbody>
               {lines.map((l) => {
@@ -238,28 +258,25 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
                     <TableCell className="text-[13px]">{fund.get(l.fund_id)?.code}</TableCell>
                     <TableCell className="text-[13px]">{l.program_id ? program.get(l.program_id)?.name : ""}</TableCell>
                     <TableCell className="text-[13px]">{l.description}</TableCell>
-                    <TableCell className="text-right tabular-nums">{l.debit_cents ? formatCents(l.debit_cents) : ""}</TableCell>
-                    <TableCell className="text-right tabular-nums">{l.credit_cents ? formatCents(l.credit_cents) : ""}</TableCell>
+                    <TableCell className="text-right tabular-nums">{l.debit_cents ? money(l.debit_cents) : ""}</TableCell>
+                    <TableCell className="text-right tabular-nums">{l.credit_cents ? money(l.credit_cents) : ""}</TableCell>
                   </TableRow>
                 );
               })}
               <TableRow className="font-semibold">
                 <TableCell>{""}</TableCell>
-                <TableCell>Total</TableCell>
+                <TableCell>{t("finance.common.total")}</TableCell>
                 <TableCell>{""}</TableCell>
                 <TableCell>{""}</TableCell>
-                <TableCell>{debits === credits ? "Balanced" : "Not balanced"}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatCents(debits)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatCents(credits)}</TableCell>
+                <TableCell>{debits === credits ? t("finance.payroll.run.balanced") : t("finance.payroll.run.notBalanced")}</TableCell>
+                <TableCell className="text-right tabular-nums">{money(debits)}</TableCell>
+                <TableCell className="text-right tabular-nums">{money(credits)}</TableCell>
               </TableRow>
             </tbody>
           </DataTable>
         )}
         {draft ? (
-          <p className="mt-2 text-[12.5px] text-muted">
-            Posting creates this entry, dated on the pay date, through the ledger&rsquo;s own checks: it must balance
-            overall and within each fund, fall in an open period, and respect restricted funds.
-          </p>
+          <p className="mt-2 text-[12.5px] text-muted">{t("finance.payroll.run.postingNote")}</p>
         ) : null}
       </section>
     </div>

@@ -7,30 +7,34 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCents } from "@/features/finance/money";
 import { getLedgerAccess } from "@/features/ledger/services/ledger.access";
-import { employerContributions, PROVIDER_LABEL } from "@/features/payroll/categories";
+import { employerContributions, providerShortLabel } from "@/features/payroll/categories";
 import { AccountMapDialog, PayrollImportForm } from "@/features/payroll/components/payroll-forms";
 import { NoPayrollAccess } from "@/features/payroll/components/no-payroll-access";
 import {
   getAccountMap,
   listRuns,
   payrollOptions,
-  RUN_STATUS_LABEL,
+  RUN_STATUS_KEY,
 } from "@/features/payroll/services/payroll.queries";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Payroll" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.payroll.title") };
+}
 export const dynamic = "force-dynamic";
-
-const DESCRIPTION =
-  "Pay runs imported from the payroll provider's journal export, each posted to the ledger as one balanced entry. Only run totals are kept: never employee names, social insurance numbers or per-employee lines.";
 
 const STATUS_TONE = { draft: "warning", posted: "success", reversed: "neutral" } as const;
 
 export default async function PayrollPage() {
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
+  const title = t("finance.payroll.title");
+  const eyebrow = t("finance.common.title");
+  const description = t("finance.payroll.list.description");
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
   if (!canRead) {
     return (
       <div>
-        <PageHeader eyebrow="Finance" title="Payroll" description={DESCRIPTION} />
+        <PageHeader eyebrow={eyebrow} title={title} description={description} />
         <NoPayrollAccess isAdmin={session.isAdmin} />
       </div>
     );
@@ -45,15 +49,15 @@ export default async function PayrollPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Finance"
-        title="Payroll"
-        description={DESCRIPTION}
+        eyebrow={eyebrow}
+        title={title}
+        description={description}
         actions={canManage && options ? <AccountMapDialog map={map} options={options} /> : undefined}
       />
       {canManage ? (
         <section aria-labelledby="import" className="mb-8">
           <h2 id="import" className="mb-2 text-[15px] font-semibold">
-            Import pay runs
+            {t("finance.payroll.list.importHeading")}
           </h2>
           <div className="card p-4">
             <PayrollImportForm />
@@ -63,28 +67,26 @@ export default async function PayrollPage() {
 
       <section aria-labelledby="runs">
         <h2 id="runs" className="mb-2 text-[15px] font-semibold">
-          Pay runs
+          {t("finance.payroll.list.runsHeading")}
         </h2>
         {runs.length === 0 ? (
           <EmptyState
             icon={<Banknote />}
-            title="No pay runs yet"
+            title={t("finance.payroll.list.emptyTitle")}
             description={
-              canManage
-                ? "Export the payroll journal or register from your provider and import it above."
-                : "An administrator imports pay runs from the payroll provider."
+              canManage ? t("finance.payroll.list.emptyManager") : t("finance.payroll.list.emptyReader")
             }
           />
         ) : (
           <DataTable minWidth="760px">
             <TableHead>
-              <TableHeader className="w-32">Pay date</TableHeader>
-              <TableHeader>Period</TableHeader>
-              <TableHeader>Provider</TableHeader>
-              <TableHeader className="text-right">Gross wages</TableHeader>
-              <TableHeader className="text-right">Employer contributions</TableHeader>
-              <TableHeader className="text-right">Net pay</TableHeader>
-              <TableHeader className="w-28">Status</TableHeader>
+              <TableHeader className="w-32">{t("finance.payroll.list.payDate")}</TableHeader>
+              <TableHeader>{t("finance.payroll.list.period")}</TableHeader>
+              <TableHeader>{t("finance.payroll.list.provider")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.payroll.list.grossWages")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.payroll.list.employerContributions")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.payroll.list.netPay")}</TableHeader>
+              <TableHeader className="w-28">{t("finance.common.status")}</TableHeader>
             </TableHead>
             <tbody>
               {runs.map((r) => (
@@ -94,18 +96,22 @@ export default async function PayrollPage() {
                       {r.pay_date}
                     </Link>
                     {r.run_reference ? (
-                      <span className="block text-[12.5px] text-muted">Run {r.run_reference}</span>
+                      <span className="block text-[12.5px] text-muted">
+                        {t("finance.payroll.list.runReference", { reference: r.run_reference })}
+                      </span>
                     ) : null}
                   </TableCell>
                   <TableCell className="text-[13px]">
-                    {r.period_start} to {r.period_end}
+                    {t("finance.payroll.list.periodRange", { start: r.period_start, end: r.period_end })}
                   </TableCell>
-                  <TableCell className="text-[13px]">{PROVIDER_LABEL[r.provider].replace(/ \(.*\)$/, "")}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(r.cents.gross_wages)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(employerContributions(r.cents))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(r.cents.net_pay)}</TableCell>
+                  <TableCell className="text-[13px]">{providerShortLabel(r.provider, t)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCents(r.cents.gross_wages, locale)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatCents(employerContributions(r.cents), locale)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCents(r.cents.net_pay, locale)}</TableCell>
                   <TableCell>
-                    <Badge tone={STATUS_TONE[r.status]}>{RUN_STATUS_LABEL[r.status]}</Badge>
+                    <Badge tone={STATUS_TONE[r.status]}>{t(RUN_STATUS_KEY[r.status])}</Badge>
                   </TableCell>
                 </TableRow>
               ))}
@@ -113,10 +119,7 @@ export default async function PayrollPage() {
           </DataTable>
         )}
       </section>
-      <p className="mt-6 text-[12.5px] text-muted">
-        Provider presets follow each provider&rsquo;s published export layout and are not yet checked against a real
-        export. See the payroll import runbook.
-      </p>
+      <p className="mt-6 text-[12.5px] text-muted">{t("finance.payroll.list.presetsNote")}</p>
     </div>
   );
 }

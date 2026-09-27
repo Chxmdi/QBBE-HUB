@@ -13,10 +13,11 @@ import type { DateOrder } from "@/features/banking/parsers";
 import { centsToDecimal, formatCents } from "@/features/finance/money";
 import {
   PAYROLL_CATEGORIES,
-  PROVIDER_LABEL,
+  PAYROLL_PROVIDERS,
   categoryLabel,
   employeeDeductions,
   employerContributions,
+  providerLabel,
   type PayrollProvider,
 } from "@/features/payroll/categories";
 import {
@@ -38,6 +39,7 @@ import {
   savePayrollAllocation,
 } from "@/features/payroll/services/payroll.commands";
 import type { AccountMapRow, Allocation, PayrollOptions } from "@/features/payroll/services/payroll.queries";
+import { useLocale, useT } from "@/lib/i18n/client";
 
 function FormError({ error }: { error: string | null }) {
   return error ? (
@@ -51,6 +53,7 @@ function FormError({ error }: { error: string | null }) {
 function useAction() {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   async function run<T extends ActionResult>(
@@ -64,7 +67,7 @@ function useAction() {
     const result = await action();
     setPending(null);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong. Try again.");
+      setError(result.error ?? t("finance.payroll.errors.generic"));
       return false;
     }
     toast(typeof success === "string" ? success : success(result), { tone: "success" });
@@ -72,7 +75,7 @@ function useAction() {
     else router.refresh();
     return true;
   }
-  return { pending, error, setError, run, router };
+  return { pending, error, setError, run, router, t };
 }
 
 async function readFileText(file: File): Promise<string> {
@@ -93,7 +96,6 @@ async function sha256Hex(text: string): Promise<string | null> {
   }
 }
 
-const PROVIDERS = Object.keys(PROVIDER_LABEL) as PayrollProvider[];
 const MAPPABLE: PayrollField[] = [
   "payDate",
   "periodStart",
@@ -108,7 +110,9 @@ const NONE = "-1";
  * itself never leaves this page: only the totals are sent.
  */
 export function PayrollImportForm() {
-  const { pending, error, setError, run, router } = useAction();
+  const { pending, error, setError, run, router, t } = useAction();
+  const locale = useLocale();
+  const money = (cents: number) => formatCents(cents, locale);
   const [provider, setProvider] = useState<PayrollProvider>("nethris");
   const [file, setFile] = useState<{ name: string; text: string; sha256: string | null } | null>(null);
   const [headerRow, setHeaderRow] = useState(0);
@@ -119,9 +123,9 @@ export function PayrollImportForm() {
   const header = rows[headerRow] ?? [];
   const mapping: PayrollMapping = { headerRow, dateOrder, columns };
   const result = useMemo(
-    () => (file ? parsePayrollFile(file.text, provider, provider === "other" ? mapping : undefined) : null),
+    () => (file ? parsePayrollFile(file.text, provider, provider === "other" ? mapping : undefined, locale) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [file, provider, headerRow, dateOrder, columns],
+    [file, provider, headerRow, dateOrder, columns, locale],
   );
 
   function chooseHeaderRow(index: number, from: string[][] = rows) {
@@ -132,11 +136,11 @@ export function PayrollImportForm() {
   return (
     <form
       className="space-y-4"
-      aria-label="Import payroll"
+      aria-label={t("finance.payroll.import.formLabel")}
       onSubmit={async (e) => {
         e.preventDefault();
         if (!file || !result) {
-          setError("Choose a payroll file.");
+          setError(t("finance.payroll.import.chooseFile"));
           return;
         }
         if (!result.ok) {
@@ -158,11 +162,17 @@ export function PayrollImportForm() {
                 cents: r.cents,
               })),
             }),
-          (r) =>
-            r.added === 0
-              ? "Already imported: nothing was added."
-              : `Imported ${r.added} pay run${r.added === 1 ? "" : "s"} as draft${r.added === 1 ? "" : "s"}` +
-                (r.skipped ? `; ${r.skipped} already imported were skipped.` : "."),
+          (r) => {
+            const added = r.added ?? 0;
+            if (added === 0) return t("finance.payroll.import.alreadyImported");
+            const vars = { count: added, skipped: r.skipped ?? 0 };
+            if (r.skipped) {
+              return added === 1
+                ? t("finance.payroll.import.importedOneSkipped", vars)
+                : t("finance.payroll.import.importedOtherSkipped", vars);
+            }
+            return added === 1 ? t("finance.payroll.import.importedOne") : t("finance.payroll.import.importedOther", vars);
+          },
           (r) => {
             setFile(null);
             const form = e.target as HTMLFormElement;
@@ -175,26 +185,24 @@ export function PayrollImportForm() {
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <Label htmlFor="payroll-provider">Payroll provider</Label>
+          <Label htmlFor="payroll-provider">{t("finance.payroll.import.provider")}</Label>
           <Select
             id="payroll-provider"
             value={provider}
             onChange={(e) => setProvider(e.currentTarget.value as PayrollProvider)}
           >
-            {PROVIDERS.map((p) => (
+            {PAYROLL_PROVIDERS.map((p) => (
               <option key={p} value={p}>
-                {PROVIDER_LABEL[p]}
-                {p === "other" ? "" : " (not yet checked against a real export)"}
+                {p === "other"
+                  ? providerLabel(p, t)
+                  : t("finance.payroll.import.providerUnchecked", { provider: providerLabel(p, t) })}
               </option>
             ))}
           </Select>
-          <FieldHint>
-            Presets follow each provider&rsquo;s published export layout and have not yet been checked against a real
-            export. If yours is refused, choose &ldquo;Other CSV&rdquo;.
-          </FieldHint>
+          <FieldHint>{t("finance.payroll.import.providerHint")}</FieldHint>
         </div>
         <div>
-          <Label htmlFor="payroll-file">Payroll journal or register (CSV)</Label>
+          <Label htmlFor="payroll-file">{t("finance.payroll.import.file")}</Label>
           <Input
             id="payroll-file"
             type="file"
@@ -209,7 +217,7 @@ export function PayrollImportForm() {
               }
               if (chosen.size > 5_000_000) {
                 setFile(null);
-                setError("The file is too large. Export fewer pay runs at a time.");
+                setError(t("finance.payroll.import.fileTooLarge"));
                 return;
               }
               const text = await readFileText(chosen);
@@ -218,16 +226,16 @@ export function PayrollImportForm() {
               chooseHeaderRow(guessHeaderRow(read), read);
             }}
           />
-          <FieldHint>Read on this computer. Only the totals of each pay run are sent and kept.</FieldHint>
+          <FieldHint>{t("finance.payroll.import.fileHint")}</FieldHint>
         </div>
       </div>
 
       {provider === "other" && file ? (
         <fieldset className="space-y-3 rounded-(--radius-sm) border border-line p-3">
-          <legend className="px-1 text-[13px] font-medium">Columns</legend>
+          <legend className="px-1 text-[13px] font-medium">{t("finance.payroll.import.columns")}</legend>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label htmlFor="payroll-header-row">Header row</Label>
+              <Label htmlFor="payroll-header-row">{t("finance.payroll.import.headerRow")}</Label>
               <Select
                 id="payroll-header-row"
                 value={String(headerRow)}
@@ -235,21 +243,24 @@ export function PayrollImportForm() {
               >
                 {rows.slice(0, 15).map((r, i) => (
                   <option key={i} value={i}>
-                    Row {i + 1}: {r.filter(Boolean).slice(0, 3).join(", ").slice(0, 60)}
+                    {t("finance.payroll.import.headerRowOption", {
+                      number: i + 1,
+                      preview: r.filter(Boolean).slice(0, 3).join(", ").slice(0, 60),
+                    })}
                   </option>
                 ))}
               </Select>
             </div>
             <div>
-              <Label htmlFor="payroll-date-order">Dates not written YYYY-MM-DD are</Label>
+              <Label htmlFor="payroll-date-order">{t("finance.payroll.import.dateOrder")}</Label>
               <Select
                 id="payroll-date-order"
                 value={dateOrder}
                 onChange={(e) => setDateOrder(e.currentTarget.value as DateOrder)}
               >
-                <option value="ymd">Year, month, day</option>
-                <option value="dmy">Day, month, year</option>
-                <option value="mdy">Month, day, year</option>
+                <option value="ymd">{t("finance.payroll.import.ymd")}</option>
+                <option value="dmy">{t("finance.payroll.import.dmy")}</option>
+                <option value="mdy">{t("finance.payroll.import.mdy")}</option>
               </Select>
             </div>
           </div>
@@ -257,8 +268,9 @@ export function PayrollImportForm() {
             {MAPPABLE.map((field) => (
               <div key={field}>
                 <Label htmlFor={`payroll-col-${field}`}>
-                  {fieldLabel(field)}
-                  {REQUIRED_FIELDS.includes(field) ? "" : field === "runReference" ? "" : " (if any)"}
+                  {REQUIRED_FIELDS.includes(field) || field === "runReference"
+                    ? fieldLabel(field, t)
+                    : t("finance.payroll.import.ifAny", { label: fieldLabel(field, t) })}
                 </Label>
                 <Select
                   id={`payroll-col-${field}`}
@@ -268,10 +280,10 @@ export function PayrollImportForm() {
                     setColumns((c) => ({ ...c, [field]: value >= 0 ? [value] : [] }));
                   }}
                 >
-                  <option value={NONE}>Not in the file</option>
+                  <option value={NONE}>{t("finance.payroll.import.notInFile")}</option>
                   {header.map((h, i) => (
                     <option key={i} value={i}>
-                      {h || `Column ${i + 1}`}
+                      {h || t("finance.payroll.import.column", { number: i + 1 })}
                     </option>
                   ))}
                 </Select>
@@ -285,46 +297,55 @@ export function PayrollImportForm() {
       {result && result.ok ? (
         <section aria-labelledby="payroll-preview" className="space-y-2">
           <h3 id="payroll-preview" className="text-[14px] font-semibold">
-            {result.payroll.runs.length} pay run{result.payroll.runs.length === 1 ? "" : "s"} found
+            {result.payroll.runs.length === 1
+              ? t("finance.payroll.import.foundOne")
+              : t("finance.payroll.import.foundOther", { count: result.payroll.runs.length })}
           </h3>
           <DataTable minWidth="720px">
             <TableHead>
-              <TableHeader>Pay date</TableHeader>
-              <TableHeader>Period</TableHeader>
-              <TableHeader className="text-right">Gross wages</TableHeader>
-              <TableHeader className="text-right">Employee deductions</TableHeader>
-              <TableHeader className="text-right">Employer contributions</TableHeader>
-              <TableHeader className="text-right">Net pay</TableHeader>
+              <TableHeader>{t("finance.payroll.list.payDate")}</TableHeader>
+              <TableHeader>{t("finance.payroll.list.period")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.payroll.list.grossWages")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.payroll.import.employeeDeductions")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.payroll.list.employerContributions")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.payroll.list.netPay")}</TableHeader>
             </TableHead>
             <tbody>
               {result.payroll.runs.map((r) => (
                 <TableRow key={`${r.payDate}-${r.periodStart}-${r.runReference ?? ""}`}>
                   <TableCell>
                     {r.payDate}
-                    {r.runReference ? <span className="block text-[12.5px] text-muted">Run {r.runReference}</span> : null}
+                    {r.runReference ? (
+                      <span className="block text-[12.5px] text-muted">
+                        {t("finance.payroll.list.runReference", { reference: r.runReference })}
+                      </span>
+                    ) : null}
                   </TableCell>
                   <TableCell className="text-[13px]">
-                    {r.periodStart} to {r.periodEnd}
+                    {t("finance.payroll.list.periodRange", { start: r.periodStart, end: r.periodEnd })}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(r.cents.gross_wages)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(employeeDeductions(r.cents))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(employerContributions(r.cents))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(r.cents.net_pay)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(r.cents.gross_wages)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(employeeDeductions(r.cents))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(employerContributions(r.cents))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(r.cents.net_pay)}</TableCell>
                 </TableRow>
               ))}
             </tbody>
           </DataTable>
           <ul className="list-disc space-y-1 pl-5 text-[13px] text-muted">
             <li>
-              {result.payroll.runs.reduce((s, r) => s + r.rowsRead, 0)} lines were added into these totals and then
-              discarded. Names, social insurance numbers and per-employee amounts are not sent or stored.
+              {t("finance.payroll.import.linesDiscarded", {
+                count: result.payroll.runs.reduce((s, r) => s + r.rowsRead, 0),
+              })}
             </li>
             {result.payroll.totalRowsChecked > 0 ? (
-              <li>The file&rsquo;s own total row matches the sum of its lines.</li>
+              <li>{t("finance.payroll.import.totalRowMatches")}</li>
             ) : null}
             {result.payroll.missing.length > 0 ? (
               <li>
-                Not in the file, imported as zero: {result.payroll.missing.map(categoryLabel).join(", ")}.
+                {t("finance.payroll.import.missing", {
+                  categories: result.payroll.missing.map((k) => categoryLabel(k, t)).join(", "),
+                })}
               </li>
             ) : null}
           </ul>
@@ -334,7 +355,7 @@ export function PayrollImportForm() {
       <FormError error={error} />
       <Button type="submit" loading={pending === "import"} disabled={!result?.ok}>
         <Upload className="size-4" aria-hidden />
-        Import pay runs
+        {t("finance.payroll.import.submit")}
       </Button>
     </form>
   );
@@ -347,7 +368,7 @@ function accountChoices(options: PayrollOptions, types: readonly string[] | null
 
 /** The account each category posts to, for the whole organization. */
 export function AccountMapDialog({ map, options }: { map: AccountMapRow[]; options: PayrollOptions }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState(0);
   const byCategory = new Map(map.map((m) => [m.category, m]));
@@ -361,12 +382,12 @@ export function AccountMapDialog({ map, options }: { map: AccountMapRow[]; optio
         }}
       >
         <Settings2 className="size-4" aria-hidden />
-        Edit account mapping
+        {t("finance.payroll.mapping.open")}
       </Button>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Payroll account mapping"
+        title={t("finance.payroll.mapping.title")}
         className="w-[min(820px,calc(100vw-2rem))]"
       >
         <form
@@ -386,26 +407,23 @@ export function AccountMapDialog({ map, options }: { map: AccountMapRow[]; optio
                     creditAccountId: c.credit ? value(`credit-${c.key}`) : null,
                   })),
                 ),
-              "Account mapping saved.",
+              t("finance.payroll.mapping.saved"),
             );
             if (ok) setOpen(false);
           }}
         >
-          <p className="text-[13px] text-muted">
-            Applies to every run posted from now on; posted runs keep their entries. Net pay can come out of the bank
-            account directly or go to a net pay payable account that the bank payment later clears.
-          </p>
+          <p className="text-[13px] text-muted">{t("finance.payroll.mapping.intro")}</p>
           <div className="space-y-3">
             {PAYROLL_CATEGORIES.map((c) => {
               const current = byCategory.get(c.key);
               return (
                 <div key={c.key} className="grid gap-2 sm:grid-cols-[14rem_1fr_1fr] sm:items-end">
-                  <p className="text-[13.5px] font-medium sm:pb-2">{categoryLabel(c.key)}</p>
+                  <p className="text-[13.5px] font-medium sm:pb-2">{categoryLabel(c.key, t)}</p>
                   {c.debit ? (
                     <div>
-                      <Label htmlFor={`debit-${c.key}`}>Debit (expense)</Label>
+                      <Label htmlFor={`debit-${c.key}`}>{t("finance.payroll.mapping.debit")}</Label>
                       <Select id={`debit-${c.key}`} name={`debit-${c.key}`} defaultValue={current?.debit_account_id ?? ""}>
-                        <option value="">Not mapped</option>
+                        <option value="">{t("finance.payroll.run.notMapped")}</option>
                         {accountChoices(options, c.debit, current?.debit_account_id ?? null).map((a) => (
                           <option key={a.id} value={a.id}>
                             {a.code} {a.name}
@@ -419,14 +437,16 @@ export function AccountMapDialog({ map, options }: { map: AccountMapRow[]; optio
                   {c.credit ? (
                     <div>
                       <Label htmlFor={`credit-${c.key}`}>
-                        {c.key === "net_pay" ? "Credit (bank or net pay payable)" : "Credit (payable)"}
+                        {c.key === "net_pay"
+                          ? t("finance.payroll.mapping.creditNetPay")
+                          : t("finance.payroll.mapping.credit")}
                       </Label>
                       <Select
                         id={`credit-${c.key}`}
                         name={`credit-${c.key}`}
                         defaultValue={current?.credit_account_id ?? ""}
                       >
-                        <option value="">Not mapped</option>
+                        <option value="">{t("finance.payroll.run.notMapped")}</option>
                         {accountChoices(options, c.credit, current?.credit_account_id ?? null).map((a) => (
                           <option key={a.id} value={a.id}>
                             {a.code} {a.name}
@@ -444,10 +464,10 @@ export function AccountMapDialog({ map, options }: { map: AccountMapRow[]; optio
           <FormError error={error} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.common.cancel")}
             </Button>
             <Button type="submit" loading={pending === "map"}>
-              Save mapping
+              {t("finance.payroll.mapping.save")}
             </Button>
           </div>
         </form>
@@ -475,7 +495,8 @@ export function AllocationForm({
   allocation: Allocation[];
   options: PayrollOptions;
 }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
+  const locale = useLocale();
   const initialMode = allocation.some((a) => a.share_cents !== null) ? "amount" : "percent";
   const [mode, setMode] = useState<"percent" | "amount">(initialMode);
   const [next, setNext] = useState(allocation.length + 1);
@@ -497,7 +518,7 @@ export function AllocationForm({
   return (
     <form
       className="space-y-3"
-      aria-label="Allocation"
+      aria-label={t("finance.payroll.allocation.formLabel")}
       onSubmit={(e) => {
         e.preventDefault();
         void run(
@@ -508,32 +529,30 @@ export function AllocationForm({
               mode,
               shares: shares.map((s) => ({ fundId: s.fundId, programId: s.programId, value: s.value })),
             }),
-          "Allocation saved.",
+          t("finance.payroll.allocation.saved"),
         );
       }}
     >
       <fieldset>
-        <legend className="mb-1.5 text-[13px] font-medium">Split by</legend>
+        <legend className="mb-1.5 text-[13px] font-medium">{t("finance.payroll.allocation.splitBy")}</legend>
         <div className="flex flex-wrap gap-4 text-[13.5px]">
           <label className="flex items-center gap-2">
             <input type="radio" name="mode" value="percent" checked={mode === "percent"} onChange={() => setMode("percent")} />
-            Percentage of the run
+            {t("finance.payroll.allocation.percent")}
           </label>
           <label className="flex items-center gap-2">
             <input type="radio" name="mode" value="amount" checked={mode === "amount"} onChange={() => setMode("amount")} />
-            Amount of gross wages ({formatCents(grossCents)} in all)
+            {t("finance.payroll.allocation.amount", { total: formatCents(grossCents, locale) })}
           </label>
         </div>
       </fieldset>
       {shares.length === 0 ? (
-        <p className="text-[13px] text-muted">
-          No shares: the whole run goes to the general fund (GEN) with no program.
-        </p>
+        <p className="text-[13px] text-muted">{t("finance.payroll.allocation.none")}</p>
       ) : null}
       {shares.map((s, i) => (
         <div key={s.key} className="grid gap-2 sm:grid-cols-[1fr_1fr_9rem_auto] sm:items-end">
           <div>
-            <Label htmlFor={`share-fund-${s.key}`}>Share {i + 1} fund</Label>
+            <Label htmlFor={`share-fund-${s.key}`}>{t("finance.payroll.allocation.fund", { number: i + 1 })}</Label>
             <Select
               id={`share-fund-${s.key}`}
               value={s.fundId}
@@ -541,7 +560,7 @@ export function AllocationForm({
               onChange={(e) => update(s.key, { fundId: e.currentTarget.value })}
             >
               <option value="" disabled>
-                Choose a fund
+                {t("finance.payroll.allocation.chooseFund")}
               </option>
               {funds.map((f) => (
                 <option key={f.id} value={f.id}>
@@ -551,13 +570,15 @@ export function AllocationForm({
             </Select>
           </div>
           <div>
-            <Label htmlFor={`share-program-${s.key}`}>Share {i + 1} program</Label>
+            <Label htmlFor={`share-program-${s.key}`}>
+              {t("finance.payroll.allocation.program", { number: i + 1 })}
+            </Label>
             <Select
               id={`share-program-${s.key}`}
               value={s.programId}
               onChange={(e) => update(s.key, { programId: e.currentTarget.value })}
             >
-              <option value="">No program</option>
+              <option value="">{t("finance.payroll.allocation.noProgram")}</option>
               {options.programs.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -566,20 +587,28 @@ export function AllocationForm({
             </Select>
           </div>
           <div>
-            <Label htmlFor={`share-value-${s.key}`}>{mode === "percent" ? `Share ${i + 1} %` : `Share ${i + 1} amount`}</Label>
+            <Label htmlFor={`share-value-${s.key}`}>
+              {mode === "percent"
+                ? t("finance.payroll.allocation.valuePercent", { number: i + 1 })
+                : t("finance.payroll.allocation.valueAmount", { number: i + 1 })}
+            </Label>
             <Input
               id={`share-value-${s.key}`}
               inputMode="decimal"
               required
               value={s.value}
-              placeholder={mode === "percent" ? "50" : "1250.00"}
+              placeholder={
+                mode === "percent"
+                  ? t("finance.payroll.allocation.placeholderPercent")
+                  : t("finance.payroll.allocation.placeholderAmount")
+              }
               onChange={(e) => update(s.key, { value: e.currentTarget.value })}
             />
           </div>
           <Button
             type="button"
             variant="ghost"
-            aria-label={`Remove share ${i + 1}`}
+            aria-label={t("finance.payroll.allocation.remove", { number: i + 1 })}
             onClick={() => setShares((list) => list.filter((x) => x.key !== s.key))}
           >
             <Trash2 className="size-4" aria-hidden />
@@ -598,10 +627,10 @@ export function AllocationForm({
           }}
         >
           <Plus className="size-4" aria-hidden />
-          Add share
+          {t("finance.payroll.allocation.add")}
         </Button>
         <Button type="submit" loading={pending === "allocate"}>
-          Save allocation
+          {t("finance.payroll.allocation.save")}
         </Button>
       </div>
     </form>
@@ -620,7 +649,7 @@ export function RunActions({
   payDate: string;
   canPost: boolean;
 }) {
-  const { pending, error, run, router } = useAction();
+  const { pending, error, run, router, t } = useAction();
   const [reverseOn, setReverseOn] = useState(payDate);
   if (status === "reversed") return null;
   return (
@@ -633,32 +662,33 @@ export function RunActions({
               loading={pending === "delete"}
               disabled={pending !== null}
               onClick={() => {
-                if (!window.confirm("Delete this draft pay run? You can import it again later.")) return;
-                void run("delete", () => deletePayrollDraft(runId), "Draft deleted.", () => {
+                if (!window.confirm(t("finance.payroll.actions.confirmDelete"))) return;
+                void run("delete", () => deletePayrollDraft(runId), t("finance.payroll.actions.deleted"), () => {
                   router.push("/finance/payroll");
                   router.refresh();
                 });
               }}
             >
-              Delete draft
+              {t("finance.payroll.actions.delete")}
             </Button>
             <Button
               loading={pending === "post"}
               disabled={pending !== null || !canPost}
               onClick={() => {
-                if (!window.confirm("Post this pay run to the ledger? A posted entry can only be corrected by reversing it.")) {
+                if (!window.confirm(t("finance.payroll.actions.confirmPost"))) {
                   return;
                 }
-                void run("post", () => postPayrollRun(runId), (r) => `Posted as journal entry ${r.entryNumber}.`);
+                void run("post", () => postPayrollRun(runId), (r) =>
+                  t("finance.payroll.actions.posted", { number: r.entryNumber ?? "" }),);
               }}
             >
-              Post to ledger
+              {t("finance.payroll.actions.post")}
             </Button>
           </>
         ) : (
           <>
             <div>
-              <Label htmlFor="reverse-date">Reversal date</Label>
+              <Label htmlFor="reverse-date">{t("finance.payroll.actions.reversalDate")}</Label>
               <Input
                 id="reverse-date"
                 type="date"
@@ -671,13 +701,17 @@ export function RunActions({
               variant="danger"
               loading={pending === "reverse"}
               onClick={() => {
-                if (!window.confirm("Reverse this pay run? A mirror entry is posted; the run can then be imported again.")) {
+                if (!window.confirm(t("finance.payroll.actions.confirmReverse"))) {
                   return;
                 }
-                void run("reverse", () => reversePayrollRun({ runId, entryDate: reverseOn }), "Pay run reversed.");
+                void run(
+                  "reverse",
+                  () => reversePayrollRun({ runId, entryDate: reverseOn }),
+                  t("finance.payroll.actions.reversed"),
+                );
               }}
             >
-              Reverse
+              {t("finance.payroll.actions.reverse")}
             </Button>
           </>
         )}
