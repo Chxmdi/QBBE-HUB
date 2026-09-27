@@ -17,8 +17,11 @@ import { createApprovalRule } from "@/features/approvals/services/approval.comma
 import { getApprovalRules } from "@/features/approvals/services/approval.queries";
 import { requireAdminAal2 } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Approval rules" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.approvals.rules.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 /**
@@ -28,6 +31,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function AdminApprovalsPage() {
   await requireAdminAal2();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const supabase = await createSupabasePageClient();
   const [rules, { data: programRows }, { data: memberRows }] = await Promise.all([
     getApprovalRules(),
@@ -47,90 +51,93 @@ export default async function AdminApprovalsPage() {
     user_id: string;
     user_profile: { full_name: string } | null;
   }[])
-    .map((row) => ({ value: row.user_id, label: row.user_profile?.full_name ?? "Unnamed" }))
+    .map((row) => ({ value: row.user_id, label: row.user_profile?.full_name ?? t("finance.approvals.rules.unnamed") }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
   return (
     <div>
       <AdminNav />
       <PageHeader
-        eyebrow="Administration"
-        title="Approval rules"
-        description="Who approves what, by kind of item, program and amount. Changes apply to new requests; items already waiting keep their approvers."
+        eyebrow={t("finance.approvals.rules.eyebrow")}
+        title={t("finance.approvals.rules.title")}
+        description={t("finance.approvals.rules.description")}
         actions={
           <EntityFormDialog
-            triggerLabel="Add rule"
-            title="Add an approval rule"
-            submitLabel="Save rule"
+            triggerLabel={t("finance.approvals.rules.addRule")}
+            title={t("finance.approvals.rules.addRuleTitle")}
+            submitLabel={t("finance.approvals.rules.saveRule")}
             action={createApprovalRule}
             fields={[
               {
                 name: "label",
-                label: "Approver title",
+                label: t("finance.approvals.rules.fieldLabel"),
                 type: "text",
                 required: true,
-                placeholder: "Executive director",
+                placeholder: t("finance.approvals.rules.fieldLabelPlaceholder"),
               },
               {
                 name: "approverKind",
-                label: "Who approves",
+                label: t("finance.approvals.rules.fieldKind"),
                 type: "select",
                 required: true,
                 colSpan: 1,
                 options: APPROVER_KINDS.map((value) => ({
                   value,
-                  label: APPROVER_KIND_LABELS[value],
+                  label: t(APPROVER_KIND_LABELS[value]),
                 })),
               },
               {
                 name: "approverUserId",
-                label: "Person",
+                label: t("finance.approvals.rules.fieldPerson"),
                 type: "select",
                 colSpan: 1,
                 options: people,
-                hint: "Only when a named person approves.",
+                hint: t("finance.approvals.rules.fieldPersonHint"),
               },
               {
                 name: "subjectType",
-                label: "Applies to",
+                label: t("finance.approvals.rules.fieldSubject"),
                 type: "select",
                 colSpan: 1,
                 options: SUBJECT_TYPES.map((value) => ({
                   value,
-                  label: SUBJECT_TYPE_LABELS[value],
+                  label: t(SUBJECT_TYPE_LABELS[value]),
                 })),
-                hint: "Leave empty for every kind.",
+                hint: t("finance.approvals.rules.fieldSubjectHint"),
               },
               {
                 name: "programId",
-                label: "Program",
+                label: t("finance.approvals.rules.fieldProgram"),
                 type: "select",
                 colSpan: 1,
                 options: programOptions,
-                hint: "Leave empty for every program.",
+                hint: t("finance.approvals.rules.fieldProgramHint"),
               },
               {
                 name: "minAmount",
-                label: "From amount (CAD)",
+                label: t("finance.approvals.rules.fieldMin"),
                 type: "text",
                 colSpan: 1,
                 placeholder: "0.00",
               },
               {
                 name: "maxAmount",
-                label: "Up to, not including (CAD)",
+                label: t("finance.approvals.rules.fieldMax"),
                 type: "text",
                 colSpan: 1,
-                hint: "Leave empty for no upper limit.",
+                hint: t("finance.approvals.rules.fieldMaxHint"),
               },
               {
                 name: "step",
-                label: "Step",
+                label: t("finance.approvals.rules.fieldStep"),
                 type: "select",
                 colSpan: 1,
                 defaultValue: "1",
-                options: [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `Step ${n}` })),
-                hint: "Step 2 approvers are asked after every step 1 approver has approved.",
+                options: [1, 2, 3, 4, 5].map((n) => ({
+                  value: String(n),
+                  label: t("finance.approvals.rules.stepOption", { step: n }),
+                })),
+                hint: t("finance.approvals.rules.fieldStepHint"),
               },
             ]}
           />
@@ -140,32 +147,34 @@ export default async function AdminApprovalsPage() {
       {rules.length === 0 ? (
         <EmptyState
           icon={<Route />}
-          title="No approval rules yet"
-          description="Until you add rules, every request goes to the owners and administrators."
+          title={t("finance.approvals.rules.emptyTitle")}
+          description={t("finance.approvals.rules.emptyDescription")}
         />
       ) : (
-        <ul className="space-y-2" aria-label="Approval rules">
+        <ul className="space-y-2" aria-label={t("finance.approvals.rules.listLabel")}>
           {rules.map((rule) => (
             <li key={rule.id} className="card flex flex-wrap items-center gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[13.5px] font-medium">
-                  Step {rule.step}: {rule.label}
+                  {t("finance.approvals.rules.ruleStep", { step: rule.step, label: rule.label })}
                   {rule.approver ? ` (${rule.approver.full_name})` : ""}
                 </p>
                 <p className="meta">
-                  {rule.subject_type ? SUBJECT_TYPE_LABELS[rule.subject_type] : "Every kind"}
+                  {rule.subject_type
+                    ? t(SUBJECT_TYPE_LABELS[rule.subject_type])
+                    : t("finance.approvals.rules.everyKind")}
                   {" · "}
-                  {rule.program?.name ?? "Every program"}
+                  {rule.program?.name ?? t("finance.approvals.rules.everyProgram")}
                   {" · "}
-                  {describeRange(rule.min_amount_cents, rule.max_amount_cents)}
+                  {describeRange(rule.min_amount_cents, rule.max_amount_cents, locale)}
                   {" · "}
-                  {APPROVER_KIND_LABELS[rule.approver_kind]}
+                  {t(APPROVER_KIND_LABELS[rule.approver_kind])}
                 </p>
               </div>
               {rule.active ? (
-                <Badge tone="success">On</Badge>
+                <Badge tone="success">{t("finance.approvals.rules.on")}</Badge>
               ) : (
-                <Badge tone="neutral">Off</Badge>
+                <Badge tone="neutral">{t("finance.approvals.rules.off")}</Badge>
               )}
               <RuleControls ruleId={rule.id} active={rule.active} />
             </li>

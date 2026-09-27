@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import type { Locale } from "@/lib/i18n/config";
+import { formatCurrency } from "@/lib/i18n/format";
+import { createTranslator, type MessageKey } from "@/lib/i18n/translate";
 
 /**
  * Approval routing (#143). The database decides who may approve what; these
@@ -17,14 +20,14 @@ export const SUBJECT_TYPES = [
 ] as const;
 export type SubjectType = (typeof SUBJECT_TYPES)[number];
 
-export const SUBJECT_TYPE_LABELS: Record<SubjectType, string> = {
-  purchase: "Purchase request",
-  expense_claim: "Expense claim",
-  bill: "Vendor bill",
-  contract: "Contract",
-  payment: "Payment",
-  form: "Form",
-  other: "Other",
+export const SUBJECT_TYPE_LABELS: Record<SubjectType, MessageKey> = {
+  purchase: "finance.approvals.subjectTypes.purchase",
+  expense_claim: "finance.approvals.subjectTypes.expense_claim",
+  bill: "finance.approvals.subjectTypes.bill",
+  contract: "finance.approvals.subjectTypes.contract",
+  payment: "finance.approvals.subjectTypes.payment",
+  form: "finance.approvals.subjectTypes.form",
+  other: "finance.approvals.subjectTypes.other",
 };
 
 /** Kinds of item that always carry an amount (the database insists too). */
@@ -37,11 +40,11 @@ export const AMOUNT_REQUIRED: ReadonlySet<SubjectType> = new Set([
 
 export type ApprovalStatus = "pending" | "approved" | "rejected" | "withdrawn";
 
-export const STATUS_LABELS: Record<ApprovalStatus, string> = {
-  pending: "Waiting",
-  approved: "Approved",
-  rejected: "Rejected",
-  withdrawn: "Withdrawn",
+export const STATUS_LABELS: Record<ApprovalStatus, MessageKey> = {
+  pending: "finance.approvals.statuses.pending",
+  approved: "finance.approvals.statuses.approved",
+  rejected: "finance.approvals.statuses.rejected",
+  withdrawn: "finance.approvals.statuses.withdrawn",
 };
 
 export const STATUS_TONE = {
@@ -54,19 +57,19 @@ export const STATUS_TONE = {
 export const APPROVER_KINDS = ["person", "program_lead", "admins"] as const;
 export type ApproverKind = (typeof APPROVER_KINDS)[number];
 
-export const APPROVER_KIND_LABELS: Record<ApproverKind, string> = {
-  person: "A named person",
-  program_lead: "The program's lead",
-  admins: "Any owner or administrator",
+export const APPROVER_KIND_LABELS: Record<ApproverKind, MessageKey> = {
+  person: "finance.approvals.approverKinds.person",
+  program_lead: "finance.approvals.approverKinds.program_lead",
+  admins: "finance.approvals.approverKinds.admins",
 };
 
-export const EVENT_LABELS: Record<string, string> = {
-  submitted: "Submitted",
-  approved: "Approved",
-  rejected: "Rejected",
-  commented: "Commented",
-  withdrawn: "Withdrawn",
-  completed: "Fully approved",
+export const EVENT_LABELS: Record<string, MessageKey> = {
+  submitted: "finance.approvals.events.submitted",
+  approved: "finance.approvals.events.approved",
+  rejected: "finance.approvals.events.rejected",
+  commented: "finance.approvals.events.commented",
+  withdrawn: "finance.approvals.events.withdrawn",
+  completed: "finance.approvals.events.completed",
 };
 
 /**
@@ -84,8 +87,9 @@ export function parseAmountToCents(input: string): number | null {
 
 const amountFormatter = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 
-export function formatAmount(cents: number | null | undefined): string {
-  return cents === null || cents === undefined ? "—" : amountFormatter.format(cents / 100);
+export function formatAmount(cents: number | null | undefined, locale: Locale = "en"): string {
+  if (cents === null || cents === undefined) return "—";
+  return locale === "en" ? amountFormatter.format(cents / 100) : formatCurrency(cents / 100, locale);
 }
 
 const optionalAmount = z
@@ -96,7 +100,7 @@ const optionalAmount = z
     if (value === "") return null;
     const cents = parseAmountToCents(value);
     if (cents === null) {
-      ctx.addIssue({ code: "custom", message: "Enter the amount in dollars, like 42.18." });
+      ctx.addIssue({ code: "custom", message: "finance.approvals.validation.amountFormat" satisfies MessageKey });
       return z.NEVER;
     }
     return cents;
@@ -111,15 +115,15 @@ const optionalUuid = z
 export const submitApprovalSchema = z
   .object({
     subjectType: z.enum(SUBJECT_TYPES, {
-      errorMap: () => ({ message: "Choose what needs approval." }),
+      errorMap: () => ({ message: "finance.approvals.validation.chooseSubject" satisfies MessageKey }),
     }),
-    title: requiredText("Say what needs approval.", 200),
+    title: requiredText("finance.approvals.validation.titleRequired" satisfies MessageKey, 200),
     amount: optionalAmount,
     programId: optionalUuid,
     description: z.string().trim().max(4000).optional(),
   })
   .refine((v) => !AMOUNT_REQUIRED.has(v.subjectType) || v.amount !== null, {
-    message: "Enter the amount.",
+    message: "finance.approvals.validation.amountRequired" satisfies MessageKey,
     path: ["amount"],
   });
 
@@ -130,13 +134,13 @@ export const decideApprovalSchema = z
     note: z.string().trim().max(2000).optional(),
   })
   .refine((v) => v.decision === "approve" || Boolean(v.note), {
-    message: "Say why you are rejecting it.",
+    message: "finance.approvals.validation.rejectReason" satisfies MessageKey,
     path: ["note"],
   });
 
 export const commentApprovalSchema = z.object({
   itemId: z.string().uuid(),
-  note: requiredText("Write your question or answer.", 2000),
+  note: requiredText("finance.approvals.validation.commentRequired" satisfies MessageKey, 2000),
 });
 
 export const withdrawApprovalSchema = z.object({
@@ -146,7 +150,7 @@ export const withdrawApprovalSchema = z.object({
 
 export const approvalRuleSchema = z
   .object({
-    label: requiredText("Name the approver, like Executive director.", 100),
+    label: requiredText("finance.approvals.validation.ruleLabelRequired" satisfies MessageKey, 100),
     step: z.coerce.number().int().min(1).max(5).default(1),
     subjectType: z
       .string()
@@ -157,23 +161,38 @@ export const approvalRuleSchema = z
     minAmount: optionalAmount,
     maxAmount: optionalAmount,
     approverKind: z.enum(APPROVER_KINDS, {
-      errorMap: () => ({ message: "Choose who approves." }),
+      errorMap: () => ({ message: "finance.approvals.validation.chooseApproverKind" satisfies MessageKey }),
     }),
     approverUserId: optionalUuid,
   })
   .refine((v) => v.approverKind !== "person" || v.approverUserId !== null, {
-    message: "Choose the person who approves.",
+    message: "finance.approvals.validation.choosePerson" satisfies MessageKey,
     path: ["approverUserId"],
   })
   .refine((v) => v.maxAmount === null || v.maxAmount > (v.minAmount ?? 0), {
-    message: "The upper amount must be more than the lower amount.",
+    message: "finance.approvals.validation.rangeOrder" satisfies MessageKey,
     path: ["maxAmount"],
   });
 
+/**
+ * Validation messages above are catalogue keys; this turns one into the
+ * sentence for `locale`. Anything that is not a key (Zod's own wording) is
+ * shown as it is.
+ */
+export function approvalIssueText(message: string, locale: Locale = "en"): string {
+  return message.startsWith("finance.approvals.")
+    ? createTranslator(locale)(message as MessageKey)
+    : message;
+}
+
 /** "Under $500", "$500 to $5,000", "$5,000 and over", "Any amount". */
-export function describeRange(min: number, max: number | null): string {
-  if (min <= 0 && max === null) return "Any amount";
-  if (min <= 0 && max !== null) return `Under ${formatAmount(max)}`;
-  if (max === null) return `${formatAmount(min)} and over`;
-  return `${formatAmount(min)} up to ${formatAmount(max)}`;
+export function describeRange(min: number, max: number | null, locale: Locale = "en"): string {
+  const t = createTranslator(locale);
+  if (min <= 0 && max === null) return t("finance.approvals.range.any");
+  if (min <= 0 && max !== null) return t("finance.approvals.range.under", { max: formatAmount(max, locale) });
+  if (max === null) return t("finance.approvals.range.andOver", { min: formatAmount(min, locale) });
+  return t("finance.approvals.range.between", {
+    min: formatAmount(min, locale),
+    max: formatAmount(max, locale),
+  });
 }

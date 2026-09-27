@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  approvalIssueText,
   approvalRuleSchema,
   decideApprovalSchema,
   describeRange,
@@ -26,7 +27,7 @@ describe("submitApprovalSchema", () => {
   it("requires an amount for money items", () => {
     const result = submitApprovalSchema.safeParse({ subjectType: "purchase", title: "Laptop" });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0]?.message).toBe("Enter the amount.");
+    expect(approvalIssueText(result.error?.issues[0]?.message ?? "")).toBe("Enter the amount.");
   });
 
   it("allows a contract without an amount", () => {
@@ -36,7 +37,7 @@ describe("submitApprovalSchema", () => {
 
   it("keeps the person's message when the title is missing", () => {
     const result = submitApprovalSchema.safeParse({ subjectType: "other" });
-    expect(result.error?.issues[0]?.message).toBe("Say what needs approval.");
+    expect(approvalIssueText(result.error?.issues[0]?.message ?? "")).toBe("Say what needs approval.");
   });
 });
 

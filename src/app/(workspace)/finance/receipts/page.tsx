@@ -14,8 +14,11 @@ import {
 } from "@/features/finance/services/receipt.queries";
 import { requireStaff } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Receipts" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.receipts.title") };
+}
 export const dynamic = "force-dynamic";
 
 const PAGE_LIMIT = 500;
@@ -28,6 +31,7 @@ export default async function ReceiptsPage({
   const session = await requireStaff();
   const params = await searchParams;
   const filters = parseReceiptFilters(params);
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const supabase = await createSupabasePageClient();
 
   const [{ data: receipts }, { data: programs }, { data: projects }] = await Promise.all([
@@ -59,12 +63,12 @@ export default async function ReceiptsPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Finance"
-        title="Receipts"
+        eyebrow={t("finance.receipts.page.eyebrow")}
+        title={t("finance.receipts.title")}
         description={
           session.isAdmin
-            ? "Every receipt and bill submitted in your organization. Mark each one reviewed once it is checked, and export the list for the accountant."
-            : "Receipts and bills you have submitted. Photograph each one when you pay, so nothing needs to be kept on paper."
+            ? t("finance.receipts.page.descriptionAdmin")
+            : t("finance.receipts.page.descriptionStaff")
         }
         actions={
           <div className="flex items-center gap-3">
@@ -74,7 +78,7 @@ export default async function ReceiptsPage({
               prefetch={false}
             >
               <Download className="size-4" aria-hidden />
-              Export CSV
+              {t("finance.receipts.page.exportCsv")}
             </Link>
             <ReceiptSubmitDialog
               organizationId={session.organizationId}
@@ -93,20 +97,20 @@ export default async function ReceiptsPage({
       <form
         method="get"
         className="card mb-4 grid grid-cols-2 items-end gap-3 p-4 sm:grid-cols-3 lg:grid-cols-6"
-        aria-label="Filter receipts"
+        aria-label={t("finance.receipts.page.filterLabel")}
       >
         <div>
-          <Label htmlFor="f-from">From</Label>
+          <Label htmlFor="f-from">{t("finance.receipts.page.from")}</Label>
           <Input id="f-from" name="from" type="date" defaultValue={filters.from ?? ""} />
         </div>
         <div>
-          <Label htmlFor="f-to">To</Label>
+          <Label htmlFor="f-to">{t("finance.receipts.page.to")}</Label>
           <Input id="f-to" name="to" type="date" defaultValue={filters.to ?? ""} />
         </div>
         <div>
-          <Label htmlFor="f-program">Program</Label>
+          <Label htmlFor="f-program">{t("finance.receipts.page.program")}</Label>
           <Select id="f-program" name="program" defaultValue={filters.programId ?? ""}>
-            <option value="">All programs</option>
+            <option value="">{t("finance.receipts.page.allPrograms")}</option>
             {(programs ?? []).map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -115,32 +119,32 @@ export default async function ReceiptsPage({
           </Select>
         </div>
         <div>
-          <Label htmlFor="f-status">Status</Label>
+          <Label htmlFor="f-status">{t("finance.receipts.page.status")}</Label>
           <Select id="f-status" name="status" defaultValue={filters.status ?? ""}>
-            <option value="">Any status</option>
-            <option value="submitted">To review</option>
-            <option value="reviewed">Reviewed</option>
+            <option value="">{t("finance.receipts.page.anyStatus")}</option>
+            <option value="submitted">{t("finance.receipts.page.toReview")}</option>
+            <option value="reviewed">{t("finance.receipts.page.reviewed")}</option>
           </Select>
         </div>
         {session.isAdmin ? (
           <div>
-            <Label htmlFor="f-mine">Submitted by</Label>
+            <Label htmlFor="f-mine">{t("finance.receipts.page.submittedBy")}</Label>
             <Select id="f-mine" name="mine" defaultValue={filters.mine ? "1" : ""}>
-              <option value="">Anyone</option>
-              <option value="1">Me</option>
+              <option value="">{t("finance.receipts.page.anyone")}</option>
+              <option value="1">{t("finance.receipts.page.me")}</option>
             </Select>
           </div>
         ) : null}
         <div className="flex gap-2">
           <Button type="submit" variant="secondary">
-            Apply
+            {t("finance.receipts.page.apply")}
           </Button>
           {filtered ? (
             <Link
               href="/finance/receipts"
               className="inline-flex h-9.5 items-center px-2 text-[13px] font-medium text-brand-fg hover:underline"
             >
-              Clear
+              {t("finance.receipts.page.clear")}
             </Link>
           ) : null}
         </div>
@@ -149,20 +153,34 @@ export default async function ReceiptsPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<Receipt />}
-          title={filtered ? "No receipts match these filters" : "No receipts yet"}
+          title={
+            filtered
+              ? t("finance.receipts.page.emptyFilteredTitle")
+              : t("finance.receipts.page.emptyTitle")
+          }
           description={
             filtered
-              ? "Try a wider date range or clear the filters."
-              : "Use Submit receipt to photograph a receipt or upload a bill."
+              ? t("finance.receipts.page.emptyFilteredDescription")
+              : t("finance.receipts.page.emptyDescription")
           }
         />
       ) : (
         <>
           <p className="meta mb-2" aria-live="polite">
-            {rows.length === PAGE_LIMIT ? `Showing the latest ${PAGE_LIMIT}. ` : ""}
-            {rows.length} {rows.length === 1 ? "receipt" : "receipts"}: total{" "}
-            {formatCents(totals.total)}, GST {formatCents(totals.gst)}, QST{" "}
-            {formatCents(totals.qst)}.
+            {rows.length === PAGE_LIMIT
+              ? t("finance.receipts.page.showingLatest", { limit: PAGE_LIMIT })
+              : ""}
+            {t(
+              rows.length === 1
+                ? "finance.receipts.page.summaryOne"
+                : "finance.receipts.page.summaryOther",
+              {
+                count: rows.length,
+                total: formatCents(totals.total, locale),
+                gst: formatCents(totals.gst, locale),
+                qst: formatCents(totals.qst, locale),
+              },
+            )}
           </p>
           <ReceiptList rows={rows} canReview={session.isAdmin} />
         </>

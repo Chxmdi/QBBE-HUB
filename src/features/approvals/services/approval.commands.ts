@@ -5,8 +5,11 @@ import { z } from "zod";
 import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getLocale, getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
+  approvalIssueText,
   approvalRuleSchema,
   commentApprovalSchema,
   decideApprovalSchema,
@@ -29,15 +32,17 @@ interface DbError {
 }
 
 /** The database's own messages for refusals are written for people. */
-function explain(error: DbError, fallback: string): string {
+function explain(error: DbError, fallback: string, t: TranslateFn): string {
   if (error.code === "42501" || error.code === "22023") return error.message ?? fallback;
-  if (error.code === "23505") return "That record already has an approval waiting.";
-  if (error.code === "23514") return "Check the amount and program, then try again.";
+  if (error.code === "23505") return t("finance.approvals.errors.alreadyWaiting");
+  if (error.code === "23514") return t("finance.approvals.errors.checkAmountProgram");
   return fallback;
 }
 
-function firstIssue(error: z.ZodError, fallback: string): string {
-  return error.issues[0]?.message ?? fallback;
+/** The first validation message, in the requester's language. */
+async function firstIssue(error: z.ZodError, fallback: string): Promise<string> {
+  const message = error.issues[0]?.message;
+  return message ? approvalIssueText(message, await getLocale()) : fallback;
 }
 
 function refresh() {
@@ -46,11 +51,14 @@ function refresh() {
 
 export async function submitApproval(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Only staff can submit items for approval." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("finance.approvals.errors.staffOnly") };
   const limited = await enforceRateLimit("approval:submit", session.userId);
   if (limited) return limited;
   const parsed = submitApprovalSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the request.") };
+  if (!parsed.success) {
+    return { ok: false, error: await firstIssue(parsed.error, t("finance.approvals.errors.checkRequest")) };
+  }
   const data = parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -63,50 +71,59 @@ export async function submitApproval(input: unknown): Promise<ActionResult> {
     p_description: data.description || null,
     p_subject_id: null,
   });
-  if (error || !id) return { ok: false, error: explain(error ?? {}, "Could not submit it. Try again.") };
+  if (error || !id) return { ok: false, error: explain(error ?? {}, t("finance.approvals.errors.submitFailed"), t) };
   refresh();
   return { ok: true, id: id as string };
 }
 
 export async function decideApproval(input: unknown): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const parsed = decideApprovalSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the decision.") };
+  if (!parsed.success) {
+    return { ok: false, error: await firstIssue(parsed.error, t("finance.approvals.errors.checkDecision")) };
+  }
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("decide_approval", {
     p_item: parsed.data.itemId,
     p_decision: parsed.data.decision,
     p_note: parsed.data.note || null,
   });
-  if (error) return { ok: false, error: explain(error, "Could not record the decision. Try again.") };
+  if (error) return { ok: false, error: explain(error, t("finance.approvals.errors.decideFailed"), t) };
   refresh();
   return { ok: true, id: parsed.data.itemId };
 }
 
 export async function commentOnApproval(input: unknown): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const parsed = commentApprovalSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Write a comment.") };
+  if (!parsed.success) {
+    return { ok: false, error: await firstIssue(parsed.error, t("finance.approvals.errors.writeComment")) };
+  }
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("comment_on_approval", {
     p_item: parsed.data.itemId,
     p_note: parsed.data.note,
   });
-  if (error) return { ok: false, error: explain(error, "Could not post the comment. Try again.") };
+  if (error) return { ok: false, error: explain(error, t("finance.approvals.errors.commentFailed"), t) };
   refresh();
   return { ok: true, id: parsed.data.itemId };
 }
 
 export async function withdrawApproval(input: unknown): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const parsed = withdrawApprovalSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the request.") };
+  if (!parsed.success) {
+    return { ok: false, error: await firstIssue(parsed.error, t("finance.approvals.errors.checkRequest")) };
+  }
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("withdraw_approval", {
     p_item: parsed.data.itemId,
     p_note: parsed.data.note || null,
   });
-  if (error) return { ok: false, error: explain(error, "Could not withdraw it. Try again.") };
+  if (error) return { ok: false, error: explain(error, t("finance.approvals.errors.withdrawFailed"), t) };
   refresh();
   return { ok: true, id: parsed.data.itemId };
 }
@@ -138,8 +155,11 @@ export async function createApprovalRule(input: unknown): Promise<ActionResult> 
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const { session } = authorization;
+  const t = await getT();
   const parsed = approvalRuleSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error, "Check the rule.") };
+  if (!parsed.success) {
+    return { ok: false, error: await firstIssue(parsed.error, t("finance.approvals.errors.checkRule")) };
+  }
   const data = parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -163,8 +183,8 @@ export async function createApprovalRule(input: unknown): Promise<ActionResult> 
       ok: false,
       error:
         error?.code === "23514"
-          ? "The approver must be an active staff member or administrator, and the program must be in this organization."
-          : "Could not save the rule. Try again.",
+          ? t("finance.approvals.errors.ruleConstraint")
+          : t("finance.approvals.errors.ruleSaveFailed"),
     };
   }
   await auditRule(supabase, session.organizationId, session.userId, "rule_created", row.id as string, {
@@ -178,14 +198,17 @@ export async function setApprovalRuleActive(ruleId: string, active: boolean): Pr
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const { session } = authorization;
-  if (!z.string().uuid().safeParse(ruleId).success) return { ok: false, error: "Rule not found." };
+  const t = await getT();
+  if (!z.string().uuid().safeParse(ruleId).success) {
+    return { ok: false, error: t("finance.approvals.errors.ruleNotFound") };
+  }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("approval_rule")
     .update({ active })
     .eq("id", ruleId)
     .select("id");
-  if (error || !data?.length) return { ok: false, error: "Could not update the rule." };
+  if (error || !data?.length) return { ok: false, error: t("finance.approvals.errors.ruleUpdateFailed") };
   await auditRule(supabase, session.organizationId, session.userId,
     active ? "rule_enabled" : "rule_disabled", ruleId);
   revalidatePath("/admin/approvals");
@@ -196,10 +219,13 @@ export async function deleteApprovalRule(ruleId: string): Promise<ActionResult> 
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const { session } = authorization;
-  if (!z.string().uuid().safeParse(ruleId).success) return { ok: false, error: "Rule not found." };
+  const t = await getT();
+  if (!z.string().uuid().safeParse(ruleId).success) {
+    return { ok: false, error: t("finance.approvals.errors.ruleNotFound") };
+  }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.from("approval_rule").delete().eq("id", ruleId).select("id");
-  if (error || !data?.length) return { ok: false, error: "Could not delete the rule." };
+  if (error || !data?.length) return { ok: false, error: t("finance.approvals.errors.ruleDeleteFailed") };
   await auditRule(supabase, session.organizationId, session.userId, "rule_deleted", ruleId);
   revalidatePath("/admin/approvals");
   return { ok: true, id: ruleId };
