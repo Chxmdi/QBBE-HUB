@@ -75,6 +75,7 @@ export const en = {
       documents: "Documents",
       receipts: "Receipts",
       ledger: "Ledger",
+      bank: "Bank",
       people: "People",
       admin: "Admin",
     },

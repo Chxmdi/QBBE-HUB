@@ -33,6 +33,7 @@ const ITEM_KEYS: Record<string, MessageKey> = {
   "/documents": "nav.items.documents",
   "/finance/receipts": "nav.items.receipts",
   "/finance/ledger": "nav.items.ledger",
+  "/finance/bank": "nav.items.bank",
   "/people": "nav.items.people",
   "/admin": "nav.items.admin",
 };

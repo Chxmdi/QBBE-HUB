@@ -29,6 +29,7 @@ const ROUTES = [
   { path: "/crm", name: "crm" },
   { path: "/finance/ledger", name: "ledger" },
   { path: "/finance/ledger/journal/new", name: "ledger-entry" },
+  { path: "/finance/bank", name: "bank" },
   { path: "/reports", name: "reports" },
   { path: "/documents", name: "documents" },
   { path: "/finance/receipts", name: "receipts" },
