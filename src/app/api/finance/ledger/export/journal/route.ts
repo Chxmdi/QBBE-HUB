@@ -1,7 +1,10 @@
+import { csvField } from "@/features/ledger/money";
 import { dateParam, todayIn } from "@/features/ledger/services/ledger.access";
 import { authorizeLedgerExport, csvResponse } from "@/features/ledger/services/ledger.export";
 import { exportLines } from "@/features/ledger/services/year-end.queries";
 import { journalImportCsv } from "@/features/ledger/year-end";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Every posted line between two dates as a plain CSV the accountant's
@@ -12,22 +15,46 @@ import { journalImportCsv } from "@/features/ledger/year-end";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * The column names in the requester's language (#141). The rows below stay
+ * machine-friendly: ISO dates, codes and plain decimals.
+ */
+function withTranslatedHeader(csv: string, t: TranslateFn): string {
+  const header = [
+    t("finance.ledger.export.columns.date"),
+    t("finance.ledger.export.columns.entryNo"),
+    t("finance.ledger.export.columns.accountCode"),
+    t("finance.ledger.export.columns.accountName"),
+    t("finance.ledger.export.columns.fund"),
+    t("finance.ledger.export.columns.program"),
+    t("finance.ledger.export.columns.description"),
+    t("finance.ledger.export.columns.debit"),
+    t("finance.ledger.export.columns.credit"),
+  ]
+    .map(csvField)
+    .join(",");
+  // journalImportCsv starts with a byte-order mark and one header line.
+  const firstLineEnd = csv.indexOf("\r\n");
+  return `﻿${header}${csv.slice(firstLineEnd)}`;
+}
+
 export async function GET(request: Request) {
+  const t = await getT();
   const access = await authorizeLedgerExport();
-  if (!access) return new Response("You do not have access to the ledger.", { status: 403 });
+  if (!access) return new Response(t("finance.ledger.export.noAccess"), { status: 403 });
   const { session, supabase } = access;
   const url = new URL(request.url);
   const to = dateParam(url.searchParams.get("to") ?? undefined, todayIn(session.timeZone));
   const from = dateParam(url.searchParams.get("from") ?? undefined, `${to.slice(0, 4)}-01-01`);
-  if (from > to) return new Response("The start date is after the end date.", { status: 400 });
+  if (from > to) return new Response(t("finance.ledger.export.startAfterEnd"), { status: 400 });
   const { lines, error, tooMany } = await exportLines(supabase, session.organizationId, from, to);
-  if (error) return new Response("Could not export the general ledger. Try again.", { status: 500 });
-  if (tooMany) return new Response("Too many lines for one file. Export a shorter period.", { status: 413 });
+  if (error) return new Response(t("finance.ledger.export.failed"), { status: 500 });
+  if (tooMany) return new Response(t("finance.ledger.export.tooMany"), { status: 413 });
   return csvResponse(
     supabase,
     session,
     "journal_import_exported",
-    journalImportCsv(lines),
+    withTranslatedHeader(journalImportCsv(lines), t),
     `general-ledger-import-${from}-to-${to}.csv`,
     { from, to, rows: lines.length },
   );

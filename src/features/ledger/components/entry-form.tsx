@@ -8,6 +8,7 @@ import { FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { formatCents, lineTotals, parseMoneyToCents } from "@/features/ledger/money";
 import { saveEntry } from "@/features/ledger/services/ledger.commands";
+import { useLocale, useT } from "@/lib/i18n/client";
 
 export interface Choice {
   id: string;
@@ -63,6 +64,8 @@ export function EntryForm({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
+  const locale = useLocale();
   const formId = useId();
   const [entryDate, setEntryDate] = useState(initial.entryDate);
   const [memo, setMemo] = useState(initial.memo);
@@ -114,15 +117,15 @@ export function EntryForm({
     });
     setSaving(null);
     if (!result.ok) {
-      setError(result.error ?? "Could not save the entry.");
+      setError(result.error ?? t("finance.ledger.entryForm.saveFailed"));
       if (result.id) {
-        toast(result.error ?? "Saved as a draft but not posted.", { tone: "warning" });
+        toast(result.error ?? t("finance.ledger.entryForm.savedNotPosted"), { tone: "warning" });
         router.push(`/finance/ledger/journal/${result.id}`);
         router.refresh();
       }
       return;
     }
-    toast(post ? "Entry posted." : "Draft saved.", { tone: "success" });
+    toast(post ? t("finance.ledger.entryForm.posted") : t("finance.ledger.entryForm.draftSaved"), { tone: "success" });
     router.push(`/finance/ledger/journal/${result.id}`);
     router.refresh();
   }
@@ -137,11 +140,11 @@ export function EntryForm({
       className="space-y-5"
     >
       <h2 id={`${formId}-title`} className="sr-only">
-        Journal entry
+        {t("finance.ledger.entry.title")}
       </h2>
       <div className="card grid gap-4 p-4 sm:grid-cols-[11rem_1fr_13rem]">
         <div>
-          <Label htmlFor={`${formId}-date`}>Date</Label>
+          <Label htmlFor={`${formId}-date`}>{t("finance.common.date")}</Label>
           <Input
             id={`${formId}-date`}
             type="date"
@@ -151,53 +154,52 @@ export function EntryForm({
           />
         </div>
         <div>
-          <Label htmlFor={`${formId}-memo`}>Memo</Label>
+          <Label htmlFor={`${formId}-memo`}>{t("finance.common.memo")}</Label>
           <Input
             id={`${formId}-memo`}
             value={memo}
             maxLength={500}
             onChange={(e) => setMemo(e.target.value)}
-            placeholder="What this entry records"
+            placeholder={t("finance.ledger.entryForm.memoPlaceholder")}
             required
           />
         </div>
         <div>
-          <Label htmlFor={`${formId}-kind`}>Kind</Label>
+          <Label htmlFor={`${formId}-kind`}>{t("finance.ledger.entryForm.kind")}</Label>
           <Select
             id={`${formId}-kind`}
             value={kind}
             onChange={(e) => setKind(e.target.value as EntryFormValue["kind"])}
           >
-            <option value="standard">Journal entry</option>
-            <option value="opening">Opening balances</option>
+            <option value="standard">{t("finance.common.entryKinds.standard")}</option>
+            <option value="opening">{t("finance.common.entryKinds.opening")}</option>
           </Select>
         </div>
         {kind === "opening" ? (
           <p className="text-[13px] text-muted sm:col-span-3">
-            Enter each balance from the accountant&apos;s 2026-09-30 figures: assets as debits, liabilities and net
-            assets as credits, each in its fund.
+            {t("finance.ledger.entryForm.openingHint")}
           </p>
         ) : null}
       </div>
 
       <fieldset className="space-y-3">
-        <legend className="mb-2 text-[15px] font-semibold">Lines</legend>
+        <legend className="mb-2 text-[15px] font-semibold">{t("finance.ledger.entryForm.lines")}</legend>
         {lines.map((line, index) => {
           const id = `${formId}-l${line.key}`;
           const projectChoices = line.programId
             ? projects.filter((p) => p.programId === line.programId)
             : projects;
           return (
-            <div key={line.key} className="card grid gap-3 p-3 md:grid-cols-6" role="group" aria-label={`Line ${index + 1}`}>
+            <div key={line.key} className="card grid gap-3 p-3 md:grid-cols-6" role="group" aria-label={t("finance.ledger.entryForm.line", { number: index + 1 })}>
               <div className="md:col-span-2">
-                <Label htmlFor={`${id}-account`}>Account</Label>
+                <Label htmlFor={`${id}-account`}>{t("finance.common.account")}</Label>
                 <Select
                   id={`${id}-account`}
                   value={line.accountId}
                   onChange={(e) => update(line.key, { accountId: e.target.value })}
                   required
                 >
-                  <option value="">Choose an account</option>
+                  <option value="">{t("finance.ledger.entryForm.chooseAccount")}</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.label}
@@ -206,7 +208,7 @@ export function EntryForm({
                 </Select>
               </div>
               <div>
-                <Label htmlFor={`${id}-fund`}>Fund</Label>
+                <Label htmlFor={`${id}-fund`}>{t("finance.common.fund")}</Label>
                 <Select
                   id={`${id}-fund`}
                   value={line.fundId}
@@ -221,13 +223,13 @@ export function EntryForm({
                 </Select>
               </div>
               <div>
-                <Label htmlFor={`${id}-program`}>Program</Label>
+                <Label htmlFor={`${id}-program`}>{t("finance.common.program")}</Label>
                 <Select
                   id={`${id}-program`}
                   value={line.programId}
                   onChange={(e) => update(line.key, { programId: e.target.value, projectId: "" })}
                 >
-                  <option value="">None</option>
+                  <option value="">{t("finance.common.none")}</option>
                   {programs.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label}
@@ -236,13 +238,13 @@ export function EntryForm({
                 </Select>
               </div>
               <div className="md:col-span-2">
-                <Label htmlFor={`${id}-project`}>Project</Label>
+                <Label htmlFor={`${id}-project`}>{t("finance.ledger.entryForm.project")}</Label>
                 <Select
                   id={`${id}-project`}
                   value={line.projectId}
                   onChange={(e) => update(line.key, { projectId: e.target.value })}
                 >
-                  <option value="">None</option>
+                  <option value="">{t("finance.common.none")}</option>
                   {projectChoices.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label}
@@ -251,7 +253,7 @@ export function EntryForm({
                 </Select>
               </div>
               <div className="md:col-span-3">
-                <Label htmlFor={`${id}-description`}>Description (optional)</Label>
+                <Label htmlFor={`${id}-description`}>{t("finance.ledger.optionalLabel.description")}</Label>
                 <Input
                   id={`${id}-description`}
                   value={line.description}
@@ -260,7 +262,7 @@ export function EntryForm({
                 />
               </div>
               <div>
-                <Label htmlFor={`${id}-debit`}>Debit</Label>
+                <Label htmlFor={`${id}-debit`}>{t("finance.common.debit")}</Label>
                 <Input
                   id={`${id}-debit`}
                   inputMode="decimal"
@@ -270,7 +272,7 @@ export function EntryForm({
                 />
               </div>
               <div>
-                <Label htmlFor={`${id}-credit`}>Credit</Label>
+                <Label htmlFor={`${id}-credit`}>{t("finance.common.credit")}</Label>
                 <Input
                   id={`${id}-credit`}
                   inputMode="decimal"
@@ -285,10 +287,10 @@ export function EntryForm({
                   variant="ghost"
                   disabled={lines.length <= 2}
                   onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
-                  aria-label={`Remove line ${index + 1}`}
+                  aria-label={t("finance.ledger.entryForm.removeLine", { number: index + 1 })}
                 >
                   <Trash2 className="size-4" aria-hidden />
-                  Remove
+                  {t("finance.ledger.entryForm.remove")}
                 </Button>
               </div>
             </div>
@@ -303,31 +305,34 @@ export function EntryForm({
           }}
         >
           <Plus className="size-4" aria-hidden />
-          Add line
+          {t("finance.ledger.entryForm.addLine")}
         </Button>
       </fieldset>
 
       <div className="card flex flex-wrap items-center justify-between gap-4 p-4">
         <dl className="flex flex-wrap gap-6 text-[14px]" aria-live="polite">
           <div>
-            <dt className="text-[12.5px] text-muted">Debits</dt>
-            <dd className="font-semibold tabular-nums">{formatCents(totals.debit)}</dd>
+            <dt className="text-[12.5px] text-muted">{t("finance.common.debits")}</dt>
+            <dd className="font-semibold tabular-nums">{formatCents(totals.debit, locale)}</dd>
           </div>
           <div>
-            <dt className="text-[12.5px] text-muted">Credits</dt>
-            <dd className="font-semibold tabular-nums">{formatCents(totals.credit)}</dd>
+            <dt className="text-[12.5px] text-muted">{t("finance.common.credits")}</dt>
+            <dd className="font-semibold tabular-nums">{formatCents(totals.credit, locale)}</dd>
           </div>
           <div>
-            <dt className="text-[12.5px] text-muted">Difference</dt>
+            <dt className="text-[12.5px] text-muted">{t("finance.ledger.entryForm.difference")}</dt>
             <dd className={totals.difference === 0 ? "font-semibold tabular-nums" : "font-semibold tabular-nums text-danger-fg"}>
-              {formatCents(Math.abs(totals.difference))}
-              {totals.difference === 0 ? "" : totals.difference > 0 ? " more debits" : " more credits"}
+              {totals.difference === 0
+                ? formatCents(0, locale)
+                : t(totals.difference > 0 ? "finance.ledger.entryForm.moreDebits" : "finance.ledger.entryForm.moreCredits", {
+                    amount: formatCents(Math.abs(totals.difference), locale),
+                  })}
             </dd>
           </div>
         </dl>
         <div className="flex flex-wrap gap-2">
           <Button type="submit" variant="secondary" loading={saving === "draft"} disabled={saving !== null}>
-            Save draft
+            {t("finance.ledger.entryForm.saveDraft")}
           </Button>
           <Button
             type="button"
@@ -335,12 +340,11 @@ export function EntryForm({
             disabled={saving !== null || !totals.balanced}
             onClick={() => void submit(true)}
           >
-            Save and post
+            {t("finance.ledger.entryForm.saveAndPost")}
           </Button>
         </div>
         <FieldHint>
-          Posting is permanent. Each fund must balance on its own, and restricted funds only pay for their programs
-          and dates.
+          {t("finance.ledger.entryForm.postingHint")}
         </FieldHint>
       </div>
       {error ? (

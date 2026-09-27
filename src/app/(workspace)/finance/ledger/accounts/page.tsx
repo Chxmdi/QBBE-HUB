@@ -5,19 +5,23 @@ import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { AccountDialog, type AccountFormValue } from "@/features/ledger/components/account-dialog";
 import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
-import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABEL, type AccountType } from "@/features/ledger/money";
+import { ACCOUNT_TYPES, ACCOUNT_TYPE_KEY, type AccountType } from "@/features/ledger/money";
 import { getLedgerAccess } from "@/features/ledger/services/ledger.access";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Chart of accounts" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledger.accounts.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function LedgerAccountsPage() {
   const { session, supabase, canRead, canManage, settings } = await getLedgerAccess();
+  const t = await getT();
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Chart of accounts"
-      description="A starting chart for a Quebec nonprofit reporting under the accounting standards for not-for-profit organizations. The accountant reviews it before anything is posted."
+      eyebrow={t("finance.ledger.title")}
+      title={t("finance.ledger.accounts.title")}
+      description={t("finance.ledger.accounts.description")}
       actions={canRead && canManage ? <AccountDialog /> : undefined}
     />
   );
@@ -55,9 +59,12 @@ export default async function LedgerAccountsPage() {
       <LedgerTabs />
       <p className="meta mb-3">
         {settings?.chart_approved_on
-          ? `Approved by ${settings.chart_approved_by_name} on ${settings.chart_approved_on}.`
-          : "Not yet approved by the accountant."}{" "}
-        {rows.length} accounts.
+          ? t("finance.ledger.approvedByOn", {
+              name: settings.chart_approved_by_name ?? "",
+              date: settings.chart_approved_on,
+            })
+          : t("finance.ledger.accounts.notApproved")}{" "}
+        {t("finance.ledger.accounts.count", { count: rows.length })}
       </p>
       {ACCOUNT_TYPES.map((type: AccountType) => {
         const group = rows.filter((r) => r.account_type === type);
@@ -65,16 +72,16 @@ export default async function LedgerAccountsPage() {
         return (
           <section key={type} aria-labelledby={`type-${type}`} className="mb-6">
             <h2 id={`type-${type}`} className="mb-2 text-[15px] font-semibold">
-              {ACCOUNT_TYPE_LABEL[type]}
+              {t(ACCOUNT_TYPE_KEY[type])}
             </h2>
             <DataTable minWidth="520px">
               <TableHead>
-                <TableHeader className="w-24">Code</TableHeader>
-                <TableHeader>Name</TableHeader>
-                <TableHeader className="w-28">Status</TableHeader>
+                <TableHeader className="w-24">{t("finance.ledger.code")}</TableHeader>
+                <TableHeader>{t("finance.ledger.name")}</TableHeader>
+                <TableHeader className="w-28">{t("finance.common.status")}</TableHeader>
                 {canManage ? (
                   <TableHeader className="w-16">
-                    <span className="sr-only">Edit</span>
+                    <span className="sr-only">{t("finance.ledger.edit")}</span>
                   </TableHeader>
                 ) : null}
               </TableHead>
@@ -87,7 +94,7 @@ export default async function LedgerAccountsPage() {
                       {a.description ? <p className="meta">{a.description}</p> : null}
                     </TableCell>
                     <TableCell>
-                      {a.is_active ? <Badge tone="success">Active</Badge> : <Badge>Inactive</Badge>}
+                      {a.is_active ? <Badge tone="success">{t("finance.ledger.status.active")}</Badge> : <Badge>{t("finance.ledger.status.inactive")}</Badge>}
                     </TableCell>
                     {canManage ? (
                       <TableCell>

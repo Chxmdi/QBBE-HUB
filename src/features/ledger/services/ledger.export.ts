@@ -1,5 +1,6 @@
 import { requireSession, type SessionContext } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -21,10 +22,14 @@ export async function authorizeLedgerExport(): Promise<{ session: SessionContext
   return { session, supabase };
 }
 
+/** The fund a report covers, in the requester's language. */
 export async function fundLabel(supabase: Client, fundId: string | null): Promise<string> {
-  if (!fundId) return "All funds";
+  const t = await getT();
+  if (!fundId) return t("finance.ledger.export.allFunds");
   const { data } = await supabase.from("ledger_fund").select("code, name").eq("id", fundId).maybeSingle();
-  return data ? `Fund ${data.code} ${data.name}` : "Unknown fund";
+  return data
+    ? t("finance.ledger.export.fund", { code: data.code, name: data.name })
+    : t("finance.ledger.export.unknownFund");
 }
 
 /** Records who took a copy of the books, then returns the file. */

@@ -10,11 +10,15 @@ import { DraftActions, ReverseEntryButton } from "@/features/ledger/components/e
 import { EntryForm } from "@/features/ledger/components/entry-form";
 import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
-import { ENTRY_KIND_LABEL, centsToDecimal, formatCents } from "@/features/ledger/money";
+import { ENTRY_KIND_KEY, centsToDecimal, formatCents } from "@/features/ledger/money";
 import { getLedgerAccess, todayIn, uuidParam } from "@/features/ledger/services/ledger.access";
 import { loadEntryChoices } from "@/features/ledger/services/ledger.queries";
+import { getLocale, getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 
-export const metadata: Metadata = { title: "Journal entry" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledger.entry.title") };
+}
 export const dynamic = "force-dynamic";
 
 interface Line {
@@ -48,12 +52,12 @@ interface Entry {
   creator: { full_name: string } | null;
 }
 
-const TRAIL_LABEL: Record<string, string> = {
-  draft_saved: "Draft saved",
-  entry_posted: "Posted",
-  entry_reversed: "Reversed",
-  fiscal_year_closed: "Posted as the year-end closing entry",
-  fiscal_year_reopened: "Posted as the reopening entry",
+const TRAIL_LABEL: Record<string, MessageKey> = {
+  draft_saved: "finance.ledger.entry.trail.draft_saved",
+  entry_posted: "finance.ledger.entry.trail.entry_posted",
+  entry_reversed: "finance.ledger.entry.trail.entry_reversed",
+  fiscal_year_closed: "finance.ledger.entry.trail.fiscal_year_closed",
+  fiscal_year_reopened: "finance.ledger.entry.trail.fiscal_year_reopened",
 };
 
 export default async function JournalEntryPage({
@@ -64,12 +68,14 @@ export default async function JournalEntryPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
+  const t = await getT();
+  const locale = await getLocale();
   const { id: rawId } = await params;
   const query = await searchParams;
   if (!canRead) {
     return (
       <div>
-        <PageHeader eyebrow="Ledger" title="Journal entry" />
+        <PageHeader eyebrow={t("finance.ledger.title")} title={t("finance.ledger.entry.title")} />
         <NoLedgerAccess isAdmin={session.isAdmin} />
       </div>
     );
@@ -102,7 +108,7 @@ export default async function JournalEntryPage({
     supabase.rpc("ledger_entry_trail", { p_entry: id }),
     supabase.rpc("ledger_entry_approvals", { p_entry: id }),
   ]);
-  const approvals = groupApprovalChain((approvalData ?? []) as ApprovalChainRow[]);
+  const approvals = groupApprovalChain((approvalData ?? []) as ApprovalChainRow[], t);
   const trail = (trailData ?? []) as { occurred_at: string; action: string; actor_name: string }[];
   const entry = entryData as unknown as Entry | null;
   if (!entry) notFound();
@@ -110,13 +116,15 @@ export default async function JournalEntryPage({
   const reversal = ((reversals ?? []) as { id: string; entry_number: number | null }[])[0];
   const debits = lines.reduce((s, l) => s + Number(l.debit_cents), 0);
   const credits = lines.reduce((s, l) => s + Number(l.credit_cents), 0);
-  const title = entry.entry_number ? `Entry ${entry.entry_number}` : "Draft entry";
+  const title = entry.entry_number
+    ? t("finance.ledger.entry.numbered", { number: entry.entry_number })
+    : t("finance.ledger.entry.draftTitle");
 
   if (entry.status === "draft" && canManage && query.edit === "1") {
     const choices = await loadEntryChoices(supabase, session.organizationId);
     return (
       <div>
-        <PageHeader eyebrow="Ledger" title="Edit draft entry" description={entry.memo} />
+        <PageHeader eyebrow={t("finance.ledger.title")} title={t("finance.ledger.entry.editDraftTitle")} description={entry.memo} />
         <LedgerTabs />
         <EntryForm
           initial={{
@@ -144,7 +152,7 @@ export default async function JournalEntryPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Ledger"
+        eyebrow={t("finance.ledger.title")}
         title={title}
         description={entry.memo}
         actions={
@@ -165,33 +173,33 @@ export default async function JournalEntryPage({
       <LedgerTabs />
       <dl className="card mb-4 grid gap-4 p-4 text-[13.5px] sm:grid-cols-4">
         <div>
-          <dt className="text-muted">Date</dt>
+          <dt className="text-muted">{t("finance.common.date")}</dt>
           <dd className="font-medium tabular-nums">{entry.entry_date}</dd>
         </div>
         <div>
-          <dt className="text-muted">Status</dt>
+          <dt className="text-muted">{t("finance.common.status")}</dt>
           <dd>
-            {entry.status === "posted" ? <Badge tone="success">Posted</Badge> : <Badge tone="warning">Draft</Badge>}{" "}
-            <span className="text-muted">{ENTRY_KIND_LABEL[entry.kind]}</span>
+            {entry.status === "posted" ? <Badge tone="success">{t("finance.ledger.status.posted")}</Badge> : <Badge tone="warning">{t("finance.ledger.status.draft")}</Badge>}{" "}
+            <span className="text-muted">{t(ENTRY_KIND_KEY[entry.kind])}</span>
           </dd>
         </div>
         <div>
-          <dt className="text-muted">{entry.status === "posted" ? "Posted by" : "Created by"}</dt>
+          <dt className="text-muted">{entry.status === "posted" ? t("finance.ledger.entry.postedBy") : t("finance.ledger.entry.createdBy")}</dt>
           <dd>
             {(entry.status === "posted" ? entry.poster?.full_name : entry.creator?.full_name) || "—"}
             {entry.posted_at ? <span className="meta block">{entry.posted_at.slice(0, 16).replace("T", " ")} UTC</span> : null}
           </dd>
         </div>
         <div>
-          <dt className="text-muted">Related</dt>
+          <dt className="text-muted">{t("finance.ledger.entry.related")}</dt>
           <dd>
             {entry.reverses_entry_id ? (
               <Link className="text-brand-fg hover:underline" href={`/finance/ledger/journal/${entry.reverses_entry_id}`}>
-                Reverses the original entry
+                {t("finance.ledger.entry.reversesOriginal")}
               </Link>
             ) : reversal ? (
               <Link className="text-brand-fg hover:underline" href={`/finance/ledger/journal/${reversal.id}`}>
-                Reversed by entry {reversal.entry_number}
+                {t("finance.ledger.entry.reversedBy", { number: reversal.entry_number ?? "" })}
               </Link>
             ) : entry.source_type === "finance_receipt" && entry.source_id ? (
               <a
@@ -200,10 +208,10 @@ export default async function JournalEntryPage({
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Open the receipt
+                {t("finance.ledger.entry.openReceipt")}
               </a>
             ) : entry.source_type ? (
-              <span>From {entry.source_type.replace(/_/g, " ")}</span>
+              <span>{t("finance.ledger.entry.fromSource", { source: entry.source_type.replace(/_/g, " ") })}</span>
             ) : (
               "—"
             )}
@@ -213,11 +221,11 @@ export default async function JournalEntryPage({
 
       <DataTable minWidth="760px">
         <TableHead>
-          <TableHeader>Account</TableHeader>
-          <TableHeader>Fund</TableHeader>
-          <TableHeader>Program / project</TableHeader>
-          <TableHeader className="text-right">Debit</TableHeader>
-          <TableHeader className="text-right">Credit</TableHeader>
+          <TableHeader>{t("finance.common.account")}</TableHeader>
+          <TableHeader>{t("finance.common.fund")}</TableHeader>
+          <TableHeader>{t("finance.ledger.entry.programProject")}</TableHeader>
+          <TableHeader className="text-right">{t("finance.common.debit")}</TableHeader>
+          <TableHeader className="text-right">{t("finance.common.credit")}</TableHeader>
         </TableHead>
         <tbody>
           {lines.map((l) => (
@@ -231,19 +239,19 @@ export default async function JournalEntryPage({
                 {[l.program?.name, l.project?.name].filter(Boolean).join(" / ") || "—"}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {l.debit_cents ? formatCents(Number(l.debit_cents)) : ""}
+                {l.debit_cents ? formatCents(Number(l.debit_cents), locale) : ""}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {l.credit_cents ? formatCents(Number(l.credit_cents)) : ""}
+                {l.credit_cents ? formatCents(Number(l.credit_cents), locale) : ""}
               </TableCell>
             </TableRow>
           ))}
           <TableRow className="font-semibold">
-            <TableCell>Total</TableCell>
+            <TableCell>{t("finance.common.total")}</TableCell>
             <TableCell>{""}</TableCell>
             <TableCell>{""}</TableCell>
-            <TableCell className="text-right tabular-nums">{formatCents(debits)}</TableCell>
-            <TableCell className="text-right tabular-nums">{formatCents(credits)}</TableCell>
+            <TableCell className="text-right tabular-nums">{formatCents(debits, locale)}</TableCell>
+            <TableCell className="text-right tabular-nums">{formatCents(credits, locale)}</TableCell>
           </TableRow>
         </tbody>
       </DataTable>
@@ -251,24 +259,27 @@ export default async function JournalEntryPage({
       {approvals.length > 0 || sourceHasApprovals(entry.source_type) ? (
         <ApprovalChainSection
           chains={approvals}
-          sourceLabel={entry.source_type === "finance_payment" ? "payment" : "bill"}
+          source={entry.source_type === "finance_payment" ? "payment" : "bill"}
         />
       ) : null}
 
       <section className="mt-6" aria-labelledby="trail-heading">
         <h2 id="trail-heading" className="mb-2 text-base font-semibold">
-          Trail
+          {t("finance.ledger.entry.trailHeading")}
         </h2>
         {trail.length === 0 ? (
-          <p className="text-[13.5px] text-muted">No recorded steps.</p>
+          <p className="text-[13.5px] text-muted">{t("finance.ledger.entry.noTrail")}</p>
         ) : (
           <ol className="card divide-y divide-line text-[13.5px]">
-            {trail.map((t, i) => (
-              <li key={`${t.occurred_at}-${i}`} className="flex flex-wrap justify-between gap-3 px-4 py-2">
+            {trail.map((step, i) => (
+              <li key={`${step.occurred_at}-${i}`} className="flex flex-wrap justify-between gap-3 px-4 py-2">
                 <span>
-                  {TRAIL_LABEL[t.action] ?? t.action.replace(/_/g, " ")} by {t.actor_name}
+                  {t("finance.ledger.entry.trailStep", {
+                    action: TRAIL_LABEL[step.action] ? t(TRAIL_LABEL[step.action]) : step.action.replace(/_/g, " "),
+                    name: step.actor_name,
+                  })}
                 </span>
-                <span className="tabular-nums text-muted">{t.occurred_at.slice(0, 16).replace("T", " ")} UTC</span>
+                <span className="tabular-nums text-muted">{step.occurred_at.slice(0, 16).replace("T", " ")} UTC</span>
               </li>
             ))}
           </ol>
