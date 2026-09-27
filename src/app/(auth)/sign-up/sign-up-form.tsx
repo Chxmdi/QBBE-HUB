@@ -6,8 +6,10 @@ import { useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
 
 export function SignUpForm() {
+  const t = useT();
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -26,12 +28,12 @@ export function SignUpForm() {
     });
     if (allowError) {
       setLoading(false);
-      setError("Could not check whether sign-up is open. Try again.");
+      setError(t("auth.signUp.checkFailed"));
       return;
     }
     if (allowed !== true) {
       setLoading(false);
-      setError("This workspace is invite-only. Ask an administrator to send you an invitation.");
+      setError(t("auth.signUp.inviteOnly"));
       return;
     }
     const { data, error: signUpError } = await supabase.auth.signUp({
@@ -59,10 +61,9 @@ export function SignUpForm() {
   if (needsConfirmation) {
     return (
       <div className="card space-y-3 p-6 text-center">
-        <p className="text-[15px] font-medium">Check your email</p>
+        <p className="text-[15px] font-medium">{t("auth.signUp.checkEmail")}</p>
         <p className="text-[13.5px] text-muted">
-          We sent a confirmation link to <strong>{email}</strong>. Follow it to
-          finish creating your account.
+          {t("auth.signUp.confirmationSent", { email })}
         </p>
       </div>
     );
@@ -71,7 +72,7 @@ export function SignUpForm() {
   return (
     <form onSubmit={handleSubmit} className="card space-y-4 p-6">
       <div>
-        <Label htmlFor="fullName">Full name</Label>
+        <Label htmlFor="fullName">{t("auth.signUp.fullName")}</Label>
         <Input
           id="fullName"
           autoComplete="name"
@@ -81,7 +82,7 @@ export function SignUpForm() {
         />
       </div>
       <div>
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{t("common.email")}</Label>
         <Input
           id="email"
           type="email"
@@ -92,7 +93,7 @@ export function SignUpForm() {
         />
       </div>
       <div>
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{t("common.password")}</Label>
         <Input
           id="password"
           type="password"
@@ -102,7 +103,7 @@ export function SignUpForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <FieldHint>At least 8 characters.</FieldHint>
+        <FieldHint>{t("auth.signUp.passwordHint")}</FieldHint>
       </div>
       {error ? (
         <p role="alert" className="text-[13px] text-danger-fg">
@@ -110,12 +111,12 @@ export function SignUpForm() {
         </p>
       ) : null}
       <Button type="submit" loading={loading} className="w-full">
-        Create account
+        {t("auth.signUp.submit")}
       </Button>
       <p className="text-center text-[13px] text-muted">
-        Already have an account?{" "}
+        {t("auth.signUp.haveAccount")}{" "}
         <Link href="/sign-in" className="font-medium text-brand-fg hover:underline">
-          Sign in
+          {t("auth.signUp.signIn")}
         </Link>
       </p>
     </form>

@@ -1,3 +1,5 @@
+import { DEFAULT_LOCALE, intlLocale, type Locale } from "@/lib/i18n/config";
+
 /**
  * Wall-clock time in a named zone, converted honestly.
  *
@@ -95,12 +97,13 @@ export function formatInZone(
   iso: string | null | undefined,
   timeZone: string = DEFAULT_TIME_ZONE,
   options: Intl.DateTimeFormatOptions = {},
+  locale: Locale = DEFAULT_LOCALE,
 ): string {
   if (!iso) return "—";
   const instant = new Date(iso);
   if (Number.isNaN(instant.getTime())) return "—";
   try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone, ...options }).format(instant);
+    return new Intl.DateTimeFormat(intlLocale(locale), { timeZone, ...options }).format(instant);
   } catch {
     return "—";
   }

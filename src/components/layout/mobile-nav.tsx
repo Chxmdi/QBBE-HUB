@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Mobile bottom navigation (Part II §11.1): Home, My Work, Channels,
@@ -26,17 +27,18 @@ export function MobileNav({
   onOpenMore: () => void;
 }) {
   const pathname = usePathname();
+  const t = useT();
 
   const tabs = [
-    { label: "Home", href: "/", icon: Home, badge: 0 },
-    { label: "My Work", href: "/my-work", icon: ClipboardList, badge: myWorkCount },
-    { label: "Channels", href: "/channels", icon: MessagesSquare, badge: 0 },
-    { label: "Calendar", href: "/calendar", icon: CalendarDays, badge: 0 },
+    { label: t("nav.items.home"), href: "/", icon: Home, badge: 0 },
+    { label: t("nav.items.myWork"), href: "/my-work", icon: ClipboardList, badge: myWorkCount },
+    { label: t("nav.items.channels"), href: "/channels", icon: MessagesSquare, badge: 0 },
+    { label: t("nav.items.calendar"), href: "/calendar", icon: CalendarDays, badge: 0 },
   ];
 
   return (
     <nav
-      aria-label="Primary"
+      aria-label={t("nav.primary")}
       className="fixed inset-x-0 bottom-0 z-(--z-chrome) border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
     >
       <ul className="flex items-stretch">
@@ -61,7 +63,7 @@ export function MobileNav({
                     {tab.badge > 9 ? "9+" : tab.badge}
                     {/* aria-label is ignored on a bare span; a bare number
                         also reads as part of the tab label. */}
-                    <span className="sr-only"> open items</span>
+                    <span className="sr-only">{t("common.openItems")}</span>
                   </span>
                 ) : null}
               </Link>
@@ -76,7 +78,7 @@ export function MobileNav({
             className="flex min-h-[52px] w-full flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10.5px] font-medium text-muted"
           >
             <MoreHorizontal className="size-5" aria-hidden />
-            More
+            {t("nav.more")}
           </button>
         </li>
       </ul>
