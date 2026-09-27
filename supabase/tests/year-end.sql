@@ -152,7 +152,11 @@ begin
     'Guest', 'only a Guest can be given accountant access');
   perform tests.ye_raises(format('select public.ledger_grant_accountant(%L, %L, current_date + 400)', v_org, v_guest),
     'one year', 'accountant access lasts at most a year');
-  perform tests.ye_raises(format('select public.ledger_grant_accountant(%L, %L, current_date - 1)', v_org, v_guest),
+  -- "Yesterday" in the organization's zone, as the function measures it; UTC's
+  -- date runs ahead of Quebec's every evening.
+  perform tests.ye_raises(format(
+    'select public.ledger_grant_accountant(%L, %L, (now() at time zone (select coalesce(o.timezone, ''America/Toronto'') from public.organization o where o.id = %L))::date - 1)',
+    v_org, v_guest, v_org),
     'one year', 'accountant access cannot end in the past');
   perform tests.ye_raises(format(
     'insert into public.ledger_accountant_grant (organization_id, user_id, expires_at) values (%L, %L, now() + interval ''1 day'')',
