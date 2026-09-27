@@ -84,10 +84,15 @@ function recordedText(): string[] {
     );
     for (const row of JSON.parse(json || "[]") as Record<string, unknown>[]) {
       for (const value of Object.values(row)) {
-        // Human text has a capital, a space or a dot; enum codes ("posted")
-        // do not, and must not hide an untranslated status label.
-        // File names ("receipt.png") are data too.
-        if (typeof value === "string" && value.trim().length > 1 && /[A-Z\s.]/.test(value)) {
+        // Everything people or specs stored is data (names, memos, slugs such
+        // as "program-template-program-1790541347522", file names), except
+        // enum codes ("posted", "net_assets"), which must not hide an
+        // untranslated status label.
+        if (
+          typeof value === "string" &&
+          value.trim().length > 1 &&
+          !/^[a-z]+(?:_[a-z]+)*$/.test(value.trim())
+        ) {
           values.add(value.trim());
         }
       }
