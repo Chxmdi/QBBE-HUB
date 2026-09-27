@@ -20,6 +20,7 @@ import { HealthBadge } from "@/components/shared/status-badges";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { AcknowledgeButton } from "@/features/announcements/components/acknowledge-button";
+import { AccountantHomeCard } from "@/features/ledger/components/accountant-home-card";
 import {
   ProgressBar,
   StatusDonut,
@@ -193,6 +194,7 @@ export default async function HomePage() {
     <div className="grid grid-cols-1 gap-8 2xl:grid-cols-[1fr_360px]">
       {/* ============ Main column ============ */}
       <div className="min-w-0">
+        <AccountantHomeCard session={session} />
         <header className="mb-6">
           <h1 className="page-title">
             {firstName

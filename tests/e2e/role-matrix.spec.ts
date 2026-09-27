@@ -1,4 +1,5 @@
 import { expect, test } from "./fixtures";
+import { featureRoutes } from "./feature-routes";
 import { signIn, type QaAccount } from "./auth";
 import { sql } from "./db";
 
@@ -120,14 +121,10 @@ const MATRIX: Row[] = [
 ];
 
 // Reached by every signed-in role; what is on them is scoped by the database.
-const EVERYONE = ["/", "/my-work", "/board", "/programs", "/projects", "/people", "/channels", "/settings", "/forms", "/signatures"];
-const STAFF_ONLY = ["/crm", "/reports", "/finance/receipts", "/approvals"];
-STAFF_ONLY.push("/finance/ledger");
-STAFF_ONLY.push("/finance/budgets", "/finance/budgets/programs");
-STAFF_ONLY.push("/finance/sales-tax");
-STAFF_ONLY.push("/finance/payables");
-STAFF_ONLY.push("/finance/bank");
-const ADMIN_ONLY = ["/admin", "/admin/access", "/admin/records", "/people/overview", "/forms/new", "/admin/approvals"];
+// New features add their routes in tests/e2e/routes/<feature>.json, not here.
+const EVERYONE = [...featureRoutes("everyone"), "/", "/my-work", "/board", "/programs", "/projects", "/people", "/channels", "/settings", "/forms", "/signatures"];
+const STAFF_ONLY = [...featureRoutes("staffOnly"), "/crm", "/reports", "/finance/receipts", "/approvals"];
+const ADMIN_ONLY = [...featureRoutes("adminOnly"), "/admin", "/admin/access", "/admin/records", "/people/overview", "/forms/new", "/admin/approvals"];
 
 function idsByName(table: "project" | "program"): Record<string, string> {
   return Object.fromEntries(

@@ -1,0 +1,7 @@
+{
+  "staffOnly": ["/finance/budgets", "/finance/budgets/programs"],
+  "qa": [
+    { "path": "/finance/budgets", "name": "budgets" },
+    { "path": "/finance/budgets/programs", "name": "budgets-programs" }
+  ]
+}
