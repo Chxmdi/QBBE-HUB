@@ -11,6 +11,7 @@ import { expireExports } from "./expire-exports";
 import { gmailPushSync } from "./gmail-push-sync";
 import { gmailWatchRenew } from "./gmail-watch-renew";
 import { googleSync } from "./google-sync";
+import { grantReportReminders } from "./grant-report-reminders";
 import { purgeJobHistory } from "./purge-job-history";
 import { reportRecordRetention } from "./report-record-retention";
 import { retryFailedEmails } from "./retry-failed-emails";
@@ -38,6 +39,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   "announcement-nudge": announcementNudge,
   "scheduled-announcements": scheduledAnnouncements,
   "due-date-reminders": dueDateReminders,
+  "grant-report-reminders": grantReportReminders,
   "stale-project-sweep": staleProjectSweep,
 
   // External integrations
