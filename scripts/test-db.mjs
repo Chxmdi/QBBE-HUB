@@ -14,67 +14,42 @@
 // "'$DOCKER' is not recognized", so the suite could not be run on Windows at
 // all and a local verification had to be assembled by hand.
 //
-// Adding a new test file means adding it to this list. There is no glob, on
-// purpose: order matters and a file that silently stopped running would be
-// worse than one that was never added.
+// Every .sql file in supabase/tests runs, found by name: a new test file needs
+// no edit here, so parallel work stops colliding on one shared list. Order
+// still matters at the two ends, so FIRST and LAST pin it; everything between
+// runs in name order, which is safe because each of those files opens its own
+// transaction and rolls back. FIXTURES are data loaders run elsewhere
+// (seed-local.mjs, perf.yml), never tests. A file that is none of these and
+// would not run is impossible: the list below is every file in the folder.
 
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 const CONTAINER = "supabase_db_workspace";
 
+const DIR = "supabase/tests";
+// Must run first, in this order: qa-users.sql creates the fixture users and
+// rls.sql defines the tests.* helpers every later file calls.
+const FIRST = ["qa-users.sql", "rls.sql"];
+// Last: it opens its own sessions, which only see committed rows, so it must
+// not run inside a transaction an earlier file left open.
+const LAST = ["concurrency.sql"];
+// Data loaders, not tests: run by seed-local.mjs and the perf workflow.
+const FIXTURES = ["perf-fixture.sql", "qa-scoped-grants.sql"];
+
+const pinned = new Set([...FIRST, ...LAST, ...FIXTURES]);
+const found = readdirSync(DIR).filter((name) => name.endsWith(".sql"));
+for (const name of [...FIRST, ...LAST, ...FIXTURES]) {
+  if (!found.includes(name)) {
+    console.error(`${DIR}/${name} is named in test-db.mjs but does not exist.`);
+    process.exit(1);
+  }
+}
 const FILES = [
-  "supabase/tests/qa-users.sql",
-  "supabase/tests/rls.sql",
-  "supabase/tests/admin-mfa.sql",
-  "supabase/tests/membership-lifecycle.sql",
-  "supabase/tests/invitation-lifecycle.sql",
-  "supabase/tests/invitation-organization.sql",
-  "supabase/tests/communication-deactivation.sql",
-  "supabase/tests/scoped-access-grants.sql",
-  "supabase/tests/scoped-core-rls.sql",
-  "supabase/tests/task-role-capabilities.sql",
-  "supabase/tests/task-core-followups.sql",
-  "supabase/tests/team-channel-access.sql",
-  "supabase/tests/leftover-scoped-surfaces.sql",
-  "supabase/tests/program-overview.sql",
-  "supabase/tests/project-lifecycle.sql",
-  "supabase/tests/document-scanning-meetings.sql",
-  "supabase/tests/document-links.sql",
-  "supabase/tests/document-library.sql",
-  "supabase/tests/work-planning.sql",
-  "supabase/tests/raid-decisions.sql",
-  "supabase/tests/crm-continuity.sql",
-  "supabase/tests/export-scope.sql",
-  "supabase/tests/epic4-completion.sql",
-  "supabase/tests/epic-05.sql",
-  "supabase/tests/meetings-comments.sql",
-  "supabase/tests/events.sql",
-  "supabase/tests/drive-integration-access.sql",
-  "supabase/tests/email-suppression.sql",
-  "supabase/tests/channel-history-access.sql",
-  "supabase/tests/creator-visibility.sql",
-  "supabase/tests/task-read-equivalence.sql",
-  "supabase/tests/dashboard-task-summary.sql",
-  "supabase/tests/my-open-task-count.sql",
-  "supabase/tests/finance-receipts.sql",
-  "supabase/tests/forms-esign.sql",
-  "supabase/tests/team-overview.sql",
-  "supabase/tests/member-profile-read-equivalence.sql",
-  "supabase/tests/channel-read-equivalence.sql",
-  "supabase/tests/project-program-read-equivalence.sql",
-  "supabase/tests/record-retention.sql",
-  "supabase/tests/approvals.sql",
-  "supabase/tests/ledger-core.sql",
-  "supabase/tests/gift-acknowledgements.sql",
-  "supabase/tests/budgets.sql",
-  "supabase/tests/sales-tax.sql",
-  "supabase/tests/payables.sql",
-  "supabase/tests/bank-reconciliation.sql",
-  // Last: it opens its own sessions, which only see committed rows, so it
-  // must not run inside a transaction an earlier file left open.
-  "supabase/tests/concurrency.sql",
-];
+  ...FIRST,
+  ...found.filter((name) => !pinned.has(name)).sort(),
+  ...LAST,
+].map((name) => `${DIR}/${name}`);
 
 // Docker needs sudo on some Linux installs and never on Windows or macOS.
 const probe = spawnSync("docker", ["info"], { stdio: "ignore", shell: false });

@@ -1,0 +1,4 @@
+{
+  "staffOnly": ["/finance/payables"],
+  "qa": [{ "path": "/finance/payables/aging", "name": "payables-aging" }]
+}

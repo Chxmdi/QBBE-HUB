@@ -36,14 +36,23 @@ interface Entry {
   entry_number: number | null;
   entry_date: string;
   memo: string;
-  kind: "standard" | "opening" | "reversal";
+  kind: "standard" | "opening" | "reversal" | "closing";
   status: "draft" | "posted";
   reverses_entry_id: string | null;
   source_type: string | null;
+  source_id: string | null;
   posted_at: string | null;
   poster: { full_name: string } | null;
   creator: { full_name: string } | null;
 }
+
+const TRAIL_LABEL: Record<string, string> = {
+  draft_saved: "Draft saved",
+  entry_posted: "Posted",
+  entry_reversed: "Reversed",
+  fiscal_year_closed: "Posted as the year-end closing entry",
+  fiscal_year_reopened: "Posted as the reopening entry",
+};
 
 export default async function JournalEntryPage({
   params,
@@ -66,11 +75,11 @@ export default async function JournalEntryPage({
   const id = uuidParam(rawId);
   if (!id) notFound();
 
-  const [{ data: entryData }, { data: lineData }, { data: reversals }] = await Promise.all([
+  const [{ data: entryData }, { data: lineData }, { data: reversals }, { data: trailData }] = await Promise.all([
     supabase
       .from("journal_entry")
       .select(
-        "id, entry_number, entry_date, memo, kind, status, reverses_entry_id, source_type, posted_at, poster:posted_by(full_name), creator:created_by(full_name)",
+        "id, entry_number, entry_date, memo, kind, status, reverses_entry_id, source_type, source_id, posted_at, poster:posted_by(full_name), creator:created_by(full_name)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -82,7 +91,9 @@ export default async function JournalEntryPage({
       .eq("entry_id", id)
       .order("line_no"),
     supabase.from("journal_entry").select("id, entry_number").eq("reverses_entry_id", id),
+    supabase.rpc("ledger_entry_trail", { p_entry: id }),
   ]);
+  const trail = (trailData ?? []) as { occurred_at: string; action: string; actor_name: string }[];
   const entry = entryData as unknown as Entry | null;
   if (!entry) notFound();
   const lines = (lineData ?? []) as unknown as Line[];
@@ -130,7 +141,7 @@ export default async function JournalEntryPage({
           canManage ? (
             entry.status === "draft" ? (
               <DraftActions entryId={entry.id} />
-            ) : entry.kind !== "reversal" && !reversal && entry.entry_number ? (
+            ) : entry.kind !== "reversal" && entry.kind !== "closing" && !reversal && entry.entry_number ? (
               <ReverseEntryButton
                 entryId={entry.id}
                 entryNumber={entry.entry_number}
@@ -172,6 +183,15 @@ export default async function JournalEntryPage({
               <Link className="text-brand-fg hover:underline" href={`/finance/ledger/journal/${reversal.id}`}>
                 Reversed by entry {reversal.entry_number}
               </Link>
+            ) : entry.source_type === "finance_receipt" && entry.source_id ? (
+              <a
+                className="text-brand-fg hover:underline"
+                href={`/api/finance/ledger/receipts/${entry.source_id}/file`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open the receipt
+              </a>
             ) : entry.source_type ? (
               <span>From {entry.source_type.replace(/_/g, " ")}</span>
             ) : (
@@ -217,6 +237,26 @@ export default async function JournalEntryPage({
           </TableRow>
         </tbody>
       </DataTable>
+
+      <section className="mt-6" aria-labelledby="trail-heading">
+        <h2 id="trail-heading" className="mb-2 text-base font-semibold">
+          Trail
+        </h2>
+        {trail.length === 0 ? (
+          <p className="text-[13.5px] text-muted">No recorded steps.</p>
+        ) : (
+          <ol className="card divide-y divide-line text-[13.5px]">
+            {trail.map((t, i) => (
+              <li key={`${t.occurred_at}-${i}`} className="flex flex-wrap justify-between gap-3 px-4 py-2">
+                <span>
+                  {TRAIL_LABEL[t.action] ?? t.action.replace(/_/g, " ")} by {t.actor_name}
+                </span>
+                <span className="tabular-nums text-muted">{t.occurred_at.slice(0, 16).replace("T", " ")} UTC</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
     </div>
   );
 }
