@@ -11,8 +11,11 @@ import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { formatBalance, formatCents } from "@/features/ledger/money";
 import { dateParam, getLedgerAccess, todayIn, uuidParam } from "@/features/ledger/services/ledger.access";
 import { GL_ROW_LIMIT, generalLedger, groupByAccount } from "@/features/ledger/services/ledger.reports";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "General ledger" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledgerReports.generalLedger.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function GeneralLedgerPage({
@@ -22,11 +25,13 @@ export default async function GeneralLedgerPage({
 }) {
   const { session, supabase, canRead } = await getLedgerAccess();
   const params = await searchParams;
+  const t = await getT();
+  const locale = await getLocale();
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="General ledger"
-      description="Every posted line by account, with the balance brought forward and a running balance."
+      eyebrow={t("finance.ledgerReports.eyebrow")}
+      title={t("finance.ledgerReports.generalLedger.title")}
+      description={t("finance.ledgerReports.generalLedger.description")}
     />
   );
   if (!canRead) {
@@ -61,19 +66,19 @@ export default async function GeneralLedgerPage({
     <div>
       {header}
       <LedgerTabs />
-      <form method="get" className="card mb-4 grid grid-cols-2 items-end gap-3 p-4 lg:grid-cols-6" aria-label="General ledger options">
+      <form method="get" className="card mb-4 grid grid-cols-2 items-end gap-3 p-4 lg:grid-cols-6" aria-label={t("finance.ledgerReports.generalLedger.optionsLabel")}>
         <div>
-          <Label htmlFor="gl-from">From</Label>
+          <Label htmlFor="gl-from">{t("finance.ledgerReports.generalLedger.from")}</Label>
           <Input id="gl-from" name="from" type="date" defaultValue={from} />
         </div>
         <div>
-          <Label htmlFor="gl-to">To</Label>
+          <Label htmlFor="gl-to">{t("finance.ledgerReports.generalLedger.to")}</Label>
           <Input id="gl-to" name="to" type="date" defaultValue={to} />
         </div>
         <div className="col-span-2 lg:col-span-1">
-          <Label htmlFor="gl-account">Account</Label>
+          <Label htmlFor="gl-account">{t("finance.common.account")}</Label>
           <Select id="gl-account" name="account" defaultValue={accountId ?? ""}>
-            <option value="">All accounts</option>
+            <option value="">{t("finance.ledgerReports.allAccounts")}</option>
             {((accounts ?? []) as { id: string; code: string; name: string }[]).map((a) => (
               <option key={a.id} value={a.id}>
                 {a.code} {a.name}
@@ -82,9 +87,9 @@ export default async function GeneralLedgerPage({
           </Select>
         </div>
         <div className="col-span-2 lg:col-span-1">
-          <Label htmlFor="gl-fund">Fund</Label>
+          <Label htmlFor="gl-fund">{t("finance.common.fund")}</Label>
           <Select id="gl-fund" name="fund" defaultValue={fundId ?? ""}>
-            <option value="">All funds</option>
+            <option value="">{t("finance.ledgerReports.allFunds")}</option>
             {((funds ?? []) as { id: string; code: string; name: string }[]).map((f) => (
               <option key={f.id} value={f.id}>
                 {f.code} {f.name}
@@ -93,7 +98,7 @@ export default async function GeneralLedgerPage({
           </Select>
         </div>
         <Button type="submit" variant="secondary">
-          Show
+          {t("finance.ledgerReports.show")}
         </Button>
         <Link
           href={`/api/finance/ledger/general-ledger?${exportQuery}`}
@@ -101,19 +106,19 @@ export default async function GeneralLedgerPage({
           className="inline-flex h-9.5 items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
         >
           <Download className="size-4" aria-hidden />
-          Export CSV
+          {t("finance.common.exportCsv")}
         </Link>
       </form>
 
       {truncated ? (
-        <p className="meta mb-3">Showing the first {GL_ROW_LIMIT} lines. Narrow the dates or choose an account.</p>
+        <p className="meta mb-3">{t("finance.ledgerReports.generalLedger.truncated", { count: GL_ROW_LIMIT })}</p>
       ) : null}
 
       {groups.length === 0 ? (
         <EmptyState
           icon={<BookText />}
-          title="No posted lines in this range"
-          description="Try a wider date range, another account or all funds."
+          title={t("finance.ledgerReports.generalLedger.emptyTitle")}
+          description={t("finance.ledgerReports.generalLedger.emptyDescription")}
         />
       ) : (
         groups.map((g) => {
@@ -125,23 +130,23 @@ export default async function GeneralLedgerPage({
               </h2>
               <DataTable minWidth="760px">
                 <TableHead>
-                  <TableHeader className="w-28">Date</TableHeader>
-                  <TableHeader className="w-16">Entry</TableHeader>
-                  <TableHeader>Memo</TableHeader>
-                  <TableHeader className="w-20">Fund</TableHeader>
-                  <TableHeader className="w-32 text-right">Debit</TableHeader>
-                  <TableHeader className="w-32 text-right">Credit</TableHeader>
-                  <TableHeader className="w-36 text-right">Balance</TableHeader>
+                  <TableHeader className="w-28">{t("finance.common.date")}</TableHeader>
+                  <TableHeader className="w-16">{t("finance.ledgerReports.generalLedger.entry")}</TableHeader>
+                  <TableHeader>{t("finance.common.memo")}</TableHeader>
+                  <TableHeader className="w-20">{t("finance.common.fund")}</TableHeader>
+                  <TableHeader className="w-32 text-right">{t("finance.common.debit")}</TableHeader>
+                  <TableHeader className="w-32 text-right">{t("finance.common.credit")}</TableHeader>
+                  <TableHeader className="w-36 text-right">{t("finance.ledgerReports.generalLedger.balance")}</TableHeader>
                 </TableHead>
                 <tbody>
                   <TableRow className="text-muted">
                     <TableCell className="tabular-nums">{from}</TableCell>
                     <TableCell>{""}</TableCell>
-                    <TableCell>Balance brought forward</TableCell>
+                    <TableCell>{t("finance.ledgerReports.generalLedger.broughtForward")}</TableCell>
                     <TableCell>{""}</TableCell>
                     <TableCell>{""}</TableCell>
                     <TableCell>{""}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatBalance(g.opening)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatBalance(g.opening, locale)}</TableCell>
                   </TableRow>
                   {g.rows.map((r) => (
                     <TableRow key={r.line_id}>
@@ -157,22 +162,22 @@ export default async function GeneralLedgerPage({
                       </TableCell>
                       <TableCell className="font-mono">{r.fund_code}</TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {r.debit_cents ? formatCents(r.debit_cents) : ""}
+                        {r.debit_cents ? formatCents(r.debit_cents, locale) : ""}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {r.credit_cents ? formatCents(r.credit_cents) : ""}
+                        {r.credit_cents ? formatCents(r.credit_cents, locale) : ""}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{formatBalance(r.running_cents)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatBalance(r.running_cents, locale)}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="font-semibold">
                     <TableCell className="tabular-nums">{to}</TableCell>
                     <TableCell>{""}</TableCell>
-                    <TableCell>Closing balance</TableCell>
+                    <TableCell>{t("finance.ledgerReports.generalLedger.closingBalance")}</TableCell>
                     <TableCell>{""}</TableCell>
                     <TableCell>{""}</TableCell>
                     <TableCell>{""}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatBalance(closing)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatBalance(closing, locale)}</TableCell>
                   </TableRow>
                 </tbody>
               </DataTable>
