@@ -66,6 +66,7 @@ const FILES = [
   "supabase/tests/record-retention.sql",
   "supabase/tests/ledger-core.sql",
   "supabase/tests/budgets.sql",
+  "supabase/tests/bank-reconciliation.sql",
   // Last: it opens its own sessions, which only see committed rows, so it
   // must not run inside a transaction an earlier file left open.
   "supabase/tests/concurrency.sql",

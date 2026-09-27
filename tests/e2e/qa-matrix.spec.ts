@@ -31,6 +31,7 @@ const ROUTES = [
   { path: "/finance/ledger/journal/new", name: "ledger-entry" },
   { path: "/finance/budgets", name: "budgets" },
   { path: "/finance/budgets/programs", name: "budgets-programs" },
+  { path: "/finance/bank", name: "bank" },
   { path: "/reports", name: "reports" },
   { path: "/documents", name: "documents" },
   { path: "/finance/receipts", name: "receipts" },
