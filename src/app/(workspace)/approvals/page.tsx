@@ -37,6 +37,11 @@ const STEP_TONE = {
   cancelled: "neutral",
 } as const;
 
+/** Where the record behind an approval lives, for kinds that have a page. */
+const SUBJECT_LINK: Partial<Record<ApprovalItemRow["subject_type"], (id: string) => string>> = {
+  bill: (id) => `/finance/payables/bills/${id}`,
+};
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -219,6 +224,14 @@ function ApprovalDetail({
         {item.program ? ` · ${item.program.name}` : ""} · requested by{" "}
         {item.requester?.full_name ?? "someone"} on {formatDate(item.created_at)}
       </p>
+      {SUBJECT_LINK[item.subject_type] && item.subject_id ? (
+        <p className="mt-2 text-[13.5px]">
+          <Link href={SUBJECT_LINK[item.subject_type]!(item.subject_id)} className="text-brand-fg underline">
+            Open the {SUBJECT_TYPE_LABELS[item.subject_type].toLowerCase()}
+          </Link>{" "}
+          <span className="meta">to see its lines before you decide.</span>
+        </p>
+      ) : null}
       {item.description ? (
         <p className="mt-2 text-[13.5px] whitespace-pre-wrap">{item.description}</p>
       ) : null}

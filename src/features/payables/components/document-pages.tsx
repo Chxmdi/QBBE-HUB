@@ -39,6 +39,19 @@ import {
   type DocumentRecord,
 } from "@/features/payables/services/payables.queries";
 
+/**
+ * What the bill page says about its approval (#143). Posting needs the bill's
+ * own request approved while the bill still matches what was sent.
+ */
+const APPROVAL_NOTE: Record<string, string> = {
+  none: "Send it for approval; it can be posted once approved.",
+  pending: "It is waiting for approval.",
+  approved: "It is approved and ready to post.",
+  rejected: "Its approval was rejected. Change it if needed, then send it again.",
+  withdrawn: "Its approval request was withdrawn. Send it again when it is ready.",
+  changed: "It changed after it was sent for approval, so it needs to be sent again.",
+};
+
 const linkButton =
   "inline-flex h-9.5 items-center gap-2 rounded-(--radius-sm) bg-brand px-4 text-sm font-medium text-white hover:bg-brand-strong";
 
@@ -309,7 +322,7 @@ export async function DocumentDetailPage({
   const programLabel = new Map(choices.programs.map((p) => [p.id, p.label]));
   const bankAccounts = choices.accounts.filter((a) => a.accountType === "asset" && a.code.startsWith("10"));
 
-  let approval: { status: string } | null = null;
+  let approval: { status: string; approvalItemId: string | null } | null = null;
   let threshold: number | null = null;
   if (isBill && record.status === "draft") {
     const { data } = await supabase
@@ -319,8 +332,14 @@ export async function DocumentDetailPage({
       .maybeSingle();
     threshold = data?.bill_approval_threshold_cents ?? null;
     // Null when there is no approval for this total, or approvals (#143) are not installed.
-    const { data: approvalStatus } = await supabase.rpc("finance_bill_approval_status", { p_bill: record.id });
-    approval = typeof approvalStatus === "string" ? { status: approvalStatus } : null;
+    const [{ data: approvalStatus }, { data: link }] = await Promise.all([
+      supabase.rpc("finance_bill_approval_status", { p_bill: record.id }),
+      supabase.from("finance_bill").select("approval_item_id").eq("id", record.id).maybeSingle(),
+    ]);
+    approval =
+      typeof approvalStatus === "string"
+        ? { status: approvalStatus, approvalItemId: (link?.approval_item_id as string | null) ?? null }
+        : null;
   }
   let organizationName = "";
   if (!isBill) {
@@ -406,16 +425,23 @@ export async function DocumentDetailPage({
             {isBill && needsApproval ? (
               <p className="rounded-(--radius-sm) border border-line bg-surface-soft p-3 text-[13.5px]">
                 This bill is at or above the approval threshold of {formatCents(threshold ?? 0)}.{" "}
-                {approval
-                  ? `Approval for this total: ${approval.status}.`
-                  : "It needs an approval for its total before it can be posted, where approvals are set up."}
+                {APPROVAL_NOTE[approval?.status ?? "none"] ?? APPROVAL_NOTE.none}
+                {approval?.approvalItemId ? (
+                  <>
+                    {" "}
+                    <Link href={`/approvals?tab=mine&item=${approval.approvalItemId}`} className="text-brand-fg underline">
+                      See the approval
+                    </Link>
+                  </>
+                ) : null}
               </p>
             ) : null}
             <DraftActions
               kind={kind}
               id={record.id}
               canEdit={canEdit}
-              canPost={canPost}
+              // Posting waits for the bill's own approval; the database refuses it anyway.
+              canPost={canPost && !(isBill && needsApproval && approval?.status !== "approved")}
               canRequestApproval={isBill && needsApproval && approval?.status !== "pending" && approval?.status !== "approved"}
             />
           </div>

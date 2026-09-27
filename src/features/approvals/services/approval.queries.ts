@@ -10,6 +10,7 @@ import type { ApprovalStatus, ApproverKind, SubjectType } from "@/features/appro
 export interface ApprovalItemRow {
   id: string;
   subject_type: SubjectType;
+  subject_id: string | null;
   title: string;
   description: string | null;
   amount_cents: number | null;
@@ -59,7 +60,7 @@ export interface ApprovalRuleRow {
 }
 
 const ITEM_COLUMNS =
-  "id, subject_type, title, description, amount_cents, status, current_step, decision_note, decided_at, created_at, requested_by, requester:user_profile!approval_item_requested_by_fkey(full_name), program:program_id(name)";
+  "id, subject_type, subject_id, title, description, amount_cents, status, current_step, decision_note, decided_at, created_at, requested_by, requester:user_profile!approval_item_requested_by_fkey(full_name), program:program_id(name)";
 
 type PageClient = Awaited<ReturnType<typeof createSupabasePageClient>>;
 

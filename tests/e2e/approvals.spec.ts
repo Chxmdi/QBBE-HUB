@@ -107,3 +107,91 @@ test("a rejected contract goes back to the requester with the reason", async ({ 
     sql(`delete from approval_item where title = '${title}'`);
   }
 });
+
+/**
+ * The hand-off to the ledger (#143, #150): a bill over the approval threshold
+ * cannot be posted until it is sent for approval and approved; the approver
+ * can open the bill from the approval; the owner is told it is ready and
+ * posts it. What counts as the bill's approval is proven in
+ * supabase/tests/bill-approval-handoff.sql. Posted bills are permanent, so
+ * each run uses a unique vendor.
+ */
+test("a bill over the threshold is approved, then posted to the ledger", async ({ page }) => {
+  test.setTimeout(240_000);
+  const run = Date.now();
+  const vendor = `QA Handoff Vendor ${run}`;
+  const reference = `H-${run}`;
+  const title = `Bill from ${vendor} #${reference}`;
+  const org = orgId();
+  const staffId = sql(`select id::text from user_profile where email = 'qa-staff@example.com'`);
+
+  // Open books (as payables.spec.ts does), a $1,000 threshold, and a $1,500 draft bill.
+  sql(`update ledger_settings set chart_approved_on = '2026-09-20', chart_approved_by_name = 'QA Accountant, CPA',
+         chart_approval_recorded_at = now()
+       where organization_id = '${org}' and chart_approved_on is null`);
+  sql(`insert into ledger_period (organization_id, name, starts_on, ends_on)
+       select '${org}', to_char(m, 'YYYY-MM'), m, (m + interval '1 month' - interval '1 day')::date
+       from generate_series(date '2026-10-01', date '2027-09-01', interval '1 month') as g(m)
+       where not exists (select 1 from ledger_period p where p.organization_id = '${org}'
+                         and p.starts_on <= (g.m + interval '1 month' - interval '1 day')::date and g.m <= p.ends_on)`);
+  const previousThreshold = sql(
+    `select coalesce(bill_approval_threshold_cents::text, 'null') from finance_billing_settings where organization_id = '${org}'`,
+  ) || "null";
+  sql(`insert into finance_billing_settings (organization_id, bill_approval_threshold_cents)
+       values ('${org}', 100000)
+       on conflict (organization_id) do update set bill_approval_threshold_cents = 100000`);
+  const vendorId = sql(`insert into finance_contact (organization_id, name, is_vendor, created_by)
+       values ('${org}', '${vendor}', true, '${staffId}') returning id::text`);
+  const billId = sql(`insert into finance_bill (organization_id, vendor_id, vendor_reference, bill_date, due_date,
+         fund_id, subtotal_cents, created_by)
+       select '${org}', '${vendorId}', '${reference}', '2026-10-06', '2026-11-05', f.id, 150000, '${staffId}'
+       from ledger_fund f where f.organization_id = '${org}' and f.code = 'GEN'
+       returning id::text`);
+  sql(`insert into finance_bill_line (organization_id, bill_id, line_no, account_id, description, amount_cents)
+       select '${org}', '${billId}', 1, a.id, 'Workshop venue', 150000
+       from ledger_account a where a.organization_id = '${org}' and a.code = '5200'`);
+  const billUrl = `/finance/payables/bills/${billId}`;
+
+  try {
+    // Staff send it for approval.
+    await signIn(page, "staff");
+    await page.goto(billUrl);
+    await expect(page.getByText("Send it for approval; it can be posted once approved.")).toBeVisible();
+    await page.getByRole("button", { name: "Send for approval" }).click();
+    await expect(page.getByText("It is waiting for approval.")).toBeVisible({ timeout: 20_000 });
+    await signOut(page);
+
+    // The admin cannot post it yet, opens it from the approval, and approves.
+    await signIn(page, "admin");
+    await page.goto(billUrl);
+    await expect(page.getByText("It is waiting for approval.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Post bill" })).toHaveCount(0);
+    await page.goto("/approvals");
+    const row = page.getByRole("list", { name: "Approvals" }).getByRole("link", { name: new RegExp(title) });
+    await expect(row).toBeVisible();
+    await row.click();
+    const details = page.getByRole("region", { name: "Approval details" });
+    await expect(details.getByRole("link", { name: "Open the vendor bill" })).toHaveAttribute("href", billUrl);
+    await details.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(page.getByText("Approved.")).toBeVisible();
+    await signOut(page);
+
+    // The owner is told it is ready, and posts it.
+    await expect
+      .poll(() =>
+        sql(`select count(*) from notification where user_id = '${ownerId()}'
+             and source_id = '${billId}' and title like 'Ready to post:%'`),
+      )
+      .toBe("1");
+    await signIn(page, "owner");
+    await page.goto(billUrl);
+    await expect(page.getByText("It is approved and ready to post.")).toBeVisible();
+    page.once("dialog", (d) => void d.accept());
+    await page.getByRole("button", { name: "Post bill" }).click();
+    await expect(page.getByRole("link", { name: "Posted entry" })).toBeVisible({ timeout: 20_000 });
+    expect(sql(`select status from finance_bill where id = '${billId}'`)).toBe("posted");
+  } finally {
+    sql(`update finance_billing_settings set bill_approval_threshold_cents = ${previousThreshold}
+         where organization_id = '${org}'`);
+  }
+});
