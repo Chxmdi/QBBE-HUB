@@ -23,8 +23,11 @@ import {
   listTaxLines,
   listTaxPeriods,
 } from "@/features/sales-tax/services/sales-tax.queries";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Tax lines" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.salesTax.tabs.lines") };
+}
 export const dynamic = "force-dynamic";
 
 function codesParam(value: string | undefined): TaxCode[] {
@@ -39,11 +42,13 @@ export default async function TaxLinesPage({
 }) {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
   const params = await searchParams;
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
+  const money = (cents: number) => formatCents(cents, locale);
   const header = (
     <PageHeader
-      eyebrow="GST and QST"
-      title="Tax lines"
-      description="Every sale and purchase that counts on the returns, with the tax charged, paid and claimed back."
+      eyebrow={t("finance.salesTax.title")}
+      title={t("finance.salesTax.tabs.lines")}
+      description={t("finance.salesTax.lines.description")}
     />
   );
   if (!canRead) {
@@ -73,37 +78,41 @@ export default async function TaxLinesPage({
     <div>
       {header}
       <TaxTabs />
-      <form method="get" className="card mb-4 grid grid-cols-2 items-end gap-3 p-4 lg:grid-cols-5" aria-label="Tax line filters">
+      <form method="get" className="card mb-4 grid grid-cols-2 items-end gap-3 p-4 lg:grid-cols-5" aria-label={t("finance.salesTax.lines.filtersAria")}>
         <div>
-          <Label htmlFor="tl-from">From</Label>
+          <Label htmlFor="tl-from">{t("finance.salesTax.from")}</Label>
           <Input id="tl-from" name="from" type="date" defaultValue={from} />
         </div>
         <div>
-          <Label htmlFor="tl-to">To</Label>
+          <Label htmlFor="tl-to">{t("finance.salesTax.to")}</Label>
           <Input id="tl-to" name="to" type="date" defaultValue={to} />
         </div>
         <div>
-          <Label htmlFor="tl-direction">Sales or purchases</Label>
+          <Label htmlFor="tl-direction">{t("finance.salesTax.lines.direction")}</Label>
           <Select id="tl-direction" name="direction" defaultValue={direction ?? ""}>
-            <option value="">Both</option>
-            <option value="sale">Sales</option>
-            <option value="purchase">Purchases</option>
+            <option value="">{t("finance.salesTax.lines.both")}</option>
+            <option value="sale">{t("finance.salesTax.lines.sales")}</option>
+            <option value="purchase">{t("finance.salesTax.lines.purchases")}</option>
           </Select>
         </div>
         <div>
-          <Label htmlFor="tl-codes">Tax code</Label>
+          <Label htmlFor="tl-codes">{t("finance.salesTax.lineDialog.taxCode")}</Label>
           <Select id="tl-codes" name="codes" defaultValue={codes.join(",")}>
-            <option value="">All codes</option>
-            {codes.length > 1 ? <option value={codes.join(",")}>{codes.map((c) => TAX_CODE_LABEL[c]).join(" and ")}</option> : null}
+            <option value="">{t("finance.salesTax.lines.allCodes")}</option>
+            {codes.length > 1 ? (
+              <option value={codes.join(",")}>
+                {codes.map((c) => t(TAX_CODE_LABEL[c])).join(t("finance.salesTax.lines.codesJoiner"))}
+              </option>
+            ) : null}
             {TAX_CODES.map((c) => (
               <option key={c} value={c}>
-                {TAX_CODE_LABEL[c]}
+                {t(TAX_CODE_LABEL[c])}
               </option>
             ))}
           </Select>
         </div>
         <Button type="submit" variant="secondary">
-          Show lines
+          {t("finance.salesTax.lines.show")}
         </Button>
       </form>
 
@@ -111,7 +120,7 @@ export default async function TaxLinesPage({
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <ImportReceiptsForm from={from} to={to} />
           <TaxLineDialog
-            trigger={{ label: "Add tax line" }}
+            trigger={{ label: t("finance.salesTax.lines.add") }}
             initial={{
               direction: "sale",
               taxCode: "standard",
@@ -132,35 +141,38 @@ export default async function TaxLinesPage({
       {lines.length === 0 ? (
         <EmptyState
           icon={<Receipt />}
-          title="No tax lines in this range"
-          description="Sales and purchases appear here once they are recorded or brought in from receipts."
+          title={t("finance.salesTax.lines.emptyTitle")}
+          description={t("finance.salesTax.lines.emptyDescription")}
         />
       ) : (
         <DataTable minWidth="980px">
           <TableHead>
-            <TableHeader>Date</TableHeader>
-            <TableHeader>Type</TableHeader>
-            <TableHeader>Code</TableHeader>
-            <TableHeader>Counterparty</TableHeader>
-            <TableHeader className="text-right">Before tax</TableHeader>
-            <TableHeader className="text-right">GST</TableHeader>
-            <TableHeader className="text-right">QST</TableHeader>
-            <TableHeader className="text-right">ITC</TableHeader>
-            <TableHeader className="text-right">ITR</TableHeader>
+            <TableHeader>{t("finance.common.date")}</TableHeader>
+            <TableHeader>{t("finance.salesTax.lines.colType")}</TableHeader>
+            <TableHeader>{t("finance.salesTax.lines.colCode")}</TableHeader>
+            <TableHeader>{t("finance.salesTax.lines.colCounterparty")}</TableHeader>
+            <TableHeader className="text-right">{t("finance.salesTax.lines.colBeforeTax")}</TableHeader>
+            <TableHeader className="text-right">{t("finance.common.gst")}</TableHeader>
+            <TableHeader className="text-right">{t("finance.common.qst")}</TableHeader>
+            <TableHeader className="text-right">{t("finance.salesTax.lines.colItc")}</TableHeader>
+            <TableHeader className="text-right">{t("finance.salesTax.lines.colItr")}</TableHeader>
             {canManage ? (
               <TableHeader className="text-right">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t("finance.common.actions")}</span>
               </TableHeader>
             ) : null}
           </TableHead>
           <tbody>
             {lines.map((l) => {
-              const label = `${DIRECTION_LABEL[l.direction].toLowerCase()} ${l.counterparty} on ${l.transaction_date}`;
+              const label = t(
+                l.direction === "sale" ? "finance.salesTax.lines.labelSale" : "finance.salesTax.lines.labelPurchase",
+                { counterparty: l.counterparty, date: l.transaction_date },
+              );
               return (
                 <TableRow key={l.id}>
                   <TableCell className="tabular-nums">{l.transaction_date}</TableCell>
-                  <TableCell>{DIRECTION_LABEL[l.direction]}</TableCell>
-                  <TableCell>{TAX_CODE_LABEL[l.tax_code]}</TableCell>
+                  <TableCell>{t(DIRECTION_LABEL[l.direction])}</TableCell>
+                  <TableCell>{t(TAX_CODE_LABEL[l.tax_code])}</TableCell>
                   <TableCell>
                     <span className="font-medium">{l.counterparty}</span>
                     {l.reference ? <span className="meta"> · {l.reference}</span> : null}
@@ -168,24 +180,24 @@ export default async function TaxLinesPage({
                       <span className="meta">
                         {" · "}
                         <Link className="underline" href="/finance/receipts">
-                          from a receipt
+                          {t("finance.salesTax.lines.fromReceipt")}
                         </Link>
                       </span>
                     ) : null}
                     {l.description ? <div className="meta">{l.description}</div> : null}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(l.amount_cents)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(l.gst_cents)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(l.qst_cents)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(l.itc_cents)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(l.itr_cents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(l.amount_cents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(l.gst_cents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(l.qst_cents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(l.itc_cents)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(l.itr_cents)}</TableCell>
                   {canManage ? (
                     <TableCell className="text-right whitespace-nowrap">
                       {isClosed(l.transaction_date) ? (
-                        <span className="meta">Period closed</span>
+                        <span className="meta">{t("finance.salesTax.lines.periodClosed")}</span>
                       ) : (
                         <span className="inline-flex gap-1">
-                          <TaxLineDialog trigger={{ label: "Edit", variant: "ghost" }} initial={lineValues(l)} />
+                          <TaxLineDialog trigger={{ label: t("finance.salesTax.lines.edit"), variant: "ghost" }} initial={lineValues(l)} />
                           <DeleteTaxLineButton lineId={l.id} label={label} />
                         </span>
                       )}
@@ -195,26 +207,26 @@ export default async function TaxLinesPage({
               );
             })}
             <TableRow>
-              <TableCell className="font-semibold">Total</TableCell>
+              <TableCell className="font-semibold">{t("finance.common.total")}</TableCell>
               <TableCell>{null}</TableCell>
               <TableCell>{null}</TableCell>
               <TableCell className="meta">
-                {lines.length} line{lines.length === 1 ? "" : "s"}
+                {t(lines.length === 1 ? "finance.salesTax.lineCountOne" : "finance.salesTax.lineCountOther", {
+                  count: lines.length,
+                })}
               </TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{formatCents(total((l) => l.amount_cents))}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{formatCents(total((l) => l.gst_cents))}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{formatCents(total((l) => l.qst_cents))}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{formatCents(total((l) => l.itc_cents))}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{formatCents(total((l) => l.itr_cents))}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(total((l) => l.amount_cents))}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(total((l) => l.gst_cents))}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(total((l) => l.qst_cents))}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(total((l) => l.itc_cents))}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(total((l) => l.itr_cents))}</TableCell>
               {canManage ? <TableCell>{null}</TableCell> : null}
             </TableRow>
           </tbody>
         </DataTable>
       )}
       {truncated ? (
-        <p className="meta mt-3">
-          Showing the first {LINE_LIMIT} lines. Narrow the dates, or download the worksheet CSV for all of them.
-        </p>
+        <p className="meta mt-3">{t("finance.salesTax.lines.truncated", { limit: LINE_LIMIT })}</p>
       ) : null}
     </div>
   );

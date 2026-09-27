@@ -2,19 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/translate";
 import { cn } from "@/lib/utils";
 
-const SECTIONS = [
-  { href: "/finance/sales-tax", label: "Overview" },
-  { href: "/finance/sales-tax/lines", label: "Tax lines" },
-  { href: "/finance/sales-tax/worksheet", label: "Return worksheet" },
+const SECTIONS: { href: string; label: MessageKey }[] = [
+  { href: "/finance/sales-tax", label: "finance.salesTax.tabs.overview" },
+  { href: "/finance/sales-tax/lines", label: "finance.salesTax.tabs.lines" },
+  { href: "/finance/sales-tax/worksheet", label: "finance.salesTax.tabs.worksheet" },
 ];
 
 /** Sections of GST/QST, as plain links so each is its own page and URL. */
 export function TaxTabs() {
   const pathname = usePathname();
+  const t = useT();
   return (
-    <nav aria-label="GST and QST sections" className="mb-6 -mx-4 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
+    <nav aria-label={t("finance.salesTax.tabs.aria")} className="mb-6 -mx-4 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0">
       <ul className="flex gap-1">
         {SECTIONS.map((s) => {
           const active =
@@ -29,7 +32,7 @@ export function TaxTabs() {
                   active ? "border-brand text-ink" : "border-transparent text-muted hover:text-ink",
                 )}
               >
-                {s.label}
+                {t(s.label)}
               </Link>
             </li>
           );

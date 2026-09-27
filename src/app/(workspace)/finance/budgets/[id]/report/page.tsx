@@ -12,8 +12,11 @@ import { BudgetTabs } from "@/features/budgets/components/budget-tabs";
 import { NoBudgetAccess } from "@/features/budgets/components/no-budget-access";
 import { budgetOptions, budgetVsActual, getBudget } from "@/features/budgets/services/budget.queries";
 import { getLedgerAccess, todayIn, uuidParam } from "@/features/ledger/services/ledger.access";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Budget vs actual" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.budgets.budgetVsActual") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function BudgetReportPage({
@@ -25,10 +28,11 @@ export default async function BudgetReportPage({
 }) {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const { session, supabase, canRead } = await getLedgerAccess();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   if (!canRead) {
     return (
       <div>
-        <PageHeader eyebrow="Budgets" title="Budget vs actual" />
+        <PageHeader eyebrow={t("finance.budgets.title")} title={t("finance.budgets.budgetVsActual")} />
         <BudgetTabs />
         <NoBudgetAccess isAdmin={session.isAdmin} />
       </div>
@@ -62,26 +66,26 @@ export default async function BudgetReportPage({
   return (
     <div>
       <PageHeader
-        eyebrow={`Budgets · ${fiscalYearLabel(budget.fiscal_year_start)}`}
-        title="Budget vs actual"
-        description={`${budget.name}, version ${budget.version}. Actuals are posted journal lines only. Variance is positive when favourable: revenue above budget or spending below it.`}
+        eyebrow={t("finance.budgets.eyebrowWithYear", { fiscalYear: fiscalYearLabel(budget.fiscal_year_start, locale) })}
+        title={t("finance.budgets.budgetVsActual")}
+        description={t("finance.budgets.report.description", { name: budget.name, version: budget.version })}
       />
       <BudgetTabs />
-      <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4" aria-label="Report filters">
+      <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4" aria-label={t("finance.budgets.report.filtersAria")}>
         <div>
-          <Label htmlFor="r-month">Month</Label>
+          <Label htmlFor="r-month">{t("finance.budgets.month")}</Label>
           <Select id="r-month" name="month" defaultValue={month}>
             {months.map((m) => (
               <option key={m} value={m}>
-                {monthLabel(m)}
+                {monthLabel(m, locale)}
               </option>
             ))}
           </Select>
         </div>
         <div className="min-w-44">
-          <Label htmlFor="r-program">Program</Label>
+          <Label htmlFor="r-program">{t("finance.common.program")}</Label>
           <Select id="r-program" name="program" defaultValue={filters.programId ?? ""}>
-            <option value="">All programs</option>
+            <option value="">{t("finance.budgets.report.allPrograms")}</option>
             {options.programs.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -90,9 +94,9 @@ export default async function BudgetReportPage({
           </Select>
         </div>
         <div className="min-w-44">
-          <Label htmlFor="r-project">Project</Label>
+          <Label htmlFor="r-project">{t("finance.budgets.project")}</Label>
           <Select id="r-project" name="project" defaultValue={filters.projectId ?? ""}>
-            <option value="">All projects</option>
+            <option value="">{t("finance.budgets.report.allProjects")}</option>
             {options.projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -101,9 +105,9 @@ export default async function BudgetReportPage({
           </Select>
         </div>
         <div className="min-w-44">
-          <Label htmlFor="r-fund">Fund</Label>
+          <Label htmlFor="r-fund">{t("finance.common.fund")}</Label>
           <Select id="r-fund" name="fund" defaultValue={filters.fundId ?? ""}>
-            <option value="">All funds</option>
+            <option value="">{t("finance.budgets.report.allFunds")}</option>
             {options.funds.map((f) => (
               <option key={f.id} value={f.id}>
                 {f.code} {f.name}
@@ -112,7 +116,7 @@ export default async function BudgetReportPage({
           </Select>
         </div>
         <Button type="submit" variant="secondary">
-          Show
+          {t("finance.budgets.show")}
         </Button>
         <Link
           href={`/api/finance/budgets/${budget.id}/report?${exportQuery}`}
@@ -120,20 +124,23 @@ export default async function BudgetReportPage({
           className="inline-flex h-9.5 items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
         >
           <Download className="size-4" aria-hidden />
-          Export CSV
+          {t("finance.common.exportCsv")}
         </Link>
       </form>
       <p className="meta mb-3">
-        {monthLabel(month)} and the year to date from {monthLabel(months[0])}.
+        {t("finance.budgets.report.period", {
+          month: monthLabel(month, locale),
+          start: monthLabel(months[0], locale),
+        })}
       </p>
       {rows.length === 0 ? (
         <EmptyState
           icon={<PiggyBank />}
-          title="Nothing budgeted or posted for these filters"
-          description="Rows appear for each revenue or expense account with a budget line or a posted amount."
+          title={t("finance.budgets.report.emptyTitle")}
+          description={t("finance.budgets.report.emptyDescription")}
         />
       ) : (
-        <BudgetReportTable rows={rows} monthLabel={monthLabel(month)} />
+        <BudgetReportTable rows={rows} monthLabel={monthLabel(month, locale)} />
       )}
     </div>
   );

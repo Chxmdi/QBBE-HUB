@@ -2,6 +2,7 @@ import { budgetReportCsv, fiscalMonths, fiscalYearLabel, reportMonth } from "@/f
 import { budgetVsActual } from "@/features/budgets/services/budget.queries";
 import { todayIn, uuidParam } from "@/features/ledger/services/ledger.access";
 import { authorizeLedgerExport, csvResponse, fundLabel } from "@/features/ledger/services/ledger.export";
+import { getLocale, getT } from "@/lib/i18n/server";
 
 /** Budget against actual as CSV (#153). The database decides who may run it. */
 
@@ -9,8 +10,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const access = await authorizeLedgerExport();
-  if (!access) return new Response("You do not have access to budgets.", { status: 403 });
+  if (!access) return new Response(t("finance.budgets.errors.noAccess"), { status: 403 });
   const { session, supabase } = access;
   const budgetId = uuidParam((await params).id);
   const { data: budget } = budgetId
@@ -21,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         .eq("id", budgetId)
         .maybeSingle()
     : { data: null };
-  if (!budget) return new Response("Budget not found.", { status: 404 });
+  if (!budget) return new Response(t("finance.budgets.errors.notFound"), { status: 404 });
 
   const url = new URL(request.url);
   const month = reportMonth(budget.fiscal_year_start, todayIn(session.timeZone), url.searchParams.get("month"));
@@ -31,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     fundId: uuidParam(url.searchParams.get("fund") ?? undefined),
   };
   const { rows, error } = await budgetVsActual(supabase, budget.id, month, filters);
-  if (error) return new Response("Could not export the report. Try again.", { status: 500 });
+  if (error) return new Response(t("finance.budgets.errors.exportFailed"), { status: 500 });
 
   const [program, project] = await Promise.all([
     filters.programId
@@ -42,17 +44,21 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       : Promise.resolve({ data: null }),
   ]);
   const described = [
-    program.data ? `Program ${program.data.name}.` : "All programs.",
-    project.data ? `Project ${project.data.name}.` : "All projects.",
+    program.data ? t("finance.budgets.csv.program", { name: program.data.name }) : t("finance.budgets.csv.allPrograms"),
+    project.data ? t("finance.budgets.csv.project", { name: project.data.name }) : t("finance.budgets.csv.allProjects"),
     `${await fundLabel(supabase, filters.fundId)}.`,
   ].join(" ");
-  const label = `${budget.name}, ${fiscalYearLabel(budget.fiscal_year_start)}, version ${budget.version}`;
+  const label = t("finance.budgets.csv.budgetLabel", {
+    name: budget.name,
+    fiscalYear: fiscalYearLabel(budget.fiscal_year_start, locale),
+    version: budget.version,
+  });
 
   return csvResponse(
     supabase,
     session,
     "budget_report_exported",
-    budgetReportCsv(rows, { budget: label, month, filters: described }),
+    budgetReportCsv(rows, { budget: label, month, filters: described }, t),
     `budget-vs-actual-${fiscalMonths(budget.fiscal_year_start)[0]}-v${budget.version}-${month}.csv`,
     { budget_id: budget.id, month, ...filters, rows: rows.length },
   );

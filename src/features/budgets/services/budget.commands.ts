@@ -9,6 +9,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { parseMoneyToCents } from "@/features/ledger/money";
 import { evenSplit, MONTHS_IN_YEAR } from "@/features/budgets/budget";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey, MessageVars, TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Budget actions (#153). Every write is for owners and admins who completed
@@ -24,9 +26,9 @@ type DbError = { code?: string; message: string } | null;
 // else (row-level security, a network failure) gets a generic message.
 const READABLE_CODES = new Set(["22023", "42501", "23505", "P0002"]);
 
-function dbMessage(error: DbError, fallback: string): string {
-  if (!error) return fallback;
-  if (error.code === "23503") return "An account, fund, program or project is not in this organization.";
+function dbMessage(t: TranslateFn, error: DbError, fallback: MessageKey): string {
+  if (!error) return t(fallback);
+  if (error.code === "23503") return t("finance.budgets.errors.notInOrganization");
   if (
     error.code &&
     READABLE_CODES.has(error.code) &&
@@ -34,7 +36,19 @@ function dbMessage(error: DbError, fallback: string): string {
   ) {
     return error.message;
   }
-  return fallback;
+  return t(fallback);
+}
+
+/**
+ * The first validation problem, in the person's language. Schema messages are
+ * catalogue keys (a custom issue may carry `params` for its placeholders);
+ * anything else (a Zod default) is shown as it is.
+ */
+function issueMessage(t: TranslateFn, error: z.ZodError): string | undefined {
+  const issue = error.issues[0];
+  if (!issue) return undefined;
+  const vars = issue.code === z.ZodIssueCode.custom ? (issue.params as MessageVars | undefined) : undefined;
+  return t(issue.message as MessageKey, vars);
 }
 
 async function authorize(): Promise<
@@ -57,19 +71,19 @@ const optionalUuid = z
   .pipe(uuid.nullable());
 
 const createSchema = z.object({
-  startMonth: requiredText("Choose the first month of the fiscal year.").regex(
+  startMonth: requiredText("finance.budgets.errors.startMonth" satisfies MessageKey).regex(
     /^\d{4}-\d{2}$/,
-    "Choose the first month of the fiscal year.",
+    "finance.budgets.errors.startMonth" satisfies MessageKey,
   ),
-  name: requiredText("Name the budget.", 200),
-  notes: z.string().trim().max(2000, "Keep notes under 2,000 characters.").optional(),
+  name: requiredText("finance.budgets.errors.name" satisfies MessageKey, 200),
+  notes: z.string().trim().max(2000, "finance.budgets.errors.notesTooLong" satisfies MessageKey).optional(),
 });
 
 export async function createBudget(input: unknown): Promise<ActionResult & { id?: string }> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
   const parsed = createSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(await getT(), parsed.error) };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("budget_create", {
     p_organization: auth.organizationId,
@@ -77,7 +91,7 @@ export async function createBudget(input: unknown): Promise<ActionResult & { id?
     p_name: parsed.data.name,
     p_notes: parsed.data.notes ?? null,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not create the budget. Try again.") };
+  if (error) return { ok: false, error: dbMessage(await getT(), error, "finance.budgets.errors.create") };
   revalidatePath(BUDGETS, "layout");
   return { ok: true, id: data as string };
 }
@@ -86,33 +100,39 @@ const lineSchema = z
   .object({
     budgetId: uuid,
     lineId: optionalUuid,
-    accountId: requiredText("Choose an account.").uuid("Choose an account."),
+    accountId: requiredText("finance.budgets.errors.chooseAccount" satisfies MessageKey).uuid(
+      "finance.budgets.errors.chooseAccount" satisfies MessageKey,
+    ),
     fundId: optionalUuid,
     programId: optionalUuid,
     projectId: optionalUuid,
     phasing: z.enum(["even", "custom"]),
     annual: z.string().optional(),
     months: z.array(z.string()).optional(),
-    note: z.string().trim().max(500, "Keep the note under 500 characters.").optional(),
+    note: z.string().trim().max(500, "finance.budgets.errors.noteTooLong" satisfies MessageKey).optional(),
   })
   .transform((v, ctx) => {
     let months: number[] | null = null;
     if (v.phasing === "even") {
       const annual = parseMoneyToCents(v.annual ?? "");
       if (annual === null) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter the annual amount, like 12000.00." });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "finance.budgets.errors.annualAmount" satisfies MessageKey });
         return z.NEVER;
       }
       months = evenSplit(annual);
     } else {
       if (!v.months || v.months.length !== MONTHS_IN_YEAR) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Enter an amount for each month." });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "finance.budgets.errors.eachMonth" satisfies MessageKey });
         return z.NEVER;
       }
       const parsed = v.months.map((m) => (m.trim() === "" ? 0 : parseMoneyToCents(m)));
       const bad = parsed.findIndex((m) => m === null);
       if (bad >= 0) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Month ${bad + 1}: enter an amount like 1000.00.` });
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "finance.budgets.errors.monthAmount" satisfies MessageKey,
+          params: { month: bad + 1 },
+        });
         return z.NEVER;
       }
       months = parsed as number[];
@@ -124,7 +144,7 @@ export async function saveBudgetLine(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
   const parsed = lineSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(await getT(), parsed.error) };
   const v = parsed.data;
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("budget_save_line", {
@@ -137,7 +157,7 @@ export async function saveBudgetLine(input: unknown): Promise<ActionResult> {
     p_month_cents: v.monthCents,
     p_note: v.note || null,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not save the line. Try again.") };
+  if (error) return { ok: false, error: dbMessage(await getT(), error, "finance.budgets.errors.saveLine") };
   revalidatePath(`${BUDGETS}/${v.budgetId}`);
   return { ok: true };
 }
@@ -146,37 +166,39 @@ async function simple(
   fn: "budget_delete_line" | "budget_approve" | "budget_delete_draft",
   param: "p_line" | "p_budget",
   id: string,
-  fallback: string,
+  fallback: MessageKey,
 ): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!uuid.safeParse(id).success) return { ok: false, error: fallback };
+  const t = await getT();
+  if (!uuid.safeParse(id).success) return { ok: false, error: t(fallback) };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc(fn, { [param]: id });
-  if (error) return { ok: false, error: dbMessage(error, fallback) };
+  if (error) return { ok: false, error: dbMessage(t, error, fallback) };
   revalidatePath(BUDGETS, "layout");
   return { ok: true };
 }
 
 export async function deleteBudgetLine(lineId: string): Promise<ActionResult> {
-  return simple("budget_delete_line", "p_line", lineId, "Could not remove the line. Try again.");
+  return simple("budget_delete_line", "p_line", lineId, "finance.budgets.errors.removeLine");
 }
 
 export async function approveBudget(budgetId: string): Promise<ActionResult> {
-  return simple("budget_approve", "p_budget", budgetId, "Could not approve the budget. Try again.");
+  return simple("budget_approve", "p_budget", budgetId, "finance.budgets.errors.approve");
 }
 
 export async function deleteBudgetDraft(budgetId: string): Promise<ActionResult> {
-  return simple("budget_delete_draft", "p_budget", budgetId, "Could not delete the draft. Try again.");
+  return simple("budget_delete_draft", "p_budget", budgetId, "finance.budgets.errors.deleteDraft");
 }
 
 export async function reviseBudget(budgetId: string): Promise<ActionResult & { id?: string }> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!uuid.safeParse(budgetId).success) return { ok: false, error: "Could not start a revision. Try again." };
+  const t = await getT();
+  if (!uuid.safeParse(budgetId).success) return { ok: false, error: t("finance.budgets.errors.revise") };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("budget_revise", { p_budget: budgetId });
-  if (error) return { ok: false, error: dbMessage(error, "Could not start a revision. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "finance.budgets.errors.revise") };
   revalidatePath(BUDGETS, "layout");
   return { ok: true, id: data as string };
 }
