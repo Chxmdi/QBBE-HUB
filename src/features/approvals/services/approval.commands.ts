@@ -9,6 +9,7 @@ import { getLocale, getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translate";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
+  approvalDelegationSchema,
   approvalIssueText,
   approvalRuleSchema,
   commentApprovalSchema,
@@ -126,6 +127,59 @@ export async function withdrawApproval(input: unknown): Promise<ActionResult> {
   if (error) return { ok: false, error: explain(error, t("finance.approvals.errors.withdrawFailed"), t) };
   refresh();
   return { ok: true, id: parsed.data.itemId };
+}
+
+// ---------------------------------------------------------------------------
+// Away cover (delegation)
+// ---------------------------------------------------------------------------
+
+/**
+ * Name a delegate for a date range. The database checks who may set it (the
+ * approver, or an owner/admin with MFA for anyone), refuses chains and
+ * overlaps, and writes the audit event.
+ */
+export async function setApprovalDelegation(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("finance.approvals.away.errors.staffOnly") };
+  const limited = await enforceRateLimit("approval:delegate", session.userId);
+  if (limited) return limited;
+  const parsed = approvalDelegationSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: await firstIssue(parsed.error, t("finance.approvals.away.errors.checkDates")) };
+  const data = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { data: id, error } = await supabase.rpc("set_approval_delegation", {
+    p_organization: session.organizationId,
+    p_approver: data.approverId ?? session.userId,
+    p_delegate: data.delegateId,
+    p_starts_on: data.startsOn,
+    p_ends_on: data.endsOn,
+    p_note: data.note || null,
+  });
+  if (error || !id) {
+    return {
+      ok: false,
+      error:
+        error?.code === "23514"
+          ? (error.message ?? t("finance.approvals.away.errors.checkPeopleDates"))
+          : explain(error ?? {}, t("finance.approvals.away.errors.setFailed"), t),
+    };
+  }
+  refresh();
+  return { ok: true, id: id as string };
+}
+
+export async function endApprovalDelegation(delegationId: string): Promise<ActionResult> {
+  await requireSession();
+  const t = await getT();
+  if (!z.string().uuid().safeParse(delegationId).success) {
+    return { ok: false, error: t("finance.approvals.away.errors.notFound") };
+  }
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("end_approval_delegation", { p_delegation: delegationId });
+  if (error) return { ok: false, error: explain(error, t("finance.approvals.away.errors.endFailed"), t) };
+  refresh();
+  return { ok: true, id: delegationId };
 }
 
 // ---------------------------------------------------------------------------

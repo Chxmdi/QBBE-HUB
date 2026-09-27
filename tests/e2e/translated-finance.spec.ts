@@ -178,6 +178,7 @@ test("every finance screen is in French, with French formats and no axe violatio
   const data = recordedText();
   const paths = [
     "/approvals",
+    "/approvals?tab=away",
     "/admin/approvals",
     "/finance/receipts",
     "/finance/payables",

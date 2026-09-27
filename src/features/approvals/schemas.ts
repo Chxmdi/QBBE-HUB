@@ -196,3 +196,24 @@ export function describeRange(min: number, max: number | null, locale: Locale = 
     max: formatAmount(max, locale),
   });
 }
+
+const isoDate = (message: string) =>
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, message);
+
+/**
+ * Away cover: while an approver is away, their delegate decides their steps.
+ * Without an approver, the signed-in person delegates their own approvals;
+ * naming someone else takes an owner or administrator with MFA.
+ */
+export const approvalDelegationSchema = z
+  .object({
+    approverId: optionalUuid,
+    delegateId: z.string({ required_error: "finance.approvals.away.errors.chooseDelegate" }).uuid("finance.approvals.away.errors.chooseDelegate"),
+    startsOn: isoDate("finance.approvals.away.errors.chooseFirstDay"),
+    endsOn: isoDate("finance.approvals.away.errors.chooseLastDay"),
+    note: z.string().trim().max(500).optional(),
+  })
+  .refine((v) => v.endsOn >= v.startsOn, {
+    message: "finance.approvals.away.errors.lastBeforeFirst",
+    path: ["endsOn"],
+  });
