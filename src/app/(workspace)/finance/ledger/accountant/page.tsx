@@ -105,7 +105,7 @@ export default async function AccountantAccessPage() {
         </h2>
         <ol className="list-decimal space-y-1 pl-5">
           <li>
-            <Link className="text-brand-fg hover:underline" href="/admin">
+            <Link className="text-brand-fg underline" href="/admin">
               {t("finance.ledgerReports.accountant.inviteLink")}
             </Link>{" "}
             {t("finance.ledgerReports.accountant.inviteWithRole")} <strong>{t("finance.ledgerReports.accountant.roleName")}</strong>

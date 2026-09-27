@@ -46,7 +46,10 @@ export async function PositionTable({ current, prior }: { current: Statements; p
     </>
   );
   return (
-    <DataTable minWidth="520px">
+    <DataTable
+      minWidth="520px"
+      scrollLabel={t("finance.ledgerReports.statements.positionHeading", { date: current.to })}
+    >
       <TableHead>
         <TableHeader>{t("finance.ledgerReports.statementTables.positionTitle")}</TableHeader>
         <TableHeader className="w-40 text-right">{current.to}</TableHeader>
@@ -156,7 +159,13 @@ export async function OperationsTable({ current, prior }: { current: Statements;
   const o = current.operations;
   const c = current.changes;
   return (
-    <DataTable minWidth="820px">
+    <DataTable
+      minWidth="820px"
+      scrollLabel={t("finance.ledgerReports.statements.operationsHeading", {
+        from: current.from,
+        to: current.to,
+      })}
+    >
       <TableHead>
         <TableHeader>
           {t("finance.ledgerReports.statementTables.operationsTitle", { from: current.from, to: current.to })}

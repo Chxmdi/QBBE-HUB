@@ -16,6 +16,17 @@ import { loadEntryChoices } from "@/features/ledger/services/ledger.queries";
 import { getLocale, getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translate";
 
+/** What a journal entry came from, for the "From …" line. */
+const SOURCE_KEY: Record<string, MessageKey> = {
+  finance_bill: "finance.ledger.entry.sources.finance_bill",
+  finance_invoice: "finance.ledger.entry.sources.finance_invoice",
+  finance_payment: "finance.ledger.entry.sources.finance_payment",
+  finance_receipt: "finance.ledger.entry.sources.finance_receipt",
+  bank_transaction: "finance.ledger.entry.sources.bank_transaction",
+  gift: "finance.ledger.entry.sources.gift",
+  payroll_run: "finance.ledger.entry.sources.payroll_run",
+};
+
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("finance.ledger.entry.title") };
 }
@@ -211,7 +222,12 @@ export default async function JournalEntryPage({
                 {t("finance.ledger.entry.openReceipt")}
               </a>
             ) : entry.source_type ? (
-              <span>{t("finance.ledger.entry.fromSource", { source: entry.source_type.replace(/_/g, " ") })}</span>
+              <span>{t("finance.ledger.entry.fromSource", {
+                  source:
+                    entry.source_type in SOURCE_KEY
+                      ? t(SOURCE_KEY[entry.source_type])
+                      : entry.source_type.replace(/_/g, " "),
+                })}</span>
             ) : (
               "—"
             )}

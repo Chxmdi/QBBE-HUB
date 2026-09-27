@@ -18,20 +18,20 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
   trialBalance: {
     title: "Balance de vérification",
     description:
-      "Le solde de chaque compte selon les écritures reportées jusqu’à une date. Le total des débits est toujours égal au total des crédits.",
+      "Le solde de chaque compte selon les écritures comptabilisées jusqu’à une date. Le total des débits est toujours égal au total des crédits.",
     optionsLabel: "Options de la balance de vérification",
     asAt: "Au",
-    emptyTitle: "Rien de reporté jusqu’à cette date",
-    emptyDescription: "Les soldes s’affichent ici dès que des écritures sont reportées.",
+    emptyTitle: "Rien de comptabilisé jusqu’à cette date",
+    emptyDescription: "Les soldes s’affichent ici dès que des écritures sont comptabilisées.",
   },
   generalLedger: {
-    title: "Grand livre",
-    description: "Chaque ligne reportée, par compte, avec le solde reporté de la période précédente et un solde cumulatif.",
+    title: "Grand livre général",
+    description: "Chaque ligne comptabilisée, par compte, avec le solde reporté de la période précédente et un solde cumulatif.",
     optionsLabel: "Options du grand livre",
     from: "Du",
     to: "Au",
     truncated: "Affichage des {count} premières lignes. Resserrez les dates ou choisissez un compte.",
-    emptyTitle: "Aucune ligne reportée dans cet intervalle",
+    emptyTitle: "Aucune ligne comptabilisée dans cet intervalle",
     emptyDescription: "Essayez un intervalle de dates plus large, un autre compte ou tous les fonds.",
     entry: "Écriture",
     balance: "Solde",
@@ -41,18 +41,18 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
   statements: {
     title: "États financiers",
     description:
-      "État de la situation financière et état des résultats établis à partir des écritures reportées, par catégorie de fonds, avec l’exercice précédent s’il existe.",
+      "État de la situation financière et état des résultats établis à partir des écritures comptabilisées, par catégorie de fonds, avec l’exercice précédent s’il existe.",
     emptyYearDescription:
-      "Les états s’affichent dès que les périodes d’un exercice existent et que des écritures sont reportées.",
+      "Les états s’affichent dès que les périodes d’un exercice existent et que des écritures sont comptabilisées.",
     positionCsv: "Situation financière (CSV)",
     operationsCsv: "Résultats (CSV)",
-    nothingPostedTitle: "Rien de reporté dans cet exercice",
-    nothingPostedDescription: "Les états se remplissent au fur et à mesure que les écritures sont reportées.",
+    nothingPostedTitle: "Rien de comptabilisé dans cet exercice",
+    nothingPostedDescription: "Les états se remplissent au fur et à mesure que les écritures sont comptabilisées.",
     positionHeading: "État de la situation financière au {date}",
     operationsHeading: "État des résultats, du {from} au {to}",
     footnote:
       "Présentés par catégorie de fonds (non affectés, affectés d’origine interne, affectés d’origine externe) à partir des fonds du grand livre. Les écritures de clôture sont exclues des résultats. Les notes, les flux de trésorerie et tout reclassement selon la présentation du comptable sont préparés par le comptable.",
-    noPriorYear: " Aucune colonne pour l’exercice précédent : rien n’y a été reporté.",
+    noPriorYear: " Aucune colonne pour l’exercice précédent : rien n’y a été comptabilisé.",
   },
   statementTables: {
     positionTitle: "État de la situation financière",
@@ -110,7 +110,7 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
     introBefore: "Exercice du {from} au {to}. Les chiffres proviennent des",
     introLink: "états financiers",
     introAfter:
-      "(écritures reportées seulement). QBBE est un organisme sans but lucratif, et non un organisme de bienfaisance enregistré; la déclaration T3010 des organismes de bienfaisance ne s’applique donc pas. Il revient au comptable de confirmer la ligne du formulaire à laquelle correspond chaque chiffre.",
+      "(écritures comptabilisées seulement). QBBE est un organisme sans but lucratif, et non un organisme de bienfaisance enregistré; la déclaration T3010 des organismes de bienfaisance ne s’applique donc pas. Il revient au comptable de confirmer la ligne du formulaire à laquelle correspond chaque chiffre.",
     cra: "Agence du revenu du Canada",
     revenuQuebec: "Revenu Québec",
     t2Title: "Déclaration de revenus des sociétés",
@@ -125,14 +125,14 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
       "L’équivalent québécois de la T1044. Ses conditions suivraient les conditions fédérales ci-dessous; le comptable le confirme.",
     checklistHeading: "Avant que le comptable prépare les déclarations",
     checklist1: "Chaque mois de l’exercice est rapproché et clôturé (onglet Périodes).",
-    checklist2: "L’exercice est clôturé et l’écriture de clôture est vérifiée (onglet Clôture de l’exercice).",
+    checklist2: "L’exercice est clôturé et l’écriture de clôture est vérifiée (onglet Fin d’exercice).",
     checklist3:
       "Le comptable a le dossier de fin d’exercice : états financiers, balance de vérification, grand livre et pièces justificatives.",
     checklist4: "Le comptable confirme lesquelles des quatre déclarations s’appliquent et leurs échéances.",
     checklist5: "Le comptable les produit. Rien n’est produit à partir de QBBE Hub.",
   },
   yearEnd: {
-    title: "Clôture de l’exercice",
+    title: "Fin d’exercice",
     description:
       "Clôturez un exercice et remettez au comptable tout ce dont il a besoin pour les états financiers et les déclarations.",
     accountantAccess: "Accès du comptable",
@@ -150,7 +150,7 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
     periodsMissing: "Périodes manquantes",
     closeEarlierFirst: "Clôturez d’abord les exercices antérieurs",
     closingNote:
-      "La clôture reporte, le dernier jour de l’exercice, une écriture qui vire chaque solde de produits et de charges à l’actif net du fonds (3000 non affecté, 3100 affecté d’origine interne, 3200 affecté d’origine externe), puis clôture les douze périodes. On ne peut l’annuler qu’en rouvrant l’exercice, ce qui reporte une écriture de réouverture. Les deux étapes sont consignées dans le journal d’audit.",
+      "La clôture comptabilise, le dernier jour de l’exercice, une écriture qui vire chaque solde de produits et de charges à l’actif net du fonds (3000 non affecté, 3100 affecté d’origine interne, 3200 affecté d’origine externe), puis clôture les douze périodes. On ne peut l’annuler qu’en rouvrant l’exercice, ce qui comptabilise une écriture de réouverture. Les deux étapes sont consignées dans le journal d’audit.",
     package: "Dossier de fin d’exercice",
     statementsAndBalances: "États et soldes",
     statementsPrintable: "États financiers (version imprimable)",
@@ -183,14 +183,14 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
     revoke: "Révoquer",
     closeAria: "Clôturer l’exercice {label}",
     closeConfirm:
-      "Clôturer l’exercice {label}? Cette action reporte l’écriture de clôture et clôture chaque période de l’exercice. On ne peut l’annuler qu’en rouvrant l’exercice, ce qui reporte une écriture de réouverture.",
+      "Clôturer l’exercice {label}? Cette action comptabilise l’écriture de clôture et clôture chaque période de l’exercice. On ne peut l’annuler qu’en rouvrant l’exercice, ce qui comptabilise une écriture de réouverture.",
     closeSuccess: "Exercice {label} clôturé.",
     closeYear: "Clôturer l’exercice",
     reopenAria: "Rouvrir l’exercice {label}",
     reopen: "Rouvrir",
-    reopenSuccess: "Exercice {label} rouvert. Une écriture de réouverture a été reportée.",
+    reopenSuccess: "Exercice {label} rouvert. Une écriture de réouverture a été comptabilisée.",
     reopenReason: "Motif de la réouverture de {label}",
-    reopenSubmit: "Rouvrir et reporter l’écriture de réouverture",
+    reopenSubmit: "Rouvrir et comptabiliser l’écriture de réouverture",
   },
   errors: {
     chooseAccountant: "Choisissez le comptable.",

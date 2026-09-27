@@ -165,7 +165,7 @@ export default async function ReturnsPage({
       </div>
       <p className="mb-4 text-[13.5px]">
         {t("finance.ledgerReports.returns.introBefore", { from: year.startsOn, to: year.endsOn })}{" "}
-        <Link className="text-brand-fg hover:underline" href={`/finance/ledger/statements?year=${year.startsOn}`}>
+        <Link className="text-brand-fg underline" href={`/finance/ledger/statements?year=${year.startsOn}`}>
           {t("finance.ledgerReports.returns.introLink")}
         </Link>{" "}
         {t("finance.ledgerReports.returns.introAfter")}

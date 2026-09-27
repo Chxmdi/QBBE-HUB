@@ -150,7 +150,7 @@ export function EntityFormDialog({
           ) : null}
           <div className="flex justify-end gap-2 pt-1 sm:col-span-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
               {submitLabel ?? title}

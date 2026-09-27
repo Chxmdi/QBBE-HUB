@@ -25,7 +25,6 @@ import {
   STATUS_TONE,
   addDays,
   invoiceLabel,
-  invoiceTranslator,
   type DocumentKind,
   type DocumentStatus,
   type PaymentMethod,
@@ -596,7 +595,7 @@ export async function DocumentDetailPage({
           <div className="no-print mb-2 flex justify-end">
             <PrintButton
               label={t("finance.payables.detail.printDocument", {
-                document: invoiceTranslator(record.language)("finance.payables.invoiceSheet.invoice").toLowerCase(),
+                document: t("finance.payables.invoiceSheet.invoice").toLowerCase(),
               })}
             />
           </div>

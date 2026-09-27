@@ -67,7 +67,7 @@ export const payablesFrCA: typeof payablesEn = {
     emptyBills: "Aucune facture fournisseur pour l’instant",
     emptyInvoices: "Aucune facture client pour l’instant",
     emptyBillsDescription:
-      "Saisissez une facture fournisseur, ou transformez en facture une facture numérisée dans Pièces justificatives.",
+      "Saisissez une facture fournisseur, ou transformez en facture une facture numérisée dans Reçus.",
     emptyInvoicesDescription:
       "Créez une facture pour un versement de subvention, une cotisation de membre ou un partenaire.",
     date: "Date",
@@ -177,7 +177,7 @@ export const payablesFrCA: typeof payablesEn = {
     gstAccount: "1200 TPS à recevoir",
     qstAccount: "1210 TVQ à recevoir",
     enteredFromReceiptBefore: "Saisie à partir d’une facture numérisée dans",
-    receiptsLink: "Pièces justificatives",
+    receiptsLink: "Reçus",
     invoicePreviewFr:
       "Voici la facture telle que le client la voit, en français. Comptes de produits : {accounts}.",
     invoicePreviewEn:
@@ -190,7 +190,7 @@ export const payablesFrCA: typeof payablesEn = {
     status: "Statut",
     reversedOn: "Contrepassé le {date}",
     posted: "Comptabilisé",
-    printDocument: "Imprimer ({document})",
+    printDocument: "Imprimer la {document}",
   },
   actions: {
     editDraft: "Modifier le brouillon",

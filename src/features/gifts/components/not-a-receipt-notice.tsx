@@ -14,7 +14,7 @@ export async function NotAReceiptNotice() {
       <div>
         <p className="font-medium">{t("finance.gifts.notice.heading")}</p>
         <p className="mt-1 text-muted">
-          {t("finance.gifts.notice.body")} “{DISCLAIMER_EN}” / “
+          {t("finance.gifts.notice.body")} “<span lang="en">{DISCLAIMER_EN}</span>” / “
           <span lang="fr">{DISCLAIMER_FR}</span>”
         </p>
       </div>
