@@ -51,9 +51,11 @@ export const RATE_LIMITS = {
   // row-level security, and nobody legitimately needs a dozen an hour.
   "export:request": { limit: 10, windowSeconds: 3600 },
   "job:run": { limit: 240, windowSeconds: 60 },
+  "approval:submit": { limit: 60, windowSeconds: 3600 },
   "ledger:write": { limit: 240, windowSeconds: 60 },
   "gift:write": { limit: 240, windowSeconds: 60 },
   "gift:email": { limit: 60, windowSeconds: 3600 },
+  "payables:write": { limit: 240, windowSeconds: 60 },
   "bank:write": { limit: 240, windowSeconds: 60 },
 } as const;
 
