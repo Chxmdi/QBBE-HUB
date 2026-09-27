@@ -60,6 +60,7 @@ export const en = {
       forms: "Forms",
       projects: "Projects",
       programs: "Programs",
+      approvals: "Approvals",
       inbox: "Inbox",
       channels: "Channels",
       messages: "Messages",

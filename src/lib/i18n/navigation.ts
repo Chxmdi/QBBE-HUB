@@ -18,6 +18,7 @@ const ITEM_KEYS: Record<string, MessageKey> = {
   "/forms": "nav.items.forms",
   "/projects": "nav.items.projects",
   "/programs": "nav.items.programs",
+  "/approvals": "nav.items.approvals",
   "/inbox": "nav.items.inbox",
   "/channels": "nav.items.channels",
   "/messages": "nav.items.messages",

@@ -64,6 +64,7 @@ export const frCA: Messages = {
       forms: "Formulaires",
       projects: "Projets",
       programs: "Programmes",
+      approvals: "Approbations",
       inbox: "Boîte de réception",
       channels: "Canaux",
       messages: "Messages",
