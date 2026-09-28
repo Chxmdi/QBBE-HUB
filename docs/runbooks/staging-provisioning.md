@@ -75,24 +75,49 @@ provisions the organization.
 to `auth.users` with a known fixture password, which is acceptable on a local
 container and is not acceptable on a hosted environment.
 
-## 4. Bind the GitHub environment
+## 4. Bind the GitHub environment and the Netlify site
 
-1. In the repository settings, open **Settings → Environments → staging**
-   (create it if absent).
-2. Set these, exactly as `environment-ownership.md` specifies:
+The deploy workflow reads two kinds of setting from two places. Put each one
+where the workflow looks, or `scripts/check-deploy-environment.sh` stops the
+run with the name of what is missing.
 
-   | Name | Kind | Value |
-   |---|---|---|
-   | `NETLIFY_SITE_ID` | variable | `2169b17a-8dc3-49de-a466-4281e1285de2` |
-   | `NETLIFY_AUTH_TOKEN` | secret | staging-capable deploy token |
-   | `RELEASE_ENABLED` | variable | `false` until this runbook is complete |
-   | `NEXT_PUBLIC_SUPABASE_URL` | variable | the **staging** project URL |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | secret | the **staging** anon key |
-   | `SUPABASE_SERVICE_ROLE_KEY` | secret | the **staging** service-role key |
+**a. GitHub, per environment.** Settings → Environments → **staging** (create
+it if absent):
 
-3. **Check every value against the production environment before saving.** A
-   production service-role key pasted into staging means a staging deploy can
-   rewrite production data, and nothing later in this runbook would notice.
+| Name | Kind | Value |
+|---|---|---|
+| `NETLIFY_SITE_ID` | variable | `2169b17a-8dc3-49de-a466-4281e1285de2` (the check script refuses any other) |
+| `NETLIFY_AUTH_TOKEN` | secret | a Netlify personal access token of the QBBE account that owns the staging site |
+| `SUPABASE_PROJECT_REF` | variable | the **staging** project ref |
+| `SUPABASE_ACCESS_TOKEN` | secret | a Supabase personal access token of a QBBE account, used for migrations |
+| `SUPABASE_DB_PASSWORD` | secret | the **staging** database password |
+| `SITE_URL` | variable | the staging site's address, e.g. `https://qbbe-hub-staging.netlify.app` |
+| `RELEASE_ENABLED` | variable | `true` once a–c are set. The workflow publishes nothing while it is anything else, so staging cannot be deployed with it `false`. Production keeps it `false` until #21. |
+
+**b. GitHub, repository level.** Settings → Secrets and variables → Actions →
+**Variables** tab:
+
+| Name | Value |
+|---|---|
+| `STAGING_SUPABASE_PROJECT_REF` | the staging project ref |
+| `PRODUCTION_SUPABASE_PROJECT_REF` | the production project ref. Required even for a staging-only deploy: the check refuses unless both are registered and differ. |
+
+**c. Netlify, on the staging site.** Site configuration → Environment
+variables. The app reads these at build and run time; GitHub does not pass
+them:
+
+| Name | Value |
+|---|---|
+| `NEXT_PUBLIC_APP_URL` | same as `SITE_URL` above |
+| `NEXT_PUBLIC_SUPABASE_URL` | the **staging** project URL (the workflow reads it back and refuses a production URL) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the **staging** anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | the **staging** service-role key; mark it secret |
+| `CRON_JOB_SECRET` | 32+ random characters (`openssl rand -base64 48`); the same value goes into step 5b |
+| `EMAIL_RECIPIENT_ALLOWLIST` | QBBE test addresses, e.g. `@qbbe.org`; never blank on staging |
+
+**Check every value against production before saving.** A production
+service-role key pasted into staging means a staging deploy can rewrite
+production data, and nothing later in this runbook would notice.
 
 ## 5. Deploy the frozen commit
 
@@ -122,6 +147,18 @@ deployed is whatever `main` points at the moment you dispatch.
    certifying a different commit than your evidence claims. Cancel it.
 5. Record the resulting deploy URL, the workflow run URL and the Netlify deploy
    ID.
+
+**5b. Wire background jobs.** In the staging project's SQL editor, once:
+
+```sql
+select app.configure_job_runner('<SITE_URL>', '<CRON_JOB_SECRET>');
+```
+
+Then re-run the workflow, or open `<SITE_URL>/api/health/jobs`. **You should
+see** `{"jobRunner":"ready"}`. Until then the deploy's last check fails with
+the fix, and Admin → Jobs shows a red banner. Uploaded files stay "Security
+check pending" on staging regardless until a ClamAV host exists
+(`document-scanning.md`).
 
 **Known gap, worth fixing before this is done often.** Tagging the commit and
 dispatching with `--ref <tag>` would remove the race, but the publish job's
