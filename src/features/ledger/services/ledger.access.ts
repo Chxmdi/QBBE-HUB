@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { requireSession, type SessionContext } from "@/lib/auth";
+import { requireSession, type SessionContext, NO_ACCESS_REDIRECT } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 
 export interface LedgerSettings {
@@ -51,7 +51,7 @@ export async function getLedgerAccess(): Promise<LedgerAccess> {
   const session = await requireSession();
   const supabase = await createSupabasePageClient();
   const isAccountant = !session.isStaff && (await hasAccountantGrant(supabase, session));
-  if (!session.isStaff && !isAccountant) redirect("/");
+  if (!session.isStaff && !isAccountant) redirect(NO_ACCESS_REDIRECT);
   const { data } = await supabase
     .from("ledger_settings")
     .select("chart_approved_on, chart_approved_by_name, chart_approval_recorded_at")

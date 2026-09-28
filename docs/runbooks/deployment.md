@@ -59,6 +59,15 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
    The secret must match the `CRON_JOB_SECRET` environment variable and be at
    least 32 characters. Full details in `jobs.md`.
 
+   Skipping this step is easy to miss: pages load and uploads succeed, but no
+   file ever passes its security check (so none can be opened) and no
+   notification email is sent. The deploy workflow's smoke job now checks it:
+   `GET /api/health/jobs` answers `{"jobRunner":"ready"}` (HTTP 200) only when
+   the stored URL is this site and the stored secret matches the site's
+   `CRON_JOB_SECRET`; anything else (`not_configured`, `other_site`,
+   `secret_mismatch`, `app_secret_missing`) fails the deploy with the fix.
+   Admin → Jobs shows the same status as a red banner.
+
 ## Branches and gates (CICD-001)
 
 `main` is the release branch and the only one production deploys from.

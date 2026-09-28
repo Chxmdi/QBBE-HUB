@@ -122,8 +122,13 @@ function AttentionTask({ task, reason }: { task: Task; reason: string }) {
   );
 }
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ denied?: string }>;
+}) {
   const session = await requireSession();
+  const denied = (await searchParams).denied === "1";
   const [t, locale] = await Promise.all([getT(), getLocale()]);
   const lens = dashboardLens(session.role);
   const showPortfolio = lens !== "volunteer";
@@ -208,6 +213,19 @@ export default async function HomePage() {
               : t("home.overview")}
           </p>
         </header>
+
+        {denied ? (
+          <div
+            role="status"
+            className="mb-5 flex items-start gap-3 rounded-(--radius-md) border border-warning/40 bg-warning/10 px-4 py-3"
+          >
+            <AlertTriangle className="mt-0.5 size-4.5 shrink-0 text-warning-fg" aria-hidden />
+            <div>
+              <p className="text-[13.5px] font-semibold">{t("home.denied.title")}</p>
+              <p className="meta">{t("home.denied.body")}</p>
+            </div>
+          </div>
+        ) : null}
 
         {/* Required announcements beyond the rail stay pinned until acked */}
         {data.requiredAnnouncements.filter((a) => a.id !== latestAnn?.id)

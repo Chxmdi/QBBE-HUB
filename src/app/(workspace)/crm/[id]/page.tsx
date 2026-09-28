@@ -21,7 +21,7 @@ import { DeepLinkScroll } from "@/components/shared/deep-link-scroll";
 import { OpportunityPipeline } from "@/features/crm/components/opportunity-pipeline";
 import { getOpportunitiesForCrmOrganization } from "@/features/crm/services/opportunity.queries";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
-import { requireSession } from "@/lib/auth";
+import { requireSession, NO_ACCESS_REDIRECT } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate, relativeTime } from "@/lib/utils";
@@ -38,7 +38,7 @@ export default async function CrmDetailPage({
   searchParams: Promise<{ opportunity?: string; contact?: string }>;
 }) {
   const session = await requireSession();
-  if (!session.isStaff) redirect("/");
+  if (!session.isStaff) redirect(NO_ACCESS_REDIRECT);
   const { id } = await params;
   const { opportunity: highlightId = null, contact: highlightContact = null } = await searchParams;
   // The workspace's calendar date, not the server's: this drives both the

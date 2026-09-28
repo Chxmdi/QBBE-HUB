@@ -13,9 +13,12 @@ const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth", "/account-inactive", "/fo
 export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   // Cron/job routes authenticate with CRON_JOB_SECRET, not a user session;
-  // provider webhooks authenticate with their own signatures.
+  // provider webhooks authenticate with their own signatures. The job-runner
+  // health check is read by the deploy smoke test before anyone signs in and
+  // answers a single status word.
   if (
     path.startsWith("/api/jobs/") ||
+    path === "/api/health/jobs" ||
     path === "/api/integrations/gmail/push" ||
     path === "/api/integrations/email/webhook"
   ) {
