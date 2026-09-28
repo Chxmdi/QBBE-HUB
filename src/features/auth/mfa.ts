@@ -1,4 +1,7 @@
 import type { Factor } from "@supabase/supabase-js";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+
+const english = createTranslator("en");
 
 export interface TotpFactorOption {
   id: string;
@@ -23,12 +26,15 @@ export function requiresAdministratorMfa(
   );
 }
 
-export function verifiedTotpFactors(factors: Factor[]): TotpFactorOption[] {
+export function verifiedTotpFactors(
+  factors: Factor[],
+  t: TranslateFn = english,
+): TotpFactorOption[] {
   return factors
     .filter((factor) => factor.factor_type === "totp" && factor.status === "verified")
     .map((factor, index) => ({
       id: factor.id,
-      name: factor.friendly_name?.trim() || `Authenticator ${index + 1}`,
+      name: factor.friendly_name?.trim() || t("auth.mfa.fallbackName", { number: index + 1 }),
     }));
 }
 
@@ -46,20 +52,21 @@ export function isValidTotpCode(value: string): boolean {
   return /^\d{6}$/.test(value);
 }
 
-export function mfaErrorMessage(message: string): string {
+/** Turns a provider error into a sentence for the person, in their language. */
+export function mfaErrorMessage(message: string, t: TranslateFn = english): string {
   const normalized = message.toLowerCase();
   if (normalized.includes("expired")) {
-    return "That code expired. Wait for a new code in your authenticator app and try again.";
+    return t("auth.mfa.errors.expired");
   }
   if (
     normalized.includes("verify") ||
     normalized.includes("verification") ||
     normalized.includes("code")
   ) {
-    return "That code was not accepted. Check the six digits and try again.";
+    return t("auth.mfa.errors.rejected");
   }
   if (normalized.includes("factor") && normalized.includes("exist")) {
-    return "Authenticator setup is already in progress. Retry setup to continue.";
+    return t("auth.mfa.errors.inProgress");
   }
-  return "Multi-factor authentication is temporarily unavailable. Try again.";
+  return t("auth.mfa.errors.unavailable");
 }

@@ -12,6 +12,17 @@
  */
 
 import { absoluteUrl } from "@/lib/env";
+import { htmlLang, isLocale, type Locale } from "@/lib/i18n/config";
+import { formattersFor } from "@/lib/i18n/format";
+import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
+
+/**
+ * Mail goes out in the recipient's saved language (`user_profile.locale`),
+ * never the language of whoever triggered it. Null or unknown means English.
+ */
+function recipientLocale(value: string | null | undefined): Locale {
+  return isLocale(value) ? value : "en";
+}
 
 // Email clients ignore CSS custom properties, so these are literals. They
 // are the light-theme design tokens from globals.css and a test holds them
@@ -49,6 +60,8 @@ export interface NotificationEmailInput {
   context?: string | null;
   ownerLabel?: string | null;
   dueOn?: string | null;
+  /** The recipient's `user_profile.locale`; null means English. */
+  locale?: string | null;
 }
 
 export interface DigestItem {
@@ -67,6 +80,8 @@ export interface DigestEmailInput {
   groups: { category: string; items: DigestItem[] }[];
   totalCount: number;
   shownCount: number;
+  /** The recipient's `user_profile.locale`; null means English. */
+  locale?: string | null;
 }
 
 export function escapeHtml(value: string): string {
@@ -107,13 +122,26 @@ export const CATEGORY_LABELS: Record<string, string> = {
   meetings: "Meeting reminders",
 };
 
-export function categoryLabel(category: string): string {
-  return CATEGORY_LABELS[category] ?? "Updates";
+/**
+ * The heading for a category. `CATEGORY_LABELS` keeps the English wording;
+ * pass `t` for another language.
+ */
+export function categoryLabel(category: string, t?: TranslateFn): string {
+  if (!t) return CATEGORY_LABELS[category] ?? "Updates";
+  return category in CATEGORY_LABELS
+    ? t(`notifications.email.categories.${category}` as MessageKey)
+    : t("notifications.email.fallbackCategory");
 }
 
-function shell(heading: string, inner: string, footerNote: string): string {
+function shell(
+  heading: string,
+  inner: string,
+  footerNote: string,
+  locale: Locale,
+  t: TranslateFn,
+): string {
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="${htmlLang(locale)}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(heading)}</title></head>
 <body style="margin:0;padding:0;background:${CANVAS};">
@@ -127,7 +155,7 @@ function shell(heading: string, inner: string, footerNote: string): string {
 ${inner}
 </td></tr>
 <tr><td style="padding:16px 24px;border-top:1px solid ${LINE};font:400 12px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${MUTED};">
-${escapeHtml(footerNote)} <a href="${safeLink("/settings/notifications")}" style="color:${BRAND};">Manage email preferences</a>.
+${escapeHtml(footerNote)} <a href="${safeLink("/settings/notifications")}" style="color:${BRAND};">${escapeHtml(t("notifications.email.manage"))}</a>.
 </td></tr>
 </table>
 </td></tr></table>
@@ -140,29 +168,39 @@ function button(href: string, label: string): string {
 </td></tr></table>`;
 }
 
-function detailLine(label: string, value: string | null | undefined): string | null {
-  if (!value) return null;
-  return `${label}: ${value}`;
+/**
+ * A due date as the recipient reads it. English keeps the stored
+ * `YYYY-MM-DD`, as it always has; French gets "20 août 2026". The value is a
+ * calendar date, so it is read at noon UTC and cannot slip a day.
+ */
+function dueLabel(dueOn: string | null | undefined, locale: Locale): string | null | undefined {
+  if (!dueOn || locale === "en" || !/^\d{4}-\d{2}-\d{2}$/.test(dueOn)) return dueOn;
+  return formattersFor(locale).date(`${dueOn}T12:00:00Z`, "UTC");
 }
 
 /** A single notification, sent as it happens. */
 export function renderNotificationEmail(input: NotificationEmailInput): EmailBody {
+  const locale = recipientLocale(input.locale);
+  const t = createTranslator(locale);
+  const detailLine = (label: MessageKey, value: string | null | undefined): string | null =>
+    value ? t("notifications.email.detailLine", { label: t(label), value }) : null;
+
   const href = safeLink(input.link);
   const subject = input.title;
   const details = [
-    detailLine("Action", input.action),
-    detailLine("Context", input.context),
-    detailLine("Owner", input.ownerLabel),
-    detailLine("Due", input.dueOn),
+    detailLine("notifications.email.detail.action", input.action),
+    detailLine("notifications.email.detail.context", input.context),
+    detailLine("notifications.email.detail.owner", input.ownerLabel),
+    detailLine("notifications.email.detail.due", dueLabel(input.dueOn, locale)),
   ].filter((line): line is string => Boolean(line));
 
   const text = [
     `${input.title}`,
     details.length ? `\n${details.join("\n")}` : "",
     input.body ? `\n${input.body}` : "",
-    `\n\nOpen it: ${href}`,
+    `\n\n${t("notifications.email.openIt", { url: href })}`,
     `\n\n— ${input.organizationName} · QBBE Hub`,
-    `\nManage email preferences: ${safeLink("/settings/notifications")}`,
+    `\n${t("notifications.email.manageText", { url: safeLink("/settings/notifications") })}`,
   ].join("");
 
   const detailHtml = details
@@ -174,31 +212,44 @@ export function renderNotificationEmail(input: NotificationEmailInput): EmailBod
 
   const inner = `
 <p style="margin:0 0 4px;font:600 18px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">${escapeHtml(input.title)}</p>
-<p style="margin:0;font-size:13px;color:${MUTED};">${escapeHtml(categoryLabel(input.category))}</p>
+<p style="margin:0;font-size:13px;color:${MUTED};">${escapeHtml(categoryLabel(input.category, t))}</p>
 ${detailHtml}
 ${input.body ? `<p style="margin:14px 0 0;">${escapeHtml(input.body)}</p>` : ""}
-${button(href, "Open in QBBE Hub")}`;
+${button(href, t("notifications.email.openInHub"))}`;
 
   return {
     subject,
     text,
-    html: shell(subject, inner, `Sent to ${input.recipientName} by ${input.organizationName}.`),
+    html: shell(
+      subject,
+      inner,
+      t("notifications.email.sentTo", {
+        name: input.recipientName,
+        organization: input.organizationName,
+      }),
+      locale,
+      t,
+    ),
   };
 }
 
 /** The grouped digest of everything still unread. */
 export function renderDigestEmail(input: DigestEmailInput): EmailBody {
+  const locale = recipientLocale(input.locale);
+  const t = createTranslator(locale);
+  const count = (value: number) => formattersFor(locale).number(value);
   const subject =
     input.totalCount === 1
-      ? "1 update waiting in QBBE Hub"
-      : `${input.totalCount} updates waiting in QBBE Hub`;
+      ? t("notifications.email.digestSubjectOne")
+      : t("notifications.email.digestSubjectOther", { count: count(input.totalCount) });
+  const more = (value: number) => t("notifications.email.more", { count: count(value) });
 
   const overflow = input.totalCount - input.shownCount;
 
   const textGroups = input.groups
     .map(
       (group) =>
-        `${categoryLabel(group.category).toUpperCase()}\n` +
+        `${categoryLabel(group.category, t).toUpperCase()}\n` +
         group.items
           .map((item) => `  · ${item.title}\n    ${safeLink(item.link)}`)
           .join("\n"),
@@ -206,21 +257,21 @@ export function renderDigestEmail(input: DigestEmailInput): EmailBody {
     .join("\n\n");
 
   const text = [
-    `Hello ${input.recipientName},`,
+    t("notifications.email.hello", { name: input.recipientName }),
     ``,
-    `Here is what is waiting for you.`,
+    t("notifications.email.waiting"),
     ``,
     textGroups,
-    overflow > 0 ? `\n…and ${overflow} more.` : "",
+    overflow > 0 ? `\n${more(overflow)}` : "",
     ``,
-    `Open your inbox: ${safeLink("/inbox")}`,
-    `Manage email preferences: ${safeLink("/settings/notifications")}`,
+    t("notifications.email.openInboxText", { url: safeLink("/inbox") }),
+    t("notifications.email.manageText", { url: safeLink("/settings/notifications") }),
   ].join("\n");
 
   const htmlGroups = input.groups
     .map(
       (group) => `
-<p style="margin:22px 0 8px;font:600 12px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:${MUTED};">${escapeHtml(categoryLabel(group.category))}</p>
+<p style="margin:22px 0 8px;font:600 12px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:${MUTED};">${escapeHtml(categoryLabel(group.category, t))}</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 ${group.items
   .map(
@@ -235,15 +286,24 @@ ${item.body ? `<br><span style="font-size:13px;color:${MUTED};">${escapeHtml(ite
     .join("");
 
   const inner = `
-<p style="margin:0 0 4px;font:600 18px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">Hello ${escapeHtml(input.recipientName)},</p>
-<p style="margin:0;color:${MUTED};font-size:14px;">Here is what is waiting for you.</p>
+<p style="margin:0 0 4px;font:600 18px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">${escapeHtml(t("notifications.email.hello", { name: input.recipientName }))}</p>
+<p style="margin:0;color:${MUTED};font-size:14px;">${escapeHtml(t("notifications.email.waiting"))}</p>
 ${htmlGroups}
-${overflow > 0 ? `<p style="margin:18px 0 0;font-size:13px;color:${MUTED};">…and ${overflow} more.</p>` : ""}
-${button(safeLink("/inbox"), "Open your inbox")}`;
+${overflow > 0 ? `<p style="margin:18px 0 0;font-size:13px;color:${MUTED};">${escapeHtml(more(overflow))}</p>` : ""}
+${button(safeLink("/inbox"), t("notifications.email.openInbox"))}`;
 
   return {
     subject,
     text,
-    html: shell(subject, inner, `Daily digest for ${input.recipientName}, ${input.organizationName}.`),
+    html: shell(
+      subject,
+      inner,
+      t("notifications.email.digestFooter", {
+        name: input.recipientName,
+        organization: input.organizationName,
+      }),
+      locale,
+      t,
+    ),
   };
 }

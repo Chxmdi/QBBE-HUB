@@ -4,9 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Checkbox } from "@/components/ui/input";
 import { setReduceMotion } from "@/features/onboarding/services/onboarding.commands";
+import { useT } from "@/lib/i18n/client";
 
 /** Settings control for the in-app reduced-motion preference (UI-009). */
 export function ReduceMotionSetting({ initial }: { initial: boolean }) {
+  const t = useT();
   const router = useRouter();
   const [checked, setChecked] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -15,7 +17,7 @@ export function ReduceMotionSetting({ initial }: { initial: boolean }) {
   return (
     <section aria-labelledby="display-heading" className="mt-8">
       <h2 id="display-heading" className="section-heading">
-        Display
+        {t("settings.display.heading")}
       </h2>
       <div className="mt-3 flex items-start gap-3">
         <Checkbox
@@ -32,7 +34,7 @@ export function ReduceMotionSetting({ initial }: { initial: boolean }) {
               const result = await setReduceMotion(next);
               if (!result.ok) {
                 setChecked(!next);
-                setError(result.error ?? "Could not save the setting.");
+                setError(result.error ?? t("settings.display.saveFailed"));
                 return;
               }
               router.refresh();
@@ -41,11 +43,10 @@ export function ReduceMotionSetting({ initial }: { initial: boolean }) {
         />
         <div>
           <label htmlFor="reduce-motion" className="text-[14px] font-medium">
-            Reduce motion
+            {t("settings.display.reduceMotion")}
           </label>
           <p id="reduce-motion-help" className="text-[13px] text-muted">
-            Turns off animations and smooth scrolling in QBBE Hub, even if your
-            device is not set to reduce motion.
+            {t("settings.display.reduceMotionHelp")}
           </p>
           {error ? (
             <p role="alert" className="mt-1 text-[12.5px] text-danger-fg">

@@ -4,6 +4,14 @@
  */
 export const shellEn = {
   shell: {
+    rateLimit: {
+      soon: "You're doing that too quickly. Wait a moment and try again.",
+      secondOne: "{count} second",
+      secondOther: "{count} seconds",
+      minuteOne: "{count} minute",
+      minuteOther: "{count} minutes",
+      later: "You're doing that too quickly. Try again in about {wait}.",
+    },
     optional: "(optional)",
     loading: {
       generic: "Loading",

@@ -3,6 +3,14 @@ import type { shellEn } from "./shell.en";
 /** Français québécois — shell (#141). À faire réviser. */
 export const shellFrCA: typeof shellEn = {
   shell: {
+    rateLimit: {
+      soon: "Vous faites cela trop rapidement. Attendez un instant, puis réessayez.",
+      secondOne: "{count} seconde",
+      secondOther: "{count} secondes",
+      minuteOne: "{count} minute",
+      minuteOther: "{count} minutes",
+      later: "Vous faites cela trop rapidement. Réessayez dans environ {wait}.",
+    },
     optional: "(facultatif)",
     loading: {
       generic: "Chargement",

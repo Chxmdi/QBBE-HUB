@@ -69,7 +69,7 @@ export default async function SettingsPage() {
       />
       <ReduceMotionSetting initial={profile?.reduce_motion === true} />
       {session.isAdmin && factorResult.data ? (
-        <MfaSettings initialFactors={verifiedTotpFactors(factorResult.data.all)} />
+        <MfaSettings initialFactors={verifiedTotpFactors(factorResult.data.all, t)} />
       ) : null}
     </div>
   );

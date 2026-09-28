@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
@@ -30,7 +32,8 @@ function isRealTimezone(value: string): boolean {
 const hour = z.coerce.number().int().min(0).max(23);
 const deliveryMode = z.enum(["off", "immediate", "daily", "weekly"]);
 
-const preferencesSchema = z.object({
+/** Built per call so the time-zone message is in the person's language. */
+const preferencesSchema = (t: TranslateFn) => z.object({
   emailCritical: z.boolean().optional(),
   emailDigest: z.boolean().optional(),
   emailAssignments: z.boolean().optional(),
@@ -45,7 +48,7 @@ const preferencesSchema = z.object({
     .string()
     .trim()
     .max(80)
-    .refine(isRealTimezone, "That is not a recognised time zone.")
+    .refine(isRealTimezone, t("notifications.errors.badTimezone"))
     .optional(),
   categoryModes: z
     .object({
@@ -77,11 +80,12 @@ export async function saveNotificationPreferences(
   input: unknown,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  const parsed = preferencesSchema.safeParse(input);
+  const t = await getT();
+  const parsed = preferencesSchema(t).safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Those preferences are not valid.",
+      error: parsed.error.issues[0]?.message ?? t("notifications.errors.invalid"),
     };
   }
 
@@ -117,7 +121,7 @@ export async function saveNotificationPreferences(
     if ((start === null) !== (end === null)) {
       return {
         ok: false,
-        error: "Set both a start and an end for quiet hours, or clear both.",
+        error: t("notifications.errors.quietBothEnds"),
       };
     }
   }
@@ -127,7 +131,7 @@ export async function saveNotificationPreferences(
     .from("notification_preference")
     .upsert(patch, { onConflict: "user_id" });
 
-  if (error) return { ok: false, error: "Could not save your preferences." };
+  if (error) return { ok: false, error: t("notifications.errors.saveFailed") };
 
   revalidatePath("/settings/notifications");
   revalidatePath("/", "layout");
@@ -140,8 +144,9 @@ export async function setThreadMuted(
   muted: boolean,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   if (!z.string().uuid().safeParse(threadId).success) {
-    return { ok: false, error: "Unknown thread." };
+    return { ok: false, error: t("notifications.errors.unknownThread") };
   }
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
@@ -161,7 +166,7 @@ export async function setThreadMuted(
     },
     { onConflict: "user_id" },
   );
-  if (error) return { ok: false, error: "Could not update that thread." };
+  if (error) return { ok: false, error: t("notifications.errors.threadFailed") };
   revalidatePath("/", "layout");
   return { ok: true };
 }

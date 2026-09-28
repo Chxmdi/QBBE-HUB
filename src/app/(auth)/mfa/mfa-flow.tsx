@@ -15,6 +15,7 @@ import {
   type TotpFactorOption,
 } from "@/features/auth/mfa";
 import { recordMfaSecurityEvent } from "@/features/auth/services/mfa.commands";
+import { useT } from "@/lib/i18n/client";
 import { safeRedirectPath } from "@/lib/safe-redirect";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -27,6 +28,7 @@ type Enrollment = {
 type Phase = "checking" | "enrolling" | "challenge" | "setup" | "error";
 
 export function MfaFlow() {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialized = useRef(false);
@@ -53,7 +55,7 @@ export function MfaFlow() {
     const supabase = createSupabaseBrowserClient();
     const { data: existing, error: listError } = await supabase.auth.mfa.listFactors();
     if (listError) {
-      setError(mfaErrorMessage(listError.message));
+      setError(mfaErrorMessage(listError.message, t));
       setPhase("error");
       return;
     }
@@ -63,7 +65,7 @@ export function MfaFlow() {
     for (const factorId of unverifiedTotpFactorIds(existing.all)) {
       const { error: removeError } = await supabase.auth.mfa.unenroll({ factorId });
       if (removeError) {
-        setError(mfaErrorMessage(removeError.message));
+        setError(mfaErrorMessage(removeError.message, t));
         setPhase("error");
         return;
       }
@@ -71,11 +73,11 @@ export function MfaFlow() {
 
     const { data, error: enrollError } = await supabase.auth.mfa.enroll({
       factorType: "totp",
-      friendlyName: "QBBE Hub authenticator",
+      friendlyName: t("auth.mfa.friendlyName"),
       issuer: "QBBE Hub",
     });
     if (enrollError) {
-      setError(mfaErrorMessage(enrollError.message));
+      setError(mfaErrorMessage(enrollError.message, t));
       setPhase("error");
       return;
     }
@@ -86,7 +88,7 @@ export function MfaFlow() {
       secret: data.totp.secret.trim(),
     });
     setPhase("setup");
-  }, []);
+  }, [t]);
 
   const initialize = useCallback(async () => {
     setPhase("checking");
@@ -99,12 +101,12 @@ export function MfaFlow() {
       ]);
 
     if (assuranceError || factorsError) {
-      setError(mfaErrorMessage((assuranceError ?? factorsError)!.message));
+      setError(mfaErrorMessage((assuranceError ?? factorsError)!.message, t));
       setPhase("error");
       return;
     }
 
-    const verified = verifiedTotpFactors(data.all);
+    const verified = verifiedTotpFactors(data.all, t);
     if (
       !requiresAdministratorMfa(
         true,
@@ -120,7 +122,7 @@ export function MfaFlow() {
     if (assurance.currentLevel === "aal2" && assurance.nextLevel === "aal1") {
       const { error: refreshError } = await supabase.auth.refreshSession();
       if (refreshError) {
-        setError(mfaErrorMessage(refreshError.message));
+        setError(mfaErrorMessage(refreshError.message, t));
         setPhase("error");
         return;
       }
@@ -134,7 +136,7 @@ export function MfaFlow() {
     }
 
     await startEnrollment();
-  }, [finish, startEnrollment]);
+  }, [finish, startEnrollment, t]);
 
   useEffect(() => {
     if (initialized.current) return;
@@ -145,13 +147,13 @@ export function MfaFlow() {
   async function verify(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!isValidTotpCode(code)) {
-      setError("Enter the six-digit code from your authenticator app.");
+      setError(t("auth.mfa.enterCode"));
       return;
     }
 
     const factorId = enrollment?.factorId ?? selectedFactorId;
     if (!factorId) {
-      setError("Choose an authenticator and try again.");
+      setError(t("auth.mfa.chooseAuthenticator"));
       return;
     }
 
@@ -166,7 +168,7 @@ export function MfaFlow() {
 
     if (verifyError) {
       setCode("");
-      setError(mfaErrorMessage(verifyError.message));
+      setError(mfaErrorMessage(verifyError.message, t));
       return;
     }
 
@@ -180,7 +182,7 @@ export function MfaFlow() {
     return (
       <div className="card p-6 text-center" role="status" aria-live="polite">
         <p className="text-sm font-medium">
-          {phase === "checking" ? "Checking your security settings…" : "Preparing authenticator setup…"}
+          {phase === "checking" ? t("auth.mfa.checking") : t("auth.mfa.preparing")}
         </p>
       </div>
     );
@@ -191,7 +193,7 @@ export function MfaFlow() {
       <div className="card space-y-4 p-6">
         <p role="alert" className="text-[13px] text-danger-fg">{error}</p>
         <Button type="button" onClick={() => void initialize()} className="w-full">
-          Retry
+          {t("auth.mfa.retry")}
         </Button>
         <SignOutButton />
       </div>
@@ -204,24 +206,24 @@ export function MfaFlow() {
         {phase === "setup" && enrollment ? (
           <div className="space-y-4">
             <div>
-              <h2 className="text-base font-semibold">Set up an authenticator</h2>
+              <h2 className="text-base font-semibold">{t("auth.mfa.setupHeading")}</h2>
               <p className="mt-1 text-[13px] leading-relaxed text-muted">
-                Scan this QR code with your authenticator app, then enter its six-digit code.
+                {t("auth.mfa.setupBody")}
               </p>
             </div>
             <div className="flex justify-center rounded-(--radius-sm) bg-white p-3">
               <Image
                 src={enrollment.qrCode}
-                alt="QR code for QBBE Hub authenticator setup"
+                alt={t("auth.mfa.qrAlt")}
                 width={224}
                 height={224}
                 unoptimized
               />
             </div>
             <div>
-              <Label htmlFor="totp-secret">Can’t scan the QR code?</Label>
+              <Label htmlFor="totp-secret">{t("auth.mfa.cantScan")}</Label>
               <p id="totp-secret-help" className="mb-2 text-[12.5px] text-muted">
-                Enter this setup key manually in your authenticator app.
+                {t("auth.mfa.manualHelp")}
               </p>
               <Input
                 id="totp-secret"
@@ -236,17 +238,16 @@ export function MfaFlow() {
           </div>
         ) : (
           <div>
-            <h2 className="text-base font-semibold">Enter your security code</h2>
+            <h2 className="text-base font-semibold">{t("auth.mfa.challengeHeading")}</h2>
             <p className="mt-1 text-[13px] leading-relaxed text-muted">
-              Open your authenticator app and enter the current code for QBBE Hub.
+              {t("auth.mfa.challengeBody")}
             </p>
             <p className="mt-2 text-[12.5px] leading-relaxed text-muted">
-              Lost access to every authenticator? Sign out and contact the QBBE
-              credential custodian. Factor resets require verified operator recovery.
+              {t("auth.mfa.lostAccess")}
             </p>
             {factors.length > 1 ? (
               <div className="mt-4">
-                <Label htmlFor="totp-factor">Authenticator</Label>
+                <Label htmlFor="totp-factor">{t("auth.mfa.authenticator")}</Label>
                 <Select
                   id="totp-factor"
                   value={selectedFactorId}
@@ -262,7 +263,7 @@ export function MfaFlow() {
         )}
 
         <div>
-          <Label htmlFor="totp-code">Six-digit code</Label>
+          <Label htmlFor="totp-code">{t("auth.mfa.codeLabel")}</Label>
           <Input
             id="totp-code"
             name="code"
@@ -278,14 +279,14 @@ export function MfaFlow() {
             autoFocus
           />
           <p id="totp-code-help" className="mt-1 text-[12.5px] text-muted">
-            Codes change every 30 seconds.
+            {t("auth.mfa.codeHelp")}
           </p>
         </div>
 
         {error ? <p role="alert" className="text-[13px] text-danger-fg">{error}</p> : null}
 
         <Button type="submit" loading={submitting} className="w-full">
-          {phase === "setup" ? "Enable MFA" : "Verify and continue"}
+          {phase === "setup" ? t("auth.mfa.enable") : t("auth.mfa.verify")}
         </Button>
       </form>
       <div className="mt-2">
@@ -296,9 +297,10 @@ export function MfaFlow() {
 }
 
 function SignOutButton() {
+  const t = useT();
   return (
     <form action="/auth/sign-out" method="post">
-      <Button type="submit" variant="ghost" className="w-full">Sign out</Button>
+      <Button type="submit" variant="ghost" className="w-full">{t("auth.mfa.signOut")}</Button>
     </form>
   );
 }

@@ -14,6 +14,7 @@ import {
   type TotpFactorOption,
 } from "@/features/auth/mfa";
 import { recordMfaSecurityEvent } from "@/features/auth/services/mfa.commands";
+import { useT } from "@/lib/i18n/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Enrollment = {
@@ -27,6 +28,7 @@ export function MfaSettings({
 }: {
   initialFactors: TotpFactorOption[];
 }) {
+  const t = useT();
   const [factors, setFactors] = useState(initialFactors);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [code, setCode] = useState("");
@@ -39,7 +41,7 @@ export function MfaSettings({
     const supabase = createSupabaseBrowserClient();
     const { data, error: listError } = await supabase.auth.mfa.listFactors();
     if (listError) throw listError;
-    setFactors(verifiedTotpFactors(data.all));
+    setFactors(verifiedTotpFactors(data.all, t));
   }
 
   async function startEnrollment() {
@@ -50,7 +52,7 @@ export function MfaSettings({
     const supabase = createSupabaseBrowserClient();
     const { data: existing, error: listError } = await supabase.auth.mfa.listFactors();
     if (listError) {
-      setError(mfaErrorMessage(listError.message));
+      setError(mfaErrorMessage(listError.message, t));
       setBusy(false);
       return;
     }
@@ -58,7 +60,7 @@ export function MfaSettings({
     for (const factorId of unverifiedTotpFactorIds(existing.all)) {
       const { error: removeError } = await supabase.auth.mfa.unenroll({ factorId });
       if (removeError) {
-        setError(mfaErrorMessage(removeError.message));
+        setError(mfaErrorMessage(removeError.message, t));
         setBusy(false);
         return;
       }
@@ -66,12 +68,12 @@ export function MfaSettings({
 
     const { data, error: enrollError } = await supabase.auth.mfa.enroll({
       factorType: "totp",
-      friendlyName: `QBBE Hub authenticator ${factors.length + 1}`,
+      friendlyName: t("settings.mfa.friendlyName", { number: factors.length + 1 }),
       issuer: "QBBE Hub",
     });
     setBusy(false);
     if (enrollError) {
-      setError(mfaErrorMessage(enrollError.message));
+      setError(mfaErrorMessage(enrollError.message, t));
       return;
     }
     setEnrollment({
@@ -84,7 +86,7 @@ export function MfaSettings({
   async function finishEnrollment(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!enrollment || !isValidTotpCode(code)) {
-      setError("Enter the six-digit code from your authenticator app.");
+      setError(t("auth.mfa.enterCode"));
       return;
     }
 
@@ -97,7 +99,7 @@ export function MfaSettings({
     });
     if (verifyError) {
       setCode("");
-      setError(mfaErrorMessage(verifyError.message));
+      setError(mfaErrorMessage(verifyError.message, t));
       setBusy(false);
       return;
     }
@@ -107,9 +109,9 @@ export function MfaSettings({
       await reloadFactors();
       setEnrollment(null);
       setCode("");
-      setNotice("Authenticator added.");
+      setNotice(t("settings.mfa.added"));
     } catch (reloadError) {
-      setError(mfaErrorMessage((reloadError as Error).message));
+      setError(mfaErrorMessage((reloadError as Error).message, t));
     } finally {
       setBusy(false);
     }
@@ -119,7 +121,7 @@ export function MfaSettings({
     if (!removeFactor) return;
     if (factors.length <= 1) {
       setRemoveFactor(null);
-      setError("Administrators must keep at least one verified authenticator.");
+      setError(t("settings.mfa.keepOne"));
       return;
     }
 
@@ -131,7 +133,7 @@ export function MfaSettings({
       factorId: removeFactor.id,
     });
     if (removeError) {
-      setError(mfaErrorMessage(removeError.message));
+      setError(mfaErrorMessage(removeError.message, t));
       setBusy(false);
       setRemoveFactor(null);
       return;
@@ -141,31 +143,34 @@ export function MfaSettings({
     await recordMfaSecurityEvent("mfa_factor_removed");
     try {
       await reloadFactors();
-      setNotice("Authenticator removed.");
+      setNotice(t("settings.mfa.removed"));
     } catch (reloadError) {
-      setError(mfaErrorMessage((reloadError as Error).message));
+      setError(mfaErrorMessage((reloadError as Error).message, t));
     } finally {
       setBusy(false);
       setRemoveFactor(null);
     }
   }
 
+  // The factor name is bold inside the sentence, so split the sentence around it.
+  const [removeBefore = "", removeAfter = ""] = t("settings.mfa.removeConfirm", {
+    name: "\u0000",
+  }).split("\u0000");
+
   return (
     <section className="card mt-6 p-5" aria-labelledby="mfa-settings-heading">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="mfa-settings-heading" className="text-base font-semibold">
-            Multi-factor authentication
+            {t("settings.mfa.heading")}
           </h2>
           <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-muted">
-            Owners and administrators must verify an authenticator before privileged
-            work. Keep a second authenticator available so a lost device does not
-            require operator recovery.
+            {t("settings.mfa.body")}
           </p>
         </div>
         {!enrollment ? (
           <Button type="button" variant="secondary" onClick={startEnrollment} loading={busy}>
-            Add authenticator
+            {t("settings.mfa.add")}
           </Button>
         ) : null}
       </div>
@@ -178,7 +183,7 @@ export function MfaSettings({
           <div className="flex justify-center rounded-(--radius-sm) bg-white p-2">
             <Image
               src={enrollment.qrCode}
-              alt="QR code for the new QBBE Hub authenticator"
+              alt={t("settings.mfa.qrAlt")}
               width={224}
               height={224}
               unoptimized
@@ -186,7 +191,7 @@ export function MfaSettings({
           </div>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="settings-totp-secret">Manual setup key</Label>
+              <Label htmlFor="settings-totp-secret">{t("settings.mfa.manualKey")}</Label>
               <Input
                 id="settings-totp-secret"
                 value={enrollment.secret}
@@ -197,7 +202,7 @@ export function MfaSettings({
               />
             </div>
             <div>
-              <Label htmlFor="settings-totp-code">Six-digit code</Label>
+              <Label htmlFor="settings-totp-code">{t("settings.mfa.codeLabel")}</Label>
               <Input
                 id="settings-totp-code"
                 inputMode="numeric"
@@ -210,7 +215,7 @@ export function MfaSettings({
               />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="submit" loading={busy}>Verify and add</Button>
+              <Button type="submit" loading={busy}>{t("settings.mfa.verifyAndAdd")}</Button>
               <Button
                 type="button"
                 variant="ghost"
@@ -221,7 +226,7 @@ export function MfaSettings({
                   setError(null);
                 }}
               >
-                Cancel
+                {t("settings.mfa.cancel")}
               </Button>
             </div>
           </div>
@@ -233,42 +238,42 @@ export function MfaSettings({
           <li key={factor.id} className="flex items-center justify-between gap-3 py-3">
             <div>
               <p className="text-sm font-medium">{factor.name}</p>
-              <p className="text-[12px] text-muted">Verified authenticator</p>
+              <p className="text-[12px] text-muted">{t("settings.mfa.verified")}</p>
             </div>
             <Button
               type="button"
               size="sm"
               variant="ghost"
               disabled={busy || factors.length <= 1}
-              title={factors.length <= 1 ? "Add another authenticator before removing this one." : undefined}
+              title={factors.length <= 1 ? t("settings.mfa.addAnotherFirst") : undefined}
               onClick={() => setRemoveFactor(factor)}
             >
-              Remove
+              {t("settings.mfa.remove")}
             </Button>
           </li>
         ))}
       </ul>
 
       <p className="mt-3 text-[12.5px] leading-relaxed text-muted">
-        Lost every authenticator? Contact the QBBE credential custodian. A reset
-        requires identity verification, a second authorized operator, and an audit entry.
+        {t("settings.mfa.lostAll")}
       </p>
 
       <Dialog
         open={removeFactor !== null}
         onClose={() => setRemoveFactor(null)}
-        title="Remove authenticator"
+        title={t("settings.mfa.removeTitle")}
       >
         <p className="text-sm leading-relaxed">
-          Remove <strong>{removeFactor?.name}</strong>? You will need another verified
-          authenticator the next time QBBE Hub challenges this account.
+          {removeBefore}
+          <strong>{removeFactor?.name}</strong>
+          {removeAfter}
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={() => setRemoveFactor(null)}>
-            Cancel
+            {t("settings.mfa.cancel")}
           </Button>
           <Button type="button" variant="danger" loading={busy} onClick={confirmRemoval}>
-            Remove authenticator
+            {t("settings.mfa.removeButton")}
           </Button>
         </div>
       </Dialog>

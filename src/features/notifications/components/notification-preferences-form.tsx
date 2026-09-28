@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { FieldHint, Label, Select, Checkbox } from "@/components/ui/input";
 import { saveNotificationPreferences } from "@/features/notifications/services/preferences.commands";
 import type { DeliveryMode } from "@/features/notifications/services/delivery-rules";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { intlLocale, type Locale } from "@/lib/i18n/config";
+import type { MessageKey } from "@/lib/i18n/translate";
 
 /**
  * Email preferences.
@@ -37,42 +40,15 @@ export interface PreferenceValues {
 
 const CATEGORIES: {
   key: "assignment" | "mention" | "announcement" | "due_date";
-  label: string;
-  hint: string;
   legacy: keyof PreferenceValues;
 }[] = [
-  {
-    key: "assignment",
-    label: "Work assigned to me",
-    hint: "Tasks, reviews, and decisions. Approvals follow this choice.",
-    legacy: "email_assignments",
-  },
-  {
-    key: "mention",
-    label: "Mentions and replies",
-    hint: "Someone names you, or answers a thread you started.",
-    legacy: "email_mentions",
-  },
-  {
-    key: "announcement",
-    label: "Announcements",
-    hint: "Workspace-wide posts. Ones that require acknowledgement always arrive.",
-    legacy: "email_announcements",
-  },
-  {
-    key: "due_date",
-    label: "Due dates",
-    hint: "Work due today, tomorrow, or overdue.",
-    legacy: "email_due_dates",
-  },
+  { key: "assignment", legacy: "email_assignments" },
+  { key: "mention", legacy: "email_mentions" },
+  { key: "announcement", legacy: "email_announcements" },
+  { key: "due_date", legacy: "email_due_dates" },
 ];
 
-const MODES: { value: DeliveryMode; label: string }[] = [
-  { value: "immediate", label: "Immediately" },
-  { value: "daily", label: "Daily digest" },
-  { value: "weekly", label: "Weekly digest" },
-  { value: "off", label: "Don't email" },
-];
+const MODES: DeliveryMode[] = ["immediate", "daily", "weekly", "off"];
 
 function modeFor(
   values: PreferenceValues,
@@ -85,20 +61,28 @@ function modeFor(
   return values.email_digest ? "daily" : "immediate";
 }
 
-const WEEKDAYS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
+/**
+ * Weekday names, Sunday = 0 (the stored `digest_weekday`), from Intl so each
+ * language gets its own: "Sunday" in English, "dimanche" in French.
+ */
+function weekdays(locale: Locale): string[] {
+  const format = new Intl.DateTimeFormat(intlLocale(locale), {
+    weekday: "long",
+    timeZone: "UTC",
+  });
+  // 2023-01-01 was a Sunday.
+  return Array.from({ length: 7 }, (_, day) =>
+    format.format(new Date(Date.UTC(2023, 0, 1 + day))),
+  );
+}
 
-const HOURS = Array.from({ length: 24 }, (_, hour) => ({
-  value: String(hour),
-  label: `${String(hour).padStart(2, "0")}:00`,
-}));
+/** "07:00" in English, "7 h" in Quebec French. */
+function hours(locale: Locale) {
+  return Array.from({ length: 24 }, (_, hour) => ({
+    value: String(hour),
+    label: locale === "fr-CA" ? `${hour}\u00a0h` : `${String(hour).padStart(2, "0")}:00`,
+  }));
+}
 
 const TIMEZONES = [
   "America/Toronto",
@@ -146,6 +130,10 @@ export function NotificationPreferencesForm({
   timezoneOptions?: string[];
   projects?: { id: string; name: string }[];
 }) {
+  const t = useT();
+  const locale = useLocale();
+  const HOURS = hours(locale);
+  const WEEKDAYS = weekdays(locale);
   const router = useRouter();
   const [saving, setSaving] = React.useState(false);
   const [message, setMessage] = React.useState<{
@@ -187,10 +175,10 @@ export function NotificationPreferencesForm({
 
     setSaving(false);
     if (!result.ok) {
-      setMessage({ tone: "error", text: result.error ?? "Could not save." });
+      setMessage({ tone: "error", text: result.error ?? t("notifications.form.saveFailed") });
       return;
     }
-    setMessage({ tone: "ok", text: "Preferences saved." });
+    setMessage({ tone: "ok", text: t("notifications.form.saved") });
     router.refresh();
   }
 
@@ -198,40 +186,43 @@ export function NotificationPreferencesForm({
     <form onSubmit={handleSubmit} className="space-y-8">
       <section aria-labelledby="prefs-categories" className="card px-4 py-2">
         <h2 id="prefs-categories" className="sr-only">
-          What to email me about
+          {t("notifications.form.whatToEmail")}
         </h2>
         <div className="divide-y divide-line">
-          {CATEGORIES.map((entry) => (
+          {CATEGORIES.map((entry) => {
+            const label = t(`notifications.form.categories.${entry.key}.label` as MessageKey);
+            return (
             <div
               key={entry.key}
               className="flex flex-wrap items-center gap-3 py-3"
             >
               <span className="min-w-0 flex-1">
                 <span className="block text-[13.5px] font-medium">
-                  {entry.label}
+                  {label}
                 </span>
                 <span className="block text-[12.5px] text-muted">
-                  {entry.hint}
+                  {t(`notifications.form.categories.${entry.key}.hint` as MessageKey)}
                 </span>
               </span>
               <Select
                 name={`mode_${entry.key}`}
-                aria-label={entry.label}
+                aria-label={label}
                 defaultValue={modeFor(values, entry)}
                 className="w-44"
               >
                 {MODES.map((mode) => (
-                  <option key={mode.value} value={mode.value}>
-                    {mode.label}
+                  <option key={mode} value={mode}>
+                    {t(`notifications.form.modes.${mode}` as MessageKey)}
                   </option>
                 ))}
               </Select>
             </div>
-          ))}
+            );
+          })}
           <Switch
             name="email_critical"
-            label="Reach me straight away for urgent work"
-            hint="Urgent items set to arrive immediately still come during quiet hours. A daily or weekly category waits for the digest. Security notices always arrive."
+            label={t("notifications.form.urgent")}
+            hint={t("notifications.form.urgentHint")}
             defaultChecked={values.email_critical}
           />
         </div>
@@ -239,7 +230,7 @@ export function NotificationPreferencesForm({
 
       <section aria-labelledby="prefs-quiet">
         <h2 id="prefs-quiet" className="section-heading mb-3">
-          Quiet hours
+          {t("notifications.form.quietHeading")}
         </h2>
         <div className="card px-4 py-3">
           <label className="flex cursor-pointer items-start gap-3 pb-1">
@@ -251,11 +242,10 @@ export function NotificationPreferencesForm({
             />
             <span className="min-w-0">
               <span className="block text-[13.5px] font-medium">
-                Hold routine email overnight
+                {t("notifications.form.quietToggle")}
               </span>
               <span className="block text-[12.5px] text-muted">
-                Mail is delayed until the window ends, never dropped. Security
-                notices and announcements needing acknowledgement still arrive.
+                {t("notifications.form.quietHint")}
               </span>
             </span>
           </label>
@@ -263,7 +253,7 @@ export function NotificationPreferencesForm({
           {quietEnabled ? (
             <div className="mt-3 grid grid-cols-2 gap-3 sm:max-w-sm">
               <div>
-                <Label htmlFor="quiet_hours_start">From</Label>
+                <Label htmlFor="quiet_hours_start">{t("notifications.form.from")}</Label>
                 <Select
                   id="quiet_hours_start"
                   name="quiet_hours_start"
@@ -277,7 +267,7 @@ export function NotificationPreferencesForm({
                 </Select>
               </div>
               <div>
-                <Label htmlFor="quiet_hours_end">Until</Label>
+                <Label htmlFor="quiet_hours_end">{t("notifications.form.until")}</Label>
                 <Select
                   id="quiet_hours_end"
                   name="quiet_hours_end"
@@ -297,16 +287,15 @@ export function NotificationPreferencesForm({
 
       <section aria-labelledby="prefs-digest">
         <h2 id="prefs-digest" className="section-heading mb-3">
-          When digests go out
+          {t("notifications.form.digestHeading")}
         </h2>
         <div className="card px-4 py-3">
           <p className="pb-3 text-[12.5px] text-muted">
-            Daily categories send every day at this hour. Weekly categories send
-            on the chosen day. Nothing is sent when there is nothing to report.
+            {t("notifications.form.digestIntro")}
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
-              <Label htmlFor="digest_hour">Send at</Label>
+              <Label htmlFor="digest_hour">{t("notifications.form.sendAt")}</Label>
               <Select
                 id="digest_hour"
                 name="digest_hour"
@@ -320,7 +309,7 @@ export function NotificationPreferencesForm({
               </Select>
             </div>
             <div>
-              <Label htmlFor="digest_weekday">Weekly on</Label>
+              <Label htmlFor="digest_weekday">{t("notifications.form.weeklyOn")}</Label>
               <Select
                 id="digest_weekday"
                 name="digest_weekday"
@@ -334,7 +323,7 @@ export function NotificationPreferencesForm({
               </Select>
             </div>
             <div>
-              <Label htmlFor="timezone">Time zone</Label>
+              <Label htmlFor="timezone">{t("notifications.form.timeZone")}</Label>
               <Select
                 id="timezone"
                 name="timezone"
@@ -348,21 +337,20 @@ export function NotificationPreferencesForm({
               </Select>
             </div>
           </div>
-          <FieldHint>Quiet hours and the digest both use this zone.</FieldHint>
+          <FieldHint>{t("notifications.form.zoneHint")}</FieldHint>
         </div>
       </section>
 
       <section aria-labelledby="prefs-mute">
         <h2 id="prefs-mute" className="section-heading mb-3">
-          Muted projects
+          {t("notifications.form.muteHeading")}
         </h2>
         <div className="card px-4 py-3">
           <p className="pb-2 text-[12.5px] text-muted">
-            Non-critical mail and inbox items from a muted project stay quiet.
-            Security notices and required announcements still arrive.
+            {t("notifications.form.muteIntro")}
           </p>
           {projects.length === 0 ? (
-            <p className="text-[13px] text-muted">No projects to mute.</p>
+            <p className="text-[13px] text-muted">{t("notifications.form.noProjects")}</p>
           ) : (
             <ul className="divide-y divide-line">
               {projects.map((project) => (
@@ -386,7 +374,7 @@ export function NotificationPreferencesForm({
 
       <div className="flex items-center gap-3">
         <Button type="submit" loading={saving} disabled={saving}>
-          Save preferences
+          {t("notifications.form.save")}
         </Button>
         {message ? (
           <p
