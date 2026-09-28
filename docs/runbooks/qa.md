@@ -40,6 +40,7 @@ already holds the seed data rather than doubling every record.
 To run the matrix against the local stack:
 
 ```bash
+bash scripts/local-signing-key.sh   # once: the local Auth signing key (#138)
 npx supabase start            # or `npx supabase db reset --local` for a clean one
 npm run db:seed               # QA users, then workspace content
 cp .env.example .env.local    # local Supabase URL and anon key
@@ -102,6 +103,7 @@ recipe is one allow case and one deny case in the same pull request as the
 policy.
 
 ```bash
+bash scripts/local-signing-key.sh   # once: the local Auth signing key (#138)
 supabase start        # migrations applied to a fresh local database
 npm run test:db       # qa-users.sql + rls.sql through psql
 ```

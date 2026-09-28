@@ -148,6 +148,12 @@ jobs:
         with:
           version: 2.114.0
 
+      # supabase/config.toml points Auth at an ES256 signing key so sessions
+      # are verified locally, as on the hosted projects (#138). The key is
+      # generated per run and never committed.
+      - name: Local Auth signing key
+        run: scripts/local-signing-key.sh
+
       - name: Avoid local DB port collisions on CI runners
         run: |
           if lsof -iTCP:54322 -sTCP:LISTEN -t >/dev/null; then
