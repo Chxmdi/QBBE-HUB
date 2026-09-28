@@ -112,8 +112,17 @@ staff and volunteer, in English and French.
   did not set its own values talk to the hosted Supabase project.
 - [x] Pages a member may not see say so ("That page isn't available to you")
   instead of silently returning Home.
-- [ ] Run the flows the audit could not reach on an empty database: fund
-  release, statements with data, bank and payroll import.
+- [x] Run the flows the audit could not reach on an empty database: fund
+  release, statements with data, bank and payroll import. Done on 28 September
+  2026 from a fresh seed, through the app's own screens only: chart approval,
+  fiscal year, a restricted grant fund, grant receipt and expense, an
+  over-release (refused) and a release, a bank statement matched and reconciled
+  at a zero difference, and a Nethris pay run split 40/60 between the grant and
+  the general fund. Fund balances, the three statements and the bank report all
+  agree to the cent. Two questions for the accountant, not defects: the
+  statement of financial position shows interfund "Due from/to other funds"
+  gross (3,000 on each side) rather than eliminated; and the release form's
+  "available today" figure is as at today, not the release date chosen.
 - [x] Close #143 and #149 once their acceptance is confirmed on `main`; update
   #141 and #147. (#143, #147 and #149 closed with their PRs; #141 stays open
   for the French reviewer's pass.)
