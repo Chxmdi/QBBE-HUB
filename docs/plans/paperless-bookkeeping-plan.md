@@ -100,11 +100,11 @@ Supporting fixes merged the same day:
 The app was built from `main`, run locally and driven in a browser as owner,
 staff and volunteer, in English and French.
 
-- [ ] Merge #186: French for the finance screens.
-- [ ] French for every other screen, and Quebec date and number formats
+- [x] Merge #186: French for the finance screens.
+- [x] French for every other screen, and Quebec date and number formats
   ("28 sept. 2026", "1 234,56 $"). The audit found English on 68 of 70 pages in
-  French. A build session is on it (branch `claude/french-everywhere`), with a
-  browser check that fails on English text in French.
+  French; #188 translates them, with a browser check that fails on English text
+  in French.
 - [x] The job runner is a checked deployment step: `GET /api/health/jobs`,
   a deploy smoke check, and a red banner on Admin → Jobs. Without it no upload
   ever opens and no notification is sent.
@@ -114,8 +114,9 @@ staff and volunteer, in English and French.
   instead of silently returning Home.
 - [ ] Run the flows the audit could not reach on an empty database: fund
   release, statements with data, bank and payroll import.
-- [ ] Close #143 and #149 once their acceptance is confirmed on `main`; update
-  #141 and #147.
+- [x] Close #143 and #149 once their acceptance is confirmed on `main`; update
+  #141 and #147. (#143, #147 and #149 closed with their PRs; #141 stays open
+  for the French reviewer's pass.)
 
 ### C. Needed from QBBE (nobody else can supply these)
 - [ ] Accountant:
