@@ -68,6 +68,25 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
    `secret_mismatch`, `app_secret_missing`) fails the deploy with the fix.
    Admin → Jobs shows the same status as a red banner.
 
+9. Switch the project to **asymmetric JWT signing keys** (#138). Until this is
+   done the app still works, but the request proxy asks Auth to confirm the
+   session on every request, background link prefetches included, which is
+   about 40 extra Auth calls per page viewed.
+
+   In the Supabase dashboard for the project: **Project Settings → JWT Keys**.
+   Start using JWT signing keys (the dashboard creates a standby ECC P-256
+   key), then rotate so the new key becomes the one in use. Existing sessions
+   stay valid until they expire. You should see `ES256` listed at
+   `https://<project-ref>.supabase.co/auth/v1/.well-known/jwks.json`.
+   Do the same on staging and production; never through the MCP.
+
+   What changes: the proxy then verifies the session token locally. A sign-out
+   elsewhere is noticed by the proxy only when the token expires (one hour at
+   most). Every page still asks Auth live (`requireSession` uses `getUser`),
+   and row-level security applies to every read, so a revoked session reaches
+   no data. Locally and in CI the same setup comes from
+   `scripts/local-signing-key.sh`, which `supabase/config.toml` requires.
+
 ## Branches and gates (CICD-001)
 
 `main` is the release branch and the only one production deploys from.

@@ -48,13 +48,23 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() verifies the session token's signature against the project's
+  // published public keys, so with asymmetric signing keys there is no Auth
+  // round trip per request, background link prefetches included (#138). It
+  // still refreshes an expired session, and with a legacy symmetric key it
+  // falls back to asking Auth, so it is never weaker than before.
+  //
+  // What it cannot see is a sign-out elsewhere: a token stays valid here until
+  // it expires (at most jwt_expiry, one hour). That only decides this redirect.
+  // Every page still checks the session live with Auth (requireSession uses
+  // getUser) and row-level security still applies to every read, so a revoked
+  // session reaches no data.
+  const { data } = await supabase.auth.getClaims();
+  const signedIn = Boolean(data?.claims?.sub);
 
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
 
-  if (!user && !isPublic) {
+  if (!signedIn && !isPublic) {
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
     url.searchParams.set("next", path);
