@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import { startConversation } from "@/features/channels/services/message.commands";
 import { Checkbox } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
 
 export function StartConversationDialog({ people }: { people: Option[] }) {
   const router = useRouter();
@@ -15,6 +16,7 @@ export function StartConversationDialog({ people }: { people: Option[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const t = useT();
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -31,7 +33,7 @@ export function StartConversationDialog({ people }: { people: Option[] }) {
     const result = await startConversation({ memberIds: Array.from(selected) });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong.");
+      setError(result.error ?? t("messages.errors.somethingWrong"));
       return;
     }
     setOpen(false);
@@ -42,9 +44,9 @@ export function StartConversationDialog({ people }: { people: Option[] }) {
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus className="size-4" aria-hidden />
-        New message
+        {t("messages.start.button")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Start a conversation">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("messages.start.title")}>
         <div className="space-y-3">
           {/* A <label> with no control names nothing; the checkbox list needs
               a group that carries the name instead. */}
@@ -52,11 +54,11 @@ export function StartConversationDialog({ people }: { people: Option[] }) {
             id="conversation-participants"
             className="mb-1.5 block text-[13px] font-medium text-ink"
           >
-            Choose participants
+            {t("messages.start.participants")}
           </p>
           {people.length === 0 ? (
             <p className="text-[13.5px] text-muted">
-              No other active members yet — invite teammates from Admin.
+              {t("messages.start.nobody")}
             </p>
           ) : (
             <ul
@@ -84,14 +86,14 @@ export function StartConversationDialog({ people }: { people: Option[] }) {
           ) : null}
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               onClick={handleStart}
               loading={saving}
               disabled={selected.size === 0}
             >
-              Start conversation
+              {t("messages.start.submit")}
             </Button>
           </div>
         </div>

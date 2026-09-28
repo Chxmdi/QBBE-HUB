@@ -8,9 +8,11 @@ import { StartConversationDialog } from "@/features/channels/components/start-co
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { relativeTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Direct messages" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("messages.title") };
+}
 export const dynamic = "force-dynamic";
 
 interface ConversationListRow {
@@ -26,6 +28,7 @@ interface ConversationListRow {
 
 export default async function MessagesPage() {
   const session = await requireSession();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const supabase = await createSupabasePageClient();
   const options = await getPickerOptions();
 
@@ -67,7 +70,7 @@ export default async function MessagesPage() {
         id: row.conversation_id,
         title:
           row.conversation!.title ??
-          (others.map((o) => o.full_name).join(", ") || "Just you"),
+          (others.map((o) => o.full_name).join(", ") || t("messages.justYou")),
         avatar: others[0] ?? null,
         lastMessage,
         unread: lastMessage
@@ -87,17 +90,17 @@ export default async function MessagesPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Communication"
-        title="Direct messages"
-        description="Private 1:1 and small-group conversations. Visibility is limited to participants."
+        eyebrow={t("messages.eyebrow")}
+        title={t("messages.title")}
+        description={t("messages.description")}
         actions={<StartConversationDialog people={options.people.filter((p) => p.id !== session.userId)} />}
       />
 
       {conversations.length === 0 ? (
         <EmptyState
           icon={<MessageCircle />}
-          title="No conversations yet"
-          description="Start a direct message with a colleague — it stays private to the participants."
+          title={t("messages.emptyTitle")}
+          description={t("messages.emptyBody")}
         />
       ) : (
         <ul className="card divide-y divide-line">
@@ -132,13 +135,13 @@ export default async function MessagesPage() {
                   <>
                     {/* aria-label is ignored on a bare span, so unread was
                         carried by the dot's colour alone. */}
-                    <span className="sr-only">Unread messages</span>
+                    <span className="sr-only">{t("messages.unread")}</span>
                     <span aria-hidden className="size-2 rounded-full bg-brand" />
                   </>
                 ) : null}
                 {conversation.lastMessage ? (
                   <span className="meta whitespace-nowrap">
-                    {relativeTime(conversation.lastMessage.created_at)}
+                    {format.relative(conversation.lastMessage.created_at)}
                   </span>
                 ) : null}
               </Link>

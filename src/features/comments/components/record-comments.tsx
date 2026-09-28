@@ -10,6 +10,7 @@ import {
   editRecordComment,
   resolveRecordComment,
 } from "../services/comment.commands";
+import { useFormatters, useT } from "@/lib/i18n/client";
 
 export interface CommentView {
   id: string;
@@ -54,6 +55,7 @@ export function RecordComments({
   people: Option[];
   documents: Option[];
 }) {
+  const t = useT();
   const topLevel = comments.filter((comment) => !comment.parent_comment_id);
   const replies = (id: string) =>
     comments.filter((comment) => comment.parent_comment_id === id);
@@ -61,10 +63,10 @@ export function RecordComments({
   return (
     <section aria-labelledby={`comments-${parentId}`} className="mt-8">
       <h2 id={`comments-${parentId}`} className="section-heading mb-3">
-        Comments
+        {t("comments.heading")}
       </h2>
       {topLevel.length === 0 ? (
-        <p className="meta mb-4">No comments yet.</p>
+        <p className="meta mb-4">{t("comments.none")}</p>
       ) : (
         <ul className="card mb-4 divide-y divide-line">
           {topLevel.map((comment) => (
@@ -81,7 +83,7 @@ export function RecordComments({
               />
               {replies(comment.id).length > 0 ? (
                 <ul
-                  aria-label="Replies"
+                  aria-label={t("comments.replies")}
                   className="mt-3 space-y-3 border-l-2 border-line pl-4"
                 >
                   {replies(comment.id).map((reply) => (
@@ -109,7 +111,7 @@ export function RecordComments({
         parentId={parentId}
         people={people}
         documents={documents}
-        submitLabel="Post comment"
+        submitLabel={t("comments.postComment")}
       />
     </section>
   );
@@ -135,6 +137,8 @@ function CommentItem({
   documents: Option[];
 }) {
   const router = useRouter();
+  const t = useT();
+  const format = useFormatters();
   const [mode, setMode] = useState<"view" | "edit" | "reply">("view");
   const [draft, setDraft] = useState(comment.body);
   const [error, setError] = useState<string | null>(null);
@@ -147,7 +151,7 @@ function CommentItem({
     const result = await action();
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "That did not work.");
+      setError(result.error ?? t("comments.didNotWork"));
       return false;
     }
     router.refresh();
@@ -157,7 +161,7 @@ function CommentItem({
   if (comment.deleted_at) {
     return (
       <p id={`comment-${comment.id}`} className="meta italic">
-        Comment deleted {new Date(comment.deleted_at).toLocaleString()}
+        {t("comments.deletedAt", { when: format.dateTime(comment.deleted_at) })}
       </p>
     );
   }
@@ -180,7 +184,7 @@ function CommentItem({
           }}
         >
           <Label htmlFor={`edit-${comment.id}`} className="sr-only">
-            Edit comment
+            {t("comments.editLabel")}
           </Label>
           <Textarea
             id={`edit-${comment.id}`}
@@ -191,14 +195,14 @@ function CommentItem({
           />
           <div className="flex gap-2">
             <Button type="submit" loading={busy}>
-              Save comment
+              {t("comments.saveComment")}
             </Button>
             <Button
               type="button"
               variant="ghost"
               onClick={() => setMode("view")}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         </form>
@@ -219,25 +223,25 @@ function CommentItem({
       ) : null}
       {comment.document ? (
         <p className="mt-1 text-[13px]">
-          Attached:{" "}
+          {t("comments.attached")}{" "}
           <span className="font-medium">{comment.document.title}</span>
         </p>
       ) : null}
       <p className="meta mt-1">
-        {new Date(comment.created_at).toLocaleString()}
-        {comment.edited_at ? " · edited" : ""}
-        {comment.resolved_at ? " · resolved" : ""}
+        {format.dateTime(comment.created_at)}
+        {comment.edited_at ? t("comments.edited") : ""}
+        {comment.resolved_at ? t("comments.resolved") : ""}
       </p>
       {mode === "view" ? (
         <div className="mt-2 flex flex-wrap gap-1">
           {canResolve ? (
             <Button variant="ghost" onClick={() => setMode("reply")}>
-              Reply
+              {t("comments.reply")}
             </Button>
           ) : null}
           {isAuthor ? (
             <Button variant="ghost" onClick={() => setMode("edit")}>
-              Edit
+              {t("comments.edit")}
             </Button>
           ) : null}
           {isAuthor || isAdmin ? (
@@ -246,15 +250,13 @@ function CommentItem({
               loading={busy}
               onClick={() => {
                 if (
-                  window.confirm(
-                    "Delete this comment? A marker stays in the thread.",
-                  )
+                  window.confirm(t("comments.deleteConfirm"))
                 ) {
                   void run(() => deleteRecordComment(comment.id));
                 }
               }}
             >
-              Delete
+              {t("comments.delete")}
             </Button>
           ) : null}
           {canResolve && !comment.resolved_at ? (
@@ -263,7 +265,7 @@ function CommentItem({
               loading={busy}
               onClick={() => void run(() => resolveRecordComment(comment.id))}
             >
-              Resolve
+              {t("comments.resolve")}
             </Button>
           ) : null}
         </div>
@@ -276,7 +278,7 @@ function CommentItem({
             parentCommentId={comment.id}
             people={people}
             documents={documents}
-            submitLabel="Post reply"
+            submitLabel={t("comments.postReply")}
             onDone={() => setMode("view")}
           />
         </div>
@@ -308,6 +310,7 @@ function CommentForm({
   onDone?: () => void;
 }) {
   const router = useRouter();
+  const t = useT();
   const [body, setBody] = useState("");
   const [mentionIds, setMentionIds] = useState<string[]>([]);
   const [linkUrl, setLinkUrl] = useState("");
@@ -331,7 +334,7 @@ function CommentForm({
     });
     setPending(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not save the comment.");
+      setError(result.error ?? t("comments.errors.saveFailed"));
       return;
     }
     setBody("");
@@ -346,20 +349,22 @@ function CommentForm({
     <form onSubmit={submit} className="space-y-3">
       <div>
         <Label htmlFor={`${idBase}-body`}>
-          {parentCommentId ? "Reply" : "Comment"}
+          {parentCommentId ? t("comments.replyLabel") : t("comments.commentLabel")}
         </Label>
         <Textarea
           id={`${idBase}-body`}
           value={body}
           onChange={(event) => setBody(event.target.value)}
-          placeholder={parentCommentId ? "Write a reply" : "Add a comment"}
+          placeholder={
+            parentCommentId ? t("comments.replyPlaceholder") : t("comments.commentPlaceholder")
+          }
           maxLength={5000}
           required
         />
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <Label htmlFor={`${idBase}-mention`}>Mention</Label>
+          <Label htmlFor={`${idBase}-mention`}>{t("comments.mention")}</Label>
           <Select
             id={`${idBase}-mention`}
             multiple
@@ -382,23 +387,23 @@ function CommentForm({
           </Select>
         </div>
         <div>
-          <Label htmlFor={`${idBase}-link`}>Link</Label>
+          <Label htmlFor={`${idBase}-link`}>{t("comments.link")}</Label>
           <Input
             id={`${idBase}-link`}
             type="url"
-            placeholder="https://drive.google.com/…"
+            placeholder={t("comments.linkPlaceholder")}
             value={linkUrl}
             onChange={(event) => setLinkUrl(event.target.value)}
           />
         </div>
         <div>
-          <Label htmlFor={`${idBase}-document`}>Attach document</Label>
+          <Label htmlFor={`${idBase}-document`}>{t("comments.attachDocument")}</Label>
           <Select
             id={`${idBase}-document`}
             value={documentId}
             onChange={(event) => setDocumentId(event.target.value)}
           >
-            <option value="">None</option>
+            <option value="">{t("comments.noDocument")}</option>
             {documents.map((document) => (
               <option key={document.id} value={document.id}>
                 {document.label}

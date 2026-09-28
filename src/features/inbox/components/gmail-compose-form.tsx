@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { sendGmailMessage } from "@/features/inbox/services/gmail.commands";
+import { useT } from "@/lib/i18n/client";
 
 export function GmailComposeForm() {
   const [to, setTo] = useState("");
@@ -13,6 +14,7 @@ export function GmailComposeForm() {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
+  const t = useT();
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -20,20 +22,20 @@ export function GmailComposeForm() {
     const result = await sendGmailMessage({ to, subject, body });
     setSending(false);
     if (!result.ok) {
-      toast(result.error ?? "Could not send message.", { tone: "error" });
+      toast(result.error ?? t("inbox.compose.failed"), { tone: "error" });
       return;
     }
     setTo("");
     setSubject("");
     setBody("");
-    toast("Message sent through Gmail.");
+    toast(t("inbox.compose.sent"));
   }
 
   return (
-    <form onSubmit={submit} className="card mb-5 space-y-3 p-4" aria-label="Compose Gmail message">
-      <p className="text-[14px] font-semibold">Compose</p>
+    <form onSubmit={submit} className="card mb-5 space-y-3 p-4" aria-label={t("inbox.compose.formLabel")}>
+      <p className="text-[14px] font-semibold">{t("inbox.compose.heading")}</p>
       <div>
-        <Label htmlFor="gmail-compose-to">To</Label>
+        <Label htmlFor="gmail-compose-to">{t("inbox.compose.to")}</Label>
         <Input
           id="gmail-compose-to"
           type="email"
@@ -41,11 +43,11 @@ export function GmailComposeForm() {
           onChange={(event) => setTo(event.target.value)}
           required
           autoComplete="email"
-          placeholder="recipient@example.org"
+          placeholder={t("inbox.compose.toPlaceholder")}
         />
       </div>
       <div>
-        <Label htmlFor="gmail-compose-subject">Subject</Label>
+        <Label htmlFor="gmail-compose-subject">{t("inbox.compose.subject")}</Label>
         <Input
           id="gmail-compose-subject"
           value={subject}
@@ -55,7 +57,7 @@ export function GmailComposeForm() {
         />
       </div>
       <div>
-        <Label htmlFor="gmail-compose-body">Message</Label>
+        <Label htmlFor="gmail-compose-body">{t("inbox.compose.message")}</Label>
         <Textarea
           id="gmail-compose-body"
           value={body}
@@ -68,7 +70,7 @@ export function GmailComposeForm() {
       <div className="flex justify-end">
         <Button type="submit" loading={sending}>
           <Send className="size-4" aria-hidden />
-          Send
+          {t("inbox.compose.send")}
         </Button>
       </div>
     </form>

@@ -12,6 +12,7 @@ import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn } from "@/lib/utils";
 import { getFormatters, getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 import { inboxItemVisible } from "@/features/notifications/services/mute";
 import type { Notification } from "@/types/entities";
 
@@ -31,6 +32,28 @@ const CATEGORIES = [
   "announcement",
   "mail",
 ] as const;
+
+/** Notification categories with a label; anything else shows its code. */
+const CATEGORY_LABELS = [
+  "mention",
+  "assignment",
+  "reply",
+  "due_date",
+  "approval",
+  "decision",
+  "announcement",
+  "digest",
+  "governance",
+  "hr",
+  "meeting",
+  "system",
+] as const;
+
+function categoryLabel(category: string, t: TranslateFn): string {
+  return (CATEGORY_LABELS as readonly string[]).includes(category)
+    ? t(`inbox.category.${category as (typeof CATEGORY_LABELS)[number]}`)
+    : category;
+}
 
 export default async function InboxPage({
   searchParams,
@@ -203,7 +226,7 @@ export default async function InboxPage({
                       <p className="meta truncate">{notification.body}</p>
                     ) : null}
                     <p className="meta mt-0.5 flex items-center gap-2">
-                      <Badge tone="neutral">{notification.category}</Badge>
+                      <Badge tone="neutral">{categoryLabel(notification.category, t)}</Badge>
                       {format.relative(notification.created_at)}
                     </p>
                   </div>

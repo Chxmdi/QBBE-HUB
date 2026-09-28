@@ -9,11 +9,15 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
+import { recipientTranslators } from "@/features/channels/recipient-locale";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 export async function acknowledgeAnnouncement(
   announcementId: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
 
   const { error } = await supabase
@@ -27,15 +31,15 @@ export async function acknowledgeAnnouncement(
       { onConflict: "announcement_id,user_id", ignoreDuplicates: true },
     );
 
-  if (error) return { ok: false, error: "Could not record acknowledgment." };
+  if (error) return { ok: false, error: t("announcements.errors.ackFailed") };
 
   revalidatePath("/", "layout");
   return { ok: true };
 }
 
-const publishSchema = z.object({
-  title: requiredText("Announcements need a title.", 200),
-  body: requiredText("Announcements need content.", 10000),
+const publishSchema = (t: TranslateFn) => z.object({
+  title: requiredText(t("announcements.errors.titleRequired"), 200),
+  body: requiredText(t("announcements.errors.bodyRequired"), 10000),
   priority: z.enum(["normal", "important", "critical"]).default("normal"),
   requiresAck: z.boolean().default(false),
   ackDeadline: z.string().optional(),
@@ -54,11 +58,12 @@ export async function publishAnnouncement(
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
 
+  const t = await getT();
   const limited = await enforceRateLimit("announcement:publish", session.userId);
   if (limited) return limited;
-  const parsed = publishSchema.safeParse(input);
+  const parsed = publishSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("announcements.errors.invalidInput") };
   }
   const { title, body, priority, requiresAck, ackDeadline, publishAt } = parsed.data;
   // Both fields come from `datetime-local`, which carries no offset, so they
@@ -69,7 +74,7 @@ export async function publishAnnouncement(
   // because it is what the overdue reminder job compares against.
   const scheduledFor = publishAt ? wallTimeToInstant(publishAt, session.timeZone) : null;
   if (publishAt && !scheduledFor) {
-    return { ok: false, error: "Invalid publish time." };
+    return { ok: false, error: t("announcements.errors.invalidPublishTime") };
   }
   const publishAtIso = (scheduledFor ?? new Date()).toISOString();
   const isScheduled = new Date(publishAtIso).getTime() > Date.now() + 30_000;
@@ -77,7 +82,7 @@ export async function publishAnnouncement(
   const ackDeadlineInstant =
     requiresAck && ackDeadline ? wallTimeToInstant(ackDeadline, session.timeZone) : null;
   if (requiresAck && ackDeadline && !ackDeadlineInstant) {
-    return { ok: false, error: "Invalid acknowledgement deadline." };
+    return { ok: false, error: t("announcements.errors.invalidDeadline") };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -88,7 +93,7 @@ export async function publishAnnouncement(
     .eq("is_mandatory", true)
     .maybeSingle();
 
-  if (!channel) return { ok: false, error: "No announcements channel exists." };
+  if (!channel) return { ok: false, error: t("announcements.errors.noChannel") };
 
   const { data: message, error: messageError } = await supabase
     .from("message")
@@ -104,7 +109,7 @@ export async function publishAnnouncement(
   if (messageError || !message) {
     return {
       ok: false,
-      error: "You don't have permission to post announcements, or the save failed.",
+      error: t("announcements.errors.noPermission"),
     };
   }
 
@@ -124,7 +129,7 @@ export async function publishAnnouncement(
     .single();
 
   if (annError || !announcement) {
-    return { ok: false, error: "Could not publish the announcement." };
+    return { ok: false, error: t("announcements.errors.publishFailed") };
   }
 
   // Fan out now; scheduled announcements wait for the publish job (P1-ANN-07).
@@ -140,13 +145,14 @@ export async function publishAnnouncement(
         .filter((id) => id !== session.userId);
 
   if (recipients.length > 0) {
+    const recipientT = await recipientTranslators(supabase, recipients);
     await createNotifications(
       supabase,
       recipients.map((userId) => ({
         user_id: userId,
         organization_id: session.organizationId,
         category: "announcement",
-        title: `Announcement: ${title}`,
+        title: recipientT(userId)("announcements.notificationTitle", { title }),
         body: body.slice(0, 140),
         source_type: "announcement",
         source_id: announcement.id as string,

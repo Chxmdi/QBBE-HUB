@@ -17,9 +17,13 @@ import { AnnouncementComposeDialog } from "@/features/announcements/components/a
 import { CHANNEL_HISTORY_PAGE_SIZE } from "@/features/channels/history";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 import type { Channel, Message } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Channel" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("channels.channelTitle") };
+}
 export const dynamic = "force-dynamic";
 
 const MESSAGE_SELECT =
@@ -32,6 +36,7 @@ export default async function ChannelPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await requireSession();
+  const t = await getT();
   const { id } = await params;
   const supabase = await createSupabasePageClient();
 
@@ -115,12 +120,12 @@ export default async function ChannelPage({
         : session.isAdmin);
 
   const postDisabledHint = !isMember
-    ? "Join this channel to participate."
+    ? t("channels.postHint.join")
     : channel.archived_at
-      ? "This channel is archived and read-only."
+      ? t("channels.postHint.archived")
       : channel.posting_policy === "admins"
-        ? "Posting here is limited to leadership and admins. You can reply in threads."
-        : "Posting here is limited to staff.";
+        ? t("channels.postHint.admins")
+        : t("channels.postHint.staff");
 
   return (
     <div className="-mx-4 -my-6 flex h-[calc(100dvh-3.5rem)] flex-col md:-mx-8">
@@ -136,16 +141,16 @@ export default async function ChannelPage({
           )}
         </span>
         <h1 className="text-[16px] font-semibold">{channel.slug}</h1>
-        {channel.is_mandatory ? <Badge tone="brand">Mandatory</Badge> : null}
+        {channel.is_mandatory ? <Badge tone="brand">{t("channels.badges.mandatory")}</Badge> : null}
         {channel.posting_policy !== "everyone" ? (
-          <Badge tone="accent">Restricted posting</Badge>
+          <Badge tone="accent">{t("channels.badges.restrictedPosting")}</Badge>
         ) : null}
         {channel.project_id ? (
           <Link
             href={`/projects/${channel.project_id}`}
             className="text-[12.5px] font-medium text-brand-fg hover:underline"
           >
-            View linked project →
+            {t("channels.viewProject")}
           </Link>
         ) : null}
         {channel.program_id ? (
@@ -153,12 +158,14 @@ export default async function ChannelPage({
             href={`/programs/${channel.program_id}`}
             className="text-[12.5px] font-medium text-brand-fg hover:underline"
           >
-            View linked program →
+            {t("channels.viewProgram")}
           </Link>
         ) : null}
         <span className="meta ml-auto flex items-center gap-1">
           <Users className="size-3.5" aria-hidden />
-          {memberCount ?? 0} members
+          {t(memberCount === 1 ? "channels.memberOne" : "channels.memberOther", {
+            count: memberCount ?? 0,
+          })}
         </span>
         {channel.type === "announcements" && session.isAdmin ? (
           <AnnouncementComposeDialog />
@@ -182,7 +189,9 @@ export default async function ChannelPage({
         ) : null}
         {isMember && membership?.membership_source !== "manual" ? (
           <Badge tone="neutral">
-            {membership?.membership_source === "team" ? "Team access" : "Managed access"}
+            {membership?.membership_source === "team"
+              ? t("channels.badges.teamAccess")
+              : t("channels.badges.managedAccess")}
           </Badge>
         ) : null}
         {isMember && !channel.is_mandatory && membership?.membership_source === "manual" ? (
@@ -194,8 +203,7 @@ export default async function ChannelPage({
           role="status"
           className="border-b border-line bg-surface-soft px-4 py-1.5 text-center text-[12.5px] text-muted md:px-6"
         >
-          This channel is archived. History stays searchable for members, but no
-          new messages can be posted.
+          {t("channels.archivedBanner")}
         </p>
       ) : null}
       {channel.purpose ? (
@@ -204,7 +212,7 @@ export default async function ChannelPage({
         </p>
       ) : null}
 
-      <ChannelAccess grants={(grants ?? []) as unknown as ChannelGrant[]} />
+      <ChannelAccess grants={(grants ?? []) as unknown as ChannelGrant[]} t={t} />
 
       <PinnedResources
         channelId={channel.id}
@@ -212,7 +220,7 @@ export default async function ChannelPage({
         canManage={session.isStaff && isMember}
       />
 
-      <Suspense fallback={<p className="px-4 py-6 text-[13px] text-muted">Loading messages…</p>}>
+      <Suspense fallback={<p className="px-4 py-6 text-[13px] text-muted">{t("channels.loadingMessages")}</p>}>
         <ChannelView
           channelId={channel.id}
           currentUserId={session.userId}
@@ -237,32 +245,40 @@ interface ChannelGrant {
   grantor: { full_name: string } | null;
 }
 
-const GRANT_SOURCE: Record<string, string> = {
-  direct: "Direct",
-  team: "Team",
-  program: "Program",
-  project: "Project",
-  event: "Event",
-  mandatory: "Required",
-  legacy: "Earlier access",
-};
+const GRANT_SOURCES = [
+  "direct",
+  "team",
+  "program",
+  "project",
+  "event",
+  "mandatory",
+  "legacy",
+] as const;
 
-function ChannelAccess({ grants }: { grants: ChannelGrant[] }) {
+function grantSourceLabel(source: string, t: TranslateFn): string {
+  return (GRANT_SOURCES as readonly string[]).includes(source)
+    ? t(`channels.access.source.${source as (typeof GRANT_SOURCES)[number]}`)
+    : source;
+}
+
+function ChannelAccess({ grants, t }: { grants: ChannelGrant[]; t: TranslateFn }) {
   if (grants.length === 0) return null;
   return (
     <details className="border-b border-line bg-surface px-4 py-2 md:px-6">
       <summary className="cursor-pointer text-[13px] font-medium">
-        Access ({grants.length})
+        {t("channels.access.summary", { count: grants.length })}
       </summary>
       <ul className="mt-2 space-y-1 pb-1">
         {grants.map((grant) => (
           <li key={grant.id} className="text-[12.5px] text-muted">
-            <span className="text-ink">{grant.user?.full_name ?? "Member"}</span>
+            <span className="text-ink">{grant.user?.full_name ?? t("channels.access.member")}</span>
             {" · "}
-            {GRANT_SOURCE[grant.source] ?? grant.source}
+            {grantSourceLabel(grant.source, t)}
             {grant.team?.name ? ` · ${grant.team.name}` : ""}
-            {" · granted by "}
-            {grant.grantor?.full_name ?? "the workspace"}
+            {" · "}
+            {t("channels.access.grantedBy", {
+              name: grant.grantor?.full_name ?? t("channels.access.theWorkspace"),
+            })}
           </li>
         ))}
       </ul>
