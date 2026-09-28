@@ -114,8 +114,9 @@ function recordedText(): string[] {
         const text = value.trim();
         // Enum codes ("in_review", "not_started") are not data: they must not
         // hide an untranslated status label. Names are, even when they look
-        // like one: the "announcements" channel is called that in French too.
-        const named = /(^|_)(name|slug|title)$/.test(column);
+        // like one: the "announcements" channel is called that in French too,
+        // and a document tagged "policy" keeps its tag.
+        const named = /(^|_)(name|slug|title|tags?)$/.test(column);
         if (text.length > 1 && (named || !/^[a-z]+(?:_[a-z]+)*$/.test(text))) values.add(text);
       } else if (Array.isArray(value)) {
         for (const item of value) collect(item, column);
