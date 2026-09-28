@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Checkbox, FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABEL, type AccountType } from "@/features/ledger/money";
+import { ACCOUNT_TYPES, ACCOUNT_TYPE_KEY, type AccountType } from "@/features/ledger/money";
 import { saveAccount } from "@/features/ledger/services/ledger.commands";
+import { useT } from "@/lib/i18n/client";
 
 export interface AccountFormValue {
   id: string;
@@ -24,6 +25,7 @@ export interface AccountFormValue {
 export function AccountDialog({ account }: { account?: AccountFormValue }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,16 +34,16 @@ export function AccountDialog({ account }: { account?: AccountFormValue }) {
   return (
     <>
       {account ? (
-        <Button size="sm" variant="ghost" onClick={() => setOpen(true)} aria-label={`Edit account ${account.code}`}>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(true)} aria-label={t("finance.ledger.accountDialog.editTitle", { code: account.code })}>
           <Pencil className="size-4" aria-hidden />
         </Button>
       ) : (
         <Button onClick={() => setOpen(true)}>
           <Plus className="size-4" aria-hidden />
-          Add account
+          {t("finance.ledger.accountDialog.add")}
         </Button>
       )}
-      <Dialog open={open} onClose={() => setOpen(false)} title={account ? `Edit account ${account.code}` : "Add an account"}>
+      <Dialog open={open} onClose={() => setOpen(false)} title={account ? t("finance.ledger.accountDialog.editTitle", { code: account.code }) : t("finance.ledger.accountDialog.addTitle")}>
         <form
           className="space-y-4"
           onSubmit={async (e) => {
@@ -59,17 +61,17 @@ export function AccountDialog({ account }: { account?: AccountFormValue }) {
             });
             setSaving(false);
             if (!result.ok) {
-              setError(result.error ?? "Could not save the account.");
+              setError(result.error ?? t("finance.ledger.accountDialog.saveFailed"));
               return;
             }
-            toast(account ? "Account saved." : "Account added.", { tone: "success" });
+            toast(account ? t("finance.ledger.accountDialog.saved") : t("finance.ledger.accountDialog.added"), { tone: "success" });
             setOpen(false);
             router.refresh();
           }}
         >
           <div className="grid gap-4 sm:grid-cols-[8rem_1fr]">
             <div>
-              <Label htmlFor="account-code">Code</Label>
+              <Label htmlFor="account-code">{t("finance.ledger.code")}</Label>
               <Input
                 id="account-code"
                 name="code"
@@ -81,30 +83,30 @@ export function AccountDialog({ account }: { account?: AccountFormValue }) {
               />
             </div>
             <div>
-              <Label htmlFor="account-name">Name</Label>
+              <Label htmlFor="account-name">{t("finance.ledger.name")}</Label>
               <Input id="account-name" name="name" maxLength={200} defaultValue={account?.name} required />
             </div>
           </div>
           <div>
-            <Label htmlFor="account-type">Type</Label>
+            <Label htmlFor="account-type">{t("finance.ledger.accountDialog.type")}</Label>
             {locked ? (
               <>
                 <input type="hidden" name="accountType" value={account?.account_type} />
-                <Input id="account-type" value={ACCOUNT_TYPE_LABEL[account!.account_type]} readOnly />
-                <FieldHint>This account has entries, so its code and type stay as they are.</FieldHint>
+                <Input id="account-type" value={t(ACCOUNT_TYPE_KEY[account!.account_type])} readOnly />
+                <FieldHint>{t("finance.ledger.accountDialog.lockedHint")}</FieldHint>
               </>
             ) : (
               <Select id="account-type" name="accountType" defaultValue={account?.account_type ?? "expense"}>
-                {ACCOUNT_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {ACCOUNT_TYPE_LABEL[t]}
+                {ACCOUNT_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {t(ACCOUNT_TYPE_KEY[type])}
                   </option>
                 ))}
               </Select>
             )}
           </div>
           <div>
-            <Label htmlFor="account-description">Description (optional)</Label>
+            <Label htmlFor="account-description">{t("finance.ledger.optionalLabel.description")}</Label>
             <Textarea
               id="account-description"
               name="description"
@@ -114,7 +116,7 @@ export function AccountDialog({ account }: { account?: AccountFormValue }) {
           </div>
           <label className="flex items-center gap-2 text-[13.5px]">
             <Checkbox name="isActive" defaultChecked={account?.is_active ?? true} />
-            Active (inactive accounts cannot be used in new entries)
+            {t("finance.ledger.accountDialog.active")}
           </label>
           {error ? (
             <p role="alert" className="text-[13px] text-danger-fg">
@@ -123,10 +125,10 @@ export function AccountDialog({ account }: { account?: AccountFormValue }) {
           ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.common.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              Save
+              {t("finance.common.save")}
             </Button>
           </div>
         </form>

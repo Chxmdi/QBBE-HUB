@@ -2,6 +2,7 @@
 
 import { ScanText } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/client";
 import { textReaderMessage, type TextReaderState } from "./use-file-text-reader";
 
 /**
@@ -17,7 +18,8 @@ export function TextReadingStatus({
   onSkip: () => void;
   id?: string;
 }) {
-  const message = textReaderMessage(state);
+  const t = useT();
+  const message = textReaderMessage(state, t);
   // Nothing at all until a readable file is chosen, so a form that already has
   // a status region (the receipt dialog) keeps exactly one while idle.
   if (!message) return null;
@@ -28,7 +30,7 @@ export function TextReadingStatus({
         <span>{message}</span>
         {state.kind === "running" ? (
           <Button type="button" variant="ghost" size="sm" onClick={onSkip}>
-            Skip reading
+            {t("textReader.skip")}
           </Button>
         ) : null}
       </p>

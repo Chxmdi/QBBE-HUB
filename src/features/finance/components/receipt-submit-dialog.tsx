@@ -22,6 +22,8 @@ import { useFileTextReader } from "@/features/documents/text-extract/use-file-te
 import { normalizeExtractedText } from "@/features/documents/text-extract/text";
 import { TextReadingStatus } from "@/features/documents/text-extract/text-reading-status";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useLocale, useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/translate";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -29,12 +31,12 @@ const MAX_BYTES = 25 * 1024 * 1024;
 type Field = "documentDate" | "vendor" | "total" | "gst" | "qst";
 type Values = Record<Field, string>;
 
-const FIELD_NAMES: Record<Field, string> = {
-  documentDate: "date",
-  vendor: "paid to",
-  total: "total",
-  gst: "GST",
-  qst: "QST",
+const FIELD_NAMES: Record<Field, MessageKey> = {
+  documentDate: "finance.receipts.submit.fieldNames.documentDate",
+  vendor: "finance.receipts.submit.fieldNames.vendor",
+  total: "finance.receipts.submit.fieldNames.total",
+  gst: "finance.receipts.submit.fieldNames.gst",
+  qst: "finance.receipts.submit.fieldNames.qst",
 };
 
 function asFieldValues(s: ReceiptSuggestions): Partial<Values> {
@@ -74,6 +76,8 @@ export function ReceiptSubmitDialog({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -107,10 +111,12 @@ export function ReceiptSubmitDialog({
     setSuggested((s) => ({ ...s, ...fill }));
     setOutcome(
       filled.length
-        ? `Receipt read. Suggested ${filled.map((f) => FIELD_NAMES[f]).join(", ")}. Check them before submitting.`
+        ? t("finance.receipts.submit.readSuggested", {
+            fields: filled.map((f) => t(FIELD_NAMES[f])).join(", "),
+          })
         : Object.keys(found).length
-          ? "Receipt read. The fields it found were already filled in, so nothing was changed."
-          : "Receipt read, but no figures could be picked out. Type them in.",
+          ? t("finance.receipts.submit.readAlreadyFilled")
+          : t("finance.receipts.submit.readNothing"),
     );
   });
 
@@ -170,16 +176,16 @@ export function ReceiptSubmitDialog({
     const form = new FormData(e.currentTarget);
     const file = form.get("file") as File | null;
     if (!file || file.size === 0) {
-      setError("Take a photo of the receipt or choose its file.");
+      setError(t("finance.receipts.submit.fileRequired"));
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError("Files must be 25 MB or smaller.");
+      setError(t("finance.receipts.submit.fileTooLarge"));
       return;
     }
 
     setSaving(true);
-    setProgress("Uploading…");
+    setProgress(t("finance.receipts.submit.uploading"));
     const supabase = createSupabaseBrowserClient();
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "receipt";
     // The database checks that the first two segments are this organization
@@ -192,13 +198,11 @@ export function ReceiptSubmitDialog({
     if (uploadError) {
       setSaving(false);
       setProgress(null);
-      setError(
-        "Upload failed. Receipts must be a photo (JPEG, PNG, HEIC, WebP) or a PDF; check your connection and try again.",
-      );
+      setError(t("finance.receipts.submit.uploadFailed"));
       return;
     }
 
-    setProgress("Saving…");
+    setProgress(t("finance.receipts.submit.saving"));
     const result = await registerReceipt({
       kind: form.get("kind") || "receipt",
       documentDate: values.documentDate,
@@ -219,14 +223,14 @@ export function ReceiptSubmitDialog({
 
     if (!result.ok) {
       await supabase.storage.from("receipts").remove([path]);
-      setError(result.error ?? "Could not save the receipt.");
+      setError(result.error ?? t("finance.receipts.submit.saveFailed"));
       return;
     }
     // The words on the receipt, for search. Never fails the submission: Skip
     // settles reading at once, and a failed save only means no words.
     if (result.id) {
       setSaving(true);
-      setProgress("Reading the receipt's words for search…");
+      setProgress(t("finance.receipts.submit.progressWords"));
       const [photoText, pdfText] = await Promise.all([reader.result(), pdfReader.result()]);
       const found = photoText
         ? { text: normalizeExtractedText(photoText), source: "ocr" as const }
@@ -235,7 +239,7 @@ export function ReceiptSubmitDialog({
       setSaving(false);
       setProgress(null);
     }
-    toast("Receipt submitted. The file opens once its security check passes.");
+    toast(t("finance.receipts.submit.submitted"));
     setOpen(false);
     setProgramId("");
     // The next receipt starts from a clean form.
@@ -253,12 +257,12 @@ export function ReceiptSubmitDialog({
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus className="size-4" aria-hidden />
-        Submit receipt
+        {t("finance.receipts.submit.trigger")}
       </Button>
-      <Dialog open={open} onClose={close} title="Submit a receipt or bill">
+      <Dialog open={open} onClose={close} title={t("finance.receipts.submit.dialogTitle")}>
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="rc-file">Photo or PDF</Label>
+            <Label htmlFor="rc-file">{t("finance.receipts.submit.fileLabel")}</Label>
             <Input
               id="rc-file"
               name="file"
@@ -267,25 +271,20 @@ export function ReceiptSubmitDialog({
               accept="image/jpeg,image/png,image/heic,image/heif,image/webp,application/pdf"
               onChange={handleFileChange}
             />
-            <FieldHint>
-              On a phone this opens the camera. Up to 25 MB. Keep the paper until
-              the file shows as checked. A photo is read on this device to suggest
-              the figures; a PDF is not. The words on either are kept so library
-              search can find the receipt.
-            </FieldHint>
+            <FieldHint>{t("finance.receipts.submit.fileHint")}</FieldHint>
             <ReadingStatus state={reader.state} outcome={outcome} onSkip={reader.skip} />
             <TextReadingStatus state={pdfReader.state} onSkip={pdfReader.skip} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="rc-kind">Type</Label>
+              <Label htmlFor="rc-kind">{t("finance.receipts.submit.typeLabel")}</Label>
               <Select id="rc-kind" name="kind" defaultValue="receipt">
-                <option value="receipt">Receipt (already paid)</option>
-                <option value="bill">Bill or invoice (to pay)</option>
+                <option value="receipt">{t("finance.receipts.submit.typeReceipt")}</option>
+                <option value="bill">{t("finance.receipts.submit.typeBill")}</option>
               </Select>
             </div>
             <div>
-              <Label htmlFor="rc-date">Date on the receipt</Label>
+              <Label htmlFor="rc-date">{t("finance.receipts.submit.dateLabel")}</Label>
               <Input
                 id="rc-date"
                 name="documentDate"
@@ -300,13 +299,13 @@ export function ReceiptSubmitDialog({
             </div>
           </div>
           <div>
-            <Label htmlFor="rc-vendor">Paid to</Label>
+            <Label htmlFor="rc-vendor">{t("finance.receipts.submit.vendorLabel")}</Label>
             <Input
               id="rc-vendor"
               name="vendor"
               required
               maxLength={200}
-              placeholder="Store or supplier"
+              placeholder={t("finance.receipts.submit.vendorPlaceholder")}
               value={values.vendor}
               onChange={(e) => setField("vendor", e.target.value)}
               {...suggestedProps("vendor", suggested)}
@@ -315,7 +314,7 @@ export function ReceiptSubmitDialog({
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <Label htmlFor="rc-total">Total</Label>
+              <Label htmlFor="rc-total">{t("finance.receipts.submit.totalLabel")}</Label>
               <Input
                 id="rc-total"
                 name="total"
@@ -329,7 +328,7 @@ export function ReceiptSubmitDialog({
               <SuggestedMark field="total" suggested={suggested} />
             </div>
             <div>
-              <Label htmlFor="rc-gst">GST</Label>
+              <Label htmlFor="rc-gst">{t("finance.receipts.submit.gstLabel")}</Label>
               <Input
                 id="rc-gst"
                 name="gst"
@@ -342,7 +341,7 @@ export function ReceiptSubmitDialog({
               <SuggestedMark field="gst" suggested={suggested} />
             </div>
             <div>
-              <Label htmlFor="rc-qst">QST</Label>
+              <Label htmlFor="rc-qst">{t("finance.receipts.submit.qstLabel")}</Label>
               <Input
                 id="rc-qst"
                 name="qst"
@@ -355,25 +354,26 @@ export function ReceiptSubmitDialog({
               <SuggestedMark field="qst" suggested={suggested} />
             </div>
           </div>
-          <FieldHint>Total includes taxes. Leave GST and QST empty if none are shown.</FieldHint>
+          <FieldHint>{t("finance.receipts.submit.taxHint")}</FieldHint>
           {consistency && !consistency.consistent ? (
             <p id="rc-tax-check" className="-mt-2 text-[12.5px] text-warning-fg">
-              Check the taxes: on {formatCents(consistency.beforeTaxCents)} before tax, GST at
-              5&nbsp;% would be {formatCents(consistency.expectedGstCents)} and QST at 9.975&nbsp;%
-              would be {formatCents(consistency.expectedQstCents)}. This can be right when some
-              items are not taxed or a tip is included.
+              {t("finance.receipts.submit.taxCheck", {
+                base: formatCents(consistency.beforeTaxCents, locale),
+                gst: formatCents(consistency.expectedGstCents, locale),
+                qst: formatCents(consistency.expectedQstCents, locale),
+              })}
             </p>
           ) : null}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="rc-program">Program</Label>
+              <Label htmlFor="rc-program">{t("finance.receipts.submit.programLabel")}</Label>
               <Select
                 id="rc-program"
                 name="programId"
                 value={programId}
                 onChange={(e) => setProgramId(e.target.value)}
               >
-                <option value="">No program</option>
+                <option value="">{t("finance.receipts.submit.noProgram")}</option>
                 {programs.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -382,9 +382,9 @@ export function ReceiptSubmitDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="rc-project">Project</Label>
+              <Label htmlFor="rc-project">{t("finance.receipts.submit.projectLabel")}</Label>
               <Select id="rc-project" name="projectId" defaultValue="" key={programId}>
-                <option value="">No project</option>
+                <option value="">{t("finance.receipts.submit.noProject")}</option>
                 {projectChoices.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -395,7 +395,8 @@ export function ReceiptSubmitDialog({
           </div>
           <div>
             <Label htmlFor="rc-note">
-              What was it for? <span className="font-normal text-muted">(optional)</span>
+              {t("finance.receipts.submit.noteLabel")}{" "}
+              <span className="font-normal text-muted">{t("finance.receipts.submit.optional")}</span>
             </Label>
             <Textarea id="rc-note" name="note" maxLength={2000} rows={2} />
           </div>
@@ -407,11 +408,11 @@ export function ReceiptSubmitDialog({
           <div className="flex items-center justify-end gap-2 pt-1">
             {progress ? <span className="meta">{progress}</span> : null}
             <Button type="button" variant="secondary" onClick={close}>
-              Cancel
+              {t("finance.receipts.submit.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
               <Camera className="size-4" aria-hidden />
-              Submit
+              {t("finance.receipts.submit.submit")}
             </Button>
           </div>
         </form>
@@ -430,10 +431,11 @@ function suggestedProps(field: Field, suggested: Partial<Values>, alsoDescribedB
 }
 
 function SuggestedMark({ field, suggested }: { field: Field; suggested: Partial<Values> }) {
+  const t = useT();
   if (!(field in suggested)) return null;
   return (
     <p id={`rc-${field}-suggested`} className="mt-1 text-[12px] font-medium text-accent-fg">
-      Suggested — check before submitting
+      {t("finance.receipts.submit.suggestedMark")}
     </p>
   );
 }
@@ -452,17 +454,18 @@ function ReadingStatus({
   outcome: string | null;
   onSkip: () => void;
 }) {
+  const t = useT();
   const message =
     state.kind === "running"
-      ? "Reading the receipt on this device. You can keep typing."
+      ? t("finance.receipts.submit.reading")
       : state.kind === "done"
         ? (outcome ?? "")
         : state.kind === "failed"
-          ? "This photo could not be read automatically. Type the figures in."
+          ? t("finance.receipts.submit.readFailed")
           : state.kind === "timed-out"
-            ? "Reading took too long on this device and was stopped. Type the figures in."
+            ? t("finance.receipts.submit.readTimedOut")
             : state.kind === "skipped"
-              ? "Automatic reading skipped. Type the figures in."
+              ? t("finance.receipts.submit.readSkipped")
               : "";
 
   return (
@@ -477,12 +480,12 @@ function ReadingStatus({
             value={state.progress.stage === "reading" ? state.progress.percent : undefined}
             aria-label={
               state.progress.stage === "reading"
-                ? "Reading the receipt"
-                : "Preparing to read the receipt"
+                ? t("finance.receipts.submit.progressReading")
+                : t("finance.receipts.submit.progressPreparing")
             }
           />
           <Button type="button" variant="secondary" size="sm" onClick={onSkip}>
-            Skip reading
+            {t("finance.receipts.submit.skip")}
           </Button>
         </div>
       ) : null}

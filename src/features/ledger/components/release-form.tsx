@@ -7,6 +7,7 @@ import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input
 import { useToast } from "@/components/ui/toast";
 import { formatCents } from "@/features/ledger/money";
 import { releaseRestricted } from "@/features/ledger/services/ledger.commands";
+import { useLocale, useT } from "@/lib/i18n/client";
 
 export interface ReleaseFundOption {
   id: string;
@@ -32,6 +33,8 @@ export function ReleaseForm({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
+  const locale = useLocale();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fromId, setFromId] = useState("");
@@ -55,17 +58,17 @@ export function ReleaseForm({
         });
         setPending(false);
         if (!result.ok) {
-          setError(result.error ?? "Something went wrong. Try again.");
+          setError(result.error ?? t("finance.ledger.release.form.failed"));
           return;
         }
-        toast("Released and posted.", { tone: "success" });
+        toast(t("finance.ledger.release.form.released"), { tone: "success" });
         formEl.reset();
         setFromId("");
         router.refresh();
       }}
     >
       <div>
-        <Label htmlFor="release-from">From restricted fund</Label>
+        <Label htmlFor="release-from">{t("finance.ledger.release.form.fromLabel")}</Label>
         <Select
           id="release-from"
           name="fromFundId"
@@ -73,7 +76,7 @@ export function ReleaseForm({
           value={fromId}
           onChange={(e) => setFromId(e.target.value)}
         >
-          <option value="">Choose a restricted fund</option>
+          <option value="">{t("finance.ledger.release.form.fromPlaceholder")}</option>
           {restricted.map((f) => (
             <option key={f.id} value={f.id}>
               {f.code} {f.name}
@@ -81,13 +84,17 @@ export function ReleaseForm({
           ))}
         </Select>
         <FieldHint>
-          {from ? `${formatCents(from.availableCents ?? 0)} available today.` : "Only restricted funds can be released."}
+          {from
+            ? t("finance.ledger.release.form.available", {
+                amount: formatCents(from.availableCents ?? 0, locale),
+              })
+            : t("finance.ledger.release.form.onlyRestricted")}
         </FieldHint>
       </div>
       <div>
-        <Label htmlFor="release-to">To unrestricted fund</Label>
+        <Label htmlFor="release-to">{t("finance.ledger.release.form.toLabel")}</Label>
         <Select id="release-to" name="toFundId" required defaultValue={unrestricted.length === 1 ? unrestricted[0].id : ""}>
-          <option value="">Choose an unrestricted fund</option>
+          <option value="">{t("finance.ledger.release.form.toPlaceholder")}</option>
           {unrestricted.map((f) => (
             <option key={f.id} value={f.id}>
               {f.code} {f.name}
@@ -96,29 +103,29 @@ export function ReleaseForm({
         </Select>
       </div>
       <div>
-        <Label htmlFor="release-amount">Amount</Label>
-        <Input id="release-amount" name="amount" inputMode="decimal" required placeholder="0.00" />
+        <Label htmlFor="release-amount">{t("finance.ledger.release.form.amount")}</Label>
+        <Input id="release-amount" name="amount" inputMode="decimal" required placeholder={t("finance.ledger.release.form.amountPlaceholder")} />
       </div>
       <div>
-        <Label htmlFor="release-date">Release date</Label>
+        <Label htmlFor="release-date">{t("finance.ledger.release.form.date")}</Label>
         <Input id="release-date" name="releaseDate" type="date" required defaultValue={defaultDate} />
-        <FieldHint>Must fall in an open period.</FieldHint>
+        <FieldHint>{t("finance.ledger.release.form.dateHint")}</FieldHint>
       </div>
       <div className="md:col-span-2">
-        <Label htmlFor="release-condition">Condition met</Label>
+        <Label htmlFor="release-condition">{t("finance.ledger.release.form.condition")}</Label>
         <Textarea
           id="release-condition"
           name="condition"
           required
           maxLength={300}
           rows={2}
-          placeholder="For example: funder accepted the final report on 2027-03-31"
+          placeholder={t("finance.ledger.release.form.conditionPlaceholder")}
         />
-        <FieldHint>Goes into the entry&apos;s memo, so the accountant sees why the money was released.</FieldHint>
+        <FieldHint>{t("finance.ledger.release.form.conditionHint")}</FieldHint>
       </div>
       <div className="flex flex-col gap-2 md:col-span-2 md:flex-row md:items-center">
         <Button type="submit" loading={pending}>
-          Release and post
+          {t("finance.ledger.release.form.submit")}
         </Button>
         {error ? (
           <p role="alert" className="text-[13px] text-danger-fg">

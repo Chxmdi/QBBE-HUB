@@ -1,49 +1,48 @@
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+
 /**
  * Payroll categories (#155). The same fifteen figures the database stores on
  * a pay run (supabase/migrations/20260929900000_payroll_import.sql,
- * app.payroll_categories), in the same order.
+ * app.payroll_categories), in the same order. Their labels live in the
+ * catalogue under `finance.payroll` (#141).
  */
 
 export const PAYROLL_CATEGORIES = [
-  { key: "gross_wages", label: "Gross wages", group: "wages", debit: ["expense"], credit: null },
-  { key: "ee_federal_tax", label: "Federal income tax", group: "employee", debit: null, credit: ["liability"] },
-  { key: "ee_quebec_tax", label: "Quebec income tax", group: "employee", debit: null, credit: ["liability"] },
-  { key: "ee_qpp", label: "QPP", group: "employee", debit: null, credit: ["liability"] },
-  { key: "ee_ei", label: "EI", group: "employee", debit: null, credit: ["liability"] },
-  { key: "ee_qpip", label: "QPIP", group: "employee", debit: null, credit: ["liability"] },
-  { key: "ee_other", label: "Other deductions", group: "employee", debit: null, credit: ["liability"] },
-  { key: "er_qpp", label: "QPP", group: "employer", debit: ["expense"], credit: ["liability"] },
-  { key: "er_ei", label: "EI", group: "employer", debit: ["expense"], credit: ["liability"] },
-  { key: "er_qpip", label: "QPIP", group: "employer", debit: ["expense"], credit: ["liability"] },
-  { key: "er_fss", label: "Health Services Fund (FSS)", group: "employer", debit: ["expense"], credit: ["liability"] },
-  { key: "er_cnesst", label: "CNESST", group: "employer", debit: ["expense"], credit: ["liability"] },
-  { key: "er_cnt", label: "CNT (labour standards)", group: "employer", debit: ["expense"], credit: ["liability"] },
-  { key: "er_other", label: "Other contributions", group: "employer", debit: ["expense"], credit: ["liability"] },
-  { key: "net_pay", label: "Net pay", group: "net", debit: null, credit: ["liability", "asset"] },
+  { key: "gross_wages", group: "wages", debit: ["expense"], credit: null },
+  { key: "ee_federal_tax", group: "employee", debit: null, credit: ["liability"] },
+  { key: "ee_quebec_tax", group: "employee", debit: null, credit: ["liability"] },
+  { key: "ee_qpp", group: "employee", debit: null, credit: ["liability"] },
+  { key: "ee_ei", group: "employee", debit: null, credit: ["liability"] },
+  { key: "ee_qpip", group: "employee", debit: null, credit: ["liability"] },
+  { key: "ee_other", group: "employee", debit: null, credit: ["liability"] },
+  { key: "er_qpp", group: "employer", debit: ["expense"], credit: ["liability"] },
+  { key: "er_ei", group: "employer", debit: ["expense"], credit: ["liability"] },
+  { key: "er_qpip", group: "employer", debit: ["expense"], credit: ["liability"] },
+  { key: "er_fss", group: "employer", debit: ["expense"], credit: ["liability"] },
+  { key: "er_cnesst", group: "employer", debit: ["expense"], credit: ["liability"] },
+  { key: "er_cnt", group: "employer", debit: ["expense"], credit: ["liability"] },
+  { key: "er_other", group: "employer", debit: ["expense"], credit: ["liability"] },
+  { key: "net_pay", group: "net", debit: null, credit: ["liability", "asset"] },
 ] as const;
 
 export type PayrollCategory = (typeof PAYROLL_CATEGORIES)[number]["key"];
+export type PayrollGroup = (typeof PAYROLL_CATEGORIES)[number]["group"];
 export type AccountType = "asset" | "liability" | "net_assets" | "revenue" | "expense";
 
 export const CATEGORY_KEYS = PAYROLL_CATEGORIES.map((c) => c.key) as PayrollCategory[];
 
-export const GROUP_LABEL = {
-  wages: "Wages",
-  employee: "Employee deductions",
-  employer: "Employer contributions",
-  net: "Net pay",
-} as const;
+/** The short label, as the totals table shows it under its group: "QPP". */
+export function categoryShortKey(key: PayrollCategory): MessageKey {
+  return `finance.payroll.categories.${key}`;
+}
+
+export function groupKey(group: PayrollGroup): MessageKey {
+  return `finance.payroll.groups.${group}`;
+}
 
 /** "QPP (employee)", "EI (employer)", "Net pay": unambiguous on its own. */
-export function categoryLabel(key: PayrollCategory): string {
-  const c = PAYROLL_CATEGORIES.find((x) => x.key === key)!;
-  if (c.group === "employee" && key !== "ee_other") return `${c.label} (employee)`;
-  if (c.group === "employer" && !["er_fss", "er_cnesst", "er_cnt", "er_other"].includes(key)) {
-    return `${c.label} (employer)`;
-  }
-  if (key === "er_other") return "Other employer contributions";
-  if (key === "ee_other") return "Other employee deductions";
-  return c.label;
+export function categoryLabel(key: PayrollCategory, t: TranslateFn): string {
+  return t(`finance.payroll.categoryNames.${key}`);
 }
 
 export type RunCents = Record<PayrollCategory, number>;
@@ -67,10 +66,14 @@ export function totalsAddUp(c: RunCents): boolean {
 
 export type PayrollProvider = "nethris" | "employeur_d" | "adp_wfn" | "ceridian_powerpay" | "other";
 
-export const PROVIDER_LABEL: Record<PayrollProvider, string> = {
-  nethris: "Nethris (Desjardins)",
-  employeur_d: "Employeur D",
-  adp_wfn: "ADP Workforce Now",
-  ceridian_powerpay: "Ceridian Powerpay",
-  other: "Other CSV (choose the columns)",
-};
+export const PAYROLL_PROVIDERS: PayrollProvider[] = ["nethris", "employeur_d", "adp_wfn", "ceridian_powerpay", "other"];
+
+/** "Nethris (Desjardins)", "Other CSV (choose the columns)". */
+export function providerLabel(provider: PayrollProvider, t: TranslateFn): string {
+  return t(`finance.payroll.providers.${provider}`);
+}
+
+/** The provider's name without its parenthesis: "Nethris", "Other CSV". */
+export function providerShortLabel(provider: PayrollProvider, t: TranslateFn): string {
+  return providerLabel(provider, t).replace(/ \(.*\)$/, "");
+}

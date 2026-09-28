@@ -6,6 +6,9 @@ import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { bankEn } from "@/lib/i18n/messages/finance/bank.en";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { fingerprint, sha256Hex } from "@/features/banking/fingerprint";
 import {
@@ -13,6 +16,7 @@ import {
   MAX_LINES,
   parseSignedCents,
   parseStatementFile,
+  translateParseError,
   type CsvMapping,
 } from "@/features/banking/parsers";
 
@@ -31,17 +35,29 @@ type DbError = { code?: string; message: string } | null;
 
 const READABLE_CODES = new Set(["23514", "22023", "42501", "23505", "P0002"]);
 
-function dbMessage(error: DbError, fallback: string): string {
-  if (!error) return fallback;
-  if (error.code === "23503") return "An account or fund is not in this organization.";
+type ErrorName = keyof typeof bankEn.errors;
+const E = (name: ErrorName): MessageKey => `finance.bank.errors.${name}`;
+
+/**
+ * Validation messages are catalogue keys (#141); this shows one in the
+ * reader's language. Anything else (Zod's own wording) is shown as it came.
+ */
+function issueText(t: TranslateFn, message: string | undefined): string | undefined {
+  if (message === undefined) return undefined;
+  return message.startsWith("finance.bank.") ? t(message as MessageKey) : message;
+}
+
+function dbMessage(t: TranslateFn, error: DbError, fallback: ErrorName): string {
+  if (!error) return t(E(fallback));
+  if (error.code === "23503") return t(E("notInOrganization"));
   if (error.code === "23505" && /bank_account_organization_id_ledger_account_id_key/.test(error.message)) {
-    return "Another bank account already uses that cash account.";
+    return t(E("cashAccountTaken"));
   }
   if (error.code === "23505" && /bank_reconciliation_bank_account_id_statement_end_key/.test(error.message)) {
-    return "A statement ending that day already exists for this account.";
+    return t(E("statementEndTaken"));
   }
   if (error.code === "23514" && /violates check constraint/i.test(error.message)) {
-    return "Check the values entered.";
+    return t(E("checkValues"));
   }
   if (
     error.code &&
@@ -50,7 +66,7 @@ function dbMessage(error: DbError, fallback: string): string {
   ) {
     return error.message;
   }
-  return fallback;
+  return t(E(fallback));
 }
 
 async function authorize(): Promise<
@@ -64,8 +80,8 @@ async function authorize(): Promise<
 }
 
 const id = z.string().uuid();
-const isoDate = (message: string) => requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message);
-const signedMoney = (message: string) =>
+const isoDate = (message: MessageKey) => requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message);
+const signedMoney = (message: MessageKey) =>
   requiredText(message).transform((v, ctx) => {
     const cents = parseSignedCents(v);
     if (cents === null) {
@@ -83,24 +99,25 @@ const INSTITUTIONS = ["desjardins", "national_bank", "rbc", "td", "bmo", "other"
 
 const accountSchema = z.object({
   id: id.optional(),
-  name: requiredText("Name the account, for example Chequing.", 120),
-  institution: z.enum(INSTITUTIONS, { message: "Choose the bank." }),
+  name: requiredText(E("accountName"), 120),
+  institution: z.enum(INSTITUTIONS, { message: E("chooseBank") }),
   accountLast4: z
     .string()
     .trim()
-    .regex(/^(\d{4})?$/, "Enter only the last four digits of the account number.")
+    .regex(/^(\d{4})?$/, E("last4"))
     .optional(),
-  ledgerAccountId: id.or(z.literal("")).refine(Boolean, "Choose the ledger cash account."),
-  defaultFundId: id.or(z.literal("")).refine(Boolean, "Choose the fund."),
-  reconcileFrom: isoDate("Choose the first day to reconcile."),
+  ledgerAccountId: id.or(z.literal("")).refine(Boolean, E("chooseLedgerAccount")),
+  defaultFundId: id.or(z.literal("")).refine(Boolean, E("chooseFund")),
+  reconcileFrom: isoDate(E("reconcileFrom")),
   isActive: z.boolean().default(true),
 });
 
 export async function saveBankAccount(input: unknown): Promise<ActionResult & { id?: string }> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = accountSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueText(t, parsed.error.issues[0]?.message) };
   const d = parsed.data;
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("bank_save_account", {
@@ -114,7 +131,7 @@ export async function saveBankAccount(input: unknown): Promise<ActionResult & { 
     p_reconcile_from: d.reconcileFrom,
     p_is_active: d.isActive,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not save the bank account. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "saveAccount") };
   revalidatePath(BANK, "layout");
   return { ok: true, id: data as string };
 }
@@ -143,12 +160,12 @@ const LAYOUTS = ["custom", ...CSV_PRESETS.map((p) => p.id)] as [string, ...strin
 
 const importSchema = z.object({
   bankAccountId: id,
-  fileName: requiredText("Choose a statement file.", 200),
+  fileName: requiredText(E("chooseFile"), 200),
   text: z
-    .string({ required_error: "Choose a statement file." })
-    .min(1, "The file is empty.")
-    .max(MAX_FILE_CHARS, "The file is too large. Export a shorter date range."),
-  layout: z.enum(LAYOUTS, { message: "Choose the bank's file layout." }),
+    .string({ required_error: E("chooseFile") })
+    .min(1, E("fileEmpty"))
+    .max(MAX_FILE_CHARS, E("fileTooLarge")),
+  layout: z.enum(LAYOUTS, { message: E("chooseLayout") }),
   mapping: mappingSchema.optional(),
 });
 
@@ -161,13 +178,14 @@ export interface ImportResult extends ActionResult {
 export async function importStatement(input: unknown): Promise<ImportResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = importSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueText(t, parsed.error.issues[0]?.message) };
   const d = parsed.data;
   const result = parseStatementFile(d.fileName, d.text, d.layout, d.mapping as CsvMapping | undefined);
-  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.ok) return { ok: false, error: translateParseError(t, result) };
   const { statement } = result;
-  if (statement.lines.length > MAX_LINES) return { ok: false, error: `A file can hold at most ${MAX_LINES} lines.` };
+  if (statement.lines.length > MAX_LINES) return { ok: false, error: t(E("tooManyLines"), { max: MAX_LINES }) };
 
   const supabase = await createSupabaseServerClient();
   // An OFX file names its account; refuse one that is plainly another account.
@@ -181,7 +199,7 @@ export async function importStatement(input: unknown): Promise<ImportResult> {
     if (last4 && last4 !== statement.accountLast4) {
       return {
         ok: false,
-        error: `This file is for the account ending ${statement.accountLast4}, not ${last4}.`,
+        error: t(E("wrongAccount"), { file: statement.accountLast4, account: last4 }),
       };
     }
   }
@@ -200,7 +218,7 @@ export async function importStatement(input: unknown): Promise<ImportResult> {
       fingerprint: fingerprint(l.key),
     })),
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not import the statement. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "importFailed") };
   revalidatePath(BANK, "layout");
   const counts = data as { added: number; skipped: number };
   return { ok: true, added: counts.added, skipped: counts.skipped, total: statement.lines.length };
@@ -209,10 +227,11 @@ export async function importStatement(input: unknown): Promise<ImportResult> {
 export async function deleteImport(importId: string): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!id.safeParse(importId).success) return { ok: false, error: "Import not found." };
+  const t = await getT();
+  if (!id.safeParse(importId).success) return { ok: false, error: t(E("importNotFound")) };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("bank_delete_import", { p_import: importId });
-  if (error) return { ok: false, error: dbMessage(error, "Could not delete the import. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "deleteImport") };
   revalidatePath(BANK, "layout");
   return { ok: true };
 }
@@ -228,8 +247,9 @@ export async function matchLine(
 ): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   if (!id.safeParse(transactionId).success || !id.safeParse(journalLineId).success) {
-    return { ok: false, error: "Choose a ledger line to match." };
+    return { ok: false, error: t(E("chooseLedgerLine")) };
   }
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("bank_match_line", {
@@ -237,7 +257,7 @@ export async function matchLine(
     p_journal_line: journalLineId,
     p_method: method === "manual" ? "manual" : "suggested",
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not match the line. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "matchFailed") };
   revalidatePath(BANK, "layout");
   return { ok: true };
 }
@@ -248,8 +268,9 @@ const acceptSchema = z.array(z.object({ transactionId: id, journalLineId: id }))
 export async function acceptSuggestions(input: unknown): Promise<ActionResult & { matched?: number }> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = acceptSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "There are no suggestions to accept." };
+  if (!parsed.success) return { ok: false, error: t(E("noSuggestions")) };
   const supabase = await createSupabaseServerClient();
   let matched = 0;
   for (const s of parsed.data) {
@@ -260,7 +281,7 @@ export async function acceptSuggestions(input: unknown): Promise<ActionResult & 
     });
     if (error) {
       revalidatePath(BANK, "layout");
-      return { ok: false, matched, error: dbMessage(error, "Could not match every line. Try again.") };
+      return { ok: false, matched, error: dbMessage(t, error, "matchSomeFailed") };
     }
     matched++;
   }
@@ -271,17 +292,18 @@ export async function acceptSuggestions(input: unknown): Promise<ActionResult & 
 export async function unmatchLine(transactionId: string): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!id.safeParse(transactionId).success) return { ok: false, error: "Line not found." };
+  const t = await getT();
+  if (!id.safeParse(transactionId).success) return { ok: false, error: t(E("lineNotFound")) };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("bank_unmatch_line", { p_transaction: transactionId });
-  if (error) return { ok: false, error: dbMessage(error, "Could not undo the match. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "unmatchFailed") };
   revalidatePath(BANK, "layout");
   return { ok: true };
 }
 
 const createEntrySchema = z.object({
   transactionId: id,
-  accountId: id.or(z.literal("")).refine(Boolean, "Choose the account for the other side."),
+  accountId: id.or(z.literal("")).refine(Boolean, E("chooseContraAccount")),
   fundId: id.optional().or(z.literal("")),
   programId: id.optional().or(z.literal("")),
   memo: z.string().trim().max(500).optional(),
@@ -290,8 +312,9 @@ const createEntrySchema = z.object({
 export async function createEntryFromLine(input: unknown): Promise<ActionResult & { entryId?: string }> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = createEntrySchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueText(t, parsed.error.issues[0]?.message) };
   const d = parsed.data;
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("bank_create_entry", {
@@ -301,7 +324,7 @@ export async function createEntryFromLine(input: unknown): Promise<ActionResult 
     p_program: d.programId || null,
     p_memo: d.memo || null,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not create the entry. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "createEntryFailed") };
   revalidatePath(BANK, "layout");
   revalidatePath("/finance/ledger", "layout");
   return { ok: true, entryId: data as string };
@@ -314,20 +337,21 @@ export async function createEntryFromLine(input: unknown): Promise<ActionResult 
 const startSchema = z
   .object({
     bankAccountId: id,
-    statementStart: isoDate("Enter the statement's first day."),
-    statementEnd: isoDate("Enter the statement's last day."),
-    openingBalance: signedMoney("Enter the opening balance shown on the statement, like 1234.56."),
-    closingBalance: signedMoney("Enter the closing balance shown on the statement, like 1234.56."),
+    statementStart: isoDate(E("statementStart")),
+    statementEnd: isoDate(E("statementEnd")),
+    openingBalance: signedMoney(E("openingBalance")),
+    closingBalance: signedMoney(E("closingBalance")),
   })
   .refine((v) => v.statementStart <= v.statementEnd, {
-    message: "The statement ends on or after the day it starts.",
+    message: E("endBeforeStart"),
   });
 
 export async function startReconciliation(input: unknown): Promise<ActionResult & { id?: string }> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = startSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueText(t, parsed.error.issues[0]?.message) };
   const d = parsed.data;
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("bank_start_reconciliation", {
@@ -337,29 +361,30 @@ export async function startReconciliation(input: unknown): Promise<ActionResult 
     p_opening_balance_cents: d.openingBalance,
     p_closing_balance_cents: d.closingBalance,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not start the reconciliation. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "startFailed") };
   revalidatePath(BANK, "layout");
   return { ok: true, id: data as string };
 }
 
 const balancesSchema = z.object({
   reconciliationId: id,
-  openingBalance: signedMoney("Enter the opening balance shown on the statement, like 1234.56."),
-  closingBalance: signedMoney("Enter the closing balance shown on the statement, like 1234.56."),
+  openingBalance: signedMoney(E("openingBalance")),
+  closingBalance: signedMoney(E("closingBalance")),
 });
 
 export async function updateReconciliationBalances(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = balancesSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueText(t, parsed.error.issues[0]?.message) };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("bank_update_reconciliation", {
     p_reconciliation: parsed.data.reconciliationId,
     p_opening_balance_cents: parsed.data.openingBalance,
     p_closing_balance_cents: parsed.data.closingBalance,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not save the balances. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "saveBalances") };
   revalidatePath(BANK, "layout");
   return { ok: true };
 }
@@ -370,15 +395,16 @@ export async function setReconciliationStatus(
 ): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   if (!id.safeParse(reconciliationId).success || !["open", "reconciled"].includes(status)) {
-    return { ok: false, error: "Reconciliation not found." };
+    return { ok: false, error: t(E("reconciliationNotFound")) };
   }
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("bank_set_reconciliation_status", {
     p_reconciliation: reconciliationId,
     p_status: status,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not change the reconciliation. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "statusFailed") };
   revalidatePath(BANK, "layout");
   return { ok: true };
 }
@@ -386,10 +412,11 @@ export async function setReconciliationStatus(
 export async function deleteReconciliation(reconciliationId: string): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!id.safeParse(reconciliationId).success) return { ok: false, error: "Reconciliation not found." };
+  const t = await getT();
+  if (!id.safeParse(reconciliationId).success) return { ok: false, error: t(E("reconciliationNotFound")) };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("bank_delete_reconciliation", { p_reconciliation: reconciliationId });
-  if (error) return { ok: false, error: dbMessage(error, "Could not delete the reconciliation. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, "deleteFailed") };
   revalidatePath(BANK, "layout");
   return { ok: true };
 }

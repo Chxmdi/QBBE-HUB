@@ -8,10 +8,14 @@ import {
   centsToDecimal,
   csvDocument,
   FUND_RESTRICTIONS,
-  FUND_RESTRICTION_LABEL,
+  FUND_RESTRICTION_KEY,
   type AccountType,
   type FundRestriction,
 } from "@/features/ledger/money";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+
+/** CSV text defaults to English, so spreadsheets and tests stay stable (#141). */
+const EN = createTranslator("en");
 
 export interface StatementTotalRow {
   account_id: string;
@@ -163,17 +167,23 @@ export function hasActivity(s: Statements): boolean {
 // CSV files
 // ---------------------------------------------------------------------------
 
-const CLASS_HEADERS = FUND_RESTRICTIONS.map((r) => FUND_RESTRICTION_LABEL[r]);
+const classHeaders = (t: TranslateFn) => FUND_RESTRICTIONS.map((r) => t(FUND_RESTRICTION_KEY[r]));
 const money = (cents: number) => centsToDecimal(cents);
 const classCells = (a: ByClass) => [...FUND_RESTRICTIONS.map((r) => money(a[r])), money(a.total)];
 
 /** Statement of financial position, one account per row, with an optional comparative. */
-export function positionCsv(current: Statements, prior: Statements | null): string {
+export function positionCsv(current: Statements, prior: Statements | null, t: TranslateFn = EN): string {
   const priorTotals = (lines: StatementLine[], code: string) =>
     prior ? money(lines.find((l) => l.code === code)?.amounts.total ?? 0) : null;
-  const header = ["Section", "Account", "Name", `As at ${current.to}`, ...(prior ? [`As at ${prior.to}`] : [])];
+  const header = [
+    t("finance.ledgerReports.csv.section"),
+    t("finance.common.account"),
+    t("finance.ledgerReports.name"),
+    t("finance.ledgerReports.csv.asAt", { date: current.to }),
+    ...(prior ? [t("finance.ledgerReports.csv.asAt", { date: prior.to })] : []),
+  ];
   const rows: (string | number | null)[][] = [
-    [`Statement of financial position as at ${current.to}`, "Prepared for your accountant, not filed"],
+    [t("finance.ledgerReports.csv.positionTitle", { date: current.to }), t("finance.ledgerReports.csv.notFiled")],
     header,
   ];
   const section = (label: string, lines: StatementLine[], priorLines: StatementLine[] | undefined) => {
@@ -189,29 +199,38 @@ export function positionCsv(current: Statements, prior: Statements | null): stri
       ]);
     }
   };
-  section("Assets", current.position.assets, prior?.position.assets);
-  rows.push(["Assets", "", "Total assets", money(current.position.totalAssets), ...(prior ? [money(prior.position.totalAssets)] : [])]);
-  section("Liabilities", current.position.liabilities, prior?.position.liabilities);
+  const assets = t("finance.ledgerReports.statementTables.assets");
+  const liabilities = t("finance.ledgerReports.statementTables.liabilities");
+  const netAssets = t("finance.ledgerReports.statementTables.netAssets");
+  section(assets, current.position.assets, prior?.position.assets);
   rows.push([
-    "Liabilities",
+    assets,
     "",
-    "Total liabilities",
+    t("finance.ledgerReports.statementTables.totalAssets"),
+    money(current.position.totalAssets),
+    ...(prior ? [money(prior.position.totalAssets)] : []),
+  ]);
+  section(liabilities, current.position.liabilities, prior?.position.liabilities);
+  rows.push([
+    liabilities,
+    "",
+    t("finance.ledgerReports.statementTables.totalLiabilities"),
     money(current.position.totalLiabilities),
     ...(prior ? [money(prior.position.totalLiabilities)] : []),
   ]);
   for (const r of FUND_RESTRICTIONS) {
     rows.push([
-      "Net assets",
+      netAssets,
       "",
-      FUND_RESTRICTION_LABEL[r],
+      t(FUND_RESTRICTION_KEY[r]),
       money(current.position.netAssets[r]),
       ...(prior ? [money(prior.position.netAssets[r])] : []),
     ]);
   }
   rows.push([
-    "Net assets",
+    netAssets,
     "",
-    "Total net assets",
+    t("finance.ledgerReports.statementTables.totalNetAssets"),
     money(current.position.netAssets.total),
     ...(prior ? [money(prior.position.netAssets.total)] : []),
   ]);
@@ -219,27 +238,41 @@ export function positionCsv(current: Statements, prior: Statements | null): stri
 }
 
 /** Statement of operations and changes in net assets, by restriction class. */
-export function operationsCsv(current: Statements, prior: Statements | null): string {
-  const header = ["Section", "Account", "Name", ...CLASS_HEADERS, "Total", ...(prior ? [`Total ${prior.from} to ${prior.to}`] : [])];
+export function operationsCsv(current: Statements, prior: Statements | null, t: TranslateFn = EN): string {
+  const header = [
+    t("finance.ledgerReports.csv.section"),
+    t("finance.common.account"),
+    t("finance.ledgerReports.name"),
+    ...classHeaders(t),
+    t("finance.common.total"),
+    ...(prior ? [t("finance.ledgerReports.csv.totalRange", { from: prior.from, to: prior.to })] : []),
+  ];
   const rows: (string | number | null)[][] = [
-    [`Statement of operations ${current.from} to ${current.to}`, "Prepared for your accountant, not filed"],
+    [
+      t("finance.ledgerReports.csv.operationsTitle", { from: current.from, to: current.to }),
+      t("finance.ledgerReports.csv.notFiled"),
+    ],
     header,
   ];
+  const revenue = t("finance.ledgerReports.statementTables.revenue");
+  const expenses = t("finance.ledgerReports.statementTables.expenses");
+  const netAssets = t("finance.ledgerReports.statementTables.netAssets");
+  const excess = t("finance.ledgerReports.statementTables.excess");
   const priorTotal = (lines: StatementLine[] | undefined, code: string) =>
     prior ? [money(lines?.find((l) => l.code === code)?.amounts.total ?? 0)] : [];
   for (const l of current.operations.revenue) {
-    rows.push(["Revenue", l.code, l.name, ...classCells(l.amounts), ...priorTotal(prior?.operations.revenue, l.code)]);
+    rows.push([revenue, l.code, l.name, ...classCells(l.amounts), ...priorTotal(prior?.operations.revenue, l.code)]);
   }
-  rows.push(["Revenue", "", "Total revenue", ...classCells(current.operations.totalRevenue), ...(prior ? [money(prior.operations.totalRevenue.total)] : [])]);
+  rows.push([revenue, "", t("finance.ledgerReports.statementTables.totalRevenue"), ...classCells(current.operations.totalRevenue), ...(prior ? [money(prior.operations.totalRevenue.total)] : [])]);
   for (const l of current.operations.expenses) {
-    rows.push(["Expenses", l.code, l.name, ...classCells(l.amounts), ...priorTotal(prior?.operations.expenses, l.code)]);
+    rows.push([expenses, l.code, l.name, ...classCells(l.amounts), ...priorTotal(prior?.operations.expenses, l.code)]);
   }
-  rows.push(["Expenses", "", "Total expenses", ...classCells(current.operations.totalExpenses), ...(prior ? [money(prior.operations.totalExpenses.total)] : [])]);
-  rows.push(["Result", "", "Excess (deficiency) of revenue over expenses", ...classCells(current.operations.excess), ...(prior ? [money(prior.operations.excess.total)] : [])]);
-  rows.push(["Net assets", "", "Net assets, beginning of year", ...classCells(current.changes.beginning), ...(prior ? [money(prior.changes.beginning.total)] : [])]);
-  rows.push(["Net assets", "", "Excess (deficiency) of revenue over expenses", ...classCells(current.changes.excess), ...(prior ? [money(prior.changes.excess.total)] : [])]);
-  rows.push(["Net assets", "", "Transfers and direct entries", ...classCells(current.changes.direct), ...(prior ? [money(prior.changes.direct.total)] : [])]);
-  rows.push(["Net assets", "", "Net assets, end of year", ...classCells(current.changes.ending), ...(prior ? [money(prior.changes.ending.total)] : [])]);
+  rows.push([expenses, "", t("finance.ledgerReports.statementTables.totalExpenses"), ...classCells(current.operations.totalExpenses), ...(prior ? [money(prior.operations.totalExpenses.total)] : [])]);
+  rows.push([t("finance.ledgerReports.csv.result"), "", excess, ...classCells(current.operations.excess), ...(prior ? [money(prior.operations.excess.total)] : [])]);
+  rows.push([netAssets, "", t("finance.ledgerReports.statementTables.netAssetsBeginning"), ...classCells(current.changes.beginning), ...(prior ? [money(prior.changes.beginning.total)] : [])]);
+  rows.push([netAssets, "", excess, ...classCells(current.changes.excess), ...(prior ? [money(prior.changes.excess.total)] : [])]);
+  rows.push([netAssets, "", t("finance.ledgerReports.csv.transfersDirect"), ...classCells(current.changes.direct), ...(prior ? [money(prior.changes.direct.total)] : [])]);
+  rows.push([netAssets, "", t("finance.ledgerReports.statementTables.netAssetsEnd"), ...classCells(current.changes.ending), ...(prior ? [money(prior.changes.ending.total)] : [])]);
   return csvDocument(rows);
 }
 
@@ -308,9 +341,19 @@ export interface ReceiptExportRow {
   file_name: string;
 }
 
-export function receiptsCsv(rows: ReceiptExportRow[]): string {
+export function receiptsCsv(rows: ReceiptExportRow[], t: TranslateFn = EN): string {
   return csvDocument([
-    ["Date", "Kind", "Vendor", "Total", "GST", "QST", "Review status", "File", "File available"],
+    [
+      t("finance.common.date"),
+      t("finance.ledgerReports.csv.kind"),
+      t("finance.common.vendor"),
+      t("finance.common.total"),
+      t("finance.common.gst"),
+      t("finance.common.qst"),
+      t("finance.ledgerReports.csv.reviewStatus"),
+      t("finance.ledgerReports.receipts.file"),
+      t("finance.ledgerReports.csv.fileAvailable"),
+    ],
     ...rows.map((r) => [
       r.document_date,
       r.kind,
@@ -320,7 +363,9 @@ export function receiptsCsv(rows: ReceiptExportRow[]): string {
       money(r.qst_cents),
       r.status,
       r.file_name,
-      r.scan_status === "clean" ? "yes" : `no (${r.scan_status})`,
+      r.scan_status === "clean"
+        ? t("finance.ledgerReports.csv.yes")
+        : t("finance.ledgerReports.csv.noWithStatus", { status: r.scan_status }),
     ]),
   ]);
 }

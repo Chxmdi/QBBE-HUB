@@ -10,8 +10,11 @@ import { PrintButton } from "@/features/ledger/components/year-end-forms";
 import { NotFiledNotice, YearPicker } from "@/features/ledger/components/year-picker";
 import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
 import { loadFiscalYears, pickYear, yearFundChanges, yearStatements } from "@/features/ledger/services/year-end.queries";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Financial statements" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledgerReports.statements.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function StatementsPage({
@@ -21,11 +24,12 @@ export default async function StatementsPage({
 }) {
   const { session, supabase, canRead } = await getLedgerAccess();
   const params = await searchParams;
+  const t = await getT();
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Financial statements"
-      description="Statement of financial position, statement of operations and statement of changes in fund balances from posted entries, with the prior year when there is one."
+      eyebrow={t("finance.ledgerReports.eyebrow")}
+      title={t("finance.ledgerReports.statements.title")}
+      description={t("finance.ledgerReports.statements.description")}
     />
   );
   if (!canRead) {
@@ -46,8 +50,8 @@ export default async function StatementsPage({
         <LedgerTabs />
         <EmptyState
           icon={<FileBarChart />}
-          title="No fiscal year yet"
-          description="Statements appear once a fiscal year's periods exist and entries are posted."
+          title={t("finance.ledgerReports.noFiscalYearTitle")}
+          description={t("finance.ledgerReports.statements.emptyYearDescription")}
         />
       </div>
     );
@@ -75,7 +79,7 @@ export default async function StatementsPage({
             className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
           >
             <Download className="size-4" aria-hidden />
-            Financial position CSV
+            {t("finance.ledgerReports.statements.positionCsv")}
           </Link>
           <Link
             href={csv("operations")}
@@ -83,7 +87,7 @@ export default async function StatementsPage({
             className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
           >
             <Download className="size-4" aria-hidden />
-            Operations CSV
+            {t("finance.ledgerReports.statements.operationsCsv")}
           </Link>
           <Link
             href={csv("fund-changes")}
@@ -91,7 +95,7 @@ export default async function StatementsPage({
             className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
           >
             <Download className="size-4" aria-hidden />
-            Changes in fund balances CSV
+            {t("finance.ledgerReports.statements.fundChangesCsv")}
           </Link>
           <PrintButton />
         </div>
@@ -99,38 +103,35 @@ export default async function StatementsPage({
       {current.empty ? (
         <EmptyState
           icon={<FileBarChart />}
-          title="Nothing posted in this fiscal year"
-          description="The statements fill in as entries are posted."
+          title={t("finance.ledgerReports.statements.nothingPostedTitle")}
+          description={t("finance.ledgerReports.statements.nothingPostedDescription")}
         />
       ) : (
         <div className="space-y-6">
           <section aria-labelledby="position-heading">
             <h2 id="position-heading" className="mb-2 text-base font-semibold">
-              Statement of financial position as at {current.to}
+              {t("finance.ledgerReports.statements.positionHeading", { date: current.to })}
             </h2>
             <PositionTable current={current} prior={prior} />
           </section>
           <section aria-labelledby="operations-heading">
             <h2 id="operations-heading" className="mb-2 text-base font-semibold">
-              Statement of operations, {current.from} to {current.to}
+              {t("finance.ledgerReports.statements.operationsHeading", { from: current.from, to: current.to })}
             </h2>
             <OperationsTable current={current} prior={prior} />
           </section>
           <section aria-labelledby="fund-changes-heading">
             <h2 id="fund-changes-heading" className="mb-2 text-base font-semibold">
-              Statement of changes in fund balances, {current.from} to {current.to}
+              {t("finance.ledgerReports.statements.fundChangesHeading", { from: current.from, to: current.to })}
             </h2>
             <FundChangesTable changes={fundChanges.changes} />
             <p className="meta mt-2">
-              Each fund&apos;s balance at the end is its balance on the Funds page for {current.to}. Transfers and
-              releases move net assets between funds, so across all funds they add up to zero.
+              {t("finance.ledgerReports.statements.fundChangesNote", { date: current.to })}
             </p>
           </section>
           <p className="meta">
-            Presented by fund class (unrestricted, internally restricted, externally restricted) from the ledger&apos;s
-            funds. Closing entries are left out of operations. Notes, cash flows and any reclassification to the
-            accountant&apos;s presentation are prepared by the accountant.
-            {prior ? "" : " No prior-year column: nothing was posted in the previous fiscal year."}
+            {t("finance.ledgerReports.statements.footnote")}
+            {prior ? "" : t("finance.ledgerReports.statements.noPriorYear")}
           </p>
         </div>
       )}

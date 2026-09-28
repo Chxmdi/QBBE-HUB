@@ -9,8 +9,11 @@ import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { GrantAccountantForm, RevokeAccountantButton } from "@/features/ledger/components/year-end-forms";
 import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Accountant access" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledgerReports.accountant.title") };
+}
 export const dynamic = "force-dynamic";
 
 interface Grant {
@@ -37,11 +40,12 @@ function addDays(isoDate: string, days: number): string {
  */
 export default async function AccountantAccessPage() {
   const { session, supabase, canManage } = await getLedgerAccess();
+  const t = await getT();
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Accountant access"
-      description="Read-only access to the books for your external accountant, for a limited time."
+      eyebrow={t("finance.ledgerReports.eyebrow")}
+      title={t("finance.ledgerReports.accountant.title")}
+      description={t("finance.ledgerReports.accountant.description")}
     />
   );
   if (!canManage) {
@@ -97,31 +101,26 @@ export default async function AccountantAccessPage() {
       <LedgerTabs />
       <section className="card mb-6 p-4 text-[13.5px]" aria-labelledby="how-heading">
         <h2 id="how-heading" className="mb-2 text-base font-semibold">
-          How it works
+          {t("finance.ledgerReports.accountant.howHeading")}
         </h2>
         <ol className="list-decimal space-y-1 pl-5">
           <li>
-            <Link className="text-brand-fg hover:underline" href="/admin">
-              Invite the accountant
+            <Link className="text-brand-fg underline" href="/admin">
+              {t("finance.ledgerReports.accountant.inviteLink")}
             </Link>{" "}
-            with the role <strong>Read-only guest</strong>. A guest sees no relationships or finance records, but like every member sees public channels, announcements and the people directory.
+            {t("finance.ledgerReports.accountant.inviteWithRole")} <strong>{t("finance.ledgerReports.accountant.roleName")}</strong>
+            {t("finance.ledgerReports.accountant.inviteRest")}
           </li>
-          <li>Once they have signed up, grant access below and choose the last day.</li>
-          <li>
-            The accountant sets up an authenticator app the first time they open the books. Without it they see
-            nothing.
-          </li>
-          <li>
-            They can read the ledger, reports, statements, receipts and the files that passed the virus scan, and
-            export them. They cannot change anything. Every sign-in and export is recorded.
-          </li>
+          <li>{t("finance.ledgerReports.accountant.step2")}</li>
+          <li>{t("finance.ledgerReports.accountant.step3")}</li>
+          <li>{t("finance.ledgerReports.accountant.step4")}</li>
         </ol>
       </section>
 
       <div className="card mb-6 p-4">
         {guests.length === 0 ? (
           <p className="text-[13.5px] text-muted">
-            No active Guest to give access to. Invite the accountant as a Guest first.
+            {t("finance.ledgerReports.accountant.noGuest")}
           </p>
         ) : (
           <GrantAccountantForm
@@ -134,22 +133,26 @@ export default async function AccountantAccessPage() {
       </div>
 
       {grants.length === 0 ? (
-        <EmptyState icon={<UserCheck />} title="No accountant access yet" description="Grants appear here with their dates." />
+        <EmptyState
+          icon={<UserCheck />}
+          title={t("finance.ledgerReports.accountant.emptyTitle")}
+          description={t("finance.ledgerReports.accountant.emptyDescription")}
+        />
       ) : (
         <DataTable minWidth="720px">
           <TableHead>
-            <TableHeader>Accountant</TableHeader>
-            <TableHeader>Access</TableHeader>
-            <TableHeader>Status</TableHeader>
-            <TableHeader>Granted by</TableHeader>
+            <TableHeader>{t("finance.ledgerReports.accountant.accountant")}</TableHeader>
+            <TableHeader>{t("finance.ledgerReports.accountant.access")}</TableHeader>
+            <TableHeader>{t("finance.common.status")}</TableHeader>
+            <TableHeader>{t("finance.ledgerReports.accountant.grantedBy")}</TableHeader>
             <TableHeader className="text-right">
-              <span className="sr-only">Actions</span>
+              <span className="sr-only">{t("finance.common.actions")}</span>
             </TableHeader>
           </TableHead>
           <tbody>
             {grants.map((g) => {
               const live = !g.revoked_at && g.expires_at > now;
-              const name = g.person?.full_name ?? "Former member";
+              const name = g.person?.full_name ?? t("finance.ledgerReports.formerMember");
               return (
                 <TableRow key={g.id}>
                   <TableCell>
@@ -158,15 +161,15 @@ export default async function AccountantAccessPage() {
                     {g.note ? <span className="meta block">{g.note}</span> : null}
                   </TableCell>
                   <TableCell className="text-[13px] tabular-nums">
-                    {g.starts_at.slice(0, 10)} to {g.expires_at.slice(0, 10)}
+                    {t("finance.ledgerReports.dateRange", { from: g.starts_at.slice(0, 10), to: g.expires_at.slice(0, 10) })}
                   </TableCell>
                   <TableCell>
                     {g.revoked_at ? (
-                      <Badge>Revoked {g.revoked_at.slice(0, 10)}</Badge>
+                      <Badge>{t("finance.ledgerReports.accountant.revokedOn", { date: g.revoked_at.slice(0, 10) })}</Badge>
                     ) : live ? (
-                      <Badge tone="success">Active</Badge>
+                      <Badge tone="success">{t("finance.ledgerReports.accountant.active")}</Badge>
                     ) : (
-                      <Badge>Expired</Badge>
+                      <Badge>{t("finance.ledgerReports.accountant.expired")}</Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-[13px]">{g.granter?.full_name ?? "—"}</TableCell>
@@ -179,16 +182,16 @@ export default async function AccountantAccessPage() {
           </tbody>
         </DataTable>
       )}
-      <p className="meta mt-2">Access ends at the end of the chosen day, in the organization&apos;s time zone.</p>
+      <p className="meta mt-2">{t("finance.ledgerReports.accountant.endsNote")}</p>
 
-      <h2 className="mt-8 mb-2 text-base font-semibold">Recent accountant sign-ins</h2>
+      <h2 className="mt-8 mb-2 text-base font-semibold">{t("finance.ledgerReports.accountant.signIns")}</h2>
       {sessions.length === 0 ? (
-        <p className="text-[13.5px] text-muted">No accountant has opened the books yet.</p>
+        <p className="text-[13.5px] text-muted">{t("finance.ledgerReports.accountant.noSignIns")}</p>
       ) : (
         <ul className="card divide-y divide-line text-[13.5px]">
           {sessions.map((s) => (
             <li key={`${s.user_id}-${s.first_seen_at}`} className="flex justify-between gap-3 px-4 py-2">
-              <span>{s.person?.full_name ?? "Former member"}</span>
+              <span>{s.person?.full_name ?? t("finance.ledgerReports.formerMember")}</span>
               <span className="tabular-nums text-muted">{s.first_seen_at.slice(0, 16).replace("T", " ")} UTC</span>
             </li>
           ))}

@@ -17,8 +17,11 @@ import { NoBudgetAccess } from "@/features/budgets/components/no-budget-access";
 import { BUDGET_STATUS_LABEL, budgetOptions, getBudget } from "@/features/budgets/services/budget.queries";
 import { formatCents } from "@/features/ledger/money";
 import { getLedgerAccess, uuidParam } from "@/features/ledger/services/ledger.access";
+import { getFormatters, getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Budget" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.budgets.budget") };
+}
 export const dynamic = "force-dynamic";
 
 const STATUS_TONE = { draft: "warning", approved: "success", superseded: "neutral" } as const;
@@ -26,10 +29,13 @@ const STATUS_TONE = { draft: "warning", approved: "success", superseded: "neutra
 export default async function BudgetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
+  const [t, locale, format] = await Promise.all([getT(), getLocale(), getFormatters()]);
+  // English keeps the ISO day it always showed; French gets a written date.
+  const day = (iso: string) => (locale === "en" ? iso.slice(0, 10) : format.date(iso, session.timeZone));
   if (!canRead) {
     return (
       <div>
-        <PageHeader eyebrow="Budgets" title="Budget" />
+        <PageHeader eyebrow={t("finance.budgets.title")} title={t("finance.budgets.budget")} />
         <BudgetTabs />
         <NoBudgetAccess isAdmin={session.isAdmin} />
       </div>
@@ -63,31 +69,31 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
   return (
     <div>
       <PageHeader
-        eyebrow={`Budgets · ${fiscalYearLabel(budget.fiscal_year_start)}`}
+        eyebrow={t("finance.budgets.eyebrowWithYear", { fiscalYear: fiscalYearLabel(budget.fiscal_year_start, locale) })}
         title={budget.name}
         description={budget.notes ?? undefined}
         actions={canManage ? <BudgetActions budgetId={budget.id} status={budget.status} /> : undefined}
       />
       <BudgetTabs />
       <div className="mb-4 flex flex-wrap items-center gap-3 text-[13.5px]">
-        <Badge tone={STATUS_TONE[budget.status]}>{BUDGET_STATUS_LABEL[budget.status]}</Badge>
+        <Badge tone={STATUS_TONE[budget.status]}>{t(BUDGET_STATUS_LABEL[budget.status])}</Badge>
         <span className="text-muted">
-          Version {budget.version}
-          {budget.approved_at ? ` · approved ${budget.approved_at.slice(0, 10)}` : ""}
-          {budget.superseded_at ? ` · superseded ${budget.superseded_at.slice(0, 10)}` : ""}
+          {t("finance.budgets.detail.version", { version: budget.version })}
+          {budget.approved_at ? t("finance.budgets.detail.approvedOn", { date: day(budget.approved_at) }) : ""}
+          {budget.superseded_at ? t("finance.budgets.detail.supersededOn", { date: day(budget.superseded_at) }) : ""}
         </span>
         <Link className="font-medium text-brand-fg hover:underline" href={`/finance/budgets/${budget.id}/report`}>
-          Budget vs actual
+          {t("finance.budgets.budgetVsActual")}
         </Link>
         {budget.status !== "draft" ? (
-          <span className="text-muted">Locked. Revise the budget to change it; this version stays on record.</span>
+          <span className="text-muted">{t("finance.budgets.detail.locked")}</span>
         ) : null}
       </div>
 
       <section aria-labelledby="lines" className="mb-8">
         <div className="mb-2 flex items-center justify-between gap-3">
           <h2 id="lines" className="text-[15px] font-semibold">
-            Lines
+            {t("finance.budgets.detail.lines")}
           </h2>
           {editable ? (
             <BudgetLineDialog budgetId={budget.id} fiscalYearStart={budget.fiscal_year_start} options={options} />
@@ -96,19 +102,19 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
         {sorted.length === 0 ? (
           <EmptyState
             icon={<PiggyBank />}
-            title="No lines yet"
-            description={editable ? "Add a line for each revenue or expense account you plan for." : undefined}
+            title={t("finance.budgets.detail.noLinesTitle")}
+            description={editable ? t("finance.budgets.detail.noLinesDescription") : undefined}
           />
         ) : (
           <DataTable minWidth="820px">
             <TableHead>
-              <TableHeader className="w-20">Account</TableHeader>
-              <TableHeader>Name</TableHeader>
-              <TableHeader className="w-28">Fund</TableHeader>
-              <TableHeader>Program</TableHeader>
-              <TableHeader>Project</TableHeader>
-              <TableHeader className="w-36 text-right">Annual</TableHeader>
-              <TableHeader className="w-24">Phasing</TableHeader>
+              <TableHeader className="w-20">{t("finance.common.account")}</TableHeader>
+              <TableHeader>{t("finance.budgets.name")}</TableHeader>
+              <TableHeader className="w-28">{t("finance.common.fund")}</TableHeader>
+              <TableHeader>{t("finance.common.program")}</TableHeader>
+              <TableHeader>{t("finance.budgets.project")}</TableHeader>
+              <TableHeader className="w-36 text-right">{t("finance.budgets.detail.colAnnual")}</TableHeader>
+              <TableHeader className="w-24">{t("finance.budgets.detail.colPhasing")}</TableHeader>
               {editable ? <TableHeader className="w-24">{""}</TableHeader> : null}
             </TableHead>
             <tbody>
@@ -126,11 +132,11 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
                           {a?.name}
                           {l.note ? <span className="block text-[12.5px] text-muted">{l.note}</span> : null}
                         </TableCell>
-                        <TableCell className="text-[13px]">{l.fund_id ? fund.get(l.fund_id)?.code : "Any"}</TableCell>
+                        <TableCell className="text-[13px]">{l.fund_id ? fund.get(l.fund_id)?.code : t("finance.budgets.detail.anyFund")}</TableCell>
                         <TableCell className="text-[13px]">{l.program_id ? program.get(l.program_id)?.name : ""}</TableCell>
                         <TableCell className="text-[13px]">{l.project_id ? project.get(l.project_id)?.name : ""}</TableCell>
-                        <TableCell className="text-right tabular-nums">{formatCents(l.annual_cents)}</TableCell>
-                        <TableCell className="text-[13px] text-muted">{even ? "Even" : "Custom"}</TableCell>
+                        <TableCell className="text-right tabular-nums">{formatCents(l.annual_cents, locale)}</TableCell>
+                        <TableCell className="text-[13px] text-muted">{even ? t("finance.budgets.detail.even") : t("finance.budgets.detail.custom")}</TableCell>
                         {editable ? (
                           <TableCell>
                             <div className="flex justify-end">
@@ -149,12 +155,12 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
                   }),
                   <TableRow key={`total-${type}`} className="font-semibold">
                     <TableCell>{""}</TableCell>
-                    <TableCell>{type === "revenue" ? "Total revenue" : "Total expense"}</TableCell>
+                    <TableCell>{t(type === "revenue" ? "finance.budgets.totalRevenue" : "finance.budgets.totalExpense")}</TableCell>
                     <TableCell>{""}</TableCell>
                     <TableCell>{""}</TableCell>
                     <TableCell>{""}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatCents(group.reduce((s, l) => s + l.annual_cents, 0))}
+                      {formatCents(group.reduce((s, l) => s + l.annual_cents, 0), locale)}
                     </TableCell>
                     <TableCell>{""}</TableCell>
                     {editable ? <TableCell>{""}</TableCell> : null}
@@ -169,14 +175,14 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
       {sorted.length > 0 ? (
         <section aria-labelledby="by-month" className="mb-8">
           <h2 id="by-month" className="mb-2 text-[15px] font-semibold">
-            By month
+            {t("finance.budgets.detail.byMonth")}
           </h2>
           <DataTable minWidth="420px">
             <TableHead>
-              <TableHeader>Month</TableHeader>
-              <TableHeader className="text-right">Revenue</TableHeader>
-              <TableHeader className="text-right">Expense</TableHeader>
-              <TableHeader className="text-right">Net</TableHeader>
+              <TableHeader>{t("finance.budgets.month")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.common.accountTypes.revenue")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.common.accountTypes.expense")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.budgets.detail.net")}</TableHeader>
             </TableHead>
             <tbody>
               {months.map((m, i) => {
@@ -184,10 +190,10 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
                 const expense = monthTotals("expense")[i];
                 return (
                   <TableRow key={m}>
-                    <TableCell>{monthLabel(m)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCents(revenue)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCents(expense)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCents(revenue - expense)}</TableCell>
+                    <TableCell>{monthLabel(m, locale)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCents(revenue, locale)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCents(expense, locale)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCents(revenue - expense, locale)}</TableCell>
                   </TableRow>
                 );
               })}
@@ -198,21 +204,21 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
 
       <section aria-labelledby="versions">
         <h2 id="versions" className="mb-2 text-[15px] font-semibold">
-          Versions
+          {t("finance.budgets.detail.versions")}
         </h2>
         <ul className="space-y-1 text-[13.5px]">
           {versions.map((v) => (
             <li key={v.id}>
               {v.id === budget.id ? (
-                <span className="font-medium">Version {v.version} (this one)</span>
+                <span className="font-medium">{t("finance.budgets.detail.thisVersion", { version: v.version })}</span>
               ) : (
                 <Link className="text-brand-fg hover:underline" href={`/finance/budgets/${v.id}`}>
-                  Version {v.version}
+                  {t("finance.budgets.detail.version", { version: v.version })}
                 </Link>
               )}{" "}
               <span className="text-muted">
-                · {BUDGET_STATUS_LABEL[v.status]}
-                {v.approved_at ? ` · approved ${v.approved_at.slice(0, 10)}` : ""}
+                · {t(BUDGET_STATUS_LABEL[v.status])}
+                {v.approved_at ? t("finance.budgets.detail.approvedOn", { date: day(v.approved_at) }) : ""}
               </span>
             </li>
           ))}

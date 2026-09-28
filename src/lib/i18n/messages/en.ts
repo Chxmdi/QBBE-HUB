@@ -1,3 +1,15 @@
+import { commonEn } from "@/lib/i18n/messages/finance/common.en";
+import { approvalsEn } from "@/lib/i18n/messages/finance/approvals.en";
+import { receiptsEn } from "@/lib/i18n/messages/finance/receipts.en";
+import { payablesEn } from "@/lib/i18n/messages/finance/payables.en";
+import { bankEn } from "@/lib/i18n/messages/finance/bank.en";
+import { salesTaxEn } from "@/lib/i18n/messages/finance/salesTax.en";
+import { budgetsEn } from "@/lib/i18n/messages/finance/budgets.en";
+import { ledgerEn } from "@/lib/i18n/messages/finance/ledger.en";
+import { ledgerReportsEn } from "@/lib/i18n/messages/finance/ledgerReports.en";
+import { giftsEn } from "@/lib/i18n/messages/finance/gifts.en";
+import { payrollEn } from "@/lib/i18n/messages/finance/payroll.en";
+
 /**
  * English interface text — the source catalogue (#141).
  *
@@ -86,6 +98,7 @@ export const en = {
       admin: "Admin",
     },
     more: "More",
+    moreDestinations: "More destinations",
     homeLink: "QBBE Hub home",
     openNavigation: "Open navigation",
     closeNavigation: "Close navigation",
@@ -311,6 +324,62 @@ export const en = {
       "Gmail integration requires a QBBE-approved Google OAuth configuration. Once credentials exist, Connect appears here.",
     connectGmail: "Connect Gmail",
     setupDocs: "See docs/runbooks/integrations.md for setup.",
+  },
+  admin: {
+    nav: {
+      label: "Administration sections",
+      workspace: "Workspace",
+      templates: "Templates",
+      access: "Access impact",
+      jobs: "Jobs",
+      email: "Email",
+      exports: "Exports",
+      retention: "Retention",
+      records: "Records & holds",
+      approvals: "Approvals",
+      designSystem: "Design system",
+    },
+  },
+  textReader: {
+    loading: "Getting ready to read the words in this file, so it can be found by search…",
+    reading: "Reading the words in this file for search… {percent}%",
+    found: "The words in this file were read. Search will find it by them.",
+    notFound:
+      "No words could be read in this file. It will be found by its title, description and tags.",
+    failed:
+      "The words in this file could not be read. It will be found by its title, description and tags.",
+    timedOut: "Reading this file took too long. It will be found by its title, description and tags.",
+    skipped: "Skipped. This file will be found by its title, description and tags.",
+    skip: "Skip reading",
+  },
+  ui: {
+    closeDialog: "Close dialog",
+    closePanel: "Close panel",
+    moreActions: "More actions",
+    sections: "Sections",
+    breadcrumb: "Breadcrumb",
+    loadFailed: "This couldn't be loaded.",
+    somethingWrong: "Something went wrong. Try again.",
+    toast: {
+      success: "Success",
+      warning: "Warning",
+      error: "Error",
+      info: "Information",
+      dismiss: "Dismiss notification",
+    },
+  },
+  finance: {
+    common: commonEn,
+    approvals: approvalsEn,
+    receipts: receiptsEn,
+    payables: payablesEn,
+    bank: bankEn,
+    salesTax: salesTaxEn,
+    budgets: budgetsEn,
+    ledger: ledgerEn,
+    ledgerReports: ledgerReportsEn,
+    gifts: giftsEn,
+    payroll: payrollEn,
   },
 };
 

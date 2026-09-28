@@ -1,4 +1,15 @@
 import type { Messages } from "@/lib/i18n/messages/en";
+import { commonFrCA } from "@/lib/i18n/messages/finance/common.fr-CA";
+import { approvalsFrCA } from "@/lib/i18n/messages/finance/approvals.fr-CA";
+import { receiptsFrCA } from "@/lib/i18n/messages/finance/receipts.fr-CA";
+import { payablesFrCA } from "@/lib/i18n/messages/finance/payables.fr-CA";
+import { bankFrCA } from "@/lib/i18n/messages/finance/bank.fr-CA";
+import { salesTaxFrCA } from "@/lib/i18n/messages/finance/salesTax.fr-CA";
+import { budgetsFrCA } from "@/lib/i18n/messages/finance/budgets.fr-CA";
+import { ledgerFrCA } from "@/lib/i18n/messages/finance/ledger.fr-CA";
+import { ledgerReportsFrCA } from "@/lib/i18n/messages/finance/ledgerReports.fr-CA";
+import { giftsFrCA } from "@/lib/i18n/messages/finance/gifts.fr-CA";
+import { payrollFrCA } from "@/lib/i18n/messages/finance/payroll.fr-CA";
 
 /**
  * Texte de l'interface en français québécois (#141).
@@ -90,6 +101,7 @@ export const frCA: Messages = {
       admin: "Administration",
     },
     more: "Plus",
+    moreDestinations: "Autres destinations",
     homeLink: "Accueil de QBBE Hub",
     openNavigation: "Ouvrir la navigation",
     closeNavigation: "Fermer la navigation",
@@ -318,5 +330,62 @@ export const frCA: Messages = {
       "L’intégration Gmail nécessite une configuration Google OAuth approuvée par QBBE. Une fois les identifiants en place, le bouton Connecter apparaît ici.",
     connectGmail: "Connecter Gmail",
     setupDocs: "Consultez docs/runbooks/integrations.md pour la configuration.",
+  },
+  admin: {
+    nav: {
+      label: "Sections de l’administration",
+      workspace: "Espace de travail",
+      templates: "Modèles",
+      access: "Incidence sur les accès",
+      jobs: "Tâches planifiées",
+      email: "Courriel",
+      exports: "Exportations",
+      retention: "Conservation",
+      records: "Documents et mises en suspens",
+      approvals: "Approbations",
+      designSystem: "Système de design",
+    },
+  },
+  textReader: {
+    loading: "Préparation de la lecture des mots de ce fichier, pour que la recherche puisse le trouver…",
+    reading: "Lecture des mots de ce fichier pour la recherche… {percent} %",
+    found: "Les mots de ce fichier ont été lus. La recherche le trouvera grâce à eux.",
+    notFound:
+      "Aucun mot n’a pu être lu dans ce fichier. Il sera trouvé par son titre, sa description et ses étiquettes.",
+    failed:
+      "Les mots de ce fichier n’ont pas pu être lus. Il sera trouvé par son titre, sa description et ses étiquettes.",
+    timedOut:
+      "La lecture de ce fichier a pris trop de temps. Il sera trouvé par son titre, sa description et ses étiquettes.",
+    skipped: "Lecture ignorée. Ce fichier sera trouvé par son titre, sa description et ses étiquettes.",
+    skip: "Ignorer la lecture",
+  },
+  ui: {
+    closeDialog: "Fermer la boîte de dialogue",
+    closePanel: "Fermer le panneau",
+    moreActions: "Plus d’actions",
+    sections: "Sections",
+    breadcrumb: "Fil d’Ariane",
+    loadFailed: "Impossible de charger ce contenu.",
+    somethingWrong: "Une erreur s’est produite. Réessayez.",
+    toast: {
+      success: "Réussite",
+      warning: "Avertissement",
+      error: "Erreur",
+      info: "Information",
+      dismiss: "Fermer la notification",
+    },
+  },
+  finance: {
+    common: commonFrCA,
+    approvals: approvalsFrCA,
+    receipts: receiptsFrCA,
+    payables: payablesFrCA,
+    bank: bankFrCA,
+    salesTax: salesTaxFrCA,
+    budgets: budgetsFrCA,
+    ledger: ledgerFrCA,
+    ledgerReports: ledgerReportsFrCA,
+    gifts: giftsFrCA,
+    payroll: payrollFrCA,
   },
 };

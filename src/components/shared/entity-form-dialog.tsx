@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
 
 export interface FormField {
   name: string;
@@ -43,6 +44,7 @@ export function EntityFormDialog({
   defaultOpen?: boolean;
   extraValues?: Record<string, string>;
 }) {
+  const t = useT();
   const router = useRouter();
   // Every dialog on the page is mounted at once, so a fixed `field-<name>`
   // id collided whenever two of them shared a field name — "Name", "Title",
@@ -68,7 +70,7 @@ export function EntityFormDialog({
     const result = await action(values);
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong. Try again.");
+      setError(result.error ?? t("ui.somethingWrong"));
       return;
     }
     // The native <dialog> stays mounted when closed, so without a reset the
@@ -148,7 +150,7 @@ export function EntityFormDialog({
           ) : null}
           <div className="flex justify-end gap-2 pt-1 sm:col-span-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
               {submitLabel ?? title}

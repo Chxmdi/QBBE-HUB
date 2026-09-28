@@ -1,4 +1,5 @@
 import type { createSupabasePageClient } from "@/lib/supabase/page";
+import type { MessageKey } from "@/lib/i18n/translate";
 import { normalizeRows, type BudgetAccountType, type BudgetReportRow } from "@/features/budgets/budget";
 
 type Client = Awaited<ReturnType<typeof createSupabasePageClient>>;
@@ -35,10 +36,11 @@ export interface BudgetOptions {
   projects: { id: string; name: string; program_id: string | null }[];
 }
 
-export const BUDGET_STATUS_LABEL: Record<BudgetStatus, string> = {
-  draft: "Draft",
-  approved: "Approved",
-  superseded: "Superseded",
+/** Catalogue keys; translate with `t()` where shown. */
+export const BUDGET_STATUS_LABEL: Record<BudgetStatus, MessageKey> = {
+  draft: "finance.budgets.statuses.draft",
+  approved: "finance.budgets.statuses.approved",
+  superseded: "finance.budgets.statuses.superseded",
 };
 
 const BUDGET_COLUMNS = "id, fiscal_year_start, version, name, notes, status, approved_at, superseded_at, created_at";

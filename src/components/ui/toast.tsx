@@ -3,6 +3,8 @@
 import * as React from "react";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/translate";
 
 type ToastTone = "success" | "warning" | "error" | "info";
 
@@ -35,31 +37,32 @@ export function useToast(): ToastContextValue {
 
 const toneMeta: Record<
   ToastTone,
-  { icon: React.ReactNode; classes: string; label: string }
+  { icon: React.ReactNode; classes: string; label: MessageKey }
 > = {
   success: {
     icon: <CheckCircle2 className="size-4" aria-hidden />,
     classes: "border-success/30 text-success-fg",
-    label: "Success",
+    label: "ui.toast.success",
   },
   warning: {
     icon: <AlertTriangle className="size-4" aria-hidden />,
     classes: "border-warning/30 text-warning-fg",
-    label: "Warning",
+    label: "ui.toast.warning",
   },
   error: {
     icon: <XCircle className="size-4" aria-hidden />,
     classes: "border-danger/30 text-danger-fg",
-    label: "Error",
+    label: "ui.toast.error",
   },
   info: {
     icon: <Info className="size-4" aria-hidden />,
     classes: "border-info/30 text-info-fg",
-    label: "Information",
+    label: "ui.toast.info",
   },
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const [toasts, setToasts] = React.useState<Toast[]>([]);
   const nextId = React.useRef(0);
 
@@ -109,7 +112,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             >
               <span className="mt-0.5 shrink-0">{meta.icon}</span>
               <div className="min-w-0 flex-1">
-                <span className="sr-only">{meta.label}: </span>
+                <span className="sr-only">{t(meta.label)}: </span>
                 <p className="text-[13.5px] text-ink">{item.message}</p>
                 {item.action ? (
                   <button
@@ -127,7 +130,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               <button
                 type="button"
                 onClick={() => dismiss(item.id)}
-                aria-label="Dismiss notification"
+                aria-label={t("ui.toast.dismiss")}
                 className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-surface-soft hover:text-ink"
               >
                 <X className="size-3.5" aria-hidden />

@@ -5,7 +5,8 @@
  * cents with a fund balance positive. Pure functions so they can be tested
  * without a database.
  */
-import { centsToDecimal, csvDocument, FUND_RESTRICTION_LABEL, type FundRestriction } from "@/features/ledger/money";
+import { centsToDecimal, csvDocument, FUND_RESTRICTION_KEY, type FundRestriction } from "@/features/ledger/money";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 
 export interface FundChangeRow {
   fund_id: string;
@@ -77,27 +78,28 @@ export function normalizeFundChangeRow(r: FundChangeRow): FundChangeRow {
   };
 }
 
-export function fundChangesCsv(statement: FundChanges): string {
+/** The CSV, headed in the reader's language; English by default. Figures stay plain decimals. */
+export function fundChangesCsv(statement: FundChanges, t: TranslateFn = createTranslator("en")): string {
   const money = (cents: number) => centsToDecimal(cents);
   const rows: (string | number | null)[][] = [
     [
-      `Statement of changes in fund balances ${statement.from} to ${statement.to}`,
-      "Prepared for your accountant, not filed",
+      t("finance.ledgerReports.csv.fundChangesTitle", { from: statement.from, to: statement.to }),
+      t("finance.ledgerReports.csv.notFiled"),
     ],
     [
-      "Fund",
-      "Name",
-      "Restriction",
-      `Balance ${statement.from}`,
-      "Revenue",
-      "Expenses",
-      "Transfers and releases",
-      `Balance ${statement.to}`,
+      t("finance.ledgerReports.statementTables.fund"),
+      t("finance.ledgerReports.statementTables.fundName"),
+      t("finance.ledgerReports.statementTables.restriction"),
+      t("finance.ledgerReports.statementTables.balanceAt", { date: statement.from }),
+      t("finance.ledgerReports.statementTables.revenue"),
+      t("finance.ledgerReports.statementTables.expenses"),
+      t("finance.ledgerReports.statementTables.transfersReleases"),
+      t("finance.ledgerReports.statementTables.balanceAt", { date: statement.to }),
     ],
     ...statement.funds.map((f) => [
       f.code,
       f.name,
-      FUND_RESTRICTION_LABEL[f.restriction],
+      t(FUND_RESTRICTION_KEY[f.restriction]),
       money(f.opening_cents),
       money(f.revenue_cents),
       money(f.expenses_cents),
@@ -106,7 +108,7 @@ export function fundChangesCsv(statement: FundChanges): string {
     ]),
     [
       "",
-      "All funds",
+      t("finance.ledgerReports.statementTables.allFunds"),
       "",
       money(statement.totals.opening_cents),
       money(statement.totals.revenue_cents),

@@ -1,5 +1,9 @@
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
-import { ACCOUNT_TYPE_LABEL, centsToDecimal, csvDocument, type AccountType } from "@/features/ledger/money";
+import { ACCOUNT_TYPE_KEY, centsToDecimal, csvDocument, type AccountType } from "@/features/ledger/money";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+
+/** CSV text defaults to English, so spreadsheets and tests stay stable (#141). */
+const EN = createTranslator("en");
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -76,27 +80,51 @@ export async function generalLedger(
   return { rows, error, truncated: rows.length === GL_ROW_LIMIT };
 }
 
-export function trialBalanceCsv(rows: TrialBalanceRow[], asOf: string, fundLabel: string): string {
+export function trialBalanceCsv(rows: TrialBalanceRow[], asOf: string, fundLabel: string, t: TranslateFn = EN): string {
   const debit = rows.reduce((s, r) => s + Math.max(r.balance_cents, 0), 0);
   const credit = rows.reduce((s, r) => s + Math.max(-r.balance_cents, 0), 0);
   return csvDocument([
-    [`Trial balance as at ${asOf}`, fundLabel],
-    ["Account", "Name", "Type", "Debit", "Credit"],
+    [t("finance.ledgerReports.csv.trialBalanceTitle", { date: asOf }), fundLabel],
+    [
+      t("finance.common.account"),
+      t("finance.ledgerReports.name"),
+      t("finance.ledgerReports.type"),
+      t("finance.common.debit"),
+      t("finance.common.credit"),
+    ],
     ...rows.map((r) => [
       r.code,
       r.name,
-      ACCOUNT_TYPE_LABEL[r.account_type],
+      t(ACCOUNT_TYPE_KEY[r.account_type]),
       r.balance_cents > 0 ? centsToDecimal(r.balance_cents) : "",
       r.balance_cents < 0 ? centsToDecimal(-r.balance_cents) : "",
     ]),
-    ["", "Total", "", centsToDecimal(debit), centsToDecimal(credit)],
+    ["", t("finance.common.total"), "", centsToDecimal(debit), centsToDecimal(credit)],
   ]);
 }
 
-export function generalLedgerCsv(rows: GeneralLedgerRow[], from: string, to: string, fundLabel: string): string {
+export function generalLedgerCsv(
+  rows: GeneralLedgerRow[],
+  from: string,
+  to: string,
+  fundLabel: string,
+  t: TranslateFn = EN,
+): string {
   return csvDocument([
-    [`General ledger ${from} to ${to}`, fundLabel],
-    ["Account", "Name", "Date", "Entry", "Memo", "Line description", "Fund", "Debit", "Credit", "Balance", "Opening balance"],
+    [t("finance.ledgerReports.csv.generalLedgerTitle", { from, to }), fundLabel],
+    [
+      t("finance.common.account"),
+      t("finance.ledgerReports.name"),
+      t("finance.common.date"),
+      t("finance.ledgerReports.generalLedger.entry"),
+      t("finance.common.memo"),
+      t("finance.ledgerReports.csv.lineDescription"),
+      t("finance.common.fund"),
+      t("finance.common.debit"),
+      t("finance.common.credit"),
+      t("finance.ledgerReports.generalLedger.balance"),
+      t("finance.ledgerReports.csv.openingBalance"),
+    ],
     ...rows.map((r) => [
       r.account_code,
       r.account_name,

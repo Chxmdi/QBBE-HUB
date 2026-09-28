@@ -1,13 +1,18 @@
 import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FUND_RESTRICTIONS, FUND_RESTRICTION_LABEL, formatCents } from "@/features/ledger/money";
+import { FUND_RESTRICTIONS, FUND_RESTRICTION_KEY, formatCents } from "@/features/ledger/money";
 import type { ByClass, StatementLine, Statements } from "@/features/ledger/year-end";
 import type { FundChanges } from "@/features/ledger/fund-changes";
+import type { Locale } from "@/lib/i18n/config";
+import { getLocale, getT } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 
-const amount = (cents: number) => (cents < 0 ? `(${formatCents(-cents)})` : formatCents(cents));
+const amount = (cents: number, locale: Locale) =>
+  cents < 0 ? `(${formatCents(-cents, locale)})` : formatCents(cents, locale);
 
-function AmountCell({ cents, strong }: { cents: number; strong?: boolean }) {
-  return <TableCell className={cn("text-right tabular-nums", strong && "font-semibold")}>{amount(cents)}</TableCell>;
+function AmountCell({ cents, strong, locale }: { cents: number; strong?: boolean; locale: Locale }) {
+  return (
+    <TableCell className={cn("text-right tabular-nums", strong && "font-semibold")}>{amount(cents, locale)}</TableCell>
+  );
 }
 
 function priorOf(lines: StatementLine[] | undefined, code: string) {
@@ -21,7 +26,8 @@ function codesOf(current: StatementLine[], prior: StatementLine[] | undefined) {
   return [...byCode.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
-export function PositionTable({ current, prior }: { current: Statements; prior: Statements | null }) {
+export async function PositionTable({ current, prior }: { current: Statements; prior: Statements | null }) {
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const section = (title: string, lines: StatementLine[], priorLines: StatementLine[] | undefined) => (
     <>
       <TableRow>
@@ -34,71 +40,87 @@ export function PositionTable({ current, prior }: { current: Statements; prior: 
           <TableCell className="pl-6">
             <span className="font-mono tabular-nums">{code}</span> {name}
           </TableCell>
-          <AmountCell cents={priorOf(lines, code)} />
-          {prior ? <AmountCell cents={priorOf(priorLines, code)} /> : null}
+          <AmountCell cents={priorOf(lines, code)} locale={locale} />
+          {prior ? <AmountCell cents={priorOf(priorLines, code)} locale={locale} /> : null}
         </TableRow>
       ))}
     </>
   );
   return (
-    <DataTable minWidth="520px">
+    <DataTable
+      minWidth="520px"
+      scrollLabel={t("finance.ledgerReports.statements.positionHeading", { date: current.to })}
+    >
       <TableHead>
-        <TableHeader>Statement of financial position</TableHeader>
+        <TableHeader>{t("finance.ledgerReports.statementTables.positionTitle")}</TableHeader>
         <TableHeader className="w-40 text-right">{current.to}</TableHeader>
         {prior ? <TableHeader className="w-40 text-right">{prior.to}</TableHeader> : null}
       </TableHead>
       <tbody>
-        {section("Assets", current.position.assets, prior?.position.assets)}
+        {section(t("finance.ledgerReports.statementTables.assets"), current.position.assets, prior?.position.assets)}
         <TableRow>
-          <TableCell className="font-semibold">Total assets</TableCell>
-          <AmountCell cents={current.position.totalAssets} strong />
-          {prior ? <AmountCell cents={prior.position.totalAssets} strong /> : null}
+          <TableCell className="font-semibold">{t("finance.ledgerReports.statementTables.totalAssets")}</TableCell>
+          <AmountCell cents={current.position.totalAssets} strong locale={locale} />
+          {prior ? <AmountCell cents={prior.position.totalAssets} strong locale={locale} /> : null}
         </TableRow>
-        {section("Liabilities", current.position.liabilities, prior?.position.liabilities)}
+        {section(
+          t("finance.ledgerReports.statementTables.liabilities"),
+          current.position.liabilities,
+          prior?.position.liabilities,
+        )}
         <TableRow>
-          <TableCell className="font-semibold">Total liabilities</TableCell>
-          <AmountCell cents={current.position.totalLiabilities} strong />
-          {prior ? <AmountCell cents={prior.position.totalLiabilities} strong /> : null}
+          <TableCell className="font-semibold">{t("finance.ledgerReports.statementTables.totalLiabilities")}</TableCell>
+          <AmountCell cents={current.position.totalLiabilities} strong locale={locale} />
+          {prior ? <AmountCell cents={prior.position.totalLiabilities} strong locale={locale} /> : null}
         </TableRow>
         <TableRow>
           <th scope="rowgroup" className="px-4 py-3 text-left font-semibold" colSpan={prior ? 3 : 2}>
-            Net assets
+            {t("finance.ledgerReports.statementTables.netAssets")}
           </th>
         </TableRow>
         {FUND_RESTRICTIONS.map((r) => (
           <TableRow key={r}>
-            <TableCell className="pl-6">{FUND_RESTRICTION_LABEL[r]}</TableCell>
-            <AmountCell cents={current.position.netAssets[r]} />
-            {prior ? <AmountCell cents={prior.position.netAssets[r]} /> : null}
+            <TableCell className="pl-6">{t(FUND_RESTRICTION_KEY[r])}</TableCell>
+            <AmountCell cents={current.position.netAssets[r]} locale={locale} />
+            {prior ? <AmountCell cents={prior.position.netAssets[r]} locale={locale} /> : null}
           </TableRow>
         ))}
         <TableRow>
-          <TableCell className="font-semibold">Total net assets</TableCell>
-          <AmountCell cents={current.position.netAssets.total} strong />
-          {prior ? <AmountCell cents={prior.position.netAssets.total} strong /> : null}
+          <TableCell className="font-semibold">{t("finance.ledgerReports.statementTables.totalNetAssets")}</TableCell>
+          <AmountCell cents={current.position.netAssets.total} strong locale={locale} />
+          {prior ? <AmountCell cents={prior.position.netAssets.total} strong locale={locale} /> : null}
         </TableRow>
         <TableRow>
-          <TableCell className="font-semibold">Total liabilities and net assets</TableCell>
-          <AmountCell cents={current.position.totalLiabilities + current.position.netAssets.total} strong />
-          {prior ? <AmountCell cents={prior.position.totalLiabilities + prior.position.netAssets.total} strong /> : null}
+          <TableCell className="font-semibold">
+            {t("finance.ledgerReports.statementTables.totalLiabilitiesAndNetAssets")}
+          </TableCell>
+          <AmountCell
+            cents={current.position.totalLiabilities + current.position.netAssets.total}
+            strong
+            locale={locale}
+          />
+          {prior ? (
+            <AmountCell cents={prior.position.totalLiabilities + prior.position.netAssets.total} strong locale={locale} />
+          ) : null}
         </TableRow>
       </tbody>
     </DataTable>
   );
 }
 
-function ClassCells({ values, strong }: { values: ByClass; strong?: boolean }) {
+function ClassCells({ values, strong, locale }: { values: ByClass; strong?: boolean; locale: Locale }) {
   return (
     <>
       {FUND_RESTRICTIONS.map((r) => (
-        <AmountCell key={r} cents={values[r]} strong={strong} />
+        <AmountCell key={r} cents={values[r]} strong={strong} locale={locale} />
       ))}
-      <AmountCell cents={values.total} strong />
+      <AmountCell cents={values.total} strong locale={locale} />
     </>
   );
 }
 
-export function OperationsTable({ current, prior }: { current: Statements; prior: Statements | null }) {
+export async function OperationsTable({ current, prior }: { current: Statements; prior: Statements | null }) {
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const cols = 5 + (prior ? 1 : 0);
   const section = (title: string, lines: StatementLine[], priorLines: StatementLine[] | undefined) => (
     <>
@@ -115,11 +137,14 @@ export function OperationsTable({ current, prior }: { current: Statements; prior
               <span className="font-mono tabular-nums">{code}</span> {name}
             </TableCell>
             {line ? (
-              <ClassCells values={line.amounts} />
+              <ClassCells values={line.amounts} locale={locale} />
             ) : (
-              <ClassCells values={{ unrestricted: 0, internally_restricted: 0, externally_restricted: 0, total: 0 }} />
+              <ClassCells
+                values={{ unrestricted: 0, internally_restricted: 0, externally_restricted: 0, total: 0 }}
+                locale={locale}
+              />
             )}
-            {prior ? <AmountCell cents={priorOf(priorLines, code)} /> : null}
+            {prior ? <AmountCell cents={priorOf(priorLines, code)} locale={locale} /> : null}
           </TableRow>
         );
       })}
@@ -128,74 +153,101 @@ export function OperationsTable({ current, prior }: { current: Statements; prior
   const totalRow = (label: string, values: ByClass, priorValue: number | undefined) => (
     <TableRow>
       <TableCell className="font-semibold">{label}</TableCell>
-      <ClassCells values={values} strong />
-      {prior ? <AmountCell cents={priorValue ?? 0} strong /> : null}
+      <ClassCells values={values} strong locale={locale} />
+      {prior ? <AmountCell cents={priorValue ?? 0} strong locale={locale} /> : null}
     </TableRow>
   );
   const o = current.operations;
   const c = current.changes;
   return (
-    <DataTable minWidth="820px">
+    <DataTable
+      minWidth="820px"
+      scrollLabel={t("finance.ledgerReports.statements.operationsHeading", {
+        from: current.from,
+        to: current.to,
+      })}
+    >
       <TableHead>
         <TableHeader>
-          Statement of operations and changes in net assets, {current.from} to {current.to}
+          {t("finance.ledgerReports.statementTables.operationsTitle", { from: current.from, to: current.to })}
         </TableHeader>
         {FUND_RESTRICTIONS.map((r) => (
           <TableHeader key={r} className="w-36 text-right">
-            {FUND_RESTRICTION_LABEL[r]}
+            {t(FUND_RESTRICTION_KEY[r])}
           </TableHeader>
         ))}
-        <TableHeader className="w-36 text-right">Total</TableHeader>
-        {prior ? <TableHeader className="w-36 text-right">Prior year total</TableHeader> : null}
+        <TableHeader className="w-36 text-right">{t("finance.common.total")}</TableHeader>
+        {prior ? (
+          <TableHeader className="w-36 text-right">{t("finance.ledgerReports.statementTables.priorYearTotal")}</TableHeader>
+        ) : null}
       </TableHead>
       <tbody>
-        {section("Revenue", o.revenue, prior?.operations.revenue)}
-        {totalRow("Total revenue", o.totalRevenue, prior?.operations.totalRevenue.total)}
-        {section("Expenses", o.expenses, prior?.operations.expenses)}
-        {totalRow("Total expenses", o.totalExpenses, prior?.operations.totalExpenses.total)}
-        {totalRow("Excess (deficiency) of revenue over expenses", o.excess, prior?.operations.excess.total)}
-        {totalRow("Net assets, beginning of year", c.beginning, prior?.changes.beginning.total)}
-        {totalRow("Transfers and direct entries to net assets", c.direct, prior?.changes.direct.total)}
-        {totalRow("Net assets, end of year", c.ending, prior?.changes.ending.total)}
+        {section(t("finance.ledgerReports.statementTables.revenue"), o.revenue, prior?.operations.revenue)}
+        {totalRow(
+          t("finance.ledgerReports.statementTables.totalRevenue"),
+          o.totalRevenue,
+          prior?.operations.totalRevenue.total,
+        )}
+        {section(t("finance.ledgerReports.statementTables.expenses"), o.expenses, prior?.operations.expenses)}
+        {totalRow(
+          t("finance.ledgerReports.statementTables.totalExpenses"),
+          o.totalExpenses,
+          prior?.operations.totalExpenses.total,
+        )}
+        {totalRow(t("finance.ledgerReports.statementTables.excess"), o.excess, prior?.operations.excess.total)}
+        {totalRow(
+          t("finance.ledgerReports.statementTables.netAssetsBeginning"),
+          c.beginning,
+          prior?.changes.beginning.total,
+        )}
+        {totalRow(t("finance.ledgerReports.statementTables.transfersDirect"), c.direct, prior?.changes.direct.total)}
+        {totalRow(t("finance.ledgerReports.statementTables.netAssetsEnd"), c.ending, prior?.changes.ending.total)}
       </tbody>
     </DataTable>
   );
 }
 
 /** Statement of changes in fund balances (#149): one row per fund, then all funds. */
-export function FundChangesTable({ changes }: { changes: FundChanges }) {
-  const t = changes.totals;
+export async function FundChangesTable({ changes }: { changes: FundChanges }) {
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
+  const totals = changes.totals;
   return (
     <DataTable minWidth="860px">
       <TableHead>
-        <TableHeader>Fund</TableHeader>
-        <TableHeader className="w-32 text-right">Balance {changes.from}</TableHeader>
-        <TableHeader className="w-32 text-right">Revenue</TableHeader>
-        <TableHeader className="w-32 text-right">Expenses</TableHeader>
-        <TableHeader className="w-32 text-right">Transfers and releases</TableHeader>
-        <TableHeader className="w-32 text-right">Balance {changes.to}</TableHeader>
+        <TableHeader>{t("finance.ledgerReports.statementTables.fund")}</TableHeader>
+        <TableHeader className="w-32 text-right">
+          {t("finance.ledgerReports.statementTables.balanceAt", { date: changes.from })}
+        </TableHeader>
+        <TableHeader className="w-32 text-right">{t("finance.ledgerReports.statementTables.revenue")}</TableHeader>
+        <TableHeader className="w-32 text-right">{t("finance.ledgerReports.statementTables.expenses")}</TableHeader>
+        <TableHeader className="w-32 text-right">
+          {t("finance.ledgerReports.statementTables.transfersReleases")}
+        </TableHeader>
+        <TableHeader className="w-32 text-right">
+          {t("finance.ledgerReports.statementTables.balanceAt", { date: changes.to })}
+        </TableHeader>
       </TableHead>
       <tbody>
         {changes.funds.map((f) => (
           <TableRow key={f.fund_id}>
             <TableCell>
               <span className="font-mono">{f.code}</span> {f.name}
-              <p className="meta">{FUND_RESTRICTION_LABEL[f.restriction]}</p>
+              <p className="meta">{t(FUND_RESTRICTION_KEY[f.restriction])}</p>
             </TableCell>
-            <AmountCell cents={f.opening_cents} />
-            <AmountCell cents={f.revenue_cents} />
-            <AmountCell cents={f.expenses_cents} />
-            <AmountCell cents={f.transfers_cents} />
-            <AmountCell cents={f.closing_cents} strong />
+            <AmountCell cents={f.opening_cents} locale={locale} />
+            <AmountCell cents={f.revenue_cents} locale={locale} />
+            <AmountCell cents={f.expenses_cents} locale={locale} />
+            <AmountCell cents={f.transfers_cents} locale={locale} />
+            <AmountCell cents={f.closing_cents} strong locale={locale} />
           </TableRow>
         ))}
         <TableRow>
-          <TableCell className="font-semibold">All funds</TableCell>
-          <AmountCell cents={t.opening_cents} strong />
-          <AmountCell cents={t.revenue_cents} strong />
-          <AmountCell cents={t.expenses_cents} strong />
-          <AmountCell cents={t.transfers_cents} strong />
-          <AmountCell cents={t.closing_cents} strong />
+          <TableCell className="font-semibold">{t("finance.ledgerReports.statementTables.allFunds")}</TableCell>
+          <AmountCell cents={totals.opening_cents} strong locale={locale} />
+          <AmountCell cents={totals.revenue_cents} strong locale={locale} />
+          <AmountCell cents={totals.expenses_cents} strong locale={locale} />
+          <AmountCell cents={totals.transfers_cents} strong locale={locale} />
+          <AmountCell cents={totals.closing_cents} strong locale={locale} />
         </TableRow>
       </tbody>
     </DataTable>

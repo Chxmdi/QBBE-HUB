@@ -17,7 +17,6 @@ export const DISCLAIMER_FR = "Ceci n'est pas un reçu officiel de don aux fins d
 
 export const LANGUAGES = ["en", "fr"] as const;
 export type AckLanguage = (typeof LANGUAGES)[number];
-export const LANGUAGE_LABEL: Record<AckLanguage, string> = { en: "English", fr: "Français" };
 
 export type GiftType = "donation" | "grant_payment" | "in_kind";
 

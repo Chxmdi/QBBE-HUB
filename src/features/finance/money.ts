@@ -1,3 +1,6 @@
+import type { Locale } from "@/lib/i18n/config";
+import { formatCurrency } from "@/lib/i18n/format";
+
 /**
  * Money for the finance screens (#142). Amounts live in integer cents end to
  * end; floats never touch a stored figure.
@@ -31,10 +34,9 @@ export function parseMoneyToCents(input: string): number | null {
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
-const formatter = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
-
-export function formatCents(cents: number): string {
-  return formatter.format(cents / 100);
+/** "$1,234.56" in English, "1 234,56 $" in French (#141). */
+export function formatCents(cents: number, locale: Locale = "en"): string {
+  return formatCurrency(cents / 100, locale);
 }
 
 /** Plain decimal for spreadsheets: 4218 → "42.18". */

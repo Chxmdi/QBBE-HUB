@@ -6,6 +6,8 @@ import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
   ACCOUNT_TYPES,
@@ -28,14 +30,14 @@ type DbError = { code?: string; message: string } | null;
 // else (row-level security, a network failure) gets a generic message.
 const READABLE_CODES = new Set(["23514", "22023", "42501", "23505", "P0002"]);
 
-function dbMessage(error: DbError, fallback: string): string {
+function dbMessage(t: TranslateFn, error: DbError, fallback: string): string {
   if (!error) return fallback;
-  if (error.code === "23503") return "An account, fund, program or project is not in this organization.";
+  if (error.code === "23503") return t("finance.ledger.errors.notInOrganization");
   if (error.code === "23505" && /unique|duplicate/i.test(error.message)) {
-    return error.message.includes("reversed") ? error.message : "That code is already used.";
+    return error.message.includes("reversed") ? error.message : t("finance.ledger.errors.codeUsed");
   }
   if (error.code === "23514" && /violates check constraint/i.test(error.message)) {
-    return "Check the values entered.";
+    return t("finance.ledger.errors.checkValues");
   }
   if (
     error.code &&
@@ -47,13 +49,21 @@ function dbMessage(error: DbError, fallback: string): string {
   return fallback;
 }
 
+/** Validation messages are catalogue keys, translated when the action returns. */
+const K = (key: MessageKey): string => key;
+
+/** A validation message in the reader's language; one that is not a key shows as is. */
+function issueMessage(t: TranslateFn, message: string | undefined): string | undefined {
+  return message === undefined ? undefined : t(message as MessageKey);
+}
+
 const isoDate = (message: string) =>
   requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message);
 
 const optionalDate = z
   .string()
   .trim()
-  .regex(/^(\d{4}-\d{2}-\d{2})?$/, "Enter dates as YYYY-MM-DD.")
+  .regex(/^(\d{4}-\d{2}-\d{2})?$/, K("finance.ledger.errors.datesFormat"))
   .optional()
   .transform((v) => v || null);
 
@@ -72,44 +82,46 @@ async function authorize(): Promise<
 // ---------------------------------------------------------------------------
 
 const approvalSchema = z.object({
-  approvedOn: isoDate("Enter the date the accountant approved the chart."),
-  approvedByName: requiredText("Name the accountant who approved the chart.", 200),
+  approvedOn: isoDate(K("finance.ledger.errors.approvalDate")),
+  approvedByName: requiredText(K("finance.ledger.errors.approvalName"), 200),
 });
 
 export async function recordChartApproval(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = approvalSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(t, parsed.error.issues[0]?.message) };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("ledger_record_chart_approval", {
     p_organization: auth.organizationId,
     p_approved_on: parsed.data.approvedOn,
     p_approved_by_name: parsed.data.approvedByName,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not record the approval. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.recordApproval")) };
   revalidatePath(LEDGER, "layout");
   return { ok: true };
 }
 
 const fiscalYearSchema = z.object({
-  startMonth: requiredText("Choose the first month of the fiscal year.").regex(
+  startMonth: requiredText(K("finance.ledger.errors.firstMonth")).regex(
     /^\d{4}-\d{2}$/,
-    "Choose the first month of the fiscal year.",
+    K("finance.ledger.errors.firstMonth"),
   ),
 });
 
 export async function createFiscalYear(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = fiscalYearSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(t, parsed.error.issues[0]?.message) };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("ledger_create_fiscal_year", {
     p_organization: auth.organizationId,
     p_starts_on: `${parsed.data.startMonth}-01`,
   });
-  if (error) return { ok: false, error: dbMessage(error, "Could not create the periods. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.createPeriods")) };
   revalidatePath(LEDGER, "layout");
   return { ok: true };
 }
@@ -117,12 +129,13 @@ export async function createFiscalYear(input: unknown): Promise<ActionResult> {
 export async function setPeriodStatus(periodId: string, status: "open" | "closed"): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   if (!z.string().uuid().safeParse(periodId).success || !["open", "closed"].includes(status)) {
-    return { ok: false, error: "Period not found." };
+    return { ok: false, error: t("finance.ledger.errors.periodNotFound") };
   }
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("ledger_set_period_status", { p_period: periodId, p_status: status });
-  if (error) return { ok: false, error: dbMessage(error, "Could not change the period. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.changePeriod")) };
   revalidatePath(LEDGER, "layout");
   return { ok: true };
 }
@@ -133,9 +146,9 @@ export async function setPeriodStatus(periodId: string, status: "open" | "closed
 
 const accountSchema = z.object({
   id: z.string().uuid().optional(),
-  code: requiredText("Enter an account code.").regex(/^[0-9]{3,6}$/, "Account codes are 3 to 6 digits."),
-  name: requiredText("Enter the account name.", 200),
-  accountType: z.enum(ACCOUNT_TYPES, { message: "Choose the account type." }),
+  code: requiredText(K("finance.ledger.errors.accountCode")).regex(/^[0-9]{3,6}$/, K("finance.ledger.errors.accountCodeFormat")),
+  name: requiredText(K("finance.ledger.errors.accountName"), 200),
+  accountType: z.enum(ACCOUNT_TYPES, { message: K("finance.ledger.errors.accountType") }),
   description: z.string().trim().max(1000).optional(),
   isActive: z.boolean().default(true),
 });
@@ -143,8 +156,9 @@ const accountSchema = z.object({
 export async function saveAccount(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = accountSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(t, parsed.error.issues[0]?.message) };
   const d = parsed.data;
   const row = {
     code: d.code,
@@ -167,7 +181,7 @@ export async function saveAccount(input: unknown): Promise<ActionResult> {
         .insert({ ...row, organization_id: auth.organizationId })
         .select("id")
         .single();
-  if (error || !data) return { ok: false, error: dbMessage(error, "Could not save the account. Try again.") };
+  if (error || !data) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.saveAccount")) };
   revalidatePath(LEDGER, "layout");
   return { ok: true, id: data.id as string };
 }
@@ -175,12 +189,12 @@ export async function saveAccount(input: unknown): Promise<ActionResult> {
 const fundSchema = z
   .object({
     id: z.string().uuid().optional(),
-    code: requiredText("Enter a fund code.").regex(
+    code: requiredText(K("finance.ledger.errors.fundCode")).regex(
       /^[A-Z0-9][A-Z0-9-]{0,19}$/,
-      "Fund codes are up to 20 capital letters, digits and dashes.",
+      K("finance.ledger.errors.fundCodeFormat"),
     ),
-    name: requiredText("Enter the fund name.", 200),
-    restriction: z.enum(FUND_RESTRICTIONS, { message: "Choose how the fund is restricted." }),
+    name: requiredText(K("finance.ledger.errors.fundName"), 200),
+    restriction: z.enum(FUND_RESTRICTIONS, { message: K("finance.ledger.errors.fundRestriction") }),
     funder: z.string().trim().max(200).optional(),
     startsOn: optionalDate,
     endsOn: optionalDate,
@@ -189,15 +203,16 @@ const fundSchema = z
     programIds: z.array(z.string().uuid()).max(100).default([]),
   })
   .refine((f) => !f.startsOn || !f.endsOn || f.startsOn <= f.endsOn, {
-    message: "The end date must be on or after the start date.",
+    message: K("finance.ledger.errors.fundDates"),
     path: ["endsOn"],
   });
 
 export async function saveFund(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = fundSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(t, parsed.error.issues[0]?.message) };
   const d = parsed.data;
   const row = {
     code: d.code,
@@ -223,7 +238,7 @@ export async function saveFund(input: unknown): Promise<ActionResult> {
         .insert({ ...row, organization_id: auth.organizationId })
         .select("id")
         .single();
-  if (error || !data) return { ok: false, error: dbMessage(error, "Could not save the fund. Try again.") };
+  if (error || !data) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.saveFund")) };
   const fundId = data.id as string;
 
   // Unrestricted funds carry no program limits.
@@ -232,7 +247,7 @@ export async function saveFund(input: unknown): Promise<ActionResult> {
     .from("ledger_fund_program")
     .select("program_id")
     .eq("fund_id", fundId);
-  if (readError) return { ok: false, error: "The fund was saved but its programs could not be updated." };
+  if (readError) return { ok: false, error: t("finance.ledger.errors.fundPrograms") };
   const have = new Set((current ?? []).map((r) => r.program_id as string));
   const remove = [...have].filter((id) => !wanted.has(id));
   const add = [...wanted].filter((id) => !have.has(id));
@@ -242,7 +257,7 @@ export async function saveFund(input: unknown): Promise<ActionResult> {
       .delete()
       .eq("fund_id", fundId)
       .in("program_id", remove);
-    if (removeError) return { ok: false, error: "The fund was saved but its programs could not be updated." };
+    if (removeError) return { ok: false, error: t("finance.ledger.errors.fundPrograms") };
   }
   if (add.length > 0) {
     const { error: addError } = await supabase.from("ledger_fund_program").insert(
@@ -252,7 +267,7 @@ export async function saveFund(input: unknown): Promise<ActionResult> {
         program_id: programId,
       })),
     );
-    if (addError) return { ok: false, error: dbMessage(addError, "The fund was saved but its programs could not be updated.") };
+    if (addError) return { ok: false, error: dbMessage(t, addError, t("finance.ledger.errors.fundPrograms")) };
   }
   revalidatePath(LEDGER, "layout");
   return { ok: true, id: fundId };
@@ -264,8 +279,8 @@ export async function saveFund(input: unknown): Promise<ActionResult> {
 
 const lineSchema = z
   .object({
-    accountId: z.string().uuid({ message: "Choose an account on every line." }),
-    fundId: z.string().uuid({ message: "Choose a fund on every line." }),
+    accountId: z.string().uuid({ message: K("finance.ledger.errors.lineAccount") }),
+    fundId: z.string().uuid({ message: K("finance.ledger.errors.lineFund") }),
     programId: z.string().uuid().optional().or(z.literal("")),
     projectId: z.string().uuid().optional().or(z.literal("")),
     description: z.string().trim().max(500).optional(),
@@ -276,11 +291,11 @@ const lineSchema = z
     const debit = line.debit ? parseMoneyToCents(line.debit) : 0;
     const credit = line.credit ? parseMoneyToCents(line.credit) : 0;
     if (debit === null || credit === null) {
-      ctx.addIssue({ code: "custom", message: "Enter amounts like 1234.56." });
+      ctx.addIssue({ code: "custom", message: K("finance.ledger.errors.lineAmount") });
       return z.NEVER;
     }
     if ((debit > 0) === (credit > 0)) {
-      ctx.addIssue({ code: "custom", message: "Each line needs either a debit or a credit, not both." });
+      ctx.addIssue({ code: "custom", message: K("finance.ledger.errors.lineDebitOrCredit") });
       return z.NEVER;
     }
     return {
@@ -297,24 +312,25 @@ const lineSchema = z
 const entrySchema = z
   .object({
     entryId: z.string().uuid().optional(),
-    entryDate: isoDate("Enter the entry date."),
-    memo: requiredText("Describe the entry.", 500),
+    entryDate: isoDate(K("finance.ledger.errors.entryDate")),
+    memo: requiredText(K("finance.ledger.errors.entryMemo"), 500),
     kind: z.enum(["standard", "opening"]).default("standard"),
-    lines: z.array(lineSchema).min(2, "An entry needs at least two lines.").max(500),
+    lines: z.array(lineSchema).min(2, K("finance.ledger.errors.entryLines")).max(500),
     post: z.boolean().default(false),
   })
   .refine(
     (e) =>
       e.lines.reduce((s, l) => s + l.debit_cents, 0) === e.lines.reduce((s, l) => s + l.credit_cents, 0),
-    { message: "Debits and credits must be equal.", path: ["lines"] },
+    { message: K("finance.ledger.errors.unbalanced"), path: ["lines"] },
   );
 
 /** Saves a draft (and posts it when asked). A failed post leaves the draft saved. */
 export async function saveEntry(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = entrySchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(t, parsed.error.issues[0]?.message) };
   const d = parsed.data;
   const supabase = await createSupabaseServerClient();
   const { data: entryId, error } = await supabase.rpc("ledger_save_draft", {
@@ -325,7 +341,7 @@ export async function saveEntry(input: unknown): Promise<ActionResult> {
     p_kind: d.kind,
     p_lines: d.lines,
   });
-  if (error || !entryId) return { ok: false, error: dbMessage(error, "Could not save the entry. Try again.") };
+  if (error || !entryId) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.saveEntry")) };
   revalidatePath(LEDGER, "layout");
   if (d.post) {
     const { error: postError } = await supabase.rpc("ledger_post_entry", { p_entry: entryId });
@@ -333,7 +349,7 @@ export async function saveEntry(input: unknown): Promise<ActionResult> {
       return {
         ok: false,
         id: entryId as string,
-        error: `Saved as a draft but not posted: ${dbMessage(postError, "try posting again.")}`,
+        error: t("finance.ledger.errors.savedNotPosted", { reason: dbMessage(t, postError, t("finance.ledger.errors.tryPostingAgain")) }),
       };
     }
   }
@@ -343,10 +359,11 @@ export async function saveEntry(input: unknown): Promise<ActionResult> {
 export async function postEntry(entryId: string): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!z.string().uuid().safeParse(entryId).success) return { ok: false, error: "Entry not found." };
+  const t = await getT();
+  if (!z.string().uuid().safeParse(entryId).success) return { ok: false, error: t("finance.ledger.errors.entryNotFound") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("ledger_post_entry", { p_entry: entryId });
-  if (error) return { ok: false, error: dbMessage(error, "Could not post the entry. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.postEntry")) };
   revalidatePath(LEDGER, "layout");
   return { ok: true, id: entryId };
 }
@@ -354,32 +371,34 @@ export async function postEntry(entryId: string): Promise<ActionResult> {
 export async function deleteDraft(entryId: string): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!z.string().uuid().safeParse(entryId).success) return { ok: false, error: "Entry not found." };
+  const t = await getT();
+  if (!z.string().uuid().safeParse(entryId).success) return { ok: false, error: t("finance.ledger.errors.entryNotFound") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("ledger_delete_draft", { p_entry: entryId });
-  if (error) return { ok: false, error: dbMessage(error, "Could not delete the draft. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.deleteDraft")) };
   revalidatePath(LEDGER, "layout");
   return { ok: true };
 }
 
 const reverseSchema = z.object({
   entryId: z.string().uuid(),
-  entryDate: isoDate("Enter the date of the reversing entry."),
+  entryDate: isoDate(K("finance.ledger.errors.reversalDate")),
   memo: z.string().trim().max(500).optional(),
 });
 
 export async function reverseEntry(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = reverseSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(t, parsed.error.issues[0]?.message) };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("ledger_reverse_entry", {
     p_entry: parsed.data.entryId,
     p_entry_date: parsed.data.entryDate,
     p_memo: parsed.data.memo || null,
   });
-  if (error || !data) return { ok: false, error: dbMessage(error, "Could not reverse the entry. Try again.") };
+  if (error || !data) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.reverseEntry")) };
   revalidatePath(LEDGER, "layout");
   return { ok: true, id: data as string };
 }
@@ -389,11 +408,15 @@ export async function reverseEntry(input: unknown): Promise<ActionResult> {
 // ---------------------------------------------------------------------------
 
 const releaseSchema = z.object({
-  fromFundId: z.string({ message: "Choose the restricted fund." }).uuid("Choose the restricted fund."),
-  toFundId: z.string({ message: "Choose the unrestricted fund." }).uuid("Choose the unrestricted fund."),
-  amount: requiredText("Enter the amount to release."),
-  releaseDate: isoDate("Enter the date of the release."),
-  condition: requiredText("Name the condition that was met.", 300),
+  fromFundId: z
+    .string({ message: K("finance.ledger.release.errors.chooseRestricted") })
+    .uuid(K("finance.ledger.release.errors.chooseRestricted")),
+  toFundId: z
+    .string({ message: K("finance.ledger.release.errors.chooseUnrestricted") })
+    .uuid(K("finance.ledger.release.errors.chooseUnrestricted")),
+  amount: requiredText(K("finance.ledger.release.errors.amount")),
+  releaseDate: isoDate(K("finance.ledger.release.errors.date")),
+  condition: requiredText(K("finance.ledger.release.errors.condition"), 300),
 });
 
 /**
@@ -404,10 +427,13 @@ const releaseSchema = z.object({
 export async function releaseRestricted(input: unknown): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
+  const t = await getT();
   const parsed = releaseSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  if (!parsed.success) return { ok: false, error: issueMessage(t, parsed.error.issues[0]?.message) };
   const cents = parseMoneyToCents(parsed.data.amount);
-  if (cents === null || cents <= 0) return { ok: false, error: "Enter an amount above zero, like 1250.00." };
+  if (cents === null || cents <= 0) {
+    return { ok: false, error: t("finance.ledger.release.errors.amountPositive") };
+  }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("ledger_release_restricted", {
     p_organization: auth.organizationId,
@@ -417,7 +443,7 @@ export async function releaseRestricted(input: unknown): Promise<ActionResult> {
     p_release_date: parsed.data.releaseDate,
     p_condition: parsed.data.condition,
   });
-  if (error || !data) return { ok: false, error: dbMessage(error, "Could not release the money. Try again.") };
+  if (error || !data) return { ok: false, error: dbMessage(t, error, t("finance.ledger.release.errors.failed")) };
   revalidatePath(LEDGER, "layout");
   return { ok: true, id: data as string };
 }
@@ -429,7 +455,8 @@ export async function releaseRestricted(input: unknown): Promise<ActionResult> {
 export async function grantLedgerReader(userId: string): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!z.string().uuid().safeParse(userId).success) return { ok: false, error: "Choose a staff member." };
+  const t = await getT();
+  if (!z.string().uuid().safeParse(userId).success) return { ok: false, error: t("finance.ledger.errors.chooseStaff") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("ledger_reader")
@@ -437,7 +464,7 @@ export async function grantLedgerReader(userId: string): Promise<ActionResult> {
   if (error) {
     return {
       ok: false,
-      error: error.code === "23505" ? "They can already read the ledger." : dbMessage(error, "Could not grant access. Try again."),
+      error: error.code === "23505" ? t("finance.ledger.errors.alreadyReader") : dbMessage(t, error, t("finance.ledger.errors.grantAccess")),
     };
   }
   revalidatePath(LEDGER, "layout");
@@ -447,14 +474,15 @@ export async function grantLedgerReader(userId: string): Promise<ActionResult> {
 export async function revokeLedgerReader(userId: string): Promise<ActionResult> {
   const auth = await authorize();
   if (!auth.ok) return auth.result;
-  if (!z.string().uuid().safeParse(userId).success) return { ok: false, error: "Reader not found." };
+  const t = await getT();
+  if (!z.string().uuid().safeParse(userId).success) return { ok: false, error: t("finance.ledger.errors.readerNotFound") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("ledger_reader")
     .delete()
     .eq("organization_id", auth.organizationId)
     .eq("user_id", userId);
-  if (error) return { ok: false, error: dbMessage(error, "Could not remove access. Try again.") };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.removeAccess")) };
   revalidatePath(LEDGER, "layout");
   return { ok: true };
 }

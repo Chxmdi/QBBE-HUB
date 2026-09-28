@@ -8,8 +8,11 @@ import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { FiscalYearForm, PeriodStatusButton } from "@/features/ledger/components/setup-forms";
 import { getLedgerAccess } from "@/features/ledger/services/ledger.access";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Fiscal periods" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledger.periods.title") };
+}
 export const dynamic = "force-dynamic";
 
 interface Period {
@@ -31,11 +34,12 @@ function nextStartMonth(periods: Period[]): string {
 
 export default async function LedgerPeriodsPage() {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
+  const t = await getT();
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Fiscal periods"
-      description="Entries can only be dated in an open period. Close each month once it is reconciled; a closed month cannot be changed."
+      eyebrow={t("finance.ledger.title")}
+      title={t("finance.ledger.periods.title")}
+      description={t("finance.ledger.periods.description")}
     />
   );
   if (!canRead) {
@@ -66,18 +70,18 @@ export default async function LedgerPeriodsPage() {
       {periods.length === 0 ? (
         <EmptyState
           icon={<CalendarRange />}
-          title="No fiscal periods yet"
-          description="Add a fiscal year to create its twelve monthly periods."
+          title={t("finance.ledger.periods.emptyTitle")}
+          description={t("finance.ledger.periods.emptyDescription")}
         />
       ) : (
         <DataTable minWidth="560px">
           <TableHead>
-            <TableHeader>Period</TableHeader>
-            <TableHeader>Dates</TableHeader>
-            <TableHeader>Status</TableHeader>
+            <TableHeader>{t("finance.ledger.periods.period")}</TableHeader>
+            <TableHeader>{t("finance.ledger.periods.dates")}</TableHeader>
+            <TableHeader>{t("finance.common.status")}</TableHeader>
             {canManage ? (
               <TableHeader className="text-right">
-                <span className="sr-only">Actions</span>
+                <span className="sr-only">{t("finance.common.actions")}</span>
               </TableHeader>
             ) : null}
           </TableHead>
@@ -86,10 +90,10 @@ export default async function LedgerPeriodsPage() {
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
                 <TableCell className="tabular-nums">
-                  {p.starts_on} to {p.ends_on}
+                  {t("finance.ledger.periods.dateRange", { from: p.starts_on, to: p.ends_on })}
                 </TableCell>
                 <TableCell>
-                  {p.status === "open" ? <Badge tone="success">Open</Badge> : <Badge>Closed</Badge>}
+                  {p.status === "open" ? <Badge tone="success">{t("finance.ledger.status.open")}</Badge> : <Badge>{t("finance.ledger.status.closed")}</Badge>}
                 </TableCell>
                 {canManage ? (
                   <TableCell className="text-right">
@@ -102,7 +106,7 @@ export default async function LedgerPeriodsPage() {
         </DataTable>
       )}
       <p className="meta mt-3">
-        Closing a whole fiscal year, with its closing entry, is on the Year-end tab.
+        {t("finance.ledger.periods.yearEndNote")}
       </p>
     </div>
   );

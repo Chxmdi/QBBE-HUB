@@ -8,8 +8,11 @@ import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { ReleaseForm, type ReleaseFundOption } from "@/features/ledger/components/release-form";
 import { formatCents, type FundRestriction } from "@/features/ledger/money";
 import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Release restricted money" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledger.release.title") };
+}
 export const dynamic = "force-dynamic";
 
 interface FundRow {
@@ -32,12 +35,16 @@ interface ReleaseRow {
 }
 
 export default async function ReleaseRestrictedPage() {
-  const { session, supabase, canRead, canManage } = await getLedgerAccess();
+  const [{ session, supabase, canRead, canManage }, t, locale] = await Promise.all([
+    getLedgerAccess(),
+    getT(),
+    getLocale(),
+  ]);
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Release restricted money"
-      description="When a restricted fund's conditions are met, move its money to an unrestricted fund. Each release is one posted, balanced entry that names the condition."
+      eyebrow={t("finance.ledger.title")}
+      title={t("finance.ledger.release.title")}
+      description={t("finance.ledger.release.description")}
     />
   );
   if (!canRead) {
@@ -99,7 +106,7 @@ export default async function ReleaseRestrictedPage() {
 
   const fundLabel = (id: string) => {
     const f = fundById.get(id);
-    return f ? `${f.code} ${f.name}` : "Unknown fund";
+    return f ? `${f.code} ${f.name}` : t("finance.ledger.release.unknownFund");
   };
 
   return (
@@ -109,13 +116,13 @@ export default async function ReleaseRestrictedPage() {
       {canManage ? (
         <section aria-labelledby="release-heading" className="card mb-6 p-4">
           <h2 id="release-heading" className="mb-3 text-base font-semibold">
-            New release
+            {t("finance.ledger.release.newRelease")}
           </h2>
           {restricted.length === 0 || unrestricted.length === 0 ? (
             <p className="meta">
-              A release needs an active restricted fund and an active unrestricted fund.{" "}
+              {t("finance.ledger.release.needsFunds")}{" "}
               <Link href="/finance/ledger/funds" className="text-brand-fg hover:underline">
-                Manage funds
+                {t("finance.ledger.release.manageFunds")}
               </Link>
             </p>
           ) : (
@@ -126,19 +133,19 @@ export default async function ReleaseRestrictedPage() {
 
       <section aria-labelledby="history-heading">
         <h2 id="history-heading" className="mb-2 text-base font-semibold">
-          Releases
+          {t("finance.ledger.release.history")}
         </h2>
         {releaseRows.length === 0 ? (
-          <p className="meta">No restricted money has been released yet.</p>
+          <p className="meta">{t("finance.ledger.release.empty")}</p>
         ) : (
           <DataTable minWidth="820px">
             <TableHead>
-              <TableHeader>Date</TableHeader>
-              <TableHeader>From</TableHeader>
-              <TableHeader>To</TableHeader>
-              <TableHeader>Condition met</TableHeader>
-              <TableHeader className="text-right">Amount</TableHeader>
-              <TableHeader>Entry</TableHeader>
+              <TableHeader>{t("finance.ledger.release.date")}</TableHeader>
+              <TableHeader>{t("finance.ledger.release.from")}</TableHeader>
+              <TableHeader>{t("finance.ledger.release.to")}</TableHeader>
+              <TableHeader>{t("finance.ledger.release.condition")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.ledger.release.amount")}</TableHeader>
+              <TableHeader>{t("finance.ledger.release.entry")}</TableHeader>
             </TableHead>
             <tbody>
               {releaseRows.map((r) => (
@@ -148,14 +155,14 @@ export default async function ReleaseRestrictedPage() {
                   <TableCell>{fundLabel(r.to_fund_id)}</TableCell>
                   <TableCell className="text-[13px]">
                     {r.condition}
-                    {r.releaser ? <p className="meta">By {r.releaser.full_name}</p> : null}
+                    {r.releaser ? <p className="meta">{t("finance.ledger.release.by", { name: r.releaser.full_name })}</p> : null}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(Number(r.amount_cents))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCents(Number(r.amount_cents), locale)}</TableCell>
                   <TableCell className="whitespace-nowrap">
                     <Link href={`/finance/ledger/journal/${r.entry_id}`} className="text-brand-fg hover:underline">
-                      Entry {entryNumber.get(r.entry_id) ?? ""}
+                      {t("finance.ledger.release.entryNumber", { number: entryNumber.get(r.entry_id) ?? "" })}
                     </Link>
-                    {reversed.has(r.entry_id) ? <Badge className="ml-2">Reversed</Badge> : null}
+                    {reversed.has(r.entry_id) ? <Badge className="ml-2">{t("finance.ledger.release.reversed")}</Badge> : null}
                   </TableCell>
                 </TableRow>
               ))}
@@ -163,9 +170,7 @@ export default async function ReleaseRestrictedPage() {
           </DataTable>
         )}
         <p className="meta mt-2">
-          A release debits the restricted fund&apos;s net assets and credits 2900 Due to other funds, and in the
-          unrestricted fund debits 1900 Due from other funds and credits 3000 Unrestricted net assets. To undo one,
-          reverse its entry.
+          {t("finance.ledger.release.note")}
         </p>
       </section>
     </div>

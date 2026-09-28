@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/translate";
 import {
   commentOnApproval,
   decideApproval,
@@ -16,11 +18,11 @@ import {
 
 type Action = "approve" | "reject" | "comment" | "withdraw";
 
-const DONE: Record<Action, string> = {
-  approve: "Approved.",
-  reject: "Rejected.",
-  comment: "Comment posted.",
-  withdraw: "Request withdrawn.",
+const DONE: Record<Action, MessageKey> = {
+  approve: "finance.approvals.actions.doneApprove",
+  reject: "finance.approvals.actions.doneReject",
+  comment: "finance.approvals.actions.doneComment",
+  withdraw: "finance.approvals.actions.doneWithdraw",
 };
 
 /**
@@ -38,6 +40,7 @@ export function ApprovalActions({
 }) {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState<Action | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -55,18 +58,18 @@ export function ApprovalActions({
           : await withdrawApproval({ itemId, note: trimmed || undefined });
     setBusy(null);
     if (!result.ok) {
-      setError(result.error ?? "That didn't work. Try again.");
+      setError(result.error ?? t("finance.approvals.errors.generic"));
       return;
     }
     setNote("");
-    toast.toast(DONE[action], { tone: "success" });
+    toast.toast(t(DONE[action]), { tone: "success" });
     router.refresh();
   }
 
   return (
     <div className="mt-4 space-y-2">
       <Label htmlFor={noteId}>
-        {canDecide ? "Comment or reason (required to reject)" : "Comment"}
+        {canDecide ? t("finance.approvals.actions.noteLabelDecide") : t("finance.approvals.actions.noteLabel")}
       </Label>
       <Textarea
         id={noteId}
@@ -84,7 +87,7 @@ export function ApprovalActions({
         {canDecide ? (
           <>
             <Button size="sm" disabled={busy !== null} onClick={() => run("approve")}>
-              Approve
+              {t("finance.approvals.actions.approve")}
             </Button>
             <Button
               size="sm"
@@ -92,7 +95,7 @@ export function ApprovalActions({
               disabled={busy !== null}
               onClick={() => run("reject")}
             >
-              Reject
+              {t("finance.approvals.actions.reject")}
             </Button>
           </>
         ) : null}
@@ -102,7 +105,7 @@ export function ApprovalActions({
           disabled={busy !== null || note.trim() === ""}
           onClick={() => run("comment")}
         >
-          {canDecide ? "Ask a question" : "Post comment"}
+          {canDecide ? t("finance.approvals.actions.askQuestion") : t("finance.approvals.actions.postComment")}
         </Button>
         {canWithdraw ? (
           <Button
@@ -111,7 +114,7 @@ export function ApprovalActions({
             disabled={busy !== null}
             onClick={() => run("withdraw")}
           >
-            Withdraw request
+            {t("finance.approvals.actions.withdraw")}
           </Button>
         ) : null}
       </div>
@@ -122,6 +125,7 @@ export function ApprovalActions({
 export function RuleControls({ ruleId, active }: { ruleId: string; active: boolean }) {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const [busy, setBusy] = React.useState(false);
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>, done: string) {
@@ -129,7 +133,7 @@ export function RuleControls({ ruleId, active }: { ruleId: string; active: boole
     const result = await action();
     setBusy(false);
     if (!result.ok) {
-      toast.toast(result.error ?? "That didn't work. Try again.", { tone: "error" });
+      toast.toast(result.error ?? t("finance.approvals.errors.generic"), { tone: "error" });
       return;
     }
     toast.toast(done, { tone: "success" });
@@ -143,21 +147,24 @@ export function RuleControls({ ruleId, active }: { ruleId: string; active: boole
         variant="secondary"
         disabled={busy}
         onClick={() =>
-          run(() => setApprovalRuleActive(ruleId, !active), active ? "Rule switched off." : "Rule switched on.")
+          run(
+            () => setApprovalRuleActive(ruleId, !active),
+            active ? t("finance.approvals.rules.switchedOff") : t("finance.approvals.rules.switchedOn"),
+          )
         }
       >
-        {active ? "Switch off" : "Switch on"}
+        {active ? t("finance.approvals.rules.switchOff") : t("finance.approvals.rules.switchOn")}
       </Button>
       <Button
         size="sm"
         variant="ghost"
         disabled={busy}
         onClick={() => {
-          if (!window.confirm("Delete this rule? Items already waiting keep their approvers.")) return;
-          void run(() => deleteApprovalRule(ruleId), "Rule deleted.");
+          if (!window.confirm(t("finance.approvals.rules.confirmDelete"))) return;
+          void run(() => deleteApprovalRule(ruleId), t("finance.approvals.rules.deleted"));
         }}
       >
-        Delete
+        {t("finance.approvals.rules.delete")}
       </Button>
     </div>
   );
@@ -167,6 +174,7 @@ export function RuleControls({ ruleId, active }: { ruleId: string; active: boole
 export function EndDelegationButton({ delegationId, label }: { delegationId: string; label: string }) {
   const router = useRouter();
   const toast = useToast();
+  const t = useT();
   const [busy, setBusy] = React.useState(false);
 
   async function end() {
@@ -174,10 +182,10 @@ export function EndDelegationButton({ delegationId, label }: { delegationId: str
     const result = await endApprovalDelegation(delegationId);
     setBusy(false);
     if (!result.ok) {
-      toast.toast(result.error ?? "That didn't work. Try again.", { tone: "error" });
+      toast.toast(result.error ?? t("finance.approvals.errors.generic"), { tone: "error" });
       return;
     }
-    toast.toast("Delegation ended.", { tone: "success" });
+    toast.toast(t("finance.approvals.away.ended"), { tone: "success" });
     router.refresh();
   }
 

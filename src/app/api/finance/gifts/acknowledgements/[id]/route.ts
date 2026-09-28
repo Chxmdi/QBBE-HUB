@@ -1,4 +1,5 @@
 import { requireStaff } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { letterDocument, type AckLanguage } from "@/features/gifts/acknowledgement";
 
@@ -9,6 +10,9 @@ import { letterDocument, type AckLanguage } from "@/features/gifts/acknowledgeme
  * official receipt for income tax purposes" sentence. No PDF, no scripts.
  * Row-level security decides who may read it: admins with MFA and ledger
  * readers. Each read is audited.
+ *
+ * The letter itself stays in the language it was issued in, whoever opens it;
+ * only this route's own error text follows the requester's language.
  */
 
 export const runtime = "nodejs";
@@ -19,7 +23,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireStaff();
   const { id } = await params;
-  if (!UUID.test(id)) return new Response("Not found", { status: 404 });
+  const t = await getT();
+  if (!UUID.test(id)) return new Response(t("finance.gifts.api.notFound"), { status: 404 });
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("gift_acknowledgement")
@@ -27,7 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     .eq("organization_id", session.organizationId)
     .eq("id", id)
     .maybeSingle();
-  if (!data) return new Response("Not found", { status: 404 });
+  if (!data) return new Response(t("finance.gifts.api.notFound"), { status: 404 });
 
   const download = new URL(request.url).searchParams.get("download") === "1";
   await supabase.from("audit_event").insert({

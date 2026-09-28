@@ -11,11 +11,11 @@ import {
   BankAccountDialog,
   DeleteImportButton,
   ImportStatementForm,
-  INSTITUTION_LABEL,
   StartReconciliationForm,
   StatementLineActions,
   type MatchOption,
 } from "@/features/banking/components/bank-forms";
+import { institutionLabel } from "@/features/banking/labels";
 import { pickSuggestions } from "@/features/banking/matching";
 import {
   SUGGESTION_WINDOW_DAYS,
@@ -33,8 +33,12 @@ import { centsToDecimal } from "@/features/finance/money";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { getLedgerAccess, todayIn, uuidParam } from "@/features/ledger/services/ledger.access";
 import { loadEntryChoices } from "@/features/ledger/services/ledger.queries";
+import { getLocale, getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 
-export const metadata: Metadata = { title: "Bank account" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.bank.account.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 function shiftMonth(month: string, delta: number): string {
@@ -43,7 +47,11 @@ function shiftMonth(month: string, delta: number): string {
   return d.toISOString().slice(0, 7);
 }
 
-const METHOD_LABEL = { suggested: "Suggested", manual: "Manual", created: "Created here" } as const;
+const METHOD_LABEL: Record<"suggested" | "manual" | "created", MessageKey> = {
+  suggested: "finance.bank.account.methods.suggested",
+  manual: "finance.bank.account.methods.manual",
+  created: "finance.bank.account.methods.created",
+};
 
 export default async function BankAccountPage({
   params,
@@ -55,10 +63,11 @@ export default async function BankAccountPage({
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
   const { id: rawId } = await params;
   const query = await searchParams;
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   if (!canRead) {
     return (
       <div>
-        <PageHeader eyebrow="Bank" title="Bank account" />
+        <PageHeader eyebrow={t("finance.bank.account.eyebrow")} title={t("finance.bank.account.metaTitle")} />
         <NoLedgerAccess isAdmin={session.isAdmin} />
       </div>
     );
@@ -126,15 +135,19 @@ export default async function BankAccountPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Bank"
+        eyebrow={t("finance.bank.account.eyebrow")}
         title={`${account.name}${account.account_last4 ? ` ···${account.account_last4}` : ""}`}
-        description={`${INSTITUTION_LABEL[account.institution] ?? account.institution}, reconciled against ${
-          account.ledger_account ? `${account.ledger_account.code} ${account.ledger_account.name}` : "the ledger"
-        } from ${account.reconcile_from}.`}
+        description={t("finance.bank.account.description", {
+          institution: institutionLabel(t, account.institution),
+          ledger: account.ledger_account
+            ? `${account.ledger_account.code} ${account.ledger_account.name}`
+            : t("finance.bank.account.theLedger"),
+          date: account.reconcile_from,
+        })}
         actions={
           <>
             <Link href="/finance/bank" className="text-[13.5px] text-muted underline underline-offset-2">
-              All bank accounts
+              {t("finance.bank.account.allAccounts")}
             </Link>
             {canManage && choices ? (
               <BankAccountDialog
@@ -151,7 +164,7 @@ export default async function BankAccountPage({
       {canManage && account.is_active ? (
         <section className="card mb-6 p-4" aria-labelledby="import-heading">
           <h2 id="import-heading" className="mb-3 text-[15px] font-semibold">
-            Import a statement
+            {t("finance.bank.account.importHeading")}
           </h2>
           <ImportStatementForm bankAccountId={account.id} institution={account.institution} />
         </section>
@@ -159,7 +172,7 @@ export default async function BankAccountPage({
 
       <section className="mb-8" aria-labelledby="recs-heading">
         <h2 id="recs-heading" className="mb-3 text-[15px] font-semibold">
-          Reconciliations
+          {t("finance.bank.account.recsHeading")}
         </h2>
         {canManage ? (
           <div className="card mb-3 p-4">
@@ -172,25 +185,29 @@ export default async function BankAccountPage({
           </div>
         ) : null}
         {recs.length === 0 ? (
-          <p className="text-[13.5px] text-muted">No statement has been reconciled yet.</p>
+          <p className="text-[13.5px] text-muted">{t("finance.bank.account.noRecs")}</p>
         ) : (
           <DataTable minWidth="560px">
             <TableHead>
-              <TableHeader>Statement</TableHeader>
-              <TableHeader className="text-right">Closing balance</TableHeader>
-              <TableHeader>Status</TableHeader>
+              <TableHeader>{t("finance.bank.account.statement")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.bank.account.closingBalance")}</TableHeader>
+              <TableHeader>{t("finance.common.status")}</TableHeader>
             </TableHead>
             <tbody>
               {recs.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="tabular-nums">
                     <Link href={`/finance/bank/reconciliations/${r.id}`} className="underline underline-offset-2">
-                      {r.statement_start} to {r.statement_end}
+                      {t("finance.bank.period", { start: r.statement_start, end: r.statement_end })}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatSigned(Number(r.closing_balance_cents))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatSigned(Number(r.closing_balance_cents), locale)}</TableCell>
                   <TableCell>
-                    {r.status === "reconciled" ? <Badge tone="success">Reconciled</Badge> : <Badge tone="warning">Open</Badge>}
+                    {r.status === "reconciled" ? (
+                      <Badge tone="success">{t("finance.bank.reconciled")}</Badge>
+                    ) : (
+                      <Badge tone="warning">{t("finance.bank.open")}</Badge>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -203,23 +220,26 @@ export default async function BankAccountPage({
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 id="lines-heading" className="text-[15px] font-semibold">
-              Statement lines, {month}
+              {t("finance.bank.account.linesHeading", { month })}
             </h2>
             <p className="meta mt-1">
-              {lines.length} line{lines.length === 1 ? "" : "s"}, {unmatchedCount} not matched.{" "}
+              {t(lines.length === 1 ? "finance.bank.account.lineCountOne" : "finance.bank.account.lineCountOther", {
+                count: lines.length,
+                unmatched: unmatchedCount,
+              })}{" "}
               <Link className="underline underline-offset-2" href={monthLink(shiftMonth(month, -1))}>
-                Previous month
+                {t("finance.bank.account.previousMonth")}
               </Link>{" "}
               ·{" "}
               <Link className="underline underline-offset-2" href={monthLink(shiftMonth(month, 1))}>
-                Next month
+                {t("finance.bank.account.nextMonth")}
               </Link>{" "}
               ·{" "}
               <Link
                 className="underline underline-offset-2"
                 href={`/finance/bank/${accountId}?month=${month}${unmatchedOnly ? "" : "&show=unmatched"}`}
               >
-                {unmatchedOnly ? "Show all lines" : "Show unmatched only"}
+                {unmatchedOnly ? t("finance.bank.account.showAll") : t("finance.bank.account.showUnmatched")}
               </Link>
             </p>
           </div>
@@ -228,19 +248,19 @@ export default async function BankAccountPage({
         {shown.length === 0 ? (
           <EmptyState
             icon={<FileText />}
-            title={lines.length === 0 ? "No statement lines this month" : "Every line is matched"}
-            description={lines.length === 0 ? "Import the month's statement to see its lines here." : undefined}
+            title={lines.length === 0 ? t("finance.bank.account.emptyNoLines") : t("finance.bank.account.emptyAllMatched")}
+            description={lines.length === 0 ? t("finance.bank.account.emptyNoLinesDescription") : undefined}
           />
         ) : (
           <DataTable minWidth="900px">
             <TableHead>
-              <TableHeader>Date</TableHeader>
-              <TableHeader>Description</TableHeader>
-              <TableHeader className="text-right">Amount</TableHeader>
-              <TableHeader>Ledger</TableHeader>
+              <TableHeader>{t("finance.common.date")}</TableHeader>
+              <TableHeader>{t("finance.common.description")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.common.amount")}</TableHeader>
+              <TableHeader>{t("finance.bank.account.ledger")}</TableHeader>
               {canManage ? (
                 <TableHeader className="text-right">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("finance.common.actions")}</span>
                 </TableHeader>
               ) : null}
             </TableHead>
@@ -254,21 +274,23 @@ export default async function BankAccountPage({
                       {l.description}
                       {l.reference ? <span className="meta"> · {l.reference}</span> : null}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums whitespace-nowrap">{formatSigned(l.amount_cents)}</TableCell>
+                    <TableCell className="text-right tabular-nums whitespace-nowrap">{formatSigned(l.amount_cents, locale)}</TableCell>
                     <TableCell>
                       {l.entry_id ? (
                         <span>
                           <Link href={`/finance/ledger/journal/${l.entry_id}`} className="underline underline-offset-2">
-                            Entry {l.entry_number}
+                            {t("finance.bank.entryNumber", { number: l.entry_number ?? "" })}
                           </Link>{" "}
-                          <Badge tone="success">{l.match_method ? METHOD_LABEL[l.match_method] : "Matched"}</Badge>
+                          <Badge tone="success">
+                            {l.match_method ? t(METHOD_LABEL[l.match_method]) : t("finance.bank.account.matched")}
+                          </Badge>
                         </span>
                       ) : suggestion ? (
                         <span className="text-[13px]">
-                          <Badge tone="info">Suggested</Badge> {candidateLabel(suggestion)}
+                          <Badge tone="info">{t("finance.bank.account.suggested")}</Badge> {candidateLabel(suggestion)}
                         </span>
                       ) : (
-                        <Badge tone="warning">Not matched</Badge>
+                        <Badge tone="warning">{t("finance.bank.notMatched")}</Badge>
                       )}
                     </TableCell>
                     {canManage && choices ? (
@@ -301,20 +323,20 @@ export default async function BankAccountPage({
 
       <section aria-labelledby="imports-heading">
         <h2 id="imports-heading" className="mb-3 text-[15px] font-semibold">
-          Recent imports
+          {t("finance.bank.account.importsHeading")}
         </h2>
         {imports.length === 0 ? (
-          <p className="text-[13.5px] text-muted">Nothing imported yet.</p>
+          <p className="text-[13.5px] text-muted">{t("finance.bank.account.noImports")}</p>
         ) : (
           <DataTable minWidth="640px">
             <TableHead>
-              <TableHeader>File</TableHeader>
-              <TableHeader>Dates</TableHeader>
-              <TableHeader className="text-right">Added</TableHeader>
-              <TableHeader className="text-right">Already there</TableHeader>
+              <TableHeader>{t("finance.bank.account.file")}</TableHeader>
+              <TableHeader>{t("finance.bank.account.dates")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.bank.account.added")}</TableHeader>
+              <TableHeader className="text-right">{t("finance.bank.account.alreadyThere")}</TableHeader>
               {canManage ? (
                 <TableHeader className="text-right">
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("finance.common.actions")}</span>
                 </TableHeader>
               ) : null}
             </TableHead>
@@ -325,7 +347,7 @@ export default async function BankAccountPage({
                     {i.file_name} <span className="meta">({i.file_format.toUpperCase()})</span>
                   </TableCell>
                   <TableCell className="tabular-nums">
-                    {i.first_date ? `${i.first_date} to ${i.last_date}` : "—"}
+                    {i.first_date ? t("finance.bank.period", { start: i.first_date, end: String(i.last_date) }) : "—"}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{i.lines_added}</TableCell>
                   <TableCell className="text-right tabular-nums">{i.lines_skipped}</TableCell>

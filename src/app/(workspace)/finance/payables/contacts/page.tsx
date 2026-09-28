@@ -7,34 +7,42 @@ import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { ContactDialog } from "@/features/payables/components/contact-dialog";
 import { PayablesTabs } from "@/features/payables/components/payables-tabs";
 import { getPayablesAccess, loadContacts } from "@/features/payables/services/payables.queries";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Vendors and customers" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.payables.meta.contacts") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function ContactsPage() {
   const { session, supabase } = await getPayablesAccess();
+  const t = await getT();
   const contacts = await loadContacts(supabase, session.organizationId);
   return (
     <div>
       <PageHeader
-        eyebrow="Finance"
-        title="Bills and invoices"
-        description="Vendors who bill QBBE, and the partners, funders and members QBBE invoices. A contact can be both."
+        eyebrow={t("finance.common.title")}
+        title={t("finance.payables.heading")}
+        description={t("finance.payables.contacts.description")}
         actions={<ContactDialog />}
       />
       <PayablesTabs />
       {contacts.length === 0 ? (
-        <EmptyState icon={<Users />} title="No vendors or customers yet" description="Add the first one to enter a bill or an invoice." />
+        <EmptyState
+          icon={<Users />}
+          title={t("finance.payables.contacts.emptyTitle")}
+          description={t("finance.payables.contacts.emptyDescription")}
+        />
       ) : (
         <DataTable minWidth="720px">
           <TableHead>
-            <TableHeader>Name</TableHeader>
-            <TableHeader className="w-44">Role</TableHeader>
-            <TableHeader>Email</TableHeader>
-            <TableHeader className="w-24">Language</TableHeader>
-            <TableHeader className="w-24">Status</TableHeader>
+            <TableHeader>{t("finance.payables.contacts.name")}</TableHeader>
+            <TableHeader className="w-44">{t("finance.payables.contacts.role")}</TableHeader>
+            <TableHeader>{t("finance.payables.contacts.email")}</TableHeader>
+            <TableHeader className="w-24">{t("finance.payables.contacts.language")}</TableHeader>
+            <TableHeader className="w-24">{t("finance.payables.contacts.status")}</TableHeader>
             <TableHeader className="w-16">
-              <span className="sr-only">Edit</span>
+              <span className="sr-only">{t("finance.payables.contacts.edit")}</span>
             </TableHeader>
           </TableHead>
           <tbody>
@@ -42,11 +50,24 @@ export default async function ContactsPage() {
               <TableRow key={c.id}>
                 <TableCell className="font-medium">{c.name}</TableCell>
                 <TableCell>
-                  {[c.is_vendor ? "Vendor" : null, c.is_customer ? "Customer" : null].filter(Boolean).join(", ")}
+                  {[
+                    c.is_vendor ? t("finance.payables.contacts.vendor") : null,
+                    c.is_customer ? t("finance.payables.contacts.customer") : null,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
                 </TableCell>
                 <TableCell>{c.email ?? "—"}</TableCell>
-                <TableCell>{c.language === "fr" ? "French" : "English"}</TableCell>
-                <TableCell>{c.is_active ? <Badge tone="success">Active</Badge> : <Badge>Inactive</Badge>}</TableCell>
+                <TableCell>
+                  {c.language === "fr" ? t("finance.payables.languages.fr") : t("finance.payables.languages.en")}
+                </TableCell>
+                <TableCell>
+                  {c.is_active ? (
+                    <Badge tone="success">{t("finance.payables.contacts.active")}</Badge>
+                  ) : (
+                    <Badge>{t("finance.payables.contacts.inactive")}</Badge>
+                  )}
+                </TableCell>
                 <TableCell>
                   <ContactDialog contact={c} />
                 </TableCell>

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Contextual side drawer that preserves workspace context (UI-010).
@@ -27,6 +28,7 @@ export function Drawer({
   children: React.ReactNode;
   width?: "md" | "lg";
 }) {
+  const t = useT();
   const ref = React.useRef<HTMLDialogElement>(null);
 
   React.useEffect(() => {
@@ -66,7 +68,7 @@ export function Drawer({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close panel"
+              aria-label={t("ui.closePanel")}
               className="rounded-(--radius-sm) p-1.5 text-muted transition-colors hover:bg-surface-soft hover:text-ink"
             >
               <X className="size-4" aria-hidden />

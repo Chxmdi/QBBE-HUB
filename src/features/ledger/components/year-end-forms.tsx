@@ -13,10 +13,12 @@ import {
   revokeAccountantAccess,
 } from "@/features/ledger/services/year-end.commands";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { useT } from "@/lib/i18n/client";
 
 function useAction() {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function run(action: () => Promise<ActionResult>, success: string) {
@@ -25,7 +27,7 @@ function useAction() {
     const result = await action();
     setPending(false);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong. Try again.");
+      setError(result.error ?? t("ui.somethingWrong"));
       return false;
     }
     toast(success, { tone: "success" });
@@ -61,6 +63,7 @@ export function GrantAccountantForm({
   maxDate: string;
 }) {
   const { pending, error, run } = useAction();
+  const t = useT();
   return (
     <form
       className="grid gap-3 md:grid-cols-[1fr_11rem_1fr_auto] md:items-start"
@@ -74,14 +77,14 @@ export function GrantAccountantForm({
               expiresOn: form.get("expiresOn"),
               note: form.get("note") || undefined,
             }),
-          "Accountant access granted.",
+          t("finance.ledgerReports.yearEndForms.grantSuccess"),
         );
       }}
     >
       <div>
-        <Label htmlFor="accountant-user">Accountant</Label>
+        <Label htmlFor="accountant-user">{t("finance.ledgerReports.yearEndForms.accountant")}</Label>
         <Select id="accountant-user" name="userId" required defaultValue="">
-          <option value="">Choose an invited Guest</option>
+          <option value="">{t("finance.ledgerReports.yearEndForms.chooseGuest")}</option>
           {guests.map((g) => (
             <option key={g.id} value={g.id}>
               {g.name}
@@ -90,16 +93,21 @@ export function GrantAccountantForm({
         </Select>
       </div>
       <div>
-        <Label htmlFor="accountant-expires">Access ends on</Label>
+        <Label htmlFor="accountant-expires">{t("finance.ledgerReports.yearEndForms.accessEndsOn")}</Label>
         <Input id="accountant-expires" name="expiresOn" type="date" required min={minDate} max={maxDate} defaultValue={defaultExpiry} />
-        <FieldHint>At most one year.</FieldHint>
+        <FieldHint>{t("finance.ledgerReports.yearEndForms.atMostOneYear")}</FieldHint>
       </div>
       <div>
-        <Label htmlFor="accountant-note">Note (optional)</Label>
-        <Input id="accountant-note" name="note" maxLength={500} placeholder="Firm, engagement" />
+        <Label htmlFor="accountant-note">{t("finance.ledgerReports.yearEndForms.noteOptional")}</Label>
+        <Input
+          id="accountant-note"
+          name="note"
+          maxLength={500}
+          placeholder={t("finance.ledgerReports.yearEndForms.notePlaceholder")}
+        />
       </div>
       <Button type="submit" loading={pending} className="md:mt-6">
-        Grant access
+        {t("finance.ledgerReports.yearEndForms.grantAccess")}
       </Button>
       <div className="md:col-span-4">
         <FormError error={error} />
@@ -110,19 +118,23 @@ export function GrantAccountantForm({
 
 export function RevokeAccountantButton({ grantId, name }: { grantId: string; name: string }) {
   const { pending, error, run } = useAction();
+  const t = useT();
   return (
     <div className="flex flex-col items-end gap-1">
       <Button
         size="sm"
         variant="secondary"
         loading={pending}
-        aria-label={`Revoke access for ${name}`}
+        aria-label={t("finance.ledgerReports.yearEndForms.revokeAria", { name })}
         onClick={() => {
-          if (!window.confirm(`Revoke ${name}'s access to the books now?`)) return;
-          void run(() => revokeAccountantAccess(grantId), `${name} can no longer open the books.`);
+          if (!window.confirm(t("finance.ledgerReports.yearEndForms.revokeConfirm", { name }))) return;
+          void run(
+            () => revokeAccountantAccess(grantId),
+            t("finance.ledgerReports.yearEndForms.revokeSuccess", { name }),
+          );
         }}
       >
-        Revoke
+        {t("finance.ledgerReports.yearEndForms.revoke")}
       </Button>
       <FormError error={error} />
     </div>
@@ -131,25 +143,22 @@ export function RevokeAccountantButton({ grantId, name }: { grantId: string; nam
 
 export function CloseYearButton({ startsOn, label }: { startsOn: string; label: string }) {
   const { pending, error, run } = useAction();
+  const t = useT();
   return (
     <div className="flex flex-col items-end gap-1">
       <Button
         size="sm"
         loading={pending}
-        aria-label={`Close fiscal year ${label}`}
+        aria-label={t("finance.ledgerReports.yearEndForms.closeAria", { label })}
         onClick={() => {
-          if (
-            !window.confirm(
-              `Close fiscal year ${label}? This posts the closing entry and closes every period of the year. ` +
-                "It can only be undone by reopening the year, which posts a reopening entry.",
-            )
-          ) {
-            return;
-          }
-          void run(() => closeFiscalYear({ startsOn, confirm: true }), `Fiscal year ${label} closed.`);
+          if (!window.confirm(t("finance.ledgerReports.yearEndForms.closeConfirm", { label }))) return;
+          void run(
+            () => closeFiscalYear({ startsOn, confirm: true }),
+            t("finance.ledgerReports.yearEndForms.closeSuccess", { label }),
+          );
         }}
       >
-        Close year
+        {t("finance.ledgerReports.yearEndForms.closeYear")}
       </Button>
       <FormError error={error} />
     </div>
@@ -158,11 +167,17 @@ export function CloseYearButton({ startsOn, label }: { startsOn: string; label: 
 
 export function ReopenYearForm({ startsOn, label }: { startsOn: string; label: string }) {
   const { pending, error, run } = useAction();
+  const t = useT();
   const [open, setOpen] = useState(false);
   if (!open) {
     return (
-      <Button size="sm" variant="secondary" aria-label={`Reopen fiscal year ${label}`} onClick={() => setOpen(true)}>
-        Reopen
+      <Button
+        size="sm"
+        variant="secondary"
+        aria-label={t("finance.ledgerReports.yearEndForms.reopenAria", { label })}
+        onClick={() => setOpen(true)}
+      >
+        {t("finance.ledgerReports.yearEndForms.reopen")}
       </Button>
     );
   }
@@ -174,20 +189,20 @@ export function ReopenYearForm({ startsOn, label }: { startsOn: string; label: s
         const form = new FormData(e.currentTarget);
         void run(
           () => reopenFiscalYear({ startsOn, reason: form.get("reason") }),
-          `Fiscal year ${label} reopened. A reopening entry was posted.`,
+          t("finance.ledgerReports.yearEndForms.reopenSuccess", { label }),
         );
       }}
     >
       <div className="w-64 text-left">
-        <Label htmlFor={`reopen-${startsOn}`}>Reason for reopening {label}</Label>
+        <Label htmlFor={`reopen-${startsOn}`}>{t("finance.ledgerReports.yearEndForms.reopenReason", { label })}</Label>
         <Input id={`reopen-${startsOn}`} name="reason" required maxLength={500} />
       </div>
       <div className="flex gap-2">
         <Button size="sm" variant="ghost" type="button" onClick={() => setOpen(false)}>
-          Cancel
+          {t("finance.common.cancel")}
         </Button>
         <Button size="sm" variant="danger" type="submit" loading={pending}>
-          Reopen and post reopening entry
+          {t("finance.ledgerReports.yearEndForms.reopenSubmit")}
         </Button>
       </div>
       <FormError error={error} />
@@ -196,10 +211,11 @@ export function ReopenYearForm({ startsOn, label }: { startsOn: string; label: s
 }
 
 export function PrintButton() {
+  const t = useT();
   return (
     <Button variant="secondary" size="sm" onClick={() => window.print()} className="print:hidden">
       <Printer className="size-4" aria-hidden />
-      Print
+      {t("finance.common.print")}
     </Button>
   );
 }

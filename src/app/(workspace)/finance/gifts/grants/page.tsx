@@ -11,8 +11,11 @@ import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.acce
 import { GiftTabs } from "@/features/gifts/components/gift-tabs";
 import { GrantDialog } from "@/features/gifts/components/grant-forms";
 import { grantOptions } from "@/features/gifts/services/gift.options";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Grants" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.gifts.grants.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 interface GrantRow {
@@ -28,12 +31,13 @@ interface GrantRow {
 
 export default async function GrantsPage() {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
-  const options = canManage ? await grantOptions(supabase, session.organizationId) : null;
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
+  const options = canManage ? await grantOptions(supabase, session.organizationId, t) : null;
   const header = (
     <PageHeader
-      eyebrow="Gifts"
-      title="Grants"
-      description="Grants awarded to QBBE: the funder, the amount, its conditions, the money received so far and the reports owed."
+      eyebrow={t("finance.gifts.tabs.gifts")}
+      title={t("finance.gifts.grants.metaTitle")}
+      description={t("finance.gifts.grants.description")}
       actions={options ? <GrantDialog options={options} /> : undefined}
     />
   );
@@ -81,14 +85,14 @@ export default async function GrantsPage() {
       {header}
       <GiftTabs />
       {rows.length === 0 ? (
-        <EmptyState icon={<Landmark />} title="No grants yet" description="Add a grant to track its money, conditions and reports." />
+        <EmptyState icon={<Landmark />} title={t("finance.gifts.grants.emptyTitle")} description={t("finance.gifts.grants.emptyDescription")} />
       ) : (
         <DataTable minWidth="760px">
           <TableHead>
-            <TableHeader>Grant</TableHeader>
-            <TableHeader className="text-right">Awarded</TableHeader>
-            <TableHeader className="text-right">Received</TableHeader>
-            <TableHeader>Next report due</TableHeader>
+            <TableHeader>{t("finance.gifts.grants.colGrant")}</TableHeader>
+            <TableHeader className="text-right">{t("finance.gifts.grants.colAwarded")}</TableHeader>
+            <TableHeader className="text-right">{t("finance.gifts.grants.colReceived")}</TableHeader>
+            <TableHeader>{t("finance.gifts.grants.colNextReport")}</TableHeader>
           </TableHead>
           <tbody>
             {rows.map((g) => {
@@ -103,17 +107,17 @@ export default async function GrantsPage() {
                       {g.funder?.name ?? ""}
                       {g.fund ? ` · ${g.fund.code}` : ""}
                     </p>
-                    {g.status === "closed" ? <Badge className="mt-1">Closed</Badge> : null}
+                    {g.status === "closed" ? <Badge className="mt-1">{t("finance.gifts.grants.closed")}</Badge> : null}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(Number(g.amount_awarded_cents))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(received.get(g.id) ?? 0)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCents(Number(g.amount_awarded_cents), locale)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCents(received.get(g.id) ?? 0, locale)}</TableCell>
                   <TableCell>
                     {due ? (
                       <>
-                        {due} {due < today ? <Badge tone="danger">Overdue</Badge> : null}
+                        {due} {due < today ? <Badge tone="danger">{t("finance.gifts.grants.overdue")}</Badge> : null}
                       </>
                     ) : (
-                      <span className="text-muted">None</span>
+                      <span className="text-muted">{t("finance.common.none")}</span>
                     )}
                   </TableCell>
                 </TableRow>

@@ -11,8 +11,11 @@ import { YearPicker } from "@/features/ledger/components/year-picker";
 import { formatCents } from "@/features/ledger/money";
 import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
 import { loadFiscalYears, pickYear } from "@/features/ledger/services/year-end.queries";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Ledger receipts" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledgerReports.receipts.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 const LIMIT = 500;
@@ -42,11 +45,13 @@ export default async function LedgerReceiptsPage({
 }) {
   const { session, supabase, canRead } = await getLedgerAccess();
   const params = await searchParams;
+  const t = await getT();
+  const locale = await getLocale();
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Receipts"
-      description="Receipts and vendor bills behind the entries, with their taxes. Files open once they have passed the virus scan."
+      eyebrow={t("finance.ledgerReports.eyebrow")}
+      title={t("finance.ledgerReports.receipts.title")}
+      description={t("finance.ledgerReports.receipts.description")}
     />
   );
   if (!canRead) {
@@ -81,23 +86,27 @@ export default async function LedgerReceiptsPage({
             className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
           >
             <Download className="size-4" aria-hidden />
-            Receipts CSV
+            {t("finance.ledgerReports.receipts.csv")}
           </Link>
         </div>
       ) : null}
       {rows.length === 0 ? (
-        <EmptyState icon={<Receipt />} title="No receipts in this period" description="Receipts submitted by staff appear here." />
+        <EmptyState
+          icon={<Receipt />}
+          title={t("finance.ledgerReports.receipts.emptyTitle")}
+          description={t("finance.ledgerReports.receipts.emptyDescription")}
+        />
       ) : (
         <>
           <DataTable minWidth="760px">
             <TableHead>
-              <TableHeader className="w-28">Date</TableHeader>
-              <TableHeader>Vendor</TableHeader>
-              <TableHeader className="w-32 text-right">Total</TableHeader>
-              <TableHeader className="w-28 text-right">GST</TableHeader>
-              <TableHeader className="w-28 text-right">QST</TableHeader>
-              <TableHeader className="w-28">Review</TableHeader>
-              <TableHeader className="w-36">File</TableHeader>
+              <TableHeader className="w-28">{t("finance.common.date")}</TableHeader>
+              <TableHeader>{t("finance.common.vendor")}</TableHeader>
+              <TableHeader className="w-32 text-right">{t("finance.common.total")}</TableHeader>
+              <TableHeader className="w-28 text-right">{t("finance.common.gst")}</TableHeader>
+              <TableHeader className="w-28 text-right">{t("finance.common.qst")}</TableHeader>
+              <TableHeader className="w-28">{t("finance.ledgerReports.receipts.review")}</TableHeader>
+              <TableHeader className="w-36">{t("finance.ledgerReports.receipts.file")}</TableHeader>
             </TableHead>
             <tbody>
               {rows.map((r) => (
@@ -105,13 +114,17 @@ export default async function LedgerReceiptsPage({
                   <TableCell className="tabular-nums">{r.document_date}</TableCell>
                   <TableCell>
                     {r.vendor}
-                    <span className="meta block">{r.kind === "bill" ? "Vendor bill" : "Receipt"}</span>
+                    <span className="meta block">{t(r.kind === "bill" ? "finance.ledgerReports.receipts.vendorBill" : "finance.ledgerReports.receipts.receipt")}</span>
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(Number(r.total_cents))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(Number(r.gst_cents))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCents(Number(r.qst_cents))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCents(Number(r.total_cents), locale)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCents(Number(r.gst_cents), locale)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCents(Number(r.qst_cents), locale)}</TableCell>
                   <TableCell>
-                    {r.status === "reviewed" ? <Badge tone="success">Reviewed</Badge> : <Badge>Submitted</Badge>}
+                    {r.status === "reviewed" ? (
+                      <Badge tone="success">{t("finance.ledgerReports.receipts.reviewed")}</Badge>
+                    ) : (
+                      <Badge>{t("finance.ledgerReports.receipts.submitted")}</Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     {r.scan_status === "clean" ? (
@@ -121,11 +134,11 @@ export default async function LedgerReceiptsPage({
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        Open file
+                        {t("finance.ledgerReports.receipts.openFile")}
                       </a>
                     ) : (
                       <span className="text-[13px] text-muted">
-                        {r.scan_status === "pending" ? "Being checked" : "Not available"}
+                        {t(r.scan_status === "pending" ? "finance.ledgerReports.receipts.beingChecked" : "finance.ledgerReports.receipts.notAvailable")}
                       </span>
                     )}
                   </TableCell>
@@ -134,7 +147,7 @@ export default async function LedgerReceiptsPage({
             </tbody>
           </DataTable>
           {rows.length === LIMIT ? (
-            <p className="meta mt-3">Showing the latest {LIMIT}. The CSV lists every receipt of the year.</p>
+            <p className="meta mt-3">{t("finance.ledgerReports.receipts.limitNote", { count: LIMIT })}</p>
           ) : null}
         </>
       )}

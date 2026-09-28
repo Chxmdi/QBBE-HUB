@@ -11,6 +11,7 @@ import { formatCurrency, formatNumber } from "@/lib/i18n/format";
 import { NAV_GROUPS } from "@/config/navigation";
 import { navGroupLabel, navItemLabel } from "@/lib/i18n/navigation";
 import { dueLabel, formatDate, formatTime } from "@/lib/utils";
+import { formatBalance, formatCents } from "@/features/ledger/money";
 
 /** Every dotted key with its string, flattened. */
 function flatten(node: unknown, prefix = ""): Map<string, string> {
@@ -22,6 +23,9 @@ function flatten(node: unknown, prefix = ""): Map<string, string> {
   }
   return out;
 }
+
+// Normalizes the narrow/non-breaking spaces Intl uses in French.
+const plain = (s: string) => s.replace(/[\u00a0\u202f]/g, " ");
 
 const placeholders = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -45,6 +49,37 @@ describe("message catalogues", () => {
     for (const [key, value] of english) {
       expect(placeholders(french.get(key) ?? ""), key).toEqual(placeholders(value));
     }
+  });
+});
+
+// Words and names that are written the same in both languages. Anything else
+// in the finance catalogues that is identical in French is English that was
+// copied across and never translated.
+const SAME_IN_BOTH = new Set([
+  "Total", "total", "Date", "date", "Dates", "Description", "Notes", "Note", "Actions",
+  "Type", "Code", "Source", "Section", "Administration", "Journal", "Budget", "Budgets",
+  "Version", "Versions", "Net", "Active", "Restrictions", "%", "50", "Français",
+  "Desjardins", "Desjardins (AccèsD)", "TD Canada Trust", "Revenu Québec", "CNESST",
+  "Nethris (Desjardins)", "Employeur D", "ADP Workforce Now", "Ceridian Powerpay",
+  "Budgets · {fiscalYear}", "v{version}", "Version {version}",
+  "{name}, {fiscalYear}, version {version}",
+]);
+
+describe("finance catalogues", () => {
+  it("translate every string that differs between the languages", () => {
+    const french = flatten(frCA.finance);
+    const copied = [...flatten(en.finance)]
+      .filter(([key, value]) => french.get(key) === value && !SAME_IN_BOTH.has(value))
+      .map(([key]) => key);
+    expect(copied).toEqual([]);
+  });
+
+  it("format money and balances the Quebec way", () => {
+    expect(plain(formatCents(123456, "fr-CA"))).toBe("1 234,56 $");
+    expect(formatCents(123456)).toBe("$1,234.56");
+    expect(plain(formatBalance(120000, "fr-CA"))).toBe("1 200,00 $ Dt");
+    expect(plain(formatBalance(-30000, "fr-CA"))).toBe("300,00 $ Ct");
+    expect(formatBalance(-30000)).toBe("$300.00 Cr");
   });
 });
 
@@ -100,9 +135,6 @@ describe("locale resolution", () => {
     expect(htmlLang("en")).toBe("en");
   });
 });
-
-// Normalizes the narrow/non-breaking spaces Intl uses in French.
-const plain = (s: string) => s.replace(/[  ]/g, " ");
 
 describe("Quebec formats", () => {
   it("formats money and numbers", () => {

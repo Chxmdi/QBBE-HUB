@@ -8,10 +8,13 @@ import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { FundDialog, type FundFormValue } from "@/features/ledger/components/fund-dialog";
 import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
-import { FUND_RESTRICTION_LABEL, formatCents } from "@/features/ledger/money";
+import { FUND_RESTRICTION_KEY, formatCents } from "@/features/ledger/money";
 import { dateParam, getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Funds" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledger.funds.title") };
+}
 export const dynamic = "force-dynamic";
 
 interface FundBalance {
@@ -27,6 +30,8 @@ export default async function LedgerFundsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
+  const t = await getT();
+  const locale = await getLocale();
   const params = await searchParams;
   const asOf = dateParam(params.as_of, todayIn(session.timeZone));
   const { data: programs } = canManage
@@ -36,9 +41,9 @@ export default async function LedgerFundsPage({
 
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Funds"
-      description="Every journal line belongs to a fund. Restricted money is tracked separately from the general fund, and each fund balances on its own."
+      eyebrow={t("finance.ledger.title")}
+      title={t("finance.ledger.funds.title")}
+      description={t("finance.ledger.funds.description")}
       actions={
         canRead ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -46,7 +51,7 @@ export default async function LedgerFundsPage({
               href="/finance/ledger/funds/release"
               className="inline-flex h-9.5 items-center gap-2 rounded-(--radius-sm) border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-soft"
             >
-              {canManage ? "Release restricted money" : "Releases"}
+              {canManage ? t("finance.ledger.funds.releaseLink") : t("finance.ledger.funds.releasesLink")}
             </Link>
             {canManage ? <FundDialog programs={programList} /> : null}
           </div>
@@ -96,24 +101,24 @@ export default async function LedgerFundsPage({
     <div>
       {header}
       <LedgerTabs />
-      <form method="get" className="mb-4 flex flex-wrap items-end gap-2" aria-label="Choose the balance date">
+      <form method="get" className="mb-4 flex flex-wrap items-end gap-2" aria-label={t("finance.ledger.funds.dateFormLabel")}>
         <div>
-          <Label htmlFor="funds-as-of">Balances as at</Label>
+          <Label htmlFor="funds-as-of">{t("finance.ledger.funds.balancesAsAt")}</Label>
           <Input id="funds-as-of" name="as_of" type="date" defaultValue={asOf} />
         </div>
         <Button type="submit" variant="secondary">
-          Show
+          {t("finance.ledger.funds.show")}
         </Button>
       </form>
       <DataTable minWidth="760px">
         <TableHead>
-          <TableHeader>Fund</TableHeader>
-          <TableHeader>Restriction</TableHeader>
-          <TableHeader>Spending limits</TableHeader>
-          <TableHeader className="text-right">Fund balance</TableHeader>
+          <TableHeader>{t("finance.common.fund")}</TableHeader>
+          <TableHeader>{t("finance.ledger.funds.restriction")}</TableHeader>
+          <TableHeader>{t("finance.ledger.funds.spendingLimits")}</TableHeader>
+          <TableHeader className="text-right">{t("finance.ledger.funds.fundBalance")}</TableHeader>
           {canManage ? (
             <TableHeader className="w-16">
-              <span className="sr-only">Edit</span>
+              <span className="sr-only">{t("finance.ledger.edit")}</span>
             </TableHeader>
           ) : null}
         </TableHead>
@@ -122,34 +127,37 @@ export default async function LedgerFundsPage({
             <TableRow key={f.id}>
               <TableCell>
                 <span className="font-mono">{f.code}</span> · {f.name}
-                {f.funder ? <p className="meta">Funder: {f.funder}</p> : null}
-                {!f.is_active ? <Badge className="mt-1">Inactive</Badge> : null}
+                {f.funder ? <p className="meta">{t("finance.ledger.funds.funder", { funder: f.funder })}</p> : null}
+                {!f.is_active ? <Badge className="mt-1">{t("finance.ledger.status.inactive")}</Badge> : null}
               </TableCell>
               <TableCell>
                 <Badge tone={f.restriction === "unrestricted" ? "neutral" : f.restriction === "externally_restricted" ? "warning" : "info"}>
-                  {FUND_RESTRICTION_LABEL[f.restriction]}
+                  {t(FUND_RESTRICTION_KEY[f.restriction])}
                 </Badge>
               </TableCell>
               <TableCell className="text-[13px]">
                 {f.restriction === "unrestricted" ? (
-                  <span className="text-muted">None</span>
+                  <span className="text-muted">{t("finance.common.none")}</span>
                 ) : (
                   <>
                     <p>
                       {f.starts_on || f.ends_on
-                        ? `${f.starts_on ?? "any time"} to ${f.ends_on ?? "no end date"}`
-                        : "Any dates"}
+                        ? t("finance.ledger.funds.dateRange", {
+                            from: f.starts_on ?? t("finance.ledger.funds.anyTime"),
+                            to: f.ends_on ?? t("finance.ledger.funds.noEndDate"),
+                          })
+                        : t("finance.ledger.funds.anyDates")}
                     </p>
                     <p className="meta">
                       {f.programIds.length > 0
-                        ? f.programIds.map((id) => programName.get(id) ?? "Unknown program").join(", ")
-                        : "Any program"}
+                        ? f.programIds.map((id) => programName.get(id) ?? t("finance.ledger.funds.unknownProgram")).join(", ")
+                        : t("finance.ledger.funds.anyProgram")}
                     </p>
                   </>
                 )}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {formatCents(Number(balanceOf.get(f.id)?.fund_balance_cents ?? 0))}
+                {formatCents(Number(balanceOf.get(f.id)?.fund_balance_cents ?? 0), locale)}
               </TableCell>
               {canManage ? (
                 <TableCell>
@@ -159,16 +167,16 @@ export default async function LedgerFundsPage({
             </TableRow>
           ))}
           <TableRow className="font-semibold">
-            <TableCell>All funds</TableCell>
+            <TableCell>{t("finance.ledger.funds.allFunds")}</TableCell>
             <TableCell>{""}</TableCell>
             <TableCell>{""}</TableCell>
-            <TableCell className="text-right tabular-nums">{formatCents(total)}</TableCell>
+            <TableCell className="text-right tabular-nums">{formatCents(total, locale)}</TableCell>
             {canManage ? <TableCell>{""}</TableCell> : null}
           </TableRow>
         </tbody>
       </DataTable>
       <p className="meta mt-2">
-        A fund&apos;s balance is its assets less its liabilities, from posted entries up to the date shown.
+        {t("finance.ledger.funds.balanceNote")}
       </p>
     </div>
   );

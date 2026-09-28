@@ -9,10 +9,13 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
-import { ENTRY_KIND_LABEL, formatCents } from "@/features/ledger/money";
+import { ENTRY_KIND_KEY, formatCents } from "@/features/ledger/money";
 import { dateParam, getLedgerAccess } from "@/features/ledger/services/ledger.access";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Journal" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledger.journal.title") };
+}
 export const dynamic = "force-dynamic";
 
 const PAGE_LIMIT = 500;
@@ -33,12 +36,14 @@ export default async function LedgerJournalPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
+  const t = await getT();
+  const locale = await getLocale();
   const params = await searchParams;
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Journal"
-      description="Every entry, newest first. Drafts can be edited or deleted; posted entries are permanent and are corrected by reversing them."
+      eyebrow={t("finance.ledger.title")}
+      title={t("finance.ledger.journal.title")}
+      description={t("finance.ledger.journal.description")}
       actions={
         canRead && canManage ? (
           <Link
@@ -46,7 +51,7 @@ export default async function LedgerJournalPage({
             className="inline-flex h-9.5 items-center gap-2 rounded-(--radius-sm) bg-brand px-4 text-sm font-medium text-white hover:bg-brand-strong"
           >
             <Plus className="size-4" aria-hidden />
-            New entry
+            {t("finance.ledger.journal.newEntry")}
           </Link>
         ) : undefined
       }
@@ -83,33 +88,33 @@ export default async function LedgerJournalPage({
     <div>
       {header}
       <LedgerTabs />
-      <form method="get" className="card mb-4 grid grid-cols-2 items-end gap-3 p-4 sm:grid-cols-4" aria-label="Filter entries">
+      <form method="get" className="card mb-4 grid grid-cols-2 items-end gap-3 p-4 sm:grid-cols-4" aria-label={t("finance.ledger.journal.filterLabel")}>
         <div>
-          <Label htmlFor="j-from">From</Label>
+          <Label htmlFor="j-from">{t("finance.ledger.journal.from")}</Label>
           <Input id="j-from" name="from" type="date" defaultValue={from} />
         </div>
         <div>
-          <Label htmlFor="j-to">To</Label>
+          <Label htmlFor="j-to">{t("finance.ledger.journal.to")}</Label>
           <Input id="j-to" name="to" type="date" defaultValue={to} />
         </div>
         <div>
-          <Label htmlFor="j-status">Status</Label>
+          <Label htmlFor="j-status">{t("finance.common.status")}</Label>
           <Select id="j-status" name="status" defaultValue={status}>
-            <option value="">Any status</option>
-            <option value="posted">Posted</option>
-            <option value="draft">Draft</option>
+            <option value="">{t("finance.ledger.journal.anyStatus")}</option>
+            <option value="posted">{t("finance.ledger.status.posted")}</option>
+            <option value="draft">{t("finance.ledger.status.draft")}</option>
           </Select>
         </div>
         <div className="flex gap-2">
           <Button type="submit" variant="secondary">
-            Apply
+            {t("finance.ledger.journal.apply")}
           </Button>
           {filtered ? (
             <Link
               href="/finance/ledger/journal"
               className="inline-flex h-9.5 items-center px-2 text-[13px] font-medium text-brand-fg hover:underline"
             >
-              Clear
+              {t("finance.ledger.journal.clear")}
             </Link>
           ) : null}
         </div>
@@ -118,21 +123,21 @@ export default async function LedgerJournalPage({
       {rows.length === 0 ? (
         <EmptyState
           icon={<BookOpen />}
-          title={filtered ? "No entries match these filters" : "No journal entries yet"}
+          title={filtered ? t("finance.ledger.journal.noMatchTitle") : t("finance.ledger.journal.emptyTitle")}
           description={
-            filtered ? "Try a wider date range or clear the filters." : "Start with the opening balances from the accountant."
+            filtered ? t("finance.ledger.journal.noMatchDescription") : t("finance.ledger.journal.emptyDescription")
           }
         />
       ) : (
         <>
-          {rows.length === PAGE_LIMIT ? <p className="meta mb-2">Showing the latest {PAGE_LIMIT}.</p> : null}
+          {rows.length === PAGE_LIMIT ? <p className="meta mb-2">{t("finance.ledger.journal.showingLatest", { count: PAGE_LIMIT })}</p> : null}
           <DataTable minWidth="680px">
             <TableHead>
-              <TableHeader className="w-20">No.</TableHeader>
-              <TableHeader className="w-28">Date</TableHeader>
-              <TableHeader>Memo</TableHeader>
-              <TableHeader className="w-32">Status</TableHeader>
-              <TableHeader className="w-36 text-right">Amount</TableHeader>
+              <TableHeader className="w-20">{t("finance.ledger.journal.number")}</TableHeader>
+              <TableHeader className="w-28">{t("finance.common.date")}</TableHeader>
+              <TableHeader>{t("finance.common.memo")}</TableHeader>
+              <TableHeader className="w-32">{t("finance.common.status")}</TableHeader>
+              <TableHeader className="w-36 text-right">{t("finance.common.amount")}</TableHeader>
             </TableHead>
             <tbody>
               {rows.map((e) => (
@@ -143,13 +148,13 @@ export default async function LedgerJournalPage({
                     <Link href={`/finance/ledger/journal/${e.id}`} className="font-medium text-brand-fg hover:underline">
                       {e.memo}
                     </Link>
-                    {e.kind !== "standard" ? <p className="meta">{ENTRY_KIND_LABEL[e.kind]}</p> : null}
+                    {e.kind !== "standard" ? <p className="meta">{ENTRY_KIND_KEY[e.kind] ? t(ENTRY_KIND_KEY[e.kind]) : null}</p> : null}
                   </TableCell>
                   <TableCell>
-                    {e.status === "posted" ? <Badge tone="success">Posted</Badge> : <Badge tone="warning">Draft</Badge>}
+                    {e.status === "posted" ? <Badge tone="success">{t("finance.ledger.status.posted")}</Badge> : <Badge tone="warning">{t("finance.ledger.status.draft")}</Badge>}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {formatCents(e.journal_line.reduce((s, l) => s + Number(l.debit_cents), 0))}
+                    {formatCents(e.journal_line.reduce((s, l) => s + Number(l.debit_cents), 0), locale)}
                   </TableCell>
                 </TableRow>
               ))}

@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 export interface LinkTab {
   id: string;
@@ -21,9 +24,10 @@ export function LinkTabs({
   active: string;
   className?: string;
 }) {
+  const t = useT();
   return (
     <nav
-      aria-label="Sections"
+      aria-label={t("ui.sections")}
       className={cn(
         "-mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-line px-4 md:mx-0 md:px-0",
         className,

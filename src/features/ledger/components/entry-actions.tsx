@@ -8,11 +8,13 @@ import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Input, Label } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { deleteDraft, postEntry, reverseEntry } from "@/features/ledger/services/ledger.commands";
+import { useT } from "@/lib/i18n/client";
 
 /** Post, edit or delete a draft. */
 export function DraftActions({ entryId }: { entryId: string }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [pending, setPending] = useState<null | "post" | "delete">(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,34 +25,34 @@ export function DraftActions({ entryId }: { entryId: string }) {
           href={`/finance/ledger/journal/${entryId}?edit=1`}
           className="inline-flex h-9.5 items-center rounded-(--radius-sm) border border-line bg-surface px-4 text-sm font-medium hover:bg-surface-soft"
         >
-          Edit draft
+          {t("finance.ledger.entryActions.editDraft")}
         </Link>
         <Button
           variant="danger"
           loading={pending === "delete"}
           disabled={pending !== null}
           onClick={async () => {
-            if (!window.confirm("Delete this draft? It has not been posted, so nothing else changes.")) return;
+            if (!window.confirm(t("finance.ledger.entryActions.deleteConfirm"))) return;
             setPending("delete");
             setError(null);
             const result = await deleteDraft(entryId);
             setPending(null);
             if (!result.ok) {
-              setError(result.error ?? "Could not delete the draft.");
+              setError(result.error ?? t("finance.ledger.entryActions.deleteFailed"));
               return;
             }
-            toast("Draft deleted.", { tone: "success" });
+            toast(t("finance.ledger.entryActions.deleted"), { tone: "success" });
             router.push("/finance/ledger/journal");
             router.refresh();
           }}
         >
-          Delete draft
+          {t("finance.ledger.entryActions.deleteDraft")}
         </Button>
         <Button
           loading={pending === "post"}
           disabled={pending !== null}
           onClick={async () => {
-            if (!window.confirm("Post this entry? A posted entry can never be changed or deleted, only reversed.")) {
+            if (!window.confirm(t("finance.ledger.entryActions.postConfirm"))) {
               return;
             }
             setPending("post");
@@ -58,14 +60,14 @@ export function DraftActions({ entryId }: { entryId: string }) {
             const result = await postEntry(entryId);
             setPending(null);
             if (!result.ok) {
-              setError(result.error ?? "Could not post the entry.");
+              setError(result.error ?? t("finance.ledger.entryActions.postFailed"));
               return;
             }
-            toast("Entry posted.", { tone: "success" });
+            toast(t("finance.ledger.entryActions.posted"), { tone: "success" });
             router.refresh();
           }}
         >
-          Post entry
+          {t("finance.ledger.entryActions.postEntry")}
         </Button>
       </div>
       {error ? (
@@ -91,6 +93,7 @@ export function ReverseEntryButton({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,9 +101,9 @@ export function ReverseEntryButton({
   return (
     <>
       <Button variant="secondary" onClick={() => setOpen(true)}>
-        Reverse entry
+        {t("finance.ledger.entryActions.reverseEntry")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title={`Reverse entry ${entryNumber}`}>
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("finance.ledger.entryActions.reverseTitle", { number: entryNumber })}>
         <form
           className="space-y-4"
           onSubmit={async (e) => {
@@ -115,27 +118,26 @@ export function ReverseEntryButton({
             });
             setSaving(false);
             if (!result.ok || !result.id) {
-              setError(result.error ?? "Could not reverse the entry.");
+              setError(result.error ?? t("finance.ledger.entryActions.reverseFailed"));
               return;
             }
-            toast("Reversing entry posted.", { tone: "success" });
+            toast(t("finance.ledger.entryActions.reversed"), { tone: "success" });
             setOpen(false);
             router.push(`/finance/ledger/journal/${result.id}`);
             router.refresh();
           }}
         >
           <p className="text-[13.5px] text-muted">
-            This posts a new entry with every debit and credit swapped, which cancels this one. The original stays
-            in the books unchanged. Post a corrected entry afterwards if one is needed.
+            {t("finance.ledger.entryActions.reverseExplainer")}
           </p>
           <div>
-            <Label htmlFor="reverse-date">Date of the reversal</Label>
+            <Label htmlFor="reverse-date">{t("finance.ledger.entryActions.reversalDate")}</Label>
             <Input id="reverse-date" name="entryDate" type="date" defaultValue={defaultDate} min={minDate} required />
-            <FieldHint>Must be in an open period, on or after {minDate}.</FieldHint>
+            <FieldHint>{t("finance.ledger.entryActions.reversalDateHint", { date: minDate })}</FieldHint>
           </div>
           <div>
-            <Label htmlFor="reverse-memo">Memo (optional)</Label>
-            <Input id="reverse-memo" name="memo" maxLength={500} placeholder={`Reversal of entry ${entryNumber}`} />
+            <Label htmlFor="reverse-memo">{t("finance.ledger.optionalLabel.memo")}</Label>
+            <Input id="reverse-memo" name="memo" maxLength={500} placeholder={t("finance.ledger.entryActions.reversalMemoPlaceholder", { number: entryNumber })} />
           </div>
           {error ? (
             <p role="alert" className="text-[13px] text-danger-fg">
@@ -144,10 +146,10 @@ export function ReverseEntryButton({
           ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.common.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              Post reversal
+              {t("finance.ledger.entryActions.postReversal")}
             </Button>
           </div>
         </form>

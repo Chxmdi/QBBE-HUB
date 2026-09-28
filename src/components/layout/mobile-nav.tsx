@@ -74,7 +74,7 @@ export function MobileNav({
           <button
             type="button"
             onClick={onOpenMore}
-            aria-label="More destinations"
+            aria-label={t("nav.moreDestinations")}
             className="flex min-h-[52px] w-full flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[10.5px] font-medium text-muted"
           >
             <MoreHorizontal className="size-5" aria-hidden />

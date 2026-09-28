@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OcrCancelled } from "@/features/finance/receipt-ocr/read-receipt";
 import { canReadFileText, readFileText, type FileText, type ReadProgress } from "./read-file-text";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 
 /** A slow device gets this long; the file is saved without its words after that. */
 export const TEXT_READ_TIMEOUT_MS = 120_000;
@@ -113,22 +114,23 @@ export function useFileTextReader() {
 }
 
 /** One line for the form, or null when there is nothing to say. */
-export function textReaderMessage(state: TextReaderState): string | null {
+export function textReaderMessage(
+  state: TextReaderState,
+  t: TranslateFn = createTranslator("en"),
+): string | null {
   switch (state.kind) {
     case "running":
       return state.progress.stage === "loading"
-        ? "Getting ready to read the words in this file, so it can be found by search…"
-        : `Reading the words in this file for search… ${state.progress.percent}%`;
+        ? t("textReader.loading")
+        : t("textReader.reading", { percent: state.progress.percent });
     case "done":
-      return state.found
-        ? "The words in this file were read. Search will find it by them."
-        : "No words could be read in this file. It will be found by its title, description and tags.";
+      return state.found ? t("textReader.found") : t("textReader.notFound");
     case "failed":
-      return "The words in this file could not be read. It will be found by its title, description and tags.";
+      return t("textReader.failed");
     case "timed-out":
-      return "Reading this file took too long. It will be found by its title, description and tags.";
+      return t("textReader.timedOut");
     case "skipped":
-      return "Skipped. This file will be found by its title, description and tags.";
+      return t("textReader.skipped");
     default:
       return null;
   }

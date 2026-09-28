@@ -8,11 +8,14 @@ import { Input, Label, Select } from "@/components/ui/input";
 import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
-import { ACCOUNT_TYPE_LABEL, formatCents } from "@/features/ledger/money";
+import { ACCOUNT_TYPE_KEY, formatCents } from "@/features/ledger/money";
 import { dateParam, getLedgerAccess, todayIn, uuidParam } from "@/features/ledger/services/ledger.access";
 import { trialBalance } from "@/features/ledger/services/ledger.reports";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Trial balance" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.ledgerReports.trialBalance.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function TrialBalancePage({
@@ -22,11 +25,13 @@ export default async function TrialBalancePage({
 }) {
   const { session, supabase, canRead } = await getLedgerAccess();
   const params = await searchParams;
+  const t = await getT();
+  const locale = await getLocale();
   const header = (
     <PageHeader
-      eyebrow="Ledger"
-      title="Trial balance"
-      description="The balance of every account from posted entries up to a date. Total debits always equal total credits."
+      eyebrow={t("finance.ledgerReports.eyebrow")}
+      title={t("finance.ledgerReports.trialBalance.title")}
+      description={t("finance.ledgerReports.trialBalance.description")}
     />
   );
   if (!canRead) {
@@ -54,15 +59,15 @@ export default async function TrialBalancePage({
     <div>
       {header}
       <LedgerTabs />
-      <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4" aria-label="Trial balance options">
+      <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4" aria-label={t("finance.ledgerReports.trialBalance.optionsLabel")}>
         <div>
-          <Label htmlFor="tb-as-of">As at</Label>
+          <Label htmlFor="tb-as-of">{t("finance.ledgerReports.trialBalance.asAt")}</Label>
           <Input id="tb-as-of" name="as_of" type="date" defaultValue={asOf} />
         </div>
         <div className="min-w-48">
-          <Label htmlFor="tb-fund">Fund</Label>
+          <Label htmlFor="tb-fund">{t("finance.common.fund")}</Label>
           <Select id="tb-fund" name="fund" defaultValue={fundId ?? ""}>
-            <option value="">All funds</option>
+            <option value="">{t("finance.ledgerReports.allFunds")}</option>
             {((funds ?? []) as { id: string; code: string; name: string }[]).map((f) => (
               <option key={f.id} value={f.id}>
                 {f.code} {f.name}
@@ -71,7 +76,7 @@ export default async function TrialBalancePage({
           </Select>
         </div>
         <Button type="submit" variant="secondary">
-          Show
+          {t("finance.ledgerReports.show")}
         </Button>
         <Link
           href={`/api/finance/ledger/trial-balance?${exportQuery}`}
@@ -79,24 +84,24 @@ export default async function TrialBalancePage({
           className="inline-flex h-9.5 items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
         >
           <Download className="size-4" aria-hidden />
-          Export CSV
+          {t("finance.common.exportCsv")}
         </Link>
       </form>
 
       {shown.length === 0 ? (
         <EmptyState
           icon={<Scale />}
-          title="Nothing posted up to this date"
-          description="Balances appear here once entries are posted."
+          title={t("finance.ledgerReports.trialBalance.emptyTitle")}
+          description={t("finance.ledgerReports.trialBalance.emptyDescription")}
         />
       ) : (
         <DataTable minWidth="600px">
           <TableHead>
-            <TableHeader className="w-24">Account</TableHeader>
-            <TableHeader>Name</TableHeader>
-            <TableHeader className="w-32">Type</TableHeader>
-            <TableHeader className="w-36 text-right">Debit</TableHeader>
-            <TableHeader className="w-36 text-right">Credit</TableHeader>
+            <TableHeader className="w-24">{t("finance.common.account")}</TableHeader>
+            <TableHeader>{t("finance.ledgerReports.name")}</TableHeader>
+            <TableHeader className="w-32">{t("finance.ledgerReports.type")}</TableHeader>
+            <TableHeader className="w-36 text-right">{t("finance.common.debit")}</TableHeader>
+            <TableHeader className="w-36 text-right">{t("finance.common.credit")}</TableHeader>
           </TableHead>
           <tbody>
             {shown.map((r) => (
@@ -110,21 +115,21 @@ export default async function TrialBalancePage({
                     {r.name}
                   </Link>
                 </TableCell>
-                <TableCell className="text-[13px] text-muted">{ACCOUNT_TYPE_LABEL[r.account_type]}</TableCell>
+                <TableCell className="text-[13px] text-muted">{t(ACCOUNT_TYPE_KEY[r.account_type])}</TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {r.balance_cents > 0 ? formatCents(r.balance_cents) : ""}
+                  {r.balance_cents > 0 ? formatCents(r.balance_cents, locale) : ""}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {r.balance_cents < 0 ? formatCents(-r.balance_cents) : ""}
+                  {r.balance_cents < 0 ? formatCents(-r.balance_cents, locale) : ""}
                 </TableCell>
               </TableRow>
             ))}
             <TableRow className="font-semibold">
               <TableCell>{""}</TableCell>
-              <TableCell>Total</TableCell>
+              <TableCell>{t("finance.common.total")}</TableCell>
               <TableCell>{""}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatCents(debit)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatCents(credit)}</TableCell>
+              <TableCell className="text-right tabular-nums">{formatCents(debit, locale)}</TableCell>
+              <TableCell className="text-right tabular-nums">{formatCents(credit, locale)}</TableCell>
             </TableRow>
           </tbody>
         </DataTable>

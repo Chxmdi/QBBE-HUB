@@ -8,8 +8,18 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { parseMoneyToCents } from "@/features/finance/money";
 import { requiredText } from "@/lib/schema";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 
-const money = (label: string, required: boolean) =>
+/**
+ * Validation messages are catalogue keys, translated when the action returns
+ * one. Anything else (Zod's own wording) is shown as it is.
+ */
+function issueText(message: string, t: (key: MessageKey) => string): string {
+  return message.startsWith("finance.receipts.") ? t(message as MessageKey) : message;
+}
+
+const money = (message: MessageKey, required: boolean) =>
   z
     .string()
     .nullish()
@@ -18,7 +28,7 @@ const money = (label: string, required: boolean) =>
       if (value === "" && !required) return 0;
       const cents = parseMoneyToCents(value);
       if (cents === null) {
-        ctx.addIssue({ code: "custom", message: `Enter ${label} as an amount, like 42.18.` });
+        ctx.addIssue({ code: "custom", message });
         return z.NEVER;
       }
       return cents;
@@ -27,24 +37,24 @@ const money = (label: string, required: boolean) =>
 const receiptSchema = z
   .object({
     kind: z.enum(["receipt", "bill"]).default("receipt"),
-    documentDate: requiredText("Enter the date on the receipt.").regex(
+    documentDate: requiredText("finance.receipts.validation.dateRequired" satisfies MessageKey).regex(
       /^\d{4}-\d{2}-\d{2}$/,
-      "Enter the date on the receipt.",
+      "finance.receipts.validation.dateRequired" satisfies MessageKey,
     ),
-    vendor: requiredText("Enter who was paid.", 200),
-    total: money("the total", true),
-    gst: money("the GST", false),
-    qst: money("the QST", false),
+    vendor: requiredText("finance.receipts.validation.vendorRequired" satisfies MessageKey, 200),
+    total: money("finance.receipts.validation.totalInvalid", true),
+    gst: money("finance.receipts.validation.gstInvalid", false),
+    qst: money("finance.receipts.validation.qstInvalid", false),
     programId: z.string().uuid().optional(),
     projectId: z.string().uuid().optional(),
     note: z.string().trim().max(2000).optional(),
-    storagePath: requiredText("Upload the receipt file first.", 500),
-    fileName: requiredText("Upload the receipt file first.", 200),
+    storagePath: requiredText("finance.receipts.validation.fileRequired" satisfies MessageKey, 500),
+    fileName: requiredText("finance.receipts.validation.fileRequired" satisfies MessageKey, 200),
     mimeType: z.string().trim().max(200).optional(),
     sizeBytes: z.coerce.number().int().min(0).optional(),
   })
   .refine((r) => r.gst + r.qst <= r.total, {
-    message: "GST and QST together cannot be more than the total.",
+    message: "finance.receipts.validation.taxesOverTotal" satisfies MessageKey,
     path: ["gst"],
   });
 
@@ -53,9 +63,14 @@ export async function registerReceipt(input: unknown): Promise<ActionResult> {
   const session = await requireStaff();
   const limited = await enforceRateLimit("receipt:submit", session.userId);
   if (limited) return limited;
+  const t = await getT();
   const parsed = receiptSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the receipt details." };
+    const message = parsed.error.issues[0]?.message;
+    return {
+      ok: false,
+      error: message ? issueText(message, t) : t("finance.receipts.validation.checkDetails"),
+    };
   }
   const data = parsed.data;
 
@@ -87,8 +102,8 @@ export async function registerReceipt(input: unknown): Promise<ActionResult> {
       ok: false,
       error:
         error?.code === "23514"
-          ? "That project does not belong to the chosen program."
-          : "Could not save the receipt. Try again.",
+          ? t("finance.receipts.errors.projectProgram")
+          : t("finance.receipts.errors.saveFailed"),
     };
   }
 
@@ -111,8 +126,9 @@ export async function setReceiptReviewed(
   reviewed: boolean,
 ): Promise<ActionResult> {
   const session = await requireStaff();
+  const t = await getT();
   if (!z.string().uuid().safeParse(receiptId).success) {
-    return { ok: false, error: "Receipt not found." };
+    return { ok: false, error: t("finance.receipts.errors.notFound") };
   }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -122,9 +138,9 @@ export async function setReceiptReviewed(
     .select("id")
     .maybeSingle();
   if (error?.code === "42501") {
-    return { ok: false, error: "Only finance administrators can review receipts." };
+    return { ok: false, error: t("finance.receipts.errors.adminOnly") };
   }
-  if (error || !data) return { ok: false, error: "Could not update the receipt." };
+  if (error || !data) return { ok: false, error: t("finance.receipts.errors.updateFailed") };
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
@@ -143,8 +159,9 @@ export async function openReceiptFile(
   receiptId: string,
 ): Promise<ActionResult & { url?: string }> {
   const session = await requireStaff();
+  const t = await getT();
   if (!z.string().uuid().safeParse(receiptId).success) {
-    return { ok: false, error: "Receipt not found." };
+    return { ok: false, error: t("finance.receipts.errors.notFound") };
   }
   const supabase = await createSupabaseServerClient();
   const { data: receipt } = await supabase
@@ -152,14 +169,14 @@ export async function openReceiptFile(
     .select("id, storage_path, scan_status")
     .eq("id", receiptId)
     .maybeSingle();
-  if (!receipt) return { ok: false, error: "Receipt not found or not accessible." };
+  if (!receipt) return { ok: false, error: t("finance.receipts.errors.notAccessible") };
   if (receipt.scan_status !== "clean") {
-    return { ok: false, error: "This file is still being checked or has been quarantined." };
+    return { ok: false, error: t("finance.receipts.errors.stillChecking") };
   }
   const { data: signed, error } = await supabase.storage
     .from("receipts")
     .createSignedUrl(receipt.storage_path as string, 60);
-  if (error || !signed) return { ok: false, error: "Could not open the file." };
+  if (error || !signed) return { ok: false, error: t("finance.receipts.errors.openFailed") };
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,

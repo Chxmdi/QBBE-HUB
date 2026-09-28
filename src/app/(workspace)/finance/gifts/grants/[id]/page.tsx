@@ -10,8 +10,11 @@ import { getLedgerAccess, todayIn, uuidParam } from "@/features/ledger/services/
 import { GiftTabs } from "@/features/gifts/components/gift-tabs";
 import { AddReportForm, GrantDialog, ReportControls, type GrantFormValue } from "@/features/gifts/components/grant-forms";
 import { grantOptions } from "@/features/gifts/services/gift.options";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Grant" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.gifts.grant.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 interface GrantDetail extends Omit<GrantFormValue, "amount"> {
@@ -45,10 +48,11 @@ export default async function GrantPage({ params }: { params: Promise<{ id: stri
   const grantId = uuidParam(id);
   if (!grantId) notFound();
   const { session, supabase, canRead, canManage } = await getLedgerAccess();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   if (!canRead) {
     return (
       <div>
-        <PageHeader eyebrow="Gifts" title="Grant" />
+        <PageHeader eyebrow={t("finance.gifts.tabs.gifts")} title={t("finance.gifts.grant.metaTitle")} />
         <NoLedgerAccess isAdmin={session.isAdmin} />
       </div>
     );
@@ -75,7 +79,7 @@ export default async function GrantPage({ params }: { params: Promise<{ id: stri
       .select("id, gift_number, received_on, amount_cents, status")
       .eq("grant_id", grantId)
       .order("received_on"),
-    canManage ? grantOptions(supabase, session.organizationId) : Promise.resolve(null),
+    canManage ? grantOptions(supabase, session.organizationId, t) : Promise.resolve(null),
   ]);
   const grant = data as unknown as GrantDetail | null;
   if (!grant) notFound();
@@ -87,9 +91,9 @@ export default async function GrantPage({ params }: { params: Promise<{ id: stri
   return (
     <div>
       <PageHeader
-        eyebrow="Grants"
+        eyebrow={t("finance.gifts.tabs.grants")}
         title={grant.title}
-        description={grant.funder ? `From ${grant.funder.name}` : undefined}
+        description={grant.funder ? t("finance.gifts.grant.fromFunder", { funder: grant.funder.name }) : undefined}
         actions={
           options ? (
             <GrantDialog
@@ -101,44 +105,56 @@ export default async function GrantPage({ params }: { params: Promise<{ id: stri
       />
       <GiftTabs />
       <dl className="mb-8 divide-y divide-line">
-        <Row label="Status">{grant.status === "active" ? "Active" : <Badge>Closed</Badge>}</Row>
-        <Row label="Amount awarded">{formatCents(Number(grant.amount_awarded_cents))}</Row>
-        <Row label="Received so far">
-          {formatCents(received)}{" "}
-          <span className="meta">({formatCents(Number(grant.amount_awarded_cents) - received)} still to come)</span>
+        <Row label={t("finance.common.status")}>
+          {grant.status === "active" ? t("finance.gifts.grant.active") : <Badge>{t("finance.gifts.grants.closed")}</Badge>}
         </Row>
-        {grant.funder_reference ? <Row label="Funder's file number">{grant.funder_reference}</Row> : null}
-        {grant.contact ? <Row label="Funder contact">{grant.contact.full_name}</Row> : null}
-        <Row label="Dates">
-          {grant.awarded_on ? `Awarded ${grant.awarded_on}. ` : ""}
-          {grant.starts_on || grant.ends_on ? `Runs ${grant.starts_on ?? "?"} to ${grant.ends_on ?? "?"}.` : ""}
+        <Row label={t("finance.gifts.grant.amountAwarded")}>{formatCents(Number(grant.amount_awarded_cents), locale)}</Row>
+        <Row label={t("finance.gifts.grant.receivedSoFar")}>
+          {formatCents(received, locale)}{" "}
+          <span className="meta">
+            {t("finance.gifts.grant.stillToCome", { amount: formatCents(Number(grant.amount_awarded_cents) - received, locale) })}
+          </span>
         </Row>
-        <Row label="Fund">{grant.fund ? `${grant.fund.code} · ${grant.fund.name}` : ""}</Row>
-        <Row label="Program">{grant.program?.name ?? <span className="text-muted">Any program</span>}</Row>
-        <Row label="Restrictions">
-          {grant.restrictions ? <span className="whitespace-pre-line">{grant.restrictions}</span> : <span className="text-muted">None recorded</span>}
+        {grant.funder_reference ? <Row label={t("finance.gifts.grant.funderReference")}>{grant.funder_reference}</Row> : null}
+        {grant.contact ? <Row label={t("finance.gifts.grant.funderContact")}>{grant.contact.full_name}</Row> : null}
+        <Row label={t("finance.gifts.grant.dates")}>
+          {grant.awarded_on ? `${t("finance.gifts.grant.awardedOn", { date: grant.awarded_on })} ` : ""}
+          {grant.starts_on || grant.ends_on
+            ? t("finance.gifts.grant.runs", { start: grant.starts_on ?? "?", end: grant.ends_on ?? "?" })
+            : ""}
         </Row>
-        <Row label="Reminders go to">{grant.responsible?.full_name ?? "Owners and admins"}</Row>
+        <Row label={t("finance.common.fund")}>{grant.fund ? `${grant.fund.code} · ${grant.fund.name}` : ""}</Row>
+        <Row label={t("finance.common.program")}>
+          {grant.program?.name ?? <span className="text-muted">{t("finance.gifts.grant.anyProgram")}</span>}
+        </Row>
+        <Row label={t("finance.gifts.grant.restrictions")}>
+          {grant.restrictions ? (
+            <span className="whitespace-pre-line">{grant.restrictions}</span>
+          ) : (
+            <span className="text-muted">{t("finance.gifts.grant.noneRecorded")}</span>
+          )}
+        </Row>
+        <Row label={t("finance.gifts.grant.remindersGoTo")}>{grant.responsible?.full_name ?? t("finance.gifts.grant.ownersAndAdmins")}</Row>
       </dl>
 
       <section aria-labelledby="grant-reports" className="mb-8">
         <h2 id="grant-reports" className="mb-2 text-[15px] font-semibold">
-          Reports owed to the funder
+          {t("finance.gifts.grant.reportsHeading")}
         </h2>
         <p className="mb-3 text-[13px] text-muted">
-          Reminders go out 14 days before, on the due date, then weekly while a report is overdue.
+          {t("finance.gifts.grant.remindersNote")}
         </p>
         {reports.length === 0 ? (
-          <p className="mb-3 text-[13.5px] text-muted">No reports scheduled.</p>
+          <p className="mb-3 text-[13.5px] text-muted">{t("finance.gifts.grant.noReports")}</p>
         ) : (
           <DataTable minWidth="560px">
             <TableHead>
-              <TableHeader>Report</TableHeader>
-              <TableHeader>Due</TableHeader>
-              <TableHeader>Status</TableHeader>
+              <TableHeader>{t("finance.gifts.grant.colReport")}</TableHeader>
+              <TableHeader>{t("finance.gifts.grant.colDue")}</TableHeader>
+              <TableHeader>{t("finance.common.status")}</TableHeader>
               {canManage ? (
                 <TableHeader>
-                  <span className="sr-only">Actions</span>
+                  <span className="sr-only">{t("finance.common.actions")}</span>
                 </TableHeader>
               ) : null}
             </TableHead>
@@ -149,11 +165,11 @@ export default async function GrantPage({ params }: { params: Promise<{ id: stri
                   <TableCell>{r.due_on}</TableCell>
                   <TableCell>
                     {r.submitted_on ? (
-                      <Badge tone="success">Submitted {r.submitted_on}</Badge>
+                      <Badge tone="success">{t("finance.gifts.grant.submittedOn", { date: r.submitted_on })}</Badge>
                     ) : r.due_on < today ? (
-                      <Badge tone="danger">Overdue</Badge>
+                      <Badge tone="danger">{t("finance.gifts.grants.overdue")}</Badge>
                     ) : (
-                      <Badge>Not submitted</Badge>
+                      <Badge>{t("finance.gifts.grant.notSubmitted")}</Badge>
                     )}
                   </TableCell>
                   {canManage ? (
@@ -175,21 +191,19 @@ export default async function GrantPage({ params }: { params: Promise<{ id: stri
 
       <section aria-labelledby="grant-payments">
         <h2 id="grant-payments" className="mb-2 text-[15px] font-semibold">
-          Payments received
+          {t("finance.gifts.grant.paymentsHeading")}
         </h2>
         {paid.length === 0 ? (
-          <p className="text-[13.5px] text-muted">
-            None yet. Record a payment from Gifts, choosing &ldquo;Grant payment&rdquo;.
-          </p>
+          <p className="text-[13.5px] text-muted">{t("finance.gifts.grant.noPayments")}</p>
         ) : (
           <ul className="space-y-1 text-[14px]">
             {paid.map((p) => (
               <li key={p.id}>
                 <Link href={`/finance/gifts/${p.id}`} className="underline">
-                  Gift {p.gift_number}
+                  {t("finance.gifts.list.giftNumber", { number: p.gift_number })}
                 </Link>{" "}
-                · {p.received_on} · {formatCents(Number(p.amount_cents))}
-                {p.status === "voided" ? <Badge tone="danger" className="ml-2">Void</Badge> : null}
+                · {p.received_on} · {formatCents(Number(p.amount_cents), locale)}
+                {p.status === "voided" ? <Badge tone="danger" className="ml-2">{t("finance.gifts.list.void")}</Badge> : null}
               </li>
             ))}
           </ul>

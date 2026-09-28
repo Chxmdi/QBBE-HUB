@@ -19,6 +19,7 @@ import {
   saveBudgetLine,
 } from "@/features/budgets/services/budget.commands";
 import type { BudgetLine, BudgetOptions } from "@/features/budgets/services/budget.queries";
+import { useLocale, useT } from "@/lib/i18n/client";
 
 function FormError({ error }: { error: string | null }) {
   return error ? (
@@ -32,6 +33,7 @@ function FormError({ error }: { error: string | null }) {
 function useAction() {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   async function run<T extends ActionResult>(
@@ -45,7 +47,7 @@ function useAction() {
     const result = await action();
     setPending(null);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong. Try again.");
+      setError(result.error ?? t("finance.budgets.genericError"));
       return false;
     }
     toast(success, { tone: "success" });
@@ -53,16 +55,16 @@ function useAction() {
     else router.refresh();
     return true;
   }
-  return { pending, error, run, router };
+  return { pending, error, run, router, t };
 }
 
 /** Starts the budget of a fiscal year. */
 export function CreateBudgetForm({ defaultMonth }: { defaultMonth: string }) {
-  const { pending, error, run, router } = useAction();
+  const { pending, error, run, router, t } = useAction();
   return (
     <form
       className="card grid gap-4 p-4 sm:grid-cols-[12rem_1fr_auto] sm:items-end"
-      aria-label="New budget"
+      aria-label={t("finance.budgets.forms.newBudgetAria")}
       onSubmit={(e) => {
         e.preventDefault();
         const form = new FormData(e.currentTarget);
@@ -74,7 +76,7 @@ export function CreateBudgetForm({ defaultMonth }: { defaultMonth: string }) {
               name: form.get("name"),
               notes: form.get("notes") ?? undefined,
             }),
-          "Budget created as a draft.",
+          t("finance.budgets.forms.created"),
           (result) => {
             if (result.id) router.push(`/finance/budgets/${result.id}`);
           },
@@ -82,19 +84,19 @@ export function CreateBudgetForm({ defaultMonth }: { defaultMonth: string }) {
       }}
     >
       <div>
-        <Label htmlFor="budget-start">First month of the fiscal year</Label>
+        <Label htmlFor="budget-start">{t("finance.budgets.forms.startMonth")}</Label>
         <Input id="budget-start" name="startMonth" type="month" defaultValue={defaultMonth} required />
       </div>
       <div>
-        <Label htmlFor="budget-name">Name</Label>
-        <Input id="budget-name" name="name" maxLength={200} required placeholder="Operating budget" />
+        <Label htmlFor="budget-name">{t("finance.budgets.name")}</Label>
+        <Input id="budget-name" name="name" maxLength={200} required placeholder={t("finance.budgets.forms.namePlaceholder")} />
       </div>
       <Button type="submit" loading={pending === "create"}>
         <Plus className="size-4" aria-hidden />
-        Create budget
+        {t("finance.budgets.forms.create")}
       </Button>
       <div className="sm:col-span-3">
-        <Label htmlFor="budget-notes">Notes (optional)</Label>
+        <Label htmlFor="budget-notes">{t("finance.budgets.forms.notes")}</Label>
         <Textarea id="budget-notes" name="notes" maxLength={2000} rows={2} />
         <FormError error={error} />
       </div>
@@ -119,7 +121,8 @@ export function BudgetLineDialog({
   options: BudgetOptions;
   line?: BudgetLine;
 }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const initialPhasing = line && !sameMonths(line.month_cents) ? "custom" : "even";
   const [phasing, setPhasing] = useState<"even" | "custom">(initialPhasing);
@@ -144,20 +147,22 @@ export function BudgetLineDialog({
           size="sm"
           variant="ghost"
           onClick={show}
-          aria-label={`Edit line ${account ? `${account.code} ${account.name}` : ""}`.trim()}
+          aria-label={t("finance.budgets.forms.editLineAria", {
+            account: account ? `${account.code} ${account.name}` : "",
+          }).trim()}
         >
           <Pencil className="size-4" aria-hidden />
         </Button>
       ) : (
         <Button onClick={show}>
           <Plus className="size-4" aria-hidden />
-          Add line
+          {t("finance.budgets.forms.addLine")}
         </Button>
       )}
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title={line ? "Edit budget line" : "Add a budget line"}
+        title={line ? t("finance.budgets.forms.editLineTitle") : t("finance.budgets.forms.addLineTitle")}
         className="w-[min(720px,calc(100vw-2rem))]"
       >
         <form
@@ -181,19 +186,19 @@ export function BudgetLineDialog({
                   months: phasing === "custom" ? months.map((_, i) => String(form.get(`month-${i}`) ?? "")) : undefined,
                   note: form.get("note") ?? undefined,
                 }),
-              line ? "Line saved." : "Line added.",
+              line ? t("finance.budgets.forms.lineSaved") : t("finance.budgets.forms.lineAdded"),
             );
             if (ok) setOpen(false);
           }}
         >
           <div>
-            <Label htmlFor="line-account">Account</Label>
+            <Label htmlFor="line-account">{t("finance.common.account")}</Label>
             <Select id="line-account" name="accountId" defaultValue={line?.account_id ?? ""} required>
               <option value="" disabled>
-                Choose a revenue or expense account
+                {t("finance.budgets.forms.chooseAccount")}
               </option>
               {(["revenue", "expense"] as const).map((type) => (
-                <optgroup key={type} label={type === "revenue" ? "Revenue" : "Expense"}>
+                <optgroup key={type} label={t(`finance.common.accountTypes.${type}`)}>
                   {options.accounts
                     .filter((a) => a.account_type === type && (a.is_active || a.id === line?.account_id))
                     .map((a) => (
@@ -207,9 +212,9 @@ export function BudgetLineDialog({
           </div>
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
-              <Label htmlFor="line-fund">Fund</Label>
+              <Label htmlFor="line-fund">{t("finance.common.fund")}</Label>
               <Select id="line-fund" name="fundId" defaultValue={line?.fund_id ?? ""}>
-                <option value="">Any fund</option>
+                <option value="">{t("finance.budgets.forms.anyFund")}</option>
                 {options.funds.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.code} {f.name}
@@ -218,14 +223,14 @@ export function BudgetLineDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="line-program">Program</Label>
+              <Label htmlFor="line-program">{t("finance.common.program")}</Label>
               <Select
                 id="line-program"
                 name="programId"
                 value={programId}
                 onChange={(e) => setProgramId(e.target.value)}
               >
-                <option value="">No program</option>
+                <option value="">{t("finance.budgets.forms.noProgram")}</option>
                 {options.programs.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -234,9 +239,9 @@ export function BudgetLineDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="line-project">Project</Label>
+              <Label htmlFor="line-project">{t("finance.budgets.project")}</Label>
               <Select id="line-project" name="projectId" defaultValue={line?.project_id ?? ""} key={programId}>
-                <option value="">No project</option>
+                <option value="">{t("finance.budgets.forms.noProject")}</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -246,7 +251,7 @@ export function BudgetLineDialog({
             </div>
           </div>
           <fieldset>
-            <legend className="mb-1.5 text-[13px] font-medium">Monthly phasing</legend>
+            <legend className="mb-1.5 text-[13px] font-medium">{t("finance.budgets.forms.phasing")}</legend>
             <div className="flex flex-wrap gap-4 text-[13.5px]">
               <label className="flex items-center gap-2">
                 <input
@@ -256,7 +261,7 @@ export function BudgetLineDialog({
                   checked={phasing === "even"}
                   onChange={() => setPhasing("even")}
                 />
-                Even split over 12 months
+                {t("finance.budgets.forms.evenSplit")}
               </label>
               <label className="flex items-center gap-2">
                 <input
@@ -266,13 +271,13 @@ export function BudgetLineDialog({
                   checked={phasing === "custom"}
                   onChange={() => setPhasing("custom")}
                 />
-                Custom amount per month
+                {t("finance.budgets.forms.customSplit")}
               </label>
             </div>
           </fieldset>
           {phasing === "even" ? (
             <div className="max-w-56">
-              <Label htmlFor="line-annual">Annual amount</Label>
+              <Label htmlFor="line-annual">{t("finance.budgets.forms.annualAmount")}</Label>
               <Input
                 id="line-annual"
                 name="annual"
@@ -281,13 +286,13 @@ export function BudgetLineDialog({
                 defaultValue={line ? centsToDecimal(line.annual_cents) : ""}
                 placeholder="12000.00"
               />
-              <FieldHint>Split evenly; leftover cents go to the first months.</FieldHint>
+              <FieldHint>{t("finance.budgets.forms.annualHint")}</FieldHint>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {months.map((m, i) => (
                 <div key={m}>
-                  <Label htmlFor={`line-month-${i}`}>{monthLabel(m)}</Label>
+                  <Label htmlFor={`line-month-${i}`}>{monthLabel(m, locale)}</Label>
                   <Input
                     id={`line-month-${i}`}
                     name={`month-${i}`}
@@ -300,16 +305,16 @@ export function BudgetLineDialog({
             </div>
           )}
           <div>
-            <Label htmlFor="line-note">Note (optional)</Label>
+            <Label htmlFor="line-note">{t("finance.budgets.forms.note")}</Label>
             <Input id="line-note" name="note" maxLength={500} defaultValue={line?.note ?? ""} />
           </div>
           <FormError error={error} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("finance.common.cancel")}
             </Button>
             <Button type="submit" loading={pending === "save"}>
-              Save line
+              {t("finance.budgets.forms.saveLine")}
             </Button>
           </div>
         </form>
@@ -319,17 +324,17 @@ export function BudgetLineDialog({
 }
 
 export function DeleteLineButton({ lineId, label }: { lineId: string; label: string }) {
-  const { pending, error, run } = useAction();
+  const { pending, error, run, t } = useAction();
   return (
     <>
       <Button
         size="sm"
         variant="ghost"
         loading={pending === "delete"}
-        aria-label={`Remove line ${label}`}
+        aria-label={t("finance.budgets.forms.removeLineAria", { label })}
         onClick={() => {
-          if (!window.confirm(`Remove the line for ${label}?`)) return;
-          void run("delete", () => deleteBudgetLine(lineId), "Line removed.");
+          if (!window.confirm(t("finance.budgets.forms.removeLineConfirm", { label }))) return;
+          void run("delete", () => deleteBudgetLine(lineId), t("finance.budgets.forms.lineRemoved"));
         }}
       >
         <Trash2 className="size-4" aria-hidden />
@@ -341,7 +346,7 @@ export function DeleteLineButton({ lineId, label }: { lineId: string; label: str
 
 /** Approve or delete a draft; revise the approved version. */
 export function BudgetActions({ budgetId, status }: { budgetId: string; status: "draft" | "approved" | "superseded" }) {
-  const { pending, error, run, router } = useAction();
+  const { pending, error, run, router, t } = useAction();
   if (status === "superseded") return null;
   return (
     <div className="flex flex-col items-end gap-2">
@@ -353,30 +358,28 @@ export function BudgetActions({ budgetId, status }: { budgetId: string; status: 
               loading={pending === "delete"}
               disabled={pending !== null}
               onClick={() => {
-                if (!window.confirm("Delete this draft and its lines? Approved versions are not affected.")) return;
-                void run("delete", () => deleteBudgetDraft(budgetId), "Draft deleted.", () => {
+                if (!window.confirm(t("finance.budgets.forms.deleteDraftConfirm"))) return;
+                void run("delete", () => deleteBudgetDraft(budgetId), t("finance.budgets.forms.draftDeleted"), () => {
                   router.push("/finance/budgets");
                   router.refresh();
                 });
               }}
             >
-              Delete draft
+              {t("finance.budgets.forms.deleteDraft")}
             </Button>
             <Button
               loading={pending === "approve"}
               disabled={pending !== null}
               onClick={() => {
                 if (
-                  !window.confirm(
-                    "Approve this budget? It will be locked; later changes need a new version. Any earlier approved version is superseded.",
-                  )
+                  !window.confirm(t("finance.budgets.forms.approveConfirm"))
                 ) {
                   return;
                 }
-                void run("approve", () => approveBudget(budgetId), "Budget approved and locked.");
+                void run("approve", () => approveBudget(budgetId), t("finance.budgets.forms.approved"));
               }}
             >
-              Approve budget
+              {t("finance.budgets.forms.approve")}
             </Button>
           </>
         ) : (
@@ -384,12 +387,12 @@ export function BudgetActions({ budgetId, status }: { budgetId: string; status: 
             variant="secondary"
             loading={pending === "revise"}
             onClick={() =>
-              void run("revise", () => reviseBudget(budgetId), "New draft version started.", (result) => {
+              void run("revise", () => reviseBudget(budgetId), t("finance.budgets.forms.revised"), (result) => {
                 if (result.id) router.push(`/finance/budgets/${result.id}`);
               })
             }
           >
-            Revise budget
+            {t("finance.budgets.forms.revise")}
           </Button>
         )}
       </div>

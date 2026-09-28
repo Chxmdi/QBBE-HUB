@@ -10,6 +10,8 @@ import type { Choice } from "@/features/ledger/components/entry-form";
 import { formatCents, parseMoneyToCents } from "@/features/ledger/money";
 import { addDays, type DocumentKind } from "@/features/payables/model";
 import { saveDocument } from "@/features/payables/services/payables.commands";
+import { useLocale, useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/translate";
 
 export interface DocumentLineValue {
   accountId: string;
@@ -46,11 +48,11 @@ function cents(value: string): number {
   return value.trim() === "" ? 0 : (parseMoneyToCents(value) ?? 0);
 }
 
-const TERMS = [
-  { days: 0, label: "On receipt" },
-  { days: 15, label: "15 days" },
-  { days: 30, label: "30 days" },
-  { days: 60, label: "60 days" },
+const TERMS: { days: number; label: MessageKey }[] = [
+  { days: 0, label: "finance.payables.form.terms.onReceipt" },
+  { days: 15, label: "finance.payables.form.terms.days15" },
+  { days: 30, label: "finance.payables.form.terms.days30" },
+  { days: 60, label: "finance.payables.form.terms.days60" },
 ];
 
 /**
@@ -80,6 +82,8 @@ export function DocumentForm({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
+  const locale = useLocale();
   const formId = useId();
   const isBill = kind === "bill";
   const [value, setValue] = useState(initial);
@@ -129,20 +133,25 @@ export function DocumentForm({
     setSaving(null);
     const base = isBill ? "/finance/payables/bills" : "/finance/payables/invoices";
     if (!result.ok) {
-      setError(result.error ?? "Could not save.");
+      setError(result.error ?? t("finance.payables.form.couldNotSave"));
       if (result.id) {
-        toast(result.error ?? "Saved as a draft but not posted.", { tone: "warning" });
+        toast(result.error ?? t("finance.payables.form.savedNotPosted"), { tone: "warning" });
         router.push(`${base}/${result.id}`);
         router.refresh();
       }
       return;
     }
-    toast(post ? (isBill ? "Bill posted." : "Invoice posted.") : "Draft saved.", { tone: "success" });
+    toast(
+      post
+        ? isBill
+          ? t("finance.payables.form.billPosted")
+          : t("finance.payables.form.invoicePosted")
+        : t("finance.payables.form.draftSaved"),
+      { tone: "success" },
+    );
     router.push(`${base}/${result.id}`);
     router.refresh();
   }
-
-  const noun = isBill ? "bill" : "invoice";
 
   return (
     <form
@@ -154,11 +163,13 @@ export function DocumentForm({
       className="space-y-5"
     >
       <h2 id={`${formId}-title`} className="sr-only">
-        {isBill ? "Bill" : "Invoice"}
+        {isBill ? t("finance.payables.form.bill") : t("finance.payables.form.invoice")}
       </h2>
       <div className="card grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="sm:col-span-2">
-          <Label htmlFor={`${formId}-contact`}>{isBill ? "Vendor" : "Customer or funder"}</Label>
+          <Label htmlFor={`${formId}-contact`}>
+            {isBill ? t("finance.payables.form.vendor") : t("finance.payables.form.customerOrFunder")}
+          </Label>
           <Select
             id={`${formId}-contact`}
             value={value.contactId}
@@ -172,7 +183,9 @@ export function DocumentForm({
             }}
             required
           >
-            <option value="">{isBill ? "Choose a vendor" : "Choose a customer"}</option>
+            <option value="">
+              {isBill ? t("finance.payables.form.chooseVendor") : t("finance.payables.form.chooseCustomer")}
+            </option>
             {contacts.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
@@ -180,13 +193,13 @@ export function DocumentForm({
             ))}
           </Select>
           {contacts.length === 0 ? (
-            <FieldHint>Add one first under Vendors and customers.</FieldHint>
+            <FieldHint>{t("finance.payables.form.addContactFirst")}</FieldHint>
           ) : null}
         </div>
         {isBill ? (
           <>
             <div>
-              <Label htmlFor={`${formId}-reference`}>Vendor invoice number</Label>
+              <Label htmlFor={`${formId}-reference`}>{t("finance.payables.form.vendorInvoiceNumber")}</Label>
               <Input
                 id={`${formId}-reference`}
                 value={value.reference}
@@ -195,9 +208,9 @@ export function DocumentForm({
               />
             </div>
             <div>
-              <Label htmlFor={`${formId}-receipt`}>Captured bill (optional)</Label>
+              <Label htmlFor={`${formId}-receipt`}>{t("finance.payables.form.capturedBill")}</Label>
               <Select id={`${formId}-receipt`} value={value.receiptId} onChange={(e) => set("receiptId", e.target.value)}>
-                <option value="">None</option>
+                <option value="">{t("finance.payables.form.none")}</option>
                 {receipts.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.label}
@@ -208,19 +221,21 @@ export function DocumentForm({
           </>
         ) : (
           <div>
-            <Label htmlFor={`${formId}-language`}>Language</Label>
+            <Label htmlFor={`${formId}-language`}>{t("finance.payables.form.language")}</Label>
             <Select
               id={`${formId}-language`}
               value={value.language}
               onChange={(e) => set("language", e.target.value as "fr" | "en")}
             >
-              <option value="fr">French</option>
-              <option value="en">English</option>
+              <option value="fr">{t("finance.payables.languages.fr")}</option>
+              <option value="en">{t("finance.payables.languages.en")}</option>
             </Select>
           </div>
         )}
         <div>
-          <Label htmlFor={`${formId}-date`}>{isBill ? "Bill date" : "Invoice date"}</Label>
+          <Label htmlFor={`${formId}-date`}>
+            {isBill ? t("finance.payables.form.billDate") : t("finance.payables.form.invoiceDate")}
+          </Label>
           <Input
             id={`${formId}-date`}
             type="date"
@@ -230,7 +245,7 @@ export function DocumentForm({
           />
         </div>
         <div>
-          <Label htmlFor={`${formId}-due`}>Due date</Label>
+          <Label htmlFor={`${formId}-due`}>{t("finance.payables.form.dueDate")}</Label>
           <Input
             id={`${formId}-due`}
             type="date"
@@ -240,20 +255,20 @@ export function DocumentForm({
             required
           />
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[12.5px]">
-            {TERMS.map((t) => (
+            {TERMS.map((term) => (
               <button
-                key={t.days}
+                key={term.days}
                 type="button"
                 className="text-brand-fg hover:underline"
-                onClick={() => value.documentDate && set("dueDate", addDays(value.documentDate, t.days))}
+                onClick={() => value.documentDate && set("dueDate", addDays(value.documentDate, term.days))}
               >
-                {t.label}
+                {t(term.label)}
               </button>
             ))}
           </div>
         </div>
         <div>
-          <Label htmlFor={`${formId}-fund`}>Fund</Label>
+          <Label htmlFor={`${formId}-fund`}>{t("finance.payables.form.fund")}</Label>
           <Select id={`${formId}-fund`} value={value.fundId} onChange={(e) => set("fundId", e.target.value)} required>
             {funds.map((f) => (
               <option key={f.id} value={f.id}>
@@ -263,35 +278,41 @@ export function DocumentForm({
           </Select>
         </div>
         <div>
-          <Label htmlFor={`${formId}-control`}>{isBill ? "Payable account" : "Receivable account"}</Label>
+          <Label htmlFor={`${formId}-control`}>
+            {isBill ? t("finance.payables.form.payableAccount") : t("finance.payables.form.receivableAccount")}
+          </Label>
           <Select
             id={`${formId}-control`}
             value={value.controlAccountId}
             onChange={(e) => set("controlAccountId", e.target.value)}
           >
-            <option value="">{isBill ? "2000 Accounts payable (default)" : "1100 Accounts receivable (default)"}</option>
+            <option value="">
+              {isBill ? t("finance.payables.form.defaultPayable") : t("finance.payables.form.defaultReceivable")}
+            </option>
             {controlAccounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
               </option>
             ))}
           </Select>
-          {!isBill ? <FieldHint>Use 1150 for grants and contributions.</FieldHint> : null}
+          {!isBill ? <FieldHint>{t("finance.payables.form.grantsHint")}</FieldHint> : null}
         </div>
         <div className="sm:col-span-2 lg:col-span-4">
-          <Label htmlFor={`${formId}-memo`}>Memo (optional)</Label>
+          <Label htmlFor={`${formId}-memo`}>{t("finance.payables.form.memo")}</Label>
           <Input id={`${formId}-memo`} value={value.memo} maxLength={500} onChange={(e) => set("memo", e.target.value)} />
         </div>
       </div>
 
       <fieldset className="space-y-3">
-        <legend className="mb-2 text-[15px] font-semibold">Lines</legend>
+        <legend className="mb-2 text-[15px] font-semibold">{t("finance.payables.form.lines")}</legend>
         {lines.map((line, index) => {
           const id = `${formId}-l${line.key}`;
           return (
-            <div key={line.key} className="card grid gap-3 p-3 md:grid-cols-6" role="group" aria-label={`Line ${index + 1}`}>
+            <div key={line.key} className="card grid gap-3 p-3 md:grid-cols-6" role="group" aria-label={t("finance.payables.form.line", { number: index + 1 })}>
               <div className="md:col-span-2">
-                <Label htmlFor={`${id}-description`}>{isBill ? "Description (optional)" : "Description"}</Label>
+                <Label htmlFor={`${id}-description`}>
+                  {isBill ? t("finance.payables.form.descriptionOptional") : t("finance.payables.form.description")}
+                </Label>
                 <Input
                   id={`${id}-description`}
                   value={line.description}
@@ -301,13 +322,17 @@ export function DocumentForm({
                 />
               </div>
               <div className="md:col-span-2">
-                <Label htmlFor={`${id}-account`}>{isBill ? "Expense or asset account" : "Revenue account"}</Label>
+                <Label htmlFor={`${id}-account`}>
+                  {isBill ? t("finance.payables.form.expenseOrAssetAccount") : t("finance.payables.form.revenueAccount")}
+                </Label>
                 <Select
                   id={`${id}-account`}
                   value={line.accountId}
                   onChange={(e) => update(line.key, { accountId: e.target.value })}
                 >
-                  <option value="">{canPost ? "Choose an account" : "Leave for finance"}</option>
+                  <option value="">
+                    {canPost ? t("finance.payables.form.chooseAccount") : t("finance.payables.form.leaveForFinance")}
+                  </option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.label}
@@ -316,13 +341,13 @@ export function DocumentForm({
                 </Select>
               </div>
               <div>
-                <Label htmlFor={`${id}-program`}>Program</Label>
+                <Label htmlFor={`${id}-program`}>{t("finance.payables.form.program")}</Label>
                 <Select
                   id={`${id}-program`}
                   value={line.programId}
                   onChange={(e) => update(line.key, { programId: e.target.value })}
                 >
-                  <option value="">None</option>
+                  <option value="">{t("finance.payables.form.none")}</option>
                   {programs.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label}
@@ -331,7 +356,7 @@ export function DocumentForm({
                 </Select>
               </div>
               <div>
-                <Label htmlFor={`${id}-amount`}>Amount before tax</Label>
+                <Label htmlFor={`${id}-amount`}>{t("finance.payables.form.amountBeforeTax")}</Label>
                 <div className="flex gap-1">
                   <Input
                     id={`${id}-amount`}
@@ -346,7 +371,7 @@ export function DocumentForm({
                     variant="ghost"
                     disabled={lines.length <= 1}
                     onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
-                    aria-label={`Remove line ${index + 1}`}
+                    aria-label={t("finance.payables.form.removeLine", { number: index + 1 })}
                   >
                     <Trash2 className="size-4" aria-hidden />
                   </Button>
@@ -364,13 +389,13 @@ export function DocumentForm({
           }}
         >
           <Plus className="size-4" aria-hidden />
-          Add line
+          {t("finance.payables.form.addLine")}
         </Button>
       </fieldset>
 
       <div className="card grid gap-4 p-4 sm:grid-cols-4">
         <div>
-          <Label htmlFor={`${formId}-gst`}>GST</Label>
+          <Label htmlFor={`${formId}-gst`}>{t("finance.payables.form.gst")}</Label>
           <Input
             id={`${formId}-gst`}
             inputMode="decimal"
@@ -380,7 +405,7 @@ export function DocumentForm({
           />
         </div>
         <div>
-          <Label htmlFor={`${formId}-qst`}>QST</Label>
+          <Label htmlFor={`${formId}-qst`}>{t("finance.payables.form.qst")}</Label>
           <Input
             id={`${formId}-qst`}
             inputMode="decimal"
@@ -391,18 +416,16 @@ export function DocumentForm({
         </div>
         <dl className="flex gap-6 text-[14px] sm:col-span-2 sm:justify-end" aria-live="polite">
           <div>
-            <dt className="text-[12.5px] text-muted">Before tax</dt>
-            <dd className="font-semibold tabular-nums">{formatCents(subtotal)}</dd>
+            <dt className="text-[12.5px] text-muted">{t("finance.payables.form.beforeTax")}</dt>
+            <dd className="font-semibold tabular-nums">{formatCents(subtotal, locale)}</dd>
           </div>
           <div>
-            <dt className="text-[12.5px] text-muted">Total</dt>
-            <dd className="font-semibold tabular-nums">{formatCents(total)}</dd>
+            <dt className="text-[12.5px] text-muted">{t("finance.payables.form.total")}</dt>
+            <dd className="font-semibold tabular-nums">{formatCents(total, locale)}</dd>
           </div>
         </dl>
         <p className="text-[12.5px] text-muted sm:col-span-4">
-          {isBill
-            ? "GST and QST you can claim back go to the tax receivable accounts (1200, 1210). If the taxes cannot be claimed, include them in the line amounts instead and leave these at zero."
-            : "GST and QST charged go to the tax payable accounts (2200, 2210). Leave them at zero when the item is exempt."}
+          {isBill ? t("finance.payables.form.billTaxHint") : t("finance.payables.form.invoiceTaxHint")}
         </p>
       </div>
 
@@ -413,11 +436,11 @@ export function DocumentForm({
           </p>
         ) : null}
         <Button type="submit" variant={canPost ? "secondary" : "primary"} loading={saving === "draft"} disabled={saving !== null}>
-          Save draft
+          {t("finance.payables.form.saveDraft")}
         </Button>
         {canPost ? (
           <Button type="button" loading={saving === "post"} disabled={saving !== null} onClick={() => void submit(true)}>
-            Save and post {noun}
+            {isBill ? t("finance.payables.form.saveAndPostBill") : t("finance.payables.form.saveAndPostInvoice")}
           </Button>
         ) : null}
       </div>

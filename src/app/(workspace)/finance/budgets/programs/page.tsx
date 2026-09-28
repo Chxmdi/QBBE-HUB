@@ -11,8 +11,11 @@ import { BudgetReportTable } from "@/features/budgets/components/budget-report-t
 import { BudgetTabs } from "@/features/budgets/components/budget-tabs";
 import { managedPrograms, programSummary } from "@/features/budgets/services/budget.queries";
 import { todayIn, uuidParam } from "@/features/ledger/services/ledger.access";
+import { getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "My programs' budgets" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("finance.budgets.programs.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 /**
@@ -27,11 +30,12 @@ export default async function ProgramBudgetsPage({
   const session = await requireStaff();
   const supabase = await createSupabasePageClient();
   const query = await searchParams;
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const header = (
     <PageHeader
-      eyebrow="Budgets"
-      title="My programs"
-      description="Spending and revenue for the programs you lead or manage, against the approved budget. Totals per account from posted entries."
+      eyebrow={t("finance.budgets.title")}
+      title={t("finance.budgets.tabs.myPrograms")}
+      description={t("finance.budgets.programs.description")}
     />
   );
   const programs = await managedPrograms(supabase, session.organizationId);
@@ -42,8 +46,8 @@ export default async function ProgramBudgetsPage({
         <BudgetTabs />
         <EmptyState
           icon={<FolderKanban />}
-          title="You do not lead or manage a program"
-          description="Program leads and managers see their program's budget here."
+          title={t("finance.budgets.programs.noProgramTitle")}
+          description={t("finance.budgets.programs.noProgramDescription")}
         />
       </div>
     );
@@ -58,9 +62,9 @@ export default async function ProgramBudgetsPage({
     <div>
       {header}
       <BudgetTabs />
-      <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4" aria-label="Program and month">
+      <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4" aria-label={t("finance.budgets.programs.formAria")}>
         <div className="min-w-52">
-          <Label htmlFor="p-program">Program</Label>
+          <Label htmlFor="p-program">{t("finance.common.program")}</Label>
           <Select id="p-program" name="program" defaultValue={program.id}>
             {programs.map((p) => (
               <option key={p.id} value={p.id}>
@@ -70,27 +74,32 @@ export default async function ProgramBudgetsPage({
           </Select>
         </div>
         <div>
-          <Label htmlFor="p-month">Month</Label>
+          <Label htmlFor="p-month">{t("finance.budgets.month")}</Label>
           <Input id="p-month" name="month" type="month" defaultValue={month} />
         </div>
         <Button type="submit" variant="secondary">
-          Show
+          {t("finance.budgets.show")}
         </Button>
       </form>
       {summary.budget ? (
         <p className="meta mb-3">
-          {program.name}: {summary.budget.name}, {fiscalYearLabel(summary.budget.fiscal_year_start)}, version{" "}
-          {summary.budget.version}. {monthLabel(month)} and the year to date.
+          {t("finance.budgets.programs.summary", {
+            program: program.name,
+            budget: summary.budget.name,
+            fiscalYear: fiscalYearLabel(summary.budget.fiscal_year_start, locale),
+            version: summary.budget.version,
+            month: monthLabel(month, locale),
+          })}
         </p>
       ) : null}
       {summary.rows.length === 0 ? (
         <EmptyState
           icon={<PiggyBank />}
-          title="Nothing to show for this month"
-          description="Either no approved budget covers this month, or nothing was budgeted or posted for this program yet."
+          title={t("finance.budgets.programs.emptyTitle")}
+          description={t("finance.budgets.programs.emptyDescription")}
         />
       ) : (
-        <BudgetReportTable rows={summary.rows} monthLabel={monthLabel(month)} />
+        <BudgetReportTable rows={summary.rows} monthLabel={monthLabel(month, locale)} />
       )}
     </div>
   );

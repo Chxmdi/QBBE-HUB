@@ -15,6 +15,8 @@ import {
   type RunCents,
 } from "@/features/payroll/categories";
 import { formatCents } from "@/features/finance/money";
+import type { Locale } from "@/lib/i18n/config";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Payroll journal and register parsers (#155). Pure functions that run in the
@@ -34,17 +36,12 @@ export const REQUIRED_FIELDS: PayrollField[] = ["payDate", "periodStart", "perio
 /** Categories where several columns may add together (union dues, RRSP...). */
 const MULTI_COLUMN: PayrollField[] = ["ee_other", "er_other"];
 
-export const FIELD_LABEL: Record<Exclude<PayrollField, PayrollCategory>, string> = {
-  payDate: "Pay date",
-  periodStart: "Period start",
-  periodEnd: "Period end",
-  runReference: "Run number (optional)",
-};
+const DATE_FIELDS = ["payDate", "periodStart", "periodEnd", "runReference"] as const;
 
-export function fieldLabel(field: PayrollField): string {
-  return field in FIELD_LABEL
-    ? FIELD_LABEL[field as keyof typeof FIELD_LABEL]
-    : categoryLabel(field as PayrollCategory);
+export function fieldLabel(field: PayrollField, t: TranslateFn): string {
+  return (DATE_FIELDS as readonly string[]).includes(field)
+    ? t(`finance.payroll.fields.${field as (typeof DATE_FIELDS)[number]}`)
+    : categoryLabel(field as PayrollCategory, t);
 }
 
 export interface RunTotals {
@@ -216,6 +213,7 @@ const ALL_FIELDS: PayrollField[] = ["payDate", "periodStart", "periodEnd", "runR
 function matchHeaders(
   header: string[],
   aliases: Partial<Record<PayrollField, string[]>>,
+  t: TranslateFn,
 ): Partial<Record<PayrollField, number[]>> | string {
   const cells = header.map(normalizeHeader);
   const columns: Partial<Record<PayrollField, number[]>> = {};
@@ -227,7 +225,7 @@ function matchHeaders(
       const found = cells.flatMap((c, i) => (c === name && !taken.has(i) ? [i] : []));
       if (found.length === 0) continue;
       if (found.length > 1 && !MULTI_COLUMN.includes(field)) {
-        return `Two columns are headed "${header[found[0]]}". Use "Other CSV" and choose the column for ${fieldLabel(field)}.`;
+        return t("finance.payroll.parse.twoColumns", { header: header[found[0]], field: fieldLabel(field, t) });
       }
       columns[field] = found;
       found.forEach((i) => taken.add(i));
@@ -238,10 +236,14 @@ function matchHeaders(
 }
 
 /** Finds the header row (within the first 15) and maps it for a preset. */
-export function resolvePreset(rows: string[][], preset: PayrollPreset): PayrollMapping | string {
+export function resolvePreset(
+  rows: string[][],
+  preset: PayrollPreset,
+  t: TranslateFn = createTranslator("en"),
+): PayrollMapping | string {
   let lastError: string | null = null;
   for (let r = 0; r < Math.min(rows.length, 15); r++) {
-    const columns = matchHeaders(rows[r], preset.headers);
+    const columns = matchHeaders(rows[r], preset.headers, t);
     if (typeof columns === "string") {
       lastError = columns;
       continue;
@@ -252,13 +254,14 @@ export function resolvePreset(rows: string[][], preset: PayrollPreset): PayrollM
   }
   return (
     lastError ??
-    `Expected a header row with ${REQUIRED_FIELDS.map(fieldLabel).join(", ")}. Try "Other CSV" to choose the columns yourself.`
+    t("finance.payroll.parse.expectedHeader", { fields: REQUIRED_FIELDS.map((f) => fieldLabel(f, t)).join(", ") })
   );
 }
 
 /** Best guess of a mapping for "Other CSV", for the person to check. */
 export function guessMapping(header: string[]): Partial<Record<PayrollField, number[]>> {
-  const columns = matchHeaders(header, COMMON);
+  // The message for an ambiguous header is dropped here, so its language does not matter.
+  const columns = matchHeaders(header, COMMON, createTranslator("en"));
   return typeof columns === "string" ? {} : columns;
 }
 
@@ -302,17 +305,21 @@ export function parsePayrollRows(
   rows: string[][],
   mapping: PayrollMapping,
   provider: PayrollProvider,
+  locale: Locale = "en",
 ): PayrollParseResult {
+  const t = createTranslator(locale);
   const header = rows[mapping.headerRow] ?? [];
   const body = rows.slice(mapping.headerRow + 1);
-  if (body.length === 0) return { ok: false, error: "The file has no pay lines under its header." };
-  if (body.length > MAX_ROWS) return { ok: false, error: `A file can hold at most ${MAX_ROWS} rows.` };
+  if (body.length === 0) return { ok: false, error: t("finance.payroll.parse.noLines") };
+  if (body.length > MAX_ROWS) return { ok: false, error: t("finance.payroll.parse.maxRows", { max: MAX_ROWS }) };
   for (const field of REQUIRED_FIELDS) {
-    if (!mapping.columns[field]?.length) return { ok: false, error: `Choose the column for ${fieldLabel(field)}.` };
+    if (!mapping.columns[field]?.length) {
+      return { ok: false, error: t("finance.payroll.parse.chooseColumn", { field: fieldLabel(field, t) }) };
+    }
   }
   const col = (field: PayrollField) => mapping.columns[field] ?? [];
   const cell = (row: string[], i: number) => (row[i] ?? "").trim();
-  const headerName = (i: number) => header[i] || `column ${i + 1}`;
+  const headerName = (i: number) => header[i] || t("finance.payroll.parse.columnFallback", { number: i + 1 });
 
   const details = new Map<string, Accumulator>();
   const totals: Accumulator[] = [];
@@ -332,7 +339,7 @@ export function parsePayrollRows(
         if (value === null) {
           return {
             ok: false,
-            error: `Row ${rowNo}, ${headerName(c)}: "${text}" could not be read as an amount without guessing.`,
+            error: t("finance.payroll.parse.notAmount", { row: rowNo, column: headerName(c), text }),
           };
         }
         cents[key] += value;
@@ -365,7 +372,10 @@ export function parsePayrollRows(
     for (const [field, value] of Object.entries(dates) as [PayrollField, string | null][]) {
       if (!value) {
         const text = cell(row, col(field)[0]);
-        return { ok: false, error: `Row ${rowNo}: ${fieldLabel(field).toLowerCase()} "${text}" is not a date.` };
+        return {
+          ok: false,
+          error: t("finance.payroll.parse.notDate", { row: rowNo, field: fieldLabel(field, t).toLowerCase(), text }),
+        };
       }
     }
     const run = {
@@ -386,22 +396,31 @@ export function parsePayrollRows(
   if (details.size > 0) {
     runs = [...details.values()];
     // A total row the file carries must equal the sum of its lines.
-    for (const t of totals) {
+    for (const total of totals) {
       // Matched on its dates: a total row's run-number cell often says "Total".
       const sameDates = runs.filter(
-        (r) => t.payDate && r.payDate === t.payDate && r.periodStart === t.periodStart && r.periodEnd === t.periodEnd,
+        (r) =>
+          total.payDate &&
+          r.payDate === total.payDate &&
+          r.periodStart === total.periodStart &&
+          r.periodEnd === total.periodEnd,
       );
-      const target = !t.payDate
+      const target = !total.payDate
         ? runs.length === 1
           ? runs[0]
           : undefined
-        : (details.get(runKey(t)) ?? (sameDates.length === 1 ? sameDates[0] : undefined));
+        : (details.get(runKey(total)) ?? (sameDates.length === 1 ? sameDates[0] : undefined));
       if (!target) continue;
-      const differs = CATEGORY_KEYS.find((k) => target.cents[k] !== t.cents[k]);
+      const differs = CATEGORY_KEYS.find((k) => target.cents[k] !== total.cents[k]);
       if (differs) {
         return {
           ok: false,
-          error: `The file's total row for ${categoryLabel(differs)} (${formatCents(t.cents[differs])}) does not equal the sum of its lines (${formatCents(target.cents[differs])}) for the run paid ${target.payDate}. Check the export or the column mapping.`,
+          error: t("finance.payroll.parse.totalMismatch", {
+            category: categoryLabel(differs, t),
+            fileTotal: formatCents(total.cents[differs], locale),
+            sum: formatCents(target.cents[differs], locale),
+            date: target.payDate,
+          }),
         };
       }
       checked += 1;
@@ -409,26 +428,33 @@ export function parsePayrollRows(
   } else {
     // A register that holds only run totals.
     runs = totals.filter((t) => t.payDate);
-    if (runs.length === 0) return { ok: false, error: "The file has no pay lines with a pay date." };
+    if (runs.length === 0) return { ok: false, error: t("finance.payroll.parse.noPayDate") };
   }
 
-  if (runs.length > MAX_RUNS) return { ok: false, error: `A file can hold at most ${MAX_RUNS} pay runs.` };
+  if (runs.length > MAX_RUNS) return { ok: false, error: t("finance.payroll.errors.maxRuns", { max: MAX_RUNS }) };
   for (const run of runs) {
     const negative = CATEGORY_KEYS.find((k) => run.cents[k] < 0);
     if (negative) {
       return {
         ok: false,
-        error: `The run paid ${run.payDate} has a negative total for ${categoryLabel(negative)}. Enter adjustments as a journal entry instead.`,
+        error: t("finance.payroll.parse.negative", { date: run.payDate, category: categoryLabel(negative, t) }),
       };
     }
-    if (run.cents.gross_wages <= 0) return { ok: false, error: `The run paid ${run.payDate} has no gross wages.` };
+    if (run.cents.gross_wages <= 0) {
+      return { ok: false, error: t("finance.payroll.parse.noGross", { date: run.payDate }) };
+    }
     if (run.periodStart > run.periodEnd) {
-      return { ok: false, error: `The run paid ${run.payDate}: the period ends before it starts.` };
+      return { ok: false, error: t("finance.payroll.parse.periodOrder", { date: run.payDate }) };
     }
     if (!totalsAddUp(run.cents)) {
       return {
         ok: false,
-        error: `The run paid ${run.payDate} does not add up: gross wages ${formatCents(run.cents.gross_wages)} less employee deductions ${formatCents(employeeDeductions(run.cents))} is not net pay ${formatCents(run.cents.net_pay)}. Check the column mapping.`,
+        error: t("finance.payroll.parse.doesNotAddUp", {
+          date: run.payDate,
+          gross: formatCents(run.cents.gross_wages, locale),
+          deductions: formatCents(employeeDeductions(run.cents), locale),
+          net: formatCents(run.cents.net_pay, locale),
+        }),
       };
     }
   }
@@ -453,20 +479,26 @@ export function parsePayrollRows(
 }
 
 /** Parses a payroll export with a provider preset, or with a hand mapping. */
-export function parsePayrollFile(text: string, provider: PayrollProvider, custom?: PayrollMapping): PayrollParseResult {
+export function parsePayrollFile(
+  text: string,
+  provider: PayrollProvider,
+  custom?: PayrollMapping,
+  locale: Locale = "en",
+): PayrollParseResult {
+  const t = createTranslator(locale);
   const rows = readCsv(text);
-  if (rows.length === 0) return { ok: false, error: "The file is empty." };
+  if (rows.length === 0) return { ok: false, error: t("finance.payroll.parse.empty") };
   if (provider === "other") {
-    if (!custom) return { ok: false, error: "Choose which column holds each figure." };
-    return parsePayrollRows(rows, custom, "other");
+    if (!custom) return { ok: false, error: t("finance.payroll.parse.chooseEachColumn") };
+    return parsePayrollRows(rows, custom, "other", locale);
   }
   const preset = presetById(provider);
-  if (!preset) return { ok: false, error: "Choose the payroll provider." };
-  const mapping = resolvePreset(rows, preset);
+  if (!preset) return { ok: false, error: t("finance.payroll.errors.chooseProvider") };
+  const mapping = resolvePreset(rows, preset, t);
   if (typeof mapping === "string") {
-    return { ok: false, error: `This does not look like a ${preset.label} export. ${mapping}` };
+    return { ok: false, error: t("finance.payroll.parse.notPreset", { provider: preset.label, reason: mapping }) };
   }
-  return parsePayrollRows(rows, mapping, preset.id);
+  return parsePayrollRows(rows, mapping, preset.id, locale);
 }
 
 export { readCsv };
