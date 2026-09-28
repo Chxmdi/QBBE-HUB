@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Outputs and outcomes.
@@ -27,6 +28,16 @@ export const DIRECTION_LABELS: Record<MetricDirection, string> = {
   increase: "Higher is better",
   decrease: "Lower is better",
 };
+
+/** A session's status in the reader's language (#141). */
+export function operationStatusLabel(status: OperationStatus, t: TranslateFn): string {
+  return t(`outcomes.operationStatus.${status}`);
+}
+
+/** Which way a metric counts as better, in the reader's language (#141). */
+export function directionLabel(direction: MetricDirection, t: TranslateFn): string {
+  return t(`outcomes.direction.${direction}`);
+}
 
 /** The same arithmetic the database stores, so a form can show it before saving. */
 export function contactHours(

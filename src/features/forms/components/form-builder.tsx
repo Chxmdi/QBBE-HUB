@@ -8,13 +8,14 @@ import { Checkbox, FieldHint, Input, Label, Select, Textarea } from "@/component
 import { useToast } from "@/components/ui/toast";
 import {
   FIELD_TYPES,
-  FIELD_TYPE_LABELS,
+  FIELD_TYPE_KEYS,
   MAX_FIELDS,
   parseOptions,
   type FieldType,
   type FormField,
 } from "@/features/forms/fields";
 import { createForm, updateDraftForm } from "@/features/forms/services/form.commands";
+import { useT } from "@/lib/i18n/client";
 
 interface DraftField {
   id: string;
@@ -45,6 +46,7 @@ function blankField(): DraftField {
 export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [fields, setFields] = useState<DraftField[]>(
     initial
       ? initial.fields.map((f) => ({
@@ -94,24 +96,25 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
     const result = initial ? await updateDraftForm(initial.id, payload) : await createForm(payload);
     setSaving(false);
     if (!result.ok || !result.id) {
-      setError(result.error ?? "Could not save the form.");
+      setError(result.error ?? t("forms.builder.saveFailed"));
       return;
     }
-    toast(initial ? "Draft saved." : "Form saved as a draft. Publish it when it is ready.");
+    toast(initial ? t("forms.builder.draftSaved") : t("forms.builder.savedAsDraft"));
     router.push(`/forms/${result.id}`);
     router.refresh();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6" aria-label="Form builder">
+    <form onSubmit={handleSubmit} className="space-y-6" aria-label={t("forms.builder.label")}>
       <section className="card space-y-4 p-4">
         <div>
-          <Label htmlFor="fb-title">Title</Label>
+          <Label htmlFor="fb-title">{t("forms.builder.title")}</Label>
           <Input id="fb-title" name="title" required maxLength={200} defaultValue={initial?.title} />
         </div>
         <div>
           <Label htmlFor="fb-description">
-            Instructions <span className="font-normal text-muted">(optional)</span>
+            {t("forms.builder.instructions")}{" "}
+            <span className="font-normal text-muted">{t("forms.builder.optional")}</span>
           </Label>
           <Textarea
             id="fb-description"
@@ -123,19 +126,17 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="fb-audience">Who can fill it in</Label>
+            <Label htmlFor="fb-audience">{t("forms.builder.audience")}</Label>
             <Select id="fb-audience" name="audience" defaultValue={initial?.audience ?? "members"}>
-              <option value="members">Every member, including volunteers</option>
-              <option value="staff">Staff only</option>
+              <option value="members">{t("forms.builder.audienceMembers")}</option>
+              <option value="staff">{t("forms.builder.audienceStaff")}</option>
             </Select>
           </div>
           <label className="flex items-start gap-2 pt-6 text-[13px]">
             <Checkbox name="requiresSignature" defaultChecked={initial?.requiresSignature ?? false} />
             <span>
-              <span className="font-medium">Must be signed</span>
-              <span className="block text-muted">
-                The person types their name and agrees to sign electronically when submitting.
-              </span>
+              <span className="font-medium">{t("forms.builder.mustBeSigned")}</span>
+              <span className="block text-muted">{t("forms.builder.mustBeSignedHint")}</span>
             </span>
           </label>
         </div>
@@ -143,13 +144,13 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
 
       <section aria-labelledby="fb-fields" className="space-y-3">
         <h2 id="fb-fields" className="text-[15px] font-semibold">
-          Questions
+          {t("forms.builder.questions")}
         </h2>
         {fields.map((field, index) => (
-          <fieldset key={field.id} className="card space-y-3 p-4" aria-label={`Question ${index + 1}`}>
+          <fieldset key={field.id} className="card space-y-3 p-4" aria-label={t("forms.builder.question", { n: index + 1 })}>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_14rem]">
               <div>
-                <Label htmlFor={`fb-label-${field.id}`}>Question {index + 1}</Label>
+                <Label htmlFor={`fb-label-${field.id}`}>{t("forms.builder.question", { n: index + 1 })}</Label>
                 <Input
                   id={`fb-label-${field.id}`}
                   value={field.label}
@@ -159,15 +160,15 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
                 />
               </div>
               <div>
-                <Label htmlFor={`fb-type-${field.id}`}>Answer type</Label>
+                <Label htmlFor={`fb-type-${field.id}`}>{t("forms.builder.answerType")}</Label>
                 <Select
                   id={`fb-type-${field.id}`}
                   value={field.type}
                   onChange={(e) => change(field.id, { type: e.target.value as FieldType })}
                 >
-                  {FIELD_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {FIELD_TYPE_LABELS[t]}
+                  {FIELD_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {t(FIELD_TYPE_KEYS[type])}
                     </option>
                   ))}
                 </Select>
@@ -175,19 +176,20 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
             </div>
             {field.type === "choice" ? (
               <div>
-                <Label htmlFor={`fb-options-${field.id}`}>Options</Label>
+                <Label htmlFor={`fb-options-${field.id}`}>{t("forms.builder.options")}</Label>
                 <Textarea
                   id={`fb-options-${field.id}`}
                   rows={3}
                   value={field.optionsText}
                   onChange={(e) => change(field.id, { optionsText: e.target.value })}
                 />
-                <FieldHint>One per line.</FieldHint>
+                <FieldHint>{t("forms.builder.optionsHint")}</FieldHint>
               </div>
             ) : null}
             <div>
               <Label htmlFor={`fb-help-${field.id}`}>
-                Hint <span className="font-normal text-muted">(optional)</span>
+                {t("forms.builder.hint")}{" "}
+                <span className="font-normal text-muted">{t("forms.builder.optional")}</span>
               </Label>
               <Input
                 id={`fb-help-${field.id}`}
@@ -202,7 +204,7 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
                   checked={field.required}
                   onChange={(e) => change(field.id, { required: e.target.checked })}
                 />
-                Required
+                {t("forms.builder.required")}
               </label>
               <div className="flex gap-1">
                 <Button
@@ -211,7 +213,7 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
                   variant="ghost"
                   disabled={index === 0}
                   onClick={() => move(index, -1)}
-                  aria-label={`Move question ${index + 1} up`}
+                  aria-label={t("forms.builder.moveUp", { n: index + 1 })}
                 >
                   <ArrowUp className="size-4" aria-hidden />
                 </Button>
@@ -221,7 +223,7 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
                   variant="ghost"
                   disabled={index === fields.length - 1}
                   onClick={() => move(index, 1)}
-                  aria-label={`Move question ${index + 1} down`}
+                  aria-label={t("forms.builder.moveDown", { n: index + 1 })}
                 >
                   <ArrowDown className="size-4" aria-hidden />
                 </Button>
@@ -231,7 +233,7 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
                   variant="ghost"
                   disabled={fields.length === 1}
                   onClick={() => setFields((all) => all.filter((f) => f.id !== field.id))}
-                  aria-label={`Remove question ${index + 1}`}
+                  aria-label={t("forms.builder.remove", { n: index + 1 })}
                 >
                   <Trash2 className="size-4" aria-hidden />
                 </Button>
@@ -246,7 +248,7 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
           onClick={() => setFields((all) => [...all, blankField()])}
         >
           <Plus className="size-4" aria-hidden />
-          Add question
+          {t("forms.builder.addQuestion")}
         </Button>
       </section>
 
@@ -257,10 +259,10 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
       ) : null}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={() => router.back()}>
-          Cancel
+          {t("forms.builder.cancel")}
         </Button>
         <Button type="submit" loading={saving}>
-          Save draft
+          {t("forms.builder.saveDraft")}
         </Button>
       </div>
     </form>

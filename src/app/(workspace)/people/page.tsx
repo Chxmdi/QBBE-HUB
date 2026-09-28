@@ -8,19 +8,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { PersonDeepLink } from "@/features/admin/components/person-deep-link";
+import { getT } from "@/lib/i18n/server";
 import type { Membership, OrgRole } from "@/types/entities";
 
-export const metadata: Metadata = { title: "People" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("people.title") };
+}
 export const dynamic = "force-dynamic";
-
-const ROLE_LABELS: Record<OrgRole, string> = {
-  owner: "Primary Owner",
-  admin: "Workspace Admin",
-  leadership_viewer: "Leadership Viewer",
-  staff: "Staff",
-  volunteer: "Volunteer",
-  guest: "Guest",
-};
 
 const ROLE_TONES: Record<OrgRole, "brand" | "accent" | "info" | "neutral"> = {
   owner: "brand",
@@ -39,6 +33,7 @@ export default async function PeoplePage({
   const session = await requireSession();
   const params = await searchParams;
   const supabase = await createSupabasePageClient();
+  const t = await getT();
 
   const [{ data: members }, openTasks, { data: teams }, { data: teamMembers }] = await Promise.all([
     supabase
@@ -78,30 +73,30 @@ export default async function PeoplePage({
   const inactive = memberList.filter((m) => m.status !== "active");
 
   const workload = new Map<string, number>();
-  for (const t of openTasks) {
-    workload.set(t.assignee_id, (workload.get(t.assignee_id) ?? 0) + 1);
+  for (const task of openTasks) {
+    workload.set(task.assignee_id, (workload.get(task.assignee_id) ?? 0) + 1);
   }
 
   return (
     <div>
       <PageHeader
-        eyebrow="Directory"
-        title="People"
-        description="Internal users, roles, and current workload context."
+        eyebrow={t("people.eyebrow")}
+        title={t("people.title")}
+        description={t("people.description")}
         actions={
           session.isAdmin ? (
             <Link
               href="/people/overview"
               className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-semibold hover:bg-surface-soft"
             >
-              Team overview
+              {t("people.teamOverviewLink")}
             </Link>
           ) : null
         }
       />
       <PersonDeepLink personId={highlighted} />
       {teamList.length > 0 ? (
-        <nav aria-label="Filter by team" className="mb-4 flex flex-wrap gap-1.5">
+        <nav aria-label={t("people.filterByTeam")} className="mb-4 flex flex-wrap gap-1.5">
           <a
             href="/people"
             className={
@@ -110,7 +105,7 @@ export default async function PeoplePage({
                 : "rounded-full border border-line bg-surface px-3 py-1 text-[13px] font-medium text-muted"
             }
           >
-            All
+            {t("people.all")}
           </a>
           {teamList.map((team) => (
             <a
@@ -131,8 +126,8 @@ export default async function PeoplePage({
       {active.length === 0 ? (
         <EmptyState
           icon={<Users />}
-          title="No members yet"
-          description="Invite teammates from the Admin page — they'll appear here with role and workload."
+          title={t("people.emptyTitle")}
+          description={t("people.emptyDescription")}
         />
       ) : (
         <div className="card overflow-hidden">
@@ -140,14 +135,14 @@ export default async function PeoplePage({
             <table className="w-full text-left text-[13.5px]">
               <thead>
                 <tr className="border-b border-line bg-surface-soft/60">
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Person</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Role</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("people.columns.person")}</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("people.columns.role")}</th>
                   {session.isStaff ? (
                     <th scope="col" className="px-4 py-2.5 font-semibold">
-                      Open tasks
+                      {t("people.columns.openTasks")}
                     </th>
                   ) : null}
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Email</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("people.columns.email")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -170,7 +165,7 @@ export default async function PeoplePage({
                             <span className="block font-medium">
                               {profile.full_name}
                               {member.user_id === session.userId ? (
-                                <span className="meta ml-1.5">(you)</span>
+                                <span className="meta ml-1.5">{t("people.you")}</span>
                               ) : null}
                             </span>
                             {profile.title ? (
@@ -181,7 +176,7 @@ export default async function PeoplePage({
                       </td>
                       <td className="px-4 py-3">
                         <Badge tone={ROLE_TONES[member.role]}>
-                          {ROLE_LABELS[member.role]}
+                          {t(`people.roles.${member.role}`)}
                         </Badge>
                       </td>
                       {session.isStaff ? (
@@ -201,8 +196,9 @@ export default async function PeoplePage({
 
       {inactive.length > 0 && session.isAdmin ? (
         <p className="meta mt-3">
-          {inactive.length} deactivated or invited member
-          {inactive.length === 1 ? "" : "s"} — manage them in Admin.
+          {t(inactive.length === 1 ? "people.inactiveOne" : "people.inactiveOther", {
+            count: inactive.length,
+          })}
         </p>
       ) : null}
     </div>

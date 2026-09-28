@@ -4,12 +4,18 @@ import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { AdminNav } from "@/features/admin/components/admin-nav";
 import { PolicyEditor } from "@/features/retention/components/policy-editor";
-import { ACTION_LABELS, describeDuration } from "@/features/retention/schemas";
+import {
+  actionLabel,
+  describeDuration as describeDays,
+  localizeSubject,
+} from "@/features/retention/schemas";
 import { getRetentionOverview } from "@/features/retention/services/retention.queries";
 import { requireAdminAal2 } from "@/lib/auth";
-import { formatDateTime, relativeTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Retention" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("retention.title") };
+}
 export const dynamic = "force-dynamic";
 
 /**
@@ -25,18 +31,24 @@ export default async function AdminRetentionPage() {
   const session = await requireAdminAal2();
   const now = new Date();
   const { subjects, runs } = await getRetentionOverview(session.organizationId, now);
+  const t = await getT();
+  const format = await getFormatters();
+  const describeDuration = (days: number) =>
+    describeDays(days, t, (value) => format.number(value));
 
   return (
     <div>
       <AdminNav />
       <PageHeader
-        eyebrow="Administration"
-        title="Retention"
-        description="How long each kind of record is kept. Policies are off until you switch them on, and each one shows what it would remove before it removes anything."
+        eyebrow={t("retention.eyebrow")}
+        title={t("retention.title")}
+        description={t("retention.description")}
       />
 
       <ul className="space-y-3">
-        {subjects.map(({ subject, policy, wouldAffect }) => (
+        {subjects.map(({ subject: stored, policy, wouldAffect }) => {
+          const subject = localizeSubject(stored, t);
+          return (
           <li key={subject.key} className="card px-4 py-3">
             <div className="flex flex-wrap items-start gap-2">
               <span className="min-w-0 flex-1 text-[13.5px] font-medium">
@@ -44,22 +56,28 @@ export default async function AdminRetentionPage() {
               </span>
               {policy?.enabled ? (
                 <Badge tone="success">
-                  {describeDuration(policy.retain_days)}, then{" "}
-                  {policy.action === "delete" ? "deleted" : "redacted"}
+                  {t("retention.enabledBadge", {
+                    duration: describeDuration(policy.retain_days),
+                    outcome: t(
+                      policy.action === "delete"
+                        ? "retention.outcomeDeleted"
+                        : "retention.outcomeRedacted",
+                    ),
+                  })}
                 </Badge>
               ) : policy ? (
-                <Badge tone="neutral">Set but not switched on</Badge>
+                <Badge tone="neutral">{t("retention.setNotOn")}</Badge>
               ) : (
-                <Badge tone="neutral">Kept indefinitely</Badge>
+                <Badge tone="neutral">{t("retention.keptIndefinitely")}</Badge>
               )}
             </div>
 
             <p className="meta mt-0.5">{subject.description}</p>
 
             <p className="meta">
-              Floor: {describeDuration(subject.minimum_days)}
+              {t("retention.floor", { duration: describeDuration(subject.minimum_days) })}
               {" · "}
-              {subject.allowed_actions.map((a) => ACTION_LABELS[a]).join(" or ")}
+              {subject.allowed_actions.map((a) => actionLabel(a, t)).join(t("retention.or"))}
             </p>
 
             {subject.caution ? (
@@ -75,20 +93,21 @@ export default async function AdminRetentionPage() {
                 }
               >
                 {wouldAffect > 0
-                  ? `${wouldAffect.toLocaleString()} records are already older than ${describeDuration(
-                      policy?.retain_days ?? subject.default_days,
-                    )}.`
-                  : `Nothing is older than ${describeDuration(
-                      policy?.retain_days ?? subject.default_days,
-                    )} yet.`}
+                  ? t("retention.wouldAffect", {
+                      count: format.number(wouldAffect),
+                      duration: describeDuration(policy?.retain_days ?? subject.default_days),
+                    })
+                  : t("retention.nothingOlder", {
+                      duration: describeDuration(policy?.retain_days ?? subject.default_days),
+                    })}
               </p>
             ) : null}
 
             {policy?.last_run_at ? (
               <p className="meta">
-                Last run {relativeTime(policy.last_run_at)}
+                {t("retention.lastRun", { when: format.relative(policy.last_run_at) })}
                 {policy.last_affected !== null
-                  ? `, ${policy.last_affected} affected`
+                  ? t("retention.lastAffected", { count: format.number(policy.last_affected) })
                   : ""}
                 .
               </p>
@@ -104,18 +123,17 @@ export default async function AdminRetentionPage() {
               wouldAffect={wouldAffect}
             />
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       <section aria-labelledby="retention-runs" className="mt-8">
         <h2 id="retention-runs" className="section-heading mb-3">
-          What has been removed
+          {t("retention.runsHeading")}
         </h2>
         {runs.length === 0 ? (
           <p className="card px-4 py-6 text-center text-[13px] text-muted">
-            Nothing yet. Every pass is recorded here, including the ones that
-            removed nothing — deletion without a record of it is
-            indistinguishable from data loss.
+            {t("retention.runsEmpty")}
           </p>
         ) : (
           <ul className="card divide-y divide-line">
@@ -124,13 +142,21 @@ export default async function AdminRetentionPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{run.subject_key}</span>
                   <Badge tone={run.error ? "danger" : "neutral"}>
-                    {run.error ? "Failed" : `${run.affected} affected`}
+                    {run.error
+                      ? t("retention.runFailed")
+                      : t("retention.runAffected", { count: format.number(run.affected) })}
                   </Badge>
-                  <span className="meta ml-auto">{relativeTime(run.ran_at)}</span>
+                  <span className="meta ml-auto">{format.relative(run.ran_at)}</span>
                 </div>
                 <p className="meta">
-                  Everything before {formatDateTime(run.cutoff)}, by{" "}
-                  {run.action === "delete" ? "deletion" : "redaction"}.
+                  {t("retention.runCutoff", {
+                    date: format.dateTime(run.cutoff),
+                    method: t(
+                      run.action === "delete"
+                        ? "retention.methodDeletion"
+                        : "retention.methodRedaction",
+                    ),
+                  })}
                 </p>
                 {run.error ? (
                   <p className="text-[12.5px] text-danger-fg">{run.error}</p>
@@ -144,10 +170,7 @@ export default async function AdminRetentionPage() {
       <p className="meta mt-6 flex max-w-2xl items-start gap-2">
         <ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
         <span>
-          Only the record types listed above can be governed at all. Adding
-          another is a schema change, deliberately — a retention system that can
-          be pointed at any table is a compliance hole waiting for a
-          well-meaning administrator.
+          {t("retention.footer")}
         </span>
       </p>
     </div>

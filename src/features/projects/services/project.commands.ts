@@ -10,6 +10,8 @@ import { parseLabelledLinks } from "@/lib/links";
 import { slugify } from "@/lib/utils";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
+import { getT } from "@/lib/i18n/server";
+import { localizeIssue, recipientTranslators } from "@/features/projects/i18n";
 
 const createProjectSchema = z.object({
   name: requiredText("A project needs a name.", 200),
@@ -45,10 +47,11 @@ const createProjectSchema = z.object({
 });
 
 export async function createProject(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = createProjectSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "projects.errors.invalidInput") };
   }
   const {
     name, outcome, programId, ownerId, sponsorId, startDate, targetDate, stage,
@@ -58,10 +61,10 @@ export async function createProject(input: unknown): Promise<ActionResult> {
   const supabase = await createSupabaseServerClient();
   if (programId) {
     if (!(await hasProgramCapability(supabase, programId, "manage"))) {
-      return { ok: false, error: "You cannot create a project in this program." };
+      return { ok: false, error: t("projects.errors.cannotCreateInProgram") };
     }
   } else if (!session.isAdmin) {
-    return { ok: false, error: "Independent projects can only be created by an administrator." };
+    return { ok: false, error: t("projects.errors.independentAdminOnly") };
   }
   const projectId = crypto.randomUUID();
   const { error } = await supabase
@@ -85,7 +88,7 @@ export async function createProject(input: unknown): Promise<ActionResult> {
       created_by: session.userId,
     });
 
-  if (error) return { ok: false, error: "Could not create the project." };
+  if (error) return { ok: false, error: t("projects.errors.createFailed") };
 
   await supabase.from("project_membership").insert({
     project_id: projectId,
@@ -102,7 +105,7 @@ export async function createProject(input: unknown): Promise<ActionResult> {
       slug: channelSlug,
       type: "project",
       privacy: "public",
-      purpose: `Project conversation for ${name}.`,
+      purpose: t("projects.projectChannelPurpose", { name }),
       project_id: projectId,
       program_id: programId ?? null,
       owner_id: ownerId ?? session.userId,
@@ -148,10 +151,11 @@ const statusUpdateSchema = z.object({
  * discipline: at-risk/off-track requires a reason (P0-PRJ-04).
  */
 export async function publishStatusUpdate(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = statusUpdateSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "projects.errors.invalidInput") };
   }
   const data = parsed.data;
 
@@ -162,7 +166,7 @@ export async function publishStatusUpdate(input: unknown): Promise<ActionResult>
   ) {
     return {
       ok: false,
-      error: "Marking a project at risk or off track requires a reason.",
+      error: t("projects.errors.reasonRequired"),
     };
   }
 
@@ -178,7 +182,7 @@ export async function publishStatusUpdate(input: unknown): Promise<ActionResult>
     decisions_needed: data.decisionsNeeded || null,
     help_requested: data.helpRequested || null,
   });
-  if (updateError) return { ok: false, error: "Could not publish the update." };
+  if (updateError) return { ok: false, error: t("projects.errors.publishFailed") };
 
   const { data: project } = await supabase
     .from("project")
@@ -235,17 +239,18 @@ const stageSchema = z.object({
 });
 
 export async function updateProjectStage(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = stageSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: t("projects.errors.invalidInput") };
   const { projectId, stage } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
   if (!(await hasProjectCapability(supabase, projectId, "manage"))) {
-    return { ok: false, error: "You cannot change this project's stage." };
+    return { ok: false, error: t("projects.errors.cannotChangeStage") };
   }
   if (stage === "completed") {
-    return { ok: false, error: "Use close project so unresolved work is recorded." };
+    return { ok: false, error: t("projects.errors.useClose") };
   }
   const { data: project, error } = await supabase
     .from("project")
@@ -258,7 +263,7 @@ export async function updateProjectStage(input: unknown): Promise<ActionResult> 
     .select("name, program_id")
     .maybeSingle();
 
-  if (error || !project) return { ok: false, error: "Could not update the stage." };
+  if (error || !project) return { ok: false, error: t("projects.errors.stageFailed") };
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,
@@ -379,10 +384,11 @@ const closeSchema = z.object({
  * nothing pointed at.
  */
 export async function closeProject(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = closeSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "projects.errors.invalidInput") };
   }
   const {
     projectId, results, lessons, evidenceLinks, evidenceDocumentIds,
@@ -391,13 +397,13 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
 
   const supabase = await createSupabaseServerClient();
   if (!(await hasProjectCapability(supabase, projectId, "manage"))) {
-    return { ok: false, error: "You cannot close this project." };
+    return { ok: false, error: t("projects.errors.cannotClose") };
   }
   const unresolved = await getUnresolvedWork(projectId);
   if (unresolved.openMilestones > 0 || unresolved.blockedTasks > 0) {
     return {
       ok: false,
-      error: "Close or reassign open milestones and blocked work before completing the project.",
+      error: t("projects.errors.closeBlocked"),
     };
   }
 
@@ -408,11 +414,11 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
       project_id: projectId,
       author_id: session.userId,
       health: "on_track",
-      progress_summary: `Project closed. Results: ${results}`,
-      next_steps: lessons ? `Lessons learned: ${lessons}` : null,
+      progress_summary: t("projects.closingUpdate", { results }),
+      next_steps: lessons ? t("projects.closingLessons", { lessons }) : null,
     });
   if (updateError) {
-    return { ok: false, error: "Could not record the closing update." };
+    return { ok: false, error: t("projects.errors.closingUpdateFailed") };
   }
 
   if (archiveOpenTasks) {
@@ -436,7 +442,7 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
     .select("name, program_id")
     .maybeSingle();
 
-  if (error || !project) return { ok: false, error: "Could not close the project." };
+  if (error || !project) return { ok: false, error: t("projects.errors.closeFailed") };
 
   // The closure record, and the evidence for it. Written after the stage move
   // so a failed close leaves no closure claiming a project that is still open.
@@ -462,8 +468,7 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
   if (closureError || !closure) {
     return {
       ok: false,
-      error:
-        "The project is closed, but its closure record could not be saved. Add the results again from the project page.",
+      error: t("projects.errors.closureRecordFailed"),
     };
   }
 
@@ -496,13 +501,16 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
   ].filter((userId) => userId !== session.userId);
 
   if (recipients.length > 0) {
+    const translatorFor = await recipientTranslators(supabase, recipients);
     await createNotifications(
       supabase,
       recipients.map((userId) => ({
         user_id: userId,
         organization_id: session.organizationId,
         category: "system",
-        title: `Closed: ${project.name}`,
+        title: translatorFor(userId)("projects.notifications.closed", {
+          name: project.name as string,
+        }),
         body: results.slice(0, 500),
         source_type: "project",
         source_id: projectId,
@@ -553,12 +561,13 @@ const createProgramSchema = z.object({
 });
 
 export async function createProgram(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
   const parsed = createProgramSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "projects.errors.invalidInput") };
   }
   const { name, description, leadId } = parsed.data;
   const slug = name
@@ -582,7 +591,7 @@ export async function createProgram(input: unknown): Promise<ActionResult> {
       created_by: session.userId,
     });
 
-  if (error) return { ok: false, error: "Could not create the program." };
+  if (error) return { ok: false, error: t("projects.errors.programCreateFailed") };
 
   const channelSlug = `program-${slug || programId.slice(0, 8)}`;
   const { data: channel } = await supabase
@@ -593,7 +602,7 @@ export async function createProgram(input: unknown): Promise<ActionResult> {
       slug: channelSlug,
       type: "program",
       privacy: "public",
-      purpose: `Program conversation for ${name}.`,
+      purpose: t("projects.programChannelPurpose", { name }),
       program_id: programId,
       owner_id: leadId ?? session.userId,
       created_by: session.userId,
@@ -633,17 +642,18 @@ const updateProjectSchema = z.object({
 // here would reopen exactly that hole.
 
 export async function updateProject(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = updateProjectSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "projects.errors.invalidInput") };
   }
   const db = await createSupabaseServerClient();
   const { projectId, name, outcome, description, programId, ownerId, sponsorId,
     startDate, targetDate, priority, reportingCadence, fundingSourceId } = parsed.data;
 
   if (!(await hasProjectCapability(db, projectId, "manage"))) {
-    return { ok: false, error: "You cannot edit this project." };
+    return { ok: false, error: t("projects.errors.cannotEdit") };
   }
 
   const { data: before } = await db
@@ -651,7 +661,7 @@ export async function updateProject(input: unknown): Promise<ActionResult> {
     .select("name, program_id, owner_id, stage")
     .eq("id", projectId)
     .maybeSingle();
-  if (!before) return { ok: false, error: "Project not found." };
+  if (!before) return { ok: false, error: t("projects.errors.notFound") };
 
   // Moving a project between programs moves who can reach it, because project
   // capability inherits from the program. Requiring `manage` on the destination
@@ -659,7 +669,7 @@ export async function updateProject(input: unknown): Promise<ActionResult> {
   const nextProgramId = programId ? programId : null;
   if (nextProgramId && nextProgramId !== before.program_id) {
     if (!(await hasProgramCapability(db, nextProgramId, "manage"))) {
-      return { ok: false, error: "You cannot move this project into that program." };
+      return { ok: false, error: t("projects.errors.cannotMove") };
     }
   }
   // Taking a project out of its program removes that inherited access from
@@ -667,7 +677,7 @@ export async function updateProject(input: unknown): Promise<ActionResult> {
   if (!nextProgramId && before.program_id && !session.isAdmin) {
     return {
       ok: false,
-      error: "Only an administrator can remove a project from its program.",
+      error: t("projects.errors.removeFromProgramAdminOnly"),
     };
   }
 
@@ -693,8 +703,8 @@ export async function updateProject(input: unknown): Promise<ActionResult> {
       ok: false,
       error:
         before.stage === "active"
-          ? "An active project needs a program, outcome and target date."
-          : "Could not save the project.",
+          ? t("projects.validation.activeNeeds")
+          : t("projects.errors.saveFailed"),
     };
   }
 

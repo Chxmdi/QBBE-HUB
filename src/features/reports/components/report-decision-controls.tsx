@@ -9,6 +9,7 @@ import {
   regenerateReport,
   rejectReport,
 } from "@/features/reports/services/report.commands";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Deciding, or rebuilding, the report on screen.
@@ -28,6 +29,7 @@ export function ReportDecisionControls({
   isApproved: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [rejecting, setRejecting] = React.useState(false);
@@ -38,7 +40,7 @@ export function ReportDecisionControls({
     const result = await action();
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "That didn't work. Try again.");
+      setError(result.error ?? t("reports.decision.failed"));
       return false;
     }
     router.refresh();
@@ -59,12 +61,12 @@ export function ReportDecisionControls({
         }}
       >
         <Label htmlFor="report-reject-note">
-          What needs to change before this can be signed off?
+          {t("reports.decision.rejectLabel")}
         </Label>
         <Textarea id="report-reject-note" name="note" rows={2} required />
         <div className="mt-2 flex items-center gap-2">
           <Button type="submit" size="sm" loading={busy} disabled={busy}>
-            Send back
+            {t("reports.decision.sendBack")}
           </Button>
           <Button
             type="button"
@@ -72,7 +74,7 @@ export function ReportDecisionControls({
             variant="ghost"
             onClick={() => setRejecting(false)}
           >
-            Cancel
+            {t("reports.decision.cancel")}
           </Button>
           {error ? (
             <span role="alert" className="text-[12.5px] text-danger-fg">
@@ -94,13 +96,13 @@ export function ReportDecisionControls({
           disabled={busy}
           onClick={() => {
             const warning = isApproved
-              ? "Rebuild this report from current data? It will get a new version and lose its approval."
-              : "Rebuild this report from current data? It will get a new version.";
+              ? t("reports.decision.confirmRegenerateApproved")
+              : t("reports.decision.confirmRegenerate");
             if (!window.confirm(warning)) return;
             void run(() => regenerateReport(reportId));
           }}
         >
-          Regenerate
+          {t("reports.decision.regenerate")}
         </Button>
 
         {canDecide && !isApproved ? (
@@ -111,19 +113,17 @@ export function ReportDecisionControls({
               disabled={busy}
               onClick={() => {
                 if (
-                  !window.confirm(
-                    "Approve this version? The approval is recorded against these exact figures, with your name and the time.",
-                  )
+                  !window.confirm(t("reports.decision.confirmApprove"))
                 ) {
                   return;
                 }
                 void run(() => approveReport(reportId));
               }}
             >
-              Approve
+              {t("reports.decision.approve")}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setRejecting(true)}>
-              Send back
+              {t("reports.decision.sendBack")}
             </Button>
           </>
         ) : null}

@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label, Select, Textarea, Input, FieldHint } from "@/components/ui/input";
 import { publishStatusUpdate } from "@/features/projects/services/project.commands";
+import { healthLabel } from "@/components/shared/status-badges";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Structured project status update (P0-PRJ-05). At-risk / off-track health
@@ -12,6 +14,7 @@ import { publishStatusUpdate } from "@/features/projects/services/project.comman
  */
 export function StatusUpdateForm({ projectId }: { projectId: string }) {
   const router = useRouter();
+  const t = useT();
   const [health, setHealth] = useState("on_track");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -36,7 +39,7 @@ export function StatusUpdateForm({ projectId }: { projectId: string }) {
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not publish the update.");
+      setError(result.error ?? t("projects.statusUpdate.error"));
       return;
     }
     setExpanded(false);
@@ -46,7 +49,7 @@ export function StatusUpdateForm({ projectId }: { projectId: string }) {
   if (!expanded) {
     return (
       <Button variant="secondary" onClick={() => setExpanded(true)}>
-        Publish status update
+        {t("projects.statusUpdate.open")}
       </Button>
     );
   }
@@ -55,51 +58,52 @@ export function StatusUpdateForm({ projectId }: { projectId: string }) {
     <form onSubmit={handleSubmit} className="card space-y-4 p-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <Label htmlFor="update-health">Health</Label>
+          <Label htmlFor="update-health">{t("projects.statusUpdate.health")}</Label>
           <Select
             id="update-health"
             value={health}
             onChange={(e) => setHealth(e.target.value)}
           >
-            <option value="on_track">On track</option>
-            <option value="at_risk">At risk</option>
-            <option value="off_track">Off track</option>
-            <option value="paused">Paused</option>
+            {(["on_track", "at_risk", "off_track", "paused"] as const).map((value) => (
+              <option key={value} value={value}>
+                {healthLabel(value, t)}
+              </option>
+            ))}
           </Select>
         </div>
         {needsReason ? (
           <div>
-            <Label htmlFor="update-reason">Reason (required)</Label>
+            <Label htmlFor="update-reason">{t("projects.statusUpdate.reason")}</Label>
             <Input
               id="update-reason"
               name="healthReason"
               required
               maxLength={1000}
-              placeholder="Why is this project at risk?"
+              placeholder={t("projects.statusUpdate.reasonPlaceholder")}
             />
           </div>
         ) : null}
       </div>
       <div>
-        <Label htmlFor="update-progress">Progress</Label>
+        <Label htmlFor="update-progress">{t("projects.statusUpdate.progress")}</Label>
         <Textarea id="update-progress" name="progressSummary" required maxLength={5000} />
-        <FieldHint>What moved since the last update?</FieldHint>
+        <FieldHint>{t("projects.statusUpdate.progressHint")}</FieldHint>
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <Label htmlFor="update-next">Next steps</Label>
+          <Label htmlFor="update-next">{t("projects.statusUpdate.nextSteps")}</Label>
           <Textarea id="update-next" name="nextSteps" maxLength={5000} />
         </div>
         <div>
-          <Label htmlFor="update-blockers">Blockers</Label>
+          <Label htmlFor="update-blockers">{t("projects.statusUpdate.blockers")}</Label>
           <Textarea id="update-blockers" name="blockers" maxLength={5000} />
         </div>
         <div>
-          <Label htmlFor="update-decisions">Decisions needed</Label>
+          <Label htmlFor="update-decisions">{t("projects.statusUpdate.decisionsNeeded")}</Label>
           <Textarea id="update-decisions" name="decisionsNeeded" maxLength={5000} />
         </div>
         <div>
-          <Label htmlFor="update-help">Help requested</Label>
+          <Label htmlFor="update-help">{t("projects.statusUpdate.helpRequested")}</Label>
           <Textarea id="update-help" name="helpRequested" maxLength={5000} />
         </div>
       </div>
@@ -110,10 +114,10 @@ export function StatusUpdateForm({ projectId }: { projectId: string }) {
       ) : null}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" onClick={() => setExpanded(false)}>
-          Cancel
+          {t("projects.statusUpdate.cancel")}
         </Button>
         <Button type="submit" loading={saving}>
-          Publish update
+          {t("projects.statusUpdate.submit")}
         </Button>
       </div>
     </form>

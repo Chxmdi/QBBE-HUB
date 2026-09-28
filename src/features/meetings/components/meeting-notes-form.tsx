@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { saveMeetingNotes } from "@/features/meetings/services/meeting.commands";
+import { useT } from "@/lib/i18n/client";
 
 export function MeetingNotesForm({
   meetingId,
@@ -12,6 +13,7 @@ export function MeetingNotesForm({
   meetingId: string;
   initialNotes: string | null;
 }) {
+  const t = useT();
   const [notes, setNotes] = useState(initialNotes ?? "");
   const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
@@ -27,23 +29,23 @@ export function MeetingNotesForm({
       <Textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        placeholder="Capture discussion notes in context…"
+        placeholder={t("meetings.notesForm.placeholder")}
         rows={5}
-        aria-label="Meeting notes"
+        aria-label={t("meetings.notesForm.label")}
         maxLength={20000}
       />
       <div className="flex items-center justify-end gap-3">
         {state === "saved" ? (
           <span role="status" className="text-[12.5px] text-success-fg">
-            Saved
+            {t("meetings.notesForm.saved")}
           </span>
         ) : state === "error" ? (
           <span role="alert" className="text-[12.5px] text-danger-fg">
-            Could not save — try again
+            {t("meetings.notesForm.error")}
           </span>
         ) : null}
         <Button variant="secondary" size="sm" onClick={handleSave} loading={state === "saving"}>
-          Save notes
+          {t("meetings.notesForm.save")}
         </Button>
       </div>
     </div>

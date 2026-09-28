@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { X } from "lucide-react";
 import { deleteSavedView } from "@/features/admin/services/workflow.commands";
+import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 interface View {
@@ -33,13 +34,14 @@ function sameQuery(view: View, current: URLSearchParams): boolean {
  * filters through the URL, and can be removed.
  */
 export function SavedViews({ views }: { views: View[] }) {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   if (views.length === 0) return null;
 
   return (
-    <nav aria-label="Saved views" className="mb-4">
+    <nav aria-label={t("tasks.savedViews.nav")} className="mb-4">
       <ul className="flex flex-wrap items-center gap-2">
         {views.map((view) => {
           const current = sameQuery(view, searchParams);
@@ -60,12 +62,12 @@ export function SavedViews({ views }: { views: View[] }) {
               </Link>
               <button
                 type="button"
-                aria-label={`Delete saved view ${view.name}`}
+                aria-label={t("tasks.savedViews.delete", { name: view.name })}
                 onClick={async () => {
                   setError(null);
                   const result = await deleteSavedView(view.id, view.path);
                   if (!result.ok) {
-                    setError(result.error ?? "Could not delete the view.");
+                    setError(result.error ?? t("tasks.savedViews.deleteFailed"));
                     return;
                   }
                   router.refresh();

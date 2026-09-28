@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * The risk and issue log.
@@ -58,6 +59,39 @@ export const RISK_BAND_LABELS: Record<RiskBand, string> = {
   high: "High",
   severe: "Severe",
 };
+
+/** A risk band in the reader's language (#141). */
+export function riskBandLabel(band: RiskBand, t: TranslateFn): string {
+  return t(`risks.bands.${band}`);
+}
+
+/** A risk's status as a person reads it, lower case like the stored code. */
+export function riskStatusLabel(status: RiskStatus, t: TranslateFn): string {
+  return t(`risks.riskStatus.${status}`);
+}
+
+/** An issue's status as a person reads it, lower case like the stored code. */
+export function issueStatusLabel(status: IssueStatus, t: TranslateFn): string {
+  return t(`risks.issueStatus.${status}`);
+}
+
+/** An issue's severity as a person reads it, lower case like the stored code. */
+export function issueSeverityLabel(severity: IssueSeverity, t: TranslateFn): string {
+  return t(`risks.severity.${severity}`);
+}
+
+/**
+ * A likelihood, impact or severity level as a capitalised choice in a form.
+ * French agrees the adjective with the noun it qualifies (« probabilité » and
+ * « gravité » are feminine, « impact » masculine), hence the kind.
+ */
+export function riskLevelLabel(
+  level: RiskLikelihood | RiskImpact | IssueSeverity,
+  kind: "likelihood" | "impact" | "severity",
+  t: TranslateFn,
+): string {
+  return kind === "impact" ? t(`risks.levels.${level}`) : t(`risks.levelsFeminine.${level}`);
+}
 
 /** A risk needing review, by its own review date. */
 export function riskNeedsReview(

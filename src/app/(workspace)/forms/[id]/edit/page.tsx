@@ -7,8 +7,11 @@ import { FormBuilder } from "@/features/forms/components/form-builder";
 import type { FormField } from "@/features/forms/fields";
 import { requireAdminAal2 } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Edit form" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("forms.edit.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function EditFormPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,17 +26,18 @@ export default async function EditFormPage({ params }: { params: Promise<{ id: s
     .maybeSingle();
   if (!form) notFound();
   if (form.status !== "draft") redirect(`/forms/${id}`);
+  const t = await getT();
 
   return (
     <div>
       <Breadcrumbs
         items={[
-          { label: "Forms", href: "/forms" },
+          { label: t("forms.title"), href: "/forms" },
           { label: form.title, href: `/forms/${id}` },
-          { label: "Edit" },
+          { label: t("forms.edit.crumb") },
         ]}
       />
-      <PageHeader eyebrow="Forms" title="Edit draft" />
+      <PageHeader eyebrow={t("forms.title")} title={t("forms.edit.title")} />
       <FormBuilder
         initial={{
           id,

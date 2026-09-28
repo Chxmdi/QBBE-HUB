@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Pure helpers for the document library (#147): folder categories, tag
@@ -24,22 +25,30 @@ export interface LibraryFolder {
   visibility: "organization" | "staff";
 }
 
-export function categoryLabel(category: string): string {
-  return FOLDER_CATEGORIES.find((c) => c.id === category)?.label ?? "Other";
+const english = createTranslator("en");
+
+/** A category's name in the reader's language (English when `t` is left out). */
+export function categoryLabel(category: string, t: TranslateFn = english): string {
+  const known = FOLDER_CATEGORIES.find((c) => c.id === category)?.id ?? "other";
+  return t(`documents.categories.${known}`);
 }
 
-/** "Governance / Bylaws". */
-export function folderLabel(folder: Pick<LibraryFolder, "category" | "name">): string {
-  return `${categoryLabel(folder.category)} / ${folder.name}`;
+/** "Governance / Bylaws". The folder's own name is data and stays as typed. */
+export function folderLabel(
+  folder: Pick<LibraryFolder, "category" | "name">,
+  t: TranslateFn = english,
+): string {
+  return t("documents.folderPath", { category: categoryLabel(folder.category, t), name: folder.name });
 }
 
 /** Folders grouped by category, in the category order above, for a <select>. */
 export function groupFolders<T extends Pick<LibraryFolder, "category" | "name">>(
   folders: T[],
+  t: TranslateFn = english,
 ): { category: string; label: string; folders: T[] }[] {
   return FOLDER_CATEGORIES.map((c) => ({
     category: c.id as string,
-    label: c.label as string,
+    label: categoryLabel(c.id, t),
     folders: folders
       .filter((f) => f.category === c.id)
       .sort((a, b) => a.name.localeCompare(b.name)),
@@ -72,14 +81,22 @@ export function likePattern(query: string): string {
   return `%${escaped}%`;
 }
 
-/** Tags as typed (comma-separated) or as a list, validated after parsing. */
-export const tagsSchema = z
-  .union([z.string(), z.array(z.string())])
-  .optional()
-  .transform((value) => parseTags(value))
-  .refine((tags) => tags.length <= MAX_TAGS, `Use at most ${MAX_TAGS} tags.`)
-  .refine(
-    (tags) => tags.every((tag) => tag.length <= MAX_TAG_LENGTH),
-    `Each tag can be at most ${MAX_TAG_LENGTH} characters.`,
-  );
+/**
+ * Tags as typed (comma-separated) or as a list, validated after parsing. The
+ * messages are in the language `t` speaks, so server actions build it per call.
+ */
+export function tagsSchemaFor(t: TranslateFn) {
+  return z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .transform((value) => parseTags(value))
+    .refine((tags) => tags.length <= MAX_TAGS, t("documents.tagsTooMany", { max: MAX_TAGS }))
+    .refine(
+      (tags) => tags.every((tag) => tag.length <= MAX_TAG_LENGTH),
+      t("documents.tagTooLong", { max: MAX_TAG_LENGTH }),
+    );
+}
+
+/** The English tags schema, for callers outside a request. */
+export const tagsSchema = tagsSchemaFor(english);
 

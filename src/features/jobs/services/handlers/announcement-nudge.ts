@@ -1,4 +1,6 @@
+import { recipientLocales, translators } from "../i18n";
 import { createNotifications, type NotificationDraft } from "../notify";
+import { formattersFor } from "@/lib/i18n/format";
 import type { JobContext, JobResult } from "../runner";
 
 /**
@@ -53,6 +55,7 @@ export async function announcementNudge({
   const today = nowIso.slice(0, 10);
 
   let nudged = 0;
+  const translatorFor = translators();
 
   for (const announcement of announcements) {
     const { data: ackRows } = await db
@@ -74,22 +77,37 @@ export async function announcementNudge({
 
     if (outstanding.length === 0) continue;
 
-    const drafts: NotificationDraft[] = outstanding.map((member) => ({
-      user_id: member.user_id,
-      organization_id: announcement.organization_id,
-      category: "announcement",
-      title: `Still needs your acknowledgement: ${announcement.title}`,
-      body: announcement.ack_deadline
-        ? `Acknowledge by ${new Date(announcement.ack_deadline).toDateString()}.`
-        : "Open the announcement and acknowledge it.",
-      source_type: "announcement",
-      source_id: announcement.id,
-      link: "/announcements",
-      // High urgency puts this past the opt-out switches: a required
-      // acknowledgement is not routine mail (NTF-003).
-      urgency: "high",
-      dedupe_key: `ack-nudge:${announcement.id}:${member.user_id}:${today}`,
-    }));
+    // Each person reads the nudge in their own saved language.
+    const locales = await recipientLocales(
+      db,
+      outstanding.map((member) => member.user_id),
+    );
+    const drafts: NotificationDraft[] = outstanding.map((member) => {
+      const locale = locales.get(member.user_id) ?? "en";
+      const t = translatorFor(locale);
+      const deadline = announcement.ack_deadline
+        ? locale === "en"
+          ? // English keeps the wording it has always had.
+            new Date(announcement.ack_deadline).toDateString()
+          : formattersFor(locale).date(announcement.ack_deadline)
+        : null;
+      return {
+        user_id: member.user_id,
+        organization_id: announcement.organization_id,
+        category: "announcement",
+        title: t("jobs.notify.ackTitle", { title: announcement.title }),
+        body: deadline
+          ? t("jobs.notify.ackBy", { date: deadline })
+          : t("jobs.notify.ackOpen"),
+        source_type: "announcement",
+        source_id: announcement.id,
+        link: "/announcements",
+        // High urgency puts this past the opt-out switches: a required
+        // acknowledgement is not routine mail (NTF-003).
+        urgency: "high",
+        dedupe_key: `ack-nudge:${announcement.id}:${member.user_id}:${today}`,
+      };
+    });
 
     nudged += await createNotifications(db, drafts);
   }

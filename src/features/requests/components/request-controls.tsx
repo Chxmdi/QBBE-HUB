@@ -7,9 +7,11 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import {
   EXPLAINED_REQUEST_STATUSES,
   PROJECT_REQUEST_STATUSES,
-  REQUEST_STATUS_LABELS,
+  REQUEST_STATUS_KEYS,
   type ProjectRequestStatus,
 } from "@/features/requests/schemas";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/translate";
 import {
   decideApproval,
   decideProjectRequest,
@@ -18,6 +20,7 @@ import {
 
 function useRowAction() {
   const router = useRouter();
+  const t = useT();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -27,7 +30,7 @@ function useRowAction() {
     const result = await action();
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "That didn't work. Try again.");
+      setError(result.error ?? t("requests.errors.generic"));
       return false;
     }
     router.refresh();
@@ -45,18 +48,18 @@ function useRowAction() {
  * answer. A returned request in particular is useless without a specific
  * question: the requester cannot guess what was missing.
  */
-const NOTE_PROMPT: Partial<Record<ProjectRequestStatus, string>> = {
-  declined: "Why not? The next person to propose this needs to know.",
-  withdrawn: "Why is it being withdrawn?",
-  deferred: "Until when, and what would have to change?",
-  returned: "What is missing? Ask for one specific thing.",
+const NOTE_PROMPT: Partial<Record<ProjectRequestStatus, MessageKey>> = {
+  declined: "requests.controls.notePrompts.declined",
+  withdrawn: "requests.controls.notePrompts.withdrawn",
+  deferred: "requests.controls.notePrompts.deferred",
+  returned: "requests.controls.notePrompts.returned",
 };
 
-const SUBMIT_LABEL: Partial<Record<ProjectRequestStatus, string>> = {
-  approved: "Approve and open the project",
-  declined: "Decline",
-  deferred: "Defer",
-  returned: "Return for clarification",
+const SUBMIT_LABEL: Partial<Record<ProjectRequestStatus, MessageKey>> = {
+  approved: "requests.controls.submitLabels.approved",
+  declined: "requests.controls.submitLabels.declined",
+  deferred: "requests.controls.submitLabels.deferred",
+  returned: "requests.controls.submitLabels.returned",
 };
 
 /**
@@ -78,6 +81,7 @@ export function RequestDecision({
   title: string;
   status: ProjectRequestStatus;
 }) {
+  const t = useT();
   const { busy, error, run } = useRowAction();
   const [open, setOpen] = React.useState(false);
   const [next, setNext] = React.useState<ProjectRequestStatus>(status);
@@ -89,7 +93,7 @@ export function RequestDecision({
     return (
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-          Decide
+          {t("requests.controls.decide")}
         </Button>
         {error ? <span className="text-[12.5px] text-danger-fg">{error}</span> : null}
       </div>
@@ -114,7 +118,7 @@ export function RequestDecision({
       }}
     >
       <div>
-        <Label htmlFor={`request-status-${requestId}`}>Decision</Label>
+        <Label htmlFor={`request-status-${requestId}`}>{t("requests.controls.decision")}</Label>
         <Select
           id={`request-status-${requestId}`}
           value={next}
@@ -125,7 +129,7 @@ export function RequestDecision({
           {PROJECT_REQUEST_STATUSES.filter((value) => value !== "withdrawn").map(
             (value) => (
               <option key={value} value={value}>
-                {REQUEST_STATUS_LABELS[value]}
+                {t(REQUEST_STATUS_KEYS[value])}
               </option>
             ),
           )}
@@ -134,7 +138,7 @@ export function RequestDecision({
 
       {approving ? (
         <div>
-          <Label htmlFor={`project-name-${requestId}`}>Project name</Label>
+          <Label htmlFor={`project-name-${requestId}`}>{t("requests.controls.projectName")}</Label>
           <Input
             id={`project-name-${requestId}`}
             name="projectName"
@@ -146,7 +150,7 @@ export function RequestDecision({
 
       <div className="sm:col-span-2">
         <Label htmlFor={`request-note-${requestId}`}>
-          {NOTE_PROMPT[next] ?? "Note"}
+          {NOTE_PROMPT[next] ? t(NOTE_PROMPT[next]) : t("requests.controls.note")}
         </Label>
         <Textarea
           id={`request-note-${requestId}`}
@@ -158,7 +162,7 @@ export function RequestDecision({
 
       <div className="flex items-center gap-2 sm:col-span-2">
         <Button type="submit" size="sm" loading={busy} disabled={busy}>
-          {SUBMIT_LABEL[next] ?? "Save"}
+          {SUBMIT_LABEL[next] ? t(SUBMIT_LABEL[next]) : t("requests.controls.save")}
         </Button>
         <Button
           type="button"
@@ -169,7 +173,7 @@ export function RequestDecision({
             setNext(status);
           }}
         >
-          Cancel
+          {t("requests.controls.cancel")}
         </Button>
         {error ? (
           <span role="alert" className="text-[12.5px] text-danger-fg">
@@ -202,6 +206,7 @@ export function RequestClarification({
   beneficiaries: string | null;
   question: string | null;
 }) {
+  const t = useT();
   const { busy, error, run } = useRowAction();
   const [open, setOpen] = React.useState(false);
 
@@ -209,7 +214,7 @@ export function RequestClarification({
     return (
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={() => setOpen(true)}>
-          Answer and resubmit
+          {t("requests.controls.answerResubmit")}
         </Button>
         {error ? <span className="text-[12.5px] text-danger-fg">{error}</span> : null}
       </div>
@@ -235,13 +240,13 @@ export function RequestClarification({
     >
       {question ? (
         <p className="text-[13px] text-muted">
-          <span className="font-medium text-fg">You were asked: </span>
+          <span className="font-medium text-fg">{t("requests.controls.youWereAsked")} </span>
           {question}
         </p>
       ) : null}
 
       <div>
-        <Label htmlFor={`clarify-summary-${requestId}`}>What would it involve</Label>
+        <Label htmlFor={`clarify-summary-${requestId}`}>{t("requests.fields.summary")}</Label>
         <Textarea
           id={`clarify-summary-${requestId}`}
           name="summary"
@@ -251,7 +256,7 @@ export function RequestClarification({
         />
       </div>
       <div>
-        <Label htmlFor={`clarify-rationale-${requestId}`}>Why now</Label>
+        <Label htmlFor={`clarify-rationale-${requestId}`}>{t("requests.fields.rationale")}</Label>
         <Textarea
           id={`clarify-rationale-${requestId}`}
           name="rationale"
@@ -260,7 +265,7 @@ export function RequestClarification({
         />
       </div>
       <div>
-        <Label htmlFor={`clarify-beneficiaries-${requestId}`}>Who it serves</Label>
+        <Label htmlFor={`clarify-beneficiaries-${requestId}`}>{t("requests.fields.beneficiaries")}</Label>
         <Textarea
           id={`clarify-beneficiaries-${requestId}`}
           name="beneficiaries"
@@ -271,10 +276,10 @@ export function RequestClarification({
 
       <div className="flex items-center gap-2">
         <Button type="submit" size="sm" loading={busy} disabled={busy}>
-          Resubmit
+          {t("requests.controls.resubmit")}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
+          {t("requests.controls.cancel")}
         </Button>
         {error ? (
           <span role="alert" className="text-[12.5px] text-danger-fg">
@@ -288,6 +293,7 @@ export function RequestClarification({
 
 /** Answering an approval addressed to you. */
 export function ApprovalDecision({ approvalId }: { approvalId: string }) {
+  const t = useT();
   const { busy, error, run } = useRowAction();
   const [rejecting, setRejecting] = React.useState(false);
 
@@ -308,11 +314,11 @@ export function ApprovalDecision({ approvalId }: { approvalId: string }) {
           if (saved) setRejecting(false);
         }}
       >
-        <Label htmlFor={`reject-${approvalId}`}>Why are you rejecting it?</Label>
+        <Label htmlFor={`reject-${approvalId}`}>{t("requests.controls.whyReject")}</Label>
         <Textarea id={`reject-${approvalId}`} name="decisionNote" rows={2} required />
         <div className="mt-2 flex items-center gap-2">
           <Button type="submit" size="sm" loading={busy} disabled={busy}>
-            Reject
+            {t("requests.controls.reject")}
           </Button>
           <Button
             type="button"
@@ -320,7 +326,7 @@ export function ApprovalDecision({ approvalId }: { approvalId: string }) {
             variant="ghost"
             onClick={() => setRejecting(false)}
           >
-            Cancel
+            {t("requests.controls.cancel")}
           </Button>
           {error ? (
             <span role="alert" className="text-[12.5px] text-danger-fg">
@@ -340,10 +346,10 @@ export function ApprovalDecision({ approvalId }: { approvalId: string }) {
         disabled={busy}
         onClick={() => run(() => decideApproval({ approvalId, decision: "approved" }))}
       >
-        Approve
+        {t("requests.controls.approve")}
       </Button>
       <Button size="sm" variant="ghost" onClick={() => setRejecting(true)}>
-        Reject
+        {t("requests.controls.reject")}
       </Button>
       {error ? <span className="text-[12.5px] text-danger-fg">{error}</span> : null}
     </div>

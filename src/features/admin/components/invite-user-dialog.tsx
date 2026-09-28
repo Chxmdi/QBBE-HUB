@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Plus } from "lucide-react";
+import { useT } from "@/lib/i18n/client";
 
 export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -27,13 +29,13 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not create the invitation.");
+      setError(result.error ?? t("admin.errors.inviteFailed"));
       return;
     }
     setNotice(
       result.emailSent
-        ? "Invitation recorded and queued for email."
-        : "Invite recorded — email not sent",
+        ? t("admin.invite.queued")
+        : t("admin.invite.notSent"),
     );
     router.refresh();
   }
@@ -42,43 +44,40 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
     <>
       <Button onClick={() => { setOpen(true); setNotice(null); setError(null); }}>
         <Plus className="size-4" aria-hidden />
-        Invite user
+        {t("admin.invite.button")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Invite a user">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("admin.invite.title")}>
         <form onSubmit={handleSubmit} className="space-y-4">
           {!emailConfigured ? (
             <p className="rounded-(--radius-sm) bg-warning/10 px-3 py-2 text-[13px] text-warning-fg">
-              Transactional email is not configured. The invitation row will be
-              saved; the recipient will not receive an email until
-              EMAIL_PROVIDER_API_KEY is set.
+              {t("admin.invite.emailNotConfigured")}
             </p>
           ) : null}
           <div>
-            <Label htmlFor="invite-email">Email</Label>
+            <Label htmlFor="invite-email">{t("admin.invite.email")}</Label>
             <Input id="invite-email" name="email" type="email" required autoFocus />
           </div>
           <div>
-            <Label htmlFor="invite-role">Role</Label>
+            <Label htmlFor="invite-role">{t("admin.invite.role")}</Label>
             <Select id="invite-role" name="intendedRole" defaultValue="staff" required>
-              <option value="admin">Workspace Admin</option>
-              <option value="leadership_viewer">Leadership viewer</option>
-              <option value="staff">Staff</option>
-              <option value="volunteer">Volunteer</option>
-              <option value="guest">Read-only guest</option>
+              <option value="admin">{t("admin.roles.workspaceAdmin")}</option>
+              <option value="leadership_viewer">{t("admin.roles.leadership_viewer")}</option>
+              <option value="staff">{t("admin.roles.staff")}</option>
+              <option value="volunteer">{t("admin.roles.volunteer")}</option>
+              <option value="guest">{t("admin.roles.readOnlyGuest")}</option>
             </Select>
             <p className="mt-1 text-[12.5px] text-muted">
-              When this person signs up with the invited email, the role is applied automatically.
-              Leadership viewers receive portfolio read access without operational write access.
+              {t("admin.invite.roleHelp")}
             </p>
           </div>
           {error ? <p role="alert" className="text-[13px] text-danger-fg">{error}</p> : null}
           {notice ? <p role="status" className="text-[13px] text-success-fg">{notice}</p> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Close
+              {t("admin.invite.close")}
             </Button>
             <Button type="submit" loading={saving}>
-              Create invitation
+              {t("admin.invite.submit")}
             </Button>
           </div>
         </form>

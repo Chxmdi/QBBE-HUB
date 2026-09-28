@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 import type { TaskStatus } from "@/types/entities";
 
 /** Canonical statuses (P0-TSK-02). Shared by board, list, and commands. */
@@ -29,6 +30,21 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   completed: "Completed",
   cancelled: "Cancelled",
 };
+
+/**
+ * The same status in the reader's language (#141). The English constants above
+ * stay because history entries and tests are written with them.
+ */
+export function taskStatusText(status: TaskStatus, t: TranslateFn): string {
+  return t(`shell.status.task.${status}` as MessageKey);
+}
+
+/** A priority code (`low` … `critical`) in the reader's language. */
+export function taskPriorityText(priority: string, t: TranslateFn): string {
+  return ["low", "medium", "high", "critical"].includes(priority)
+    ? t(`shell.status.priority.${priority}` as MessageKey)
+    : priority;
+}
 
 export const BOARD_COLUMNS: TaskStatus[] = [...TASK_STATUSES];
 
@@ -99,6 +115,10 @@ export const TASK_ROLE_LABELS: Record<TaskRole, string> = {
   approver: "Approver",
   follower: "Follower",
 };
+
+export function taskRoleLabel(role: TaskRole, t: TranslateFn): string {
+  return t(`tasks.role.${role}` as MessageKey);
+}
 
 export const taskRoleSchema = z.object({
   taskId: z.string().uuid(),
@@ -301,4 +321,32 @@ export function circularMilestoneDependencyError(
     existing.map(e => [e.blocking_milestone_id, e.blocked_milestone_id] as const),
     "A milestone cannot depend on itself.",
   );
+}
+
+/**
+ * Messages the schemas and pure checks above return in English, keyed to
+ * their catalogue entry so a command can hand them back in the reader's
+ * language (#141). Anything not listed (Zod's own wording) passes through.
+ */
+const TASK_ERROR_KEYS: Record<string, MessageKey> = {
+  "A task needs a title.": "tasks.errors.titleRequired",
+  "Marking a task blocked requires a reason.": "tasks.errors.blockedNeedsReason",
+  "A task cannot depend on itself.": "tasks.errors.selfDependency",
+  "That dependency would create a cycle.": "tasks.errors.cycle",
+  "A checklist item needs a title.": "tasks.errors.checklistTitle",
+  "A label needs a name.": "tasks.errors.labelName",
+  "Nothing to reorder.": "tasks.errors.nothingToReorder",
+  "A recurring task needs a title.": "tasks.errors.seriesTitle",
+  "A recurring task needs a valid start date.": "tasks.errors.seriesStart",
+  "A reschedule needs a calendar date.": "tasks.errors.rescheduleDate",
+  "A milestone cannot depend on itself.": "tasks.errors.milestoneSelf",
+};
+
+export function translateTaskError(
+  t: TranslateFn,
+  message: string | null | undefined,
+): string | undefined {
+  if (!message) return undefined;
+  const key = TASK_ERROR_KEYS[message];
+  return key ? t(key) : message;
 }

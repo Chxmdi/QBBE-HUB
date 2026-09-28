@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import type { Locale } from "@/lib/i18n/config";
+import { peopleEn } from "@/lib/i18n/messages/workspace/people.en";
+
+/** English messages from the catalogue; actions translate them via `crmMessage`. */
+const V = peopleEn.crm.validation;
 
 /**
  * The funding and partnership pipeline.
@@ -53,24 +58,11 @@ export function isOpenStage(stage: OpportunityStage): boolean {
   return !SETTLED_STAGES.includes(stage);
 }
 
-export const KIND_LABELS: Record<OpportunityKind, string> = {
-  grant: "Grant",
-  sponsorship: "Sponsorship",
-  contract: "Contract",
-  donation: "Donation",
-  partnership: "Partnership",
-  in_kind: "In-kind",
-};
+/** English labels; screens use `kindLabel(kind, t)` from `@/features/crm/labels`. */
+export const KIND_LABELS: Record<OpportunityKind, string> = peopleEn.crm.pipeline.kinds;
 
-export const STAGE_LABELS: Record<OpportunityStage, string> = {
-  identified: "Identified",
-  qualifying: "Qualifying",
-  preparing: "Preparing",
-  submitted: "Submitted",
-  awarded: "Awarded",
-  declined: "Declined",
-  withdrawn: "Withdrawn",
-};
+/** English labels; screens use `stageLabel(stage, t)` from `@/features/crm/labels`. */
+export const STAGE_LABELS: Record<OpportunityStage, string> = peopleEn.crm.pipeline.stages;
 
 /**
  * Money as it is written down, not as it is stored. `Intl` gets the symbol,
@@ -80,11 +72,14 @@ export const STAGE_LABELS: Record<OpportunityStage, string> = {
 export function formatMoney(
   amount: number | string | null | undefined,
   currency = "GBP",
+  locale: Locale = "en",
 ): string {
   if (amount === null || amount === undefined || amount === "") return "—";
   const value = typeof amount === "string" ? Number(amount) : amount;
   if (!Number.isFinite(value)) return "—";
-  return new Intl.NumberFormat("en-GB", {
+  // English keeps the British grouping the pipeline has always shown; French
+  // uses Quebec's ("25 000 £").
+  return new Intl.NumberFormat(locale === "fr-CA" ? "fr-CA" : "en-GB", {
     style: "currency",
     currency,
     maximumFractionDigits: value % 1 === 0 ? 0 : 2,
@@ -105,12 +100,11 @@ export function decisionOverdue(
   return opportunity.decision_expected_at < today;
 }
 
-const awardMessage = "Record what was awarded.";
-const refusalMessage = "Say why it was declined or withdrawn.";
-const decisionDateMessage = "A settled bid needs the date it was decided.";
-const openDecisionMessage =
-  "Only a settled bid has a decision date — change the stage first.";
-const orderMessage = "A decision cannot predate the submission it decides.";
+const awardMessage = V.award;
+const refusalMessage = V.refusal;
+const decisionDateMessage = V.decisionDate;
+const openDecisionMessage = V.openDecision;
+const orderMessage = V.order;
 
 /**
  * Money arrives from a form as a string, and people type money the way they
@@ -128,9 +122,9 @@ const money = z
       return cleaned !== "" && Number.isFinite(parsed) ? parsed : value;
     },
     z
-      .number({ invalid_type_error: "Enter an amount as a number." })
-      .nonnegative("Amounts cannot be negative.")
-      .max(99_999_999.99, "That amount is larger than this field holds."),
+      .number({ invalid_type_error: V.amountNumber })
+      .nonnegative(V.amountNegative)
+      .max(99_999_999.99, V.amountTooLarge),
   )
   .optional()
   .nullable();
@@ -178,12 +172,12 @@ function settlementRules<T extends z.ZodTypeAny>(schema: T) {
     .refine(
       (v: { stage?: OpportunityStage; decisionExpectedAt?: string | null }) =>
         !v.stage || SETTLED_STAGES.includes(v.stage) || Boolean(v.decisionExpectedAt),
-      { message: "An open opportunity needs a next review date.", path: ["decisionExpectedAt"] },
+      { message: V.nextReview, path: ["decisionExpectedAt"] },
     );
 }
 
 const baseFields = {
-  title: requiredText("An opportunity needs a title.", 300),
+  title: requiredText(V.opportunityTitle, 300),
   description: z.string().trim().max(5000).optional(),
   kind: z.enum(OPPORTUNITY_KINDS).default("grant"),
   stage: z.enum(OPPORTUNITY_STAGES).default("identified"),
@@ -191,7 +185,7 @@ const baseFields = {
     .string()
     .trim()
     .toUpperCase()
-    .regex(/^[A-Z]{3}$/, "Use a three-letter currency code, like GBP.")
+    .regex(/^[A-Z]{3}$/, V.currencyCode)
     .default("GBP"),
   amountRequested: money,
   amountAwarded: money,
@@ -210,8 +204,8 @@ export const createOpportunitySchema = settlementRules(
     // Required, unlike the rest of the CRM: a bid nobody owns is a bid nobody
     // submits, and the column is NOT NULL for the same reason.
     ownerId: z
-      .string({ required_error: "Every opportunity needs an owner." })
-      .uuid({ message: "Every opportunity needs an owner." }),
+      .string({ required_error: V.opportunityOwner })
+      .uuid({ message: V.opportunityOwner }),
     ...baseFields,
   }),
 );
@@ -228,7 +222,7 @@ export const updateOpportunitySchema = settlementRules(
       .string()
       .trim()
       .toUpperCase()
-      .regex(/^[A-Z]{3}$/, "Use a three-letter currency code, like GBP.")
+      .regex(/^[A-Z]{3}$/, V.currencyCode)
       .optional(),
   }),
 );

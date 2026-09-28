@@ -7,13 +7,21 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
+
+/** Schema messages below are catalogue keys; Zod's own wording passes through. */
+async function issueText(message: string | undefined, fallback: MessageKey): Promise<string> {
+  const t = await getT();
+  return t((message ?? fallback) as MessageKey);
+}
 
 const documentSchema = z.object({
-  title: requiredText("Give the document a title.", 200),
+  title: requiredText("signatures.errors.title" satisfies MessageKey, 200),
   message: z.string().trim().max(2000).optional(),
-  storagePath: requiredText("Upload the PDF first.", 500),
-  fileName: requiredText("Upload the PDF first.", 200),
-  signerIds: z.array(z.string().uuid()).min(1, "Choose at least one person to sign.").max(50),
+  storagePath: requiredText("signatures.errors.uploadFirst" satisfies MessageKey, 500),
+  fileName: requiredText("signatures.errors.uploadFirst" satisfies MessageKey, 200),
+  signerIds: z.array(z.string().uuid()).min(1, "signatures.errors.chooseSigner" satisfies MessageKey).max(50),
 });
 
 /**
@@ -26,7 +34,7 @@ export async function createSigningDocument(input: unknown): Promise<ActionResul
   if (!auth.ok) return { ok: false, error: auth.error };
   const parsed = documentSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the document details." };
+    return { ok: false, error: await issueText(parsed.error.issues[0]?.message, "signatures.errors.check") };
   }
   const data = parsed.data;
   const supabase = await createSupabaseServerClient();
@@ -40,12 +48,13 @@ export async function createSigningDocument(input: unknown): Promise<ActionResul
     p_signer_ids: signerIds,
   });
   if (error || !id) {
+    const t = await getT();
     return {
       ok: false,
       error:
         error?.code === "23514"
-          ? "Only active members of the organization can be asked to sign."
-          : "Could not save the document. Try again.",
+          ? t("signatures.errors.onlyMembers")
+          : t("signatures.errors.saveFailed"),
     };
   }
   await supabase.from("audit_event").insert({
@@ -63,9 +72,9 @@ export async function createSigningDocument(input: unknown): Promise<ActionResul
 
 const signSchema = z.object({
   documentId: z.string().uuid(),
-  signerName: requiredText("Type your full name to sign.", 200),
+  signerName: requiredText("signatures.errors.typeName" satisfies MessageKey, 200),
   consent: z.literal(true, {
-    errorMap: () => ({ message: "Tick the consent box to sign." }),
+    errorMap: () => ({ message: "signatures.errors.tickConsent" satisfies MessageKey }),
   }),
 });
 
@@ -80,7 +89,10 @@ export async function signDocument(input: unknown): Promise<ActionResult> {
   if (limited) return limited;
   const parsed = signSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check your signature." };
+    return {
+      ok: false,
+      error: await issueText(parsed.error.issues[0]?.message, "signatures.errors.checkSignature"),
+    };
   }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -98,14 +110,15 @@ export async function signDocument(input: unknown): Promise<ActionResult> {
     .select("id")
     .single();
   if (error || !data) {
+    const t = await getT();
     const message =
       error?.code === "23505"
-        ? "You have already signed this document."
+        ? t("signatures.errors.alreadySigned")
         : error?.code === "55000"
-          ? "The document can be signed once its security check has passed."
+          ? t("signatures.errors.afterCheck")
           : error?.code === "42501"
-            ? "You are not asked to sign this document."
-            : "Could not record your signature. Try again.";
+            ? t("signatures.errors.notAsked")
+            : t("signatures.errors.recordFailed");
     return { ok: false, error: message };
   }
   revalidatePath(`/signatures/${parsed.data.documentId}`);
@@ -118,21 +131,21 @@ export async function openSigningDocument(
   documentId: string,
 ): Promise<ActionResult & { url?: string }> {
   const session = await requireSession();
-  if (!z.string().uuid().safeParse(documentId).success) return { ok: false, error: "Document not found." };
+  if (!z.string().uuid().safeParse(documentId).success) return { ok: false, error: (await getT())("signatures.errors.docNotFound") };
   const supabase = await createSupabaseServerClient();
   const { data: doc } = await supabase
     .from("signing_document")
     .select("id, storage_path, scan_status")
     .eq("id", documentId)
     .maybeSingle();
-  if (!doc) return { ok: false, error: "Document not found or not accessible." };
+  if (!doc) return { ok: false, error: (await getT())("signatures.errors.docNotAccessible") };
   if (doc.scan_status !== "clean") {
-    return { ok: false, error: "This file is still being checked or has been quarantined." };
+    return { ok: false, error: (await getT())("forms.errors.fileChecking") };
   }
   const { data: signed, error } = await supabase.storage
     .from("signing-documents")
     .createSignedUrl(doc.storage_path as string, 60);
-  if (error || !signed) return { ok: false, error: "Could not open the file." };
+  if (error || !signed) return { ok: false, error: (await getT())("forms.errors.openFailed") };
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
     actor_id: session.userId,

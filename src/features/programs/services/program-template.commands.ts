@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import { localizeIssue } from "@/features/projects/i18n";
 import { requiredText } from "@/lib/schema";
 import { calendarDateInZone } from "@/lib/time";
 import { expandProjectTemplate } from "@/features/projects/services/template-expansion";
@@ -16,12 +18,13 @@ const createSchema = z.object({
 });
 
 export async function createProgramTemplate(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid template." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "programs.errors.invalidTemplate") };
   }
   const db = await createSupabaseServerClient();
   const { data, error } = await db
@@ -35,7 +38,7 @@ export async function createProgramTemplate(input: unknown): Promise<ActionResul
     })
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: "Could not save the template." };
+  if (error || !data) return { ok: false, error: t("programs.errors.templateSaveFailed") };
   revalidatePath("/programs");
   return { ok: true, id: data.id as string };
 }
@@ -48,11 +51,12 @@ export async function setProgramTemplateApproval(
   templateId: string,
   approved: boolean,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
   if (!z.string().uuid().safeParse(templateId).success) {
-    return { ok: false, error: "Invalid template." };
+    return { ok: false, error: t("programs.errors.invalidTemplate") };
   }
   const db = await createSupabaseServerClient();
   const { data, error } = await db
@@ -66,7 +70,7 @@ export async function setProgramTemplateApproval(
     .eq("organization_id", session.organizationId)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: "Could not update the template." };
+  if (error || !data) return { ok: false, error: t("programs.errors.templateUpdateFailed") };
   revalidatePath("/programs");
   return { ok: true, id: templateId };
 }
@@ -84,11 +88,12 @@ export async function setProgramTemplateApproval(
 export async function createProgramFromTemplate(
   templateId: string,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
   if (!z.string().uuid().safeParse(templateId).success) {
-    return { ok: false, error: "Invalid template." };
+    return { ok: false, error: t("programs.errors.invalidTemplate") };
   }
 
   const db = await createSupabaseServerClient();
@@ -98,11 +103,11 @@ export async function createProgramFromTemplate(
     .eq("id", templateId)
     .eq("organization_id", session.organizationId)
     .maybeSingle();
-  if (!template) return { ok: false, error: "Template not found." };
+  if (!template) return { ok: false, error: t("programs.errors.templateNotFound") };
   if (!template.approved_at) {
     return {
       ok: false,
-      error: "This template has not been approved yet, so it cannot be used.",
+      error: t("programs.errors.templateNotApproved"),
     };
   }
 
@@ -116,7 +121,7 @@ export async function createProgramFromTemplate(
     description: template.description ?? undefined,
   });
   if (!created.ok || !created.id) {
-    return { ok: false, error: created.error ?? "Could not create the program." };
+    return { ok: false, error: created.error ?? t("programs.errors.programCreateFailed") };
   }
   const programId = created.id;
 
@@ -185,6 +190,7 @@ export async function listApprovedProgramTemplates() {
 
 /** Put a project template into a program template's structure. */
 export async function addProjectTemplateToProgram(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = z
@@ -193,7 +199,7 @@ export async function addProjectTemplateToProgram(input: unknown): Promise<Actio
       projectTemplateId: z.string().uuid(),
     })
     .safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Choose a project template." };
+  if (!parsed.success) return { ok: false, error: t("programs.errors.chooseProjectTemplate") };
 
   const db = await createSupabaseServerClient();
   const { error } = await db.from("program_template_project").insert({
@@ -205,15 +211,16 @@ export async function addProjectTemplateToProgram(input: unknown): Promise<Actio
     // state the caller wanted; the cross-organization trigger is a real refusal.
     if (error.code === "23505") return { ok: true };
     if (error.code === "23514") {
-      return { ok: false, error: "That project template belongs to another organization." };
+      return { ok: false, error: t("programs.errors.otherOrganization") };
     }
-    return { ok: false, error: "Could not add the project template." };
+    return { ok: false, error: t("programs.errors.addTemplateFailed") };
   }
   revalidatePath("/programs");
   return { ok: true };
 }
 
 export async function removeProjectTemplateFromProgram(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = z
@@ -222,14 +229,14 @@ export async function removeProjectTemplateFromProgram(input: unknown): Promise<
       projectTemplateId: z.string().uuid(),
     })
     .safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid selection." };
+  if (!parsed.success) return { ok: false, error: t("programs.errors.invalidSelection") };
   const db = await createSupabaseServerClient();
   const { error } = await db
     .from("program_template_project")
     .delete()
     .eq("program_template_id", parsed.data.programTemplateId)
     .eq("project_template_id", parsed.data.projectTemplateId);
-  if (error) return { ok: false, error: "Could not remove the project template." };
+  if (error) return { ok: false, error: t("programs.errors.removeTemplateFailed") };
   revalidatePath("/programs");
   return { ok: true };
 }

@@ -17,6 +17,9 @@ import {
   type TemplateLanguage,
 } from "@/features/documents/templates/merge";
 import { renderTextPdf } from "@/features/documents/templates/pdf";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
+import { calendarDateInZone } from "@/lib/time";
 
 // Templates (#147). Owners and admins with MFA write them (checked here for a
 // clear message, and by row-level security underneath). Staff generate from
@@ -24,13 +27,13 @@ import { renderTextPdf } from "@/features/documents/templates/pdf";
 // only if they could already read it; the output goes into the library through
 // the same upload path as any file.
 
-const templateSchema = z.object({
+const templateSchema = (t: TranslateFn) => z.object({
   id: z.string().uuid().optional(),
-  name: requiredText("Give the template a name.", 120),
+  name: requiredText(t("documents.errors.templateName"), 120),
   kind: z.enum(["letter", "contract", "acknowledgement"]),
   language: z.enum(["fr", "en"]),
   recordType: z.enum(["member", "contact", "gift"]),
-  body: requiredText("Write the template's text.", 20000),
+  body: requiredText(t("documents.errors.templateBody"), 20000),
   folderId: z
     .string()
     .optional()
@@ -42,17 +45,20 @@ export async function saveTemplate(input: unknown): Promise<ActionResult> {
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const { session } = authorization;
+  const t = await getT();
 
-  const parsed = templateSchema.safeParse(input);
+  const parsed = templateSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the template." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("documents.errors.checkTemplate") };
   }
   const data = parsed.data;
   const unknown = unknownPlaceholders(data.body, data.recordType);
   if (unknown.length) {
     return {
       ok: false,
-      error: `This template cannot fill ${unknown.map((n) => `{{${n}}}`).join(", ")}. Use only the fields listed for the record it merges.`,
+      error: t("documents.errors.unknownFields", {
+        fields: unknown.map((n) => `{{${n}}}`).join(", "),
+      }),
     };
   }
 
@@ -79,9 +85,9 @@ export async function saveTemplate(input: unknown): Promise<ActionResult> {
         .select("id")
         .single();
 
-  if (error?.code === "23505") return { ok: false, error: "A template with that name already exists." };
-  if (error?.code === "42501") return { ok: false, error: "Only owners and admins with MFA manage templates." };
-  if (error || !saved) return { ok: false, error: "Could not save the template." };
+  if (error?.code === "23505") return { ok: false, error: t("documents.errors.templateExists") };
+  if (error?.code === "42501") return { ok: false, error: t("documents.errors.templateMfa") };
+  if (error || !saved) return { ok: false, error: t("documents.errors.saveTemplate") };
 
   revalidatePath("/documents/templates");
   return { ok: true, id: saved.id as string };
@@ -90,8 +96,9 @@ export async function saveTemplate(input: unknown): Promise<ActionResult> {
 export async function archiveTemplate(templateId: string): Promise<ActionResult> {
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
+  const t = await getT();
   if (!z.string().uuid().safeParse(templateId).success) {
-    return { ok: false, error: "Template not found." };
+    return { ok: false, error: t("documents.errors.templateNotFound") };
   }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -101,7 +108,7 @@ export async function archiveTemplate(templateId: string): Promise<ActionResult>
     .is("archived_at", null)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: "Could not archive the template." };
+  if (error || !data) return { ok: false, error: t("documents.errors.archiveTemplate") };
   revalidatePath("/documents/templates");
   return { ok: true, id: templateId };
 }
@@ -232,11 +239,13 @@ async function recordValues(
  */
 export async function generateFromTemplate(input: unknown): Promise<ActionResult> {
   const session = await requireStaff();
+  const t = await getT();
   const limited = await enforceRateLimit("document:upload", session.userId);
   if (limited) return limited;
   const parsed = generateSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Choose a template and a record." };
+    // The schema only checks ids, so its own wording is never the useful one.
+    return { ok: false, error: t("documents.errors.chooseTemplateRecord") };
   }
   const data = parsed.data;
   const supabase = await createSupabaseServerClient();
@@ -247,12 +256,12 @@ export async function generateFromTemplate(input: unknown): Promise<ActionResult
     .eq("id", data.templateId)
     .is("archived_at", null)
     .maybeSingle();
-  if (!template) return { ok: false, error: "Template not found or not available." };
+  if (!template) return { ok: false, error: t("documents.errors.templateUnavailable") };
 
   const language = template.language as TemplateLanguage;
   const recordType = template.record_type as RecordType;
   const record = await recordValues(supabase, session.organizationId, recordType, data.recordId, language);
-  if (!record) return { ok: false, error: "That record was not found, or you cannot read it." };
+  if (!record) return { ok: false, error: t("documents.errors.recordUnavailable") };
 
   const { data: org } = await supabase
     .from("organization")
@@ -261,7 +270,9 @@ export async function generateFromTemplate(input: unknown): Promise<ActionResult
     .maybeSingle();
   const values: Record<string, MergeValue> = {
     ...record.values,
-    today: { kind: "date", value: new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" }) },
+    // A machine date (YYYY-MM-DD); the merge writes it out in the template's
+    // own language, like every other date in the document.
+    today: { kind: "date", value: calendarDateInZone(new Date(), "America/Toronto") },
     "organization.name": text(org?.name),
   };
 
@@ -269,7 +280,7 @@ export async function generateFromTemplate(input: unknown): Promise<ActionResult
   try {
     body = mergeTemplate(template.body as string, values, language, placeholdersFor(recordType));
   } catch {
-    return { ok: false, error: "This template uses a field it cannot fill. An administrator can correct it." };
+    return { ok: false, error: t("documents.errors.templateBadField") };
   }
   const title = generatedTitle(template.name as string, record.label);
   const pdf = renderTextPdf({ title, text: body });
@@ -284,7 +295,7 @@ export async function generateFromTemplate(input: unknown): Promise<ActionResult
   const { error: uploadError } = await supabase.storage
     .from("documents")
     .upload(path, pdf, { contentType: "application/pdf" });
-  if (uploadError) return { ok: false, error: "Could not save the generated file. Try again." };
+  if (uploadError) return { ok: false, error: t("documents.errors.saveGeneratedFile") };
 
   const { data: doc, error } = await supabase
     .from("document")
@@ -312,8 +323,8 @@ export async function generateFromTemplate(input: unknown): Promise<ActionResult
       ok: false,
       error:
         error?.code === "42501"
-          ? "You cannot file into that folder."
-          : "Could not save the generated document.",
+          ? t("documents.errors.cannotFileThere")
+          : t("documents.errors.saveGenerated"),
     };
   }
 

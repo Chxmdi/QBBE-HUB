@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import { opsEn } from "@/lib/i18n/messages/workspace/ops.en";
+import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Records retention and legal hold (#146).
@@ -60,26 +62,70 @@ export const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ] as const;
 
+const ENGLISH = createTranslator("en");
+
+/** A month's name (1 = January) in the reader's language. */
+export function monthName(month: number, t: TranslateFn = ENGLISH): string {
+  return t(`records.months.${month}` as MessageKey);
+}
+
+/** Who confirms a category's period ("accountant", "counsel") in the reader's language. */
+export function confirmerLabel(
+  who: RecordCategory["confirm_with"],
+  t: TranslateFn = ENGLISH,
+): string {
+  return t(`records.who.${who}` as MessageKey);
+}
+
+/**
+ * A category's label, description and legal reference in the reader's
+ * language. They are seeded reference rows, so a known key reads from the
+ * catalogue; an unknown one shows what the database holds.
+ */
+export function localizeCategory<T extends RecordCategory>(category: T, t: TranslateFn): T {
+  if (!(category.key in opsEn.records.categories)) return category;
+  const base = `records.categories.${category.key}`;
+  return {
+    ...category,
+    label: t(`${base}.label` as MessageKey),
+    description: t(`${base}.description` as MessageKey),
+    legal_reference: t(`${base}.legalReference` as MessageKey),
+  };
+}
+
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 /** How a category's period reads to a person. */
 export function describePeriod(
   category: Pick<RecordCategory, "retention_basis">,
   years: number | null,
+  t: TranslateFn = ENGLISH,
 ): string {
-  if (category.retention_basis === "permanent" || years === null) return "Kept permanently";
-  const unit = years === 1 ? "year" : "years";
+  if (category.retention_basis === "permanent" || years === null) {
+    return t("records.period.permanent");
+  }
+  const one = years === 1;
   return category.retention_basis === "fiscal_year_end"
-    ? `${years} ${unit} after the end of the fiscal year`
-    : `${years} ${unit} after the record's date`;
+    ? t(one ? "records.period.fiscalOne" : "records.period.fiscalOther", { n: years })
+    : t(one ? "records.period.recordOne" : "records.period.recordOther", { n: years });
 }
 
-/** The retention date as a person reads it. */
-export function describeRetainUntil(value: string | null): string {
-  if (value === null) return "No rule";
-  if (value === "infinity") return "Permanently";
-  return value;
+/**
+ * The retention date as a person reads it. `date` formats a YYYY-MM-DD date
+ * for display; by default it is shown as stored.
+ */
+export function describeRetainUntil(
+  value: string | null,
+  t: TranslateFn = ENGLISH,
+  date: (isoDate: string) => string = (isoDate) => isoDate,
+): string {
+  if (value === null) return t("records.retainUntil.noRule");
+  if (value === "infinity") return t("records.retainUntil.permanently");
+  return date(value);
 }
+
+// Validation messages stay in English here (tests and callers read them); the
+// server actions translate them through `records.errors`.
 
 const years = z.preprocess(
   (value) => (typeof value === "string" ? Number(value.trim()) : value),
@@ -99,8 +145,16 @@ export const saveRuleSchema = z.object({
 
 export const fiscalYearEndSchema = z
   .object({
-    month: z.coerce.number().int().min(1, "Choose a month.").max(12, "Choose a month."),
-    day: z.coerce.number().int().min(1, "Choose a day.").max(31, "Choose a day."),
+    month: z.coerce
+      .number()
+      .int()
+      .min(1, "Choose a month.")
+      .max(12, "Choose a month."),
+    day: z.coerce
+      .number()
+      .int()
+      .min(1, "Choose a day.")
+      .max(31, "Choose a day."),
   })
   .refine((value) => value.day <= DAYS_IN_MONTH[value.month - 1], {
     message: "That day does not exist in that month (February 29 is not accepted).",
@@ -122,7 +176,10 @@ export const placeHoldSchema = z.discriminatedUnion("scope", [
 
 export const releaseHoldSchema = z.object({
   holdId: z.string().uuid(),
-  reason: requiredText("Say why the hold is being released.", 2000).min(3, "Say why the hold is being released."),
+  reason: requiredText("Say why the hold is being released.", 2000).min(
+    3,
+    "Say why the hold is being released.",
+  ),
 });
 
 export const classifyDocumentSchema = z.object({

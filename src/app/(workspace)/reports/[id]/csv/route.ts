@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getReportSnapshot } from "@/features/reports/services/report.queries";
 import { snapshotSections } from "@/features/reports/snapshot-view";
+import { getT } from "@/lib/i18n/server";
 
 function csvEscape(value: unknown): string {
   const str = value === null || value === undefined ? "" : String(value);
@@ -19,6 +20,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
+  const t = await getT();
 
   const { data: report } = await supabase
     .from("report_instance")
@@ -27,7 +29,7 @@ export async function GET(
     .maybeSingle();
 
   if (!report) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ error: t("reports.errors.notFound") }, { status: 404 });
   }
 
   // The approved version if there is one, so an export cannot quietly differ
@@ -37,20 +39,23 @@ export async function GET(
   const snapshot = (chosen?.snapshot ?? report.snapshot) as Record<string, unknown>;
   const rows: string[] = [];
   rows.push(`# ${report.title}`);
+  // The generation time stays an ISO timestamp: a spreadsheet reads it as one.
   rows.push(
-    `# Exported from version ${chosen?.version ?? 1}, generated ${report.created_at}`,
+    t("reports.csvExported", { version: chosen?.version ?? 1, at: String(report.created_at) }),
   );
   rows.push("");
 
   const metrics = (snapshot.metrics ?? {}) as Record<string, number>;
-  rows.push("section,key,value,extra");
+  rows.push(t("reports.csvHeader"));
   for (const [key, value] of Object.entries(metrics)) {
-    rows.push(["metric", csvEscape(key), csvEscape(value), ""].join(","));
+    rows.push([csvEscape(t("reports.csvMetric")), csvEscape(key), csvEscape(value), ""].join(","));
   }
 
-  for (const section of snapshotSections(snapshot)) {
+  // Section names and wording follow the reader's language; stored dates stay
+  // as recorded so a spreadsheet can sort them.
+  for (const section of snapshotSections(snapshot, { t })) {
     if (section.rows.length === 0) {
-      rows.push([csvEscape(section.title.toLowerCase()), "", "None in this snapshot.", ""].join(","));
+      rows.push([csvEscape(section.title.toLowerCase()), "", csvEscape(t("reports.noneInSnapshot")), ""].join(","));
       continue;
     }
     for (const row of section.rows) {

@@ -14,9 +14,12 @@ import {
 import { folderLabel, type LibraryFolder } from "@/features/documents/services/library";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDate } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 
-export const metadata: Metadata = { title: "Document" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("documents.detailTitle") };
+}
 export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -52,6 +55,12 @@ export default async function DocumentPage({
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const supabase = await createSupabasePageClient();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
+  const roleLabel = (role: string) => {
+    const key = `documents.roles.${role}`;
+    const label = t(key as MessageKey);
+    return label === key ? role.replace(/_/g, " ") : label;
+  };
 
   // Row-level security decides whether this exists for the reader at all.
   const { data: linked } = await supabase
@@ -127,10 +136,10 @@ export default async function DocumentPage({
         className="mb-3 inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
       >
         <ArrowLeft className="size-4" aria-hidden />
-        Documents
+        {t("documents.detail.back")}
       </Link>
       <PageHeader
-        eyebrow={current.folder ? folderLabel(current.folder) : "Documents"}
+        eyebrow={current.folder ? folderLabel(current.folder, t) : t("documents.title")}
         title={current.title}
         description={current.description ?? undefined}
         actions={
@@ -142,12 +151,16 @@ export default async function DocumentPage({
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <Badge tone={current.visibility === "organization" ? "neutral" : "accent"}>
-          {current.visibility === "organization" ? "All members" : "Restricted"}
+          {current.visibility === "organization"
+            ? t("documents.detail.allMembers")
+            : t("documents.detail.restricted")}
         </Badge>
         {current.folder?.visibility === "staff" ? (
-          <Badge tone="accent">Staff-only folder</Badge>
+          <Badge tone="accent">{t("documents.detail.staffOnlyFolder")}</Badge>
         ) : null}
-        {current.requires_acknowledgement ? <Badge tone="info">Required reading</Badge> : null}
+        {current.requires_acknowledgement ? (
+          <Badge tone="info">{t("documents.detail.requiredReading")}</Badge>
+        ) : null}
         {current.tags.map((tag) => (
           <Link
             key={tag}
@@ -165,17 +178,19 @@ export default async function DocumentPage({
           className="mb-6 rounded-(--radius-md) border border-line p-4"
         >
           <h2 id="reading-heading" className="section-heading mb-2">
-            Required reading
+            {t("documents.detail.requiredReading")}
           </h2>
           {acknowledgedAt ? (
             <p className="text-sm">
-              You confirmed you read version {current.version_number} on{" "}
-              {formatDate(acknowledgedAt)}.
+              {t("documents.detail.youConfirmed", {
+                number: current.version_number,
+                date: format.date(acknowledgedAt),
+              })}
             </p>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-sm">
-                Please read version {current.version_number}, then confirm.
+                {t("documents.detail.pleaseRead", { number: current.version_number })}
               </p>
               <AcknowledgeButton documentId={current.id} />
             </div>
@@ -184,26 +199,28 @@ export default async function DocumentPage({
           {report ? (
             <div className="mt-4">
               <h3 className="mb-2 text-sm font-medium">
-                {readCount} of {report.length} have confirmed
+                {t("documents.detail.confirmedCount", { read: readCount, total: report.length })}
               </h3>
-              <table className="w-full text-sm" aria-label="Who has read this">
+              <table className="w-full text-sm" aria-label={t("documents.detail.whoHasRead")}>
                 <thead>
                   <tr className="text-left text-muted">
-                    <th className="py-1 font-medium">Member</th>
-                    <th className="py-1 font-medium">Role</th>
-                    <th className="py-1 font-medium">Status</th>
+                    <th className="py-1 font-medium">{t("documents.detail.member")}</th>
+                    <th className="py-1 font-medium">{t("documents.detail.role")}</th>
+                    <th className="py-1 font-medium">{t("documents.detail.status")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {report.map((r) => (
                     <tr key={r.user_id} className="border-t border-line">
                       <td className="py-1.5">{r.full_name ?? "—"}</td>
-                      <td className="py-1.5 text-muted">{r.role.replace("_", " ")}</td>
+                      <td className="py-1.5 text-muted">{roleLabel(r.role)}</td>
                       <td className="py-1.5">
                         {r.acknowledged_at ? (
-                          <Badge tone="success">Read {formatDate(r.acknowledged_at)}</Badge>
+                          <Badge tone="success">
+                            {t("documents.detail.readOn", { date: format.date(r.acknowledged_at) })}
+                          </Badge>
                         ) : (
-                          <Badge tone="warning">Not yet</Badge>
+                          <Badge tone="warning">{t("documents.detail.notYet")}</Badge>
                         )}
                       </td>
                     </tr>
@@ -213,7 +230,7 @@ export default async function DocumentPage({
             </div>
           ) : reportUnavailable ? (
             <p className="meta mt-3">
-              Complete multi-factor sign-in to see who has and hasn&apos;t read this.
+              {t("documents.detail.mfaNeeded")}
             </p>
           ) : null}
         </section>
@@ -221,7 +238,7 @@ export default async function DocumentPage({
 
       <section aria-labelledby="versions-heading" className="mb-6">
         <h2 id="versions-heading" className="section-heading mb-2">
-          Versions
+          {t("documents.detail.versions")}
         </h2>
         <VersionHistory versions={versions} linkedId={id} />
       </section>
@@ -229,7 +246,7 @@ export default async function DocumentPage({
       {canManage && isCurrent ? (
         <section aria-labelledby="details-heading" className="mb-6">
           <h2 id="details-heading" className="section-heading mb-2">
-            Filing
+            {t("documents.detail.filing")}
           </h2>
           <DocumentDetailsForm
             documentId={current.id}

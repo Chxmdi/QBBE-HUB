@@ -9,35 +9,30 @@ import { requireAdminAal2 } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { calendarDateInZone } from "@/lib/time";
 import { isProjectStale } from "@/features/projects/stale";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import type { Formatters } from "@/lib/i18n/format";
+import type { TranslateFn } from "@/lib/i18n/translate";
 import {
   attentionReasons,
   sortForAttention,
   type TeamOverviewRow,
 } from "@/features/people/team-overview";
 
-export const metadata: Metadata = { title: "Team overview" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("teamOverview.title") };
+}
 export const dynamic = "force-dynamic";
 
-const ROLE_LABELS: Record<TeamOverviewRow["role"], string> = {
-  owner: "Primary Owner",
-  admin: "Workspace Admin",
-  staff: "Staff",
-};
-
-function formatDay(iso: string | null, timeZone: string) {
-  if (!iso) return "No recorded work yet";
-  return new Date(iso).toLocaleDateString("en-CA", {
-    month: "short",
-    day: "numeric",
-    timeZone,
-  });
+function formatDay(iso: string | null, timeZone: string, t: TranslateFn, format: Formatters) {
+  if (!iso) return t("teamOverview.noWork");
+  return format.inZone(iso, timeZone, { month: "short", day: "numeric" });
 }
 
-function trend(current: number, previous: number) {
-  if (current === previous) return "same as the week before";
+function trend(current: number, previous: number, t: TranslateFn) {
+  if (current === previous) return t("teamOverview.trendSame");
   return current > previous
-    ? `up from ${previous} the week before`
-    : `down from ${previous} the week before`;
+    ? t("teamOverview.trendUp", { count: previous })
+    : t("teamOverview.trendDown", { count: previous });
 }
 
 /**
@@ -56,6 +51,7 @@ export default async function TeamOverviewPage({
   const session = await requireAdminAal2();
   const params = await searchParams;
   const supabase = await createSupabasePageClient();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const today =
     calendarDateInZone(new Date(), session.timeZone) ?? new Date().toISOString().slice(0, 10);
 
@@ -81,7 +77,7 @@ export default async function TeamOverviewPage({
   }
 
   const teams = (teamsRes.data ?? []) as { id: string; name: string }[];
-  const teamFilter = params.team && teams.some((t) => t.id === params.team) ? params.team : null;
+  const teamFilter = params.team && teams.some((team) => team.id === params.team) ? params.team : null;
   const inTeam = teamFilter
     ? new Set(
         ((teamMembersRes.data ?? []) as { team_id: string; user_id: string }[])
@@ -111,7 +107,7 @@ export default async function TeamOverviewPage({
     rows.map((row) => ({
       row,
       staleProjects: staleByOwner.get(row.user_id) ?? 0,
-      reasons: attentionReasons(row, today, staleByOwner.get(row.user_id) ?? 0),
+      reasons: attentionReasons(row, today, staleByOwner.get(row.user_id) ?? 0, t),
     })),
   );
   const needingAttention = entries.filter((e) => e.reasons.length > 0).length;
@@ -124,15 +120,15 @@ export default async function TeamOverviewPage({
   return (
     <div>
       <PageHeader
-        eyebrow="People"
-        title="Team overview"
-        description="Where each staff member's assigned work stands, from tasks, decisions and project reporting dates. Sign-ins and time online are not tracked."
+        eyebrow={t("teamOverview.eyebrow")}
+        title={t("teamOverview.title")}
+        description={t("teamOverview.description")}
       />
 
       {teams.length > 0 ? (
-        <nav aria-label="Filter by team" className="mb-4 flex flex-wrap gap-1.5">
+        <nav aria-label={t("teamOverview.filterByTeam")} className="mb-4 flex flex-wrap gap-1.5">
           <Link href="/people/overview" className={chip(!teamFilter)}>
-            Everyone
+            {t("teamOverview.everyone")}
           </Link>
           {teams.map((team) => (
             <Link
@@ -149,34 +145,39 @@ export default async function TeamOverviewPage({
       {entries.length === 0 ? (
         <EmptyState
           icon={<Users />}
-          title={teamFilter ? "No staff in this team" : "No staff yet"}
-          description="Owners, admins and staff with an active membership appear here."
+          title={teamFilter ? t("teamOverview.emptyTeamTitle") : t("teamOverview.emptyTitle")}
+          description={t("teamOverview.emptyDescription")}
         />
       ) : (
         <>
           <p className="meta mb-3" role="status">
             {needingAttention === 0
-              ? `All ${entries.length} people are on track.`
-              : `${needingAttention} of ${entries.length} ${entries.length === 1 ? "person needs" : "people need"} attention.`}
+              ? t("teamOverview.allOnTrack", { count: entries.length })
+              : t(
+                  entries.length === 1
+                    ? "teamOverview.needAttentionOne"
+                    : "teamOverview.needAttentionOther",
+                  { count: needingAttention, total: entries.length },
+                )}
           </p>
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[13.5px]">
                 <caption className="sr-only">
-                  Assigned work per staff member, people needing attention first
+                  {t("teamOverview.caption")}
                 </caption>
                 <thead>
                   <tr className="border-b border-line bg-surface-soft/60">
-                    <th scope="col" className="px-4 py-2.5 font-semibold">Person</th>
-                    <th scope="col" className="px-4 py-2.5 font-semibold">Status</th>
-                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">Open</th>
-                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">Overdue</th>
-                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">Blocked</th>
-                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">Due in 7 days</th>
-                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">Done, last 7 days</th>
-                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">Done, last 30 days</th>
-                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">Decisions</th>
-                    <th scope="col" className="px-4 py-2.5 font-semibold">Last recorded work</th>
+                    <th scope="col" className="px-4 py-2.5 font-semibold">{t("teamOverview.columns.person")}</th>
+                    <th scope="col" className="px-4 py-2.5 font-semibold">{t("teamOverview.columns.status")}</th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">{t("teamOverview.columns.open")}</th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">{t("teamOverview.columns.overdue")}</th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">{t("teamOverview.columns.blocked")}</th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">{t("teamOverview.columns.dueSoon")}</th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">{t("teamOverview.columns.done7")}</th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">{t("teamOverview.columns.done30")}</th>
+                    <th scope="col" className="px-4 py-2.5 text-right font-semibold">{t("teamOverview.columns.decisions")}</th>
+                    <th scope="col" className="px-4 py-2.5 font-semibold">{t("teamOverview.columns.lastWork")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -195,12 +196,12 @@ export default async function TeamOverviewPage({
                             >
                               {row.full_name}
                               {row.user_id === session.userId ? (
-                                <span className="meta ml-1.5">(you)</span>
+                                <span className="meta ml-1.5">{t("teamOverview.you")}</span>
                               ) : null}
                             </Link>
                             <span className="meta">
                               {row.title ? `${row.title} · ` : ""}
-                              {ROLE_LABELS[row.role]}
+                              {t(`people.roles.${row.role}`)}
                             </span>
                           </span>
                         </span>
@@ -208,7 +209,7 @@ export default async function TeamOverviewPage({
                       <td className="px-4 py-3">
                         {reasons.length > 0 ? (
                           <>
-                            <Badge tone="warning">Needs attention</Badge>
+                            <Badge tone="warning">{t("teamOverview.needsAttention")}</Badge>
                             <ul className="meta mt-1.5 list-disc space-y-0.5 pl-4">
                               {reasons.map((reason) => (
                                 <li key={reason}>{reason}</li>
@@ -216,7 +217,7 @@ export default async function TeamOverviewPage({
                             </ul>
                           </>
                         ) : (
-                          <Badge tone="success">On track</Badge>
+                          <Badge tone="success">{t("teamOverview.onTrack")}</Badge>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums">{row.open_tasks}</td>
@@ -227,7 +228,7 @@ export default async function TeamOverviewPage({
                         {row.completed_7}
                         {row.completed_7 + row.completed_prev_7 > 0 ? (
                           <span className="meta block">
-                            {trend(row.completed_7, row.completed_prev_7)}
+                            {trend(row.completed_7, row.completed_prev_7, t)}
                           </span>
                         ) : null}
                       </td>
@@ -235,21 +236,19 @@ export default async function TeamOverviewPage({
                       <td className="px-4 py-3 text-right tabular-nums">
                         {row.open_decisions}
                         {row.overdue_decisions > 0 ? (
-                          <span className="meta block">{row.overdue_decisions} past due</span>
+                          <span className="meta block">
+                            {t("teamOverview.pastDue", { count: row.overdue_decisions })}
+                          </span>
                         ) : null}
                       </td>
-                      <td className="px-4 py-3">{formatDay(row.last_activity_at, session.timeZone)}</td>
+                      <td className="px-4 py-3">{formatDay(row.last_activity_at, session.timeZone, t, format)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
-          <p className="meta mt-3">
-            &ldquo;Needs attention&rdquo; means 3 or more overdue tasks, a task overdue by more than
-            7 days, a blocked task with no update for 5 days, a task in progress with no update for
-            7 days, an overdue project report, or a decision past its due date.
-          </p>
+          <p className="meta mt-3">{t("teamOverview.footnote")}</p>
         </>
       )}
     </div>

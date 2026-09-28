@@ -6,6 +6,7 @@ import { requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { issueMessage, K, tr } from "./event.i18n";
 
 /**
  * The preparation checklist P0-EVT-01 asks an event to carry.
@@ -23,14 +24,14 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const addItemSchema = z.object({
   eventId: z.string().uuid(),
-  title: requiredText("A checklist item needs a description.", 300),
+  title: requiredText(K("events.errors.checklistTitleRequired"), 300),
 });
 
 export async function addEventChecklistItem(input: unknown): Promise<ActionResult> {
   await requireSession();
   const parsed = addItemSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: await issueMessage(parsed.error.issues[0]?.message) };
   }
   const supabase = await createSupabaseServerClient();
 
@@ -59,7 +60,7 @@ export async function addEventChecklistItem(input: unknown): Promise<ActionResul
     .single();
 
   if (error || !data) {
-    return { ok: false, error: "Could not add the checklist item." };
+    return { ok: false, error: await tr("events.errors.checklistAddFailed") };
   }
   revalidatePath("/", "layout");
   return { ok: true, id: data.id as string };
@@ -78,8 +79,8 @@ export async function toggleEventChecklistItem(
     .select("id")
     .maybeSingle();
 
-  if (error) return { ok: false, error: "Could not update the checklist item." };
-  if (!data) return { ok: false, error: "That checklist item is no longer available." };
+  if (error) return { ok: false, error: await tr("events.errors.checklistUpdateFailed") };
+  if (!data) return { ok: false, error: await tr("events.errors.checklistGone") };
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -94,8 +95,8 @@ export async function removeEventChecklistItem(itemId: string): Promise<ActionRe
     .select("id")
     .maybeSingle();
 
-  if (error) return { ok: false, error: "Could not remove the checklist item." };
-  if (!data) return { ok: false, error: "That checklist item is no longer available." };
+  if (error) return { ok: false, error: await tr("events.errors.checklistRemoveFailed") };
+  if (!data) return { ok: false, error: await tr("events.errors.checklistGone") };
   revalidatePath("/", "layout");
   return { ok: true };
 }

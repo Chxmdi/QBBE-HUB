@@ -161,6 +161,10 @@ export const test = base.extend({
       //   again while it was still loading (a same-document history update).
       //   Playwright stops waiting for "load" on the first. That is a
       //   successful navigation: wait for the load state asked for and go on.
+      // - 'WebKit encountered an internal error': how WebKit reports the first
+      //   case. It names neither address, so it is treated as X ≠ Y: settle
+      //   and navigate again. Seen as mobile Safari's goto to /sign-up in
+      //   public-routes (#188).
       //
       // Up to three attempts; anything past that is a real failure.
       for (let attempt = 1; ; attempt += 1) {
@@ -170,8 +174,9 @@ export const test = base.extend({
         } catch (error) {
           const message = String(error);
           const match = /Navigation to "([^"]+)" is interrupted by another navigation to "([^"]+)"/.exec(message);
-          if (!match || attempt >= 3) throw error;
-          if (match[1] === match[2]) {
+          const webkitInterrupted = /WebKit encountered an internal error/.test(message);
+          if ((!match && !webkitInterrupted) || attempt >= 3) throw error;
+          if (match && match[1] === match[2]) {
             await page.waitForLoadState(
               options?.waitUntil === "commit" ? "domcontentloaded" : (options?.waitUntil ?? "load"),
             );

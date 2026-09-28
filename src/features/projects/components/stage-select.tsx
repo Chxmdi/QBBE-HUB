@@ -3,9 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Select } from "@/components/ui/input";
-import { STAGE_LABELS } from "@/components/shared/status-badges";
+import { STAGE_LABELS, stageLabel } from "@/components/shared/status-badges";
 import { updateProjectStage } from "@/features/projects/services/project.commands";
 import type { ProjectStage } from "@/types/entities";
+import { useT } from "@/lib/i18n/client";
 
 export function StageSelect({
   projectId,
@@ -15,6 +16,7 @@ export function StageSelect({
   stage: ProjectStage;
 }) {
   const router = useRouter();
+  const t = useT();
   const [value, setValue] = useState<ProjectStage>(stage);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +27,7 @@ export function StageSelect({
     const result = await updateProjectStage({ projectId, stage: next });
     if (!result.ok) {
       setValue(previous);
-      setError(result.error ?? "Update failed.");
+      setError(result.error ?? t("projects.stageSelect.error"));
       return;
     }
     router.refresh();
@@ -34,7 +36,7 @@ export function StageSelect({
   return (
     <div>
       <Select
-        aria-label="Project stage"
+        aria-label={t("projects.stageSelect.label")}
         value={value}
         onChange={(e) => handleChange(e.target.value as ProjectStage)}
         className="h-8 w-36 text-[12.5px]"
@@ -48,7 +50,7 @@ export function StageSelect({
           .filter((s) => s !== "completed" || value === "completed")
           .map((s) => (
             <option key={s} value={s}>
-              {STAGE_LABELS[s]}
+              {stageLabel(s, t)}
             </option>
           ))}
       </Select>

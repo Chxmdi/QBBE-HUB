@@ -7,6 +7,8 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { refreshGoogleAccessToken } from "@/features/inbox/services/gmail-sync";
 import { buildGmailSendPayload } from "@/features/inbox/services/gmail-message";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 
 interface GmailHeader { name?: string; value?: string }
 interface GmailPayload { body?: { data?: string }; parts?: GmailPayload[]; headers?: GmailHeader[] }
@@ -30,21 +32,25 @@ function plainText(payload: GmailPayload): string {
   return "";
 }
 
+/** A failure whose message is already written for the person reading it. */
+class GmailUserError extends Error {}
+
 async function gmailAccess() {
   const session = await requireSession();
+  const t = await getT();
   const supabase = createSupabaseServiceClient();
   const { data: connection } = await supabase.from("integration_connection")
     .select("id").eq("organization_id", session.organizationId).eq("provider", "gmail")
     .eq("user_id", session.userId).eq("status", "connected").maybeSingle();
-  if (!connection) throw new Error("Gmail is not connected. Reconnect Gmail and grant send permission.");
+  if (!connection) throw new GmailUserError(t("inbox.errors.notConnected"));
   const { data: secret } = await supabase.from("integration_secret")
     .select("access_token, refresh_token, token_expires_at").eq("connection_id", connection.id).maybeSingle();
-  if (!secret?.access_token) throw new Error("Gmail authorization has expired. Reconnect Gmail.");
+  if (!secret?.access_token) throw new GmailUserError(t("inbox.errors.expired"));
   let accessToken = secret.access_token as string;
   const expiry = secret.token_expires_at ? new Date(secret.token_expires_at as string).getTime() : 0;
   if (expiry && expiry < Date.now() + 60_000 && secret.refresh_token) {
     const refreshed = await refreshGoogleAccessToken(secret.refresh_token as string);
-    if (!refreshed?.access_token) throw new Error("Gmail authorization has expired. Reconnect Gmail.");
+    if (!refreshed?.access_token) throw new GmailUserError(t("inbox.errors.expired"));
     accessToken = refreshed.access_token;
     await supabase.from("integration_secret").update({
       access_token: accessToken,
@@ -78,8 +84,20 @@ const sendSchema = z.object({ to: z.string().trim().email(), subject: z.string()
 
 /** Sends/replies through Gmail. OAuth tokens and raw MIME remain server-only. */
 export async function sendGmailMessage(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const parsed = sendSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid email." };
+  if (!parsed.success) {
+    const field = parsed.error.issues[0]?.path[0];
+    const key: MessageKey =
+      field === "to"
+        ? "inbox.errors.invalidRecipient"
+        : field === "subject"
+          ? "inbox.errors.subjectRequired"
+          : field === "body"
+            ? "inbox.errors.bodyRequired"
+            : "inbox.errors.invalid";
+    return { ok: false, error: t(key) };
+  }
   try {
     const { session, accessToken } = await gmailAccess();
     const data = parsed.data;
@@ -88,10 +106,10 @@ export async function sendGmailMessage(input: unknown): Promise<ActionResult> {
       method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!response.ok) throw new Error(`Gmail rejected the message (${response.status}). Reconnect Gmail and grant send permission.`);
+    if (!response.ok) throw new GmailUserError(t("inbox.errors.rejected", { status: response.status }));
     const supabase = createSupabaseServiceClient();
     await supabase.from("audit_event").insert({ organization_id: session.organizationId, actor_id: session.userId, event_type: "integration", action: "gmail_message_sent", object_type: "integration_connection", metadata: { reply: Boolean(data.threadId) } });
     revalidatePath("/inbox");
     return { ok: true };
-  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : "Could not send Gmail message." }; }
+  } catch (error) { return { ok: false, error: error instanceof GmailUserError ? error.message : t("inbox.errors.sendFailed") }; }
 }

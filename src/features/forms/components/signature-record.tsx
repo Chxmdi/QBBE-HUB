@@ -1,6 +1,6 @@
 import { CheckCircle2, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { formatInZone } from "@/lib/time";
+import { getFormatters, getT } from "@/lib/i18n/server";
 
 export interface SignatureRow {
   id: string;
@@ -16,7 +16,7 @@ export interface SignatureRow {
  * matches. `currentSha256` is recomputed from what is stored now: for a
  * submission by the database, for a PDF from its bytes.
  */
-export function SignatureRecord({
+export async function SignatureRecord({
   signatures,
   currentSha256,
   timeZone,
@@ -25,13 +25,14 @@ export function SignatureRecord({
   currentSha256: string | null;
   timeZone: string;
 }) {
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   return (
     <section aria-labelledby="signature-record" className="card space-y-3 p-4">
       <h2 id="signature-record" className="text-[15px] font-semibold">
-        Signature record
+        {t("signatures.record.heading")}
       </h2>
       {signatures.length === 0 ? (
-        <p className="meta">Not signed yet.</p>
+        <p className="meta">{t("signatures.record.notSigned")}</p>
       ) : (
         <ul className="space-y-3">
           {signatures.map((s) => {
@@ -40,29 +41,31 @@ export function SignatureRecord({
               <li key={s.id} className="rounded-(--radius-sm) border border-line p-3" data-testid="signature">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium">
-                    Signed by {s.signer_name}
+                    {t("signatures.record.signedBy", { name: s.signer_name })}
                     {s.signer_email ? <span className="meta"> ({s.signer_email})</span> : null}
                   </p>
                   {verified ? (
                     <Badge tone="success">
                       <CheckCircle2 className="size-3.5" aria-hidden />
-                      Content unchanged since signing
+                      {t("signatures.record.unchanged")}
                     </Badge>
                   ) : (
                     <Badge tone="danger">
                       <XCircle className="size-3.5" aria-hidden />
-                      {currentSha256 === null ? "Could not verify" : "Content does not match"}
+                      {currentSha256 === null
+                        ? t("signatures.record.couldNotVerify")
+                        : t("signatures.record.mismatch")}
                     </Badge>
                   )}
                 </div>
                 <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-[13px] sm:grid-cols-[10rem_1fr]">
-                  <dt className="text-muted">Signed at</dt>
+                  <dt className="text-muted">{t("signatures.record.signedAt")}</dt>
                   <dd>
-                    <time dateTime={s.signed_at}>{formatInZone(s.signed_at, timeZone, { dateStyle: "medium", timeStyle: "long" })}</time>
+                    <time dateTime={s.signed_at}>{format.inZone(s.signed_at, timeZone, { dateStyle: "medium", timeStyle: "long" })}</time>
                   </dd>
-                  <dt className="text-muted">Agreed to</dt>
+                  <dt className="text-muted">{t("signatures.record.agreedTo")}</dt>
                   <dd>{s.consent_statement}</dd>
-                  <dt className="text-muted">SHA-256 signed</dt>
+                  <dt className="text-muted">{t("signatures.record.shaSigned")}</dt>
                   <dd className="font-mono text-[12px] break-all">{s.content_sha256}</dd>
                 </dl>
               </li>
@@ -71,8 +74,8 @@ export function SignatureRecord({
         </ul>
       )}
       <p className="meta">
-        SHA-256 recomputed now:{" "}
-        <span className="font-mono text-[12px] break-all">{currentSha256 ?? "unavailable"}</span>
+        {t("signatures.record.shaNow")}{" "}
+        <span className="font-mono text-[12px] break-all">{currentSha256 ?? t("signatures.record.unavailable")}</span>
       </p>
     </section>
   );

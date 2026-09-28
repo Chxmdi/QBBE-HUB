@@ -1,3 +1,14 @@
+import { shellFrCA } from "@/lib/i18n/messages/workspace/shell.fr-CA";
+import { accountFrCA } from "@/lib/i18n/messages/workspace/account.fr-CA";
+import { workFrCA } from "@/lib/i18n/messages/workspace/work.fr-CA";
+import { intakeFrCA } from "@/lib/i18n/messages/workspace/intake.fr-CA";
+import { portfolioFrCA } from "@/lib/i18n/messages/workspace/portfolio.fr-CA";
+import { commsFrCA } from "@/lib/i18n/messages/workspace/comms.fr-CA";
+import { timeFrCA } from "@/lib/i18n/messages/workspace/time.fr-CA";
+import { peopleFrCA } from "@/lib/i18n/messages/workspace/people.fr-CA";
+import { knowledgeFrCA } from "@/lib/i18n/messages/workspace/knowledge.fr-CA";
+import { adminFrCA } from "@/lib/i18n/messages/workspace/admin.fr-CA";
+import { opsFrCA } from "@/lib/i18n/messages/workspace/ops.fr-CA";
 import type { Messages } from "@/lib/i18n/messages/en";
 import { commonFrCA } from "@/lib/i18n/messages/finance/common.fr-CA";
 import { approvalsFrCA } from "@/lib/i18n/messages/finance/approvals.fr-CA";
@@ -22,6 +33,17 @@ import { payrollFrCA } from "@/lib/i18n/messages/finance/payroll.fr-CA";
  * French speaker named by QBBE before the switch-over.
  */
 export const frCA: Messages = {
+  ...shellFrCA,
+  ...accountFrCA,
+  ...workFrCA,
+  ...intakeFrCA,
+  ...portfolioFrCA,
+  ...commsFrCA,
+  ...timeFrCA,
+  ...peopleFrCA,
+  ...knowledgeFrCA,
+  ...adminFrCA,
+  ...opsFrCA,
   common: {
     appName: "QBBE Hub",
     tryAgain: "Réessayer",
@@ -163,56 +185,6 @@ export const frCA: Messages = {
     noMatches: "Aucun dossier correspondant auquel vous avez accès.",
     prompt: "Tapez pour rechercher ou choisissez une destination.",
   },
-  auth: {
-    tagline:
-      "Travail, communication et opérations de programmes sécurisés pour le Quebec Board of Black Educators.",
-    signIn: {
-      title: "Connexion",
-      submit: "Se connecter",
-      badCredentials:
-        "Ce courriel et ce mot de passe ne correspondent pas. Vérifiez-les et réessayez.",
-      forgot: "Mot de passe oublié?",
-      newHere: "Nouveau sur QBBE Hub?",
-      createAccount: "Créer un compte",
-    },
-    signUp: {
-      title: "Créer un compte",
-      fullName: "Nom complet",
-      passwordHint: "Au moins 8 caractères.",
-      submit: "Créer le compte",
-      haveAccount: "Vous avez déjà un compte?",
-      signIn: "Se connecter",
-      checkFailed: "Impossible de vérifier si l’inscription est ouverte. Réessayez.",
-      inviteOnly:
-        "Cet espace de travail est sur invitation seulement. Demandez à un administrateur de vous envoyer une invitation.",
-      checkEmail: "Vérifiez vos courriels",
-      confirmationSent:
-        "Nous avons envoyé un lien de confirmation à {email}. Suivez-le pour terminer la création de votre compte.",
-    },
-    recovery: {
-      requestTitle: "Récupérer le compte",
-      resetTitle: "Réinitialiser le mot de passe",
-      requestHeading: "Récupérer votre compte",
-      resetHeading: "Choisir un nouveau mot de passe",
-      requestDone:
-        "Si cette adresse correspond à un compte, un lien de récupération arrivera sous peu. Ouvrez-le dans ce navigateur.",
-      resetDone:
-        "Votre mot de passe a été modifié. Connectez-vous avec votre nouveau mot de passe.",
-      passwordRules:
-        "Utilisez au moins 12 caractères. Votre espace de travail peut exiger des mesures de protection supplémentaires.",
-      newPassword: "Nouveau mot de passe",
-      confirmPassword: "Confirmer le mot de passe",
-      sendLink: "Envoyer le lien de récupération",
-      savePassword: "Enregistrer le mot de passe",
-      requestFailed: "Impossible de demander la récupération. Patientez un moment et réessayez.",
-      mismatch: "Les mots de passe ne correspondent pas.",
-      updateFailed:
-        "Impossible de modifier votre mot de passe. Vérifiez les exigences ou demandez un nouveau lien de récupération.",
-      failed: "Impossible de terminer la récupération. Veuillez réessayer.",
-      sessionMissing: "Votre session de récupération est absente ou a expiré.",
-      requestNewLink: "Demander un nouveau lien de récupération",
-    },
-  },
   errors: {
     rootTitle: "Le Hub n’a pas pu se charger",
     rootBody:
@@ -230,138 +202,6 @@ export const frCA: Messages = {
     overdueDays: "En retard de {days} j",
     today: "Échéance aujourd’hui",
     tomorrow: "Échéance demain",
-  },
-  settings: {
-    title: "Paramètres du compte",
-    eyebrow: "Compte",
-    heading: "Paramètres",
-    description:
-      "Gérez la façon dont QBBE Hub vous avise. Les administrateurs gèrent séparément les paramètres par défaut de l’organisation.",
-  },
-  home: {
-    denied: {
-      title: "Cette page ne vous est pas accessible",
-      body: "Votre rôle ne la comprend pas; vous avez donc été ramené ici. Si vous en avez besoin pour votre travail, demandez-le à un administrateur.",
-    },
-    title: "Accueil",
-    greeting: {
-      morning: "Bonjour",
-      afternoon: "Bon après-midi",
-      evening: "Bonsoir",
-    },
-    greetingLine: "{greeting}, {name}",
-    sections: {
-      today: "Aujourd’hui",
-      programHealth: "Santé des programmes",
-      activityOverview: "Aperçu des activités",
-      upcomingEvents: "Événements à venir",
-      workload: "Charge de travail",
-      commitments: "Engagements",
-      outcomes: "Résultats",
-      needsAttention: "Requiert une attention",
-      recentActivity: "Activité récente",
-    },
-    attentionToday: "Voici ce qui requiert votre attention aujourd’hui.",
-    overview: "Votre travail assigné, les annonces et votre horaire à venir.",
-  },
-  myWork: {
-    title: "Mon travail",
-    eyebrow: "Centre de commande",
-    description:
-      "Tout ce dont vous êtes responsable ou que vous devez réviser, groupé par urgence. Sélectionnez des lignes pour des modifications en lot ou ouvrez une tâche pour tous les détails.",
-    buckets: {
-      overdue: "En retard",
-      today: "Échéance aujourd’hui",
-      thisWeek: "Cette semaine",
-      later: "Plus tard / non planifié",
-    },
-    loadFailed: "Votre travail n’a pas pu être chargé.",
-    loadFailedDetail:
-      "Il s’agit d’un échec de chargement, pas d’une charge de travail vide — rien n’a été modifié ni perdu.",
-    reviewHeading: "En attente de votre révision",
-    reviewQueue: "File de révision",
-    blocked: "Bloqué",
-    noMatchTitle: "Aucune tâche ne correspond à ces filtres",
-    noMatchBody:
-      "Essayez d’élargir un filtre — ou effacez-les pour voir tout votre travail en cours.",
-    clearTitle: "Votre charge de travail est vide",
-    clearBody:
-      "Lorsque des tâches vous sont assignées — dans des projets, des réunions ou des conversations — elles apparaissent ici, groupées par échéance.",
-    upcomingMeetings: "Réunions à venir",
-  },
-  inbox: {
-    title: "Boîte de réception",
-    eyebrow: "Triage unifié",
-    description:
-      "Notifications de la plateforme, mentions, assignations, réponses et annonces au même endroit.",
-    filtersLabel: "Filtres de la boîte de réception",
-    filters: {
-      all: "Tout",
-      mention: "Mentions",
-      assignment: "Assignations",
-      reply: "Réponses",
-      due_date: "Échéances",
-      approval: "Approbations",
-      decision: "Décisions",
-      announcement: "Annonces",
-      mail: "Courriel",
-    },
-    notificationsLabel: "Notifications",
-    gmailNotConnectedTitle: "Gmail n’est pas connecté",
-    gmailConnectPrompt:
-      "Connectez votre compte Google QBBE pour lister vos courriels et répondre de façon sécurisée sans stocker le contenu des messages dans QBBE Hub.",
-    gmailNotConfigured:
-      "Gmail reste déconnecté tant qu’un administrateur n’a pas défini GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET et l’URI de redirection. Ce n’est pas une fausse boîte de réception.",
-    noMailTitle: "Aucun courriel synchronisé pour l’instant",
-    noMailBody:
-      "Après une synchronisation Gmail réussie, les métadonnées des fils apparaissent ici. Le contenu des messages n’est pas conservé dans les journaux.",
-    zeroTitle: "Boîte de réception vide",
-    zeroBody:
-      "Les notifications de mentions, d’assignations, de réponses et d’annonces arriveront ici.",
-    fromTo: "De : {from} · À : {to}",
-    noBody: "Gmail n’a fourni aucun contenu en texte brut.",
-    unreadSummary: "{unread} non lues sur {shown} affichées",
-    connectedEmail: "Courriel connecté",
-    connected: "Connecté",
-    notConnected: "Non connecté",
-    lastSync: "Dernière synchronisation : {when}",
-    reconnectRequired: "Reconnexion requise : {error}",
-    connectedHelp:
-      "Rédigez un nouveau courriel ici ou ouvrez un message synchronisé pour le lire sur demande et y répondre par Gmail. Les connexions existantes qui utilisent l’ancienne autorisation de modification doivent se reconnecter pour obtenir l’autorisation plus restreinte de lecture et d’envoi.",
-    connectHelp:
-      "Connectez Gmail pour lister vos courriels et envoyer ou répondre à partir d’un message sélectionné.",
-    configHelp:
-      "L’intégration Gmail nécessite une configuration Google OAuth approuvée par QBBE. Une fois les identifiants en place, le bouton Connecter apparaît ici.",
-    connectGmail: "Connecter Gmail",
-    setupDocs: "Consultez docs/runbooks/integrations.md pour la configuration.",
-  },
-  admin: {
-    nav: {
-      label: "Sections de l’administration",
-      workspace: "Espace de travail",
-      templates: "Modèles",
-      access: "Incidence sur les accès",
-      jobs: "Tâches planifiées",
-      email: "Courriel",
-      exports: "Exportations",
-      retention: "Conservation",
-      records: "Documents et mises en suspens",
-      approvals: "Approbations",
-      designSystem: "Système de design",
-    },
-  },
-  textReader: {
-    loading: "Préparation de la lecture des mots de ce fichier, pour que la recherche puisse le trouver…",
-    reading: "Lecture des mots de ce fichier pour la recherche… {percent} %",
-    found: "Les mots de ce fichier ont été lus. La recherche le trouvera grâce à eux.",
-    notFound:
-      "Aucun mot n’a pu être lu dans ce fichier. Il sera trouvé par son titre, sa description et ses étiquettes.",
-    failed:
-      "Les mots de ce fichier n’ont pas pu être lus. Il sera trouvé par son titre, sa description et ses étiquettes.",
-    timedOut:
-      "La lecture de ce fichier a pris trop de temps. Il sera trouvé par son titre, sa description et ses étiquettes.",
-    skipped: "Lecture ignorée. Ce fichier sera trouvé par son titre, sa description et ses étiquettes.",
-    skip: "Ignorer la lecture",
   },
   ui: {
     closeDialog: "Fermer la boîte de dialogue",

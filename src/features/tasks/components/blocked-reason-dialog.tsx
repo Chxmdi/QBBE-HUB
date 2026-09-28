@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Label, Textarea } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Ask why a task is blocked (P0-TSK-04, A11Y-002).
@@ -33,6 +34,7 @@ export function BlockedReasonDialog({
   onCancel: () => void;
   onConfirm: (reason: string) => void;
 }) {
+  const t = useT();
   const [reason, setReason] = useState("");
   // Every StatusSelect on the page renders one of these, so a fixed id would
   // appear many times over. Duplicate ids are not merely untidy: the browser
@@ -55,7 +57,11 @@ export function BlockedReasonDialog({
     <Dialog
       open={open}
       onClose={cancel}
-      title={taskTitle ? `What is blocking “${taskTitle}”?` : "What is blocking this task?"}
+      title={
+        taskTitle
+          ? t("tasks.blockedDialog.titleNamed", { title: taskTitle })
+          : t("tasks.blockedDialog.title")
+      }
     >
       <form
         className="space-y-4"
@@ -68,7 +74,7 @@ export function BlockedReasonDialog({
         }}
       >
         <div>
-          <Label htmlFor={fieldId}>Reason</Label>
+          <Label htmlFor={fieldId}>{t("tasks.blockedDialog.reason")}</Label>
           <Textarea
             id={fieldId}
             name="reason"
@@ -78,19 +84,18 @@ export function BlockedReasonDialog({
             autoFocus
             value={reason}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="Waiting on the signed venue contract before we can confirm dates."
+            placeholder={t("tasks.blockedDialog.placeholder")}
           />
           <FieldHint>
-            Shown on the task wherever it appears. It is cleared automatically
-            when the task leaves Blocked, so it never outlives the blockage.
+            {t("tasks.blockedDialog.hint")}
           </FieldHint>
         </div>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={cancel}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button type="submit" loading={busy} disabled={!reason.trim()}>
-            Mark blocked
+            {t("tasks.blockedDialog.markBlocked")}
           </Button>
         </div>
       </form>

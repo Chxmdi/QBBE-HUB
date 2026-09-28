@@ -7,10 +7,11 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import {
   OPPORTUNITY_STAGES,
   SETTLED_STAGES,
-  STAGE_LABELS,
   type OpportunityStage,
 } from "@/features/crm/opportunity-schemas";
 import { updateOpportunity } from "@/features/crm/services/opportunity.commands";
+import { stageLabel } from "@/features/crm/labels";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Moving one bid along the pipeline.
@@ -37,6 +38,7 @@ export function OpportunityControls({
   today: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -50,7 +52,7 @@ export function OpportunityControls({
     return (
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-          Move stage
+          {t("crm.pipeline.controls.moveStage")}
         </Button>
         {error ? <span className="text-[12.5px] text-danger-fg">{error}</span> : null}
       </div>
@@ -79,7 +81,7 @@ export function OpportunityControls({
         setBusy(false);
 
         if (!result.ok) {
-          setError(result.error ?? "That didn't work. Try again.");
+          setError(result.error ?? t("crm.pipeline.controls.failed"));
           return;
         }
         setOpen(false);
@@ -87,7 +89,7 @@ export function OpportunityControls({
       }}
     >
       <div>
-        <Label htmlFor={`stage-${opportunityId}`}>Stage</Label>
+        <Label htmlFor={`stage-${opportunityId}`}>{t("crm.pipeline.controls.stage")}</Label>
         <Select
           id={`stage-${opportunityId}`}
           value={nextStage}
@@ -97,7 +99,7 @@ export function OpportunityControls({
         >
           {OPPORTUNITY_STAGES.map((value) => (
             <option key={value} value={value}>
-              {STAGE_LABELS[value]}
+              {stageLabel(value, t)}
             </option>
           ))}
         </Select>
@@ -105,7 +107,7 @@ export function OpportunityControls({
 
       {settling ? (
         <div>
-          <Label htmlFor={`decided-${opportunityId}`}>Decided on</Label>
+          <Label htmlFor={`decided-${opportunityId}`}>{t("crm.pipeline.controls.decidedOn")}</Label>
           <Input
             id={`decided-${opportunityId}`}
             name="decidedAt"
@@ -118,7 +120,7 @@ export function OpportunityControls({
       {awarding ? (
         <div>
           <Label htmlFor={`awarded-${opportunityId}`}>
-            Amount awarded ({currency})
+            {t("crm.pipeline.controls.amountAwarded", { currency })}
           </Label>
           <Input
             id={`awarded-${opportunityId}`}
@@ -134,7 +136,7 @@ export function OpportunityControls({
       {refusing ? (
         <div className="sm:col-span-2">
           <Label htmlFor={`outcome-${opportunityId}`}>
-            Why? This shapes the next application to them.
+            {t("crm.pipeline.controls.why")}
           </Label>
           <Textarea
             id={`outcome-${opportunityId}`}
@@ -148,7 +150,7 @@ export function OpportunityControls({
 
       <div className="flex items-center gap-2 sm:col-span-2">
         <Button type="submit" size="sm" loading={busy} disabled={busy}>
-          Save
+          {t("crm.pipeline.controls.save")}
         </Button>
         <Button
           type="button"
@@ -160,7 +162,7 @@ export function OpportunityControls({
             setError(null);
           }}
         >
-          Cancel
+          {t("crm.pipeline.controls.cancel")}
         </Button>
         {error ? (
           <span role="alert" className="text-[12.5px] text-danger-fg">

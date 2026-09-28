@@ -15,11 +15,14 @@ import {
 } from "@/features/tasks/services/planning.commands";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Checkbox } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
-const RULE_LABELS: Record<string, string> = {
-  weekly: "weekly",
-  monthly: "monthly",
-};
+function ruleLabel(rule: string, t: TranslateFn): string {
+  if (rule === "weekly") return t("tasks.extras.ruleWeekly");
+  if (rule === "monthly") return t("tasks.extras.ruleMonthly");
+  return rule;
+}
 
 export function TaskExtras({
   taskId,
@@ -58,6 +61,7 @@ export function TaskExtras({
    */
   onChanged: () => void;
 }) {
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -91,25 +95,25 @@ export function TaskExtras({
     const [moved] = ids.splice(from, 1);
     ids.splice(to, 0, moved);
     const result = await reorderChecklist({ taskId, itemIds: ids });
-    if (!result.ok) setError(result.error ?? "Could not reorder the checklist.");
+    if (!result.ok) setError(result.error ?? t("tasks.extras.reorderFailed"));
     else onChanged();
   }
 
   return (
     <div className="space-y-5">
       <section>
-        <h3 className="section-heading mb-2">Checklist</h3>
+        <h3 className="section-heading mb-2">{t("tasks.extras.checklist")}</h3>
         {optimisticChecklist.length === 0 ? (
-          <p className="text-[13px] text-muted">No checklist items yet.</p>
+          <p className="text-[13px] text-muted">{t("tasks.extras.noChecklist")}</p>
         ) : (
           <>
             {/* The roll-up P1-TSK-10 asks for. Announced politely so a screen
                 reader hears progress change after a box is ticked rather than
                 having to hunt for it. */}
             <p className="mb-2 text-[13px] text-muted" aria-live="polite">
-              {done} of {optimisticChecklist.length} done
+              {t("tasks.extras.progress", { done, total: optimisticChecklist.length })}
             </p>
-            <ul className="space-y-1.5" aria-label="Checklist">
+            <ul className="space-y-1.5" aria-label={t("tasks.extras.checklist")}>
               {optimisticChecklist.map((item, index) => (
                 <li key={item.id} className="flex items-center gap-2">
                   <label className="flex flex-1 items-center gap-2 text-[13.5px]">
@@ -135,7 +139,7 @@ export function TaskExtras({
                   <Button
                     type="button"
                     variant="ghost"
-                    aria-label={`Move ${item.title} up`}
+                    aria-label={t("tasks.extras.moveUp", { title: item.title })}
                     disabled={index === 0}
                     onClick={() => move(index, index - 1)}
                   >
@@ -144,7 +148,7 @@ export function TaskExtras({
                   <Button
                     type="button"
                     variant="ghost"
-                    aria-label={`Move ${item.title} down`}
+                    aria-label={t("tasks.extras.moveDown", { title: item.title })}
                     disabled={index === optimisticChecklist.length - 1}
                     onClick={() => move(index, index + 1)}
                   >
@@ -153,14 +157,14 @@ export function TaskExtras({
                   <Button
                     type="button"
                     variant="ghost"
-                    aria-label={`Remove ${item.title}`}
+                    aria-label={t("tasks.extras.removeItem", { title: item.title })}
                     onClick={async () => {
                       const result = await removeChecklistItem(item.id);
-                      if (!result.ok) setError(result.error ?? "Could not remove item.");
+                      if (!result.ok) setError(result.error ?? t("tasks.extras.removeFailed"));
                       else onChanged();
                     }}
                   >
-                    Remove
+                    {t("tasks.extras.remove")}
                   </Button>
                 </li>
               ))}
@@ -174,28 +178,30 @@ export function TaskExtras({
             const form = e.currentTarget;
             const title = new FormData(form).get("title") as string;
             const result = await addChecklistItem({ taskId, title });
-            if (!result.ok) setError(result.error ?? "Could not add item.");
+            if (!result.ok) setError(result.error ?? t("tasks.extras.addFailed"));
             else {
               form.reset();
               onChanged();
             }
           }}
         >
-          <Input name="title" placeholder="Add a checklist item" required maxLength={300} />
+          <Input name="title" placeholder={t("tasks.extras.addPlaceholder")} required maxLength={300} />
           <Button type="submit" variant="secondary">
-            Add
+            {t("tasks.add")}
           </Button>
         </form>
       </section>
 
       <section>
-        <h3 className="section-heading mb-2">Dependencies</h3>
+        <h3 className="section-heading mb-2">{t("tasks.extras.dependencies")}</h3>
         {blockers.length === 0 ? (
-          <p className="text-[13px] text-muted">No blocking tasks.</p>
+          <p className="text-[13px] text-muted">{t("tasks.extras.noBlockers")}</p>
         ) : (
           <ul className="text-[13.5px]">
             {blockers.map((b) => (
-              <li key={b.blocking_task_id}>Blocked by {b.title}</li>
+              <li key={b.blocking_task_id}>
+                {t("tasks.extras.blockedBy", { title: b.title })}
+              </li>
             ))}
           </ul>
         )}
@@ -206,13 +212,13 @@ export function TaskExtras({
               e.preventDefault();
               const blockingTaskId = new FormData(e.currentTarget).get("blockingTaskId") as string;
               const result = await addTaskDependency({ blockingTaskId, blockedTaskId: taskId });
-              if (!result.ok) setError(result.error ?? "Could not add dependency.");
+              if (!result.ok) setError(result.error ?? t("tasks.extras.dependencyFailed"));
               else onChanged();
             }}
           >
-            <Select name="blockingTaskId" aria-label="Blocked by task" required defaultValue="">
+            <Select name="blockingTaskId" aria-label={t("tasks.extras.blockedByLabel")} required defaultValue="">
               <option value="" disabled>
-                This task is blocked by…
+                {t("tasks.extras.blockedByPlaceholder")}
               </option>
               {peopleTasks
                 .filter((t) => t.id !== taskId)
@@ -223,13 +229,13 @@ export function TaskExtras({
                 ))}
             </Select>
             <Button type="submit" variant="secondary">
-              Add
+              {t("tasks.add")}
             </Button>
           </form>
         ) : null}
       </section>
 
-      <section aria-label="Repeats">
+      <section aria-label={t("tasks.extras.repeats")}>
         {series ? (
           /*
            * An occurrence of a series is not the same thing as a task somebody
@@ -240,13 +246,18 @@ export function TaskExtras({
           <div className="space-y-2">
             <p className="text-[13px]">
               {series.stopped_at
-                ? `Stopped. This was part of “${series.title}”, which repeated ${RULE_LABELS[series.recurrence_rule] ?? series.recurrence_rule}.`
-                : `Repeats ${RULE_LABELS[series.recurrence_rule] ?? series.recurrence_rule} as part of “${series.title}”.`}
+                ? t("tasks.extras.stopped", {
+                    title: series.title,
+                    rule: ruleLabel(series.recurrence_rule, t),
+                  })
+                : t("tasks.extras.repeatsAs", {
+                    title: series.title,
+                    rule: ruleLabel(series.recurrence_rule, t),
+                  })}
             </p>
             {seriesEditedAt ? (
               <p className="text-[12.5px] text-muted">
-                This occurrence was detached, so it keeps its own changes and the series will not
-                replace it.
+                {t("tasks.extras.detachedNote")}
               </p>
             ) : null}
             <div className="flex flex-wrap gap-2">
@@ -258,13 +269,13 @@ export function TaskExtras({
                     setError(null);
                     const result = await stopTaskSeries(series.id);
                     if (!result.ok) {
-                      setError(result.error ?? "Could not stop the recurring task.");
+                      setError(result.error ?? t("tasks.extras.stopFailed"));
                       return;
                     }
                     onChanged();
                   }}
                 >
-                  Stop repeating
+                  {t("tasks.extras.stop")}
                 </Button>
               )}
               {seriesEditedAt ? null : (
@@ -275,24 +286,23 @@ export function TaskExtras({
                     setError(null);
                     const result = await detachSeriesOccurrence(taskId);
                     if (!result.ok) {
-                      setError(result.error ?? "Could not detach this occurrence.");
+                      setError(result.error ?? t("tasks.extras.detachFailed"));
                       return;
                     }
                     onChanged();
                   }}
                 >
-                  Detach this occurrence
+                  {t("tasks.extras.detach")}
                 </Button>
               )}
             </div>
             <p className="text-[12.5px] text-muted">
-              Stopping keeps every occurrence that already exists; it only stops new ones being
-              created.
+              {t("tasks.extras.stopHint")}
             </p>
           </div>
         ) : (
           <>
-            <Label htmlFor="recurrence">Repeats</Label>
+            <Label htmlFor="recurrence">{t("tasks.extras.repeats")}</Label>
             <Select
               id="recurrence"
               defaultValue={recurrenceRule ?? ""}
@@ -301,9 +311,9 @@ export function TaskExtras({
                 onChanged();
               }}
             >
-              <option value="">Does not repeat</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
+              <option value="">{t("tasks.create.doesNotRepeat")}</option>
+              <option value="weekly">{t("tasks.create.weekly")}</option>
+              <option value="monthly">{t("tasks.create.monthly")}</option>
             </Select>
           </>
         )}

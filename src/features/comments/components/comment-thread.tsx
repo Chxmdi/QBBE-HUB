@@ -2,6 +2,7 @@ import { RecordComments, type CommentView } from "./record-comments";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Loads one record's comment thread and renders it (P0-COM-01).
@@ -18,6 +19,7 @@ export async function CommentThread({
   parentId: string;
 }) {
   const session = await requireSession();
+  const t = await getT();
   const supabase = await createSupabasePageClient();
   const [{ data: rows }, options, { data: documentRows }] = await Promise.all([
     supabase
@@ -54,11 +56,11 @@ export async function CommentThread({
   };
   const comments: CommentView[] = ((rows ?? []) as Row[]).map((row) => ({
     ...row,
-    author_name: names.get(row.author_id) ?? "Former member",
+    author_name: names.get(row.author_id) ?? t("comments.formerMember"),
     document: row.document_id
       ? {
           id: row.document_id,
-          title: documentTitles.get(row.document_id) ?? "A document",
+          title: documentTitles.get(row.document_id) ?? t("comments.aDocument"),
         }
       : null,
   }));

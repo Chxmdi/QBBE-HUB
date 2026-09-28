@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
-import { TASK_ROLES, TASK_ROLE_LABELS, type TaskRole } from "@/features/tasks/schemas";
+import { TASK_ROLES, taskRoleLabel, type TaskRole } from "@/features/tasks/schemas";
+import { useT } from "@/lib/i18n/client";
 import { removeTaskRole, setTaskRole } from "@/features/tasks/services/task.commands";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 
@@ -36,6 +37,7 @@ export function TaskRoles({
   holders: TaskRoleHolder[];
   onChanged: () => void | Promise<void>;
 }) {
+  const t = useT();
   const { toast } = useToast();
   const [adding, setAdding] = useState(false);
   const [userId, setUserId] = useState("");
@@ -47,7 +49,7 @@ export function TaskRoles({
     startTransition(async () => {
       const result = await setTaskRole({ taskId, userId, role });
       if (!result.ok) {
-        toast(result.error ?? "Could not assign that role.", { tone: "error" });
+        toast(result.error ?? t("tasks.roles.assignFailed"), { tone: "error" });
         return;
       }
       setUserId("");
@@ -64,7 +66,7 @@ export function TaskRoles({
         role: holder.role,
       });
       if (!result.ok) {
-        toast(result.error ?? "Could not remove that role.", { tone: "error" });
+        toast(result.error ?? t("tasks.roles.removeFailed"), { tone: "error" });
         return;
       }
       await onChanged();
@@ -74,13 +76,12 @@ export function TaskRoles({
   return (
     <section aria-labelledby="drawer-roles">
       <h3 id="drawer-roles" className="section-heading mb-2">
-        Roles
+        {t("tasks.roles.heading")}
       </h3>
 
       {holders.length === 0 ? (
         <p className="text-[13px] text-muted">
-          Only the owner is accountable so far. Adding a reviewer, approver,
-          contributor or follower also gives them access to this task.
+          {t("tasks.roles.empty")}
         </p>
       ) : (
         <ul className="space-y-1.5">
@@ -91,14 +92,15 @@ export function TaskRoles({
             >
               <Avatar name={holder.fullName} src={holder.avatarUrl} size="sm" />
               <span className="text-[13.5px]">{holder.fullName}</span>
-              <Badge tone="neutral">{TASK_ROLE_LABELS[holder.role]}</Badge>
+              <Badge tone="neutral">{taskRoleLabel(holder.role, t)}</Badge>
               <button
                 type="button"
                 onClick={() => remove(holder)}
                 disabled={pending}
-                aria-label={`Remove ${holder.fullName} as ${TASK_ROLE_LABELS[
-                  holder.role
-                ].toLowerCase()}`}
+                aria-label={t("tasks.roles.removeAs", {
+                  name: holder.fullName,
+                  role: taskRoleLabel(holder.role, t).toLowerCase(),
+                })}
                 className="ml-auto rounded-(--radius-sm) p-1 text-muted transition-colors hover:bg-surface-soft hover:text-danger-fg"
               >
                 <X className="size-3.5" aria-hidden />
@@ -111,13 +113,13 @@ export function TaskRoles({
       {adding ? (
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <div className="min-w-44 flex-1">
-            <Label htmlFor="role-person">Person</Label>
+            <Label htmlFor="role-person">{t("tasks.roles.person")}</Label>
             <Select
               id="role-person"
               value={userId}
               onChange={(e) => setUserId(e.target.value)}
             >
-              <option value="">Choose someone</option>
+              <option value="">{t("tasks.roles.choose")}</option>
               {people.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -126,7 +128,7 @@ export function TaskRoles({
             </Select>
           </div>
           <div>
-            <Label htmlFor="role-kind">Role</Label>
+            <Label htmlFor="role-kind">{t("tasks.roles.role")}</Label>
             <Select
               id="role-kind"
               value={role}
@@ -134,16 +136,16 @@ export function TaskRoles({
             >
               {TASK_ROLES.map((r) => (
                 <option key={r} value={r}>
-                  {TASK_ROLE_LABELS[r]}
+                  {taskRoleLabel(r, t)}
                 </option>
               ))}
             </Select>
           </div>
           <Button size="sm" onClick={add} loading={pending} disabled={!userId}>
-            Add
+            {t("tasks.add")}
           </Button>
           <Button size="sm" variant="secondary" onClick={() => setAdding(false)}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         </div>
       ) : (
@@ -154,7 +156,7 @@ export function TaskRoles({
           onClick={() => setAdding(true)}
         >
           <UserPlus className="size-3.5" aria-hidden />
-          Add a role
+          {t("tasks.roles.addRole")}
         </Button>
       )}
     </section>

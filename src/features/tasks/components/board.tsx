@@ -4,10 +4,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useOptimistic, useState, useTransition } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { PriorityBadge, TASK_STATUS_META } from "@/components/shared/status-badges";
+import { PriorityBadge, taskStatusLabel } from "@/components/shared/status-badges";
 import { BlockedReasonDialog } from "@/features/tasks/components/blocked-reason-dialog";
 import { StatusSelect } from "@/features/tasks/components/status-select";
 import { updateTaskStatus } from "@/features/tasks/services/task.commands";
+import { useLocale, useT } from "@/lib/i18n/client";
 import { cn, dueLabel } from "@/lib/utils";
 import type { Task, TaskStatus } from "@/types/entities";
 import { BOARD_COLUMNS } from "@/features/tasks/schemas";
@@ -54,6 +55,8 @@ export function TaskBoard({
   tasks: Task[];
   timeZone?: string;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const [optimisticTasks, applyMove] = useOptimistic(
     tasks,
     (state, move: { id: string; status: TaskStatus }) =>
@@ -100,10 +103,12 @@ export function TaskBoard({
       applyMove({ id, status });
       const result = await updateTaskStatus(id, status, reason);
       if (!result.ok) {
-        setError(result.error ?? "Move failed.");
-        setAnnouncement(`${title} could not be moved`);
+        setError(result.error ?? t("board.moveFailed"));
+        setAnnouncement(t("board.couldNotMove", { title }));
       } else {
-        setAnnouncement(`${title} moved to ${TASK_STATUS_META[status].label}`);
+        setAnnouncement(
+          t("board.moved", { title, status: taskStatusLabel(status, t) }),
+        );
       }
     });
   }
@@ -122,8 +127,7 @@ export function TaskBoard({
       {/* Dragging is the pointer affordance; the status control on each card is
           the keyboard one. Saying so costs a line and saves the discovery. */}
       <p className="sr-only">
-        Each card has a status control. Use it to move a task between columns
-        without dragging.
+        {t("board.keyboardHint")}
       </p>
       <p role="status" aria-live="polite" className="sr-only">
         {announcement}
@@ -142,7 +146,7 @@ export function TaskBoard({
             return (
               <section
                 key={column}
-                aria-label={`${TASK_STATUS_META[column].label} column`}
+                aria-label={t("board.column", { status: taskStatusLabel(column, t) })}
                 onDragOver={(e) => {
                   e.preventDefault();
                   setDropTarget(column);
@@ -166,7 +170,7 @@ export function TaskBoard({
                       aria-hidden
                       className={cn("size-2 rounded-full", COLUMN_DOTS[column])}
                     />
-                    {TASK_STATUS_META[column].label}
+                    {taskStatusLabel(column, t)}
                   </h2>
                   <span className="rounded-full border border-line bg-surface px-2 py-0.5 text-[11px] font-bold text-muted">
                     {columnTasks.length}
@@ -174,7 +178,7 @@ export function TaskBoard({
                 </header>
                 <div className="space-y-2.5">
                   {shownTasks.map((task) => {
-                    const due = dueLabel(task.due_at, timeZone);
+                    const due = dueLabel(task.due_at, timeZone, locale);
                     return (
                       <article
                         key={task.id}
@@ -200,7 +204,7 @@ export function TaskBoard({
                         ) : null}
                         {task.blocked_reason ? (
                           <p className="rounded-(--radius-sm) border border-danger/15 bg-danger/8 px-2 py-1.5 text-[12px] text-danger-fg">
-                            <span className="font-semibold">Blocked:</span>{" "}
+                            <span className="font-semibold">{t("board.blocked")}</span>{" "}
                             {task.blocked_reason}
                           </p>
                         ) : null}
@@ -230,7 +234,7 @@ export function TaskBoard({
                                 />
                               </span>
                             ) : (
-                              <Badge tone="neutral">Unassigned</Badge>
+                              <Badge tone="neutral">{t("tasks.unassigned")}</Badge>
                             )}
                           </span>
                         </div>
@@ -251,12 +255,12 @@ export function TaskBoard({
                       }
                       className="w-full rounded-(--radius-sm) border border-dashed border-line bg-surface/45 px-1.5 py-2 text-center text-[12.5px] font-medium text-brand-fg hover:bg-surface"
                     >
-                      Show {hiddenCount} more
+                      {t("tasks.showMore", { count: hiddenCount })}
                     </button>
                   ) : null}
                   {columnTasks.length === 0 ? (
                     <p className="rounded-(--radius-sm) border border-dashed border-line bg-surface/45 px-1.5 py-5 text-center text-[12px] text-muted/80">
-                      No tasks
+                      {t("board.noTasksColumn")}
                     </p>
                   ) : null}
                 </div>

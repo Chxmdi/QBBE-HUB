@@ -9,6 +9,8 @@ import {
   RISK_STATUSES,
   SETTLED_ISSUE_STATUSES,
   SETTLED_RISK_STATUSES,
+  issueStatusLabel,
+  riskStatusLabel,
   type IssueStatus,
   type RiskStatus,
 } from "@/features/risks/schemas";
@@ -17,6 +19,7 @@ import {
   updateIssue,
   updateRisk,
 } from "@/features/risks/services/risk.commands";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Inline controls for a single risk or issue.
@@ -29,6 +32,7 @@ import {
 
 function useRowAction() {
   const router = useRouter();
+  const t = useT();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -38,14 +42,14 @@ function useRowAction() {
     const result = await action();
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "That didn't work. Try again.");
+      setError(result.error ?? t("risks.controls.error"));
       return false;
     }
     router.refresh();
     return true;
   }
 
-  return { busy, error, run };
+  return { busy, error, run, t };
 }
 
 export function RiskControls({
@@ -59,7 +63,7 @@ export function RiskControls({
   mitigation: string | null;
   people: { value: string; label: string }[];
 }) {
-  const { busy, error, run } = useRowAction();
+  const { busy, error, run, t } = useRowAction();
   const [open, setOpen] = React.useState(false);
   const [nextStatus, setNextStatus] = React.useState<RiskStatus>(status);
   const [note, setNote] = React.useState(mitigation ?? "");
@@ -71,7 +75,7 @@ export function RiskControls({
       {!open ? (
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-            Update
+            {t("risks.controls.update")}
           </Button>
           <Button
             size="sm"
@@ -82,7 +86,7 @@ export function RiskControls({
               run(() => escalateRiskToIssue({ riskId, severity: "high" }))
             }
           >
-            It happened — raise as issue
+            {t("risks.controls.escalate")}
           </Button>
           {error ? <span className="text-[12.5px] text-danger-fg">{error}</span> : null}
         </div>
@@ -105,7 +109,7 @@ export function RiskControls({
           }}
         >
           <div>
-            <Label htmlFor={`risk-status-${riskId}`}>Status</Label>
+            <Label htmlFor={`risk-status-${riskId}`}>{t("risks.controls.status")}</Label>
             <Select
               id={`risk-status-${riskId}`}
               value={nextStatus}
@@ -113,15 +117,15 @@ export function RiskControls({
             >
               {RISK_STATUSES.map((value) => (
                 <option key={value} value={value}>
-                  {value}
+                  {riskStatusLabel(value, t)}
                 </option>
               ))}
             </Select>
           </div>
           <div>
-            <Label htmlFor={`risk-owner-${riskId}`}>Owner</Label>
+            <Label htmlFor={`risk-owner-${riskId}`}>{t("risks.controls.owner")}</Label>
             <Select id={`risk-owner-${riskId}`} name="ownerId" defaultValue="">
-              <option value="">Unchanged</option>
+              <option value="">{t("risks.controls.unchanged")}</option>
               {people.map((person) => (
                 <option key={person.value} value={person.value}>
                   {person.label}
@@ -131,7 +135,7 @@ export function RiskControls({
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor={`risk-note-${riskId}`}>
-              {needsNote ? "Why you are settling it" : "What you are doing about it"}
+              {needsNote ? t("risks.controls.whySettling") : t("risks.controls.whatDoing")}
             </Label>
             <Textarea
               id={`risk-note-${riskId}`}
@@ -140,14 +144,14 @@ export function RiskControls({
               onChange={(event) => setNote(event.currentTarget.value)}
               placeholder={
                 needsNote
-                  ? "Accepting or closing a risk is a decision. Record the reasoning."
-                  : "Optional."
+                  ? t("risks.controls.settlePlaceholder")
+                  : t("risks.controls.optional")
               }
             />
           </div>
           <div className="flex items-center gap-3 sm:col-span-2">
             <Button type="submit" size="sm" loading={busy} disabled={busy}>
-              Save
+              {t("risks.controls.save")}
             </Button>
             <Button
               type="button"
@@ -155,7 +159,7 @@ export function RiskControls({
               variant="ghost"
               onClick={() => setOpen(false)}
             >
-              Cancel
+              {t("risks.controls.cancel")}
             </Button>
             {error ? <span className="text-[12.5px] text-danger-fg">{error}</span> : null}
           </div>
@@ -174,7 +178,7 @@ export function IssueControls({
   status: IssueStatus;
   people: { value: string; label: string }[];
 }) {
-  const { busy, error, run } = useRowAction();
+  const { busy, error, run, t } = useRowAction();
   const [open, setOpen] = React.useState(false);
   const [nextStatus, setNextStatus] = React.useState<IssueStatus>(status);
   const [resolution, setResolution] = React.useState("");
@@ -185,7 +189,7 @@ export function IssueControls({
     return (
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-          Update
+          {t("risks.controls.update")}
         </Button>
         {error ? <span className="text-[12.5px] text-danger-fg">{error}</span> : null}
       </div>
@@ -211,7 +215,7 @@ export function IssueControls({
       }}
     >
       <div>
-        <Label htmlFor={`issue-status-${issueId}`}>Status</Label>
+        <Label htmlFor={`issue-status-${issueId}`}>{t("risks.controls.status")}</Label>
         <Select
           id={`issue-status-${issueId}`}
           value={nextStatus}
@@ -219,15 +223,15 @@ export function IssueControls({
         >
           {ISSUE_STATUSES.map((value) => (
             <option key={value} value={value}>
-              {value}
+              {issueStatusLabel(value, t)}
             </option>
           ))}
         </Select>
       </div>
       <div>
-        <Label htmlFor={`issue-owner-${issueId}`}>Owner</Label>
+        <Label htmlFor={`issue-owner-${issueId}`}>{t("risks.controls.owner")}</Label>
         <Select id={`issue-owner-${issueId}`} name="ownerId" defaultValue="">
-          <option value="">Unchanged</option>
+          <option value="">{t("risks.controls.unchanged")}</option>
           {people.map((person) => (
             <option key={person.value} value={person.value}>
               {person.label}
@@ -237,22 +241,22 @@ export function IssueControls({
       </div>
       {needsResolution ? (
         <div className="sm:col-span-2">
-          <Label htmlFor={`issue-resolution-${issueId}`}>How it was resolved</Label>
+          <Label htmlFor={`issue-resolution-${issueId}`}>{t("risks.controls.howResolved")}</Label>
           <Textarea
             id={`issue-resolution-${issueId}`}
             value={resolution}
             required
             onChange={(event) => setResolution(event.currentTarget.value)}
-            placeholder="An issue closed without a resolution is not resolved, only hidden."
+            placeholder={t("risks.controls.resolvedPlaceholder")}
           />
         </div>
       ) : null}
       <div className="flex items-center gap-3 sm:col-span-2">
         <Button type="submit" size="sm" loading={busy} disabled={busy}>
-          Save
+          {t("risks.controls.save")}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
+          {t("risks.controls.cancel")}
         </Button>
         {error ? <span className="text-[12.5px] text-danger-fg">{error}</span> : null}
       </div>

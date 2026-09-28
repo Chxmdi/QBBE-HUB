@@ -3,18 +3,20 @@
 import { useRouter } from "next/navigation";
 import { leaveChannel } from "@/features/channels/services/channel.commands";
 import { useToast } from "@/components/ui/toast";
+import { useT } from "@/lib/i18n/client";
 
 export function LeaveChannelButton({ channelId }: { channelId: string }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
 
   async function leave() {
-    if (!window.confirm("Leave this channel? You can rejoin public channels later.")) {
+    if (!window.confirm(t("channels.leave.confirm"))) {
       return;
     }
     const result = await leaveChannel(channelId);
     if (!result.ok) {
-      toast(result.error ?? "You cannot leave this channel.", { tone: "error" });
+      toast(result.error ?? t("channels.errors.leaveFailed"), { tone: "error" });
       return;
     }
     router.push("/channels");
@@ -27,7 +29,7 @@ export function LeaveChannelButton({ channelId }: { channelId: string }) {
       onClick={leave}
       className="text-[12.5px] font-medium text-danger-fg hover:underline"
     >
-      Leave
+      {t("channels.leave.button")}
     </button>
   );
 }

@@ -5,19 +5,19 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AdminNav } from "@/features/admin/components/admin-nav";
 import { RequestExportDialog } from "@/features/exports/components/request-export-dialog";
-import {
-  EXPORT_KIND_LABELS,
-  EXPORT_STATUS_LABELS,
-  hoursUntilExpiry,
-  isDownloadable,
-} from "@/features/exports/schemas";
+import { hoursUntilExpiry, isDownloadable } from "@/features/exports/schemas";
 import type { ExportStatus } from "@/features/exports/schemas";
 import { getExports } from "@/features/exports/services/export.queries";
 import { requireAdminAal2 } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { formatDateTime, relativeTime } from "@/lib/utils";
+import { getFormatters, getLocale, getT } from "@/lib/i18n/server";
+import type { Formatters } from "@/lib/i18n/format";
+import type { TranslateFn } from "@/lib/i18n/translate";
+import { labelOr } from "@/features/admin/labels";
 
-export const metadata: Metadata = { title: "Exports" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("admin.exports.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 const STATUS_TONE: Record<ExportStatus, "success" | "info" | "danger" | "neutral"> = {
@@ -28,19 +28,18 @@ const STATUS_TONE: Record<ExportStatus, "success" | "info" | "danger" | "neutral
   expired: "neutral",
 };
 
-const STATUS_HELP: Record<ExportStatus, string> = {
-  queued: "Waiting for the next run, within five minutes.",
-  running: "Being built now.",
-  ready: "Downloadable until it expires.",
-  failed: "Nothing was produced. The reason is below.",
-  expired: "The file has been deleted. The record stays.",
-};
-
-function formatSize(bytes: number | null): string {
+function formatSize(bytes: number | null, t: TranslateFn, format: Formatters): string {
   if (!bytes) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024) return t("admin.exports.units.bytes", { n: format.number(bytes) });
+  if (bytes < 1024 * 1024) {
+    return t("admin.exports.units.kb", { n: format.number(Math.round(bytes / 1024)) });
+  }
+  return t("admin.exports.units.mb", {
+    n: format.number(bytes / (1024 * 1024), {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }),
+  });
 }
 
 /**
@@ -54,6 +53,9 @@ function formatSize(bytes: number | null): string {
  */
 export default async function AdminExportsPage() {
   await requireAdminAal2();
+  const t = await getT();
+  const format = await getFormatters();
+  const locale = await getLocale();
   const now = new Date();
 
   const supabase = await createSupabaseServerClient();
@@ -69,23 +71,23 @@ export default async function AdminExportsPage() {
   const people = ((members ?? []) as unknown as MemberRow[])
     .filter((m) => m.user_profile)
     .map((m) => ({ value: m.user_profile!.id, label: m.user_profile!.full_name }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .sort((a, b) => a.label.localeCompare(b.label, locale));
 
   return (
     <div>
       <AdminNav />
       <PageHeader
-        eyebrow="Administration"
-        title="Data exports"
-        description="Built in the background, kept in a private bucket, and deleted seven days after they are made. Every request and every download is recorded."
+        eyebrow={t("admin.eyebrow")}
+        title={t("admin.exports.title")}
+        description={t("admin.exports.description")}
         actions={<RequestExportDialog people={people} />}
       />
 
       {rows.length === 0 ? (
         <EmptyState
           icon={<FileArchive />}
-          title="No exports yet"
-          description="Request one when a funder audit, a data subject access request, or a move to another system calls for it."
+          title={t("admin.exports.emptyTitle")}
+          description={t("admin.exports.emptyDescription")}
         />
       ) : (
         <ul className="card divide-y divide-line">
@@ -100,7 +102,7 @@ export default async function AdminExportsPage() {
               <li key={row.id} className="px-4 py-3">
                 <div className="flex flex-wrap items-start gap-2">
                   <span className="min-w-0 flex-1 text-[13.5px] font-medium">
-                    {EXPORT_KIND_LABELS[row.kind] ?? row.kind}
+                    {labelOr(t, `admin.exports.kinds.${row.kind}`, row.kind)}
                     {row.subject ? (
                       <span className="font-normal text-muted">
                         {" "}
@@ -109,7 +111,7 @@ export default async function AdminExportsPage() {
                     ) : null}
                   </span>
                   <Badge tone={STATUS_TONE[row.status]}>
-                    {EXPORT_STATUS_LABELS[row.status]}
+                    {t(`admin.exports.statuses.${row.status}`)}
                   </Badge>
                   {downloadable ? (
                     <a
@@ -117,33 +119,48 @@ export default async function AdminExportsPage() {
                       className="inline-flex h-8 items-center gap-1.5 rounded-(--radius-sm) border border-line bg-surface px-2.5 text-[13px] font-medium hover:bg-surface-soft"
                     >
                       <Download className="size-4" aria-hidden />
-                      Download
+                      {t("admin.exports.download")}
                     </a>
                   ) : null}
                 </div>
 
                 <p className="meta mt-0.5">
-                  {row.requester?.full_name ?? "Someone"} ·{" "}
-                  {relativeTime(row.created_at)}
-                  {row.row_count !== null ? ` · ${row.row_count} rows` : ""}
-                  {row.byte_size ? ` · ${formatSize(row.byte_size)}` : ""}
+                  {row.requester?.full_name ?? t("admin.exports.someone")} ·{" "}
+                  {format.relative(row.created_at)}
+                  {row.row_count !== null
+                    ? t("admin.exports.rows", { count: format.number(row.row_count) })
+                    : ""}
+                  {row.byte_size ? ` · ${formatSize(row.byte_size, t, format)}` : ""}
                 </p>
 
-                <p className="meta">{STATUS_HELP[row.status]}</p>
+                <p className="meta">{t(`admin.exports.help.${row.status}`)}</p>
 
                 {row.status === "ready" ? (
                   <p className="meta">
                     {hours > 0
-                      ? `Expires in ${hours} ${hours === 1 ? "hour" : "hours"} (${formatDateTime(row.expires_at)}).`
-                      : "Past its expiry date — the next sweep will delete the file."}
+                      ? t(hours === 1 ? "admin.exports.expiresOne" : "admin.exports.expiresOther", {
+                          hours,
+                          when: format.dateTime(row.expires_at),
+                        })
+                      : t("admin.exports.pastExpiry")}
                   </p>
                 ) : null}
 
                 {row.download_count > 0 ? (
                   <p className="meta">
-                    Downloaded {row.download_count}{" "}
-                    {row.download_count === 1 ? "time" : "times"}
-                    {row.downloaded_at ? `, last ${relativeTime(row.downloaded_at)}` : ""}.
+                    {t(
+                      row.download_count === 1
+                        ? "admin.exports.downloadedOne"
+                        : "admin.exports.downloadedOther",
+                      {
+                        count: row.download_count,
+                        last: row.downloaded_at
+                          ? t("admin.exports.lastDownload", {
+                              when: format.relative(row.downloaded_at),
+                            })
+                          : "",
+                      },
+                    )}
                   </p>
                 ) : null}
 
@@ -157,11 +174,7 @@ export default async function AdminExportsPage() {
       )}
 
       <p className="meta mt-6 max-w-2xl">
-        Exports live in a private bucket with no access policies at all — the
-        only way to reach one is a link signed for two minutes after this page
-        has checked who you are. The record outlives the file on purpose: after
-        an incident, the question is who took a copy, and that answer should
-        survive the copy being deleted.
+        {t("admin.exports.footer")}
       </p>
     </div>
   );

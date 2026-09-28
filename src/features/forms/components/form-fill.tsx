@@ -10,6 +10,7 @@ import { parseAnswers, type FileAnswer, type FormField } from "@/features/forms/
 import { SignatureFields } from "@/features/forms/components/signature-fields";
 import { submitForm } from "@/features/forms/services/form.commands";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/client";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -33,6 +34,7 @@ export function FormFill({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -47,7 +49,7 @@ export function FormFill({
         const file = form.get(field.key) as File | null;
         if (file && file.size > 0) {
           if (file.size > MAX_BYTES) {
-            setError(`“${field.label}”: files must be 25 MB or smaller.`);
+            setError(t("forms.fill.fileTooBig", { label: field.label }));
             return;
           }
           files.push({ key: field.key, file });
@@ -64,6 +66,7 @@ export function FormFill({
     const typed = parseAnswers(
       fields.filter((f) => f.type !== "file"),
       answers,
+      t,
     );
     if (!typed.ok) {
       setError(typed.error);
@@ -84,7 +87,7 @@ export function FormFill({
       if (uploadError) {
         if (uploaded.length) await supabase.storage.from("form-files").remove(uploaded);
         setSaving(false);
-        setError("Upload failed. Attach a photo (JPEG, PNG, HEIC, WebP) or a PDF, and check your connection.");
+        setError(t("forms.fill.uploadFailed"));
         return;
       }
       uploaded.push(path);
@@ -100,21 +103,21 @@ export function FormFill({
     setSaving(false);
     if (!result.ok || !result.id) {
       if (uploaded.length) await supabase.storage.from("form-files").remove(uploaded);
-      setError(result.error ?? "Could not submit the form.");
+      setError(result.error ?? t("forms.fill.submitFailed"));
       return;
     }
-    toast(requiresSignature ? "Submitted and signed." : "Submitted.");
+    toast(requiresSignature ? t("forms.fill.submittedSigned") : t("forms.fill.submitted"));
     router.push(`/forms/submissions/${result.id}`);
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-2xl space-y-5" aria-label="Fill in the form">
+    <form onSubmit={handleSubmit} className="max-w-2xl space-y-5" aria-label={t("forms.fill.label")}>
       {fields.map((field) => {
         const id = `ff-${field.key}`;
         const label = (
           <>
             {field.label}
-            {field.required ? null : <span className="font-normal text-muted"> (optional)</span>}
+            {field.required ? null : <span className="font-normal text-muted"> {t("forms.fill.optional")}</span>}
           </>
         );
         const hint = field.help ? <FieldHint>{field.help}</FieldHint> : null;
@@ -134,7 +137,7 @@ export function FormFill({
               <div key={field.key}>
                 <Label htmlFor={id}>{label}</Label>
                 <Select id={id} name={field.key} required={field.required} defaultValue="">
-                  <option value="">Choose…</option>
+                  <option value="">{t("forms.fill.choose")}</option>
                   {(field.options ?? []).map((o) => (
                     <option key={o} value={o}>
                       {o}
@@ -163,7 +166,7 @@ export function FormFill({
                   required={field.required}
                   accept="image/jpeg,image/png,image/heic,image/heif,image/webp,application/pdf"
                 />
-                {hint ?? <FieldHint>A photo or PDF, up to 25 MB.</FieldHint>}
+                {hint ?? <FieldHint>{t("forms.fill.fileHint")}</FieldHint>}
               </div>
             );
           default:
@@ -176,7 +179,7 @@ export function FormFill({
                   required={field.required}
                   type={field.type === "date" ? "date" : "text"}
                   inputMode={field.type === "money" || field.type === "number" ? "decimal" : undefined}
-                  placeholder={field.type === "money" ? "0.00" : undefined}
+                  placeholder={field.type === "money" ? t("forms.fill.moneyPlaceholder") : undefined}
                 />
                 {hint}
               </div>
@@ -192,7 +195,7 @@ export function FormFill({
       <div className="flex justify-end">
         <Button type="submit" loading={saving}>
           <Send className="size-4" aria-hidden />
-          {requiresSignature ? "Sign and submit" : "Submit"}
+          {requiresSignature ? t("forms.fill.signAndSubmit") : t("forms.fill.submit")}
         </Button>
       </div>
     </form>

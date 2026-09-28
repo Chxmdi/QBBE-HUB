@@ -22,8 +22,11 @@ import { DeepLinkScroll } from "@/components/shared/deep-link-scroll";
 import { SearchSnippet } from "@/features/documents/components/search-snippet";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Documents" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("documents.title") };
+}
 export const dynamic = "force-dynamic";
 
 type SearchHit = {
@@ -68,6 +71,7 @@ export default async function DocumentsPage({
   const requiredOnly = reading === "1";
   const filtering = Boolean(query || folderId || tagFilter || requiredOnly);
   const supabase = await createSupabasePageClient();
+  const t = await getT();
 
   // Search inside files and receipts (#147). The database returns only what
   // this person may open; receipts are for staff, and only their own unless
@@ -167,23 +171,23 @@ export default async function DocumentsPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Files & resources"
-        title="Documents"
-        description="The organization's library: files and links filed by folder, with version history and required reading. Files are stored privately and opened through short-lived links."
+        eyebrow={t("documents.eyebrow")}
+        title={t("documents.title")}
+        description={t("documents.description")}
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <Link
               href={showingArchived ? "/documents" : "/documents?archived=1"}
               className="text-[13px] font-medium text-brand-fg hover:underline"
             >
-              {showingArchived ? "Active documents" : "Archived"}
+              {showingArchived ? t("documents.activeDocuments") : t("documents.archived")}
             </Link>
             {session.isStaff ? (
               <Link
                 href="/documents/templates"
                 className="text-[13px] font-medium text-brand-fg hover:underline"
               >
-                Templates
+                {t("documents.templatesLink")}
               </Link>
             ) : null}
             {session.isAdmin ? <FolderCreateDialog /> : null}
@@ -205,29 +209,29 @@ export default async function DocumentsPage({
         method="get"
         action="/documents"
         role="search"
-        aria-label="Search documents"
+        aria-label={t("documents.search.aria")}
         className="mb-4 grid grid-cols-1 items-end gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.5fr)_minmax(0,1fr)_auto]"
       >
         {showingArchived ? <input type="hidden" name="archived" value="1" /> : null}
         <div>
-          <Label htmlFor="library-q">Search</Label>
+          <Label htmlFor="library-q">{t("documents.search.label")}</Label>
           <Input
             id="library-q"
             name="q"
             defaultValue={query}
             maxLength={200}
-            placeholder="Title, tag, or words inside a file"
+            placeholder={t("documents.search.placeholder")}
           />
         </div>
         <div>
-          <Label htmlFor="library-folder">Folder</Label>
+          <Label htmlFor="library-folder">{t("documents.search.folder")}</Label>
           <Select id="library-folder" name="folder" defaultValue={activeFolder?.id ?? ""}>
-            <option value="">All folders</option>
-            {groupFolders(folders).map((group) => (
+            <option value="">{t("documents.search.allFolders")}</option>
+            {groupFolders(folders, t).map((group) => (
               <optgroup key={group.category} label={group.label}>
                 {group.folders.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {folderLabel(f)}
+                    {folderLabel(f, t)}
                   </option>
                 ))}
               </optgroup>
@@ -235,20 +239,20 @@ export default async function DocumentsPage({
           </Select>
         </div>
         <div>
-          <Label htmlFor="library-tag">Tag</Label>
+          <Label htmlFor="library-tag">{t("documents.search.tag")}</Label>
           <Input id="library-tag" name="tag" defaultValue={tagFilter} maxLength={40} />
         </div>
         <div className="flex items-center gap-3">
           <Button type="submit" variant="secondary">
             <Search className="size-4" aria-hidden />
-            Search
+            {t("documents.search.submit")}
           </Button>
           {filtering ? (
             <Link
               href={showingArchived ? "/documents?archived=1" : "/documents"}
               className="text-[13px] font-medium text-brand-fg hover:underline"
             >
-              Clear
+              {t("documents.search.clear")}
             </Link>
           ) : null}
         </div>
@@ -257,43 +261,42 @@ export default async function DocumentsPage({
       <p className="meta mb-3">
         {requiredOnly ? (
           <>
-            Showing required reading.{" "}
+            {t("documents.showingRequired")}{" "}
             <Link href="/documents" className="text-brand-fg hover:underline">
-              Show everything
+              {t("documents.showEverything")}
             </Link>
           </>
         ) : (
           <Link href="/documents?reading=1" className="text-brand-fg hover:underline">
-            Show required reading
+            {t("documents.showRequired")}
           </Link>
         )}
         {activeFolder ? (
           <span>
-            {" "}
-            · In {folderLabel(activeFolder)}
-            {activeFolder.visibility === "staff" ? " (staff only)" : ""}
+            {t("documents.inFolder", { folder: folderLabel(activeFolder, t) })}
+            {activeFolder.visibility === "staff" ? t("documents.staffOnlySuffix") : ""}
           </span>
         ) : null}
       </p>
 
       {rows.length === 0 && (earlierMatches.length > 0 || receiptMatches.length > 0) ? (
-        <p className="meta mb-3">No current documents match. Other matches are listed below.</p>
+        <p className="meta mb-3">{t("documents.noCurrentMatches")}</p>
       ) : rows.length === 0 ? (
         <EmptyState
           icon={<FolderOpen />}
           title={
             filtering
-              ? "No documents match"
+              ? t("documents.empty.noMatchTitle")
               : showingArchived
-                ? "No archived documents"
-                : "No resources yet"
+                ? t("documents.empty.noArchivedTitle")
+                : t("documents.empty.noneTitle")
           }
           description={
             filtering
-              ? "Try other words, another folder, or clear the search."
+              ? t("documents.empty.noMatchDescription")
               : showingArchived
-                ? "Archived documents stay here until someone restores them."
-                : "Upload a file or link a QBBE-controlled Drive document, then attach it to the program or project it supports."
+                ? t("documents.empty.noArchivedDescription")
+                : t("documents.empty.noneDescription")
           }
         />
       ) : (
@@ -314,7 +317,7 @@ export default async function DocumentsPage({
       {earlierMatches.length ? (
         <section aria-labelledby="earlier-matches" className="mt-6">
           <h2 id="earlier-matches" className="mb-2 text-[15px] font-semibold">
-            Found in earlier versions
+            {t("documents.earlierVersions")}
           </h2>
           <ul className="space-y-2">
             {earlierMatches.map((hit) => (
@@ -322,7 +325,9 @@ export default async function DocumentsPage({
                 <Link href={`/documents/${hit.id}`} className="font-medium text-brand-fg hover:underline">
                   {hit.title}
                 </Link>
-                <span className="meta"> · Version {hit.version_number}</span>
+                <span className="meta">
+                  {t("documents.versionSuffix", { number: hit.version_number ?? "" })}
+                </span>
                 {hit.snippet ? <SearchSnippet snippet={hit.snippet} /> : null}
               </li>
             ))}
@@ -333,7 +338,7 @@ export default async function DocumentsPage({
       {receiptMatches.length ? (
         <section aria-labelledby="receipt-matches" className="mt-6">
           <h2 id="receipt-matches" className="mb-2 text-[15px] font-semibold">
-            Receipts
+            {t("documents.receipts")}
           </h2>
           <ul className="space-y-2">
             {receiptMatches.map((hit) => (

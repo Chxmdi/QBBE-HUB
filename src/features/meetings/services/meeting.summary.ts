@@ -12,7 +12,13 @@
  * the meeting had none *and* as though the section was never meant to be
  * there; saying "none recorded" distinguishes "we decided nothing" from
  * "nobody wrote anything down", which are different meetings.
+ *
+ * The summary is written once, in the language of the person completing the
+ * meeting; `t` defaults to English so tests and callers without a request
+ * keep the wording they always had.
  */
+
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 
 export interface SummaryAttendee {
   fullName: string | null;
@@ -35,30 +41,33 @@ export interface MeetingSummaryInput {
   actions: SummaryAction[];
 }
 
-export function composeMeetingSummary(input: MeetingSummaryInput): string {
+export function composeMeetingSummary(
+  input: MeetingSummaryInput,
+  t: TranslateFn = createTranslator("en"),
+): string {
   const attendeeNames = input.attendees
     .map((a) => a.fullName)
     .filter((name): name is string => Boolean(name))
     .sort((a, b) => a.localeCompare(b));
 
   return [
-    `Meeting summary — ${input.title}`,
+    t("meetings.summary.heading", { title: input.title }),
     "",
     attendeeNames.length > 0
-      ? `Attendees: ${attendeeNames.join(", ")}`
-      : "Attendees: none recorded",
+      ? t("meetings.summary.attendees", { names: attendeeNames.join(", ") })
+      : t("meetings.summary.attendeesNone"),
     "",
     input.decisions.length > 0
-      ? `Decisions:\n${input.decisions.map((d) => `• ${d.title}`).join("\n")}`
-      : "Decisions: none recorded",
+      ? `${t("meetings.summary.decisions")}\n${input.decisions.map((d) => `• ${d.title}`).join("\n")}`
+      : t("meetings.summary.decisionsNone"),
     "",
     input.actions.length > 0
-      ? `Actions:\n${input.actions
+      ? `${t("meetings.summary.actions")}\n${input.actions
           .map(
             (a) =>
-              `• ${a.title}${a.ownerName ? ` — ${a.ownerName}` : ""}${a.dueAt ? ` (due ${a.dueAt})` : ""}`,
+              `• ${a.title}${a.ownerName ? ` — ${a.ownerName}` : ""}${a.dueAt ? t("meetings.summary.due", { date: a.dueAt }) : ""}`,
           )
           .join("\n")}`
-      : "Actions: none recorded",
+      : t("meetings.summary.actionsNone"),
   ].join("\n");
 }

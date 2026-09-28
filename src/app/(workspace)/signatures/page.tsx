@@ -8,9 +8,11 @@ import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { SendForSignatureDialog } from "@/features/forms/components/send-for-signature-dialog";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatInZone } from "@/lib/time";
+import { getFormatters, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Signatures" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("signatures.title") };
+}
 export const dynamic = "force-dynamic";
 
 interface DocumentRow {
@@ -25,6 +27,7 @@ interface DocumentRow {
 export default async function SignaturesPage() {
   const session = await requireSession();
   const supabase = await createSupabasePageClient();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const [{ data: documents }, { data: members }] = await Promise.all([
     supabase
       .from("signing_document")
@@ -44,7 +47,7 @@ export default async function SignaturesPage() {
   const waiting = mine.filter((d) => !d.signature.some((s) => s.signer_id === session.userId));
   const signed = mine.filter((d) => d.signature.some((s) => s.signer_id === session.userId));
   const memberOptions = ((members ?? []) as unknown as { user_id: string; user_profile: { full_name: string } | null }[])
-    .map((m) => ({ id: m.user_id, label: m.user_profile?.full_name ?? "Member" }))
+    .map((m) => ({ id: m.user_id, label: m.user_profile?.full_name ?? t("signatures.member") }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
   const list = (items: DocumentRow[]) => (
@@ -54,7 +57,11 @@ export default async function SignaturesPage() {
           <Link href={`/signatures/${d.id}`} className="font-medium text-brand-fg hover:underline">
             {d.title}
           </Link>
-          <span className="meta">Sent {formatInZone(d.created_at, session.timeZone, { dateStyle: "medium" })}</span>
+          <span className="meta">
+            {t("signatures.sentOn", {
+              date: format.inZone(d.created_at, session.timeZone, { dateStyle: "medium" }),
+            })}
+          </span>
         </li>
       ))}
     </ul>
@@ -63,9 +70,9 @@ export default async function SignaturesPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="Paperless"
-        title="Signatures"
-        description="Documents you are asked to sign electronically. Each signature records your name, your account, the time, and a SHA-256 fingerprint of exactly what you signed."
+        eyebrow={t("signatures.eyebrow")}
+        title={t("signatures.title")}
+        description={t("signatures.description")}
         actions={
           session.isAdmin ? (
             <SendForSignatureDialog
@@ -79,10 +86,10 @@ export default async function SignaturesPage() {
 
       <section aria-labelledby="waiting" className="space-y-3">
         <h2 id="waiting" className="text-[15px] font-semibold">
-          Waiting for your signature
+          {t("signatures.waitingHeading")}
         </h2>
         {waiting.length === 0 ? (
-          <EmptyState icon={<FileSignature />} title="Nothing to sign" description="Documents sent to you for signature appear here." />
+          <EmptyState icon={<FileSignature />} title={t("signatures.nothingTitle")} description={t("signatures.nothingDescription")} />
         ) : (
           list(waiting)
         )}
@@ -91,7 +98,7 @@ export default async function SignaturesPage() {
       {signed.length > 0 ? (
         <section aria-labelledby="signed" className="space-y-3">
           <h2 id="signed" className="text-[15px] font-semibold">
-            Signed by you
+            {t("signatures.signedByYou")}
           </h2>
           {list(signed)}
         </section>
@@ -100,16 +107,16 @@ export default async function SignaturesPage() {
       {session.isAdmin ? (
         <section aria-labelledby="all-documents" className="space-y-3">
           <h2 id="all-documents" className="text-[15px] font-semibold">
-            All documents sent for signature
+            {t("signatures.allHeading")}
           </h2>
           {rows.length === 0 ? (
-            <p className="meta">None yet. Use Send a PDF for signature to start.</p>
+            <p className="meta">{t("signatures.noneYet")}</p>
           ) : (
             <DataTable minWidth="560px">
               <TableHead>
-                <TableHeader>Document</TableHeader>
-                <TableHeader>Sent</TableHeader>
-                <TableHeader>Signed</TableHeader>
+                <TableHeader>{t("signatures.colDocument")}</TableHeader>
+                <TableHeader>{t("signatures.colSent")}</TableHeader>
+                <TableHeader>{t("signatures.colSigned")}</TableHeader>
               </TableHead>
               <tbody>
                 {rows.map((d) => {
@@ -122,10 +129,10 @@ export default async function SignaturesPage() {
                           {d.title}
                         </Link>
                       </TableCell>
-                      <TableCell>{formatInZone(d.created_at, session.timeZone, { dateStyle: "medium" })}</TableCell>
+                      <TableCell>{format.inZone(d.created_at, session.timeZone, { dateStyle: "medium" })}</TableCell>
                       <TableCell>
                         <Badge tone={done >= total && total > 0 ? "success" : "warning"}>
-                          {done} of {total}
+                          {t("signatures.progress", { done, total })}
                         </Badge>
                       </TableCell>
                     </TableRow>

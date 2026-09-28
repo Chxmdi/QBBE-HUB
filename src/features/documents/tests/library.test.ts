@@ -43,3 +43,15 @@ describe("folders", () => {
     expect(groups[0].folders.map((f) => f.name)).toEqual(["Bylaws", "Policies"]);
   });
 });
+
+describe("folders in French", () => {
+  it("labels categories and refuses too many tags in French", async () => {
+    const { createTranslator } = await import("@/lib/i18n/translate");
+    const { tagsSchemaFor } = await import("@/features/documents/services/library");
+    const t = createTranslator("fr-CA");
+    expect(folderLabel({ category: "governance", name: "Bylaws" }, t)).toBe("Gouvernance / Bylaws");
+    const result = tagsSchemaFor(t).safeParse(Array.from({ length: 13 }, (_, i) => `t${i}`));
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toBe("Utilisez au plus 12 étiquettes.");
+  });
+});

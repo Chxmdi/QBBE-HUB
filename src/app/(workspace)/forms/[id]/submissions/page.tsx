@@ -11,9 +11,11 @@ import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { answerText, type FormField } from "@/features/forms/fields";
 import { requireAdminAal2 } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatInZone } from "@/lib/time";
+import { getFormatters, getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Form submissions" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("forms.submissions.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 const PAGE_LIMIT = 500;
@@ -35,6 +37,7 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
       .limit(PAGE_LIMIT),
   ]);
   if (!form) notFound();
+  const [t, format, locale] = await Promise.all([getT(), getFormatters(), getLocale()]);
   const fields = (form.fields as FormField[]).filter((f) => f.type !== "file").slice(0, SHOWN_FIELDS);
   const rows = (submissions ?? []) as unknown as {
     id: string;
@@ -48,14 +51,14 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
     <div>
       <Breadcrumbs
         items={[
-          { label: "Forms", href: "/forms" },
+          { label: t("forms.title"), href: "/forms" },
           { label: form.title, href: `/forms/${id}` },
-          { label: "Submissions" },
+          { label: t("forms.submissions.crumb") },
         ]}
       />
       <PageHeader
-        eyebrow="Forms"
-        title={`Submissions: ${form.title}`}
+        eyebrow={t("forms.title")}
+        title={t("forms.submissions.title", { title: form.title })}
         actions={
           <Link
             href={`/api/forms/${id}/export`}
@@ -63,44 +66,46 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
             className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
           >
             <Download className="size-4" aria-hidden />
-            Export CSV
+            {t("forms.submissions.exportCsv")}
           </Link>
         }
       />
       {rows.length === 0 ? (
-        <EmptyState icon={<Inbox />} title="No submissions yet" />
+        <EmptyState icon={<Inbox />} title={t("forms.submissions.emptyTitle")} />
       ) : (
         <>
           <p className="meta mb-2">
-            {rows.length === PAGE_LIMIT ? `Showing the latest ${PAGE_LIMIT}. ` : ""}
-            {rows.length} {rows.length === 1 ? "submission" : "submissions"}.
+            {rows.length === PAGE_LIMIT ? t("forms.submissions.showingLatest", { count: format.number(PAGE_LIMIT) }) : ""}
+            {t(rows.length === 1 ? "forms.submissions.countOne" : "forms.submissions.countOther", {
+              count: format.number(rows.length),
+            })}
           </p>
           <DataTable minWidth="720px">
             <TableHead>
-              <TableHeader>Submitted</TableHeader>
-              <TableHeader>By</TableHeader>
+              <TableHeader>{t("forms.colSubmitted")}</TableHeader>
+              <TableHeader>{t("forms.submissions.colBy")}</TableHeader>
               {fields.map((f) => (
                 <TableHeader key={f.key}>{f.label}</TableHeader>
               ))}
-              {form.requires_signature ? <TableHeader>Signed</TableHeader> : null}
+              {form.requires_signature ? <TableHeader>{t("forms.submissions.colSigned")}</TableHeader> : null}
             </TableHead>
             <tbody>
               {rows.map((s) => (
                 <TableRow key={s.id}>
                   <TableCell className="whitespace-nowrap">
                     <Link href={`/forms/submissions/${s.id}`} className="text-brand-fg hover:underline">
-                      {formatInZone(s.submitted_at, session.timeZone, { dateStyle: "medium", timeStyle: "short" })}
+                      {format.inZone(s.submitted_at, session.timeZone, { dateStyle: "medium", timeStyle: "short" })}
                     </Link>
                   </TableCell>
                   <TableCell>{s.submitter?.full_name ?? "—"}</TableCell>
                   {fields.map((f) => (
                     <TableCell key={f.key} className="max-w-60 truncate">
-                      {answerText(f, s.answers[f.key])}
+                      {answerText(f, s.answers[f.key], false, t, locale)}
                     </TableCell>
                   ))}
                   {form.requires_signature ? (
                     <TableCell>
-                      {s.signature.length > 0 ? <Badge tone="success">Signed</Badge> : <Badge tone="warning">Not signed</Badge>}
+                      {s.signature.length > 0 ? <Badge tone="success">{t("forms.submissions.signed")}</Badge> : <Badge tone="warning">{t("forms.submissions.notSigned")}</Badge>}
                     </TableCell>
                   ) : null}
                 </TableRow>

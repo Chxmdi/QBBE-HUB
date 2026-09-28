@@ -5,7 +5,8 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
-import { requestExportSchema } from "@/features/exports/schemas";
+import { requestExportSchemaFor } from "@/features/exports/schemas";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Asking for an export.
@@ -22,13 +23,14 @@ import { requestExportSchema } from "@/features/exports/schemas";
  */
 export async function requestExport(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
 
   const limited = await enforceRateLimit("export:request", session.userId);
   if (limited) return limited;
 
-  const parsed = requestExportSchema.safeParse(input);
+  const parsed = requestExportSchemaFor(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("exports.errors.invalidInput") };
   }
   const { kind, subjectUserId } = parsed.data;
 
@@ -47,7 +49,7 @@ export async function requestExport(input: unknown): Promise<ActionResult> {
   if (error || !created) {
     return {
       ok: false,
-      error: "You don't have permission to request that export.",
+      error: t("exports.errors.notPermitted"),
     };
   }
 

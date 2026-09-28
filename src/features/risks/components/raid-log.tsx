@@ -4,16 +4,23 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   ISSUE_SEVERITIES,
-  RISK_BAND_LABELS,
   RISK_IMPACTS,
   RISK_LIKELIHOODS,
+  issueSeverityLabel,
+  issueStatusLabel,
   riskBand,
+  riskBandLabel,
+  riskLevelLabel,
   riskNeedsReview,
+  riskStatusLabel,
 } from "@/features/risks/schemas";
 import { createIssue, createRisk } from "@/features/risks/services/risk.commands";
 import type { IssueRow, RaidLog, RiskRow } from "@/features/risks/services/risk.queries";
 import { IssueControls, RiskControls } from "./raid-controls";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import type { Formatters } from "@/lib/i18n/format";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * The project's risk and issue log on one screen.
@@ -47,13 +54,17 @@ const SEVERITY_TONE = {
  */
 const HIGHLIGHT = "bg-accent/15 ring-1 ring-brand/40";
 
-const OPTION = (values: readonly string[]) =>
+const OPTION = (
+  values: readonly ("low" | "medium" | "high" | "critical")[],
+  kind: "likelihood" | "impact" | "severity",
+  t: TranslateFn,
+) =>
   values.map((value) => ({
     value,
-    label: value.charAt(0).toUpperCase() + value.slice(1),
+    label: riskLevelLabel(value, kind, t),
   }));
 
-export function RaidLogPanel({
+export async function RaidLogPanel({
   log,
   projectId,
   people,
@@ -74,6 +85,8 @@ export function RaidLogPanel({
   // the browser's clock is what let a row read "due for review" while the count
   // above it disagreed.
   const today = log.today;
+  const t = await getT();
+  const format = await getFormatters();
   const peopleOptions = people.map((p) => ({ value: p.id, label: p.label }));
 
   // A search result pointing at a settled risk must not land on a collapsed
@@ -86,10 +99,14 @@ export function RaidLogPanel({
       {log.needingReview > 0 ? (
         <p className="card border-warning/40 bg-warning/8 px-4 py-3 text-[13.5px]">
           <strong className="font-semibold">
-            {log.needingReview} {log.needingReview === 1 ? "risk is" : "risks are"} due
-            for review.
+            {t(
+              log.needingReview === 1
+                ? "risks.log.dueForReviewOne"
+                : "risks.log.dueForReviewOther",
+              { count: log.needingReview },
+            )}
           </strong>{" "}
-          Confirm the likelihood and impact still hold, or settle them.
+          {t("risks.log.dueForReviewBody")}
         </p>
       ) : null}
 
@@ -97,57 +114,59 @@ export function RaidLogPanel({
       <section aria-labelledby="project-risks">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 id="project-risks" className="section-heading">
-            Risks
-            <span className="ml-2 font-normal text-muted">{log.openRisks.length} open</span>
+            {t("risks.log.risksHeading")}
+            <span className="ml-2 font-normal text-muted">
+              {t("risks.log.openCount", { count: log.openRisks.length })}
+            </span>
           </h2>
           {canManage ? (
             <EntityFormDialog
-              triggerLabel="Log a risk"
+              triggerLabel={t("risks.log.logRisk")}
               triggerVariant="secondary"
-              title="Log a risk"
-              submitLabel="Log risk"
+              title={t("risks.log.logRisk")}
+              submitLabel={t("risks.log.logRiskSubmit")}
               extraValues={{ projectId }}
               action={createRisk}
               fields={[
-                { name: "title", label: "What might happen", type: "text", required: true },
-                { name: "description", label: "Detail", type: "textarea" },
+                { name: "title", label: t("risks.log.riskTitle"), type: "text", required: true },
+                { name: "description", label: t("risks.log.detail"), type: "textarea" },
                 {
                   name: "likelihood",
-                  label: "Likelihood",
+                  label: t("risks.log.likelihood"),
                   type: "select",
                   required: true,
                   defaultValue: "medium",
                   colSpan: 1,
-                  options: OPTION(RISK_LIKELIHOODS),
+                  options: OPTION(RISK_LIKELIHOODS, "likelihood", t),
                 },
                 {
                   name: "impact",
-                  label: "Impact if it happens",
+                  label: t("risks.log.impactIfHappens"),
                   type: "select",
                   required: true,
                   defaultValue: "medium",
                   colSpan: 1,
-                  options: OPTION(RISK_IMPACTS),
+                  options: OPTION(RISK_IMPACTS, "impact", t),
                 },
                 {
                   name: "trigger",
-                  label: "What would make it happen",
+                  label: t("risks.log.trigger"),
                   type: "textarea",
                 },
                 {
                   name: "mitigation",
-                  label: "What we are doing about it",
+                  label: t("risks.log.mitigation"),
                   type: "textarea",
-                  hint: "Required before a risk can be accepted or closed.",
+                  hint: t("risks.log.mitigationHint"),
                 },
                 {
                   name: "ownerId",
-                  label: "Owner",
+                  label: t("risks.log.owner"),
                   type: "select",
                   colSpan: 1,
                   options: peopleOptions,
                 },
-                { name: "reviewAt", label: "Review on", type: "date", colSpan: 1 },
+                { name: "reviewAt", label: t("risks.log.reviewOn"), type: "date", colSpan: 1 },
               ]}
             />
           ) : null}
@@ -156,8 +175,8 @@ export function RaidLogPanel({
         {log.openRisks.length === 0 ? (
           <EmptyState
             icon={<ShieldAlert aria-hidden />}
-            title="No open risks"
-            description="Log what might go wrong while there is still time to do something about it."
+            title={t("risks.log.noRisksTitle")}
+            description={t("risks.log.noRisksBody")}
           />
         ) : (
           <ul className="card divide-y divide-line">
@@ -166,6 +185,8 @@ export function RaidLogPanel({
                 key={risk.id}
                 risk={risk}
                 today={today}
+                t={t}
+                format={format}
                 people={peopleOptions}
                 canManage={canManage}
                 highlighted={risk.id === highlightRiskId}
@@ -177,7 +198,7 @@ export function RaidLogPanel({
         {log.settledRisks.length > 0 ? (
           <details className="card mt-3 px-4 py-3" open={settledRiskLinked}>
             <summary className="cursor-pointer text-[13.5px] font-medium">
-              Settled risks ({log.settledRisks.length})
+              {t("risks.log.settledRisks", { count: log.settledRisks.length })}
             </summary>
             <ul className="mt-2 divide-y divide-line">
               {log.settledRisks.map((risk) => (
@@ -191,7 +212,7 @@ export function RaidLogPanel({
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="min-w-0 flex-1 text-[13.5px]">{risk.title}</span>
-                    <Badge tone="neutral">{risk.status}</Badge>
+                    <Badge tone="neutral">{riskStatusLabel(risk.status, t)}</Badge>
                   </div>
                   {risk.mitigation ? (
                     <p className="meta mt-0.5">{risk.mitigation}</p>
@@ -207,35 +228,37 @@ export function RaidLogPanel({
       <section aria-labelledby="project-issues">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 id="project-issues" className="section-heading">
-            Issues
-            <span className="ml-2 font-normal text-muted">{log.openIssues.length} open</span>
+            {t("risks.log.issuesHeading")}
+            <span className="ml-2 font-normal text-muted">
+              {t("risks.log.openCount", { count: log.openIssues.length })}
+            </span>
           </h2>
           {canManage ? (
             <EntityFormDialog
-              triggerLabel="Raise an issue"
+              triggerLabel={t("risks.log.raiseIssue")}
               triggerVariant="secondary"
-              title="Raise an issue"
-              submitLabel="Raise issue"
+              title={t("risks.log.raiseIssue")}
+              submitLabel={t("risks.log.raiseIssueSubmit")}
               extraValues={{ projectId }}
               action={createIssue}
               fields={[
-                { name: "title", label: "What has happened", type: "text", required: true },
-                { name: "description", label: "Detail", type: "textarea" },
-                { name: "impact", label: "Impact", type: "textarea" },
-                { name: "resolutionPlan", label: "Resolution plan", type: "textarea" },
+                { name: "title", label: t("risks.log.issueTitle"), type: "text", required: true },
+                { name: "description", label: t("risks.log.detail"), type: "textarea" },
+                { name: "impact", label: t("risks.log.impact"), type: "textarea" },
+                { name: "resolutionPlan", label: t("risks.log.resolutionPlan"), type: "textarea" },
                 {
                   name: "severity",
-                  label: "Severity",
+                  label: t("risks.log.severity"),
                   type: "select",
                   required: true,
                   defaultValue: "medium",
                   colSpan: 1,
-                  options: OPTION(ISSUE_SEVERITIES),
+                  options: OPTION(ISSUE_SEVERITIES, "severity", t),
                 },
-                { name: "dueAt", label: "Resolve by", type: "date", colSpan: 1 },
+                { name: "dueAt", label: t("risks.log.resolveBy"), type: "date", colSpan: 1 },
                 {
                   name: "ownerId",
-                  label: "Owner",
+                  label: t("risks.log.owner"),
                   type: "select",
                   options: peopleOptions,
                 },
@@ -247,8 +270,8 @@ export function RaidLogPanel({
         {log.openIssues.length === 0 ? (
           <EmptyState
             icon={<AlertTriangle aria-hidden />}
-            title="No open issues"
-            description="Issues are things that have already happened and need resolving."
+            title={t("risks.log.noIssuesTitle")}
+            description={t("risks.log.noIssuesBody")}
           />
         ) : (
           <ul className="card divide-y divide-line">
@@ -256,6 +279,8 @@ export function RaidLogPanel({
               <IssueItem
                 key={issue.id}
                 issue={issue}
+                t={t}
+                format={format}
                 people={peopleOptions}
                 canManage={canManage}
                 highlighted={issue.id === highlightIssueId}
@@ -267,7 +292,7 @@ export function RaidLogPanel({
         {log.settledIssues.length > 0 ? (
           <details className="card mt-3 px-4 py-3" open={settledIssueLinked}>
             <summary className="cursor-pointer text-[13.5px] font-medium">
-              Resolved issues ({log.settledIssues.length})
+              {t("risks.log.resolvedIssues", { count: log.settledIssues.length })}
             </summary>
             <ul className="mt-2 divide-y divide-line">
               {log.settledIssues.map((issue) => (
@@ -281,7 +306,7 @@ export function RaidLogPanel({
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="min-w-0 flex-1 text-[13.5px]">{issue.title}</span>
-                    <Badge tone="neutral">{issue.status}</Badge>
+                    <Badge tone="neutral">{issueStatusLabel(issue.status, t)}</Badge>
                   </div>
                   {issue.resolution ? (
                     <p className="meta mt-0.5">{issue.resolution}</p>
@@ -302,9 +327,13 @@ function RiskItem({
   people,
   canManage,
   highlighted,
+  t,
+  format,
 }: {
   risk: RiskRow;
   today: string;
+  t: TranslateFn;
+  format: Formatters;
   people: { value: string; label: string }[];
   canManage: boolean;
   highlighted: boolean;
@@ -319,20 +348,23 @@ function RiskItem({
     >
       <div className="flex flex-wrap items-start gap-2">
         <span className="min-w-0 flex-1 text-[13.5px] font-medium">{risk.title}</span>
-        <Badge tone={BAND_TONE[band]}>{RISK_BAND_LABELS[band]}</Badge>
-        <Badge tone="neutral">{risk.status}</Badge>
+        <Badge tone={BAND_TONE[band]}>{riskBandLabel(band, t)}</Badge>
+        <Badge tone="neutral">{riskStatusLabel(risk.status, t)}</Badge>
       </div>
 
       <p className="meta mt-0.5">
-        {risk.likelihood} likelihood · {risk.impact} impact
-        {risk.owner ? ` · ${risk.owner.full_name}` : " · unowned"}
-        {risk.review_at ? ` · review ${formatDate(risk.review_at)}` : ""}
-        {dueForReview ? " · due for review" : ""}
+        {t(`risks.likelihoodPhrase.${risk.likelihood}`)} ·{" "}
+        {t(`risks.impactPhrase.${risk.impact}`)}
+        {risk.owner ? ` · ${risk.owner.full_name}` : t("risks.log.unownedSuffix")}
+        {risk.review_at
+          ? t("risks.log.reviewSuffix", { date: format.date(risk.review_at) })
+          : ""}
+        {dueForReview ? t("risks.log.dueForReviewSuffix") : ""}
       </p>
 
       {risk.trigger ? (
         <p className="mt-1 text-[13px]">
-          <span className="text-muted">Trigger: </span>
+          <span className="text-muted">{t("risks.log.triggerPrefix")}</span>
           {risk.trigger}
         </p>
       ) : null}
@@ -341,7 +373,7 @@ function RiskItem({
       ) : null}
       {risk.mitigation ? (
         <p className="mt-1 text-[13px]">
-          <span className="text-muted">Mitigation: </span>
+          <span className="text-muted">{t("risks.log.mitigationPrefix")}</span>
           {risk.mitigation}
         </p>
       ) : null}
@@ -363,8 +395,12 @@ function IssueItem({
   people,
   canManage,
   highlighted,
+  t,
+  format,
 }: {
   issue: IssueRow;
+  t: TranslateFn;
+  format: Formatters;
   people: { value: string; label: string }[];
   canManage: boolean;
   highlighted: boolean;
@@ -376,25 +412,29 @@ function IssueItem({
     >
       <div className="flex flex-wrap items-start gap-2">
         <span className="min-w-0 flex-1 text-[13.5px] font-medium">{issue.title}</span>
-        <Badge tone={SEVERITY_TONE[issue.severity]}>{issue.severity}</Badge>
-        <Badge tone="neutral">{issue.status}</Badge>
+        <Badge tone={SEVERITY_TONE[issue.severity]}>
+          {issueSeverityLabel(issue.severity, t)}
+        </Badge>
+        <Badge tone="neutral">{issueStatusLabel(issue.status, t)}</Badge>
       </div>
 
       <p className="meta mt-0.5">
-        {issue.owner ? issue.owner.full_name : "unowned"}
-        {issue.due_at ? ` · resolve by ${formatDate(issue.due_at)}` : ""}
-        {issue.risk_id ? " · escalated from a risk" : ""}
+        {issue.owner ? issue.owner.full_name : t("risks.log.unowned")}
+        {issue.due_at
+          ? t("risks.log.resolveBySuffix", { date: format.date(issue.due_at) })
+          : ""}
+        {issue.risk_id ? t("risks.log.escalatedSuffix") : ""}
       </p>
 
       {issue.impact ? (
         <p className="mt-1 text-[13px]">
-          <span className="text-muted">Impact: </span>
+          <span className="text-muted">{t("risks.log.impactPrefix")}</span>
           {issue.impact}
         </p>
       ) : null}
       {issue.resolution_plan ? (
         <p className="mt-1 text-[13px]">
-          <span className="text-muted">Resolution plan: </span>
+          <span className="text-muted">{t("risks.log.resolutionPlanPrefix")}</span>
           {issue.resolution_plan}
         </p>
       ) : null}

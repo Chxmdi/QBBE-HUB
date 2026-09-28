@@ -1,3 +1,5 @@
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+
 /**
  * How a job run should read on the operator's page.
  *
@@ -45,19 +47,25 @@ export function runTone(
   }
 }
 
-export function runLabel(outcome: RunOutcome, run: RunOutcomeInput | null): string {
+const ENGLISH = createTranslator("en");
+
+export function runLabel(
+  outcome: RunOutcome,
+  run: RunOutcomeInput | null,
+  t: TranslateFn = ENGLISH,
+): string {
   switch (outcome) {
     case "never":
-      return "Never run";
+      return t("jobs.run.never");
     case "running":
-      return "Running";
+      return t("jobs.run.running");
     case "succeeded":
-      return "Succeeded";
+      return t("jobs.run.succeeded");
     case "failed":
-      return "Failed";
+      return t("jobs.run.failed");
     case "partial":
       // The number is the point: "partial" alone leaves the operator guessing
       // whether one message or the whole batch went missing.
-      return `${run?.failedCount ?? 0} failed`;
+      return t("jobs.run.partial", { count: run?.failedCount ?? 0 });
   }
 }

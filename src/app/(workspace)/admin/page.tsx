@@ -25,10 +25,13 @@ import {
 import { requireAdminAal2 } from "@/lib/auth";
 import { transactionalEmailIsLive } from "@/features/notifications/services/email-provider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { formatDate, relativeTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import { labelOr, roleCodeLabel, triggerEventLabel } from "@/features/admin/labels";
 import type { Membership } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Admin" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("admin.workspace.title") };
+}
 export const dynamic = "force-dynamic";
 
 interface InvitationRow {
@@ -76,37 +79,13 @@ interface JobRunRow {
   finished_at: string;
 }
 
-const INTEGRATION_CATALOG = [
-  {
-    provider: "gmail",
-    name: "Gmail",
-    description:
-      "Unified inbox email sync. Requires Google OAuth credentials and consent review.",
-  },
-  {
-    provider: "google_calendar",
-    name: "Google Calendar",
-    description: "Calendar overlay and meeting sync with scoped OAuth.",
-  },
-  {
-    provider: "google_drive",
-    name: "Google Drive",
-    description:
-      "Metadata sync for Drive resources. Opening a resource respects its Drive sharing controls.",
-  },
-  {
-    provider: "volunteer_system",
-    name: "Volunteer Management System",
-    description:
-      "Volunteer identity/availability references. Server-to-server integration boundary.",
-  },
-  {
-    provider: "email",
-    name: "Transactional email",
-    description:
-      "Notification and digest delivery. The pipeline is live; see Admin → Email for the delivery ledger and the transport currently in use.",
-  },
-];
+const INTEGRATION_PROVIDERS = [
+  "gmail",
+  "google_calendar",
+  "google_drive",
+  "volunteer_system",
+  "email",
+] as const;
 
 export default async function AdminPage({
   searchParams,
@@ -114,6 +93,16 @@ export default async function AdminPage({
   searchParams: Promise<{ audit?: string; auditPage?: string }>;
 }) {
   const session = await requireAdminAal2();
+  const t = await getT();
+  // Audit codes are written by the app and by database triggers. Known ones
+  // read in the interface language; one this list has not caught up with is
+  // shown as recorded, marked as English.
+  const auditCode = (group: "eventTypes" | "actions" | "objects", code: string, shown: string) => {
+    const key = `admin.workspace.audit.${group}.${code.replace(/\./g, "_")}`;
+    const label = labelOr(t, key, "");
+    return label ? label : <span lang="en" translate="no">{shown}</span>;
+  };
+  const format = await getFormatters();
   const params = await searchParams;
   const auditPage = Math.max(1, Number(params.auditPage) || 1);
   const auditFilter =
@@ -234,9 +223,9 @@ export default async function AdminPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Administration"
-        title="Admin"
-        description="Users, access, invitations, integrations, and the audit trail."
+        eyebrow={t("admin.eyebrow")}
+        title={t("admin.workspace.title")}
+        description={t("admin.workspace.description")}
         actions={<InviteUserDialog emailConfigured={emailConfigured} />}
       />
       <AdminNav />
@@ -245,7 +234,7 @@ export default async function AdminPage({
         {/* Members (P0-ADM-01, P0-PPL-03) */}
         <section aria-labelledby="admin-members">
           <h2 id="admin-members" className="section-heading mb-3">
-            Members
+            {t("admin.workspace.members.heading")}
           </h2>
           <div className="card overflow-hidden">
             <div className="overflow-x-auto [contain:paint]">
@@ -253,22 +242,22 @@ export default async function AdminPage({
                 <thead>
                   <tr className="border-b border-line bg-surface-soft/60">
                     <th scope="col" className="px-4 py-2.5 font-semibold">
-                      Person
+                      {t("admin.workspace.members.person")}
                     </th>
                     <th scope="col" className="px-4 py-2.5 font-semibold">
-                      Role
+                      {t("admin.workspace.members.role")}
                     </th>
                     <th scope="col" className="px-4 py-2.5 font-semibold">
-                      Status
+                      {t("admin.workspace.members.status")}
                     </th>
                     <th scope="col" className="px-4 py-2.5 font-semibold">
-                      VMS
+                      {t("admin.workspace.members.vms")}
                     </th>
                     <th scope="col" className="px-4 py-2.5 font-semibold">
-                      Joined
+                      {t("admin.workspace.members.joined")}
                     </th>
                     <th scope="col" className="px-4 py-2.5 font-semibold">
-                      <span className="sr-only">Actions</span>
+                      <span className="sr-only">{t("admin.workspace.members.actions")}</span>
                     </th>
                   </tr>
                 </thead>
@@ -313,7 +302,7 @@ export default async function AdminPage({
                               member.status === "active" ? "success" : "neutral"
                             }
                           >
-                            {member.status}
+                            {labelOr(t, `admin.workspace.members.statuses.${member.status}`, member.status)}
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
@@ -324,7 +313,7 @@ export default async function AdminPage({
                           />
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-muted">
-                          {formatDate(member.joined_at)}
+                          {format.date(member.joined_at)}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col items-end gap-1">
@@ -355,12 +344,11 @@ export default async function AdminPage({
 
         <section aria-labelledby="admin-job-runs">
           <h2 id="admin-job-runs" className="section-heading mb-3">
-            Background jobs
+            {t("admin.workspace.jobs.heading")}
           </h2>
           {jobRunList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              No completed background jobs have been recorded for this
-              organization yet.
+              {t("admin.workspace.jobs.empty")}
             </p>
           ) : (
             <ul className="card divide-y divide-line">
@@ -375,10 +363,10 @@ export default async function AdminPage({
                   <Badge
                     tone={run.status === "succeeded" ? "success" : "danger"}
                   >
-                    {run.status}
+                    {labelOr(t, `admin.workspace.jobs.statuses.${run.status}`, run.status)}
                   </Badge>
                   <span className="meta ml-auto">
-                    {relativeTime(run.finished_at)}
+                    {format.relative(run.finished_at)}
                   </span>
                   {run.error ? (
                     <p className="basis-full text-[12.5px] text-danger-fg">
@@ -394,18 +382,16 @@ export default async function AdminPage({
         {/* Invitations (AUTH-007) */}
         <section aria-labelledby="admin-invitations">
           <h2 id="admin-invitations" className="section-heading mb-3">
-            Invitations
+            {t("admin.workspace.invitations.heading")}
           </h2>
           {!emailConfigured ? (
             <p className="mb-3 rounded-(--radius-sm) bg-warning/10 px-3 py-2 text-[13px] text-warning-fg">
-              Invite recorded — email not sent, until EMAIL_PROVIDER_API_KEY is
-              configured. The row still assigns the intended role on sign-up.
+              {t("admin.workspace.invitations.emailNotConfigured")}
             </p>
           ) : null}
           {invitationList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              No invitations yet. Invited users get their intended role on
-              sign-up.
+              {t("admin.workspace.invitations.empty")}
             </p>
           ) : (
             <ul className="card divide-y divide-line">
@@ -428,8 +414,10 @@ export default async function AdminPage({
                         {invitation.email}
                       </span>
                       <span className="meta">
-                        {invitation.intended_role} · invited{" "}
-                        {relativeTime(invitation.created_at)}
+                        {t("admin.workspace.invitations.invited", {
+                          role: roleCodeLabel(invitation.intended_role, t),
+                          when: format.relative(invitation.created_at),
+                        })}
                       </span>
                     </span>
                     <Badge
@@ -441,7 +429,7 @@ export default async function AdminPage({
                             : "neutral"
                       }
                     >
-                      {state}
+                      {t(`admin.workspace.invitations.states.${state}`)}
                     </Badge>
                     {state === "pending" ? (
                       <RevokeInvitationButton invitationId={invitation.id} />
@@ -456,10 +444,15 @@ export default async function AdminPage({
         {/* Integration center (P0-ADM-04) — honest connection states */}
         <section aria-labelledby="admin-integrations">
           <h2 id="admin-integrations" className="section-heading mb-3">
-            Integrations
+            {t("admin.workspace.integrations.heading")}
           </h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {INTEGRATION_CATALOG.map((integration) => {
+            {INTEGRATION_PROVIDERS.map((provider) => {
+              const integration = {
+                provider,
+                name: t(`admin.workspace.integrations.${provider}.name`),
+                description: t(`admin.workspace.integrations.${provider}.description`),
+              };
               const connection = integrationMap.get(integration.provider);
               const connected =
                 integration.provider === "email"
@@ -478,21 +471,14 @@ export default async function AdminPage({
                       {integration.name}
                     </p>
                     <Badge tone={integrationHealthTone(status)}>
-                      {integrationHealthLabel(status)}
+                      {integrationHealthLabel(status, t)}
                     </Badge>
                   </div>
                   <p className="text-[13px] text-muted">
                     {integration.description}
                   </p>
                   <IntegrationActions
-                    provider={
-                      integration.provider as
-                        | "gmail"
-                        | "google_calendar"
-                        | "google_drive"
-                        | "volunteer_system"
-                        | "email"
-                    }
+                    provider={integration.provider}
                     connected={
                       integration.provider === "email"
                         ? emailConfigured
@@ -504,7 +490,9 @@ export default async function AdminPage({
                   />
                   {connection?.last_sync_at ? (
                     <p className="meta mt-1.5">
-                      Last sync {relativeTime(connection.last_sync_at)}
+                      {t("admin.workspace.integrations.lastSync", {
+                        when: format.relative(connection.last_sync_at),
+                      })}
                     </p>
                   ) : null}
                   {connection?.last_error ? (
@@ -521,20 +509,20 @@ export default async function AdminPage({
         <section aria-labelledby="admin-teams">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 id="admin-teams" className="section-heading">
-              Teams
+              {t("admin.workspace.teams.heading")}
             </h2>
             <EntityFormDialog
-              triggerLabel="Create team"
+              triggerLabel={t("admin.workspace.teams.create")}
               triggerVariant="secondary"
-              title="Create team"
-              submitLabel="Create"
+              title={t("admin.workspace.teams.create")}
+              submitLabel={t("admin.workspace.teams.submit")}
               action={createTeam}
               fields={[
-                { name: "name", label: "Name", type: "text", required: true },
-                { name: "description", label: "Description", type: "textarea" },
+                { name: "name", label: t("admin.workspace.teams.name"), type: "text", required: true },
+                { name: "description", label: t("admin.workspace.teams.description"), type: "textarea" },
                 {
                   name: "ownerId",
-                  label: "Owner",
+                  label: t("admin.workspace.teams.owner"),
                   type: "select",
                   required: true,
                   defaultValue: session.userId,
@@ -553,8 +541,7 @@ export default async function AdminPage({
           </div>
           {teamList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              No teams yet. Create a team to group people and auto-provision a
-              private team channel.
+              {t("admin.workspace.teams.empty")}
             </p>
           ) : (
             <ul className="space-y-3">
@@ -603,10 +590,10 @@ export default async function AdminPage({
                                 isMember={isMember}
                                 label={
                                   isMember
-                                    ? "member"
+                                    ? t("admin.workspace.teams.memberLabel")
                                     : (m.user_profile!.full_name.split(
                                         " ",
-                                      )[0] ?? "person")
+                                      )[0] ?? t("admin.workspace.teams.personLabel"))
                                 }
                                 isOwner={team.owner_id === m.user_id}
                               />
@@ -624,69 +611,64 @@ export default async function AdminPage({
         <section aria-labelledby="admin-workflows">
           <div className="mb-3 flex items-center justify-between gap-2">
             <h2 id="admin-workflows" className="section-heading">
-              Workflow rules
+              {t("admin.workspace.workflows.heading")}
             </h2>
             <EntityFormDialog
-              triggerLabel="Add rule"
+              triggerLabel={t("admin.workspace.workflows.add")}
               triggerVariant="secondary"
-              title="Workflow rule"
-              submitLabel="Create"
+              title={t("admin.workspace.workflows.dialogTitle")}
+              submitLabel={t("admin.workspace.workflows.submit")}
               action={createWorkflowRule}
               fields={[
-                { name: "name", label: "Name", type: "text", required: true },
+                { name: "name", label: t("admin.workspace.workflows.name"), type: "text", required: true },
                 {
                   name: "triggerEvent",
-                  label: "When",
+                  label: t("admin.workspace.workflows.when"),
                   type: "select",
                   required: true,
                   defaultValue: "task_status_changed",
-                  options: [
-                    {
-                      value: "task_status_changed",
-                      label: "Task status changes",
-                    },
-                    {
-                      value: "announcement_published",
-                      label: "Announcement published",
-                    },
-                    {
-                      value: "project_health_changed",
-                      label: "Project health changes",
-                    },
-                    { value: "meeting_completed", label: "Meeting completed" },
-                    {
-                      value: "event_assignment_created",
-                      label: "Event role assigned",
-                    },
-                  ],
+                  options: (
+                    [
+                      "task_status_changed",
+                      "announcement_published",
+                      "project_health_changed",
+                      "meeting_completed",
+                      "event_assignment_created",
+                    ] as const
+                  ).map((value) => ({
+                    value,
+                    label: t(`admin.workspace.workflows.triggers.${value}`),
+                  })),
                 },
                 {
                   name: "conditionStatus",
-                  label: "Status (optional)",
+                  label: t("admin.workspace.workflows.statusOptional"),
                   type: "text",
-                  placeholder: "completed",
+                  placeholder: t("admin.workspace.workflows.statusPlaceholder"),
                 },
                 {
                   name: "actionCategory",
-                  label: "Then",
+                  label: t("admin.workspace.workflows.then"),
                   type: "select",
                   required: true,
                   defaultValue: "notify_assignee",
-                  options: [
-                    { value: "notify_assignee", label: "Notify assignee" },
-                    { value: "notify_admins", label: "Notify admins" },
-                    {
-                      value: "notify_event_owner",
-                      label: "Notify event owner",
-                    },
-                    { value: "notify_team", label: "Notify a team" },
-                  ],
+                  options: (
+                    [
+                      "notify_assignee",
+                      "notify_admins",
+                      "notify_event_owner",
+                      "notify_team",
+                    ] as const
+                  ).map((value) => ({
+                    value,
+                    label: t(`admin.workspace.workflows.actions.${value}`),
+                  })),
                 },
                 {
                   name: "actionTeamId",
-                  label: "Team to notify",
+                  label: t("admin.workspace.workflows.teamToNotify"),
                   type: "select",
-                  hint: "Required only when “Notify a team” is selected.",
+                  hint: t("admin.workspace.workflows.teamHint"),
                   options: teamList.map((team) => ({
                     value: team.id,
                     label: team.name,
@@ -697,8 +679,7 @@ export default async function AdminPage({
           </div>
           {ruleList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              No workflow rules yet. A rule watches for one kind of Hub event
-              and notifies the people you choose when it happens.
+              {t("admin.workspace.workflows.empty")}
             </p>
           ) : (
             <ul className="card divide-y divide-line">
@@ -711,10 +692,12 @@ export default async function AdminPage({
                     {rule.name}
                   </span>
                   <Badge tone={rule.enabled ? "success" : "neutral"}>
-                    {rule.enabled ? "On" : "Off"}
+                    {rule.enabled
+                      ? t("admin.workspace.workflows.on")
+                      : t("admin.workspace.workflows.off")}
                   </Badge>
                   <span className="meta">
-                    {rule.trigger_event.replace(/_/g, " ")}
+                    {triggerEventLabel(rule.trigger_event, t)}
                   </span>
                 </li>
               ))}
@@ -722,11 +705,12 @@ export default async function AdminPage({
           )}
 
           {/* Why did this fire? — the automation's own record. */}
-          <h3 className="section-heading mt-6 mb-3 text-[13px]">Recent runs</h3>
+          <h3 className="section-heading mt-6 mb-3 text-[13px]">
+            {t("admin.workspace.workflows.recentRuns")}
+          </h3>
           {workflowRunList.length === 0 ? (
             <p className="card px-4 py-5 text-center text-[13px] text-muted">
-              Nothing has triggered a rule yet. Every run is recorded here with
-              who it reached.
+              {t("admin.workspace.workflows.runsEmpty")}
             </p>
           ) : (
             <ul className="card divide-y divide-line">
@@ -746,15 +730,21 @@ export default async function AdminPage({
                       }
                     >
                       {run.outcome === "notified"
-                        ? `notified ${run.recipient_count}`
-                        : run.outcome}
+                        ? t("admin.workspace.workflows.outcomes.notified", {
+                            count: run.recipient_count,
+                          })
+                        : labelOr(
+                            t,
+                            `admin.workspace.workflows.outcomes.${run.outcome}`,
+                            run.outcome,
+                          )}
                     </Badge>
                     <span className="meta whitespace-nowrap">
-                      {relativeTime(run.created_at)}
+                      {format.relative(run.created_at)}
                     </span>
                   </div>
                   <span className="meta">
-                    {run.trigger_event.replace(/_/g, " ")}
+                    {triggerEventLabel(run.trigger_event, t)}
                     {run.detail ? ` \u00b7 ${run.detail}` : ""}
                   </span>
                 </li>
@@ -765,17 +755,17 @@ export default async function AdminPage({
 
         <section aria-labelledby="admin-audit">
           <h2 id="admin-audit" className="section-heading mb-3">
-            Audit history
+            {t("admin.workspace.audit.heading")}
           </h2>
           <div className="mb-3 flex flex-wrap gap-2">
             {[
-              ["all", "All"],
-              ["task.assignment", "Assignments"],
-              ["task.status", "Status"],
-              ["task.due_date", "Due dates"],
-              ["project.health", "Health"],
-              ["decision", "Decisions"],
-              ["task.deletion", "Deletions"],
+              ["all", t("admin.workspace.audit.filters.all")],
+              ["task.assignment", t("admin.workspace.audit.filters.assignment")],
+              ["task.status", t("admin.workspace.audit.filters.status")],
+              ["task.due_date", t("admin.workspace.audit.filters.dueDate")],
+              ["project.health", t("admin.workspace.audit.filters.health")],
+              ["decision", t("admin.workspace.audit.filters.decision")],
+              ["task.deletion", t("admin.workspace.audit.filters.deletion")],
             ].map(([key, label]) => (
               <Link
                 key={key}
@@ -791,8 +781,7 @@ export default async function AdminPage({
           </div>
           {auditList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              Material access, assignment, status, due date, health, decision,
-              and deletion events are recorded here with actor and timestamp.
+              {t("admin.workspace.audit.empty")}
             </p>
           ) : (
             <ol className="card divide-y divide-line">
@@ -803,19 +792,23 @@ export default async function AdminPage({
                 >
                   <span className="min-w-0 flex-1 text-[13px]">
                     <span className="font-medium">
-                      {event.actor?.full_name ?? "System"}
+                      {event.actor?.full_name ?? t("common.system")}
                     </span>{" "}
-                    · {event.action.replace(/_/g, " ")}
+                    · {auditCode("actions", event.action, event.action.replace(/_/g, " "))}
                     {event.object_type ? (
-                      <span className="text-muted"> ({event.object_type})</span>
+                      <span className="text-muted">
+                        {" "}({auditCode("objects", event.object_type, event.object_type)})
+                      </span>
                     ) : null}
                   </span>
-                  <Badge tone="neutral">{event.event_type}</Badge>
+                  <Badge tone="neutral">
+                    {auditCode("eventTypes", event.event_type, event.event_type)}
+                  </Badge>
                   <time
                     className="meta whitespace-nowrap"
                     dateTime={event.created_at}
                   >
-                    {relativeTime(event.created_at)}
+                    {format.relative(event.created_at)}
                   </time>
                 </li>
               ))}
@@ -827,7 +820,7 @@ export default async function AdminPage({
                 href={`/admin?audit=${auditFilter ?? "all"}&auditPage=${auditPage + 1}`}
                 className="text-[13px] font-medium text-brand-fg hover:underline"
               >
-                Older events
+                {t("admin.workspace.audit.older")}
               </Link>
             </p>
           ) : null}

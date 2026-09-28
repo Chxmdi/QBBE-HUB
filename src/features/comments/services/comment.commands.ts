@@ -7,6 +7,9 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
+import { recipientTranslators } from "@/features/channels/recipient-locale";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 const parentTypes = [
   "project",
@@ -23,39 +26,54 @@ const parentTypes = [
   "opportunity",
 ] as const;
 
-const commentSchema = z.object({
+const commentSchema = (t: TranslateFn) => z.object({
   parentType: z.enum(parentTypes),
   parentId: z.string().uuid(),
-  body: requiredText("Write a comment.", 5000),
+  body: requiredText(t("comments.errors.bodyRequired"), 5000),
   parentCommentId: z.string().uuid().optional(),
   mentionIds: z.array(z.string().uuid()).max(20).optional(),
   // Checked against the organization's approved hosts by the database.
   linkUrl: z
     .string()
     .trim()
-    .url("Enter a full https:// address.")
+    .url(t("comments.errors.invalidUrl"))
     .max(1000)
     .optional()
     .or(z.literal("")),
   documentId: z.string().uuid().optional().or(z.literal("")),
 });
 
-function commentError(message: string | undefined, fallback: string): string {
+/**
+ * The database's own refusals are worth showing; anything else is not. Its
+ * messages are English, so the known ones are put in the reader's language.
+ */
+function commentError(message: string | undefined, fallback: string, t: TranslateFn): string {
   if (!message) return fallback;
+  const host = /^(.*) is not an approved source for links\.?$/.exec(message.trim());
+  if (host) {
+    return t("comments.errors.unapprovedHost", {
+      host: host[1] === "That address" ? t("comments.errors.thatAddress") : host[1],
+    });
+  }
+  if (message.includes("not available to attach")) return t("comments.errors.documentUnavailable");
+  if (message.includes("deleted comment")) return t("comments.errors.deletedComment");
+  if (message.includes("Only the author can edit")) return t("comments.errors.authorOnly");
+  if (message.includes("Only the author or an administrator")) {
+    return t("comments.errors.authorOrAdmin");
+  }
   if (message.includes("not an approved source")) return message;
-  if (message.includes("not available to attach")) return message;
   if (message.includes("Only the")) return message;
-  if (message.includes("deleted comment")) return message;
   return fallback;
 }
 
 export async function addRecordComment(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  const parsed = commentSchema.safeParse(input);
+  const t = await getT();
+  const parsed = commentSchema(t).safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid comment.",
+      error: parsed.error.issues[0]?.message ?? t("comments.errors.invalid"),
     };
   }
   const data = parsed.data;
@@ -77,7 +95,7 @@ export async function addRecordComment(input: unknown): Promise<ActionResult> {
   if (error || !row) {
     return {
       ok: false,
-      error: commentError(error?.message, "Could not save the comment."),
+      error: commentError(error?.message, t("comments.errors.saveFailed"), t),
     };
   }
   const commentId = row.id as string;
@@ -103,11 +121,19 @@ export async function addRecordComment(input: unknown): Promise<ActionResult> {
     project_id: projectId,
     dedupe_key: notificationDedupeKey(data.parentType, data.parentId, userId),
   });
-  const drafts = [...new Set(data.mentionIds ?? [])]
-    .filter((userId) => userId !== session.userId)
-    .map((userId) =>
-      draftFor(userId, "mention", `${session.profile.full_name} mentioned you`, "mentioned"),
-    );
+  const name = session.profile.full_name;
+  const mentionIds = [...new Set(data.mentionIds ?? [])].filter(
+    (userId) => userId !== session.userId,
+  );
+  let recipientT = await recipientTranslators(db, mentionIds);
+  const drafts = mentionIds.map((userId) =>
+    draftFor(
+      userId,
+      "mention",
+      recipientT(userId)("comments.notifications.mentioned", { name }),
+      "mentioned",
+    ),
+  );
   if (data.parentCommentId) {
     const { data: parent } = await db
       .from("record_comment")
@@ -120,11 +146,12 @@ export async function addRecordComment(input: unknown): Promise<ActionResult> {
       if (existing) {
         existing.reason = `${existing.reason}, reply`;
       } else {
+        recipientT = await recipientTranslators(db, [parentAuthor]);
         drafts.push(
           draftFor(
             parentAuthor,
             "reply",
-            `${session.profile.full_name} replied to your comment`,
+            recipientT(parentAuthor)("comments.notifications.replied", { name }),
             "reply",
           ),
         );
@@ -145,19 +172,20 @@ export async function addRecordComment(input: unknown): Promise<ActionResult> {
   return { ok: true, id: commentId };
 }
 
-const editSchema = z.object({
+const editSchema = (t: TranslateFn) => z.object({
   commentId: z.string().uuid(),
-  body: requiredText("Write a comment.", 5000),
+  body: requiredText(t("comments.errors.bodyRequired"), 5000),
 });
 
 /** The author rewrites their comment; the database marks it edited. */
 export async function editRecordComment(input: unknown): Promise<ActionResult> {
   await requireSession();
-  const parsed = editSchema.safeParse(input);
+  const t = await getT();
+  const parsed = editSchema(t).safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid comment.",
+      error: parsed.error.issues[0]?.message ?? t("comments.errors.invalid"),
     };
   }
   const db = await createSupabaseServerClient();
@@ -169,10 +197,10 @@ export async function editRecordComment(input: unknown): Promise<ActionResult> {
   if (error)
     return {
       ok: false,
-      error: commentError(error.message, "Could not edit the comment."),
+      error: commentError(error.message, t("comments.errors.editFailed"), t),
     };
   if (!data || data.length === 0)
-    return { ok: false, error: "Comment not found." };
+    return { ok: false, error: t("comments.errors.notFound") };
   revalidatePath("/", "layout");
   return { ok: true, id: parsed.data.commentId };
 }
@@ -185,8 +213,9 @@ export async function deleteRecordComment(
   commentId: string,
 ): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   if (!z.string().uuid().safeParse(commentId).success) {
-    return { ok: false, error: "Comment not found." };
+    return { ok: false, error: t("comments.errors.notFound") };
   }
   const db = await createSupabaseServerClient();
   const { data, error } = await db
@@ -197,10 +226,10 @@ export async function deleteRecordComment(
   if (error)
     return {
       ok: false,
-      error: commentError(error.message, "Could not delete the comment."),
+      error: commentError(error.message, t("comments.errors.deleteFailed"), t),
     };
   if (!data || data.length === 0)
-    return { ok: false, error: "Comment not found." };
+    return { ok: false, error: t("comments.errors.notFound") };
   revalidatePath("/", "layout");
   return { ok: true, id: commentId };
 }
@@ -209,8 +238,9 @@ export async function resolveRecordComment(
   commentId: string,
 ): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   if (!z.string().uuid().safeParse(commentId).success) {
-    return { ok: false, error: "Comment not found." };
+    return { ok: false, error: t("comments.errors.notFound") };
   }
   const db = await createSupabaseServerClient();
   // resolved_by is stamped by the database from the signed-in user.
@@ -222,10 +252,10 @@ export async function resolveRecordComment(
   if (error)
     return {
       ok: false,
-      error: commentError(error.message, "Could not resolve the comment."),
+      error: commentError(error.message, t("comments.errors.resolveFailed"), t),
     };
   if (!data || data.length === 0)
-    return { ok: false, error: "Comment not found." };
+    return { ok: false, error: t("comments.errors.notFound") };
   revalidatePath("/", "layout");
   return { ok: true, id: commentId };
 }

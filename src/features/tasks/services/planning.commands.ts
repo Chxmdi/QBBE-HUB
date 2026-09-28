@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
 import { readAll } from "@/lib/supabase/read-all";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { calendarDateInZone } from "@/lib/time";
@@ -11,6 +12,7 @@ import {
   milestoneDependencySchema,
   rescheduleSchema,
   taskSeriesSchema,
+  translateTaskError,
 } from "@/features/tasks/schemas";
 
 /**
@@ -29,8 +31,9 @@ import {
 
 export async function addMilestoneDependency(input: unknown): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const parsed = milestoneDependencySchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Pick two valid milestones." };
+  if (!parsed.success) return { ok: false, error: t("tasks.errors.pickTwoMilestones") };
   const { blockingMilestoneId, blockedMilestoneId } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -41,7 +44,7 @@ export async function addMilestoneDependency(input: unknown): Promise<ActionResu
       .order("blocked_milestone_id"),
     "blocking_milestone_id",
   );
-  if (readError) return { ok: false, error: "Could not check dependencies. Please retry." };
+  if (readError) return { ok: false, error: t("tasks.errors.checkDependencies") };
 
   // The readable answer, from the edges this person is allowed to see. The
   // trigger repeats the walk over the whole graph, including edges hidden by
@@ -52,7 +55,7 @@ export async function addMilestoneDependency(input: unknown): Promise<ActionResu
     blockedMilestoneId,
     (existing ?? []) as { blocking_milestone_id: string; blocked_milestone_id: string }[],
   );
-  if (cycle) return { ok: false, error: cycle };
+  if (cycle) return { ok: false, error: translateTaskError(t, cycle) };
 
   const { error } = await supabase.from("milestone_dependency").insert({
     blocking_milestone_id: blockingMilestoneId,
@@ -60,8 +63,8 @@ export async function addMilestoneDependency(input: unknown): Promise<ActionResu
   });
   // Adding an edge that is already there is what the person asked for.
   if (error?.code === "23505") return { ok: true };
-  if (error?.code === "23514") return { ok: false, error: "That dependency would create a cycle." };
-  if (error) return { ok: false, error: "Could not save the dependency." };
+  if (error?.code === "23514") return { ok: false, error: t("tasks.errors.cycle") };
+  if (error) return { ok: false, error: t("tasks.errors.saveDependency") };
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -71,13 +74,14 @@ export async function removeMilestoneDependency(
   blockedMilestoneId: string,
 ): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("milestone_dependency")
     .delete()
     .eq("blocking_milestone_id", blockingMilestoneId)
     .eq("blocked_milestone_id", blockedMilestoneId);
-  if (error) return { ok: false, error: "Could not remove the dependency." };
+  if (error) return { ok: false, error: t("tasks.errors.removeDependency") };
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -88,9 +92,10 @@ export async function removeMilestoneDependency(
 
 export async function createTaskSeries(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = taskSeriesSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid series." };
+    return { ok: false, error: translateTaskError(t, parsed.error.issues[0]?.message) ?? t("tasks.errors.invalidSeries") };
   }
   const { title, projectId, recurrenceRule, ownerId, description, milestoneId, priority, startsOn } =
     parsed.data;
@@ -117,7 +122,7 @@ export async function createTaskSeries(input: unknown): Promise<ActionResult> {
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: "Could not create the recurring task." };
+  if (error || !data) return { ok: false, error: t("tasks.errors.createSeries") };
 
   // The first occurrence, so a new series is visible as work rather than as a
   // setting that will produce work later.
@@ -146,7 +151,7 @@ export async function createTaskSeries(input: unknown): Promise<ActionResult> {
     // Leave no series that produces nothing: a row with no occurrence looks
     // like a recurrence that silently stopped.
     await supabase.from("task_series").delete().eq("id", data.id as string);
-    return { ok: false, error: "Could not create the recurring task." };
+    return { ok: false, error: t("tasks.errors.createSeries") };
   }
 
   revalidatePath("/", "layout");
@@ -162,6 +167,7 @@ export async function createTaskSeries(input: unknown): Promise<ActionResult> {
  */
 export async function stopTaskSeries(seriesId: string): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("task_series")
@@ -169,7 +175,7 @@ export async function stopTaskSeries(seriesId: string): Promise<ActionResult> {
     .eq("id", seriesId)
     .is("stopped_at", null)
     .select("id");
-  if (error) return { ok: false, error: "Could not stop the recurring task." };
+  if (error) return { ok: false, error: t("tasks.errors.stopSeries") };
   // Already stopped, or not this caller's to stop. Both are "nothing changed",
   // and the policy has already decided which.
   if (!data?.length) return { ok: true };
@@ -187,6 +193,7 @@ export async function stopTaskSeries(seriesId: string): Promise<ActionResult> {
  */
 export async function detachSeriesOccurrence(taskId: string): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("task")
@@ -194,8 +201,8 @@ export async function detachSeriesOccurrence(taskId: string): Promise<ActionResu
     .eq("id", taskId)
     .not("series_id", "is", null)
     .select("id");
-  if (error) return { ok: false, error: "Could not update this occurrence." };
-  if (!data?.length) return { ok: false, error: "That task is not part of a series." };
+  if (error) return { ok: false, error: t("tasks.errors.updateOccurrence") };
+  if (!data?.length) return { ok: false, error: t("tasks.errors.notInSeries") };
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -218,9 +225,10 @@ export async function detachSeriesOccurrence(taskId: string): Promise<ActionResu
  */
 export async function rescheduleCalendarItem(input: unknown): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const parsed = rescheduleSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid date." };
+    return { ok: false, error: translateTaskError(t, parsed.error.issues[0]?.message) ?? t("tasks.errors.invalidDate") };
   }
   const { kind, id, date } = parsed.data;
   const supabase = await createSupabaseServerClient();
@@ -233,9 +241,9 @@ export async function rescheduleCalendarItem(input: unknown): Promise<ActionResu
     .update({ [column]: date })
     .eq("id", id)
     .select("id");
-  if (error) return { ok: false, error: "Could not move that item." };
+  if (error) return { ok: false, error: t("tasks.errors.moveItem") };
   if (!data?.length) {
-    return { ok: false, error: "You do not have permission to reschedule that item." };
+    return { ok: false, error: t("tasks.errors.noReschedulePermission") };
   }
   revalidatePath("/", "layout");
   return { ok: true };

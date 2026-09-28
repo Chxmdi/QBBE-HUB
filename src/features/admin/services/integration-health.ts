@@ -1,3 +1,7 @@
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+
+const ENGLISH = createTranslator("en");
+
 export type IntegrationHealthStatus =
   | "connected"
   | "disconnected"
@@ -21,15 +25,22 @@ export function classifyIntegrationFailure(message: string): Exclude<Integration
   return "degraded";
 }
 
-export function integrationHealthLabel(status: string | null | undefined): string {
+/**
+ * Pass `t` for the person's language; without it the label is English, which
+ * is what the unit tests and log lines expect.
+ */
+export function integrationHealthLabel(
+  status: string | null | undefined,
+  t: TranslateFn = ENGLISH,
+): string {
   switch (status) {
-    case "connected": return "Connected";
-    case "authentication_expired": return "Authentication expired";
-    case "synchronization_delayed": return "Synchronization delayed";
-    case "configuration_required": return "Configuration required";
+    case "connected": return t("admin.workspace.integrations.health.connected");
+    case "authentication_expired": return t("admin.workspace.integrations.health.authentication_expired");
+    case "synchronization_delayed": return t("admin.workspace.integrations.health.synchronization_delayed");
+    case "configuration_required": return t("admin.workspace.integrations.health.configuration_required");
     case "degraded":
-    case "error": return "Degraded";
-    default: return "Not connected";
+    case "error": return t("admin.workspace.integrations.health.degraded");
+    default: return t("admin.workspace.integrations.health.notConnected");
   }
 }
 

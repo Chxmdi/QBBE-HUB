@@ -2,6 +2,8 @@ import { z } from "zod";
 import { requireAdminAal2 } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { answerText, csvField, type FormField } from "@/features/forms/fields";
+import { getLocale } from "@/lib/i18n/server";
+import { createTranslator } from "@/lib/i18n/translate";
 
 /**
  * A form's submissions as CSV (#145). Owners and admins with MFA only, and
@@ -26,31 +28,35 @@ interface ExportRow {
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdminAal2();
+  const locale = await getLocale();
+  const t = createTranslator(locale);
   const { id } = await params;
-  if (!z.string().uuid().safeParse(id).success) return new Response("Form not found.", { status: 404 });
+  if (!z.string().uuid().safeParse(id).success) {
+    return new Response(t("forms.errors.notFound"), { status: 404 });
+  }
   const supabase = await createSupabaseServerClient();
   const { data: form } = await supabase
     .from("form_definition")
     .select("id, title, fields, requires_signature")
     .eq("id", id)
     .maybeSingle();
-  if (!form) return new Response("Form not found.", { status: 404 });
+  if (!form) return new Response(t("forms.errors.notFound"), { status: 404 });
   const { data, error } = await supabase
     .from("form_submission")
     .select("id, submitted_at, answers, content_sha256, submitter:submitted_by(full_name), signature(signer_name, signed_at)")
     .eq("form_id", id)
     .order("submitted_at", { ascending: true })
     .limit(EXPORT_LIMIT);
-  if (error) return new Response("Could not export submissions. Try again.", { status: 500 });
+  if (error) return new Response(t("forms.export.failed"), { status: 500 });
 
   const fields = form.fields as FormField[];
   const header = [
-    "Submitted at",
-    "Submitted by",
+    t("forms.export.submittedAt"),
+    t("forms.export.submittedBy"),
     ...fields.map((f) => f.label),
-    ...(form.requires_signature ? ["Signed by", "Signed at"] : []),
-    "Content SHA-256",
-    "Submission ID",
+    ...(form.requires_signature ? [t("forms.export.signedBy"), t("forms.export.signedAt")] : []),
+    t("forms.export.sha"),
+    t("forms.export.submissionId"),
   ];
   const lines = [header.map(csvField).join(",")];
   for (const row of (data ?? []) as unknown as ExportRow[]) {
@@ -59,7 +65,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       [
         row.submitted_at,
         row.submitter?.full_name ?? "",
-        ...fields.map((f) => answerText(f, row.answers[f.key], true)),
+        ...fields.map((f) => answerText(f, row.answers[f.key], true, t, locale)),
         ...(form.requires_signature ? [signature?.signer_name ?? "", signature?.signed_at ?? ""] : []),
         row.content_sha256,
         row.id,
@@ -85,7 +91,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   return new Response(`﻿${lines.join("\r\n")}\r\n`, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${slug}-submissions-${stamp}.csv"`,
+      "Content-Disposition": `attachment; filename="${slug}-${t("forms.export.fileSuffix")}-${stamp}.csv"`,
       "Cache-Control": "no-store",
     },
   });

@@ -10,6 +10,8 @@ import {
   OctagonAlert,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { TranslatedText } from "@/components/shared/translated-text";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 import { TASK_STATUSES, TASK_STATUS_LABELS } from "@/features/tasks/schemas";
 import type {
   ProjectHealth,
@@ -21,7 +23,32 @@ import type {
 /**
  * Domain status presentation shared across features. Status always pairs
  * color with text/icon — never color alone (A11Y-004).
+ *
+ * The `label` fields and STAGE_LABELS stay English (tests and server code read
+ * them); anything shown to a person should use the `*Label(code, t)` helpers
+ * below, which read the reader's language.
  */
+
+const taskStatusKey = (status: TaskStatus) => `shell.status.task.${status}` as MessageKey;
+const healthKey = (health: ProjectHealth) => `shell.status.health.${health}` as MessageKey;
+const stageKey = (stage: ProjectStage) => `shell.status.stage.${stage}` as MessageKey;
+const priorityKey = (priority: TaskPriority) => `shell.status.priority.${priority}` as MessageKey;
+
+export function taskStatusLabel(status: TaskStatus, t: TranslateFn): string {
+  return t(taskStatusKey(status));
+}
+
+export function healthLabel(health: ProjectHealth, t: TranslateFn): string {
+  return t(healthKey(health));
+}
+
+export function stageLabel(stage: ProjectStage, t: TranslateFn): string {
+  return t(stageKey(stage));
+}
+
+export function priorityLabel(priority: TaskPriority, t: TranslateFn): string {
+  return t(priorityKey(priority));
+}
 
 // Labels come from the schema module so the server can name a status without
 // importing this file's icons; tone is presentation and stays here.
@@ -68,7 +95,7 @@ export function TaskStatusBadge({ status }: { status: TaskStatus }) {
   return (
     <Badge tone={meta.tone}>
       {taskStatusIcons[status]}
-      {meta.label}
+      <TranslatedText k={taskStatusKey(status)} />
     </Badge>
   );
 }
@@ -97,7 +124,7 @@ export function HealthBadge({ health }: { health: ProjectHealth }) {
       ) : (
         <CircleDashed className="size-3" aria-hidden />
       )}
-      {meta.label}
+      <TranslatedText k={healthKey(health)} />
     </Badge>
   );
 }
@@ -122,7 +149,11 @@ export function StageBadge({ stage }: { stage: ProjectStage }) {
         : stage === "paused" || stage === "cancelled"
           ? "warning"
           : "neutral";
-  return <Badge tone={tone}>{STAGE_LABELS[stage]}</Badge>;
+  return (
+    <Badge tone={tone}>
+      <TranslatedText k={stageKey(stage)} />
+    </Badge>
+  );
 }
 
 export const PRIORITY_META: Record<
@@ -137,5 +168,9 @@ export const PRIORITY_META: Record<
 
 export function PriorityBadge({ priority }: { priority: TaskPriority }) {
   const meta = PRIORITY_META[priority];
-  return <Badge tone={meta.tone}>{meta.label}</Badge>;
+  return (
+    <Badge tone={meta.tone}>
+      <TranslatedText k={priorityKey(priority)} />
+    </Badge>
+  );
 }

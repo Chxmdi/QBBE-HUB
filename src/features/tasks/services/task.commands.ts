@@ -15,7 +15,11 @@ import {
   taskRoleSchema,
   updateTaskSchema,
   TASK_ROLE_LABELS,
+  translateTaskError,
 } from "@/features/tasks/schemas";
+import { getT } from "@/lib/i18n/server";
+import { DEFAULT_LOCALE, isLocale } from "@/lib/i18n/config";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 import {
   TRACKED_TASK_FIELDS,
   diffTaskFields,
@@ -37,6 +41,29 @@ export interface ActionResult {
 }
 
 type ServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+
+/**
+ * A translator per notification recipient, in the language they chose (#141).
+ * Notifications are read later by that person, not by whoever caused them, so
+ * the request's language is the wrong one. No saved choice means English.
+ */
+async function recipientTranslators(
+  supabase: ServerClient,
+  userIds: string[],
+): Promise<(userId: string) => TranslateFn> {
+  const ids = [...new Set(userIds)];
+  const locales = new Map<string, unknown>();
+  if (ids.length > 0) {
+    const { data } = await supabase.from("user_profile").select("id, locale").in("id", ids);
+    for (const row of (data ?? []) as { id: string; locale: string | null }[]) {
+      locales.set(row.id, row.locale);
+    }
+  }
+  return (userId) => {
+    const locale = locales.get(userId);
+    return createTranslator(isLocale(locale) ? locale : DEFAULT_LOCALE);
+  };
+}
 
 /**
  * Resolve display text for the id-valued fields in a diff.
@@ -130,9 +157,13 @@ export async function createTask(input: unknown): Promise<ActionResult> {
 
   const limited = await enforceRateLimit("task:create", session.userId);
   if (limited) return limited;
+  const t = await getT();
   const parsed = createTaskSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return {
+      ok: false,
+      error: translateTaskError(t, parsed.error.issues[0]?.message) ?? t("tasks.errors.invalidInput"),
+    };
   }
   const {
     title, description, projectId, milestoneId, assigneeId, priority, dueAt,
@@ -181,7 +212,7 @@ export async function createTask(input: unknown): Promise<ActionResult> {
     .single();
 
   if (error || !task) {
-    return { ok: false, error: "Could not save the task. Please try again." };
+    return { ok: false, error: t("tasks.errors.saveTask") };
   }
 
   await supabase.from("activity_event").insert({
@@ -197,11 +228,12 @@ export async function createTask(input: unknown): Promise<ActionResult> {
 
   // Deduplicated assignment notification (P0-NOT-04): one per task+assignee.
   if (assigneeId && assigneeId !== session.userId) {
+    const tFor = await recipientTranslators(supabase, [assigneeId]);
     await createNotifications(supabase, [{
       user_id: assigneeId,
       organization_id: session.organizationId,
       category: "assignment",
-      title: `${session.profile.full_name} assigned you a task`,
+      title: tFor(assigneeId)("tasks.notify.assigned", { name: session.profile.full_name }),
       body: title,
       source_type: "task",
       source_id: task.id as string,
@@ -226,12 +258,13 @@ export async function updateTaskStatus(
   blockedReason?: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   if (!(TASK_STATUSES as readonly string[]).includes(status)) {
-    return { ok: false, error: "Unknown status." };
+    return { ok: false, error: t("tasks.errors.unknownStatus") };
   }
   const blockedError = blockedReasonError(status, blockedReason);
   if (blockedError) {
-    return { ok: false, error: blockedError };
+    return { ok: false, error: translateTaskError(t, blockedError) };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -261,7 +294,7 @@ export async function updateTaskStatus(
     .maybeSingle();
 
   if (error || !updated) {
-    return { ok: false, error: "Could not update the task status." };
+    return { ok: false, error: t("tasks.errors.updateStatus") };
   }
 
   if (
@@ -270,11 +303,15 @@ export async function updateTaskStatus(
     updated.reviewer_id &&
     updated.reviewer_id !== session.userId
   ) {
+    const tFor = await recipientTranslators(supabase, [updated.reviewer_id as string]);
     await createNotifications(supabase, [{
       user_id: updated.reviewer_id as string,
       organization_id: session.organizationId,
       category: "approval",
-      title: `${session.profile.full_name} asked you to review “${updated.title}”`,
+      title: tFor(updated.reviewer_id as string)("tasks.notify.reviewRequest", {
+        name: session.profile.full_name,
+        title: updated.title as string,
+      }),
       body: updated.title as string,
       source_type: "task_review",
       source_id: taskId,
@@ -416,8 +453,9 @@ export async function updateTaskStatus(
 
 export async function updateTask(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = updateTaskSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: t("tasks.errors.invalidInput") };
   const { taskId, ...fields } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -455,15 +493,21 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
     .select("id, title, assignee_id, project_id, program_id, due_at, status, priority, milestone_id, reviewer_id, approver_id, completion_criteria, blocked_reason")
     .maybeSingle();
 
-  if (error || !updated) return { ok: false, error: "Could not update the task." };
+  if (error || !updated) return { ok: false, error: t("tasks.errors.updateTask") };
 
+  const tFor = await recipientTranslators(
+    supabase,
+    [fields.assigneeId, updated.assignee_id as string | null, fields.reviewerId].filter(
+      (id): id is string => Boolean(id),
+    ),
+  );
   const drafts = [];
   if (fields.assigneeId && fields.assigneeId !== session.userId && fields.assigneeId !== before?.assignee_id) {
     drafts.push({
       user_id: fields.assigneeId,
       organization_id: session.organizationId,
       category: "assignment",
-      title: `${session.profile.full_name} assigned you a task`,
+      title: tFor(fields.assigneeId)("tasks.notify.assigned", { name: session.profile.full_name }),
       body: updated.title as string,
       source_type: "task",
       source_id: taskId,
@@ -486,7 +530,9 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
       user_id: updated.assignee_id as string,
       organization_id: session.organizationId,
       category: "due_date",
-      title: `Due date changed on “${updated.title}”`,
+      title: tFor(updated.assignee_id as string)("tasks.notify.dueChanged", {
+        title: updated.title as string,
+      }),
       body: updated.title as string,
       source_type: "task_due",
       source_id: taskId,
@@ -508,7 +554,10 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
       user_id: fields.reviewerId,
       organization_id: session.organizationId,
       category: "approval",
-      title: `${session.profile.full_name} asked you to review “${updated.title}”`,
+      title: tFor(fields.reviewerId)("tasks.notify.reviewRequest", {
+        name: session.profile.full_name,
+        title: updated.title as string,
+      }),
       body: updated.title as string,
       source_type: "task_review",
       source_id: taskId,
@@ -561,8 +610,9 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
  */
 export async function setTaskRole(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = taskRoleSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: t("tasks.errors.invalidInput") };
   const { taskId, userId, role } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -575,9 +625,9 @@ export async function setTaskRole(input: unknown): Promise<ActionResult> {
   if (error) {
     // The scope trigger rejects a member of another organization.
     if (error.code === "23514") {
-      return { ok: false, error: "That person is not an active member of this organization." };
+      return { ok: false, error: t("tasks.errors.notMember") };
     }
-    return { ok: false, error: "Could not assign that role." };
+    return { ok: false, error: t("tasks.errors.assignRole") };
   }
 
   const { data: task } = await supabase
@@ -601,13 +651,14 @@ export async function setTaskRole(input: unknown): Promise<ActionResult> {
 
     if (userId !== session.userId) {
       const review = role === "reviewer" || role === "approver";
+      const tFor = await recipientTranslators(supabase, [userId]);
       await createNotifications(supabase, [{
         user_id: userId,
         organization_id: session.organizationId,
         category: review ? "approval" : "assignment",
-        title: `${session.profile.full_name} made you ${
-          role === "approver" ? "an" : "a"
-        } ${TASK_ROLE_LABELS[role].toLowerCase()}`,
+        title: tFor(userId)(`tasks.notify.madeRole.${role}`, {
+          name: session.profile.full_name,
+        }),
         body: task.title as string,
         source_type: review ? "task_review" : "task",
         source_id: taskId,
@@ -631,8 +682,9 @@ export async function setTaskRole(input: unknown): Promise<ActionResult> {
 /** Withdraw a task role. Removing the last one removes the access it carried. */
 export async function removeTaskRole(input: unknown): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const parsed = taskRoleSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: t("tasks.errors.invalidInput") };
   const { taskId, userId, role } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -643,7 +695,7 @@ export async function removeTaskRole(input: unknown): Promise<ActionResult> {
     .eq("user_id", userId)
     .eq("role", role);
 
-  if (error) return { ok: false, error: "Could not remove that role." };
+  if (error) return { ok: false, error: t("tasks.errors.removeRole") };
 
   revalidatePath("/", "layout");
   return { ok: true };
@@ -658,15 +710,19 @@ export async function bulkUpdateTasks(
   input: unknown,
 ): Promise<ActionResult & { updated?: number }> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = bulkSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return {
+      ok: false,
+      error: translateTaskError(t, parsed.error.issues[0]?.message) ?? t("tasks.errors.invalidInput"),
+    };
   }
   const { taskIds, action, status, assigneeId, priority, dueAt } = parsed.data;
 
   const patch: Record<string, unknown> = {};
   if (action === "status") {
-    if (!status) return { ok: false, error: "Pick a status." };
+    if (!status) return { ok: false, error: t("tasks.errors.pickStatus") };
     patch.status = status;
     patch.completed_at = status === "completed" ? new Date().toISOString() : null;
     // `updateTaskStatus` has always cleared these when a task leaves `blocked`;
@@ -679,10 +735,10 @@ export async function bulkUpdateTasks(
     patch.blocked_reason = null;
     patch.blocked_by_id = null;
   } else if (action === "assignee") {
-    if (assigneeId === undefined) return { ok: false, error: "Pick an assignee." };
+    if (assigneeId === undefined) return { ok: false, error: t("tasks.errors.pickAssignee") };
     patch.assignee_id = assigneeId;
   } else if (action === "priority") {
-    if (!priority) return { ok: false, error: "Pick a priority." };
+    if (!priority) return { ok: false, error: t("tasks.errors.pickPriority") };
     patch.priority = priority;
   } else if (action === "due") {
     patch.due_at = dueAt || null;
@@ -709,7 +765,7 @@ export async function bulkUpdateTasks(
     .select("id, title, project_id, program_id");
 
   if (error) {
-    return { ok: false, error: "Bulk update failed. No changes were applied." };
+    return { ok: false, error: t("tasks.errors.bulkFailed") };
   }
 
   const rows = updated ?? [];
@@ -759,13 +815,16 @@ export async function bulkUpdateTasks(
 
     // One deduplicated notification per newly assigned person.
     if (action === "assignee" && assigneeId && assigneeId !== session.userId) {
+      const tFor = await recipientTranslators(supabase, [assigneeId]);
       await createNotifications(
         supabase,
         rows.map((row) => ({
           user_id: assigneeId,
           organization_id: session.organizationId,
           category: "assignment",
-          title: `${session.profile.full_name} assigned you a task`,
+          title: tFor(assigneeId)("tasks.notify.assigned", {
+            name: session.profile.full_name,
+          }),
           body: row.title as string,
           source_type: "task",
           source_id: row.id as string,
@@ -785,17 +844,18 @@ export async function bulkUpdateTasks(
 
 export async function restoreTasks(taskIds: string[]): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const ids = [...new Set(taskIds)].filter((id) =>
     /^[0-9a-f-]{36}$/i.test(id),
   );
-  if (ids.length === 0) return { ok: false, error: "Choose a task to restore." };
+  if (ids.length === 0) return { ok: false, error: t("tasks.errors.chooseRestore") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("task")
     .update({ archived_at: null })
     .in("id", ids)
     .not("archived_at", "is", null);
-  if (error) return { ok: false, error: "Could not restore those tasks." };
+  if (error) return { ok: false, error: t("tasks.errors.restoreFailed") };
   revalidatePath("/my-work");
   return { ok: true };
 }
@@ -805,9 +865,10 @@ export async function addTaskComment(
   body: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const trimmed = body.trim();
-  if (!trimmed) return { ok: false, error: "Comment cannot be empty." };
-  if (trimmed.length > 5000) return { ok: false, error: "Comment is too long." };
+  if (!trimmed) return { ok: false, error: t("tasks.errors.commentEmpty") };
+  if (trimmed.length > 5000) return { ok: false, error: t("tasks.errors.commentTooLong") };
 
   const supabase = await createSupabaseServerClient();
   const { data: comment, error } = await supabase.from("task_comment").insert({
@@ -815,7 +876,7 @@ export async function addTaskComment(
     author_id: session.userId,
     body: trimmed,
   }).select("id").single();
-  if (error || !comment) return { ok: false, error: "Could not post the comment." };
+  if (error || !comment) return { ok: false, error: t("tasks.errors.commentFailed") };
 
   const { data: task } = await supabase
     .from("task")
@@ -824,11 +885,15 @@ export async function addTaskComment(
     .maybeSingle();
 
   if (task?.assignee_id && task.assignee_id !== session.userId) {
+    const tFor = await recipientTranslators(supabase, [task.assignee_id as string]);
     await createNotifications(supabase, [{
       user_id: task.assignee_id as string,
       organization_id: session.organizationId,
       category: "reply",
-      title: `${session.profile.full_name} commented on “${task.title}”`,
+      title: tFor(task.assignee_id as string)("tasks.notify.commented", {
+        name: session.profile.full_name,
+        title: task.title as string,
+      }),
       body: trimmed.slice(0, 140),
       source_type: "task_comment",
       source_id: comment.id as string,

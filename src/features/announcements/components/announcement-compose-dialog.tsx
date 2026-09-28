@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Input, Label, Select, Textarea, Checkbox } from "@/components/ui/input";
 import { publishAnnouncement } from "@/features/announcements/services/announcement.commands";
+import { useT } from "@/lib/i18n/client";
 
 /** Admin-only announcement composer for the mandatory channel (P0-ANN-02). */
 export function AnnouncementComposeDialog({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(defaultOpen);
   const [requiresAck, setRequiresAck] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function AnnouncementComposeDialog({ defaultOpen = false }: { defaultOpen
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong.");
+      setError(result.error ?? t("announcements.errors.somethingWrong"));
       return;
     }
     setOpen(false);
@@ -42,29 +44,29 @@ export function AnnouncementComposeDialog({ defaultOpen = false }: { defaultOpen
     <>
       <Button variant="secondary" onClick={() => setOpen(true)}>
         <Megaphone className="size-4" aria-hidden />
-        New announcement
+        {t("announcements.compose.button")}
       </Button>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Publish announcement"
+        title={t("announcements.compose.title")}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="ann-title">Title</Label>
+            <Label htmlFor="ann-title">{t("announcements.compose.titleLabel")}</Label>
             <Input id="ann-title" name="title" required maxLength={200} autoFocus />
           </div>
           <div>
-            <Label htmlFor="ann-body">Announcement</Label>
+            <Label htmlFor="ann-body">{t("announcements.compose.body")}</Label>
             <Textarea id="ann-body" name="body" required maxLength={10000} rows={5} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="ann-priority">Priority</Label>
+              <Label htmlFor="ann-priority">{t("announcements.compose.priority")}</Label>
               <Select id="ann-priority" name="priority" defaultValue="normal">
-                <option value="normal">Normal</option>
-                <option value="important">Important</option>
-                <option value="critical">Critical</option>
+                <option value="normal">{t("announcements.compose.priorities.normal")}</option>
+                <option value="important">{t("announcements.compose.priorities.important")}</option>
+                <option value="critical">{t("announcements.compose.priorities.critical")}</option>
               </Select>
             </div>
             <div className="flex items-end pb-1">
@@ -73,24 +75,23 @@ export function AnnouncementComposeDialog({ defaultOpen = false }: { defaultOpen
                   checked={requiresAck}
                   onChange={(e) => setRequiresAck(e.target.checked)}
                 />
-                Require acknowledgment
+                {t("announcements.compose.requireAck")}
               </label>
             </div>
             {requiresAck ? (
               <div className="sm:col-span-2">
-                <Label htmlFor="ann-deadline">Acknowledgment deadline</Label>
+                <Label htmlFor="ann-deadline">{t("announcements.compose.deadline")}</Label>
                 <Input id="ann-deadline" name="ackDeadline" type="datetime-local" />
                 <FieldHint>
-                  Recipients see the announcement on Home until they acknowledge.
+                  {t("announcements.compose.deadlineHint")}
                 </FieldHint>
               </div>
             ) : null}
             <div className="sm:col-span-2">
-              <Label htmlFor="ann-publish">Publish at (optional)</Label>
+              <Label htmlFor="ann-publish">{t("announcements.compose.publishAt")}</Label>
               <Input id="ann-publish" name="publishAt" type="datetime-local" />
               <FieldHint>
-                Leave blank to publish immediately. Future times wait for the
-                scheduled-announcements job.
+                {t("announcements.compose.publishHint")}
               </FieldHint>
             </div>
           </div>
@@ -101,10 +102,10 @@ export function AnnouncementComposeDialog({ defaultOpen = false }: { defaultOpen
           ) : null}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              Publish
+              {t("announcements.compose.submit")}
             </Button>
           </div>
         </form>

@@ -7,10 +7,12 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { tagsSchema } from "@/features/documents/services/library";
+import { tagsSchemaFor } from "@/features/documents/services/library";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
-const linkSchema = z.object({
-  title: requiredText("Give the resource a title.", 200),
+const linkSchema = (t: TranslateFn) => z.object({
+  title: requiredText(t("documents.errors.linkTitle"), 200),
   // https only, and not merely "a valid URL". `new URL()` — which is what Zod's
   // `.url()` defers to — parses `javascript:alert(1)` and
   // `data:text/html,<script>…</script>` without complaint, and a link document's
@@ -18,28 +20,29 @@ const linkSchema = z.object({
   url: z
     .string()
     .trim()
-    .url("Enter a valid URL.")
+    .url(t("documents.errors.invalidUrl"))
     .refine(
       (value) => /^https:\/\//i.test(value),
-      "A resource link must be an https address.",
+      t("documents.errors.httpsOnly"),
     ),
   description: z.string().trim().max(2000).optional(),
   projectId: z.string().uuid().optional(),
   programId: z.string().uuid().optional(),
   visibility: z.enum(["organization", "staff"]).default("organization"),
   folderId: z.string().uuid().optional(),
-  tags: tagsSchema,
+  tags: tagsSchemaFor(t),
 });
 
 /** Registers an external resource link (QBBE-controlled Drive, etc.). */
 export async function createDocumentLink(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
 
   const limited = await enforceRateLimit("document:upload", session.userId);
   if (limited) return limited;
-  const parsed = linkSchema.safeParse(input);
+  const parsed = linkSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("documents.errors.invalidInput") };
   }
   const data = parsed.data;
 
@@ -54,7 +57,7 @@ export async function createDocumentLink(input: unknown): Promise<ActionResult> 
   try {
     host = new URL(data.url).hostname.toLowerCase();
   } catch {
-    return { ok: false, error: "Enter a valid URL." };
+    return { ok: false, error: t("documents.errors.invalidUrl") };
   }
 
   const { data: approved, error: approvedError } = await supabase
@@ -66,7 +69,7 @@ export async function createDocumentLink(input: unknown): Promise<ActionResult> 
   // A failed read is not an empty allowlist. Treating it as one would refuse
   // every link and blame the person's URL for it.
   if (approvedError) {
-    return { ok: false, error: "Could not check the approved sources. Try again." };
+    return { ok: false, error: t("documents.errors.hostsUnavailable") };
   }
 
   if (!approved?.some((row) => row.host === host)) {
@@ -74,8 +77,8 @@ export async function createDocumentLink(input: unknown): Promise<ActionResult> 
     return {
       ok: false,
       error: names.length
-        ? `${host} is not an approved source. Links must point at ${names.join(", ")}.`
-        : `${host} is not an approved source, and no approved sources are configured yet. An administrator can add one.`,
+        ? t("documents.errors.hostNotApproved", { host, hosts: names.join(", ") })
+        : t("documents.errors.hostNotApprovedNone", { host }),
     };
   }
 
@@ -98,13 +101,13 @@ export async function createDocumentLink(input: unknown): Promise<ActionResult> 
     .select("id")
     .single();
 
-  if (error || !doc) return { ok: false, error: "Could not save the resource." };
+  if (error || !doc) return { ok: false, error: t("documents.errors.saveResource") };
 
   revalidatePath("/documents");
   return { ok: true, id: doc.id as string };
 }
 
-const fileSchema = z.object({
+const fileSchema = (t: TranslateFn) => z.object({
   title: z.string().trim().min(1).max(200),
   storagePath: z.string().trim().min(1).max(500),
   mimeType: z.string().trim().max(200).optional(),
@@ -114,7 +117,7 @@ const fileSchema = z.object({
   programId: z.string().uuid().optional(),
   visibility: z.enum(["organization", "staff"]).default("organization"),
   folderId: z.string().uuid().optional(),
-  tags: tagsSchema,
+  tags: tagsSchemaFor(t),
 });
 
 /** Records an uploaded file after the client streams it into Storage. */
@@ -122,11 +125,12 @@ export async function registerUploadedDocument(
   input: unknown,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const limited = await enforceRateLimit("document:upload", session.userId);
   if (limited) return limited;
-  const parsed = fileSchema.safeParse(input);
+  const parsed = fileSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("documents.errors.invalidInput") };
   }
   const data = parsed.data;
 
@@ -152,7 +156,7 @@ export async function registerUploadedDocument(
     .select("id")
     .single();
 
-  if (error || !doc) return { ok: false, error: "Could not record the upload." };
+  if (error || !doc) return { ok: false, error: t("documents.errors.recordUpload") };
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
@@ -176,6 +180,7 @@ export async function getDocumentDownloadUrl(
   documentId: string,
 ): Promise<ActionResult & { url?: string }> {
   const session = await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
 
   const { data: doc } = await supabase
@@ -184,10 +189,10 @@ export async function getDocumentDownloadUrl(
     .eq("id", documentId)
     .maybeSingle();
 
-  if (!doc) return { ok: false, error: "Document not found or not accessible." };
+  if (!doc) return { ok: false, error: t("documents.errors.notAccessible") };
   if (doc.kind === "link") return { ok: true, url: doc.url as string };
   if (doc.scan_status !== "clean") {
-    return { ok: false, error: "This file is still being checked or has been quarantined." };
+    return { ok: false, error: t("documents.errors.stillChecking") };
   }
 
   const { data: signed, error } = await supabase.storage
@@ -195,7 +200,7 @@ export async function getDocumentDownloadUrl(
     .createSignedUrl(doc.storage_path as string, 60);
 
   if (error || !signed) {
-    return { ok: false, error: "Could not generate a download link." };
+    return { ok: false, error: t("documents.errors.downloadLink") };
   }
 
   await supabase.from("audit_event").insert({
@@ -217,7 +222,7 @@ export async function archiveDocument(documentId: string): Promise<ActionResult>
     .from("document")
     .update({ archived_at: new Date().toISOString() })
     .eq("id", documentId);
-  if (error) return { ok: false, error: "Could not archive the document." };
+  if (error) return { ok: false, error: (await getT())("documents.errors.archive") };
 
   revalidatePath("/documents");
   return { ok: true };
@@ -231,7 +236,7 @@ export async function restoreDocument(documentId: string): Promise<ActionResult>
     .update({ archived_at: null })
     .eq("id", documentId)
     .not("archived_at", "is", null);
-  if (error) return { ok: false, error: "Could not restore the document." };
+  if (error) return { ok: false, error: (await getT())("documents.errors.restore") };
   revalidatePath("/documents");
   return { ok: true };
 }
@@ -251,13 +256,13 @@ const textSchema = z.object({
 export async function saveDocumentText(input: unknown): Promise<ActionResult> {
   await requireSession();
   const parsed = textSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Could not store the file's text." };
+  if (!parsed.success) return { ok: false, error: (await getT())("documents.errors.storeText") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("set_document_text", {
     p_document: parsed.data.id,
     p_text: parsed.data.text,
     p_source: parsed.data.source,
   });
-  if (error) return { ok: false, error: "Could not store the file's text." };
+  if (error) return { ok: false, error: (await getT())("documents.errors.storeText") };
   return { ok: true, id: parsed.data.id };
 }

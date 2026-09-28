@@ -12,22 +12,39 @@ import {
 } from "@/features/reports/services/report.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDate, formatDateTime } from "@/lib/utils";
-import { snapshotSections } from "@/features/reports/snapshot-view";
+import {
+  codeLabel,
+  formatStoredDate,
+  snapshotSections,
+} from "@/features/reports/snapshot-view";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
-export const metadata: Metadata = { title: "Report" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("reports.detailTitle") };
+}
 export const dynamic = "force-dynamic";
 
 type Snapshot = Record<string, unknown>;
 
-function MetricGrid({ metrics }: { metrics: Record<string, number> }) {
+function MetricGrid({
+  metrics,
+  t,
+  formatNumber,
+}: {
+  metrics: Record<string, number>;
+  t: TranslateFn;
+  formatNumber: (value: number) => string;
+}) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       {Object.entries(metrics).map(([key, value]) => (
         <div key={key} className="card p-3.5">
-          <p className="text-[24px] leading-none font-semibold">{value}</p>
+          <p className="text-[24px] leading-none font-semibold">
+            {typeof value === "number" ? formatNumber(value) : value}
+          </p>
           <p className="mt-1 text-[12px] text-muted capitalize">
-            {key.replace(/_/g, " ")}
+            {codeLabel(t, "reports.metrics", key)}
           </p>
         </div>
       ))}
@@ -38,15 +55,17 @@ function MetricGrid({ metrics }: { metrics: Record<string, number> }) {
 function SnapshotList({
   title,
   rows,
+  emptyText,
 }: {
   title: string;
   rows: { primary: string; secondary?: string }[];
+  emptyText: string;
 }) {
   return (
     <section className="mt-6">
       <h2 className="section-heading mb-2">{title}</h2>
       {rows.length === 0 ? (
-        <p className="card px-4 py-3 text-[13px] text-muted">None in this snapshot.</p>
+        <p className="card px-4 py-3 text-[13px] text-muted">{emptyText}</p>
       ) : (
         <ul className="card divide-y divide-line">
           {rows.map((row, i) => (
@@ -69,6 +88,7 @@ export default async function ReportDetailPage({
   const session = await requireSession();
   const { id } = await params;
   const supabase = await createSupabasePageClient();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
 
   const { data: reportRow } = await supabase
     .from("report_instance")
@@ -103,42 +123,58 @@ export default async function ReportDetailPage({
   const generator = report.generator;
   const approver = report.approver;
 
-  const sections = snapshotSections(snapshot);
+  const sections = snapshotSections(snapshot, {
+    t,
+    date: (value) => formatStoredDate(format, value),
+  });
 
   return (
     <div className="mx-auto max-w-3xl">
       <div className="no-print ">
         <Breadcrumbs
-          items={[{ label: "Reports", href: "/reports" }, { label: report.title as string }]}
+          items={[
+            { label: t("reports.title"), href: "/reports" },
+            { label: report.title as string },
+          ]}
         />
       </div>
       <PageHeader
-        eyebrow={`${formatDate(report.period_start)} → ${formatDate(report.period_end)}`}
+        eyebrow={t("reports.period", {
+          start: formatStoredDate(format, report.period_start),
+          end: formatStoredDate(format, report.period_end),
+        })}
         title={report.title as string}
-        description={`Generated ${formatDateTime(report.created_at)} by ${generator?.full_name ?? "unknown"} from a permission-filtered snapshot.`}
+        description={t("reports.generatedBy", {
+          when: format.dateTime(report.created_at),
+          name: generator?.full_name ?? t("reports.unknownPerson"),
+        })}
         actions={
           <div className="no-print flex items-center gap-2">
             <Badge
               tone={report.status === "approved" ? "success" : "neutral"}
             >
-              {(report.status as string).replace(/_/g, " ")}
-              {approver ? ` by ${approver.full_name}` : ""}
+              {approver
+                ? t("reports.approvedBy", {
+                    status: codeLabel(t, "reports.status", report.status),
+                    name: approver.full_name,
+                  })
+                : codeLabel(t, "reports.status", report.status)}
             </Badge>
             <a
               href={`/reports/${report.id}/csv`}
               className="inline-flex h-9 items-center gap-1.5 rounded-(--radius-sm) border border-line bg-surface px-3 text-[13px] font-medium hover:bg-surface-soft"
             >
               <Download className="size-4" aria-hidden />
-              CSV
+              {t("reports.csv")}
             </a>
             <a
               href={`/reports/${report.id}/pdf`}
               className="inline-flex h-9 items-center gap-1.5 rounded-(--radius-sm) border border-line bg-surface px-3 text-[13px] font-medium hover:bg-surface-soft"
             >
               <Download className="size-4" aria-hidden />
-              PDF
+              {t("reports.pdf")}
             </a>
-            <PrintHint />
+            <PrintHint label={t("reports.printHint")} />
             <ReportDecisionControls
               reportId={report.id as string}
               canDecide={session.isAdmin}
@@ -148,10 +184,17 @@ export default async function ReportDetailPage({
         }
       />
 
-      {Object.keys(metrics).length > 0 ? <MetricGrid metrics={metrics} /> : null}
+      {Object.keys(metrics).length > 0 ? (
+        <MetricGrid metrics={metrics} t={t} formatNumber={(value) => format.number(value)} />
+      ) : null}
 
       {sections.map((section) => (
-        <SnapshotList key={section.title} title={section.title} rows={section.rows} />
+        <SnapshotList
+          key={section.title}
+          title={section.title}
+          rows={section.rows}
+          emptyText={t("reports.noneInSnapshot")}
+        />
       ))}
 
       <VersionHistory
@@ -159,21 +202,16 @@ export default async function ReportDetailPage({
         shownVersion={shown?.version_number ?? null}
       />
 
-      <p className="meta mt-8">
-        Each version is frozen at the moment it was generated (RPT-001), and an
-        approved report shows the version that was approved. Regenerating adds
-        a version rather than replacing one, so a sign-off always names the
-        figures it was given.
-      </p>
+      <p className="meta mt-8">{t("reports.footnote")}</p>
     </div>
   );
 }
 
-function PrintHint() {
+function PrintHint({ label }: { label: string }) {
   return (
     <span className="inline-flex h-9 items-center gap-1.5 rounded-(--radius-sm) border border-line bg-surface px-3 text-[13px] font-medium text-muted">
       <Printer className="size-4" aria-hidden />
-      Print / Save as PDF via browser
+      {label}
     </span>
   );
 }

@@ -15,6 +15,8 @@ import {
   renderNotificationEmail,
   type EmailBody,
 } from "@/features/notifications/services/email-templates";
+import { isLocale } from "@/lib/i18n/config";
+import { createTranslator } from "@/lib/i18n/translate";
 import { ack, deadLetter, enqueue, readBatch } from "../queue";
 import { PartialJobFailure, type JobContext, type JobResult } from "../runner";
 
@@ -142,7 +144,7 @@ async function prepareNotification(
   const [profileResult, preferenceResult, membershipResult] = await Promise.all([
     db
       .from("user_profile")
-      .select("full_name, email")
+      .select("full_name, email, locale")
       .eq("id", notification.user_id)
       .maybeSingle(),
     db
@@ -182,7 +184,11 @@ async function prepareNotification(
     return { outcome: "done" };
   }
 
-  const recipientName = (profileRow?.full_name as string | undefined) || "there";
+  // Mail goes out in the recipient's saved language (null means English).
+  const recipientLocale = (profileRow?.locale as string | null | undefined) ?? null;
+  const recipientName =
+    (profileRow?.full_name as string | undefined) ||
+    createTranslator(isLocale(recipientLocale) ? recipientLocale : "en")("jobs.email.fallbackName");
   const recipientEmail = (profileRow?.email as string | undefined) ?? null;
   const prefs = withPreferenceDefaults(prefRow as Partial<DeliveryPreferences> | null);
 
@@ -225,6 +231,7 @@ async function prepareNotification(
     category: notification.category,
     link: notification.link,
     recipientName,
+    locale: recipientLocale,
     organizationName,
     action: notification.reason,
     context: notification.context,

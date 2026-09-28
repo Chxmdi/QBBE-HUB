@@ -5,6 +5,7 @@ import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { acknowledgeAnnouncement } from "@/features/announcements/services/announcement.commands";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Explicit acknowledgment — a durable record, not a reaction (ANN-003).
@@ -15,6 +16,7 @@ export function AcknowledgeButton({
   announcementId: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const [state, setState] = useState<"idle" | "saving" | "done" | "error">(
     "idle",
   );
@@ -34,7 +36,7 @@ export function AcknowledgeButton({
     return (
       <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-success-fg">
         <CheckCircle2 className="size-4" aria-hidden />
-        Acknowledged
+        {t("announcements.acknowledged")}
       </span>
     );
   }
@@ -42,11 +44,11 @@ export function AcknowledgeButton({
   return (
     <div className="flex flex-col items-end gap-1">
       <Button size="sm" onClick={handleClick} loading={state === "saving"}>
-        Acknowledge
+        {t("announcements.ack.button")}
       </Button>
       {state === "error" ? (
         <p role="alert" className="text-[12px] text-danger-fg">
-          Could not save — try again.
+          {t("announcements.ack.failed")}
         </p>
       ) : null}
     </div>

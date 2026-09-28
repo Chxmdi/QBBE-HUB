@@ -24,7 +24,8 @@ import { TASK_SELECT, getPickerOptions } from "@/features/tasks/services/task.qu
 import { requireSession } from "@/lib/auth";
 import { hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDate, relativeTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import { accessRoleLabel, accessSourceLabel } from "@/features/projects/i18n";
 import { CommentThread } from "@/features/comments/components/comment-thread";
 import { DecisionLog } from "@/features/risks/components/decision-log";
 import { RaidLogPanel } from "@/features/risks/components/raid-log";
@@ -38,7 +39,9 @@ import type {
   Task,
 } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Project" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("projects.detailMetaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 const PROJECT_TASK_ROW_LIMIT = 25;
@@ -72,6 +75,8 @@ export default async function ProjectDetailPage({
   const tab =
     tabParam ?? (highlightRiskId || highlightIssueId ? "risks" : "overview");
   const supabase = await createSupabasePageClient();
+  const t = await getT();
+  const format = await getFormatters();
 
   const { data: projectRow } = await supabase
     .from("project")
@@ -268,7 +273,7 @@ export default async function ProjectDetailPage({
     <div>
       <Breadcrumbs
         items={[
-          { label: "Projects", href: "/projects" },
+          { label: t("projects.list.title"), href: "/projects" },
           ...(project.program
             ? [{ label: project.program.name, href: `/programs/${project.program.id}` }]
             : []),
@@ -276,7 +281,7 @@ export default async function ProjectDetailPage({
         ]}
       />
       <PageHeader
-        eyebrow={project.program?.name ?? "Independent project"}
+        eyebrow={project.program?.name ?? t("projects.detail.independent")}
         title={project.name}
         description={project.outcome ?? undefined}
         actions={
@@ -308,7 +313,7 @@ export default async function ProjectDetailPage({
                 people={options.people}
                 milestones={options.milestones}
                 defaultProjectId={project.id}
-                triggerLabel="Add task"
+                triggerLabel={t("projects.detail.addTask")}
               />
             </>
           ) : undefined
@@ -318,36 +323,46 @@ export default async function ProjectDetailPage({
       {/* Meta strip */}
       <div className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-(--radius-md) border border-line bg-surface px-4 py-3">
         <div className="flex items-center gap-2">
-          <span className="meta">Owner</span>
+          <span className="meta">{t("projects.detail.owner")}</span>
           {project.owner ? (
             <span className="flex items-center gap-1.5 text-[13.5px] font-medium">
               <Avatar name={project.owner.full_name} src={project.owner.avatar_url} size="sm" />
               {project.owner.full_name}
             </span>
           ) : (
-            <span className="text-[13.5px] text-warning-fg">Unassigned</span>
+            <span className="text-[13.5px] text-warning-fg">{t("projects.detail.unassigned")}</span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="meta">Progress</span>
+          <span className="meta">{t("projects.detail.progress")}</span>
           <span className="text-[13.5px] font-medium">
             {milestoneList.length > 0
-              ? `${completedMilestones}/${milestoneList.length} milestones`
-              : "No milestones"}
-            {openTasks.length > 0 ? ` · ${openTasks.length} open tasks` : ""}
+              ? t("projects.detail.milestonesDone", {
+                  done: completedMilestones,
+                  total: milestoneList.length,
+                })
+              : t("projects.detail.noMilestones")}
+            {openTasks.length > 0
+              ? t(
+                  openTasks.length === 1
+                    ? "projects.detail.openTasksOne"
+                    : "projects.detail.openTasksOther",
+                  { count: openTasks.length },
+                )
+              : ""}
           </span>
         </div>
         {nextMilestone ? (
           <div className="flex items-center gap-2">
-            <span className="meta">Next milestone</span>
+            <span className="meta">{t("projects.detail.nextMilestone")}</span>
             <span className="text-[13.5px] font-medium">
-              {nextMilestone.name} · {formatDate(nextMilestone.due_date)}
+              {nextMilestone.name} · {format.date(nextMilestone.due_date)}
             </span>
           </div>
         ) : null}
         {projectChannel ? (
           <div className="flex items-center gap-2">
-            <span className="meta">Channel</span>
+            <span className="meta">{t("projects.detail.channel")}</span>
             <Link
               href={`/channels/${projectChannel.id}`}
               className="text-[13.5px] font-medium hover:text-brand-fg hover:underline"
@@ -359,7 +374,7 @@ export default async function ProjectDetailPage({
         {/* P0-PRJ-02 names a sponsor beside the accountable owner. It is a
             column on project, not one of the scoped roles. */}
         <div className="flex items-center gap-2">
-          <span className="meta">Sponsor</span>
+          <span className="meta">{t("projects.detail.sponsor")}</span>
           {project.sponsor ? (
             <span className="flex items-center gap-1.5 text-[13.5px] font-medium">
               <Avatar
@@ -370,20 +385,20 @@ export default async function ProjectDetailPage({
               {project.sponsor.full_name}
             </span>
           ) : (
-            <span className="text-[13.5px] text-muted">Not named</span>
+            <span className="text-[13.5px] text-muted">{t("projects.detail.notNamed")}</span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="meta">Health</span>
+          <span className="meta">{t("projects.detail.health")}</span>
           <HealthBadge health={project.health} />
         </div>
         {project.health_reason ? (
           <p className="text-[13px] text-warning-fg">{project.health_reason}</p>
         ) : null}
         <div className="flex items-center gap-2">
-          <span className="meta">Timeline</span>
+          <span className="meta">{t("projects.detail.timeline")}</span>
           <span className="text-[13.5px]">
-            {formatDate(project.start_date)} → {formatDate(project.target_date)}
+            {format.date(project.start_date)} → {format.date(project.target_date)}
           </span>
         </div>
       </div>
@@ -391,34 +406,34 @@ export default async function ProjectDetailPage({
       <LinkTabs
         active={tab}
         tabs={[
-          { id: "overview", label: "Overview", href: `/projects/${project.id}` },
+          { id: "overview", label: t("projects.detail.tabs.overview"), href: `/projects/${project.id}` },
           {
             id: "tasks",
-            label: "Tasks",
+            label: t("projects.detail.tabs.tasks"),
             href: `/projects/${project.id}?tab=tasks`,
             count: openTasks.length,
           },
           {
             id: "updates",
-            label: "Updates",
+            label: t("projects.detail.tabs.updates"),
             href: `/projects/${project.id}?tab=updates`,
             count: (updates ?? []).length,
           },
           {
             id: "risks",
-            label: "Risks & issues",
+            label: t("projects.detail.tabs.risks"),
             href: `/projects/${project.id}?tab=risks`,
             count: raidLog.openCount,
           },
           {
             id: "team",
-            label: "Team",
+            label: t("projects.detail.tabs.team"),
             href: `/projects/${project.id}?tab=team`,
             count: teamGrants.length,
           },
           {
             id: "activity",
-            label: "Activity",
+            label: t("projects.detail.tabs.activity"),
             href: `/projects/${project.id}?tab=activity`,
           },
         ]}
@@ -440,18 +455,22 @@ export default async function ProjectDetailPage({
               className={tab === "overview" || tab === "updates" ? "" : "hidden"}
             >
               <h2 id="project-closure" className="section-heading mb-3">
-                How it ended
+                {t("projects.detail.closure.heading")}
               </h2>
               <div className="card space-y-3 p-4">
                 <p className="meta">
-                  Closed {formatDate(projectClosure.closed_at)}
                   {projectClosure.closer
-                    ? ` by ${projectClosure.closer.full_name}`
-                    : ""}
+                    ? t("projects.detail.closure.closedBy", {
+                        date: format.date(projectClosure.closed_at),
+                        name: projectClosure.closer.full_name,
+                      })
+                    : t("projects.detail.closure.closed", {
+                        date: format.date(projectClosure.closed_at),
+                      })}
                 </p>
                 <div>
                   <h3 className="text-[13px] font-medium text-muted">
-                    What it delivered
+                    {t("projects.detail.closure.delivered")}
                   </h3>
                   <p className="mt-0.5 whitespace-pre-line text-[13.5px]">
                     {projectClosure.results}
@@ -460,7 +479,7 @@ export default async function ProjectDetailPage({
                 {projectClosure.lessons ? (
                   <div>
                     <h3 className="text-[13px] font-medium text-muted">
-                      Lessons learned
+                      {t("projects.detail.closure.lessons")}
                     </h3>
                     <p className="mt-0.5 whitespace-pre-line text-[13.5px]">
                       {projectClosure.lessons}
@@ -470,7 +489,7 @@ export default async function ProjectDetailPage({
                 {projectClosure.evidence_links.length > 0 ||
                 projectClosure.evidence.length > 0 ? (
                   <div>
-                    <h3 className="text-[13px] font-medium text-muted">Evidence</h3>
+                    <h3 className="text-[13px] font-medium text-muted">{t("projects.detail.closure.evidence")}</h3>
                     <ul className="mt-0.5 space-y-0.5 text-[13.5px]">
                       {projectClosure.evidence_links.map((link) => (
                         <li key={link.url}>
@@ -510,15 +529,18 @@ export default async function ProjectDetailPage({
             className={tab === "overview" || tab === "tasks" ? "" : "hidden"}
           >
             <h2 id="project-tasks" className="section-heading mb-3">
-              Tasks
+              {t("projects.detail.tasks.heading")}
               <span className="meta ml-2 font-normal">
-                {openTasks.length} open · {doneTasks.length} done
+                {t("projects.detail.tasks.counts", {
+                  open: openTasks.length,
+                  done: doneTasks.length,
+                })}
               </span>
             </h2>
             {taskList.length === 0 ? (
               <EmptyState
-                title="No tasks yet"
-                description="Break the project into owned, dated tasks to make progress visible."
+                title={t("projects.detail.tasks.emptyTitle")}
+                description={t("projects.detail.tasks.emptyBody")}
               />
             ) : (
               <div className="card overflow-hidden">
@@ -528,7 +550,7 @@ export default async function ProjectDetailPage({
                 {doneTasks.length > 0 ? (
                   <details>
                     <summary className="cursor-pointer border-t border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-medium text-muted">
-                      Completed ({doneTasks.length})
+                      {t("projects.detail.tasks.completed", { count: doneTasks.length })}
                     </summary>
                     {shownDoneTasks.map((task) => (
                       <TaskRow
@@ -545,7 +567,7 @@ export default async function ProjectDetailPage({
                     href={`/projects/${project.id}?tab=tasks&all=1`}
                     className="block border-t border-line px-3 py-2 text-[12.5px] font-medium text-brand-fg hover:bg-surface-soft"
                   >
-                    Show all {taskList.length} tasks
+                    {t("projects.detail.tasks.showAll", { count: taskList.length })}
                   </Link>
                 ) : null}
               </div>
@@ -559,7 +581,7 @@ export default async function ProjectDetailPage({
           >
             <div className="mb-3 flex items-center justify-between">
               <h2 id="project-updates" className="section-heading">
-                Status updates
+                {t("projects.detail.updates.heading")}
               </h2>
             </div>
             {canManage ? (
@@ -569,7 +591,7 @@ export default async function ProjectDetailPage({
             ) : null}
             {(updates ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No status updates published yet.
+                {t("projects.detail.updates.empty")}
               </p>
             ) : (
               <ol className="space-y-3">
@@ -588,7 +610,7 @@ export default async function ProjectDetailPage({
                       </span>
                       <HealthBadge health={update.health} />
                       <span className="meta ml-auto">
-                        {relativeTime(update.created_at)}
+                        {format.relative(update.created_at)}
                       </span>
                     </div>
                     <p className="text-[13.5px] whitespace-pre-wrap">
@@ -596,23 +618,23 @@ export default async function ProjectDetailPage({
                     </p>
                     {update.next_steps ? (
                       <p className="mt-2 text-[13px]">
-                        <span className="font-medium">Next:</span> {update.next_steps}
+                        <span className="font-medium">{t("projects.detail.updates.next")}</span> {update.next_steps}
                       </p>
                     ) : null}
                     {update.blockers ? (
                       <p className="mt-1 text-[13px] text-danger-fg">
-                        <span className="font-medium">Blockers:</span> {update.blockers}
+                        <span className="font-medium">{t("projects.detail.updates.blockers")}</span> {update.blockers}
                       </p>
                     ) : null}
                     {update.decisions_needed ? (
                       <p className="mt-1 text-[13px] text-warning-fg">
-                        <span className="font-medium">Decisions needed:</span>{" "}
+                        <span className="font-medium">{t("projects.detail.updates.decisionsNeeded")}</span>{" "}
                         {update.decisions_needed}
                       </p>
                     ) : null}
                     {update.help_requested ? (
                       <p className="mt-1 text-[13px]">
-                        <span className="font-medium">Help requested:</span>{" "}
+                        <span className="font-medium">{t("projects.detail.updates.helpRequested")}</span>{" "}
                         {update.help_requested}
                       </p>
                     ) : null}
@@ -628,22 +650,22 @@ export default async function ProjectDetailPage({
           <section aria-labelledby="project-milestones">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 id="project-milestones" className="section-heading">
-                Milestones
+                {t("projects.detail.milestones.heading")}
               </h2>
               {canManage ? (
                 <EntityFormDialog
-                  triggerLabel="Add milestone"
+                  triggerLabel={t("projects.detail.milestones.add")}
                   triggerVariant="secondary"
-                  title="Add milestone"
-                  submitLabel="Create"
+                  title={t("projects.detail.milestones.add")}
+                  submitLabel={t("projects.detail.milestones.create")}
                   extraValues={{ projectId: project.id }}
                   action={createMilestone}
                   fields={[
-                    { name: "name", label: "Name", type: "text", required: true },
-                    { name: "description", label: "Description", type: "textarea" },
+                    { name: "name", label: t("projects.detail.milestones.name"), type: "text", required: true },
+                    { name: "description", label: t("projects.detail.milestones.description"), type: "textarea" },
                     {
                       name: "ownerId",
-                      label: "Owner",
+                      label: t("projects.detail.milestones.owner"),
                       type: "select",
                       colSpan: 1,
                       options: options.people.map((p) => ({
@@ -651,7 +673,7 @@ export default async function ProjectDetailPage({
                         label: p.label,
                       })),
                     },
-                    { name: "dueDate", label: "Target date", type: "date", colSpan: 1 },
+                    { name: "dueDate", label: t("projects.detail.milestones.targetDate"), type: "date", colSpan: 1 },
                   ]}
                 />
               ) : null}
@@ -667,11 +689,11 @@ export default async function ProjectDetailPage({
           {/* Activity */}
           <section aria-labelledby="project-activity">
             <h2 id="project-activity" className="section-heading mb-3">
-              Activity
+              {t("projects.detail.activity.heading")}
             </h2>
             {(activity ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No recorded activity yet.
+                {t("projects.detail.activity.empty")}
               </p>
             ) : (
               <ol className="card divide-y divide-line">
@@ -679,11 +701,11 @@ export default async function ProjectDetailPage({
                   <li key={event.id} className="px-4 py-2.5">
                     <p className="text-[13px]">
                       <span className="font-medium">
-                        {event.actor?.full_name ?? "System"}
+                        {event.actor?.full_name ?? t("common.system")}
                       </span>{" "}
                       {event.summary}
                     </p>
-                    <p className="meta">{relativeTime(event.created_at)}</p>
+                    <p className="meta">{format.relative(event.created_at)}</p>
                   </li>
                 ))}
               </ol>
@@ -695,11 +717,11 @@ export default async function ProjectDetailPage({
           <section aria-labelledby="project-links" className="space-y-8">
             <div>
               <h2 id="project-links" className="section-heading mb-3">
-                Files
+                {t("projects.detail.files.heading")}
               </h2>
               {projectDocuments.length === 0 ? (
                 <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                  No files linked to this project.
+                  {t("projects.detail.files.empty")}
                 </p>
               ) : (
                 <ul className="card divide-y divide-line">
@@ -711,7 +733,7 @@ export default async function ProjectDetailPage({
                       >
                         {document.title}
                       </Link>
-                      <p className="meta">{relativeTime(document.created_at)}</p>
+                      <p className="meta">{format.relative(document.created_at)}</p>
                     </li>
                   ))}
                 </ul>
@@ -719,10 +741,10 @@ export default async function ProjectDetailPage({
             </div>
 
             <div>
-              <h2 className="section-heading mb-3">Meetings</h2>
+              <h2 className="section-heading mb-3">{t("projects.detail.meetings.heading")}</h2>
               {projectMeetings.length === 0 ? (
                 <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                  No meetings linked to this project.
+                  {t("projects.detail.meetings.empty")}
                 </p>
               ) : (
                 <ul className="card divide-y divide-line">
@@ -734,7 +756,7 @@ export default async function ProjectDetailPage({
                       >
                         {meeting.title}
                       </Link>
-                      <p className="meta">{formatDate(meeting.starts_at)}</p>
+                      <p className="meta">{format.date(meeting.starts_at)}</p>
                     </li>
                   ))}
                 </ul>
@@ -749,12 +771,11 @@ export default async function ProjectDetailPage({
         {tab === "team" ? (
           <section aria-labelledby="project-team-tab">
             <h2 id="project-team-tab" className="section-heading mb-3">
-              Team
+              {t("projects.detail.team.heading")}
             </h2>
             {teamGrants.length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                Nobody holds explicit access to this project yet. The owner
-                manages it through ownership.
+                {t("projects.detail.team.empty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -764,19 +785,21 @@ export default async function ProjectDetailPage({
                     className="flex items-center gap-2.5 px-4 py-2.5"
                   >
                     <Avatar
-                      name={grant.member?.full_name ?? "Unknown"}
+                      name={grant.member?.full_name ?? t("projects.access.unknown")}
                       src={grant.member?.avatar_url ?? null}
                       size="sm"
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13.5px] font-medium">
-                        {grant.member?.full_name ?? "Unknown member"}
+                        {grant.member?.full_name ?? t("projects.access.unknownMember")}
                       </span>
                       <span className="meta">
-                        {grant.role.replaceAll("_", " ")}
+                        {accessRoleLabel(grant.role, t)}
                         {grant.source === "direct"
                           ? ""
-                          : ` · via ${grant.source.replaceAll("_", " ")}`}
+                          : t("projects.access.via", {
+                              source: accessSourceLabel(grant.source, t),
+                            })}
                       </span>
                     </span>
                   </li>
@@ -785,11 +808,11 @@ export default async function ProjectDetailPage({
             )}
             {canManage ? (
               <p className="meta mt-2">
-                Access is granted by an administrator in{" "}
+                {t("projects.access.grantedBefore")}{" "}
                 <Link href="/admin/access" className="hover:underline">
-                  access administration
+                  {t("projects.access.grantedLink")}
                 </Link>
-                .
+                {t("projects.access.grantedAfter")}
               </p>
             ) : null}
           </section>
@@ -799,11 +822,11 @@ export default async function ProjectDetailPage({
         {tab === "activity" ? (
           <section aria-labelledby="project-activity-tab">
             <h2 id="project-activity-tab" className="section-heading mb-3">
-              Activity
+              {t("projects.detail.activity.heading")}
             </h2>
             {(activity ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No recorded activity yet.
+                {t("projects.detail.activity.empty")}
               </p>
             ) : (
               <ol className="card divide-y divide-line">
@@ -811,11 +834,11 @@ export default async function ProjectDetailPage({
                   <li key={event.id} className="px-4 py-2.5">
                     <p className="text-[13px]">
                       <span className="font-medium">
-                        {event.actor?.full_name ?? "System"}
+                        {event.actor?.full_name ?? t("common.system")}
                       </span>{" "}
                       {event.summary}
                     </p>
-                    <p className="meta">{relativeTime(event.created_at)}</p>
+                    <p className="meta">{format.relative(event.created_at)}</p>
                   </li>
                 ))}
               </ol>

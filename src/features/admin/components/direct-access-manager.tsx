@@ -14,12 +14,13 @@ import {
   setDirectProgramAccess,
   setDirectProjectAccess,
 } from "@/features/admin/services/access-grant.commands";
+import { scopeRoleLabel } from "@/features/admin/labels";
+import { useT } from "@/lib/i18n/client";
 
 type Option = { id: string; name: string };
 type ProgramGrant = { program_id: string; user_id: string; role: ProgramAccessRole };
 type ProjectGrant = { project_id: string; user_id: string; role: ProjectAccessRole };
 
-const roleLabel = (role: string) => role.replaceAll("_", " ");
 
 export function DirectAccessManager({
   members,
@@ -35,6 +36,7 @@ export function DirectAccessManager({
   projectGrants: ProjectGrant[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [programMember, setProgramMember] = useState(members[0]?.id ?? "");
   const [programId, setProgramId] = useState(programs[0]?.id ?? "");
   const [programRole, setProgramRole] = useState<ProgramAccessRole>("contributor");
@@ -58,7 +60,7 @@ export function DirectAccessManager({
       role: programRole,
     });
     setPending(null);
-    if (!result.ok) return setError(result.error ?? "Could not update access.");
+    if (!result.ok) return setError(result.error ?? t("admin.access.direct.updateFailed"));
     router.refresh();
   }
 
@@ -72,7 +74,7 @@ export function DirectAccessManager({
       role: projectRole,
     });
     setPending(null);
-    if (!result.ok) return setError(result.error ?? "Could not update access.");
+    if (!result.ok) return setError(result.error ?? t("admin.access.direct.updateFailed"));
     router.refresh();
   }
 
@@ -85,7 +87,7 @@ export function DirectAccessManager({
       role: null,
     });
     setPending(null);
-    if (!result.ok) return setError(result.error ?? "Could not remove access.");
+    if (!result.ok) return setError(result.error ?? t("admin.access.direct.removeFailed"));
     router.refresh();
   }
 
@@ -98,49 +100,49 @@ export function DirectAccessManager({
       role: null,
     });
     setPending(null);
-    if (!result.ok) return setError(result.error ?? "Could not remove access.");
+    if (!result.ok) return setError(result.error ?? t("admin.access.direct.removeFailed"));
     router.refresh();
   }
 
   return (
     <section aria-labelledby="direct-access" className="mt-8">
-      <h2 id="direct-access" className="section-heading">Direct access</h2>
+      <h2 id="direct-access" className="section-heading">{t("admin.access.direct.heading")}</h2>
       <p className="mt-2 text-sm text-muted">
-        Direct grants coexist with owner, lead, program, and team access. Removing one direct grant keeps every independent source.
+        {t("admin.access.direct.intro")}
       </p>
       {error ? <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p> : null}
 
       <div className="mt-4 grid gap-5 xl:grid-cols-2">
         <div className="card p-5">
-          <h3 className="font-semibold">Program access</h3>
+          <h3 className="font-semibold">{t("admin.access.direct.programAccess")}</h3>
           <form onSubmit={saveProgram} className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
-              <Label htmlFor="program-grant-member">Member</Label>
+              <Label htmlFor="program-grant-member">{t("admin.access.direct.member")}</Label>
               <Select id="program-grant-member" value={programMember} onChange={(event) => setProgramMember(event.target.value)} required>
                 {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
               </Select>
             </div>
             <div>
-              <Label htmlFor="program-grant-program">Program</Label>
+              <Label htmlFor="program-grant-program">{t("admin.access.direct.program")}</Label>
               <Select id="program-grant-program" value={programId} onChange={(event) => setProgramId(event.target.value)} required>
                 {programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
               </Select>
             </div>
             <div>
-              <Label htmlFor="program-grant-role">Role</Label>
+              <Label htmlFor="program-grant-role">{t("admin.access.direct.role")}</Label>
               <Select id="program-grant-role" value={programRole} onChange={(event) => setProgramRole(event.target.value as ProgramAccessRole)}>
-                {programAccessRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
+                {programAccessRoles.map((role) => <option key={role} value={role}>{scopeRoleLabel(role, t)}</option>)}
               </Select>
             </div>
             <div className="flex items-end">
-              <Button type="submit" loading={pending === "program"} disabled={!members.length || !programs.length} className="w-full">Save program access</Button>
+              <Button type="submit" loading={pending === "program"} disabled={!members.length || !programs.length} className="w-full">{t("admin.access.direct.saveProgram")}</Button>
             </div>
           </form>
           <GrantList
-            empty="No direct program grants."
+            empty={t("admin.access.direct.noProgramGrants")}
             rows={programGrants.map((grant) => ({
               key: `${grant.program_id}:${grant.user_id}`,
-              label: `${memberNames.get(grant.user_id) ?? "Unknown member"} · ${programNames.get(grant.program_id) ?? "Unknown program"} · ${roleLabel(grant.role)}`,
+              label: `${memberNames.get(grant.user_id) ?? t("admin.access.direct.unknownMember")} · ${programNames.get(grant.program_id) ?? t("admin.access.direct.unknownProgram")} · ${scopeRoleLabel(grant.role, t)}`,
               remove: () => removeProgram(grant),
             }))}
             disabled={pending !== null}
@@ -148,35 +150,35 @@ export function DirectAccessManager({
         </div>
 
         <div className="card p-5">
-          <h3 className="font-semibold">Project access</h3>
+          <h3 className="font-semibold">{t("admin.access.direct.projectAccess")}</h3>
           <form onSubmit={saveProject} className="mt-4 grid gap-3 sm:grid-cols-2">
             <div>
-              <Label htmlFor="project-grant-member">Member</Label>
+              <Label htmlFor="project-grant-member">{t("admin.access.direct.member")}</Label>
               <Select id="project-grant-member" value={projectMember} onChange={(event) => setProjectMember(event.target.value)} required>
                 {members.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
               </Select>
             </div>
             <div>
-              <Label htmlFor="project-grant-project">Project</Label>
+              <Label htmlFor="project-grant-project">{t("admin.access.direct.project")}</Label>
               <Select id="project-grant-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} required>
                 {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
               </Select>
             </div>
             <div>
-              <Label htmlFor="project-grant-role">Role</Label>
+              <Label htmlFor="project-grant-role">{t("admin.access.direct.role")}</Label>
               <Select id="project-grant-role" value={projectRole} onChange={(event) => setProjectRole(event.target.value as ProjectAccessRole)}>
-                {projectAccessRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
+                {projectAccessRoles.map((role) => <option key={role} value={role}>{scopeRoleLabel(role, t)}</option>)}
               </Select>
             </div>
             <div className="flex items-end">
-              <Button type="submit" loading={pending === "project"} disabled={!members.length || !projects.length} className="w-full">Save project access</Button>
+              <Button type="submit" loading={pending === "project"} disabled={!members.length || !projects.length} className="w-full">{t("admin.access.direct.saveProject")}</Button>
             </div>
           </form>
           <GrantList
-            empty="No direct project grants."
+            empty={t("admin.access.direct.noProjectGrants")}
             rows={projectGrants.map((grant) => ({
               key: `${grant.project_id}:${grant.user_id}`,
-              label: `${memberNames.get(grant.user_id) ?? "Unknown member"} · ${projectNames.get(grant.project_id) ?? "Unknown project"} · ${roleLabel(grant.role)}`,
+              label: `${memberNames.get(grant.user_id) ?? t("admin.access.direct.unknownMember")} · ${projectNames.get(grant.project_id) ?? t("admin.access.direct.unknownProject")} · ${scopeRoleLabel(grant.role, t)}`,
               remove: () => removeProject(grant),
             }))}
             disabled={pending !== null}
@@ -196,6 +198,7 @@ function GrantList({
   empty: string;
   disabled: boolean;
 }) {
+  const t = useT();
   if (!rows.length) return <p className="mt-4 text-sm text-muted">{empty}</p>;
   return (
     <ul className="mt-4 divide-y divide-line border-t border-line">
@@ -203,7 +206,7 @@ function GrantList({
         <li key={row.key} className="flex items-center justify-between gap-3 py-3 text-sm">
           <span>{row.label}</span>
           <button type="button" onClick={row.remove} disabled={disabled} className="shrink-0 font-medium text-danger-fg hover:underline disabled:opacity-50">
-            Remove
+            {t("admin.access.direct.remove")}
           </button>
         </li>
       ))}

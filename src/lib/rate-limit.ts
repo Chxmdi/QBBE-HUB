@@ -1,4 +1,6 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { getT } from "@/lib/i18n/server";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Rate limiting for the Hub's own write paths.
@@ -108,14 +110,19 @@ export async function checkRateLimit(rule: RateLimitRule): Promise<RateLimitResu
 }
 
 /** Wording a person can act on: what happened, and when they can try again. */
-export function rateLimitMessage(result: RateLimitResult): string {
-  if (!result.resetAt) return "You're doing that too quickly. Wait a moment and try again.";
+export function rateLimitMessage(
+  result: RateLimitResult,
+  t: TranslateFn = createTranslator("en"),
+): string {
+  if (!result.resetAt) return t("shell.rateLimit.soon");
   const seconds = Math.max(1, Math.ceil((result.resetAt.getTime() - Date.now()) / 1000));
   const wait =
     seconds < 60
-      ? `${seconds} second${seconds === 1 ? "" : "s"}`
-      : `${Math.ceil(seconds / 60)} minute${seconds < 120 ? "" : "s"}`;
-  return `You're doing that too quickly. Try again in about ${wait}.`;
+      ? t(seconds === 1 ? "shell.rateLimit.secondOne" : "shell.rateLimit.secondOther", { count: seconds })
+      : t(seconds < 120 ? "shell.rateLimit.minuteOne" : "shell.rateLimit.minuteOther", {
+          count: Math.ceil(seconds / 60),
+        });
+  return t("shell.rateLimit.later", { wait });
 }
 
 /**
@@ -129,5 +136,5 @@ export async function enforceRateLimit(
   const { limit, windowSeconds } = RATE_LIMITS[action];
   const result = await checkRateLimit({ action, subject, limit, windowSeconds });
   if (result.allowed) return null;
-  return { ok: false, error: rateLimitMessage(result) };
+  return { ok: false, error: rateLimitMessage(result, await getT()) };
 }

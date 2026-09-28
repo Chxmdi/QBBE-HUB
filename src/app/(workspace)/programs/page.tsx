@@ -20,8 +20,11 @@ import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import type { Project } from "@/types/entities";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Programs" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("programs.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 interface ProgramRow {
@@ -42,6 +45,7 @@ export default async function ProgramsPage({
   const params = await searchParams;
   const archived = params.status === "archived";
   const supabase = await createSupabasePageClient();
+  const t = await getT();
 
   const [{ data: programs }, { data: projects }, options] = await Promise.all([
     supabase
@@ -74,22 +78,22 @@ export default async function ProgramsPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Long-running services"
-        title="Programs"
-        description="Programs organize QBBE's ongoing services; projects deliver their time-bound outcomes."
+        eyebrow={t("programs.list.eyebrow")}
+        title={t("programs.list.title")}
+        description={t("programs.list.description")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <CreateProgramFromTemplateButton templates={programTemplates} />
             {session.isAdmin ? (
               <EntityFormDialog
-                triggerLabel="Save template"
+                triggerLabel={t("programs.list.saveTemplate")}
                 triggerVariant="secondary"
-                title="Program template"
-                submitLabel="Save"
+                title={t("programs.list.templateDialogTitle")}
+                submitLabel={t("programs.list.templateSubmit")}
                 action={createProgramTemplate}
                 fields={[
-                  { name: "name", label: "Name", type: "text", required: true },
-                  { name: "description", label: "Description", type: "textarea" },
+                  { name: "name", label: t("programs.list.templateName"), type: "text", required: true },
+                  { name: "description", label: t("programs.list.templateDescription"), type: "textarea" },
                 ]}
               />
             ) : null}
@@ -98,15 +102,15 @@ export default async function ProgramsPage({
         }
       />
 
-      <nav aria-label="Program archive" className="mb-6 flex gap-4 text-sm">
-        <Link href="/programs" aria-current={!archived ? "page" : undefined} className="hover:underline">Current programs</Link>
-        <Link href="/programs?status=archived" aria-current={archived ? "page" : undefined} className="hover:underline">Archived programs</Link>
+      <nav aria-label={t("programs.list.archiveNav")} className="mb-6 flex gap-4 text-sm">
+        <Link href="/programs" aria-current={!archived ? "page" : undefined} className="hover:underline">{t("programs.list.current")}</Link>
+        <Link href="/programs?status=archived" aria-current={archived ? "page" : undefined} className="hover:underline">{t("programs.list.archived")}</Link>
       </nav>
       {programList.length === 0 ? (
         <EmptyState
           icon={<Layers />}
-          title={archived ? "No archived programs" : "No programs yet"}
-          description={archived ? "Archived programs will appear here for review and restoration." : "Create a program to group related projects, events, and channels."}
+          title={archived ? t("programs.list.emptyArchivedTitle") : t("programs.list.emptyTitle")}
+          description={archived ? t("programs.list.emptyArchivedBody") : t("programs.list.emptyBody")}
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -152,7 +156,10 @@ export default async function ProgramsPage({
                     </span>
                   ) : null}
                   <span className="meta ml-auto">
-                    {active.length} active · {programProjects.length} total projects
+                    {t("programs.list.projectCounts", {
+                      active: active.length,
+                      total: programProjects.length,
+                    })}
                   </span>
                 </div>
               </Link>
@@ -164,12 +171,10 @@ export default async function ProgramsPage({
       {session.isAdmin ? (
         <section aria-labelledby="program-templates" className="mt-10">
           <h2 id="program-templates" className="section-heading mb-3">
-            Program templates
+            {t("programs.list.templatesHeading")}
           </h2>
           <p className="mb-3 text-[13px] text-muted">
-            An approved template can be used to create a program with its
-            projects, milestones and standard tasks already in place. Templates
-            carry structure only — no comments, notes or history are copied.
+            {t("programs.list.templatesIntro")}
           </p>
           <ProgramTemplateManager
             templates={adminTemplates}

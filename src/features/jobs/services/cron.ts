@@ -1,3 +1,5 @@
+import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
+
 /**
  * Just enough cron to answer "when does this run next?".
  *
@@ -134,33 +136,42 @@ export function nextRun(expression: string, from: Date = new Date()): Date | nul
   return null;
 }
 
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const ENGLISH = createTranslator("en");
 
-/** A short plain-English gloss for the expressions the registry uses. */
-export function describeSchedule(expression: string): string {
+/**
+ * The schedule as a sentence. `t` picks the language; English by default so
+ * shared callers and tests keep reading "Daily at 12:00 UTC".
+ */
+export function describeSchedule(expression: string, t: TranslateFn = ENGLISH): string {
   const cron = parseCron(expression);
   if (!cron) return expression;
 
   const [minuteField, hourField, , , dayField] = expression.trim().split(/\s+/);
 
-  if (minuteField === "*" && hourField === "*") return "Every minute";
+  if (minuteField === "*" && hourField === "*") return t("jobs.schedule.everyMinute");
   if (minuteField.startsWith("*/") && hourField === "*") {
-    return `Every ${minuteField.slice(2)} minutes`;
+    return t("jobs.schedule.everyNMinutes", { n: minuteField.slice(2) });
   }
-  if (hourField === "*") return "Hourly";
+  if (hourField === "*") return t("jobs.schedule.hourly");
 
   const times = [...cron.hour]
     .sort((a, b) => a - b)
-    .map((hour) => `${String(hour).padStart(2, "0")}:${String([...cron.minute][0] ?? 0).padStart(2, "0")}`)
+    .map((hour) =>
+      t("jobs.schedule.time", {
+        h: String(hour).padStart(2, "0"),
+        m: String([...cron.minute][0] ?? 0).padStart(2, "0"),
+      }),
+    )
     .join(", ");
 
-  if (dayField === "*") return `Daily at ${times} UTC`;
+  if (dayField === "*") return t("jobs.schedule.daily", { times });
 
-  const days = [...cron.dayOfWeek].sort((a, b) => a - b).map((day) => DAY_NAMES[day]);
-  const dayLabel =
-    days.length === 5 && days[0] === "Monday" && days[4] === "Friday"
-      ? "Weekdays"
-      : days.join(", ");
+  const dayNumbers = [...cron.dayOfWeek].sort((a, b) => a - b);
+  const weekdays =
+    dayNumbers.length === 5 && dayNumbers[0] === 1 && dayNumbers[4] === 5;
+  const dayLabel = weekdays
+    ? t("jobs.schedule.weekdays")
+    : dayNumbers.map((day) => t(`jobs.schedule.days.${day}` as MessageKey)).join(", ");
 
-  return `${dayLabel} at ${times} UTC`;
+  return t("jobs.schedule.onDays", { days: dayLabel, times });
 }

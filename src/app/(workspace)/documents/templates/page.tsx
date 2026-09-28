@@ -14,14 +14,18 @@ import {
 import { folderLabel, type LibraryFolder } from "@/features/documents/services/library";
 import {
   RECORD_TYPES,
-  TEMPLATE_KINDS,
   TEMPLATE_LANGUAGES,
+  templateKindLabel,
   type RecordType,
 } from "@/features/documents/templates/merge";
+import { formatStoredDate } from "@/features/reports/snapshot-view";
+import { getFormatters, getT } from "@/lib/i18n/server";
 import { requireStaff } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 
-export const metadata: Metadata = { title: "Document templates" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("documents.templates.title") };
+}
 export const dynamic = "force-dynamic";
 
 const RECORD_LIMIT = 500;
@@ -35,6 +39,7 @@ const RECORD_LIMIT = 500;
 export default async function DocumentTemplatesPage() {
   const session = await requireStaff();
   const supabase = await createSupabasePageClient();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
 
   const [{ data: templateRows }, { data: folderRows }, { data: members }, { data: contacts }, { data: gifts }] =
     await Promise.all([
@@ -76,7 +81,7 @@ export default async function DocumentTemplatesPage() {
 
   const records: Record<RecordType, RecordOption[]> = {
     member: ((members ?? []) as unknown as { user_id: string; profile: { full_name: string; email: string } | null }[])
-      .map((m) => ({ id: m.user_id, label: m.profile?.full_name || m.profile?.email || "Member" }))
+      .map((m) => ({ id: m.user_id, label: m.profile?.full_name || m.profile?.email || t("documents.templates.memberFallback") }))
       .sort((a, b) => a.label.localeCompare(b.label)),
     contact: ((contacts ?? []) as { id: string; full_name: string }[]).map((c) => ({
       id: c.id,
@@ -92,13 +97,17 @@ export default async function DocumentTemplatesPage() {
       }[]
     ).map((g) => ({
       id: g.id,
-      label: `Gift ${g.gift_number} · ${g.contact?.full_name ?? g.donor_org?.name ?? ""} · ${g.received_on}`,
+      label: t("documents.templates.giftOption", {
+        number: g.gift_number,
+        donor: g.contact?.full_name ?? g.donor_org?.name ?? "",
+        date: formatStoredDate(format, g.received_on),
+      }),
     })),
   };
 
   const folderName = (id: string | null) => {
     const folder = folders.find((f) => f.id === id);
-    return folder ? folderLabel(folder) : null;
+    return folder ? folderLabel(folder, t) : null;
   };
 
   return (
@@ -108,46 +117,49 @@ export default async function DocumentTemplatesPage() {
         className="mb-3 inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
       >
         <ArrowLeft className="size-4" aria-hidden />
-        Documents
+        {t("documents.detail.back")}
       </Link>
       <PageHeader
-        eyebrow="Files & resources"
-        title="Document templates"
-        description="Letters, contracts and acknowledgements generated from records, in French or English. Each generated document is saved as a PDF in the library."
+        eyebrow={t("documents.eyebrow")}
+        title={t("documents.templates.title")}
+        description={t("documents.templates.description")}
         actions={session.isAdmin ? <TemplateEditorDialog folders={folders} /> : null}
       />
       {session.isAdmin ? (
         <p className="meta mb-4">
-          Creating or changing a template needs an owner or admin account with
-          two-step verification (MFA) completed.
+          {t("documents.templates.mfaNote")}
         </p>
       ) : null}
 
       {templates.length === 0 ? (
         <EmptyState
           icon={<FileText />}
-          title="No templates yet"
+          title={t("documents.templates.emptyTitle")}
           description={
             session.isAdmin
-              ? "Create a template for a thank-you letter, a contract or an acknowledgement."
-              : "An owner or admin can create templates for letters, contracts and acknowledgements."
+              ? t("documents.templates.emptyAdmin")
+              : t("documents.templates.emptyStaff")
           }
         />
       ) : (
-        <ul className="space-y-3" aria-label="Templates">
+        <ul className="space-y-3" aria-label={t("documents.templates.listAria")}>
           {templates.map((template) => (
             <li key={template.id} className="rounded-xl border border-line bg-surface p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="text-[15px] font-semibold">{template.name}</h2>
                   <div className="mt-1 flex flex-wrap gap-1.5">
-                    <Badge>{TEMPLATE_KINDS.find((k) => k.id === template.kind)?.en}</Badge>
+                    <Badge>{templateKindLabel(template.kind, t)}</Badge>
                     <Badge tone="info">
                       {TEMPLATE_LANGUAGES.find((l) => l.id === template.language)?.label}
                     </Badge>
                     <span className="meta">
-                      Merges {RECORD_TYPES.find((r) => r.id === template.record_type)?.label.toLowerCase()}
-                      {folderName(template.folder_id) ? ` · Files in ${folderName(template.folder_id)}` : ""}
+                      {RECORD_TYPES.some((r) => r.id === template.record_type)
+                        ? t(`documents.templates.merges.${template.record_type}`)
+                        : null}
+                      {folderName(template.folder_id)
+                        ? t("documents.templates.filesIn", { folder: folderName(template.folder_id) ?? "" })
+                        : ""}
                     </span>
                   </div>
                 </div>

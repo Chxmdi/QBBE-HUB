@@ -6,6 +6,7 @@ import {
   toggleEventChecklistItem,
 } from "@/features/events/services/event-checklist.commands";
 import { Checkbox } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
 
 type ChecklistItem = {
   id: string;
@@ -29,6 +30,7 @@ export function EventChecklist({
   items: ChecklistItem[];
   canManage: boolean;
 }) {
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [optimisticItems, applyToggle] = useOptimistic(
@@ -49,7 +51,7 @@ export function EventChecklist({
     startTransition(async () => {
       applyToggle({ id: item.id, completed });
       const result = await toggleEventChecklistItem(item.id, completed);
-      if (!result.ok) setError(result.error ?? "Could not update the checklist item.");
+      if (!result.ok) setError(result.error ?? t("events.checklist.updateError"));
     });
   }
 
@@ -57,14 +59,14 @@ export function EventChecklist({
     setError(null);
     startTransition(async () => {
       const result = await removeEventChecklistItem(item.id);
-      if (!result.ok) setError(result.error ?? "Could not remove the checklist item.");
+      if (!result.ok) setError(result.error ?? t("events.checklist.removeError"));
     });
   }
 
   if (optimisticItems.length === 0) {
     return (
       <p className="card px-4 py-6 text-center text-[13px] text-muted">
-        Nothing to prepare yet. Add what has to be ready before the day.
+        {t("events.checklist.empty")}
       </p>
     );
   }
@@ -96,16 +98,16 @@ export function EventChecklist({
                 onClick={() => remove(item)}
                 disabled={isPending}
                 className="text-[12px] text-muted underline underline-offset-2"
-                aria-label={`Remove ${item.title}`}
+                aria-label={t("events.checklist.removeAria", { title: item.title })}
               >
-                Remove
+                {t("events.checklist.remove")}
               </button>
             ) : null}
           </li>
         ))}
       </ul>
       <p className="text-[12px] text-muted" aria-live="polite">
-        {done} of {optimisticItems.length} ready
+        {t("events.checklist.progress", { done, total: optimisticItems.length })}
       </p>
       {error ? (
         <p role="alert" className="text-[12px] text-danger-fg">

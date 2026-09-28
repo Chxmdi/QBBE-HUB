@@ -24,7 +24,7 @@ export async function sendSmtpMail(options: {
       `MAIL FROM:<${envelopeAddress(from)}>`,
       `RCPT TO:<${envelopeAddress(to)}>`,
       `DATA`,
-      `From: ${from}\r\nTo: ${to}\r\nSubject: ${subject}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n${text}\r\n.`,
+      `From: ${from}\r\nTo: ${to}\r\nSubject: ${encodeHeader(subject)}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n${text}\r\n.`,
       `QUIT`,
     ];
     let i = 0;
@@ -79,4 +79,15 @@ export async function sendSmtpMail(options: {
 export function envelopeAddress(value: string): string {
   const match = value.match(/<([^<>]+)>\s*$/);
   return (match ? match[1] : value).trim();
+}
+
+/**
+ * A header value that survives any mail server. A French subject ("1 mise à
+ * jour en attente…") is not ASCII, and raw 8-bit bytes in a header are
+ * outside the SMTP standard, so non-ASCII subjects go out RFC 2047-encoded.
+ * Plain ASCII is left as it is, so English subjects read exactly as before.
+ */
+export function encodeHeader(value: string): string {
+  if (/^[\x00-\x7F]*$/.test(value)) return value;
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
 }

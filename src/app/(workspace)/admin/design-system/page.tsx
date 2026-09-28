@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { getT } from "@/lib/i18n/server";
 import { PageHeader } from "@/components/shared/page-header";
 import { AdminNav } from "@/features/admin/components/admin-nav";
 import { ComponentGallery } from "@/features/admin/components/component-gallery";
 import { requireAdminAal2 } from "@/lib/auth";
 
-export const metadata: Metadata = { title: "Design system" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("admin.designSystem.title") };
+}
 export const dynamic = "force-dynamic";
 
 /**
@@ -15,12 +18,13 @@ export const dynamic = "force-dynamic";
  */
 export default async function DesignSystemPage() {
   await requireAdminAal2();
+  const t = await getT();
   return (
     <div>
       <PageHeader
-        eyebrow="Administration"
-        title="Design system"
-        description="Every shared component in every state, in the current theme. Switch the theme in the top bar to review dark mode."
+        eyebrow={t("admin.eyebrow")}
+        title={t("admin.designSystem.title")}
+        description={t("admin.designSystem.description")}
       />
       <AdminNav />
       <ComponentGallery />

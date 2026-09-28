@@ -5,8 +5,10 @@ import { useState } from "react";
 import { saveView } from "@/features/admin/services/workflow.commands";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Input } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
 
 export function SaveViewButton({ path = "/my-work" }: { path?: string }) {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -23,7 +25,7 @@ export function SaveViewButton({ path = "/my-work" }: { path?: string }) {
     });
     const result = await saveView({ name, path, query, shared });
     if (!result.ok) {
-      setError(result.error ?? "Could not save.");
+      setError(result.error ?? t("tasks.savedViews.saveFailed"));
       return;
     }
     setOpen(false);
@@ -33,23 +35,23 @@ export function SaveViewButton({ path = "/my-work" }: { path?: string }) {
   if (!open) {
     return (
       <Button variant="secondary" onClick={() => setOpen(true)}>
-        Save view
+        {t("tasks.savedViews.open")}
       </Button>
     );
   }
 
   return (
     <form onSubmit={handleSave} className="flex items-center gap-2">
-      <Input name="name" required placeholder="View name" className="h-9 w-40" />
+      <Input name="name" required placeholder={t("tasks.savedViews.name")} className="h-9 w-40" />
       {path === "/projects" ? (
         <label className="flex items-center gap-1.5 text-[12.5px] text-muted">
           <Checkbox name="shared" />
-          Share with the organization
+          {t("tasks.savedViews.share")}
         </label>
       ) : null}
-      <Button type="submit">Save</Button>
+      <Button type="submit">{t("tasks.savedViews.save")}</Button>
       <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-        Cancel
+        {t("common.cancel")}
       </Button>
       {error ? <span className="text-[12px] text-danger-fg">{error}</span> : null}
     </form>

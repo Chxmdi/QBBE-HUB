@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { rescheduleCalendarItem } from "@/features/tasks/services/planning.commands";
+import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,6 +34,7 @@ export function RescheduleControl({
   date: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
@@ -45,11 +47,13 @@ export function RescheduleControl({
       if (!result.ok) {
         // Say what failed and leave the field showing the real date. A control
         // that silently snaps back looks like the app lost the change.
-        setError(result.error ?? "Could not move that item.");
-        setAnnouncement(`${label} was not moved. ${result.error ?? ""}`.trim());
+        setError(result.error ?? t("calendar.reschedule.error"));
+        setAnnouncement(
+          t("calendar.reschedule.notMoved", { label, error: result.error ?? "" }).trim(),
+        );
         return;
       }
-      setAnnouncement(`${label} moved to ${next}.`);
+      setAnnouncement(t("calendar.reschedule.moved", { label, date: next }));
       router.refresh();
     });
   }
@@ -57,7 +61,7 @@ export function RescheduleControl({
   return (
     <span className="mt-1 block">
       <label className="sr-only" htmlFor={`reschedule-${kind}-${id}`}>
-        Reschedule {label}
+        {t("calendar.reschedule.label", { label })}
       </label>
       <input
         id={`reschedule-${kind}-${id}`}

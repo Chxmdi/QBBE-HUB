@@ -3,10 +3,10 @@ import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
-  DIRECTION_LABELS,
   METRIC_DIRECTIONS,
   OPERATION_STATUSES,
-  OPERATION_STATUS_LABELS,
+  directionLabel,
+  operationStatusLabel,
 } from "@/features/outcomes/schemas";
 import {
   createOutcomeMetric,
@@ -18,7 +18,9 @@ import type {
   OperationRow,
   ProgramOutcomes,
 } from "@/features/outcomes/services/outcome.queries";
-import { formatDate } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import type { Formatters } from "@/lib/i18n/format";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * A program's delivery and its outcomes, side by side but never mixed.
@@ -35,7 +37,7 @@ const STATUS_TONE = {
   cancelled: "neutral",
 } as const;
 
-export function OutcomesPanel({
+export async function OutcomesPanel({
   outcomes,
   programId,
   people,
@@ -49,6 +51,8 @@ export function OutcomesPanel({
   canManage: boolean;
 }) {
   const { summary } = outcomes;
+  const t = await getT();
+  const format = await getFormatters();
   const option = (rows: { id: string; label: string }[]) =>
     rows.map((row) => ({ value: row.id, label: row.label }));
 
@@ -57,60 +61,78 @@ export function OutcomesPanel({
       <section aria-labelledby="program-delivery">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 id="program-delivery" className="section-heading">
-            Delivery
-            <span className="ml-2 font-normal text-muted">what we did</span>
+            {t("outcomes.panel.deliveryHeading")}
+            <span className="ml-2 font-normal text-muted">
+              {t("outcomes.panel.deliveryAside")}
+            </span>
           </h2>
           {canManage ? (
             <EntityFormDialog
-              triggerLabel="Record a session"
+              triggerLabel={t("outcomes.panel.recordSession")}
               triggerVariant="secondary"
-              title="Record a session"
-              submitLabel="Record"
+              title={t("outcomes.panel.recordSession")}
+              submitLabel={t("outcomes.panel.record")}
               extraValues={{ programId }}
               action={recordOperation}
               fields={[
-                { name: "title", label: "What was it", type: "text", required: true },
-                { name: "occurredOn", label: "Date", type: "date", required: true, colSpan: 1 },
+                { name: "title", label: t("outcomes.panel.whatWasIt"), type: "text", required: true },
+                {
+                  name: "occurredOn",
+                  label: t("outcomes.panel.date"),
+                  type: "date",
+                  required: true,
+                  colSpan: 1,
+                },
                 {
                   name: "status",
-                  label: "Status",
+                  label: t("outcomes.panel.status"),
                   type: "select",
                   required: true,
                   colSpan: 1,
                   defaultValue: "delivered",
                   options: OPERATION_STATUSES.map((value) => ({
                     value,
-                    label: OPERATION_STATUS_LABELS[value],
+                    label: operationStatusLabel(value, t),
                   })),
                 },
-                { name: "location", label: "Where", type: "text", colSpan: 1 },
+                { name: "location", label: t("outcomes.panel.where"), type: "text", colSpan: 1 },
                 {
                   name: "attendeeCount",
-                  label: "People who came",
+                  label: t("outcomes.panel.peopleCame"),
                   type: "number",
                   colSpan: 1,
-                  hint: "Required once it is marked delivered.",
+                  hint: t("outcomes.panel.peopleCameHint"),
                 },
-                { name: "durationHours", label: "Hours it ran", type: "number", colSpan: 1 },
-                { name: "volunteerCount", label: "Volunteers", type: "number", colSpan: 1 },
+                {
+                  name: "durationHours",
+                  label: t("outcomes.panel.hoursRan"),
+                  type: "number",
+                  colSpan: 1,
+                },
+                {
+                  name: "volunteerCount",
+                  label: t("outcomes.panel.volunteers"),
+                  type: "number",
+                  colSpan: 1,
+                },
                 {
                   name: "ledBy",
-                  label: "Led by",
+                  label: t("outcomes.panel.ledBy"),
                   type: "select",
                   colSpan: 1,
                   options: option(people),
                 },
                 {
                   name: "projectId",
-                  label: "Part of project",
+                  label: t("outcomes.panel.partOfProject"),
                   type: "select",
                   colSpan: 1,
                   options: option(projects),
                 },
-                { name: "notes", label: "Notes", type: "textarea" },
+                { name: "notes", label: t("outcomes.panel.notes"), type: "textarea" },
                 {
                   name: "cancellationReason",
-                  label: "If cancelled, why",
+                  label: t("outcomes.panel.cancelReason"),
                   type: "textarea",
                 },
               ]}
@@ -120,14 +142,26 @@ export function OutcomesPanel({
 
         {summary.delivered > 0 || summary.planned > 0 ? (
           <dl className="mb-3 flex flex-wrap gap-x-8 gap-y-2">
-            <Figure label="Sessions delivered" value={summary.delivered} />
-            <Figure label="Attendance" value={summary.attendees} />
-            <Figure label="Contact hours" value={summary.contactHours} />
+            <Figure
+              label={t("outcomes.panel.sessionsDelivered")}
+              value={format.number(summary.delivered)}
+            />
+            <Figure label={t("outcomes.panel.attendance")} value={format.number(summary.attendees)} />
+            <Figure
+              label={t("outcomes.panel.contactHours")}
+              value={format.number(summary.contactHours)}
+            />
             {summary.planned > 0 ? (
-              <Figure label="Still planned" value={summary.planned} />
+              <Figure
+                label={t("outcomes.panel.stillPlanned")}
+                value={format.number(summary.planned)}
+              />
             ) : null}
             {summary.cancelled > 0 ? (
-              <Figure label="Cancelled" value={summary.cancelled} />
+              <Figure
+                label={t("outcomes.panel.cancelled")}
+                value={format.number(summary.cancelled)}
+              />
             ) : null}
           </dl>
         ) : null}
@@ -135,13 +169,13 @@ export function OutcomesPanel({
         {outcomes.operations.length === 0 ? (
           <EmptyState
             icon={<Activity aria-hidden />}
-            title="Nothing recorded yet"
-            description="Record each session as it happens. Attendance reconstructed from memory at the end of a funding year is the number nobody can defend."
+            title={t("outcomes.panel.nothingTitle")}
+            description={t("outcomes.panel.nothingBody")}
           />
         ) : (
           <ul className="card divide-y divide-line">
             {outcomes.operations.slice(0, 30).map((operation) => (
-              <OperationItem key={operation.id} operation={operation} />
+              <OperationItem key={operation.id} operation={operation} t={t} format={format} />
             ))}
           </ul>
         )}
@@ -150,53 +184,65 @@ export function OutcomesPanel({
       <section aria-labelledby="program-outcomes">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 id="program-outcomes" className="section-heading">
-            Outcomes
-            <span className="ml-2 font-normal text-muted">what changed</span>
+            {t("outcomes.panel.outcomesHeading")}
+            <span className="ml-2 font-normal text-muted">
+              {t("outcomes.panel.outcomesAside")}
+            </span>
           </h2>
           {canManage ? (
             <EntityFormDialog
-              triggerLabel="Add a measure"
+              triggerLabel={t("outcomes.panel.addMeasure")}
               triggerVariant="secondary"
-              title="Add an outcome measure"
-              submitLabel="Add"
+              title={t("outcomes.panel.addMeasureTitle")}
+              submitLabel={t("outcomes.panel.add")}
               extraValues={{ programId }}
               action={createOutcomeMetric}
               fields={[
                 {
                   name: "name",
-                  label: "What are you trying to change",
+                  label: t("outcomes.panel.tryingToChange"),
                   type: "text",
                   required: true,
                 },
-                { name: "description", label: "How it is measured", type: "textarea" },
+                { name: "description", label: t("outcomes.panel.howMeasured"), type: "textarea" },
                 {
                   name: "unit",
-                  label: "Unit",
+                  label: t("outcomes.panel.unit"),
                   type: "text",
                   required: true,
                   colSpan: 1,
-                  defaultValue: "people",
-                  placeholder: "people, %, score out of 10",
+                  defaultValue: t("outcomes.panel.unitDefault"),
+                  placeholder: t("outcomes.panel.unitPlaceholder"),
                 },
                 {
                   name: "direction",
-                  label: "Which way is good",
+                  label: t("outcomes.panel.whichWay"),
                   type: "select",
                   required: true,
                   colSpan: 1,
                   defaultValue: "increase",
                   options: METRIC_DIRECTIONS.map((value) => ({
                     value,
-                    label: DIRECTION_LABELS[value],
+                    label: directionLabel(value, t),
                   })),
                 },
-                { name: "baseline", label: "Starting point", type: "number", colSpan: 1 },
-                { name: "baselineOn", label: "Measured on", type: "date", colSpan: 1 },
-                { name: "target", label: "Target", type: "number", colSpan: 1 },
-                { name: "targetOn", label: "By when", type: "date", colSpan: 1 },
+                {
+                  name: "baseline",
+                  label: t("outcomes.panel.startingPoint"),
+                  type: "number",
+                  colSpan: 1,
+                },
+                {
+                  name: "baselineOn",
+                  label: t("outcomes.panel.measuredOn"),
+                  type: "date",
+                  colSpan: 1,
+                },
+                { name: "target", label: t("outcomes.panel.target"), type: "number", colSpan: 1 },
+                { name: "targetOn", label: t("outcomes.panel.byWhen"), type: "date", colSpan: 1 },
                 {
                   name: "ownerId",
-                  label: "Owner",
+                  label: t("outcomes.panel.owner"),
                   type: "select",
                   colSpan: 1,
                   options: option(people),
@@ -209,13 +255,19 @@ export function OutcomesPanel({
         {outcomes.metrics.length === 0 ? (
           <EmptyState
             icon={<Target aria-hidden />}
-            title="No outcome measures yet"
-            description="Sessions run and people attended are outputs. An outcome is the change those sessions were meant to produce — say what it is, and what it was before you started."
+            title={t("outcomes.panel.noMeasuresTitle")}
+            description={t("outcomes.panel.noMeasuresBody")}
           />
         ) : (
           <ul className="space-y-3">
             {outcomes.metrics.map((metric) => (
-              <MetricCard key={metric.id} metric={metric} canManage={canManage} />
+              <MetricCard
+                key={metric.id}
+                metric={metric}
+                canManage={canManage}
+                t={t}
+                format={format}
+              />
             ))}
           </ul>
         )}
@@ -223,14 +275,16 @@ export function OutcomesPanel({
         {outcomes.retiredMetrics.length > 0 ? (
           <details className="card mt-3 px-4 py-3">
             <summary className="cursor-pointer text-[13.5px] font-medium">
-              Retired measures ({outcomes.retiredMetrics.length})
+              {t("outcomes.panel.retired", { count: outcomes.retiredMetrics.length })}
             </summary>
             <ul className="mt-2 divide-y divide-line">
               {outcomes.retiredMetrics.map((metric) => (
                 <li key={metric.id} className="py-2.5 text-[13.5px]">
                   {metric.name}
                   <span className="meta ml-2">
-                    {metric.measurements.length} readings kept
+                    {t("outcomes.panel.readingsKept", {
+                      count: format.number(metric.measurements.length),
+                    })}
                   </span>
                 </li>
               ))}
@@ -242,7 +296,16 @@ export function OutcomesPanel({
   );
 }
 
-function Figure({ label, value }: { label: string; value: number }) {
+/**
+ * A stored numeric reading (Postgres returns `numeric` as a string) in the
+ * reader's number format. Anything that is not a finite number is shown as is.
+ */
+function formatValue(value: string | number, format: Formatters): string {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? format.number(parsed) : String(value);
+}
+
+function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="meta">{label}</dt>
@@ -251,7 +314,15 @@ function Figure({ label, value }: { label: string; value: number }) {
   );
 }
 
-function OperationItem({ operation }: { operation: OperationRow }) {
+function OperationItem({
+  operation,
+  t,
+  format,
+}: {
+  operation: OperationRow;
+  t: TranslateFn;
+  format: Formatters;
+}) {
   const hours = operation.contact_hours ? Number(operation.contact_hours) : null;
 
   return (
@@ -261,21 +332,27 @@ function OperationItem({ operation }: { operation: OperationRow }) {
           {operation.title}
         </span>
         <Badge tone={STATUS_TONE[operation.status]}>
-          {OPERATION_STATUS_LABELS[operation.status]}
+          {operationStatusLabel(operation.status, t)}
         </Badge>
       </div>
       <p className="meta mt-0.5">
-        {formatDate(operation.occurred_on)}
+        {format.date(operation.occurred_on)}
         {operation.location ? ` · ${operation.location}` : ""}
         {operation.attendee_count !== null
-          ? ` · ${operation.attendee_count} attended`
+          ? t("outcomes.panel.attendedSuffix", {
+              count: format.number(operation.attendee_count),
+            })
           : ""}
-        {hours ? ` · ${hours} contact hours` : ""}
-        {operation.leader ? ` · led by ${operation.leader.full_name}` : ""}
+        {hours
+          ? t("outcomes.panel.contactHoursSuffix", { count: format.number(hours) })
+          : ""}
+        {operation.leader
+          ? t("outcomes.panel.ledBySuffix", { name: operation.leader.full_name })
+          : ""}
       </p>
       {operation.cancellation_reason ? (
         <p className="mt-0.5 text-[13px] text-muted">
-          Cancelled: {operation.cancellation_reason}
+          {t("outcomes.panel.cancelledPrefix", { reason: operation.cancellation_reason })}
         </p>
       ) : null}
       {operation.notes ? (
@@ -288,9 +365,13 @@ function OperationItem({ operation }: { operation: OperationRow }) {
 function MetricCard({
   metric,
   canManage,
+  t,
+  format,
 }: {
   metric: MetricWithProgress;
   canManage: boolean;
+  t: TranslateFn;
+  format: Formatters;
 }) {
   const { progress, latest } = metric;
 
@@ -299,33 +380,36 @@ function MetricCard({
       <div className="flex flex-wrap items-start gap-2">
         <span className="min-w-0 flex-1 text-[13.5px] font-medium">{metric.name}</span>
         {progress.met ? (
-          <Badge tone="success">Target met</Badge>
+          <Badge tone="success">{t("outcomes.panel.targetMet")}</Badge>
         ) : progress.regressed ? (
-          <Badge tone="warning">Moving the wrong way</Badge>
+          <Badge tone="warning">{t("outcomes.panel.wrongWay")}</Badge>
         ) : null}
       </div>
 
       <p className="meta mt-0.5">
-        {DIRECTION_LABELS[metric.direction]} · measured in {metric.unit}
+        {directionLabel(metric.direction, t)}
+        {t("outcomes.panel.measuredIn", { unit: metric.unit })}
         {metric.owner ? ` · ${metric.owner.full_name}` : ""}
-        {metric.target_on ? ` · target by ${formatDate(metric.target_on)}` : ""}
+        {metric.target_on
+          ? t("outcomes.panel.targetBySuffix", { date: format.date(metric.target_on) })
+          : ""}
       </p>
 
       <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
         <span>
-          <dt className="inline text-muted">Baseline: </dt>
-          <dd className="inline tabular-nums">{metric.baseline ?? "—"}</dd>
+          <dt className="inline text-muted">{t("outcomes.panel.baseline")}</dt>
+          <dd className="inline tabular-nums">{metric.baseline === null ? "—" : formatValue(metric.baseline, format)}</dd>
         </span>
         <span>
-          <dt className="inline text-muted">Latest: </dt>
+          <dt className="inline text-muted">{t("outcomes.panel.latest")}</dt>
           <dd className="inline font-medium tabular-nums">
-            {latest ? latest.value : "—"}
-            {latest ? ` (${formatDate(latest.measured_on)})` : ""}
+            {latest ? formatValue(latest.value, format) : "—"}
+            {latest ? ` (${format.date(latest.measured_on)})` : ""}
           </dd>
         </span>
         <span>
-          <dt className="inline text-muted">Target: </dt>
-          <dd className="inline tabular-nums">{metric.target ?? "—"}</dd>
+          <dt className="inline text-muted">{t("outcomes.panel.targetPrefix")}</dt>
+          <dd className="inline tabular-nums">{metric.target === null ? "—" : formatValue(metric.target, format)}</dd>
         </span>
       </dl>
 
@@ -334,7 +418,7 @@ function MetricCard({
           <div
             className="h-1.5 w-full overflow-hidden rounded-full bg-surface-soft"
             role="img"
-            aria-label={`${progress.percent}% of the way from the baseline to the target`}
+            aria-label={t("outcomes.panel.progressAria", { percent: progress.percent })}
           >
             <div
               className={progress.met ? "h-full bg-success" : "h-full bg-brand"}
@@ -342,46 +426,60 @@ function MetricCard({
             />
           </div>
           <p className="meta mt-1">
-            {progress.percent}% of the way from baseline to target
+            {t("outcomes.panel.progress", { percent: progress.percent })}
             {progress.change !== null
-              ? ` · moved ${progress.change > 0 ? "+" : ""}${progress.change} ${metric.unit}`
+              ? t("outcomes.panel.moved", {
+                  change: `${progress.change > 0 ? "+" : ""}${format.number(progress.change)}`,
+                  unit: metric.unit,
+                })
               : ""}
           </p>
         </div>
       ) : (
         <p className="meta mt-2">
           {metric.baseline === null
-            ? "Set a baseline to show progress."
-            : "No readings yet."}
+            ? t("outcomes.panel.setBaseline")
+            : t("outcomes.panel.noReadings")}
         </p>
       )}
 
       {canManage ? (
         <div className="mt-2">
           <EntityFormDialog
-            triggerLabel="Record a reading"
+            triggerLabel={t("outcomes.panel.recordReading")}
             triggerVariant="secondary"
-            title={`Record a reading — ${metric.name}`}
-            submitLabel="Record"
+            title={t("outcomes.panel.recordReadingTitle", { name: metric.name })}
+            submitLabel={t("outcomes.panel.record")}
             extraValues={{ metricId: metric.id }}
             action={recordMeasurement}
             fields={[
-              { name: "measuredOn", label: "Measured on", type: "date", required: true, colSpan: 1 },
+              {
+                name: "measuredOn",
+                label: t("outcomes.panel.measuredOn"),
+                type: "date",
+                required: true,
+                colSpan: 1,
+              },
               {
                 name: "value",
-                label: `Value (${metric.unit})`,
+                label: t("outcomes.panel.value", { unit: metric.unit }),
                 type: "number",
                 required: true,
                 colSpan: 1,
               },
               {
                 name: "source",
-                label: "Where it came from",
+                label: t("outcomes.panel.source"),
                 type: "text",
-                hint: "A measurement without a source is an assertion, and a funder will ask.",
+                hint: t("outcomes.panel.sourceHint"),
               },
-              { name: "sampleSize", label: "How many people", type: "number", colSpan: 1 },
-              { name: "note", label: "Note", type: "textarea" },
+              {
+                name: "sampleSize",
+                label: t("outcomes.panel.howManyPeople"),
+                type: "number",
+                colSpan: 1,
+              },
+              { name: "note", label: t("outcomes.panel.note"), type: "textarea" },
             ]}
           />
         </div>

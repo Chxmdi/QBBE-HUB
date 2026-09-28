@@ -12,7 +12,7 @@ import {
   RequestDecision,
 } from "@/features/requests/components/request-controls";
 import {
-  REQUEST_STATUS_LABELS,
+  REQUEST_STATUS_KEYS,
   daysWaiting,
   requestIsStale,
 } from "@/features/requests/schemas";
@@ -25,9 +25,14 @@ import type {
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import type { Formatters } from "@/lib/i18n/format";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
-export const metadata: Metadata = { title: "Requests" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("requests.title") };
+}
 export const dynamic = "force-dynamic";
 
 const STATUS_TONE = {
@@ -59,6 +64,7 @@ export default async function RequestsPage({
   const session = await requireSession();
   const { request: highlightId = null, create } = await searchParams;
   const now = new Date();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
 
   const supabase = await createSupabasePageClient();
   const [board, options, { data: programRows }] = await Promise.all([
@@ -75,53 +81,53 @@ export default async function RequestsPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Intake"
-        title="Requests and approvals"
-        description="Propose work that does not exist yet, and answer the decisions waiting on you."
+        eyebrow={t("requests.eyebrow")}
+        title={t("requests.heading")}
+        description={t("requests.description")}
         actions={
           <EntityFormDialog
-            triggerLabel="Propose something"
-            title="Propose a project"
+            triggerLabel={t("requests.propose")}
+            title={t("requests.proposeTitle")}
             // Quick create and the command palette land here (P0-QC-01).
             defaultOpen={create === "1"}
-            submitLabel="Submit request"
+            submitLabel={t("requests.submitRequest")}
             action={submitProjectRequest}
             fields={[
-              { name: "title", label: "What are you proposing", type: "text", required: true },
+              { name: "title", label: t("requests.fields.title"), type: "text", required: true },
               {
                 name: "summary",
-                label: "What would it involve",
+                label: t("requests.fields.summary"),
                 type: "textarea",
                 required: true,
               },
-              { name: "rationale", label: "Why now", type: "textarea" },
+              { name: "rationale", label: t("requests.fields.rationale"), type: "textarea" },
               {
                 name: "beneficiaries",
-                label: "Who it serves",
+                label: t("requests.fields.beneficiaries"),
                 type: "textarea",
-                hint: "The question most often left out, and the one trustees ask first.",
+                hint: t("requests.fields.beneficiariesHint"),
               },
               {
                 name: "programId",
-                label: "Part of a program",
+                label: t("requests.fields.program"),
                 type: "select",
                 colSpan: 1,
                 options: programOptions,
               },
               {
                 name: "sponsorId",
-                label: "Staff sponsor",
+                label: t("requests.fields.sponsor"),
                 type: "select",
                 colSpan: 1,
                 options: options.people.map((p) => ({ value: p.id, label: p.label })),
               },
-              { name: "neededBy", label: "Needed by", type: "date", colSpan: 1 },
+              { name: "neededBy", label: t("requests.fields.neededBy"), type: "date", colSpan: 1 },
               {
                 name: "estimatedEffort",
-                label: "Rough effort",
+                label: t("requests.fields.effort"),
                 type: "text",
                 colSpan: 1,
-                placeholder: "A few weekends",
+                placeholder: t("requests.fields.effortPlaceholder"),
               },
             ]}
           />
@@ -131,15 +137,15 @@ export default async function RequestsPage({
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_360px]">
         <section aria-labelledby="intake-queue">
           <h2 id="intake-queue" className="section-heading mb-3">
-            Open requests
+            {t("requests.openRequests")}
             <span className="ml-2 font-normal text-muted">{board.open.length}</span>
           </h2>
 
           {board.open.length === 0 ? (
             <EmptyState
               icon={<ClipboardCheck aria-hidden />}
-              title="Nothing waiting"
-              description="Proposals appear here from the moment they are submitted, oldest first, so nothing sits unanswered without anybody noticing."
+              title={t("requests.emptyTitle")}
+              description={t("requests.emptyDescription")}
             />
           ) : (
             <ul className="card divide-y divide-line">
@@ -151,6 +157,8 @@ export default async function RequestsPage({
                   viewerId={session.userId}
                   canDecide={session.isStaff}
                   highlighted={request.id === highlightId}
+                  t={t}
+                  format={format}
                 />
               ))}
             </ul>
@@ -162,7 +170,7 @@ export default async function RequestsPage({
               open={board.settled.some((row) => row.id === highlightId)}
             >
               <summary className="cursor-pointer text-[13.5px] font-medium">
-                Decided ({board.settled.length})
+                {t("requests.decidedCount", { count: board.settled.length })}
               </summary>
               <ul className="mt-2 divide-y divide-line">
                 {board.settled.map((request) => (
@@ -176,15 +184,23 @@ export default async function RequestsPage({
                         {request.title}
                       </span>
                       <Badge tone={STATUS_TONE[request.status]}>
-                        {REQUEST_STATUS_LABELS[request.status]}
+                        {t(REQUEST_STATUS_KEYS[request.status])}
                       </Badge>
                     </div>
                     <p className="meta mt-0.5">
-                      {request.requester?.full_name ?? "Someone"}
+                      {request.requester?.full_name ?? t("requests.someone")}
                       {request.decided_at
-                        ? ` · decided ${formatDate(request.decided_at)}`
-                        : ""}
-                      {request.decider ? ` by ${request.decider.full_name}` : ""}
+                        ? ` · ${
+                            request.decider
+                              ? t("requests.decidedOnBy", {
+                                  date: format.date(request.decided_at),
+                                  name: request.decider.full_name,
+                                })
+                              : t("requests.decidedOn", { date: format.date(request.decided_at) })
+                          }`
+                        : request.decider
+                          ? ` ${t("requests.byName", { name: request.decider.full_name })}`
+                          : ""}
                     </p>
                     {request.project ? (
                       <p className="mt-0.5 text-[13px]">
@@ -194,7 +210,7 @@ export default async function RequestsPage({
                         >
                           {request.project.name}
                         </Link>
-                        <span className="text-muted"> — the project this became</span>
+                        <span className="text-muted"> {t("requests.becameProject")}</span>
                       </p>
                     ) : null}
                     {request.decision_note ? (
@@ -212,16 +228,20 @@ export default async function RequestsPage({
         <aside className="space-y-8">
           <ApprovalList
             id="waiting-on-me"
-            heading="Waiting on you"
-            empty="Nothing needs your decision."
+            heading={t("requests.waitingOnYou")}
+            empty={t("requests.nothingNeedsYou")}
             approvals={board.waitingOnMe}
             actionable
+            t={t}
+            format={format}
           />
           <ApprovalList
             id="waiting-on-others"
-            heading="You asked for"
+            heading={t("requests.youAskedFor")}
             empty=""
             approvals={board.waitingOnOthers}
+            t={t}
+            format={format}
           />
         </aside>
       </div>
@@ -237,12 +257,16 @@ function RequestItem({
   viewerId,
   canDecide,
   highlighted,
+  t,
+  format,
 }: {
   request: ProjectRequestRow;
   now: Date;
   viewerId: string;
   canDecide: boolean;
   highlighted: boolean;
+  t: TranslateFn;
+  format: Formatters;
 }) {
   const waiting = daysWaiting(request.created_at, now);
   const stale = requestIsStale(request, now);
@@ -261,28 +285,32 @@ function RequestItem({
           {request.title}
         </span>
         <Badge tone={STATUS_TONE[request.status]}>
-          {REQUEST_STATUS_LABELS[request.status]}
+          {t(REQUEST_STATUS_KEYS[request.status])}
         </Badge>
       </div>
 
       <p className="meta mt-0.5">
-        {request.requester?.full_name ?? "Someone"}
-        {` · waiting ${waiting} ${waiting === 1 ? "day" : "days"}`}
-        {request.sponsor ? ` · sponsor ${request.sponsor.full_name}` : " · no sponsor"}
+        {request.requester?.full_name ?? t("requests.someone")}
+        {` · ${t(waiting === 1 ? "requests.waitingDayOne" : "requests.waitingDayOther", { count: waiting })}`}
+        {request.sponsor
+          ? ` · ${t("requests.sponsorName", { name: request.sponsor.full_name })}`
+          : ` · ${t("requests.noSponsor")}`}
         {request.program ? ` · ${request.program.name}` : ""}
-        {request.needed_by ? ` · needed by ${formatDate(request.needed_by)}` : ""}
+        {request.needed_by
+          ? ` · ${t("requests.neededByDate", { date: format.date(request.needed_by) })}`
+          : ""}
       </p>
 
       {stale && !handedBack ? (
         <p className="mt-1 text-[13px] text-warning-fg">
-          Nobody has answered this in {waiting} days.
+          {t("requests.stale", { count: waiting })}
         </p>
       ) : null}
 
       <p className="mt-1 text-[13px]">{request.summary}</p>
       {request.beneficiaries ? (
         <p className="mt-1 text-[13px]">
-          <span className="text-muted">Serves: </span>
+          <span className="text-muted">{t("requests.serves")} </span>
           {request.beneficiaries}
         </p>
       ) : null}
@@ -290,9 +318,21 @@ function RequestItem({
       {handedBack && request.decision_note ? (
         <p className="mt-1 rounded-md bg-warning/10 px-2.5 py-1.5 text-[13px]">
           <span className="font-medium">
-            {request.status === "returned" ? "Returned" : "Deferred"}
-            {request.decider ? ` by ${request.decider.full_name}` : ""}
-            {request.decided_at ? ` on ${formatDate(request.decided_at)}` : ""}:{" "}
+            {t("requests.handedBackLabel", {
+              label: [
+                t(
+                  request.status === "returned"
+                    ? "requests.handedBack.returned"
+                    : "requests.handedBack.deferred",
+                ),
+                request.decider ? t("requests.byName", { name: request.decider.full_name }) : "",
+                request.decided_at
+                  ? t("requests.onDate", { date: format.date(request.decided_at) })
+                  : "",
+              ]
+                .filter(Boolean)
+                .join(" "),
+            })}{" "}
           </span>
           {request.decision_note}
         </p>
@@ -319,7 +359,10 @@ function RequestItem({
   );
 }
 
-function subjectOf(approval: ApprovalRow): { label: string; href: string | null } {
+function subjectOf(
+  approval: ApprovalRow,
+  t: TranslateFn,
+): { label: string; href: string | null } {
   if (approval.project_request) {
     return {
       label: approval.project_request.title,
@@ -337,7 +380,7 @@ function subjectOf(approval: ApprovalRow): { label: string; href: string | null 
   }
   // Unreachable while `exactly_one_subject` holds, but a missing label would
   // be a worse way to find that out than a visible one.
-  return { label: "An unknown record", href: null };
+  return { label: t("requests.unknownRecord"), href: null };
 }
 
 function ApprovalList({
@@ -346,12 +389,16 @@ function ApprovalList({
   empty,
   approvals,
   actionable = false,
+  t,
+  format,
 }: {
   id: string;
   heading: string;
   empty: string;
   approvals: ApprovalRow[];
   actionable?: boolean;
+  t: TranslateFn;
+  format: Formatters;
 }) {
   if (approvals.length === 0 && !empty) return null;
 
@@ -368,7 +415,7 @@ function ApprovalList({
       ) : (
         <ul className="card divide-y divide-line">
           {approvals.map((approval) => {
-            const subject = subjectOf(approval);
+            const subject = subjectOf(approval, t);
             return (
               <li key={approval.id} id={`approval-${approval.id}`} className="px-4 py-3">
                 {subject.href ? (
@@ -383,9 +430,15 @@ function ApprovalList({
                 )}
                 <p className="meta mt-0.5">
                   {actionable
-                    ? `${approval.requester?.full_name ?? "Someone"} asked you`
-                    : `Waiting on ${approval.approver?.full_name ?? "someone"}`}
-                  {approval.due_at ? ` · by ${formatDate(approval.due_at)}` : ""}
+                    ? t("requests.askedYou", {
+                        name: approval.requester?.full_name ?? t("requests.someone"),
+                      })
+                    : t("requests.waitingOn", {
+                        name: approval.approver?.full_name ?? t("requests.someoneLower"),
+                      })}
+                  {approval.due_at
+                    ? ` · ${t("requests.dueBy", { date: format.date(approval.due_at) })}`
+                    : ""}
                 </p>
                 {approval.note ? (
                   <p className="mt-1 text-[13px]">{approval.note}</p>

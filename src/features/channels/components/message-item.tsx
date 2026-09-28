@@ -32,7 +32,8 @@ import {
   toggleReaction,
 } from "@/features/channels/services/message.commands";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { cn, formatDateTime, formatTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { useFormatters, useT } from "@/lib/i18n/client";
 import type { Message } from "@/types/entities";
 
 const QUICK_EMOJI = ["👍", "✅", "🎉", "❤️", "👀"];
@@ -72,6 +73,8 @@ export function MessageItem({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
+  const format = useFormatters();
   // Each message mounts its own copy of the three dialogs below, so fixed
   // field ids repeated once per message in the channel and every duplicated
   // label resolved to the first message's control.
@@ -104,11 +107,11 @@ export function MessageItem({
   async function handleConvertTask() {
     const result = await convertMessageToTask(message.id);
     if (result.ok) {
-      toast("Task created from this message.", {
-        action: { label: "Open My Work", onClick: () => router.push("/my-work") },
+      toast(t("messages.item.taskCreated"), {
+        action: { label: t("messages.item.openMyWork"), onClick: () => router.push("/my-work") },
       });
     } else {
-      toast(result.error ?? "Conversion failed.", { tone: "error" });
+      toast(result.error ?? t("messages.item.conversionFailed"), { tone: "error" });
     }
   }
 
@@ -133,8 +136,8 @@ export function MessageItem({
     const result = await convertMessageToAgendaItem(message.id, meetingId);
     setSaving(false);
     setDialog(null);
-    if (result.ok) toast("Added to the meeting agenda.");
-    else toast(result.error ?? "Could not add the agenda item.", { tone: "error" });
+    if (result.ok) toast(t("messages.item.agendaAdded"));
+    else toast(result.error ?? t("messages.item.agendaFailed"), { tone: "error" });
   }
 
   async function handleDecisionSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -144,8 +147,8 @@ export function MessageItem({
     const result = await convertMessageToDecision(message.id, detail);
     setSaving(false);
     setDialog(null);
-    if (result.ok) toast("Decision recorded in the decision log.");
-    else toast(result.error ?? "Could not record the decision.", { tone: "error" });
+    if (result.ok) toast(t("messages.item.decisionRecorded"));
+    else toast(result.error ?? t("messages.item.decisionFailed"), { tone: "error" });
   }
 
   async function handlePinSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -157,10 +160,10 @@ export function MessageItem({
     setSaving(false);
     setDialog(null);
     if (result.ok) {
-      toast("Pinned to channel resources.");
+      toast(t("messages.item.pinned"));
       onChanged();
     } else {
-      toast(result.error ?? "Could not pin.", { tone: "error" });
+      toast(result.error ?? t("messages.item.pinFailed"), { tone: "error" });
     }
   }
 
@@ -174,7 +177,7 @@ export function MessageItem({
     const result = await editMessage({ messageId: message.id, body: draft });
     setSaving(false);
     if (!result.ok) {
-      toast(result.error ?? "Edit failed.", { tone: "error" });
+      toast(result.error ?? t("messages.item.editFailed"), { tone: "error" });
       return;
     }
     setEditing(false);
@@ -182,20 +185,20 @@ export function MessageItem({
   }
 
   async function handleDelete() {
-    if (!window.confirm("Delete this message? An audit marker is retained.")) return;
+    if (!window.confirm(t("messages.item.deleteConfirm"))) return;
     const result = await deleteMessage(message.id);
     if (result.ok) onChanged();
-    else toast(result.error ?? "Delete failed.", { tone: "error" });
+    else toast(result.error ?? t("messages.item.deleteFailed"), { tone: "error" });
   }
 
   async function handleToggleSaved() {
     const result = await toggleSavedMessage(message.id);
     if (!result.ok) {
-      toast(result.error ?? "Could not save this message.", { tone: "error" });
+      toast(result.error ?? t("messages.item.saveFailed"), { tone: "error" });
       return;
     }
     setSaved(Boolean(result.saved));
-    toast(result.saved ? "Message saved." : "Message removed from saved messages.");
+    toast(result.saved ? t("messages.item.saved") : t("messages.item.unsaved"));
   }
 
   function copyPermalink() {
@@ -204,20 +207,20 @@ export function MessageItem({
       ? `/channels/${channelId}?message=${message.id}`
       : `/messages/${message.conversation_id}?message=${message.id}`;
     void navigator.clipboard.writeText(`${window.location.origin}${base}`);
-    toast("Link copied. Access is re-checked when it's opened.");
+    toast(t("messages.item.linkCopied"));
   }
 
   const menuItems = [
-    { label: "Copy link", onSelect: copyPermalink, icon: <Link2 className="size-4" aria-hidden /> },
+    { label: t("messages.item.copyLink"), onSelect: copyPermalink, icon: <Link2 className="size-4" aria-hidden /> },
     {
-      label: saved ? "Remove from saved" : "Save message",
+      label: saved ? t("messages.item.removeSaved") : t("messages.item.saveMessage"),
       onSelect: handleToggleSaved,
       icon: <Bookmark className="size-4" aria-hidden />,
     },
     ...(isAuthor
       ? [
           {
-            label: "Edit message",
+            label: t("messages.item.editMessage"),
             onSelect: () => setEditing(true),
             icon: <Pencil className="size-4" aria-hidden />,
           },
@@ -226,12 +229,12 @@ export function MessageItem({
     ...(canConvert
       ? [
           {
-            label: "Create task",
+            label: t("messages.item.createTask"),
             onSelect: handleConvertTask,
             icon: <ListPlus className="size-4" aria-hidden />,
           },
           {
-            label: "Add to meeting agenda",
+            label: t("messages.item.addToAgenda"),
             onSelect: openAgendaDialog,
             icon: <CalendarPlus className="size-4" aria-hidden />,
           },
@@ -240,12 +243,12 @@ export function MessageItem({
     ...(canConvert && isStaff
       ? [
           {
-            label: "Record as decision",
+            label: t("messages.item.recordDecision"),
             onSelect: () => setDialog("decision"),
             icon: <Gavel className="size-4" aria-hidden />,
           },
           {
-            label: "Pin to channel",
+            label: t("messages.item.pinToChannel"),
             onSelect: () => setDialog("pin"),
             icon: <Pin className="size-4" aria-hidden />,
           },
@@ -254,7 +257,7 @@ export function MessageItem({
     ...(isAuthor
       ? [
           {
-            label: "Delete message",
+            label: t("messages.item.deleteMessage"),
             onSelect: handleDelete,
             icon: <Trash2 className="size-4" aria-hidden />,
             destructive: true,
@@ -274,7 +277,7 @@ export function MessageItem({
       )}
     >
       <Avatar
-        name={message.author?.full_name ?? "Unknown"}
+        name={message.author?.full_name ?? t("messages.item.unknown")}
         src={message.author?.avatar_url}
         size={isThreadReply ? "sm" : "md"}
         className="mt-0.5"
@@ -282,22 +285,22 @@ export function MessageItem({
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-baseline gap-2">
           <span className="text-[13.5px] font-semibold">
-            {message.author?.full_name ?? "Unknown"}
+            {message.author?.full_name ?? t("messages.item.unknown")}
           </span>
           <time
             dateTime={message.created_at}
-            title={formatDateTime(message.created_at)}
+            title={format.dateTime(message.created_at)}
             className="meta"
           >
-            {formatTime(message.created_at)}
+            {format.time(message.created_at)}
           </time>
-          {message.edited_at ? <span className="meta">(edited)</span> : null}
-          {message.is_system ? <Badge tone="info">System</Badge> : null}
+          {message.edited_at ? <span className="meta">{t("messages.item.edited")}</span> : null}
+          {message.is_system ? <Badge tone="info">{t("messages.item.system")}</Badge> : null}
         </p>
 
         {deleted ? (
           <p className="text-[13.5px] text-muted italic">
-            This message was deleted.
+            {t("messages.item.deleted")}
           </p>
         ) : editing ? (
           <div className="mt-1 space-y-2">
@@ -305,7 +308,7 @@ export function MessageItem({
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               rows={3}
-              aria-label="Edit message"
+              aria-label={t("messages.item.editLabel")}
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
@@ -320,7 +323,7 @@ export function MessageItem({
             />
             <div className="flex gap-2">
               <Button size="sm" onClick={handleSaveEdit} loading={saving}>
-                Save
+                {t("common.save")}
               </Button>
               <Button
                 size="sm"
@@ -330,7 +333,7 @@ export function MessageItem({
                   setDraft(message.body);
                 }}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -352,7 +355,10 @@ export function MessageItem({
                 key={emoji}
                 type="button"
                 onClick={() => handleReaction(emoji)}
-                aria-label={`${emoji} reaction, ${group.count}${group.mine ? ", you reacted" : ""}`}
+                aria-label={t(group.mine ? "messages.item.reactionMine" : "messages.item.reaction", {
+                  emoji,
+                  count: group.count,
+                })}
                 className={cn(
                   "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] transition-colors",
                   group.mine
@@ -373,7 +379,9 @@ export function MessageItem({
             onClick={() => onOpenThread(message.id)}
             className="mt-1.5 text-[12.5px] font-medium text-brand-fg hover:underline"
           >
-            {replyCount} {replyCount === 1 ? "reply" : "replies"}
+            {t(replyCount === 1 ? "messages.item.replyOne" : "messages.item.replyOther", {
+              count: replyCount,
+            })}
           </button>
         ) : null}
       </div>
@@ -384,7 +392,7 @@ export function MessageItem({
             <button
               type="button"
               onClick={() => setShowEmoji((v) => !v)}
-              aria-label="Add reaction"
+              aria-label={t("messages.item.addReaction")}
               aria-expanded={showEmoji}
               className="rounded p-1 text-muted hover:bg-surface-soft hover:text-ink"
             >
@@ -397,7 +405,7 @@ export function MessageItem({
                     key={emoji}
                     type="button"
                     onClick={() => handleReaction(emoji)}
-                    aria-label={`React with ${emoji}`}
+                    aria-label={t("messages.item.reactWith", { emoji })}
                     className="rounded p-1 text-[15px] hover:bg-surface-soft"
                   >
                     {emoji}
@@ -410,13 +418,13 @@ export function MessageItem({
             <button
               type="button"
               onClick={() => onOpenThread(message.id)}
-              aria-label="Reply in thread"
+              aria-label={t("messages.item.replyInThread")}
               className="rounded p-1 text-muted hover:bg-surface-soft hover:text-ink"
             >
               <MessageSquare className="size-4" aria-hidden />
             </button>
           ) : null}
-          <Menu items={menuItems} label="Message actions" />
+          <Menu items={menuItems} label={t("messages.item.actions")} />
         </div>
       ) : null}
 
@@ -428,7 +436,7 @@ export function MessageItem({
         <Dialog
           open={dialog === "agenda"}
           onClose={() => setDialog(null)}
-          title="Add to meeting agenda"
+          title={t("messages.item.agendaDialog.title")}
         >
           <form onSubmit={handleAgendaSubmit} className="space-y-4">
             <p className="rounded-(--radius-sm) bg-surface-soft px-3 py-2 text-[13px] text-muted">
@@ -437,16 +445,15 @@ export function MessageItem({
             </p>
             {meetings.length === 0 ? (
               <p className="text-[13.5px] text-muted">
-                No upcoming meetings. Schedule one first, then convert this
-                message into an agenda item.
+                {t("messages.item.agendaDialog.noMeetings")}
               </p>
             ) : (
               <div>
-                <Label htmlFor={`${fieldId}-meeting`}>Meeting</Label>
+                <Label htmlFor={`${fieldId}-meeting`}>{t("messages.item.agendaDialog.meeting")}</Label>
                 <Select id={`${fieldId}-meeting`} name="meetingId" required>
                   {meetings.map((meeting) => (
                     <option key={meeting.id} value={meeting.id}>
-                      {meeting.title} · {formatDateTime(meeting.starts_at)}
+                      {meeting.title} · {format.dateTime(meeting.starts_at)}
                     </option>
                   ))}
                 </Select>
@@ -454,10 +461,10 @@ export function MessageItem({
             )}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setDialog(null)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" loading={saving} disabled={meetings.length === 0}>
-                Add agenda item
+                {t("messages.item.agendaDialog.submit")}
               </Button>
             </div>
           </form>
@@ -469,7 +476,7 @@ export function MessageItem({
         <Dialog
           open={dialog === "decision"}
           onClose={() => setDialog(null)}
-          title="Record decision"
+          title={t("messages.item.decisionDialog.title")}
         >
           <form onSubmit={handleDecisionSubmit} className="space-y-4">
             <p className="rounded-(--radius-sm) bg-surface-soft px-3 py-2 text-[13px] text-muted">
@@ -478,21 +485,24 @@ export function MessageItem({
             </p>
             <div>
               <Label htmlFor={`${fieldId}-detail`}>
-                Context <span className="font-normal text-muted">(optional)</span>
+                {t("messages.item.decisionDialog.context")}{" "}
+                <span className="font-normal text-muted">
+                  {t("messages.item.decisionDialog.optional")}
+                </span>
               </Label>
               <Textarea
                 id={`${fieldId}-detail`}
                 name="detail"
                 rows={3}
-                placeholder="Why was this decided, and what does it affect?"
+                placeholder={t("messages.item.decisionDialog.placeholder")}
               />
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setDialog(null)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" loading={saving}>
-                Record decision
+                {t("messages.item.decisionDialog.submit")}
               </Button>
             </div>
           </form>
@@ -504,11 +514,11 @@ export function MessageItem({
         <Dialog
           open={dialog === "pin"}
           onClose={() => setDialog(null)}
-          title="Pin to channel resources"
+          title={t("messages.item.pinDialog.title")}
         >
           <form onSubmit={handlePinSubmit} className="space-y-4">
             <div>
-              <Label htmlFor={`${fieldId}-title`}>Resource title</Label>
+              <Label htmlFor={`${fieldId}-title`}>{t("messages.item.pinDialog.resourceTitle")}</Label>
               <Input
                 id={`${fieldId}-title`}
                 name="title"
@@ -519,10 +529,10 @@ export function MessageItem({
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setDialog(null)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" loading={saving}>
-                Pin resource
+                {t("messages.item.pinDialog.submit")}
               </Button>
             </div>
           </form>

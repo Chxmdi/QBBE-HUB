@@ -1,25 +1,28 @@
 import type { Metadata } from "next";
+import { getT } from "@/lib/i18n/server";
 import { PageHeader } from "@/components/shared/page-header";
 import { AdminNav } from "@/features/admin/components/admin-nav";
 import { JobHealthPanel } from "@/features/jobs/components/job-health-panel";
 import { getJobHealth } from "@/features/jobs/services/jobs.queries";
-import { JOB_RUNNER_FIX, getJobRunnerStatus } from "@/features/jobs/services/runner-status";
+import { getJobRunnerStatus } from "@/features/jobs/services/runner-status";
 import { requireAdminAal2 } from "@/lib/auth";
 
-export const metadata: Metadata = { title: "Jobs" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("admin.jobs.title") };
+}
 export const dynamic = "force-dynamic";
 
 /** Admin → Jobs: the health of the background runtime (JOB-004, §14.2). */
 export default async function AdminJobsPage() {
   await requireAdminAal2();
-  const [health, runner] = await Promise.all([getJobHealth(), getJobRunnerStatus()]);
+  const [t, health, runner] = await Promise.all([getT(), getJobHealth(), getJobRunnerStatus()]);
 
   return (
     <div>
       <PageHeader
-        eyebrow="Administration"
-        title="Jobs"
-        description="Scheduled work, queue depth, and every run the runtime has recorded."
+        eyebrow={t("admin.eyebrow")}
+        title={t("admin.jobs.title")}
+        description={t("admin.jobs.description")}
       />
       <AdminNav />
       {runner !== "ready" ? (
@@ -27,8 +30,17 @@ export default async function AdminJobsPage() {
           role="alert"
           className="mb-5 rounded-(--radius-md) border border-danger/40 bg-danger/10 px-4 py-3"
         >
-          <p className="text-[13.5px] font-semibold">Background jobs are not running</p>
-          <p className="meta">{JOB_RUNNER_FIX[runner]}</p>
+          <p className="text-[13.5px] font-semibold">{t("jobs.runner.title")}</p>
+          {/* Full-contrast text: the muted colour on this tint falls under 4.5:1. */}
+          <p className="text-[12.5px] text-ink">
+            {t(`jobs.runner.fix.${runner}`)}
+            {runner === "not_configured" ? (
+              <>
+                {" "}
+                <code className="font-mono break-all">{t("jobs.runner.command")}</code>
+              </>
+            ) : null}
+          </p>
         </div>
       ) : null}
       <JobHealthPanel {...health} />

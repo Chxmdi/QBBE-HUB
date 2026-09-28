@@ -14,8 +14,11 @@ import {
 } from "@/features/search/result-types";
 import type { SearchResult } from "@/types/entities";
 import { resolveCommentPath } from "@/features/comments/comment-links";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Search" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("shell.search.title") };
+}
 export const dynamic = "force-dynamic";
 
 /**
@@ -29,6 +32,7 @@ export default async function SearchPage({
   searchParams: Promise<{ q?: string; type?: string; comment?: string }>;
 }) {
   await requireSession();
+  const t = await getT();
   const params = await searchParams;
 
   // Mention emails link to `?comment=<id>`: open the record the comment is on.
@@ -70,12 +74,14 @@ export default async function SearchPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Search"
-        title={query ? `Results for “${query}”` : "Search"}
+        eyebrow={t("shell.search.title")}
+        title={query ? t("shell.search.resultsFor", { query }) : t("shell.search.title")}
         description={
           query
-            ? `${filtered.length} ${filtered.length === 1 ? "result" : "results"} you have access to.`
-            : "Search across tasks, projects, programs, channels, messages, people, meetings, events, documents, risks, issues, opportunities, and relationships."
+            ? t(filtered.length === 1 ? "shell.search.resultOne" : "shell.search.resultOther", {
+                count: filtered.length,
+              })
+            : t("shell.search.intro")
         }
       />
 
@@ -84,21 +90,21 @@ export default async function SearchPage({
           type="search"
           name="q"
           defaultValue={query}
-          placeholder="Search everything…"
-          aria-label="Search query"
+          placeholder={t("shell.search.placeholder")}
+          aria-label={t("shell.search.queryLabel")}
           className="h-9.5 w-full max-w-md rounded-(--radius-sm) border border-line bg-surface px-3 text-sm placeholder:text-muted/70 focus:border-brand"
         />
         <button
           type="submit"
           className="h-9.5 rounded-(--radius-sm) bg-brand px-4 text-sm font-medium text-white hover:bg-brand-strong"
         >
-          Search
+          {t("shell.search.submit")}
         </button>
       </form>
 
       {/* Type filters */}
       {availableTypes.length > 1 ? (
-        <nav aria-label="Filter by type" className="mb-5 flex flex-wrap gap-1.5">
+        <nav aria-label={t("shell.search.filterByType")} className="mb-5 flex flex-wrap gap-1.5">
           <Link
             href={`/search?q=${encodeURIComponent(query)}`}
             aria-current={!typeFilter ? "page" : undefined}
@@ -109,7 +115,7 @@ export default async function SearchPage({
                 : "border-line bg-surface text-muted hover:text-ink",
             )}
           >
-            All ({results.length})
+            {t("shell.search.all", { count: results.length })}
           </Link>
           {availableTypes.map((type) => {
             const count = results.filter((r) => r.result_type === type).length;
@@ -125,7 +131,7 @@ export default async function SearchPage({
                     : "border-line bg-surface text-muted hover:text-ink",
                 )}
               >
-                {searchTypeLabel(type)} ({count})
+                {searchTypeLabel(type, "plural", t)} ({count})
               </Link>
             );
           })}
@@ -134,17 +140,17 @@ export default async function SearchPage({
 
       {query.length < 2 ? (
         <EmptyState
-          title="Type at least two characters"
-          description="Search covers only records you're authorized to see — private channels and restricted records never appear for unauthorized viewers."
+          title={t("shell.search.tooShortTitle")}
+          description={t("shell.search.tooShortBody")}
         />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={<SearchX />}
-          title={`No results for “${query}”`}
+          title={t("shell.search.noResultsTitle", { query })}
           description={
             typeFilter
-              ? "Try removing the type filter, or check the spelling."
-              : "Check the spelling, try a shorter phrase, or search for a person's name."
+              ? t("shell.search.noResultsFiltered")
+              : t("shell.search.noResultsBody")
           }
           action={
             typeFilter ? (
@@ -152,7 +158,7 @@ export default async function SearchPage({
                 href={`/search?q=${encodeURIComponent(query)}`}
                 className="text-[13.5px] font-medium text-brand-fg hover:underline"
               >
-                Clear type filter
+                {t("shell.search.clearFilter")}
               </Link>
             ) : undefined
           }
@@ -162,7 +168,7 @@ export default async function SearchPage({
           {Array.from(grouped.entries()).map(([type, items]) => (
             <section key={type} aria-labelledby={`results-${type}`}>
               <h2 id={`results-${type}`} className="section-heading mb-2">
-                {searchTypeLabel(type)}
+                {searchTypeLabel(type, "plural", t)}
                 <span className="meta ml-2 font-normal">{items.length}</span>
               </h2>
               <ul className="card divide-y divide-line">
@@ -178,12 +184,16 @@ export default async function SearchPage({
                         </span>
                         {result.snippet ? (
                           <span className="meta block truncate">
-                            {result.snippet}
+                            {/* The search function labels message hits with a fixed English
+                                phrase; every other snippet is the record's own text. */}
+                            {result.snippet === "in conversation"
+                              ? t("shell.search.inConversation")
+                              : result.snippet}
                           </span>
                         ) : null}
                       </span>
                       {/* Result type is always communicated (§10.16) */}
-                      <Badge tone="neutral">{searchTypeLabel(type, "singular")}</Badge>
+                      <Badge tone="neutral">{searchTypeLabel(type, "singular", t)}</Badge>
                     </Link>
                   </li>
                 ))}

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createProjectFromTemplate } from "@/features/admin/services/workflow.commands";
 import { Select } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
 
 export function CreateFromTemplateButton({
   templates,
@@ -11,6 +12,7 @@ export function CreateFromTemplateButton({
   templates: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
 
   if (templates.length === 0) return null;
@@ -19,7 +21,7 @@ export function CreateFromTemplateButton({
     if (!templateId) return;
     const result = await createProjectFromTemplate(templateId);
     if (!result.ok) {
-      setError(result.error ?? "Could not use the template.");
+      setError(result.error ?? t("projects.fromTemplate.error"));
       return;
     }
     if (result.id) router.push(`/projects/${result.id}`);
@@ -29,7 +31,7 @@ export function CreateFromTemplateButton({
   return (
     <div>
       <label className="sr-only" htmlFor="project-template">
-        Create from template
+        {t("projects.fromTemplate.label")}
       </label>
       <Select
         id="project-template"
@@ -37,7 +39,7 @@ export function CreateFromTemplateButton({
         defaultValue=""
         onChange={(e) => void handleChange(e.target.value)}
       >
-        <option value="">From template…</option>
+        <option value="">{t("projects.fromTemplate.placeholder")}</option>
         {templates.map((t) => (
           <option key={t.id} value={t.id}>
             {t.name}

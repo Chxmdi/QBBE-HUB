@@ -8,7 +8,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { createTask } from "@/features/tasks/services/task.commands";
 import { createTaskSeries } from "@/features/tasks/services/planning.commands";
-import { BULK_STATUSES, TASK_STATUS_LABELS } from "@/features/tasks/schemas";
+import { BULK_STATUSES, taskPriorityText, taskStatusText } from "@/features/tasks/schemas";
+import { useT } from "@/lib/i18n/client";
 
 export interface Option {
   id: string;
@@ -26,7 +27,7 @@ export function TaskCreateDialog({
   milestones = [],
   defaultProjectId,
   defaultOpen = false,
-  triggerLabel = "New task",
+  triggerLabel,
 }: {
   projects: Option[];
   people: Option[];
@@ -35,6 +36,7 @@ export function TaskCreateDialog({
   defaultOpen?: boolean;
   triggerLabel?: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +64,7 @@ export function TaskCreateDialog({
       const ownerId = (form.get("assigneeId") as string) || "";
       if (!ownerId) {
         setSaving(false);
-        setError("A repeating task needs an assignee, who owns the series.");
+        setError(t("tasks.create.needsAssignee"));
         return;
       }
       const seriesResult = await createTaskSeries({
@@ -77,7 +79,7 @@ export function TaskCreateDialog({
       });
       setSaving(false);
       if (!seriesResult.ok) {
-        setError(seriesResult.error ?? "Something went wrong.");
+        setError(seriesResult.error ?? t("tasks.create.genericError"));
         return;
       }
       setRepeats("");
@@ -101,7 +103,7 @@ export function TaskCreateDialog({
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong.");
+      setError(result.error ?? t("tasks.create.genericError"));
       return;
     }
     closeDialog();
@@ -131,30 +133,30 @@ export function TaskCreateDialog({
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus className="size-4" aria-hidden />
-        {triggerLabel}
+        {triggerLabel ?? t("tasks.create.trigger")}
       </Button>
-      <Dialog open={open} onClose={closeDialog} title="Create task">
+      <Dialog open={open} onClose={closeDialog} title={t("tasks.create.title")}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="task-title">Title</Label>
+            <Label htmlFor="task-title">{t("tasks.create.fieldTitle")}</Label>
             <Input id="task-title" name="title" required maxLength={300} autoFocus />
           </div>
           <div>
             <Label htmlFor="task-description">
-              Description <span className="font-normal text-muted">(optional)</span>
+              {t("tasks.create.description")} <span className="font-normal text-muted">{t("tasks.create.optional")}</span>
             </Label>
             <Textarea id="task-description" name="description" maxLength={5000} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="task-project">Project</Label>
+              <Label htmlFor="task-project">{t("tasks.create.project")}</Label>
               <Select
                 id="task-project"
                 name="projectId"
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
               >
-                <option value="">No project</option>
+                <option value="">{t("tasks.noProject")}</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -164,7 +166,7 @@ export function TaskCreateDialog({
             </div>
             <div>
               <Label htmlFor="task-milestone">
-                Milestone <span className="font-normal text-muted">(optional)</span>
+                {t("tasks.create.milestone")} <span className="font-normal text-muted">{t("tasks.create.optional")}</span>
               </Label>
               <Select
                 id="task-milestone"
@@ -175,9 +177,9 @@ export function TaskCreateDialog({
                 <option value="">
                   {projectId
                     ? projectMilestones.length === 0
-                      ? "No milestones on this project"
-                      : "No milestone"
-                    : "Choose a project first"}
+                      ? t("tasks.create.noMilestonesOnProject")
+                      : t("tasks.create.noMilestone")
+                    : t("tasks.create.chooseProjectFirst")}
                 </option>
                 {projectMilestones.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -187,9 +189,9 @@ export function TaskCreateDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="task-assignee">Assignee</Label>
+              <Label htmlFor="task-assignee">{t("tasks.create.assignee")}</Label>
               <Select id="task-assignee" name="assigneeId" defaultValue="">
-                <option value="">Unassigned</option>
+                <option value="">{t("tasks.unassigned")}</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -198,61 +200,61 @@ export function TaskCreateDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="task-priority">Priority</Label>
+              <Label htmlFor="task-priority">{t("tasks.create.priority")}</Label>
               <Select id="task-priority" name="priority" defaultValue="medium">
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
+                {(["low", "medium", "high", "critical"] as const).map((p) => (
+                  <option key={p} value={p}>
+                    {taskPriorityText(p, t)}
+                  </option>
+                ))}
               </Select>
             </div>
             <div>
-              <Label htmlFor="task-due">{repeats ? "First due date" : "Due date"}</Label>
+              <Label htmlFor="task-due">{repeats ? t("tasks.create.firstDue") : t("tasks.create.due")}</Label>
               <Input id="task-due" name="dueAt" type="date" />
               {repeats ? (
                 <p className="mt-1 text-[12.5px] text-muted">
-                  Every later occurrence is counted from this date. Left empty, it starts today.
+                  {t("tasks.create.firstDueHint")}
                 </p>
               ) : null}
             </div>
             <div>
-              <Label htmlFor="task-repeats">Repeats</Label>
+              <Label htmlFor="task-repeats">{t("tasks.create.repeats")}</Label>
               <Select
                 id="task-repeats"
                 name="repeats"
                 value={repeats}
                 onChange={(e) => setRepeats(e.target.value)}
               >
-                <option value="">Does not repeat</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
+                <option value="">{t("tasks.create.doesNotRepeat")}</option>
+                <option value="weekly">{t("tasks.create.weekly")}</option>
+                <option value="monthly">{t("tasks.create.monthly")}</option>
               </Select>
               {repeats ? (
                 <p className="mt-1 text-[12.5px] text-muted">
-                  The assignee owns the series. Completing one occurrence creates the next until
-                  somebody stops it.
+                  {t("tasks.create.seriesHint")}
                 </p>
               ) : null}
             </div>
             <div>
-              <Label htmlFor="task-status">Status</Label>
+              <Label htmlFor="task-status">{t("tasks.create.status")}</Label>
               <Select id="task-status" name="status" defaultValue="not_started">
                 {BULK_STATUSES.map((s) => (
                   <option key={s} value={s}>
-                    {TASK_STATUS_LABELS[s]}
+                    {taskStatusText(s, t)}
                   </option>
                 ))}
               </Select>
               <p className="mt-1 text-[12.5px] text-muted">
-                Blocked needs a reason, so it is set on the task itself.
+                {t("tasks.create.statusHint")}
               </p>
             </div>
             <div>
               <Label htmlFor="task-reviewer">
-                Reviewer <span className="font-normal text-muted">(optional)</span>
+                {t("tasks.create.reviewer")} <span className="font-normal text-muted">{t("tasks.create.optional")}</span>
               </Label>
               <Select id="task-reviewer" name="reviewerId" defaultValue="">
-                <option value="">No reviewer</option>
+                <option value="">{t("tasks.create.noReviewer")}</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -262,10 +264,10 @@ export function TaskCreateDialog({
             </div>
             <div>
               <Label htmlFor="task-approver">
-                Approver <span className="font-normal text-muted">(optional)</span>
+                {t("tasks.create.approver")} <span className="font-normal text-muted">{t("tasks.create.optional")}</span>
               </Label>
               <Select id="task-approver" name="approverId" defaultValue="">
-                <option value="">No approver</option>
+                <option value="">{t("tasks.create.noApprover")}</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -276,8 +278,8 @@ export function TaskCreateDialog({
           </div>
           <div>
             <Label htmlFor="task-criteria">
-              Completion criteria{" "}
-              <span className="font-normal text-muted">(optional)</span>
+              {t("tasks.create.criteria")}{" "}
+              <span className="font-normal text-muted">{t("tasks.create.optional")}</span>
             </Label>
             <Textarea
               id="task-criteria"
@@ -286,7 +288,7 @@ export function TaskCreateDialog({
               rows={2}
             />
             <p className="mt-1 text-[12.5px] text-muted">
-              What has to be true before this counts as done.
+              {t("tasks.create.criteriaHint")}
             </p>
           </div>
           {error ? (
@@ -296,10 +298,10 @@ export function TaskCreateDialog({
           ) : null}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" onClick={closeDialog}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              {repeats ? "Create recurring task" : "Create task"}
+              {repeats ? t("tasks.create.createRecurring") : t("tasks.create.submit")}
             </Button>
           </div>
         </form>

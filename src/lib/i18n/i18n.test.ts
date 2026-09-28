@@ -156,3 +156,56 @@ describe("Quebec formats", () => {
     expect(dueLabel(null, "America/Toronto", "fr-CA").label).toBe("Aucune échéance");
   });
 });
+
+// Each screen area owns its own top-level namespaces in `messages/workspace`,
+// spread into the catalogue. Two areas claiming the same namespace would make
+// one silently replace the other, so that fails here.
+describe("workspace catalogues", () => {
+  it("never claim the same top-level namespace twice", async () => {
+    const modules = import.meta.glob("./messages/workspace/*.en.ts", { eager: true });
+    const seen = new Map<string, string>();
+    for (const [file, mod] of Object.entries(modules)) {
+      for (const catalogue of Object.values(mod as Record<string, object>)) {
+        for (const key of Object.keys(catalogue)) {
+          expect(seen.get(key), `${key} in ${file}`).toBeUndefined();
+          seen.set(key, file);
+        }
+      }
+    }
+    for (const key of seen.keys()) expect(en, key).toHaveProperty(key);
+  });
+});
+
+// Words, names and codes written the same in both languages outside finance.
+// Anything else identical in French is English that was copied across and
+// never translated.
+const SAME_OUTSIDE_FINANCE = new Set([
+  "communication", "document", "documents", "invitation", "mention", "notification",
+  "signature",
+  " · Version {number}", ".", "Action", "Actions", "Active", "Administration",
+  "Budgets", "CSV", "Communication", "Contact", "Contacts", "Conversation",
+  "Date", "Description", "Direct", "Discussion", "Document", "Documents",
+  "English", "Français", "Gmail", "Google", "Google Drive", "Impact",
+  "Information", "Instructions", "Invitations", "Mentions", "Message", "Messages",
+  "Navigation", "Note", "Notes", "Notifications", "Occurrences", "Options",
+  "PDF", "QBBE Hub", "Question {n}", "Questions", "Rose", "Sections",
+  "Signature", "Signatures", "Type", "URL", "VMS", "Version {number}",
+  "Versions", "accent", "active", "association", "communications",
+  "compact", "danger", "direct", "discussion", "google",
+  "https://drive.google.com/…", "information", "message", "note", "{category} / {name}", "{count} min",
+  "{count} minute", "{count} minutes", "{greeting}, {name}", "{label} — {description}", "{status} {count}", "← Messages",
+]);
+
+describe("interface catalogues outside finance", () => {
+  it("translate every string that differs between the languages", () => {
+    const { finance: frenchFinance, ...frenchRest } = frCA;
+    const { finance: englishFinance, ...englishRest } = en;
+    void frenchFinance;
+    void englishFinance;
+    const french = flatten(frenchRest);
+    const copied = [...flatten(englishRest)]
+      .filter(([key, value]) => french.get(key) === value && !SAME_OUTSIDE_FINANCE.has(value))
+      .map(([key]) => key);
+    expect(copied).toEqual([]);
+  });
+});

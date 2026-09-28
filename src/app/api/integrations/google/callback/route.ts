@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { requireSession } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { GOOGLE_PROVIDER_SCOPES, type GoogleIntegrationProvider } from "@/features/inbox/services/google-oauth";
 
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const session = await requireSession();
+  const t = await getT();
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -21,7 +23,7 @@ export async function GET(request: Request) {
     );
 
   if (!code || !state || !expected || state !== expected) {
-    return fail("OAuth state mismatch. Try connecting again.");
+    return fail(t("inbox.google.stateMismatch"));
   }
   const provider: GoogleIntegrationProvider = state.startsWith("google_calendar:")
     ? "google_calendar"
@@ -30,10 +32,10 @@ export async function GET(request: Request) {
       : "gmail";
   const stateUser = state.split(":")[1];
   if (stateUser !== session.userId) {
-    return fail("OAuth state did not match the signed-in user.");
+    return fail(t("inbox.google.wrongUser"));
   }
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-    return fail("Google credentials are not configured.");
+    return fail(t("inbox.google.credentialsMissing"));
   }
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -48,14 +50,14 @@ export async function GET(request: Request) {
     }),
   });
   if (!tokenRes.ok) {
-    return fail("Google did not issue tokens. Check the OAuth client configuration.");
+    return fail(t("inbox.google.noTokens"));
   }
   const tokens = (await tokenRes.json()) as {
     access_token?: string;
     refresh_token?: string;
     expires_in?: number;
   };
-  if (!tokens.access_token) return fail("Google response was missing an access token.");
+  if (!tokens.access_token) return fail(t("inbox.google.noAccessToken"));
 
   const supabase = await createSupabaseServerClient();
   const { data: connection, error } = await supabase
@@ -75,7 +77,7 @@ export async function GET(request: Request) {
     .select("id")
     .single();
   if (error || !connection) {
-    return fail("Could not save the connection record.");
+    return fail(t("inbox.google.saveFailed"));
   }
 
   const expires = tokens.expires_in
@@ -90,7 +92,7 @@ export async function GET(request: Request) {
     .eq("connection_id", connection.id)
     .maybeSingle();
   if (priorSecretError) {
-    return fail("Connected, but the previous authorization could not be reconciled.");
+    return fail(t("inbox.google.reconcileFailed"));
   }
   const secretPayload = {
     connection_id: connection.id,
@@ -106,7 +108,7 @@ export async function GET(request: Request) {
       .from("integration_connection")
       .update({ status: "error", last_error: "Token store failed." })
       .eq("id", connection.id);
-    return fail("Connected, but tokens could not be stored. Disconnect and retry.");
+    return fail(t("inbox.google.storeFailed"));
   }
 
   try {

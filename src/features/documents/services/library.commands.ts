@@ -7,7 +7,9 @@ import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
-import { FOLDER_CATEGORIES, tagsSchema } from "@/features/documents/services/library";
+import { FOLDER_CATEGORIES, tagsSchemaFor } from "@/features/documents/services/library";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 // Library actions (#147). Row-level security and the triggers in migration
 // 20260927600000 are the authorization and the version bookkeeping; these
@@ -15,24 +17,25 @@ import { FOLDER_CATEGORIES, tagsSchema } from "@/features/documents/services/lib
 // Audit events for versions, filing, required reading, confirmations and
 // folders are written by the database, so they cannot be skipped.
 
-const httpsUrl = z
-  .string()
-  .trim()
-  .url("Enter a valid URL.")
-  .refine((value) => /^https:\/\//i.test(value), "A resource link must be an https address.");
+const httpsUrl = (t: TranslateFn) =>
+  z
+    .string()
+    .trim()
+    .url(t("documents.errors.invalidUrl"))
+    .refine((value) => /^https:\/\//i.test(value), t("documents.errors.httpsOnly"));
 
-const versionSchema = z.discriminatedUnion("kind", [
+const versionSchema = (t: TranslateFn) => z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("file"),
     supersedesId: z.string().uuid(),
-    storagePath: requiredText("The uploaded file is missing.", 500),
+    storagePath: requiredText(t("documents.errors.fileMissing"), 500),
     mimeType: z.string().trim().max(200).optional(),
     sizeBytes: z.coerce.number().int().min(0).optional(),
   }),
   z.object({
     kind: z.literal("link"),
     supersedesId: z.string().uuid(),
-    url: httpsUrl,
+    url: httpsUrl(t),
   }),
 ]);
 
@@ -43,12 +46,13 @@ const versionSchema = z.discriminatedUnion("kind", [
  */
 export async function addDocumentVersion(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const limited = await enforceRateLimit("document:upload", session.userId);
   if (limited) return limited;
 
-  const parsed = versionSchema.safeParse(input);
+  const parsed = versionSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("documents.errors.invalidInput") };
   }
   const data = parsed.data;
   const supabase = await createSupabaseServerClient();
@@ -58,11 +62,11 @@ export async function addDocumentVersion(input: unknown): Promise<ActionResult> 
     .select("id, title, description, superseded_at, archived_at")
     .eq("id", data.supersedesId)
     .maybeSingle();
-  if (!previous) return { ok: false, error: "Document not found or not accessible." };
+  if (!previous) return { ok: false, error: t("documents.errors.notAccessible") };
   if (previous.superseded_at || previous.archived_at) {
     return {
       ok: false,
-      error: "A newer version already exists. Reload the page and replace the current version.",
+      error: t("documents.errors.newerVersion"),
     };
   }
 
@@ -86,18 +90,18 @@ export async function addDocumentVersion(input: unknown): Promise<ActionResult> 
 
   if (error || !doc) {
     if (error?.code === "42501") {
-      return { ok: false, error: "You can't add a version to this document." };
+      return { ok: false, error: t("documents.errors.cannotAddVersion") };
     }
     if (error?.code === "23514" && data.kind === "link") {
-      return { ok: false, error: "That link is not from an approved source." };
+      return { ok: false, error: t("documents.errors.linkNotApproved") };
     }
     if (error?.code === "23514" || error?.code === "23505") {
       return {
         ok: false,
-        error: "A newer version already exists. Reload the page and replace the current version.",
+        error: t("documents.errors.newerVersion"),
       };
     }
-    return { ok: false, error: "Could not save the new version." };
+    return { ok: false, error: t("documents.errors.saveVersion") };
   }
 
   revalidatePath("/documents");
@@ -105,23 +109,24 @@ export async function addDocumentVersion(input: unknown): Promise<ActionResult> 
   return { ok: true, id: doc.id as string };
 }
 
-const detailsSchema = z.object({
+const detailsSchema = (t: TranslateFn) => z.object({
   documentId: z.string().uuid(),
   folderId: z
     .string()
     .optional()
     .transform((value) => (value ? value : null))
     .pipe(z.string().uuid().nullable()),
-  tags: tagsSchema,
+  tags: tagsSchemaFor(t),
   requiresAcknowledgement: z.boolean().default(false),
 });
 
 /** Files a document in a folder, sets its tags and its required-reading flag. */
 export async function updateDocumentDetails(input: unknown): Promise<ActionResult> {
   await requireSession();
-  const parsed = detailsSchema.safeParse(input);
+  const t = await getT();
+  const parsed = detailsSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("documents.errors.invalidInput") };
   }
   const data = parsed.data;
   const supabase = await createSupabaseServerClient();
@@ -142,22 +147,22 @@ export async function updateDocumentDetails(input: unknown): Promise<ActionResul
       return {
         ok: false,
         error: data.requiresAcknowledgement
-          ? "Only staff can file into a staff folder or mark required reading."
-          : "Only staff can file into a staff folder.",
+          ? t("documents.errors.staffFolderOrReading")
+          : t("documents.errors.staffFolder"),
       };
     }
     if (error.code === "23514") {
       return {
         ok: false,
         error: data.requiresAcknowledgement
-          ? "Required reading must be a library document open to its folder's audience, not one linked to a project, program or meeting, and not restricted."
-          : "That folder is not available.",
+          ? t("documents.errors.requiredReadingRules")
+          : t("documents.errors.folderUnavailable"),
       };
     }
-    return { ok: false, error: "Could not save the details." };
+    return { ok: false, error: t("documents.errors.saveDetails") };
   }
   if (!updated?.length) {
-    return { ok: false, error: "You can't change this document, or it has a newer version." };
+    return { ok: false, error: t("documents.errors.cannotChange") };
   }
 
   revalidatePath("/documents");
@@ -168,8 +173,9 @@ export async function updateDocumentDetails(input: unknown): Promise<ActionResul
 /** Records that the signed-in member has read a required document. */
 export async function acknowledgeDocument(documentId: string): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const id = z.string().uuid().safeParse(documentId);
-  if (!id.success) return { ok: false, error: "Document not found." };
+  if (!id.success) return { ok: false, error: t("documents.errors.documentNotFound") };
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("document_acknowledgement").insert({
@@ -182,7 +188,7 @@ export async function acknowledgeDocument(documentId: string): Promise<ActionRes
   if (error && error.code !== "23505") {
     return {
       ok: false,
-      error: "Could not record your confirmation. The document may have a newer version.",
+      error: t("documents.errors.confirmation"),
     };
   }
 
@@ -191,11 +197,11 @@ export async function acknowledgeDocument(documentId: string): Promise<ActionRes
   return { ok: true, id: id.data };
 }
 
-const folderSchema = z.object({
+const folderSchema = (t: TranslateFn) => z.object({
   category: z.enum(FOLDER_CATEGORIES.map((c) => c.id) as [string, ...string[]], {
-    errorMap: () => ({ message: "Choose a category." }),
+    errorMap: () => ({ message: t("documents.errors.chooseCategory") }),
   }),
-  name: requiredText("Give the folder a name.", 80),
+  name: requiredText(t("documents.errors.folderName"), 80),
   visibility: z.enum(["organization", "staff"]).default("organization"),
 });
 
@@ -204,10 +210,11 @@ export async function createDocumentFolder(input: unknown): Promise<ActionResult
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const { session } = authorization;
+  const t = await getT();
 
-  const parsed = folderSchema.safeParse(input);
+  const parsed = folderSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("documents.errors.invalidInput") };
   }
   const supabase = await createSupabaseServerClient();
   const { data: folder, error } = await supabase
@@ -224,9 +231,9 @@ export async function createDocumentFolder(input: unknown): Promise<ActionResult
 
   if (error || !folder) {
     if (error?.code === "23505") {
-      return { ok: false, error: "A folder with that name already exists in this category." };
+      return { ok: false, error: t("documents.errors.folderExists") };
     }
-    return { ok: false, error: "Could not create the folder." };
+    return { ok: false, error: t("documents.errors.createFolder") };
   }
   revalidatePath("/documents");
   return { ok: true, id: folder.id as string };

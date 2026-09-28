@@ -2,17 +2,23 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getReportSnapshot } from "@/features/reports/services/report.queries";
 import { buildSimplePdf, type PdfSection } from "@/lib/simple-pdf";
-import { snapshotSections } from "@/features/reports/snapshot-view";
+import {
+  codeLabel,
+  formatStoredDate,
+  snapshotSections,
+} from "@/features/reports/snapshot-view";
+import { getFormatters, getT } from "@/lib/i18n/server";
 
 function list(
   title: string,
   rows: { primary: string; secondary?: string }[],
+  emptyText: string,
 ): PdfSection {
   return {
     heading: title,
     lines:
       rows.length === 0
-        ? ["None in this snapshot."]
+        ? [emptyText]
         : rows.map((r) => (r.secondary ? `${r.primary} — ${r.secondary}` : r.primary)),
   };
 }
@@ -28,6 +34,7 @@ export async function GET(
 ) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const { data: report } = await supabase
     .from("report_instance")
     .select("id, title, snapshot, created_at, organization_id")
@@ -35,7 +42,7 @@ export async function GET(
     .maybeSingle();
 
   if (!report) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ error: t("reports.errors.notFound") }, { status: 404 });
   }
 
   // Same rule as the screen and the CSV: the approved version wins.
@@ -44,16 +51,25 @@ export async function GET(
   const metrics = (snapshot.metrics ?? {}) as Record<string, number>;
   const sections: PdfSection[] = [
     {
-      heading: "Metrics",
-      lines: Object.entries(metrics).map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`),
+      heading: t("reports.sections.metrics"),
+      lines: Object.entries(metrics).map(([k, v]) =>
+        t("reports.pdfMetric", {
+          label: codeLabel(t, "reports.metrics", k),
+          value: typeof v === "number" ? format.number(v) : String(v),
+        }),
+      ),
     },
-    ...snapshotSections(snapshot).map((section) => list(section.title, section.rows)),
+    ...snapshotSections(snapshot, {
+      t,
+      date: (value) => formatStoredDate(format, value),
+    }).map((section) => list(section.title, section.rows, t("reports.noneInSnapshot"))),
   ];
 
   const bytes = buildSimplePdf(
     String(report.title),
     String(report.created_at),
     sections,
+    t("reports.pdfGenerated", { when: format.dateTime(String(report.created_at)) }),
   );
 
   const {

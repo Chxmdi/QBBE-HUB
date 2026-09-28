@@ -1,3 +1,8 @@
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+import { scopeRoleLabel } from "@/features/admin/labels";
+
+const ENGLISH = createTranslator("en");
+
 /** Proposed program/project access only. This is not the live authorization boundary. */
 export type ScopeRole = "lead" | "manager" | "contributor" | "reviewer" | "approver" | "volunteer" | "read_only" | "follower";
 export function normalizeScopeRole(role: string): ScopeRole | null {
@@ -23,28 +28,29 @@ export interface ProposedGrant {
   manage: boolean;
   sources: string[];
 }
-export function buildAccessImpact(input: AccessImpactInput) {
+/** `t` picks the language of the issue and source text; English by default. */
+export function buildAccessImpact(input: AccessImpactInput, t: TranslateFn = ENGLISH) {
   const members = input.members.filter(m => m.organization_id === input.organizationId && m.status === "active");
   const programs = input.programs.filter(p => p.organization_id === input.organizationId);
   const projects = input.projects.filter(p => p.organization_id === input.organizationId);
   const activeIds = new Set(members.map(m => m.user_id));
   const issues: string[] = [];
   for (const p of programs) {
-    if (p.status === "active" && (!p.lead_id || !activeIds.has(p.lead_id))) issues.push(`Program “${p.name}” needs an active program lead.`);
-    if (p.status === "active" && members.some(m => m.user_id === p.lead_id && ["guest", "leadership_viewer"].includes(m.role))) issues.push(`Program “${p.name}” has a read-only organization member as lead; review management responsibility.`);
+    if (p.status === "active" && (!p.lead_id || !activeIds.has(p.lead_id))) issues.push(t("admin.access.issues.programNeedsLead", { name: p.name }));
+    if (p.status === "active" && members.some(m => m.user_id === p.lead_id && ["guest", "leadership_viewer"].includes(m.role))) issues.push(t("admin.access.issues.programReadOnlyLead", { name: p.name }));
   }
   for (const p of projects) {
-    if (p.stage === "active" && !p.archived_at && (!p.owner_id || !activeIds.has(p.owner_id))) issues.push(`Project “${p.name}” needs an active owner.`);
-    if (p.stage === "active" && !p.archived_at && members.some(m => m.user_id === p.owner_id && ["guest", "leadership_viewer"].includes(m.role))) issues.push(`Project “${p.name}” has a read-only organization member as owner; review management responsibility.`);
-    if (p.program_id && !programs.some(program => program.id === p.program_id)) issues.push(`Project “${p.name}” has an unavailable parent program.`);
+    if (p.stage === "active" && !p.archived_at && (!p.owner_id || !activeIds.has(p.owner_id))) issues.push(t("admin.access.issues.projectNeedsOwner", { name: p.name }));
+    if (p.stage === "active" && !p.archived_at && members.some(m => m.user_id === p.owner_id && ["guest", "leadership_viewer"].includes(m.role))) issues.push(t("admin.access.issues.projectReadOnlyOwner", { name: p.name }));
+    if (p.program_id && !programs.some(program => program.id === p.program_id)) issues.push(t("admin.access.issues.projectNoParent", { name: p.name }));
   }
   const programIds = new Set(programs.map(p => p.id));
   const projectIds = new Set(projects.map(p => p.id));
   for (const m of input.programMemberships.filter(m => programIds.has(m.program_id))) {
-    if (!normalizeScopeRole(m.role)) issues.push(`Program membership for ${m.user_id} has unrecognized role “${m.role}”; review before cutover.`);
+    if (!normalizeScopeRole(m.role)) issues.push(t("admin.access.issues.programUnknownRole", { user: m.user_id, role: m.role }));
   }
   for (const m of input.projectMemberships.filter(m => projectIds.has(m.project_id))) {
-    if (!normalizeScopeRole(m.role)) issues.push(`Project membership for ${m.user_id} has unrecognized role “${m.role}”; review before cutover.`);
+    if (!normalizeScopeRole(m.role)) issues.push(t("admin.access.issues.projectUnknownRole", { user: m.user_id, role: m.role }));
   }
   return { issues, members: members.map(member => {
     const admin = ["owner", "admin"].includes(member.role);
@@ -54,7 +60,7 @@ export function buildAccessImpact(input: AccessImpactInput) {
     for (const p of programs) {
       const direct = input.programMemberships.find(m => m.program_id === p.id && m.user_id === member.user_id);
       const persisted = input.programGrants?.find(g => g.program_id === p.id && g.user_id === member.user_id);
-      const sources = [admin ? "organization administrator" : "", portfolioViewer ? "leadership portfolio viewer" : "", p.lead_id === member.user_id ? "program lead" : "", direct ? `direct membership (${direct.role})` : "", persisted ? `persisted grant (${persisted.role})` : ""].filter(Boolean);
+      const sources = [admin ? t("admin.access.sources.orgAdmin") : "", portfolioViewer ? t("admin.access.sources.leadershipViewer") : "", p.lead_id === member.user_id ? t("admin.access.sources.programLead") : "", direct ? t("admin.access.sources.directMembership", { role: scopeRoleLabel(direct.role, t) }) : "", persisted ? t("admin.access.sources.persistedGrant", { role: scopeRoleLabel(persisted.role, t) }) : ""].filter(Boolean);
       if (sources.length) grants.push({ type: "program", id: p.id, name: p.name,
         manage: !readOnly && (admin || p.lead_id === member.user_id || !!direct && ["lead", "manager"].includes(direct.role) || !!persisted && ["lead", "manager"].includes(persisted.role)), sources });
     }
@@ -62,14 +68,14 @@ export function buildAccessImpact(input: AccessImpactInput) {
       const inherited = grants.find(g => g.type === "program" && g.id === p.program_id);
       const direct = input.projectMemberships.find(m => m.project_id === p.id && m.user_id === member.user_id);
       const persisted = input.projectGrants?.find(g => g.project_id === p.id && g.user_id === member.user_id);
-      const sources = [admin ? "organization administrator" : "", portfolioViewer ? "leadership portfolio viewer" : "", p.owner_id === member.user_id ? "project owner" : "", inherited ? `program membership: ${inherited.name}` : "", direct ? `direct membership (${direct.role})` : "", persisted ? `persisted grant (${persisted.role})` : ""].filter(Boolean);
+      const sources = [admin ? t("admin.access.sources.orgAdmin") : "", portfolioViewer ? t("admin.access.sources.leadershipViewer") : "", p.owner_id === member.user_id ? t("admin.access.sources.projectOwner") : "", inherited ? t("admin.access.sources.programMembership", { name: inherited.name }) : "", direct ? t("admin.access.sources.directMembership", { role: scopeRoleLabel(direct.role, t) }) : "", persisted ? t("admin.access.sources.persistedGrant", { role: scopeRoleLabel(persisted.role, t) }) : ""].filter(Boolean);
       if (sources.length) grants.push({ type: "project", id: p.id, name: p.name,
         manage: !readOnly && (admin || p.owner_id === member.user_id || !!inherited?.manage || direct?.role === "manager" || persisted?.role === "project_manager"), sources });
     }
     return { userId: member.user_id, name: member.name, role: member.role, grants,
       currentReadable: programs.length + projects.length,
       losingRead: [...programs.map(p => ({ type: "program", ...p })), ...projects.map(p => ({ type: "project", ...p }))]
-        .filter(p => !grants.some(g => g.type === p.type && g.id === p.id)).map(p => `${p.type}: ${p.name}`),
+        .filter(p => !grants.some(g => g.type === p.type && g.id === p.id)).map(p => t("admin.access.recordLine", { type: t(p.type === "program" ? "admin.access.types.program" : "admin.access.types.project"), name: p.name })),
       losingManagement: ["owner", "admin", "staff"].includes(member.role)
         ? programs.length + projects.length - grants.filter(g => g.manage).length : 0,
     };

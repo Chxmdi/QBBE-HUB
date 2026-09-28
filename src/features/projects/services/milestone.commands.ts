@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import { localizeIssue } from "@/features/projects/i18n";
 import { calendarDateInZone } from "@/lib/time";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
@@ -48,15 +50,16 @@ async function loadMilestone(
 }
 
 export async function createMilestone(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = createMilestoneSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "projects.errors.invalidInput") };
   }
   const { projectId, name, description, ownerId, dueDate, status } = parsed.data;
   const supabase = await createSupabaseServerClient();
   if (!(await hasProjectCapability(supabase, projectId, "manage"))) {
-    return { ok: false, error: "You cannot add milestones to this project." };
+    return { ok: false, error: t("projects.errors.cannotAddMilestones") };
   }
 
   const { data: row, error } = await supabase
@@ -73,7 +76,7 @@ export async function createMilestone(input: unknown): Promise<ActionResult> {
     .single();
 
   if (error || !row) {
-    return { ok: false, error: "Could not create the milestone." };
+    return { ok: false, error: t("projects.errors.milestoneCreateFailed") };
   }
 
   await supabase.from("activity_event").insert({
@@ -100,18 +103,19 @@ export async function createMilestone(input: unknown): Promise<ActionResult> {
  * looked at it.
  */
 export async function completeMilestone(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = completeMilestoneSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "projects.errors.invalidInput") };
   }
   const { milestoneId, completed, evidence } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
   const current = await loadMilestone(supabase, milestoneId);
-  if (!current) return { ok: false, error: "Milestone not found." };
+  if (!current) return { ok: false, error: t("projects.errors.milestoneNotFound") };
   if (!(await hasProjectCapability(supabase, current.project_id, "manage"))) {
-    return { ok: false, error: "You cannot update this milestone." };
+    return { ok: false, error: t("projects.errors.cannotUpdateMilestone") };
   }
 
   if (completed && current.completed_at) {
@@ -127,7 +131,7 @@ export async function completeMilestone(input: unknown): Promise<ActionResult> {
         : { completed_at: null, evidence: null },
     )
     .eq("id", milestoneId);
-  if (error) return { ok: false, error: "Could not update the milestone." };
+  if (error) return { ok: false, error: t("projects.errors.milestoneUpdateFailed") };
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,
@@ -145,19 +149,20 @@ export async function completeMilestone(input: unknown): Promise<ActionResult> {
 }
 
 export async function updateMilestone(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = updateMilestoneSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "projects.errors.invalidInput") };
   }
   const { milestoneId, name, description, ownerId, dueDate, status, evidence } =
     parsed.data;
 
   const supabase = await createSupabaseServerClient();
   const existing = await loadMilestone(supabase, milestoneId);
-  if (!existing) return { ok: false, error: "Milestone not found." };
+  if (!existing) return { ok: false, error: t("projects.errors.milestoneNotFound") };
   if (!(await hasProjectCapability(supabase, existing.project_id, "manage"))) {
-    return { ok: false, error: "You cannot update this milestone." };
+    return { ok: false, error: t("projects.errors.cannotUpdateMilestone") };
   }
 
   const patch: Record<string, unknown> = {};
@@ -175,7 +180,7 @@ export async function updateMilestone(input: unknown): Promise<ActionResult> {
     if (existing.completed_at) {
       return {
         ok: false,
-        error: "Reopen the milestone first — that also clears its completion evidence.",
+        error: t("projects.errors.reopenFirst"),
       };
     }
     if (status === "missed") {
@@ -184,7 +189,7 @@ export async function updateMilestone(input: unknown): Promise<ActionResult> {
       if (!due || !today || due >= today) {
         return {
           ok: false,
-          error: "Only a milestone whose target date has passed can be marked missed.",
+          error: t("projects.errors.missedOnlyPast"),
         };
       }
     }
@@ -199,7 +204,7 @@ export async function updateMilestone(input: unknown): Promise<ActionResult> {
     .eq("id", milestoneId)
     .select("id, project_id")
     .maybeSingle();
-  if (error || !row) return { ok: false, error: "Could not update the milestone." };
+  if (error || !row) return { ok: false, error: t("projects.errors.milestoneUpdateFailed") };
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,
@@ -218,12 +223,13 @@ export async function updateMilestone(input: unknown): Promise<ActionResult> {
 }
 
 export async function deleteMilestone(milestoneId: string): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const supabase = await createSupabaseServerClient();
   const existing = await loadMilestone(supabase, milestoneId);
-  if (!existing) return { ok: false, error: "Milestone not found." };
+  if (!existing) return { ok: false, error: t("projects.errors.milestoneNotFound") };
   if (!(await hasProjectCapability(supabase, existing.project_id, "manage"))) {
-    return { ok: false, error: "You cannot delete this milestone." };
+    return { ok: false, error: t("projects.errors.cannotDeleteMilestone") };
   }
 
   // `task.milestone_id` is ON DELETE SET NULL, so the work survives and loses
@@ -235,7 +241,7 @@ export async function deleteMilestone(milestoneId: string): Promise<ActionResult
     .eq("id", milestoneId)
     .select("id");
   if (error || (deleted ?? []).length === 0) {
-    return { ok: false, error: "Could not delete the milestone." };
+    return { ok: false, error: t("projects.errors.milestoneDeleteFailed") };
   }
 
   await supabase.from("activity_event").insert({
@@ -262,16 +268,17 @@ export async function deleteMilestone(milestoneId: string): Promise<ActionResult
  * reorder in #30 that could not be operated from a keyboard.
  */
 export async function reorderMilestone(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = reorderMilestoneSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: t("projects.errors.invalidInput") };
   const { milestoneId, direction } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
   const existing = await loadMilestone(supabase, milestoneId);
-  if (!existing) return { ok: false, error: "Milestone not found." };
+  if (!existing) return { ok: false, error: t("projects.errors.milestoneNotFound") };
   if (!(await hasProjectCapability(supabase, existing.project_id, "manage"))) {
-    return { ok: false, error: "You cannot reorder these milestones." };
+    return { ok: false, error: t("projects.errors.cannotReorder") };
   }
 
   const { data: siblings } = await supabase

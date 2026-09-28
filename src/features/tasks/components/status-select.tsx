@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { Select } from "@/components/ui/input";
-import { TASK_STATUS_META } from "@/components/shared/status-badges";
+import { taskStatusLabel } from "@/components/shared/status-badges";
+import { TASK_STATUSES } from "@/features/tasks/schemas";
+import { useT } from "@/lib/i18n/client";
 import { BlockedReasonDialog } from "@/features/tasks/components/blocked-reason-dialog";
 import { updateTaskStatus } from "@/features/tasks/services/task.commands";
 import type { TaskStatus } from "@/types/entities";
@@ -30,6 +32,7 @@ export function StatusSelect({
   className?: string;
   onSelect?: (next: TaskStatus) => void;
 }) {
+  const t = useT();
   const [value, setValue] = useState<TaskStatus>(status);
   const [error, setError] = useState<string | null>(null);
   const [askingBlocked, setAskingBlocked] = useState(false);
@@ -43,7 +46,7 @@ export function StatusSelect({
       const result = await updateTaskStatus(taskId, next, blockedReason);
       if (!result.ok) {
         setValue(previous); // rollback — never display success the server rejected
-        setError(result.error ?? "Update failed.");
+        setError(result.error ?? t("tasks.statusSelect.updateFailed"));
       }
     });
   }
@@ -66,14 +69,14 @@ export function StatusSelect({
   return (
     <div className={className}>
       <Select
-        aria-label="Task status"
+        aria-label={t("tasks.statusSelect.label")}
         value={onSelect ? status : value}
         onChange={(e) => handleChange(e.target.value as TaskStatus)}
         className="h-8 w-36 text-[12.5px]"
       >
-        {(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => (
+        {TASK_STATUSES.map((s) => (
           <option key={s} value={s}>
-            {TASK_STATUS_META[s].label}
+            {taskStatusLabel(s, t)}
           </option>
         ))}
       </Select>

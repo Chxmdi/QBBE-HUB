@@ -1,4 +1,5 @@
 import { recordJobRun } from "@/lib/job-observability";
+import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { createNotifications, notificationDedupeKey } from "../notify";
 import type { JobContext, JobResult } from "../runner";
 
@@ -59,13 +60,17 @@ export async function scheduledAnnouncements({
 
     let count = 0;
     try {
+      // Each person reads the notification in their own saved language.
+      const translatorFor = await recipientTranslators(db, recipients);
       count = await createNotifications(
         db,
         recipients.map((userId) => ({
           user_id: userId,
           organization_id: announcement.organization_id,
           category: "announcement",
-          title: `Announcement: ${announcement.title}`,
+          title: translatorFor(userId)("jobs.notify.announcementTitle", {
+            title: announcement.title,
+          }),
           source_type: "announcement",
           source_id: announcement.id,
           link: `/announcements#${announcement.id}`,

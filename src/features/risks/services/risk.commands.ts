@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import { localizeIssue, recipientTranslators } from "@/features/projects/i18n";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import {
@@ -38,14 +40,15 @@ async function notifyOwner(
   },
 ) {
   if (!input.ownerId || input.ownerId === input.actorId) return;
+  const t = (await recipientTranslators(supabase, [input.ownerId]))(input.ownerId);
   await createNotifications(supabase, [{
     user_id: input.ownerId,
     organization_id: input.organizationId,
     category: "assignment",
     title:
       input.kind === "risk"
-        ? `You own a risk: ${input.title}`
-        : `You own an issue: ${input.title}`,
+        ? t("risks.notifications.ownRisk", { title: input.title })
+        : t("risks.notifications.ownIssue", { title: input.title }),
     source_type: input.kind,
     source_id: input.recordId,
     link: `/projects/${input.projectId}?tab=risks`,
@@ -58,10 +61,11 @@ async function notifyOwner(
 }
 
 export async function createRisk(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = createRiskSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "risks.errors.invalidInput") };
   }
   const { projectId, title, description, likelihood, impact, mitigation, trigger, ownerId, reviewAt } =
     parsed.data;
@@ -88,7 +92,7 @@ export async function createRisk(input: unknown): Promise<ActionResult> {
   if (error || !risk) {
     return {
       ok: false,
-      error: "You don't have permission to log risks on this project, or the save failed.",
+      error: t("risks.errors.noRiskPermission"),
     };
   }
 
@@ -117,10 +121,11 @@ export async function createRisk(input: unknown): Promise<ActionResult> {
 }
 
 export async function updateRisk(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = updateRiskSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "risks.errors.invalidInput") };
   }
   const { riskId, ...fields } = parsed.data;
 
@@ -149,7 +154,7 @@ export async function updateRisk(input: unknown): Promise<ActionResult> {
     .select("id, title, project_id, owner_id")
     .maybeSingle();
 
-  if (error || !updated) return { ok: false, error: "Could not update the risk." };
+  if (error || !updated) return { ok: false, error: t("risks.errors.riskUpdateFailed") };
 
   if (fields.ownerId) {
     await notifyOwner(supabase, {
@@ -168,10 +173,11 @@ export async function updateRisk(input: unknown): Promise<ActionResult> {
 }
 
 export async function createIssue(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = createIssueSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "risks.errors.invalidInput") };
   }
   const { projectId, riskId, title, description, impact, resolutionPlan, severity, ownerId, dueAt } =
     parsed.data;
@@ -198,7 +204,7 @@ export async function createIssue(input: unknown): Promise<ActionResult> {
   if (error || !issue) {
     return {
       ok: false,
-      error: "You don't have permission to log issues on this project, or the save failed.",
+      error: t("risks.errors.noIssuePermission"),
     };
   }
 
@@ -227,10 +233,11 @@ export async function createIssue(input: unknown): Promise<ActionResult> {
 }
 
 export async function updateIssue(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = updateIssueSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "risks.errors.invalidInput") };
   }
   const { issueId, ...fields } = parsed.data;
 
@@ -258,7 +265,7 @@ export async function updateIssue(input: unknown): Promise<ActionResult> {
     .select("id, title, project_id")
     .maybeSingle();
 
-  if (error || !updated) return { ok: false, error: "Could not update the issue." };
+  if (error || !updated) return { ok: false, error: t("risks.errors.issueUpdateFailed") };
 
   if (fields.ownerId) {
     await notifyOwner(supabase, {
@@ -282,10 +289,11 @@ export async function updateIssue(input: unknown): Promise<ActionResult> {
  * history rather than a row that quietly changed meaning.
  */
 export async function escalateRiskToIssue(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = escalateRiskSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "risks.errors.invalidInput") };
   }
   const { riskId, severity, description } = parsed.data;
 
@@ -296,7 +304,7 @@ export async function escalateRiskToIssue(input: unknown): Promise<ActionResult>
     .eq("id", riskId)
     .maybeSingle();
 
-  if (!risk) return { ok: false, error: "That risk no longer exists." };
+  if (!risk) return { ok: false, error: t("risks.errors.riskGone") };
 
   const { data: issue, error } = await supabase
     .from("issue")
@@ -314,7 +322,7 @@ export async function escalateRiskToIssue(input: unknown): Promise<ActionResult>
     .single();
 
   if (error || !issue) {
-    return { ok: false, error: "Could not raise the issue from this risk." };
+    return { ok: false, error: t("risks.errors.escalateFailed") };
   }
 
   // The risk is now history. Closing it needs a reason, and "it happened" is
@@ -325,7 +333,7 @@ export async function escalateRiskToIssue(input: unknown): Promise<ActionResult>
       status: "closed",
       closed_at: new Date().toISOString(),
       mitigation:
-        risk.mitigation ?? "This risk materialised and was raised as an issue.",
+        risk.mitigation ?? t("risks.materialised"),
     })
     .eq("id", riskId);
 
