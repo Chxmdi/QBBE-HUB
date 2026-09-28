@@ -222,6 +222,10 @@ export const en = {
       "Manage how QBBE Hub notifies you. Workspace admins manage organization-wide defaults separately.",
   },
   home: {
+    denied: {
+      title: "That page isn’t available to you",
+      body: "Your role doesn’t include it, so you were brought back here. If you need it for your work, ask an administrator.",
+    },
     title: "Home",
     greeting: {
       morning: "Good morning",

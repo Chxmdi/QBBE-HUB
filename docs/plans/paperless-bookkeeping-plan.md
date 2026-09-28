@@ -95,6 +95,28 @@ Supporting fixes merged the same day:
   statement lines and donor gift records. They read through the same
   `can_read_ledger` rule.
 
+### B2. Fixes from the runtime audit (27 September 2026)
+
+The app was built from `main`, run locally and driven in a browser as owner,
+staff and volunteer, in English and French.
+
+- [ ] Merge #186: French for the finance screens.
+- [ ] French for every other screen, and Quebec date and number formats
+  ("28 sept. 2026", "1 234,56 $"). The audit found English on 68 of 70 pages in
+  French. A build session is on it (branch `claude/french-everywhere`), with a
+  browser check that fails on English text in French.
+- [x] The job runner is a checked deployment step: `GET /api/health/jobs`,
+  a deploy smoke check, and a red banner on Admin → Jobs. Without it no upload
+  ever opens and no notification is sent.
+- [x] Remove the committed `.env.production`, which made any local build that
+  did not set its own values talk to the hosted Supabase project.
+- [x] Pages a member may not see say so ("That page isn't available to you")
+  instead of silently returning Home.
+- [ ] Run the flows the audit could not reach on an empty database: fund
+  release, statements with data, bank and payroll import.
+- [ ] Close #143 and #149 once their acceptance is confirmed on `main`; update
+  #141 and #147.
+
 ### C. Needed from QBBE (nobody else can supply these)
 - [ ] Accountant:
   - balances as at 2026-09-30;

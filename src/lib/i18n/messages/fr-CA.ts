@@ -227,6 +227,10 @@ export const frCA: Messages = {
       "Gérez la façon dont QBBE Hub vous avise. Les administrateurs gèrent séparément les paramètres par défaut de l’organisation.",
   },
   home: {
+    denied: {
+      title: "Cette page ne vous est pas accessible",
+      body: "Votre rôle ne la comprend pas; vous avez donc été ramené ici. Si vous en avez besoin pour votre travail, demandez-le à un administrateur.",
+    },
     title: "Accueil",
     greeting: {
       morning: "Bonjour",

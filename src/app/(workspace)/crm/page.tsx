@@ -16,7 +16,7 @@ import {
   PipelineTotals,
 } from "@/features/crm/components/pipeline-summary";
 import { getPipeline } from "@/features/crm/services/opportunity.queries";
-import { requireSession } from "@/lib/auth";
+import { requireSession, NO_ACCESS_REDIRECT } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { formatDate } from "@/lib/utils";
@@ -38,7 +38,7 @@ export default async function CrmPage({
   const now = new Date();
   const today =
     calendarDateInZone(now, session.timeZone) ?? now.toISOString().slice(0, 10);
-  if (!session.isStaff) redirect("/");
+  if (!session.isStaff) redirect(NO_ACCESS_REDIRECT);
   const params = await searchParams;
   const supabase = await createSupabasePageClient();
 
