@@ -3,6 +3,7 @@ import type { knowledgeEn } from "./knowledge.en";
 /** Français québécois — reports, documents, exports, textReader (#141). À faire réviser. */
 export const knowledgeFrCA: typeof knowledgeEn = {
   reports: {
+    pdfGenerated: "Produit le {when} — instantané figé (RPT-001)",
     title: "Rapports",
     detailTitle: "Rapport",
     eyebrow: "Reddition de comptes et évaluation",

@@ -69,6 +69,7 @@ export async function GET(
     String(report.title),
     String(report.created_at),
     sections,
+    t("reports.pdfGenerated", { when: format.dateTime(String(report.created_at)) }),
   );
 
   const {

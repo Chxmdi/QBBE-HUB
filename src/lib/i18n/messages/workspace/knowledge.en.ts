@@ -4,6 +4,7 @@
  */
 export const knowledgeEn = {
   reports: {
+    pdfGenerated: "Generated {when} — frozen snapshot (RPT-001)",
     title: "Reports",
     detailTitle: "Report",
     eyebrow: "Reporting & evaluation",
