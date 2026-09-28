@@ -9,10 +9,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { createMeeting } from "@/features/meetings/services/meeting.commands";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDateTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
 import type { Meeting } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Meetings" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("meetings.title") };
+}
 export const dynamic = "force-dynamic";
 
 function meetingListCutoff() {
@@ -26,6 +28,7 @@ export default async function MeetingsPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const supabase = await createSupabasePageClient();
   const cutoff = meetingListCutoff();
 
@@ -74,13 +77,13 @@ export default async function MeetingsPage({
             {meeting.title}
           </Link>
           <p className="meta">
-            {formatDateTime(meeting.starts_at)}
+            {format.dateTime(meeting.starts_at)}
             {meeting.project ? ` · ${meeting.project.name}` : ""}
             {meeting.location ? ` · ${meeting.location}` : ""}
           </p>
         </div>
         {meeting.status === "completed" ? (
-          <Badge tone="success">Completed</Badge>
+          <Badge tone="success">{t("meetings.completed")}</Badge>
         ) : null}
         {meeting.organizer ? (
           <span className="flex items-center gap-1.5 text-[12.5px] text-muted">
@@ -99,23 +102,23 @@ export default async function MeetingsPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Meetings & agendas"
-        title="Meetings"
-        description="Agendas turn discussion into decisions; actions become assigned tasks."
+        eyebrow={t("meetings.eyebrow")}
+        title={t("meetings.title")}
+        description={t("meetings.description")}
         actions={
           session.isStaff ? (
             <EntityFormDialog
-              triggerLabel="New meeting"
-              title="Schedule meeting"
-              submitLabel="Schedule"
+              triggerLabel={t("meetings.create.trigger")}
+              title={t("meetings.create.title")}
+              submitLabel={t("meetings.create.submit")}
               defaultOpen={params.create === "1"}
               action={createMeeting}
               fields={[
-                { name: "title", label: "Title", type: "text", required: true },
-                { name: "purpose", label: "Purpose", type: "textarea" },
+                { name: "title", label: t("meetings.fields.title"), type: "text", required: true },
+                { name: "purpose", label: t("meetings.fields.purpose"), type: "textarea" },
                 {
                   name: "projectId",
-                  label: "Linked project",
+                  label: t("meetings.fields.linkedProject"),
                   type: "select",
                   colSpan: 1,
                   options: (projects ?? []).map((p) => ({
@@ -125,53 +128,53 @@ export default async function MeetingsPage({
                 },
                 {
                   name: "startsAt",
-                  label: "Starts",
+                  label: t("meetings.fields.starts"),
                   type: "datetime-local",
                   required: true,
                   colSpan: 1,
                 },
                 {
                   name: "durationMinutes",
-                  label: "Duration (minutes)",
+                  label: t("meetings.fields.duration"),
                   type: "number",
                   colSpan: 1,
                   defaultValue: "60",
                 },
                 {
                   name: "location",
-                  label: "Location",
+                  label: t("meetings.fields.location"),
                   type: "text",
                   colSpan: 1,
                 },
                 {
                   name: "repeat",
-                  label: "Repeats",
+                  label: t("meetings.fields.repeats"),
                   type: "select",
                   colSpan: 1,
                   defaultValue: "none",
                   options: [
-                    { value: "none", label: "Does not repeat" },
-                    { value: "weekly", label: "Weekly" },
-                    { value: "fortnightly", label: "Every two weeks" },
-                    { value: "monthly", label: "Monthly" },
+                    { value: "none", label: t("meetings.repeat.none") },
+                    { value: "weekly", label: t("meetings.repeat.weekly") },
+                    { value: "fortnightly", label: t("meetings.repeat.fortnightly") },
+                    { value: "monthly", label: t("meetings.repeat.monthly") },
                   ],
                 },
                 {
                   name: "occurrences",
-                  label: "Occurrences",
+                  label: t("meetings.fields.occurrences"),
                   type: "number",
                   colSpan: 1,
-                  hint: "How many meetings in the series, 2 to 12.",
+                  hint: t("meetings.fields.occurrencesHint"),
                 },
                 {
                   name: "meetingLink",
-                  label: "Meeting link",
+                  label: t("meetings.fields.meetingLink"),
                   type: "url",
-                  hint: "Google Meet, Zoom, Teams — any provider.",
+                  hint: t("meetings.fields.meetingLinkHint"),
                 },
                 {
                   name: "agendaTemplateId",
-                  label: "Agenda template",
+                  label: t("meetings.fields.agendaTemplate"),
                   type: "select",
                   options: (agendas ?? []).map((agenda) => ({
                     value: agenda.id,
@@ -187,13 +190,13 @@ export default async function MeetingsPage({
       <div className="space-y-8">
         <section aria-labelledby="upcoming-meetings">
           <h2 id="upcoming-meetings" className="section-heading mb-3">
-            Upcoming
+            {t("meetings.upcoming")}
           </h2>
           {(upcoming ?? []).length === 0 ? (
             <EmptyState
               icon={<Presentation />}
-              title="No upcoming meetings"
-              description="Schedule a meeting to build an agenda, capture decisions, and assign actions."
+              title={t("meetings.emptyTitle")}
+              description={t("meetings.emptyDescription")}
             />
           ) : (
             <ul className="card divide-y divide-line">
@@ -207,7 +210,7 @@ export default async function MeetingsPage({
         {(past ?? []).length > 0 ? (
           <section aria-labelledby="past-meetings">
             <h2 id="past-meetings" className="section-heading mb-3">
-              Recent
+              {t("meetings.recent")}
             </h2>
             <ul className="card divide-y divide-line">
               {((past ?? []) as unknown as Meeting[]).map((meeting) => (

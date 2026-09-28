@@ -8,10 +8,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { createEvent } from "@/features/events/services/event.commands";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDateTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
 import type { EventRecord } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Events" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("events.title") };
+}
 export const dynamic = "force-dynamic";
 
 const STATUS_TONES = {
@@ -33,6 +35,7 @@ export default async function EventsPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const supabase = await createSupabasePageClient();
 
   const [{ data: events }, { data: programs }, { data: projects }] =
@@ -74,18 +77,20 @@ export default async function EventsPage({
             {event.name}
           </Link>
           <p className="meta">
-            {formatDateTime(event.starts_at)}
+            {format.dateTime(event.starts_at)}
             {event.location ? ` · ${event.location}` : ""}
           </p>
         </div>
         {event.volunteer_need ? (
           <span className="meta flex items-center gap-1">
             <Users className="size-3.5" aria-hidden />
-            {event.volunteer_need} volunteers
+            {t(event.volunteer_need === 1 ? "events.volunteersOne" : "events.volunteersOther", {
+              count: event.volunteer_need,
+            })}
           </span>
         ) : null}
         <Badge tone={STATUS_TONES[event.status]}>
-          {event.status.replace(/_/g, " ")}
+          {t(`events.statusBadges.${event.status}`)}
         </Badge>
       </li>
     );
@@ -94,45 +99,45 @@ export default async function EventsPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Program events"
-        title="Events"
-        description="Logistics, volunteer needs, and communication for QBBE events."
+        eyebrow={t("events.eyebrow")}
+        title={t("events.title")}
+        description={t("events.description")}
         actions={
           session.isStaff ? (
             <EntityFormDialog
-              triggerLabel="New event"
-              title="Create event"
-              submitLabel="Create event"
+              triggerLabel={t("events.create.trigger")}
+              title={t("events.create.title")}
+              submitLabel={t("events.create.submit")}
               defaultOpen={params.create === "1"}
               action={createEvent}
               fields={[
-                { name: "name", label: "Name", type: "text", required: true },
-                { name: "description", label: "Description", type: "textarea" },
+                { name: "name", label: t("events.fields.name"), type: "text", required: true },
+                { name: "description", label: t("events.fields.description"), type: "textarea" },
                 {
                   name: "programId",
-                  label: "Program",
+                  label: t("events.fields.program"),
                   type: "select",
                   colSpan: 1,
                   options: (programs ?? []).map((p) => ({ value: p.id, label: p.name })),
                 },
                 {
                   name: "projectId",
-                  label: "Project",
+                  label: t("events.fields.project"),
                   type: "select",
                   colSpan: 1,
                   options: (projects ?? []).map((p) => ({ value: p.id, label: p.name })),
                 },
-                { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1 },
-                { name: "endsAt", label: "Ends (defaults to one hour)", type: "datetime-local", colSpan: 1 },
-                { name: "location", label: "Location", type: "text", colSpan: 1 },
+                { name: "startsAt", label: t("events.fields.starts"), type: "datetime-local", required: true, colSpan: 1 },
+                { name: "endsAt", label: t("events.fields.endsDefault"), type: "datetime-local", colSpan: 1 },
+                { name: "location", label: t("events.fields.location"), type: "text", colSpan: 1 },
                 // `createEvent` has always accepted a type and the edit form has
                 // always shown one; only the create dialog left it out, so the
                 // type could be set on an event but never given to one
                 // (P0-EVT-01 asks for it on the record).
-                { name: "eventType", label: "Event type", type: "text", colSpan: 1 },
+                { name: "eventType", label: t("events.fields.eventType"), type: "text", colSpan: 1 },
                 {
                   name: "volunteerNeed",
-                  label: "Volunteers needed",
+                  label: t("events.fields.volunteersNeeded"),
                   type: "number",
                   colSpan: 1,
                 },
@@ -145,13 +150,13 @@ export default async function EventsPage({
       <div className="space-y-8">
         <section aria-labelledby="upcoming-events">
           <h2 id="upcoming-events" className="section-heading mb-3">
-            Upcoming
+            {t("events.upcoming")}
           </h2>
           {upcoming.length === 0 ? (
             <EmptyState
               icon={<CalendarDays />}
-              title="No upcoming events"
-              description="Create an event to coordinate logistics, volunteers, and communication."
+              title={t("events.emptyTitle")}
+              description={t("events.emptyDescription")}
             />
           ) : (
             <ul className="card divide-y divide-line">
@@ -165,7 +170,7 @@ export default async function EventsPage({
         {past.length > 0 ? (
           <section aria-labelledby="past-events">
             <h2 id="past-events" className="section-heading mb-3">
-              Past events
+              {t("events.past")}
             </h2>
             <ul className="card divide-y divide-line">
               {past.slice(0, 10).map((event) => (

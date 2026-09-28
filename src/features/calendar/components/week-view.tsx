@@ -7,6 +7,9 @@ import {
   isToday,
   startOfWeek,
 } from "date-fns";
+import { frCA } from "date-fns/locale";
+import type { Locale } from "@/lib/i18n/config";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 import { cn } from "@/lib/utils";
 import { RescheduleControl } from "@/features/calendar/components/reschedule-control";
 
@@ -52,14 +55,27 @@ export const KIND_STYLES: Record<CalendarItem["kind"], string> = {
 };
 
 /** Short type prefix so kind never rests on color alone (§10.9). */
-const KIND_PREFIX: Record<CalendarItem["kind"], string> = {
-  task: "Task",
-  milestone: "Milestone",
-  meeting: "Meeting",
-  event: "Event",
-  follow_up: "Follow-up",
-  google: "Google",
-};
+function kindPrefix(kind: CalendarItem["kind"], t: TranslateFn): string {
+  return t(`calendar.kinds.${kind}`);
+}
+
+/**
+ * date-fns patterns and options for visible text in one language. French
+ * reads the clock on 24 hours ("14 h 30") and puts the day before the month.
+ */
+export function calendarDateFormats(locale: Locale) {
+  const french = locale === "fr-CA";
+  return {
+    options: french ? { locale: frCA } : {},
+    time: french ? "H 'h' mm" : "h:mm a",
+    agendaDay: french ? "EEEE d MMM" : "EEEE, MMM d",
+    rangeStart: french ? "d MMM" : "MMM d",
+    rangeEnd: french ? "d MMM yyyy" : "MMM d, yyyy",
+    monthYear: "MMMM yyyy",
+    shortMonthYear: "MMM yyyy",
+    shortDay: french ? "d MMM" : "MMM d",
+  };
+}
 
 function rescheduleControl(item: CalendarItem) {
   if (!item.reschedulableDate) return null;
@@ -74,10 +90,10 @@ function rescheduleControl(item: CalendarItem) {
   );
 }
 
-function calendarItemTitle(item: CalendarItem): string {
-  const parts = [`${KIND_PREFIX[item.kind]}: ${item.label}`];
-  if (item.owner) parts.push(`owner ${item.owner}`);
-  if (item.done) parts.push("completed");
+function calendarItemTitle(item: CalendarItem, t: TranslateFn): string {
+  const parts = [t("calendar.itemTitle", { kind: kindPrefix(item.kind, t), label: item.label })];
+  if (item.owner) parts.push(t("calendar.itemOwner", { name: item.owner }));
+  if (item.done) parts.push(t("calendar.itemCompleted"));
   return parts.join(" · ");
 }
 
@@ -89,10 +105,14 @@ function calendarItemTitle(item: CalendarItem): string {
 export function WeekView({
   anchor,
   items,
+  locale,
 }: {
   anchor: Date;
   items: CalendarItem[];
+  locale: Locale;
 }) {
+  const t = createTranslator(locale);
+  const formats = calendarDateFormats(locale);
   const start = startOfWeek(anchor, { weekStartsOn: 0 });
   const days = eachDayOfInterval({
     start,
@@ -120,7 +140,7 @@ export function WeekView({
                 )}
               >
                 <p className="text-[11px] font-semibold tracking-wide text-muted uppercase">
-                  {format(day, "EEE")}
+                  {format(day, "EEE", formats.options)}
                 </p>
                 <p
                   className={cn(
@@ -130,7 +150,7 @@ export function WeekView({
                 >
                   {format(day, "d")}
                   {isToday(day) ? (
-                    <span className="ml-1.5 text-[10.5px] font-medium">Today</span>
+                    <span className="ml-1.5 text-[10.5px] font-medium">{t("calendar.today")}</span>
                   ) : null}
                 </p>
               </div>
@@ -142,14 +162,14 @@ export function WeekView({
                       <div key={item.id}>
                       <Link
                         href={item.href}
-                        title={calendarItemTitle(item)}
+                        title={calendarItemTitle(item, t)}
                         className={cn(
                           "block rounded px-1.5 py-1 text-[11px] font-medium hover:opacity-80",
                           KIND_STYLES[item.kind],
                         )}
                       >
                         <span className="block text-[9.5px] tracking-wide uppercase">
-                          {KIND_PREFIX[item.kind]}
+                          {kindPrefix(item.kind, t)}
                         </span>
                         <span className={cn("line-clamp-2", item.done && "line-through opacity-70")}>
                           <span className={cn(item.done && "line-through opacity-70")}>
@@ -167,14 +187,14 @@ export function WeekView({
                   <div key={item.id}>
                   <Link
                     href={item.href}
-                    title={calendarItemTitle(item)}
+                    title={calendarItemTitle(item, t)}
                     className={cn(
                       "block rounded px-1.5 py-1 text-[11px] font-medium hover:opacity-80",
                       KIND_STYLES[item.kind],
                     )}
                   >
                     <span className="block text-[9.5px]">
-                      {format(item.date, "h:mm a")} · {KIND_PREFIX[item.kind]}
+                      {format(item.date, formats.time, formats.options)} · {kindPrefix(item.kind, t)}
                     </span>
                     <span className={cn("line-clamp-2", item.done && "line-through opacity-70")}>
                       <span className={cn(item.done && "line-through opacity-70")}>
@@ -188,7 +208,7 @@ export function WeekView({
 
                 {dayItems.length === 0 ? (
                   <p className="px-1.5 py-3 text-center text-[11px] text-muted">
-                    Nothing scheduled
+                    {t("calendar.nothingScheduled")}
                   </p>
                 ) : null}
               </div>
@@ -203,7 +223,9 @@ export function WeekView({
 /**
  * Mobile agenda view (§11.2): a linear list rather than a compressed grid.
  */
-export function AgendaView({ items }: { items: CalendarItem[] }) {
+export function AgendaView({ items, locale }: { items: CalendarItem[]; locale: Locale }) {
+  const t = createTranslator(locale);
+  const formats = calendarDateFormats(locale);
   const sorted = [...items].sort((a, b) => a.date.getTime() - b.date.getTime());
   const byDay = new Map<string, CalendarItem[]>();
   for (const item of sorted) {
@@ -216,7 +238,7 @@ export function AgendaView({ items }: { items: CalendarItem[] }) {
   if (sorted.length === 0) {
     return (
       <p className="card px-4 py-8 text-center text-[13px] text-muted">
-        Nothing scheduled in this range.
+        {t("calendar.nothingInRange")}
       </p>
     );
   }
@@ -233,8 +255,8 @@ export function AgendaView({ items }: { items: CalendarItem[] }) {
                 isToday(date) && "text-brand-fg",
               )}
             >
-              {format(date, "EEEE, MMM d")}
-              {isToday(date) ? " · Today" : ""}
+              {format(date, formats.agendaDay, formats.options)}
+              {isToday(date) ? t("calendar.todaySuffix") : ""}
             </p>
             <ul className="card divide-y divide-line">
               {dayItems.map((item) => (
@@ -249,7 +271,7 @@ export function AgendaView({ items }: { items: CalendarItem[] }) {
                         KIND_STYLES[item.kind],
                       )}
                     >
-                      {KIND_PREFIX[item.kind]}
+                      {kindPrefix(item.kind, t)}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-[13.5px]">
                       <span className={cn(item.done && "line-through opacity-70")}>
@@ -258,7 +280,7 @@ export function AgendaView({ items }: { items: CalendarItem[] }) {
                     </span>
                     {item.timed ? (
                       <span className="meta whitespace-nowrap">
-                        {format(item.date, "h:mm a")}
+                        {format(item.date, formats.time, formats.options)}
                       </span>
                     ) : null}
                   </Link>
