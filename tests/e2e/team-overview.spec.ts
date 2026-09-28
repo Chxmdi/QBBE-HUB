@@ -15,10 +15,15 @@ test("the owner sees a staff member with slipped work flagged, with the reason",
     `select organization_id::text from organization_membership where user_id = '${staffId}' limit 1`,
   );
 
-  // Twelve days overdue: past the 7-day threshold on its own.
+  // Twelve days overdue: past the 7-day threshold on its own. Counted from
+  // today in the organization's zone, as the page counts: the database's
+  // current_date is UTC, which from 00:00 to about 04:00 UTC is already a day
+  // ahead of Toronto and made this read "oldest 11 days".
   sql(
     `insert into task (organization_id, title, created_by, assignee_id, status, due_at)
-     values ('${orgId}', '${marker}', '${staffId}', '${staffId}', 'not_started', current_date - 12)`,
+     values ('${orgId}', '${marker}', '${staffId}', '${staffId}', 'not_started',
+       (now() at time zone coalesce(
+         (select timezone from organization where id = '${orgId}'), 'America/Toronto'))::date - 12)`,
   );
 
   try {
