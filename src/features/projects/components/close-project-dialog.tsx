@@ -12,6 +12,7 @@ import {
   getUnresolvedWork,
   type UnresolvedWork,
 } from "@/features/projects/services/project.commands";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Closure flow that surfaces unresolved work before confirmation
@@ -28,6 +29,7 @@ export function CloseProjectDialog({
   documents?: { id: string; title: string }[];
 }) {
   const router = useRouter();
+  const t = useT();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [unresolved, setUnresolved] = useState<UnresolvedWork | null>(null);
@@ -58,10 +60,10 @@ export function CloseProjectDialog({
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not close the project.");
+      setError(result.error ?? t("projects.close.error"));
       return;
     }
-    toast(`“${projectName}” is closed.`);
+    toast(t("projects.close.toast", { name: projectName }));
     setOpen(false);
     router.refresh();
   }
@@ -76,45 +78,65 @@ export function CloseProjectDialog({
   return (
     <>
       <Button variant="secondary" onClick={openDialog}>
-        Close project
+        {t("projects.close.open")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title={`Close “${projectName}”`}>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title={t("projects.close.title", { name: projectName })}
+      >
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Unresolved work, surfaced before the decision */}
           {unresolved === null ? (
-            <p className="text-[13.5px] text-muted">Checking for open work…</p>
+            <p className="text-[13.5px] text-muted">{t("projects.close.checking")}</p>
           ) : hasOpenWork ? (
             <div className="rounded-(--radius-sm) border border-warning/30 bg-warning/10 p-3">
               <p className="flex items-center gap-1.5 text-[13.5px] font-medium text-warning-fg">
                 <AlertTriangle className="size-4" aria-hidden />
-                This project still has open work
+                {t("projects.close.openWork")}
               </p>
               <ul className="mt-1.5 space-y-0.5 text-[13px]">
                 {unresolved.openTasks > 0 ? (
                   <li>
-                    {unresolved.openTasks} open{" "}
-                    {unresolved.openTasks === 1 ? "task" : "tasks"}
+                    {t(
+                      unresolved.openTasks === 1
+                        ? "projects.close.openTasksOne"
+                        : "projects.close.openTasksOther",
+                      { count: unresolved.openTasks },
+                    )}
                     {unresolved.blockedTasks > 0
-                      ? ` (${unresolved.blockedTasks} blocked)`
+                      ? t("projects.close.blocked", { count: unresolved.blockedTasks })
                       : ""}
                   </li>
                 ) : null}
                 {unresolved.openMilestones > 0 ? (
                   <li>
-                    {unresolved.openMilestones} incomplete{" "}
-                    {unresolved.openMilestones === 1 ? "milestone" : "milestones"}
+                    {t(
+                      unresolved.openMilestones === 1
+                        ? "projects.close.openMilestonesOne"
+                        : "projects.close.openMilestonesOther",
+                      { count: unresolved.openMilestones },
+                    )}
                   </li>
                 ) : null}
                 {unresolved.openRisks > 0 ? (
                   <li>
-                    {unresolved.openRisks} live{" "}
-                    {unresolved.openRisks === 1 ? "risk" : "risks"}
+                    {t(
+                      unresolved.openRisks === 1
+                        ? "projects.close.openRisksOne"
+                        : "projects.close.openRisksOther",
+                      { count: unresolved.openRisks },
+                    )}
                   </li>
                 ) : null}
                 {unresolved.openIssues > 0 ? (
                   <li>
-                    {unresolved.openIssues} unresolved{" "}
-                    {unresolved.openIssues === 1 ? "issue" : "issues"}
+                    {t(
+                      unresolved.openIssues === 1
+                        ? "projects.close.openIssuesOne"
+                        : "projects.close.openIssuesOther",
+                      { count: unresolved.openIssues },
+                    )}
                   </li>
                 ) : null}
               </ul>
@@ -122,51 +144,51 @@ export function CloseProjectDialog({
           ) : (
             <p className="flex items-center gap-1.5 rounded-(--radius-sm) bg-success/10 px-3 py-2 text-[13.5px] text-success-fg">
               <CheckCircle2 className="size-4" aria-hidden />
-              No open tasks, milestones, risks or issues remain.
+              {t("projects.close.clear")}
             </p>
           )}
 
           <div>
-            <Label htmlFor="close-results">What did this project deliver?</Label>
+            <Label htmlFor="close-results">{t("projects.close.results")}</Label>
             <Textarea
               id="close-results"
               name="results"
               required
               rows={3}
               maxLength={5000}
-              placeholder="Outcomes achieved, numbers reached, what changed."
+              placeholder={t("projects.close.resultsPlaceholder")}
             />
           </div>
           <div>
             <Label htmlFor="close-lessons">
-              Lessons learned{" "}
-              <span className="font-normal text-muted">(optional)</span>
+              {t("projects.close.lessons")}{" "}
+              <span className="font-normal text-muted">{t("projects.close.optional")}</span>
             </Label>
             <Textarea id="close-lessons" name="lessons" rows={2} maxLength={5000} />
           </div>
 
           <div>
             <Label htmlFor="close-evidence-links">
-              Evidence links{" "}
-              <span className="font-normal text-muted">(optional)</span>
+              {t("projects.close.evidenceLinks")}{" "}
+              <span className="font-normal text-muted">{t("projects.close.optional")}</span>
             </Label>
             <Textarea
               id="close-evidence-links"
               name="evidenceLinks"
               rows={2}
               maxLength={4000}
-              placeholder="Final report|https://…"
+              placeholder={t("projects.close.evidencePlaceholder")}
             />
             <p className="mt-1 text-[12.5px] text-muted">
-              One per line, as <code>Label|https://…</code>. These are what a
-              funder asks for when the paragraph above is not enough.
+              {t("projects.close.evidenceHintBefore")} <code>{t("projects.close.evidenceHintFormat")}</code>
+              {t("projects.close.evidenceHintAfter")}
             </p>
           </div>
 
           {documents.length > 0 ? (
             <fieldset>
               <legend className="mb-1 text-[13.5px] font-medium">
-                Attach project documents as evidence
+                {t("projects.close.attachDocuments")}
               </legend>
               <ul className="max-h-40 space-y-1 overflow-y-auto rounded-(--radius-sm) border border-line p-2">
                 {documents.map((document) => (
@@ -197,11 +219,14 @@ export function CloseProjectDialog({
                 onChange={(e) => setArchiveOpen(e.target.checked)} className="mt-0.5"
               />
               <span>
-                Archive the {unresolved?.openTasks ?? 0} remaining open{" "}
-                {unresolved?.openTasks === 1 ? "task" : "tasks"}
+                {t(
+                  unresolved?.openTasks === 1
+                    ? "projects.close.archiveOne"
+                    : "projects.close.archiveOther",
+                  { count: unresolved?.openTasks ?? 0 },
+                )}
                 <span className="block text-muted">
-                  History and attribution are preserved. Leave unchecked to keep
-                  them active elsewhere.
+                  {t("projects.close.archiveHint")}
                 </span>
               </span>
             </label>
@@ -215,10 +240,10 @@ export function CloseProjectDialog({
 
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("projects.close.cancel")}
             </Button>
             <Button type="submit" loading={saving} disabled={unresolved === null}>
-              Close project
+              {t("projects.close.submit")}
             </Button>
           </div>
         </form>

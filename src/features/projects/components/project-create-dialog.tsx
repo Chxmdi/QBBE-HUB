@@ -8,6 +8,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import { createProject } from "@/features/projects/services/project.commands";
+import { priorityLabel, stageLabel } from "@/components/shared/status-badges";
+import { useT } from "@/lib/i18n/client";
 
 export function ProjectCreateDialog({
   programs,
@@ -21,6 +23,7 @@ export function ProjectCreateDialog({
   defaultOpen?: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -46,7 +49,7 @@ export function ProjectCreateDialog({
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong.");
+      setError(result.error ?? t("projects.create.error"));
       return;
     }
     setOpen(false);
@@ -61,37 +64,37 @@ export function ProjectCreateDialog({
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus className="size-4" aria-hidden />
-        New project
+        {t("projects.create.open")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Create project">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("projects.create.title")}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="project-name">Name</Label>
+            <Label htmlFor="project-name">{t("projects.create.name")}</Label>
             <Input id="project-name" name="name" required maxLength={200} autoFocus />
           </div>
           <div>
-            <Label htmlFor="project-outcome">Intended outcome</Label>
+            <Label htmlFor="project-outcome">{t("projects.create.outcome")}</Label>
             <Textarea
               id="project-outcome"
               name="outcome"
               maxLength={2000}
-              placeholder="What clear result should this project deliver?"
+              placeholder={t("projects.create.outcomePlaceholder")}
             />
           </div>
           <div>
-            <Label htmlFor="project-description">Description</Label>
+            <Label htmlFor="project-description">{t("projects.create.description")}</Label>
             <Textarea
               id="project-description"
               name="description"
               maxLength={5000}
-              placeholder="Background a newcomer would need."
+              placeholder={t("projects.create.descriptionPlaceholder")}
             />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="project-program">Program</Label>
+              <Label htmlFor="project-program">{t("projects.create.program")}</Label>
               <Select id="project-program" name="programId" defaultValue="">
-                <option value="">No program</option>
+                <option value="">{t("projects.create.noProgram")}</option>
                 {programs.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -100,9 +103,9 @@ export function ProjectCreateDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="project-owner">Accountable owner</Label>
+              <Label htmlFor="project-owner">{t("projects.create.owner")}</Label>
               <Select id="project-owner" name="ownerId" defaultValue="">
-                <option value="">Me</option>
+                <option value="">{t("projects.create.me")}</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -111,9 +114,9 @@ export function ProjectCreateDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="project-sponsor">Sponsor</Label>
+              <Label htmlFor="project-sponsor">{t("projects.create.sponsor")}</Label>
               <Select id="project-sponsor" name="sponsorId" defaultValue="">
-                <option value="">No sponsor</option>
+                <option value="">{t("projects.create.noSponsor")}</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -122,34 +125,35 @@ export function ProjectCreateDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="project-priority">Priority</Label>
+              <Label htmlFor="project-priority">{t("projects.create.priority")}</Label>
               <Select id="project-priority" name="priority" defaultValue="medium">
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
+                {(["low", "medium", "high", "critical"] as const).map((value) => (
+                  <option key={value} value={value}>
+                    {priorityLabel(value, t)}
+                  </option>
+                ))}
               </Select>
             </div>
             <div>
-              <Label htmlFor="project-start">Start date</Label>
+              <Label htmlFor="project-start">{t("projects.create.startDate")}</Label>
               <Input id="project-start" name="startDate" type="date" />
             </div>
             <div>
-              <Label htmlFor="project-target">Target date</Label>
+              <Label htmlFor="project-target">{t("projects.create.targetDate")}</Label>
               <Input id="project-target" name="targetDate" type="date" />
             </div>
             <div>
-              <Label htmlFor="project-cadence">Reporting cadence</Label>
+              <Label htmlFor="project-cadence">{t("projects.create.cadence")}</Label>
               <Select id="project-cadence" name="reportingCadence" defaultValue="none">
-                <option value="none">As needed</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
+                <option value="none">{t("projects.create.asNeeded")}</option>
+                <option value="weekly">{t("projects.create.weekly")}</option>
+                <option value="monthly">{t("projects.create.monthly")}</option>
               </Select>
             </div>
             <div>
-              <Label htmlFor="project-funding">Funding source</Label>
+              <Label htmlFor="project-funding">{t("projects.create.funding")}</Label>
               <Select id="project-funding" name="fundingSourceId" defaultValue="">
-                <option value="">None</option>
+                <option value="">{t("projects.create.none")}</option>
                 {funders.map((funder) => (
                   <option key={funder.id} value={funder.id}>
                     {funder.label}
@@ -158,12 +162,13 @@ export function ProjectCreateDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="project-stage">Stage</Label>
+              <Label htmlFor="project-stage">{t("projects.create.stage")}</Label>
               <Select id="project-stage" name="stage" defaultValue="planning">
-                <option value="proposed">Proposed</option>
-                <option value="approved">Approved</option>
-                <option value="planning">Planning</option>
-                <option value="active">Active</option>
+                {(["proposed", "approved", "planning", "active"] as const).map((value) => (
+                  <option key={value} value={value}>
+                    {stageLabel(value, t)}
+                  </option>
+                ))}
               </Select>
             </div>
           </div>
@@ -174,10 +179,10 @@ export function ProjectCreateDialog({
           ) : null}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("projects.create.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              Create project
+              {t("projects.create.submit")}
             </Button>
           </div>
         </form>

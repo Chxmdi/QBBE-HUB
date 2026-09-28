@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { hasProgramCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import { localizeIssue } from "@/features/projects/i18n";
 import { requiredText } from "@/lib/schema";
 import { parseLabelledLinks } from "@/lib/links";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -21,12 +23,13 @@ const editSchema = z.object({
 });
 
 export async function updateProgram(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = editSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  if (!parsed.success) return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "programs.errors.invalidInput") };
   const db = await createSupabaseServerClient();
   if (!(await hasProgramCapability(db, parsed.data.id, "manage"))) {
-    return { ok: false, error: "You cannot manage this program." };
+    return { ok: false, error: t("programs.errors.cannotManage") };
   }
   const { id, name, description, status, color, importantLinks, leadId } = parsed.data;
   const links = parseLabelledLinks(importantLinks);
@@ -54,7 +57,7 @@ export async function updateProgram(input: unknown): Promise<ActionResult> {
         .eq("status", "active")
         .maybeSingle();
       if (!member) {
-        return { ok: false, error: "Choose an active member of this workspace as the program lead." };
+        return { ok: false, error: t("programs.errors.leadMustBeMember") };
       }
     }
     patch.lead_id = leadId || null;
@@ -64,7 +67,7 @@ export async function updateProgram(input: unknown): Promise<ActionResult> {
     .update(patch)
     .eq("id", id).eq("organization_id", session.organizationId)
     .select("id").maybeSingle();
-  if (error || !data) return { ok: false, error: "Could not save the program. Please try again." };
+  if (error || !data) return { ok: false, error: t("programs.errors.saveFailed") };
   revalidatePath("/", "layout");
   return { ok: true, id };
 }

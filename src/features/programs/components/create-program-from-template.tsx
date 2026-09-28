@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createProgramFromTemplate } from "@/features/programs/services/program-template.commands";
 import { Select } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
 
 export function CreateProgramFromTemplateButton({
   templates,
@@ -11,6 +12,7 @@ export function CreateProgramFromTemplateButton({
   templates: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -25,7 +27,7 @@ export function CreateProgramFromTemplateButton({
     const result = await createProgramFromTemplate(templateId);
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not use the template.");
+      setError(result.error ?? t("programs.fromTemplate.error"));
       return;
     }
     if (result.id) router.push(`/programs/${result.id}`);
@@ -35,7 +37,7 @@ export function CreateProgramFromTemplateButton({
   return (
     <div>
       <label className="sr-only" htmlFor="program-template">
-        Create program from template
+        {t("programs.fromTemplate.label")}
       </label>
       <Select
         id="program-template"
@@ -44,7 +46,7 @@ export function CreateProgramFromTemplateButton({
         disabled={busy}
         onChange={(e) => void handleChange(e.target.value)}
       >
-        <option value="">{busy ? "Creating…" : "From template…"}</option>
+        <option value="">{busy ? t("programs.fromTemplate.creating") : t("programs.fromTemplate.placeholder")}</option>
         {templates.map((t) => (
           <option key={t.id} value={t.id}>
             {t.name}

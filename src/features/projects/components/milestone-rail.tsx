@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import {
-  MILESTONE_STATUS_LABELS,
+  milestoneStatusLabel,
   OPEN_MILESTONE_STATUSES,
   type MilestoneStatus,
 } from "@/features/projects/schemas";
@@ -24,7 +24,7 @@ import {
 } from "@/features/tasks/services/planning.commands";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import type { Milestone } from "@/types/entities";
-import { formatDate } from "@/lib/utils";
+import { useFormatters, useT } from "@/lib/i18n/client";
 
 const STATUS_TONE: Record<MilestoneStatus, "neutral" | "info" | "success" | "danger"> = {
   planned: "neutral",
@@ -60,6 +60,8 @@ export function MilestoneRail({
   dependencies?: { blocking_milestone_id: string; blocked_milestone_id: string }[];
 }) {
   const router = useRouter();
+  const t = useT();
+  const format = useFormatters();
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [editing, setEditing] = React.useState<Milestone | null>(null);
@@ -71,7 +73,7 @@ export function MilestoneRail({
     const result = await work();
     setBusy(null);
     if (!result.ok) {
-      setError(result.error ?? "That did not work.");
+      setError(result.error ?? t("projects.milestones.error"));
       return false;
     }
     router.refresh();
@@ -85,7 +87,7 @@ export function MilestoneRail({
       .filter((edge) => edge.blocked_milestone_id === milestoneId)
       .map((edge) => ({
         id: edge.blocking_milestone_id,
-        name: nameById.get(edge.blocking_milestone_id) ?? "A milestone elsewhere",
+        name: nameById.get(edge.blocking_milestone_id) ?? t("projects.milestones.elsewhere"),
       }));
   }
 
@@ -114,7 +116,7 @@ export function MilestoneRail({
   if (milestones.length === 0) {
     return (
       <p className="card px-4 py-6 text-center text-[13px] text-muted">
-        No milestones defined.
+        {t("projects.milestones.empty")}
       </p>
     );
   }
@@ -137,10 +139,10 @@ export function MilestoneRail({
                 {completed ? (
                   <CheckCircle2
                     className="size-4 shrink-0 text-success-fg"
-                    aria-label="Completed"
+                    aria-label={t("projects.milestones.completedIcon")}
                   />
                 ) : (
-                  <Circle className="size-4 shrink-0 text-muted/50" aria-label="Open" />
+                  <Circle className="size-4 shrink-0 text-muted/50" aria-label={t("projects.milestones.openIcon")} />
                 )}
                 {/*
                   The row's title, and addressable as one. Every row now carries
@@ -154,15 +156,15 @@ export function MilestoneRail({
                   {milestone.name}
                 </h3>
                 <Badge tone={STATUS_TONE[status]}>
-                  {MILESTONE_STATUS_LABELS[status]}
+                  {milestoneStatusLabel(status, t)}
                 </Badge>
                 <span className="meta whitespace-nowrap">
-                  {formatDate(milestone.due_date)}
+                  {format.date(milestone.due_date)}
                 </span>
               </div>
 
               <p className="meta mt-0.5 pl-6.5">
-                {milestone.owner?.full_name ?? "Nobody named"}
+                {milestone.owner?.full_name ?? t("projects.milestones.nobody")}
               </p>
 
               {milestone.description ? (
@@ -171,21 +173,24 @@ export function MilestoneRail({
 
               {milestone.evidence ? (
                 <p className="mt-0.5 pl-6.5 text-[13px]">
-                  <span className="text-muted">Evidence: </span>
+                  <span className="text-muted">{t("projects.milestones.evidence")}</span>
                   {milestone.evidence}
                 </p>
               ) : null}
 
               {blockersOf(milestone.id).length > 0 ? (
                 <p className="mt-0.5 pl-6.5 text-[13px]">
-                  <span className="text-muted">Blocked by: </span>
+                  <span className="text-muted">{t("projects.milestones.blockedBy")}</span>
                   {blockersOf(milestone.id).map((blocker) => (
                     <span key={blocker.id} className="mr-2 inline-flex items-center gap-1">
                       {blocker.name}
                       {canManage ? (
                         <button
                           type="button"
-                          aria-label={`Remove ${blocker.name} as a blocker of ${milestone.name}`}
+                          aria-label={t("projects.milestones.removeBlocker", {
+                            blocker: blocker.name,
+                            milestone: milestone.name,
+                          })}
                           className="text-[12px] text-muted hover:underline"
                           disabled={busy === milestone.id}
                           onClick={() =>
@@ -205,7 +210,7 @@ export function MilestoneRail({
               {canManage && availableBlockers(milestone.id).length > 0 ? (
                 <div className="mt-1 pl-6.5">
                   <label className="sr-only" htmlFor={`blocker-${milestone.id}`}>
-                    Add a blocker for {milestone.name}
+                    {t("projects.milestones.addBlockerLabel", { milestone: milestone.name })}
                   </label>
                   {/* The list offered already excludes this milestone and the
                       ones it blocks, so the obvious cycles cannot be chosen at
@@ -229,7 +234,7 @@ export function MilestoneRail({
                       );
                     }}
                   >
-                    <option value="">Add a blocker…</option>
+                    <option value="">{t("projects.milestones.addBlocker")}</option>
                     {availableBlockers(milestone.id).map((option) => (
                       <option key={option.id} value={option.id}>
                         {option.name}
@@ -256,14 +261,14 @@ export function MilestoneRail({
                         : setCompleting(milestone)
                     }
                   >
-                    {completed ? "Reopen" : "Complete"}
+                    {completed ? t("projects.milestones.reopen") : t("projects.milestones.complete")}
                   </button>
                   <button
                     type="button"
                     className="text-[12.5px] font-medium text-brand-fg hover:underline"
                     onClick={() => setEditing(milestone)}
                   >
-                    Edit
+                    {t("projects.milestones.edit")}
                   </button>
                   <button
                     type="button"
@@ -271,12 +276,12 @@ export function MilestoneRail({
                     disabled={busy === milestone.id}
                     onClick={() => void run(milestone.id, () => deleteMilestone(milestone.id))}
                   >
-                    Delete
+                    {t("projects.milestones.delete")}
                   </button>
                   <span className="ml-auto flex items-center gap-1">
                     <button
                       type="button"
-                      aria-label={`Move ${milestone.name} up`}
+                      aria-label={t("projects.milestones.moveUp", { name: milestone.name })}
                       className="rounded-(--radius-sm) p-1 text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-40"
                       disabled={index === 0 || busy === milestone.id}
                       onClick={() =>
@@ -289,7 +294,7 @@ export function MilestoneRail({
                     </button>
                     <button
                       type="button"
-                      aria-label={`Move ${milestone.name} down`}
+                      aria-label={t("projects.milestones.moveDown", { name: milestone.name })}
                       className="rounded-(--radius-sm) p-1 text-muted hover:bg-surface-soft hover:text-ink disabled:opacity-40"
                       disabled={index === milestones.length - 1 || busy === milestone.id}
                       onClick={() =>
@@ -311,7 +316,11 @@ export function MilestoneRail({
       <Dialog
         open={completing !== null}
         onClose={() => setCompleting(null)}
-        title={completing ? `Complete “${completing.name}”` : "Complete milestone"}
+        title={
+          completing
+            ? t("projects.milestones.completeTitle", { name: completing.name })
+            : t("projects.milestones.completeTitleFallback")
+        }
       >
         <form
           className="space-y-4"
@@ -331,7 +340,7 @@ export function MilestoneRail({
         >
           <div>
             <Label htmlFor="milestone-evidence">
-              What shows this milestone was met?
+              {t("projects.milestones.evidenceLabel")}
             </Label>
             <Textarea
               id="milestone-evidence"
@@ -339,19 +348,18 @@ export function MilestoneRail({
               required
               rows={3}
               maxLength={2000}
-              placeholder="The signed contract, the attendance sheet, the published page."
+              placeholder={t("projects.milestones.evidencePlaceholder")}
             />
             <p className="mt-1 text-[12.5px] text-muted">
-              Kept with the milestone. Reopening it clears this, because evidence
-              for a completion that was undone is evidence for nothing.
+              {t("projects.milestones.evidenceHint")}
             </p>
           </div>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setCompleting(null)}>
-              Cancel
+              {t("projects.milestones.cancel")}
             </Button>
             <Button type="submit" loading={busy === completing?.id}>
-              Complete
+              {t("projects.milestones.complete")}
             </Button>
           </div>
         </form>
@@ -360,7 +368,11 @@ export function MilestoneRail({
       <Dialog
         open={editing !== null}
         onClose={() => setEditing(null)}
-        title={editing ? `Edit “${editing.name}”` : "Edit milestone"}
+        title={
+          editing
+            ? t("projects.milestones.editTitle", { name: editing.name })
+            : t("projects.milestones.editTitleFallback")
+        }
       >
         {editing ? (
           <form
@@ -382,7 +394,7 @@ export function MilestoneRail({
             }}
           >
             <div>
-              <Label htmlFor="edit-milestone-name">Name</Label>
+              <Label htmlFor="edit-milestone-name">{t("projects.milestones.name")}</Label>
               <Input
                 id="edit-milestone-name"
                 name="name"
@@ -392,7 +404,7 @@ export function MilestoneRail({
               />
             </div>
             <div>
-              <Label htmlFor="edit-milestone-description">Description</Label>
+              <Label htmlFor="edit-milestone-description">{t("projects.milestones.description")}</Label>
               <Textarea
                 id="edit-milestone-description"
                 name="description"
@@ -403,13 +415,13 @@ export function MilestoneRail({
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="edit-milestone-owner">Owner</Label>
+                <Label htmlFor="edit-milestone-owner">{t("projects.milestones.owner")}</Label>
                 <Select
                   id="edit-milestone-owner"
                   name="ownerId"
                   defaultValue={editing.owner_id ?? ""}
                 >
-                  <option value="">Nobody named</option>
+                  <option value="">{t("projects.milestones.nobody")}</option>
                   {people.map((person) => (
                     <option key={person.id} value={person.id}>
                       {person.label}
@@ -418,7 +430,7 @@ export function MilestoneRail({
                 </Select>
               </div>
               <div>
-                <Label htmlFor="edit-milestone-due">Target date</Label>
+                <Label htmlFor="edit-milestone-due">{t("projects.milestones.targetDate")}</Label>
                 <Input
                   id="edit-milestone-due"
                   name="dueDate"
@@ -427,7 +439,7 @@ export function MilestoneRail({
                 />
               </div>
               <div>
-                <Label htmlFor="edit-milestone-status">Status</Label>
+                <Label htmlFor="edit-milestone-status">{t("projects.milestones.statusLabel")}</Label>
                 <Select
                   id="edit-milestone-status"
                   name="status"
@@ -438,23 +450,23 @@ export function MilestoneRail({
                 >
                   {OPEN_MILESTONE_STATUSES.map((value) => (
                     <option key={value} value={value}>
-                      {MILESTONE_STATUS_LABELS[value]}
+                      {milestoneStatusLabel(value, t)}
                     </option>
                   ))}
                 </Select>
                 <p className="mt-1 text-[12.5px] text-muted">
                   {editing.completed_at
-                    ? "Reopen the milestone to change this."
-                    : "Missed is only available once the target date has passed."}
+                    ? t("projects.milestones.reopenToChange")
+                    : t("projects.milestones.missedHint")}
                 </p>
               </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setEditing(null)}>
-                Cancel
+                {t("projects.milestones.cancel")}
               </Button>
               <Button type="submit" loading={busy === editing.id}>
-                Save milestone
+                {t("projects.milestones.save")}
               </Button>
             </div>
           </form>

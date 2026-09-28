@@ -9,13 +9,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { OutcomesPanel } from "@/features/outcomes/components/outcomes-panel";
 import { ProgramEditDialog } from "@/features/programs/components/program-edit-dialog";
 import { getProgramOutcomes } from "@/features/outcomes/services/outcome.queries";
-import { summarizeProjectHealth } from "@/features/dashboard/health";
+import { healthSummaryLabel, summarizeProjectHealth } from "@/features/dashboard/health";
 import { programAccent } from "@/features/programs/colors";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { hasProgramCapability } from "@/lib/access-capabilities";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDate, formatDateTime, relativeTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import { accessRoleLabel, accessSourceLabel } from "@/features/projects/i18n";
 import type {
   ActivityEvent,
   EventRecord,
@@ -23,7 +24,9 @@ import type {
   ProjectHealth,
 } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Program" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("programs.detailMetaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function ProgramDetailPage({
@@ -34,6 +37,8 @@ export default async function ProgramDetailPage({
   await requireSession();
   const { id } = await params;
   const supabase = await createSupabasePageClient();
+  const t = await getT();
+  const format = await getFormatters();
   const canManage = await hasProgramCapability(supabase, id, "manage");
 
   const { data: program } = await supabase
@@ -119,7 +124,7 @@ export default async function ProgramDetailPage({
   return (
     <div>
       <Breadcrumbs
-        items={[{ label: "Programs", href: "/programs" }, { label: program.name }]}
+        items={[{ label: t("programs.list.title"), href: "/programs" }, { label: program.name }]}
       />
       {/* Wayfinding only: the title beside it carries the meaning. */}
       <div
@@ -128,7 +133,7 @@ export default async function ProgramDetailPage({
         style={{ background: programAccent(program.color) }}
       />
       <PageHeader
-        eyebrow="Program"
+        eyebrow={t("programs.detail.eyebrow")}
         title={program.name}
         description={program.description ?? undefined}
         actions={
@@ -138,14 +143,14 @@ export default async function ProgramDetailPage({
           ) : null}
           <span className="flex items-center gap-2 text-[13.5px]">
             <HealthBadge health={rollUp.health} />
-            <span className="meta">{rollUp.statusLabel}</span>
+            <span className="meta">{healthSummaryLabel(rollUp.statusLabel, t)}</span>
           </span>
           {lead ? (
             <span className="flex items-center gap-2 text-[13.5px]">
               <Avatar name={lead.full_name} src={lead.avatar_url} size="md" />
               <span>
                 <span className="block font-medium">{lead.full_name}</span>
-                <span className="meta">Program lead</span>
+                <span className="meta">{t("programs.detail.lead")}</span>
               </span>
             </span>
           ) : null}
@@ -172,11 +177,11 @@ export default async function ProgramDetailPage({
         <section aria-labelledby="program-updates" className="space-y-8">
           <div>
             <h2 id="program-updates" className="section-heading mb-3">
-              Latest updates
+              {t("programs.detail.updatesHeading")}
             </h2>
             {(updates ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No project in this program has published a status update yet.
+                {t("programs.detail.updatesEmpty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -194,11 +199,11 @@ export default async function ProgramDetailPage({
                         href={`/projects/${update.project_id}?tab=updates`}
                         className="text-[13.5px] font-medium hover:text-brand-fg"
                       >
-                        {projectNameById.get(update.project_id) ?? "Project"}
+                        {projectNameById.get(update.project_id) ?? t("programs.detail.projectFallback")}
                       </Link>
                       <HealthBadge health={update.health} />
                       <span className="meta ml-auto">
-                        {relativeTime(update.created_at)}
+                        {format.relative(update.created_at)}
                       </span>
                     </div>
                     <p className="mt-1 text-[13px] text-muted">
@@ -215,7 +220,7 @@ export default async function ProgramDetailPage({
 
           {importantLinks.length > 0 ? (
             <div>
-              <h2 className="section-heading mb-3">Important links</h2>
+              <h2 className="section-heading mb-3">{t("programs.detail.linksHeading")}</h2>
               <ul className="card divide-y divide-line">
                 {importantLinks.map((link) => (
                   <li key={`${link.label}:${link.url}`} className="px-4 py-2.5">
@@ -238,12 +243,12 @@ export default async function ProgramDetailPage({
 
         <section aria-labelledby="program-projects">
           <h2 id="program-projects" className="section-heading mb-3">
-            Projects
+            {t("programs.detail.projectsHeading")}
           </h2>
           {(projects ?? []).length === 0 ? (
             <EmptyState
-              title="No projects in this program"
-              description="Projects created under this program will appear here with health and ownership."
+              title={t("programs.detail.projectsEmptyTitle")}
+              description={t("programs.detail.projectsEmptyBody")}
             />
           ) : (
             <ul className="card divide-y divide-line">
@@ -261,7 +266,7 @@ export default async function ProgramDetailPage({
                     ) : null}
                   </div>
                   <span className="meta whitespace-nowrap">
-                    {formatDate(project.target_date)}
+                    {format.date(project.target_date)}
                   </span>
                   <StageBadge stage={project.stage} />
                   <HealthBadge health={project.health} />
@@ -274,11 +279,11 @@ export default async function ProgramDetailPage({
         <div className="space-y-8">
           <section aria-labelledby="program-team">
             <h2 id="program-team" className="section-heading mb-3">
-              Team
+              {t("programs.detail.teamHeading")}
             </h2>
             {(grants ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                Nobody holds explicit access to this program yet.
+                {t("programs.detail.teamEmpty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -293,17 +298,21 @@ export default async function ProgramDetailPage({
                     className="flex items-center gap-2.5 px-4 py-2.5"
                   >
                     <Avatar
-                      name={grant.member?.full_name ?? "Unknown"}
+                      name={grant.member?.full_name ?? t("projects.access.unknown")}
                       src={grant.member?.avatar_url ?? null}
                       size="xs"
                     />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13.5px] font-medium">
-                        {grant.member?.full_name ?? "Unknown member"}
+                        {grant.member?.full_name ?? t("projects.access.unknownMember")}
                       </span>
                       <span className="meta">
-                        {grant.role.replaceAll("_", " ")}
-                        {grant.source === "direct" ? "" : ` · via ${grant.source.replaceAll("_", " ")}`}
+                        {accessRoleLabel(grant.role, t)}
+                        {grant.source === "direct"
+                          ? ""
+                          : t("projects.access.via", {
+                              source: accessSourceLabel(grant.source, t),
+                            })}
                       </span>
                     </span>
                   </li>
@@ -312,22 +321,22 @@ export default async function ProgramDetailPage({
             )}
             {canManage ? (
               <p className="meta mt-2">
-                Access is granted by an administrator in{" "}
+                {t("projects.access.grantedBefore")}{" "}
                 <Link href="/admin/access" className="hover:underline">
-                  access administration
+                  {t("projects.access.grantedLink")}
                 </Link>
-                .
+                {t("projects.access.grantedAfter")}
               </p>
             ) : null}
           </section>
 
           <section aria-labelledby="program-events">
             <h2 id="program-events" className="section-heading mb-3">
-              Upcoming events
+              {t("programs.detail.eventsHeading")}
             </h2>
             {(events ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No events scheduled for this program.
+                {t("programs.detail.eventsEmpty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -340,7 +349,7 @@ export default async function ProgramDetailPage({
                       {event.name}
                     </Link>
                     <p className="meta">
-                      {formatDateTime(event.starts_at)}
+                      {format.dateTime(event.starts_at)}
                       {event.location ? ` · ${event.location}` : ""}
                     </p>
                   </li>
@@ -351,11 +360,11 @@ export default async function ProgramDetailPage({
 
           <section aria-labelledby="program-activity">
             <h2 id="program-activity" className="section-heading mb-3">
-              Activity
+              {t("programs.detail.activityHeading")}
             </h2>
             {(activity ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No recorded activity yet.
+                {t("programs.detail.activityEmpty")}
               </p>
             ) : (
               <ol className="card divide-y divide-line">
@@ -363,11 +372,11 @@ export default async function ProgramDetailPage({
                   <li key={event.id} className="px-4 py-2.5">
                     <p className="text-[13px]">
                       <span className="font-medium">
-                        {event.actor?.full_name ?? "System"}
+                        {event.actor?.full_name ?? t("common.system")}
                       </span>{" "}
                       {event.summary}
                     </p>
-                    <p className="meta">{relativeTime(event.created_at)}</p>
+                    <p className="meta">{format.relative(event.created_at)}</p>
                   </li>
                 ))}
               </ol>

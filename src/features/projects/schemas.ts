@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Milestones.
@@ -27,6 +28,11 @@ export const MILESTONE_STATUS_LABELS: Record<MilestoneStatus, string> = {
   completed: "Completed",
   missed: "Missed",
 };
+
+/** A milestone status in the reader's language (#141). */
+export function milestoneStatusLabel(status: MilestoneStatus, t: TranslateFn): string {
+  return t(`projects.milestones.status.${status}`);
+}
 
 /** Statuses a milestone can be put into without completing it. */
 export const OPEN_MILESTONE_STATUSES: MilestoneStatus[] = [

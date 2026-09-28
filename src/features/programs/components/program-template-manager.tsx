@@ -9,6 +9,7 @@ import {
   removeProjectTemplateFromProgram,
   setProgramTemplateApproval,
 } from "@/features/programs/services/program-template.commands";
+import { useT } from "@/lib/i18n/client";
 
 type ProgramTemplate = {
   id: string;
@@ -33,6 +34,7 @@ export function ProgramTemplateManager({
   projectTemplates: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +44,7 @@ export function ProgramTemplateManager({
     const result = await work();
     setPending(null);
     if (!result.ok) {
-      setError(result.error ?? "Could not update the template.");
+      setError(result.error ?? t("programs.templates.error"));
       return;
     }
     router.refresh();
@@ -51,7 +53,7 @@ export function ProgramTemplateManager({
   if (templates.length === 0) {
     return (
       <p className="card px-4 py-6 text-center text-[13px] text-muted">
-        No program templates yet. Save one to define a reusable structure.
+        {t("programs.templates.empty")}
       </p>
     );
   }
@@ -82,7 +84,9 @@ export function ProgramTemplateManager({
                       : "text-[12px] text-muted"
                   }
                 >
-                  {template.approved_at ? "Approved" : "Not approved"}
+                  {template.approved_at
+                    ? t("programs.templates.approved")
+                    : t("programs.templates.notApproved")}
                 </span>
                 <Button
                   variant="secondary"
@@ -94,7 +98,9 @@ export function ProgramTemplateManager({
                     )
                   }
                 >
-                  {template.approved_at ? "Withdraw approval" : "Approve"}
+                  {template.approved_at
+                    ? t("programs.templates.withdraw")
+                    : t("programs.templates.approve")}
                 </Button>
               </div>
 
@@ -109,7 +115,10 @@ export function ProgramTemplateManager({
                       <button
                         type="button"
                         className="text-muted hover:text-danger-fg"
-                        aria-label={`Remove ${project.name} from ${template.name}`}
+                        aria-label={t("programs.templates.remove", {
+                          item: project.name,
+                          template: template.name,
+                        })}
                         disabled={pending === template.id}
                         onClick={() =>
                           void run(template.id, () =>
@@ -127,14 +136,14 @@ export function ProgramTemplateManager({
                 </ul>
               ) : (
                 <p className="meta">
-                  No project templates yet: this would create an empty program.
+                  {t("programs.templates.noProjects")}
                 </p>
               )}
 
               {available.length > 0 ? (
                 <div>
                   <Label htmlFor={`add-${template.id}`} className="sr-only">
-                    Add a project template to {template.name}
+                    {t("programs.templates.addLabel", { template: template.name })}
                   </Label>
                   <Select
                     id={`add-${template.id}`}
@@ -152,7 +161,7 @@ export function ProgramTemplateManager({
                       );
                     }}
                   >
-                    <option value="">Add a project template…</option>
+                    <option value="">{t("programs.templates.addPlaceholder")}</option>
                     {available.map((candidate) => (
                       <option key={candidate.id} value={candidate.id}>
                         {candidate.name}

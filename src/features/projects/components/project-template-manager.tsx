@@ -8,6 +8,7 @@ import {
   addProjectTemplateItem,
   removeProjectTemplateItem,
 } from "@/features/admin/services/workflow.commands";
+import { useT } from "@/lib/i18n/client";
 
 type TemplateItem = {
   id: string;
@@ -42,6 +43,7 @@ export function ProjectTemplateManager({
   templates: ProjectTemplate[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +53,7 @@ export function ProjectTemplateManager({
     const result = await work();
     setPending(null);
     if (!result.ok) {
-      setError(result.error ?? "Could not update the template.");
+      setError(result.error ?? t("projects.templates.error"));
       return false;
     }
     router.refresh();
@@ -63,7 +65,7 @@ export function ProjectTemplateManager({
   return (
     <section aria-labelledby="project-template-structure" className="mt-8">
       <h2 id="project-template-structure" className="section-heading mb-3">
-        Template structure
+        {t("projects.templates.heading")}
       </h2>
       {error ? (
         <p role="alert" className="mb-2 text-[13px] text-danger-fg">
@@ -81,7 +83,7 @@ export function ProjectTemplateManager({
 
               {items.length === 0 ? (
                 <p className="meta">
-                  Nothing yet: a project built from this arrives empty.
+                  {t("projects.templates.empty")}
                 </p>
               ) : (
                 <ul className="space-y-1">
@@ -91,20 +93,25 @@ export function ProjectTemplateManager({
                       className="flex flex-wrap items-center gap-2 text-[13px]"
                     >
                       <span className="rounded-(--radius-sm) border border-line px-1.5 py-0.5 text-[12px] text-muted">
-                        {item.kind === "milestone" ? "Milestone" : "Task"}
+                        {item.kind === "milestone"
+                          ? t("projects.templates.milestone")
+                          : t("projects.templates.task")}
                       </span>
                       <span>{item.name}</span>
                       <span className="text-muted">
                         {item.day_offset === null
-                          ? "no date"
+                          ? t("projects.templates.noDate")
                           : item.day_offset === 0
-                            ? "on the start day"
-                            : `day ${item.day_offset}`}
+                            ? t("projects.templates.startDay")
+                            : t("projects.templates.day", { day: item.day_offset })}
                       </span>
                       <button
                         type="button"
                         className="ml-auto text-muted hover:text-danger-fg"
-                        aria-label={`Remove ${item.name} from ${template.name}`}
+                        aria-label={t("projects.templates.remove", {
+                          item: item.name,
+                          template: template.name,
+                        })}
                         disabled={pending === template.id}
                         onClick={() =>
                           void run(template.id, () =>
@@ -139,14 +146,14 @@ export function ProjectTemplateManager({
                 }}
               >
                 <div>
-                  <Label htmlFor={`kind-${template.id}`}>Kind</Label>
+                  <Label htmlFor={`kind-${template.id}`}>{t("projects.templates.kind")}</Label>
                   <Select id={`kind-${template.id}`} name="kind" defaultValue="task">
-                    <option value="task">Task</option>
-                    <option value="milestone">Milestone</option>
+                    <option value="task">{t("projects.templates.task")}</option>
+                    <option value="milestone">{t("projects.templates.milestone")}</option>
                   </Select>
                 </div>
                 <div className="min-w-48 flex-1">
-                  <Label htmlFor={`item-name-${template.id}`}>Name</Label>
+                  <Label htmlFor={`item-name-${template.id}`}>{t("projects.templates.name")}</Label>
                   <Input
                     id={`item-name-${template.id}`}
                     name="name"
@@ -155,7 +162,7 @@ export function ProjectTemplateManager({
                   />
                 </div>
                 <div className="w-28">
-                  <Label htmlFor={`offset-${template.id}`}>Day</Label>
+                  <Label htmlFor={`offset-${template.id}`}>{t("projects.templates.dayLabel")}</Label>
                   <Input
                     id={`offset-${template.id}`}
                     name="dayOffset"
@@ -166,7 +173,7 @@ export function ProjectTemplateManager({
                   />
                 </div>
                 <Button type="submit" size="sm" disabled={pending === template.id}>
-                  Add
+                  {t("projects.templates.add")}
                 </Button>
               </form>
             </li>

@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createNotifications } from "@/features/jobs/services/notify";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import { localizeIssue, recipientTranslators } from "@/features/projects/i18n";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
   affectedRecordList,
@@ -24,12 +26,13 @@ import {
 export async function recordProjectDecision(
   input: unknown,
 ): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = recordProjectDecisionSchema.safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: localizeIssue(t, parsed.error.issues[0]?.message, "risks.errors.invalidInput"),
     };
   }
   const data = parsed.data;
@@ -53,7 +56,7 @@ export async function recordProjectDecision(
   if (error || !decision) {
     return {
       ok: false,
-      error: "You don't have permission to record a decision on this project.",
+      error: t("risks.errors.noDecisionPermission"),
     };
   }
 
@@ -66,7 +69,7 @@ export async function recordProjectDecision(
     if (requestError) {
       return {
         ok: false,
-        error: "The decision was saved, but the request could not be closed.",
+        error: t("risks.errors.requestNotClosed"),
       };
     }
   }
@@ -86,12 +89,13 @@ export async function recordProjectDecision(
 }
 
 export async function reopenDecision(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = reopenDecisionSchema.safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: localizeIssue(t, parsed.error.issues[0]?.message, "risks.errors.invalidInput"),
     };
   }
   const supabase = await createSupabaseServerClient();
@@ -102,7 +106,7 @@ export async function reopenDecision(input: unknown): Promise<ActionResult> {
     .select("id, project_id, title")
     .maybeSingle();
   if (error || !updated)
-    return { ok: false, error: "Could not reopen the decision." };
+    return { ok: false, error: t("risks.errors.reopenFailed") };
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,
@@ -121,12 +125,13 @@ export async function reopenDecision(input: unknown): Promise<ActionResult> {
 export async function createDecisionRequest(
   input: unknown,
 ): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = createDecisionRequestSchema.safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: localizeIssue(t, parsed.error.issues[0]?.message, "risks.errors.invalidInput"),
     };
   }
   const data = parsed.data;
@@ -150,13 +155,12 @@ export async function createDecisionRequest(
     if (message.includes("allowed to read")) {
       return {
         ok: false,
-        error:
-          "That person is not allowed to read this project, so they cannot be asked to decide.",
+        error: t("risks.errors.assigneeCannotRead"),
       };
     }
     return {
       ok: false,
-      error: "You don't have permission to request a decision on this project.",
+      error: t("risks.errors.noRequestPermission"),
     };
   }
 
@@ -164,12 +168,15 @@ export async function createDecisionRequest(
     // Through the shared path: an upsert needs the new row to pass the read
     // policy, which a notification for someone else never does, so this one
     // was refused and the person asked was never told.
+    const assigneeT = (await recipientTranslators(supabase, [data.assigneeId]))(
+      data.assigneeId,
+    );
     await createNotifications(supabase, [
       {
         user_id: data.assigneeId,
         organization_id: session.organizationId,
         category: "assignment",
-        title: "A decision was requested from you",
+        title: assigneeT("risks.notifications.decisionRequested"),
         body: data.context,
         source_type: "decision_request",
         source_id: request.id,
@@ -187,12 +194,13 @@ export async function createDecisionRequest(
 export async function declineDecisionRequest(
   input: unknown,
 ): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = declineDecisionRequestSchema.safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: localizeIssue(t, parsed.error.issues[0]?.message, "risks.errors.invalidInput"),
     };
   }
   const supabase = await createSupabaseServerClient();
@@ -204,7 +212,7 @@ export async function declineDecisionRequest(
     .select("id, project_id")
     .maybeSingle();
   if (error || !updated)
-    return { ok: false, error: "Could not decline the request." };
+    return { ok: false, error: t("risks.errors.declineFailed") };
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,

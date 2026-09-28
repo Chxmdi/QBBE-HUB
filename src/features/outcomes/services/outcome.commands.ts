@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import { localizeIssue } from "@/features/projects/i18n";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
   createMetricSchema,
@@ -20,10 +22,11 @@ import {
  */
 
 export async function recordOperation(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = recordOperationSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "outcomes.errors.invalidInput") };
   }
   const data = parsed.data;
 
@@ -53,7 +56,7 @@ export async function recordOperation(input: unknown): Promise<ActionResult> {
   if (error || !created) {
     return {
       ok: false,
-      error: "You don't have permission to record delivery for this program.",
+      error: t("outcomes.errors.noDeliveryPermission"),
     };
   }
 
@@ -62,10 +65,11 @@ export async function recordOperation(input: unknown): Promise<ActionResult> {
 }
 
 export async function createOutcomeMetric(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = createMetricSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "outcomes.errors.invalidInput") };
   }
   const data = parsed.data;
 
@@ -92,7 +96,7 @@ export async function createOutcomeMetric(input: unknown): Promise<ActionResult>
   if (error || !created) {
     return {
       ok: false,
-      error: "You don't have permission to set outcomes for this program.",
+      error: t("outcomes.errors.noOutcomePermission"),
     };
   }
 
@@ -101,10 +105,11 @@ export async function createOutcomeMetric(input: unknown): Promise<ActionResult>
 }
 
 export async function recordMeasurement(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const parsed = recordMeasurementSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "outcomes.errors.invalidInput") };
   }
   const data = parsed.data;
 
@@ -116,7 +121,7 @@ export async function recordMeasurement(input: unknown): Promise<ActionResult> {
     .maybeSingle();
 
   if (!metric) {
-    return { ok: false, error: "That metric is not available to you." };
+    return { ok: false, error: t("outcomes.errors.metricUnavailable") };
   }
 
   const { error } = await supabase.from("outcome_measurement").insert({
@@ -136,11 +141,10 @@ export async function recordMeasurement(input: unknown): Promise<ActionResult> {
     if (error.code === "23505") {
       return {
         ok: false,
-        error:
-          "There is already a reading for that date. Change the date, or delete the existing one first.",
+        error: t("outcomes.errors.duplicateReading"),
       };
     }
-    return { ok: false, error: "That measurement could not be recorded." };
+    return { ok: false, error: t("outcomes.errors.measurementFailed") };
   }
 
   revalidatePath(`/programs/${metric.program_id}`);
@@ -148,6 +152,7 @@ export async function recordMeasurement(input: unknown): Promise<ActionResult> {
 }
 
 export async function retireMetric(metricId: string): Promise<ActionResult> {
+  const t = await getT();
   await requireSession();
   const supabase = await createSupabaseServerClient();
 
@@ -158,7 +163,7 @@ export async function retireMetric(metricId: string): Promise<ActionResult> {
     .select("id, program_id");
 
   if (error || (updated ?? []).length === 0) {
-    return { ok: false, error: "You don't have permission to retire that metric." };
+    return { ok: false, error: t("outcomes.errors.noRetirePermission") };
   }
 
   // Retired rather than deleted: the readings taken against it are evidence,
