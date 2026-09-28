@@ -1,4 +1,7 @@
+"use client";
+
 import { TriangleAlert } from "lucide-react";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Say when the filters cannot match anything (P0-TSK-08).
@@ -13,6 +16,7 @@ import { TriangleAlert } from "lucide-react";
  * page — the review queue, meetings — is still answering correctly.
  */
 export function FilterConflictNotice({ conflicts }: { conflicts: string[] }) {
+  const t = useT();
   if (conflicts.length === 0) return null;
   return (
     <div
@@ -25,8 +29,7 @@ export function FilterConflictNotice({ conflicts }: { conflicts: string[] }) {
       />
       <div className="text-[13px] text-warning-fg">
         <p className="font-medium">
-          These filters cannot match anything, so the list below is empty for
-          that reason rather than because there is no work.
+          {t("tasks.conflicts.notice")}
         </p>
         <ul className="mt-1 list-disc space-y-0.5 pl-4">
           {conflicts.map((conflict) => (

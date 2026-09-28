@@ -10,15 +10,23 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select } from "@/components/ui/input";
 import { SelectionCheckbox } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
-import { PriorityBadge, TASK_STATUS_META } from "@/components/shared/status-badges";
+import {
+  PriorityBadge,
+  priorityLabel,
+  taskStatusLabel,
+} from "@/components/shared/status-badges";
 import { StatusSelect } from "@/features/tasks/components/status-select";
 import { bulkUpdateTasks } from "@/features/tasks/services/task.commands";
+import { BULK_STATUSES } from "@/features/tasks/schemas";
+import { useLocale, useT } from "@/lib/i18n/client";
 import { cn, dueLabel } from "@/lib/utils";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
-import type { Task, TaskStatus } from "@/types/entities";
+import type { Task, TaskPriority } from "@/types/entities";
 
 /** Rows drawn per group before "Show more" (#115: every row costs render time). */
 export const TASK_LIST_ROW_LIMIT = 25;
+
+const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 
 type BulkAction = "status" | "assignee" | "priority" | "due" | "archive";
 
@@ -44,6 +52,8 @@ export function TaskList({
   /** Off when the caller already titled the section, so it is not said twice. */
   showGroupHeadings?: boolean;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -93,10 +103,15 @@ export function TaskList({
     });
     setApplying(false);
     if (!result.ok) {
-      toast(result.error ?? "Bulk update failed.", { tone: "error" });
+      toast(result.error ?? t("tasks.list.bulkFailed"), { tone: "error" });
       return;
     }
-    toast(`Updated ${result.updated ?? selected.size} tasks.`);
+    const updated = result.updated ?? selected.size;
+    toast(
+      updated === 1
+        ? t("tasks.list.updatedOne", { count: updated })
+        : t("tasks.list.updatedOther", { count: updated }),
+    );
     setSelected(new Set());
     setBulkAction(null);
     router.refresh();
@@ -108,34 +123,34 @@ export function TaskList({
       {selected.size > 0 ? (
         <div
           role="region"
-          aria-label="Bulk actions"
+          aria-label={t("tasks.list.bulkActions")}
           className="sticky top-16 z-(--z-sticky-content) mb-3 flex flex-wrap items-center gap-2 rounded-(--radius-md) border border-brand/30 bg-brand-soft px-3 py-2"
         >
           <span className="text-[13px] font-medium">
-            {selected.size} selected
+            {t("tasks.list.selected", { count: selected.size })}
           </span>
           <div className="ml-auto flex flex-wrap gap-1.5">
             <Button size="sm" variant="secondary" onClick={() => setBulkAction("status")}>
-              Status
+              {t("tasks.list.status")}
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setBulkAction("assignee")}>
               <UserRound className="size-3.5" aria-hidden />
-              Reassign
+              {t("tasks.list.reassign")}
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setBulkAction("priority")}>
               <Flag className="size-3.5" aria-hidden />
-              Priority
+              {t("tasks.list.priority")}
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setBulkAction("due")}>
               <CalendarClock className="size-3.5" aria-hidden />
-              Reschedule
+              {t("tasks.list.reschedule")}
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setBulkAction("archive")}>
               <Archive className="size-3.5" aria-hidden />
-              Archive
+              {t("tasks.list.archive")}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
-              Clear
+              {t("tasks.list.clear")}
             </Button>
           </div>
         </div>
@@ -149,9 +164,9 @@ export function TaskList({
             onChange={(checked) =>
               setSelected(checked ? new Set(allTasks.map((t) => t.id)) : new Set())
             }
-            label="Select all tasks"
+            label={t("tasks.list.selectAllLabel")}
           />
-          Select all
+          {t("tasks.list.selectAll")}
         </label>
       ) : null}
 
@@ -176,7 +191,7 @@ export function TaskList({
               ) : null}
               <div className="card overflow-hidden">
                 {group.shown.map((task) => {
-                  const due = dueLabel(task.due_at, timeZone);
+                  const due = dueLabel(task.due_at, timeZone, locale);
                   const isSelected = selected.has(task.id);
                   return (
                     <div
@@ -190,7 +205,7 @@ export function TaskList({
                       <SelectionCheckbox
                         checked={isSelected}
                         onChange={() => toggle(task.id)}
-                        label={`Select ${task.title}`}
+                        label={t("tasks.list.selectTask", { title: task.title })}
                       />
                       <button
                         type="button"
@@ -204,11 +219,11 @@ export function TaskList({
                           {task.project ? (
                             <span className="truncate">{task.project.name}</span>
                           ) : (
-                            <span>No project</span>
+                            <span>{t("tasks.noProject")}</span>
                           )}
                           {task.blocked_reason ? (
                             <span className="text-danger-fg">
-                              Blocked: {task.blocked_reason}
+                              {t("tasks.blockedReason", { reason: task.blocked_reason })}
                             </span>
                           ) : null}
                         </span>
@@ -233,7 +248,7 @@ export function TaskList({
                           size="sm"
                         />
                       ) : (
-                        <Badge tone="neutral">Unassigned</Badge>
+                        <Badge tone="neutral">{t("tasks.unassigned")}</Badge>
                       )}
                       <StatusSelect taskId={task.id} taskTitle={task.title} status={task.status} />
                     </div>
@@ -247,7 +262,7 @@ export function TaskList({
                     }
                     className="w-full border-t border-line px-3 py-2 text-left text-[12.5px] font-medium text-brand-fg hover:bg-surface-soft"
                   >
-                    Show {hiddenCount} more
+                    {t("tasks.showMore", { count: hiddenCount })}
                   </button>
                 ) : null}
               </div>
@@ -262,34 +277,35 @@ export function TaskList({
         onClose={() => setBulkAction(null)}
         title={
           bulkAction === "archive"
-            ? `Archive ${selected.size} tasks?`
-            : `Update ${selected.size} tasks`
+            ? selected.size === 1
+              ? t("tasks.list.archiveTitleOne", { count: selected.size })
+              : t("tasks.list.archiveTitleOther", { count: selected.size })
+            : selected.size === 1
+              ? t("tasks.list.updateTitleOne", { count: selected.size })
+              : t("tasks.list.updateTitleOther", { count: selected.size })
         }
       >
         <form onSubmit={applyBulk} className="space-y-4">
           {bulkAction === "status" ? (
             <div>
-              <Label htmlFor="bulk-status">New status</Label>
+              <Label htmlFor="bulk-status">{t("tasks.list.newStatus")}</Label>
               <Select id="bulk-status" name="status" defaultValue="in_progress">
-                {(Object.keys(TASK_STATUS_META) as TaskStatus[])
-                  .filter((s) => s !== "blocked")
-                  .map((s) => (
-                    <option key={s} value={s}>
-                      {TASK_STATUS_META[s].label}
-                    </option>
-                  ))}
+                {BULK_STATUSES.map((s) => (
+                  <option key={s} value={s}>
+                    {taskStatusLabel(s, t)}
+                  </option>
+                ))}
               </Select>
               <p className="mt-1 text-[12.5px] text-muted">
-                Blocked isn&apos;t available in bulk — each blocked task needs
-                its own reason.
+                {t("tasks.list.bulkBlockedHint")}
               </p>
             </div>
           ) : null}
           {bulkAction === "assignee" ? (
             <div>
-              <Label htmlFor="bulk-assignee">Assign to</Label>
+              <Label htmlFor="bulk-assignee">{t("tasks.list.assignTo")}</Label>
               <Select id="bulk-assignee" name="assigneeId" defaultValue="">
-                <option value="">Unassigned</option>
+                <option value="">{t("tasks.unassigned")}</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
@@ -300,40 +316,42 @@ export function TaskList({
           ) : null}
           {bulkAction === "priority" ? (
             <div>
-              <Label htmlFor="bulk-priority">New priority</Label>
+              <Label htmlFor="bulk-priority">{t("tasks.list.newPriority")}</Label>
               <Select id="bulk-priority" name="priority" defaultValue="medium">
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
+                {PRIORITIES.map((p) => (
+                  <option key={p} value={p}>
+                    {priorityLabel(p, t)}
+                  </option>
+                ))}
               </Select>
             </div>
           ) : null}
           {bulkAction === "due" ? (
             <div>
-              <Label htmlFor="bulk-due">New due date</Label>
+              <Label htmlFor="bulk-due">{t("tasks.list.newDue")}</Label>
               <Input id="bulk-due" name="dueAt" type="date" />
               <p className="mt-1 text-[12.5px] text-muted">
-                Leave empty to clear the due date.
+                {t("tasks.list.clearDueHint")}
               </p>
             </div>
           ) : null}
           {bulkAction === "archive" ? (
             <p className="text-[13.5px] text-muted">
-              Archived tasks leave active views but keep their history and
-              attribution. This can be reversed by an administrator.
+              {t("tasks.list.archiveBody")}
             </p>
           ) : null}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" onClick={() => setBulkAction(null)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="submit"
               loading={applying}
               variant={bulkAction === "archive" ? "danger" : "primary"}
             >
-              {bulkAction === "archive" ? "Archive tasks" : "Apply to selection"}
+              {bulkAction === "archive"
+                ? t("tasks.list.archiveTasks")
+                : t("tasks.list.applyToSelection")}
             </Button>
           </div>
         </form>

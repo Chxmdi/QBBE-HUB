@@ -36,14 +36,9 @@ import {
 } from "@/features/dashboard/services/portfolio.queries";
 import { requireSession } from "@/lib/auth";
 import { DEFAULT_TIME_ZONE, calendarDateInZone } from "@/lib/time";
-import {
-  formatDate,
-  formatDateTime,
-  formatTime,
-  relativeTime,
-} from "@/lib/utils";
 import type { ProjectHealth, Task } from "@/types/entities";
-import { getLocale, getT } from "@/lib/i18n/server";
+import { healthSummaryLabel } from "@/features/dashboard/health";
+import { getFormatters, getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translate";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -52,10 +47,11 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = "force-dynamic";
 
 function greetingFor(timezone: string, t: TranslateFn): string {
+  // A number for comparison, not display text, so the language is fixed.
   const hour = Number(
     new Intl.DateTimeFormat("en-CA", {
       hour: "numeric",
-      hour12: false,
+      hourCycle: "h23",
       timeZone: timezone,
     }).format(new Date()),
   );
@@ -68,10 +64,12 @@ function AttentionLink({
   title,
   reason,
   href,
+  openLabel,
 }: {
   title: string;
   reason: string;
   href: string;
+  openLabel: string;
 }) {
   return (
     <li className="interactive-row flex items-center gap-3 px-3 py-2">
@@ -86,7 +84,7 @@ function AttentionLink({
       </span>
       <Link
         href={href}
-        aria-label={`Open ${title}`}
+        aria-label={openLabel}
         className="text-muted hover:text-brand-fg"
       >
         <ArrowRight className="size-4" aria-hidden />
@@ -95,7 +93,15 @@ function AttentionLink({
   );
 }
 
-function AttentionTask({ task, reason }: { task: Task; reason: string }) {
+function AttentionTask({
+  task,
+  reason,
+  openLabel,
+}: {
+  task: Task;
+  reason: string;
+  openLabel: string;
+}) {
   return (
     <li className="interactive-row flex items-center gap-3 px-3 py-2">
       <span className="min-w-0 flex-1">
@@ -113,7 +119,7 @@ function AttentionTask({ task, reason }: { task: Task; reason: string }) {
       ) : null}
       <Link
         href={`/my-work?task=${task.id}`}
-        aria-label={`Open ${task.title}`}
+        aria-label={openLabel}
         className="text-muted hover:text-brand-fg"
       >
         <ArrowRight className="size-4" aria-hidden />
@@ -124,7 +130,7 @@ function AttentionTask({ task, reason }: { task: Task; reason: string }) {
 
 export default async function HomePage() {
   const session = await requireSession();
-  const [t, locale] = await Promise.all([getT(), getLocale()]);
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const lens = dashboardLens(session.role);
   const showPortfolio = lens !== "volunteer";
   const [data, portfolio, workload, outcomes, commitments] = await Promise.all([
@@ -213,7 +219,7 @@ export default async function HomePage() {
         {data.requiredAnnouncements.filter((a) => a.id !== latestAnn?.id)
           .length > 0 ? (
           <section
-            aria-label="Required announcements"
+            aria-label={t("home.requiredAnnouncements")}
             className="mb-5 space-y-2"
           >
             {data.requiredAnnouncements
@@ -230,10 +236,10 @@ export default async function HomePage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-[13.5px] font-semibold">{a.title}</p>
                     <p className="meta">
-                      {a.priority === "critical" ? "Critical · " : ""}
-                      Acknowledgment required
+                      {a.priority === "critical" ? t("home.criticalPrefix") : ""}
+                      {t("home.ackRequired")}
                       {a.ack_deadline
-                        ? ` by ${formatDate(a.ack_deadline)}`
+                        ? t("home.ackBy", { date: format.date(a.ack_deadline) })
                         : ""}
                     </p>
                   </div>
@@ -246,7 +252,7 @@ export default async function HomePage() {
         {/* Hero: portfolio pulse — staff/leadership only (P0-VOL-02) */}
         {showPortfolio && portfolio ? (
           <section
-            aria-label="Portfolio summary"
+            aria-label={t("home.portfolioSummary")}
             className="card mb-5 flex flex-wrap items-center gap-x-8 gap-y-4 p-5"
           >
             <div>
@@ -255,7 +261,9 @@ export default async function HomePage() {
                   {kpis.activePrograms}
                 </span>
                 <span className="text-[15px] font-medium">
-                  active {kpis.activePrograms === 1 ? "program" : "programs"}
+                  {kpis.activePrograms === 1
+                    ? t("home.activeProgramOne")
+                    : t("home.activeProgramOther")}
                 </span>
               </p>
               <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-muted">
@@ -263,49 +271,51 @@ export default async function HomePage() {
                   href="/projects?stage=active"
                   className="inline-flex min-h-6 items-center hover:underline"
                 >
-                  {portfolio.counts.active} active
+                  {t("home.counts.active", { count: portfolio.counts.active })}
                 </Link>
                 <Link
                   href="/projects?health=on_track"
                   className="inline-flex min-h-6 items-center hover:underline"
                 >
-                  {portfolio.counts.onTrack} on track
+                  {t("home.counts.onTrack", { count: portfolio.counts.onTrack })}
                 </Link>
                 <Link
                   href="/projects?health=at_risk"
                   className="inline-flex min-h-6 items-center hover:underline"
                 >
-                  {portfolio.counts.atRisk} at risk
+                  {t("home.counts.atRisk", { count: portfolio.counts.atRisk })}
                 </Link>
                 <Link
                   href="/projects?health=off_track"
                   className="inline-flex min-h-6 items-center hover:underline"
                 >
-                  {portfolio.counts.offTrack} off track
+                  {t("home.counts.offTrack", { count: portfolio.counts.offTrack })}
                 </Link>
                 <Link
                   href="/projects?health=paused"
                   className="inline-flex min-h-6 items-center hover:underline"
                 >
-                  {portfolio.counts.paused} paused
+                  {t("home.counts.paused", { count: portfolio.counts.paused })}
                 </Link>
                 <Link
                   href="/projects?stale=1"
                   className="inline-flex min-h-6 items-center hover:underline"
                 >
-                  {portfolio.counts.stale} stale
+                  {t("home.counts.stale", { count: portfolio.counts.stale })}
                 </Link>
               </p>
               <p className="meta mt-1">
-                Last refreshed {formatDateTime(portfolio.refreshedAt)}
+                {t("home.lastRefreshed", {
+                  when: format.dateTime(portfolio.refreshedAt),
+                })}
               </p>
             </div>
             <div className="hidden h-12 w-px bg-line sm:block" aria-hidden />
             <div>
-              <p className="eyebrow">Overall portfolio health</p>
+              <p className="eyebrow">{t("home.overallHealth")}</p>
               {healthPercent === null ? (
                 <p className="mt-1 text-[14px] text-muted">
-                  No active projects yet
+                  {t("home.noActiveProjects")}
                 </p>
               ) : (
                 <p className="mt-0.5 flex items-baseline gap-2">
@@ -321,9 +331,10 @@ export default async function HomePage() {
                     {healthPercent}%
                   </span>
                   <span className="text-[12.5px] text-muted">
-                    of {activeTotal} active{" "}
-                    {activeTotal === 1 ? "project" : "projects"} on track
-                    {atRisk > 0 ? ` · ${atRisk} flagged` : ""}
+                    {activeTotal === 1
+                      ? t("home.healthOfOne", { total: activeTotal })
+                      : t("home.healthOfOther", { total: activeTotal })}
+                    {atRisk > 0 ? t("home.flagged", { count: atRisk }) : ""}
                   </span>
                 </p>
               )}
@@ -335,7 +346,7 @@ export default async function HomePage() {
                   className="inline-flex h-9.5 items-center gap-1.5 rounded-(--radius-sm) bg-brand px-4 text-sm font-medium text-white transition-colors hover:bg-brand-strong"
                 >
                   <Plus className="size-4" aria-hidden />
-                  New project
+                  {t("home.newProject")}
                 </Link>
               </div>
             ) : null}
@@ -350,7 +361,7 @@ export default async function HomePage() {
             </h2>
             {data.todayTasks.length === 0 && data.todayMeetings.length === 0 ? (
               <p className="py-6 text-center text-[13.5px] text-muted">
-                Nothing due or scheduled today. Enjoy the clear runway.
+                {t("home.todayEmpty")}
               </p>
             ) : (
               <ul className="space-y-1">
@@ -368,11 +379,11 @@ export default async function HomePage() {
                           {meeting.title}
                         </span>
                         <span className="meta">
-                          {meeting.project?.name ?? "Meeting"}
+                          {meeting.project?.name ?? t("home.meeting")}
                         </span>
                       </span>
                       <time className="text-[12.5px] font-medium whitespace-nowrap text-brand-fg">
-                        {formatTime(meeting.starts_at, undefined, locale)}
+                        {format.time(meeting.starts_at)}
                       </time>
                     </Link>
                   </li>
@@ -391,7 +402,7 @@ export default async function HomePage() {
                           {task.title}
                         </span>
                         <span className="meta">
-                          {task.project?.name ?? "Task"}
+                          {task.project?.name ?? t("home.task")}
                         </span>
                       </span>
                       {/*
@@ -408,8 +419,10 @@ export default async function HomePage() {
                         }
                       >
                         {task.due_at && task.due_at < todayInZone
-                          ? `Overdue · ${formatDate(task.due_at, session.timeZone)}`
-                          : "Due today"}
+                          ? t("home.overdueOn", {
+                              date: format.date(task.due_at, session.timeZone),
+                            })
+                          : t("home.dueToday")}
                       </span>
                     </Link>
                   </li>
@@ -420,7 +433,7 @@ export default async function HomePage() {
               href="/my-work"
               className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
             >
-              View my work <ArrowRight className="size-3.5" aria-hidden />
+              {t("home.viewMyWork")} <ArrowRight className="size-3.5" aria-hidden />
             </Link>
           </section>
 
@@ -435,7 +448,7 @@ export default async function HomePage() {
               </h2>
               {data.programHealth.length === 0 ? (
                 <p className="py-6 text-center text-[13.5px] text-muted">
-                  Create a program to see its delivery health here.
+                  {t("home.programHealthEmpty")}
                 </p>
               ) : (
                 <ul className="space-y-4">
@@ -466,12 +479,12 @@ export default async function HomePage() {
                                       : "text-[11.5px] font-medium text-muted"
                               }
                             >
-                              {program.statusLabel}
+                              {healthSummaryLabel(program.statusLabel, t)}
                             </span>
                           </span>
                         </span>
                         <ProgressBar
-                          label={`${program.name} completion`}
+                          label={t("home.programCompletion", { name: program.name })}
                           percent={program.completionPercent}
                           tone={program.tone}
                         />
@@ -484,7 +497,7 @@ export default async function HomePage() {
                 href="/projects"
                 className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
               >
-                View portfolio <ArrowRight className="size-3.5" aria-hidden />
+                {t("home.viewPortfolio")} <ArrowRight className="size-3.5" aria-hidden />
               </Link>
             </section>
           ) : null}
@@ -504,7 +517,7 @@ export default async function HomePage() {
                 </p>
                 <div>
                   <p className="text-[12.5px] text-muted">
-                    tasks completed · last 30 days
+                    {t("home.tasksCompleted30")}
                   </p>
                   {completionDelta !== null ? (
                     <p
@@ -519,8 +532,9 @@ export default async function HomePage() {
                       ) : (
                         <TrendingDown className="size-3.5" aria-hidden />
                       )}
-                      {completionDelta >= 0 ? "+" : ""}
-                      {completionDelta}% vs previous 30 days
+                      {t("home.vsPrevious", {
+                        delta: `${completionDelta >= 0 ? "+" : ""}${completionDelta}`,
+                      })}
                     </p>
                   ) : null}
                 </div>
@@ -528,27 +542,27 @@ export default async function HomePage() {
               <WeeklyBars weeks={data.weeklyCompleted} />
               <div className="mt-5 border-t border-line pt-4">
                 <p className="mb-3 text-[12.5px] font-medium text-muted">
-                  Tasks by status
+                  {t("home.tasksByStatus")}
                 </p>
                 <StatusDonut
                   slices={[
                     {
-                      label: "Completed · 30d",
+                      label: t("home.donut.completed"),
                       value: statusBreakdown.completed,
                       colorVar: "--color-chart-good",
                     },
                     {
-                      label: "To do",
+                      label: t("home.donut.toDo"),
                       value: statusBreakdown.toDo,
                       colorVar: "--color-chart-todo",
                     },
                     {
-                      label: "In progress",
+                      label: t("home.donut.inProgress"),
                       value: statusBreakdown.inProgress,
                       colorVar: "--color-chart-progress",
                     },
                     {
-                      label: "Overdue",
+                      label: t("home.donut.overdue"),
                       value: statusBreakdown.overdue,
                       colorVar: "--color-chart-overdue",
                     },
@@ -571,7 +585,7 @@ export default async function HomePage() {
                 href="/calendar"
                 className="inline-flex items-center gap-1 text-[12.5px] font-medium text-brand-fg hover:underline"
               >
-                View calendar <ArrowRight className="size-3.5" aria-hidden />
+                {t("home.viewCalendar")} <ArrowRight className="size-3.5" aria-hidden />
               </Link>
             </div>
             {data.upcomingEvents.length === 0 ? (
@@ -581,13 +595,12 @@ export default async function HomePage() {
                   aria-hidden
                 />
                 <p className="text-[13.5px] text-muted">
-                  No upcoming events scheduled.
+                  {t("home.noUpcomingEvents")}
                 </p>
               </div>
             ) : (
               <ul className="space-y-1.5">
                 {data.upcomingEvents.map((event) => {
-                  const date = new Date(event.starts_at);
                   return (
                     <li key={event.id}>
                       <Link
@@ -596,15 +609,13 @@ export default async function HomePage() {
                       >
                         <span className="flex w-11 shrink-0 flex-col items-center rounded-(--radius-sm) border border-line bg-surface-soft/70 py-1">
                           <span className="text-[9.5px] font-bold tracking-wide text-brand-fg uppercase">
-                            {date.toLocaleDateString("en-CA", {
+                            {format.inZone(event.starts_at, timezone, {
                               month: "short",
-                              timeZone: timezone,
                             })}
                           </span>
                           <span className="text-[16px] leading-tight font-bold">
-                            {date.toLocaleDateString("en-CA", {
+                            {format.inZone(event.starts_at, timezone, {
                               day: "2-digit",
-                              timeZone: timezone,
                             })}
                           </span>
                         </span>
@@ -613,7 +624,7 @@ export default async function HomePage() {
                             {event.name}
                           </span>
                           <span className="meta block truncate">
-                            {formatTime(event.starts_at, undefined, locale)}
+                            {format.time(event.starts_at)}
                             {event.location ? ` · ${event.location}` : ""}
                           </span>
                         </span>
@@ -633,7 +644,7 @@ export default async function HomePage() {
               href="/events"
               className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
             >
-              View all events <ArrowRight className="size-3.5" aria-hidden />
+              {t("home.viewAllEvents")} <ArrowRight className="size-3.5" aria-hidden />
             </Link>
           </section>
         </div>
@@ -645,27 +656,27 @@ export default async function HomePage() {
             </h2>
             {workload.people.length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No open assigned work.
+                {t("home.workloadEmpty")}
               </p>
             ) : (
               <div className="space-y-4">
                 <div
                   className="card overflow-x-auto"
                   role="region"
-                  aria-label="Workload by person"
+                  aria-label={t("home.workloadByPerson")}
                   tabIndex={0}
                 >
                   <table className="w-full text-left text-[13.5px]">
                     <thead>
                       <tr className="border-b border-line">
-                        <th className="px-4 py-2 font-semibold">Person</th>
-                        <th className="px-4 py-2 font-semibold">Active</th>
-                        <th className="px-4 py-2 font-semibold">Due soon</th>
-                        <th className="px-4 py-2 font-semibold">Overdue</th>
+                        <th className="px-4 py-2 font-semibold">{t("home.table.person")}</th>
+                        <th className="px-4 py-2 font-semibold">{t("home.table.active")}</th>
+                        <th className="px-4 py-2 font-semibold">{t("home.table.dueSoon")}</th>
+                        <th className="px-4 py-2 font-semibold">{t("home.table.overdue")}</th>
                         <th className="px-4 py-2 font-semibold">
-                          Estimated hours
+                          {t("home.table.estimatedHours")}
                         </th>
-                        <th className="px-4 py-2 font-semibold">Overload</th>
+                        <th className="px-4 py-2 font-semibold">{t("home.table.overload")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -680,11 +691,11 @@ export default async function HomePage() {
                           <td className="px-4 py-2">{person.overdue}</td>
                           <td className="px-4 py-2">
                             {person.estimatedHours === null
-                              ? "Unknown"
-                              : `${person.estimatedHours}${person.unknownEstimates ? ` (${person.unknownEstimates} unknown)` : ""}`}
+                              ? t("home.unknown")
+                              : `${format.number(person.estimatedHours)}${person.unknownEstimates ? t("home.unknownEstimates", { count: person.unknownEstimates }) : ""}`}
                           </td>
                           <td className="px-4 py-2">
-                            {person.overloaded ? "Possible overload" : "—"}
+                            {person.overloaded ? t("home.possibleOverload") : "—"}
                           </td>
                         </tr>
                       ))}
@@ -695,20 +706,20 @@ export default async function HomePage() {
                   <div
                     className="card overflow-x-auto"
                     role="region"
-                    aria-label="Workload by team"
+                    aria-label={t("home.workloadByTeam")}
                     tabIndex={0}
                   >
                     <table className="w-full text-left text-[13.5px]">
                       <thead>
                         <tr className="border-b border-line">
-                          <th className="px-4 py-2 font-semibold">Team</th>
-                          <th className="px-4 py-2 font-semibold">Active</th>
-                          <th className="px-4 py-2 font-semibold">Due soon</th>
-                          <th className="px-4 py-2 font-semibold">Overdue</th>
+                          <th className="px-4 py-2 font-semibold">{t("home.table.team")}</th>
+                          <th className="px-4 py-2 font-semibold">{t("home.table.active")}</th>
+                          <th className="px-4 py-2 font-semibold">{t("home.table.dueSoon")}</th>
+                          <th className="px-4 py-2 font-semibold">{t("home.table.overdue")}</th>
                           <th className="px-4 py-2 font-semibold">
-                            Estimated hours
+                            {t("home.table.estimatedHours")}
                           </th>
-                          <th className="px-4 py-2 font-semibold">Overload</th>
+                          <th className="px-4 py-2 font-semibold">{t("home.table.overload")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -723,11 +734,11 @@ export default async function HomePage() {
                             <td className="px-4 py-2">{team.overdue}</td>
                             <td className="px-4 py-2">
                               {team.estimatedHours === null
-                                ? "Unknown"
-                                : team.estimatedHours}
+                                ? t("home.unknown")
+                                : format.number(team.estimatedHours)}
                             </td>
                             <td className="px-4 py-2">
-                              {team.overloaded ? "Possible overload" : "—"}
+                              {team.overloaded ? t("home.possibleOverload") : "—"}
                             </td>
                           </tr>
                         ))}
@@ -746,7 +757,7 @@ export default async function HomePage() {
           </h2>
           {commitments.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              No upcoming milestones, reporting dates, or follow-ups.
+              {t("home.commitmentsEmpty")}
             </p>
           ) : (
             <ul className="card divide-y divide-line">
@@ -759,7 +770,7 @@ export default async function HomePage() {
                     {item.title}
                   </Link>
                   <p className="meta">
-                    {item.kind} · {item.when}
+                    {t(`home.commitmentKind.${item.kind}`)} · {item.when}
                   </p>
                 </li>
               ))}
@@ -774,7 +785,7 @@ export default async function HomePage() {
             </h2>
             {outcomes.length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No outcome targets yet.
+                {t("home.outcomesEmpty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -782,8 +793,12 @@ export default async function HomePage() {
                   <li key={metric.id} className="px-4 py-2.5">
                     <p className="text-[13.5px] font-medium">{metric.name}</p>
                     <p className="meta">
-                      {metric.programName} · latest {metric.latest ?? "—"}{" "}
-                      {metric.unit} · target {metric.target ?? "—"}
+                      {t("home.outcomeLine", {
+                        program: metric.programName,
+                        latest: metric.latest ?? "—",
+                        unit: metric.unit,
+                        target: metric.target ?? "—",
+                      })}
                     </p>
                   </li>
                 ))}
@@ -804,11 +819,10 @@ export default async function HomePage() {
                 aria-hidden
               />
               <p className="text-[14px] font-medium">
-                Nothing needs escalation right now.
+                {t("home.attentionEmptyTitle")}
               </p>
               <p className="mt-0.5 text-[13px] text-muted">
-                No overdue, blocked, unassigned, at-risk, or upcoming work is
-                visible to you.
+                {t("home.attentionEmptyBody")}
               </p>
             </div>
           ) : (
@@ -820,7 +834,7 @@ export default async function HomePage() {
                       className="size-3.5 text-warning-fg"
                       aria-hidden
                     />
-                    Projects at risk
+                    {t("home.attention.projectsAtRisk")}
                   </p>
                   <ul>
                     {attention.riskyProjects.map((p) => (
@@ -852,14 +866,15 @@ export default async function HomePage() {
                       className="size-3.5 text-danger-fg"
                       aria-hidden
                     />
-                    Overdue tasks
+                    {t("home.attention.overdueTasks")}
                   </p>
                   <ul>
-                    {attention.overdueTasks.map((t) => (
+                    {attention.overdueTasks.map((task) => (
                       <AttentionTask
-                        key={t.id}
-                        task={t}
-                        reason={`Due ${formatDate(t.due_at)}${t.project ? ` · ${t.project.name}` : ""}`}
+                        key={task.id}
+                        task={task}
+                        openLabel={t("home.openItem", { title: task.title })}
+                        reason={`${t("home.dueOn", { date: format.date(task.due_at) })}${task.project ? ` · ${task.project.name}` : ""}`}
                       />
                     ))}
                   </ul>
@@ -872,14 +887,15 @@ export default async function HomePage() {
                       className="size-3.5 text-danger-fg"
                       aria-hidden
                     />
-                    Blocked work
+                    {t("home.attention.blockedWork")}
                   </p>
                   <ul>
-                    {attention.blockedTasks.map((t) => (
+                    {attention.blockedTasks.map((task) => (
                       <AttentionTask
-                        key={t.id}
-                        task={t}
-                        reason={t.blocked_reason ?? "Blocked"}
+                        key={task.id}
+                        task={task}
+                        openLabel={t("home.openItem", { title: task.title })}
+                        reason={task.blocked_reason ?? t("home.blocked")}
                       />
                     ))}
                   </ul>
@@ -892,14 +908,15 @@ export default async function HomePage() {
                       className="size-3.5 text-warning-fg"
                       aria-hidden
                     />
-                    Unassigned tasks
+                    {t("home.attention.unassignedTasks")}
                   </p>
                   <ul>
-                    {attention.unassignedTasks.map((t) => (
+                    {attention.unassignedTasks.map((task) => (
                       <AttentionTask
-                        key={t.id}
-                        task={t}
-                        reason={t.project?.name ?? "No project"}
+                        key={task.id}
+                        task={task}
+                        openLabel={t("home.openItem", { title: task.title })}
+                        reason={task.project?.name ?? t("home.noProject")}
                       />
                     ))}
                   </ul>
@@ -912,7 +929,7 @@ export default async function HomePage() {
                       className="size-3.5 text-danger-fg"
                       aria-hidden
                     />
-                    Overdue milestones
+                    {t("home.attention.overdueMilestones")}
                   </p>
                   <ul>
                     {attention.overdueMilestones.map((item) => (
@@ -921,6 +938,7 @@ export default async function HomePage() {
                         title={item.title}
                         reason={item.reason}
                         href={item.href}
+                        openLabel={t("home.openItem", { title: item.title })}
                       />
                     ))}
                   </ul>
@@ -933,7 +951,7 @@ export default async function HomePage() {
                       className="size-3.5 text-warning-fg"
                       aria-hidden
                     />
-                    Pending decisions
+                    {t("home.attention.pendingDecisions")}
                   </p>
                   <ul>
                     {attention.pendingDecisions.map((item) => (
@@ -942,6 +960,7 @@ export default async function HomePage() {
                         title={item.title}
                         reason={item.reason}
                         href={item.href}
+                        openLabel={t("home.openItem", { title: item.title })}
                       />
                     ))}
                   </ul>
@@ -954,7 +973,7 @@ export default async function HomePage() {
                       className="size-3.5 text-brand-fg"
                       aria-hidden
                     />
-                    Upcoming commitments
+                    {t("home.attention.upcomingCommitments")}
                   </p>
                   <ul>
                     {attention.upcomingCommitments.map((item) => (
@@ -963,6 +982,7 @@ export default async function HomePage() {
                         title={item.title}
                         reason={item.reason}
                         href={item.href}
+                        openLabel={t("home.openItem", { title: item.title })}
                       />
                     ))}
                   </ul>
@@ -979,7 +999,7 @@ export default async function HomePage() {
           </h2>
           {data.recentActivity.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              Activity from tasks, projects, and meetings will appear here.
+              {t("home.activityEmpty")}
             </p>
           ) : (
             <ol className="card divide-y divide-line">
@@ -996,16 +1016,16 @@ export default async function HomePage() {
                       className="mt-0.5"
                     />
                   ) : (
-                    <Badge tone="neutral">System</Badge>
+                    <Badge tone="neutral">{t("common.system")}</Badge>
                   )}
                   <div className="min-w-0">
                     <p className="text-[13px]">
                       <span className="font-medium">
-                        {event.actor?.full_name ?? "System"}
+                        {event.actor?.full_name ?? t("common.system")}
                       </span>{" "}
                       {event.summary}
                     </p>
-                    <p className="meta">{relativeTime(event.created_at, locale)}</p>
+                    <p className="meta">{format.relative(event.created_at)}</p>
                   </div>
                 </li>
               ))}
@@ -1015,17 +1035,17 @@ export default async function HomePage() {
       </div>
 
       {/* ============ Announcements rail ============ */}
-      <aside aria-label="Announcements" className="hidden min-w-0 2xl:block">
+      <aside aria-label={t("home.rail.label")} className="hidden min-w-0 2xl:block">
         <div className="card sticky top-[4.5rem] overflow-hidden">
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <p className="flex items-center gap-1.5 text-[14px] font-semibold">
               <Hash className="size-4 text-muted" aria-hidden />
-              announcements
+              {t("home.rail.channelName")}
             </p>
             {rail.channelId ? (
               <Link
                 href={`/channels/${rail.channelId}`}
-                aria-label="Open announcements channel"
+                aria-label={t("home.rail.openChannel")}
                 className="text-muted transition-colors hover:text-brand-fg"
               >
                 <ArrowUpRight className="size-4" aria-hidden />
@@ -1038,10 +1058,10 @@ export default async function HomePage() {
               <p className="mb-1.5 flex items-center gap-1.5">
                 <Megaphone className="size-3.5 text-brand-fg" aria-hidden />
                 <span className="text-[10.5px] font-bold tracking-[0.08em] text-brand-fg uppercase">
-                  Organization announcement
+                  {t("home.rail.orgAnnouncement")}
                 </span>
                 <span className="meta ml-auto">
-                  {relativeTime(latestAnn.publish_at, locale)}
+                  {format.relative(latestAnn.publish_at)}
                 </span>
               </p>
               <p className="text-[14.5px] leading-snug font-semibold">
@@ -1052,27 +1072,33 @@ export default async function HomePage() {
                   {latestAnn.message.body}
                 </p>
               ) : null}
-              <p className="meta mt-2">Posted by {latestAnn.authorName}</p>
+              <p className="meta mt-2">
+                {t("home.rail.postedBy", { name: latestAnn.authorName })}
+              </p>
               {latestAnn.requires_ack ? (
                 <div className="mt-3 space-y-2">
                   {latestAnn.acknowledgedByMe ? (
                     <p className="inline-flex items-center gap-1.5 text-[13px] font-medium text-success-fg">
                       <CheckCircle2 className="size-4" aria-hidden />
-                      You acknowledged this
+                      {t("home.rail.youAcknowledged")}
                     </p>
                   ) : (
                     <AcknowledgeButton announcementId={latestAnn.id} />
                   )}
                   <div>
                     <p className="meta mb-1">
-                      {latestAnn.ackCount} of {latestAnn.totalRecipients}{" "}
-                      acknowledged
+                      {t("home.rail.ackCount", {
+                        count: latestAnn.ackCount,
+                        total: latestAnn.totalRecipients,
+                      })}
                       {latestAnn.ack_deadline
-                        ? ` · due ${formatDate(latestAnn.ack_deadline)}`
+                        ? t("home.rail.ackDue", {
+                            date: format.date(latestAnn.ack_deadline),
+                          })
                         : ""}
                     </p>
                     <ProgressBar
-                      label="Announcement acknowledgment progress"
+                      label={t("home.rail.ackProgress")}
                       percent={
                         latestAnn.totalRecipients > 0
                           ? (latestAnn.ackCount / latestAnn.totalRecipients) *
@@ -1090,7 +1116,7 @@ export default async function HomePage() {
           <div className="px-1 py-2">
             {rail.recentMessages.filter((m) => !m.deleted_at).length === 0 ? (
               <p className="px-4 py-6 text-center text-[13px] text-muted">
-                Channel messages will appear here.
+                {t("home.rail.empty")}
               </p>
             ) : (
               <ul>
@@ -1100,7 +1126,7 @@ export default async function HomePage() {
                   .map((message) => (
                     <li key={message.id} className="flex gap-2.5 px-3 py-2">
                       <Avatar
-                        name={message.author?.full_name ?? "Unknown"}
+                        name={message.author?.full_name ?? t("common.unknown")}
                         src={message.author?.avatar_url}
                         size="sm"
                         className="mt-0.5"
@@ -1108,10 +1134,10 @@ export default async function HomePage() {
                       <div className="min-w-0">
                         <p className="flex items-baseline gap-2">
                           <span className="truncate text-[12.5px] font-semibold">
-                            {message.author?.full_name ?? "Unknown"}
+                            {message.author?.full_name ?? t("common.unknown")}
                           </span>
                           <span className="meta shrink-0">
-                            {relativeTime(message.created_at, locale)}
+                            {format.relative(message.created_at)}
                           </span>
                         </p>
                         <p className="line-clamp-2 text-[13px]">
@@ -1130,7 +1156,7 @@ export default async function HomePage() {
                 href={`/channels/${rail.channelId}`}
                 className="block rounded-(--radius-sm) border border-line bg-canvas px-3 py-2 text-center text-[13px] font-medium text-muted transition-colors hover:border-brand/40 hover:text-brand-fg"
               >
-                Open #announcements
+                {t("home.rail.openChannelLink")}
               </Link>
             </div>
           ) : null}

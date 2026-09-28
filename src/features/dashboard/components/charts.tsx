@@ -1,3 +1,7 @@
+"use client";
+
+import { useT } from "@/lib/i18n/client";
+
 /**
  * Dashboard charts — plain SVG/CSS, no chart library. Colors come from the
  * validated chart tokens; every status color is paired with a text label
@@ -11,6 +15,7 @@ export interface DonutSlice {
 }
 
 export function StatusDonut({ slices }: { slices: DonutSlice[] }) {
+  const t = useT();
   const total = slices.reduce((sum, s) => sum + s.value, 0);
   const radius = 44;
   const circumference = 2 * Math.PI * radius;
@@ -37,7 +42,7 @@ export function StatusDonut({ slices }: { slices: DonutSlice[] }) {
         viewBox="0 0 120 120"
         className="size-32 shrink-0"
         role="img"
-        aria-label={`Tasks by status. Total ${total}.`}
+        aria-label={t("dashboard.charts.donutLabel", { total })}
       >
         {total === 0 ? (
           <circle
@@ -83,7 +88,7 @@ export function StatusDonut({ slices }: { slices: DonutSlice[] }) {
           className="fill-(--color-muted)"
           fontSize="10"
         >
-          tasks
+          {t("dashboard.charts.tasks")}
         </text>
       </svg>
       <ul className="w-full min-w-0 space-y-1.5">
@@ -108,11 +113,11 @@ export function StatusDonut({ slices }: { slices: DonutSlice[] }) {
       </ul>
       {/* Table view for assistive tech / no-color reading */}
       <table className="sr-only">
-        <caption>Tasks by status</caption>
+        <caption>{t("dashboard.charts.tasksByStatus")}</caption>
         <thead>
           <tr>
-            <th scope="col">Status</th>
-            <th scope="col">Count</th>
+            <th scope="col">{t("dashboard.charts.status")}</th>
+            <th scope="col">{t("dashboard.charts.count")}</th>
           </tr>
         </thead>
         <tbody>
@@ -134,19 +139,22 @@ export interface WeekBar {
 }
 
 export function WeeklyBars({ weeks }: { weeks: WeekBar[] }) {
+  const t = useT();
   const max = Math.max(...weeks.map((w) => w.value), 1);
   return (
     <div>
       <div
         className="flex h-28 items-end gap-2"
         role="img"
-        aria-label={`Tasks completed per week: ${weeks.map((w) => `${w.label} ${w.value}`).join(", ")}.`}
+        aria-label={t("dashboard.charts.weeklyLabel", {
+          weeks: weeks.map((w) => `${w.label} ${w.value}`).join(", "),
+        })}
       >
         {weeks.map((week) => (
           <div
             key={week.label}
             className="group flex h-full flex-1 flex-col items-center justify-end gap-1"
-            title={`${week.label}: ${week.value} completed`}
+            title={t("dashboard.charts.weekTitle", { label: week.label, value: week.value })}
           >
             <span className="text-[10.5px] text-muted tabular-nums opacity-0 transition-opacity group-hover:opacity-100">
               {week.value}
@@ -182,12 +190,13 @@ export function WeeklyBars({ weeks }: { weeks: WeekBar[] }) {
 export function ProgressBar({
   percent,
   tone,
-  label = "Progress",
+  label,
 }: {
   percent: number;
   tone: "good" | "attention" | "risk" | "neutral";
   label?: string;
 }) {
+  const t = useT();
   const color =
     tone === "good"
       ? "var(--color-chart-good)"
@@ -200,7 +209,7 @@ export function ProgressBar({
     <div
       className="h-1.5 w-full overflow-hidden rounded-full bg-surface-soft"
       role="progressbar"
-      aria-label={label}
+      aria-label={label ?? t("dashboard.charts.progress")}
       aria-valuenow={Math.round(percent)}
       aria-valuemin={0}
       aria-valuemax={100}

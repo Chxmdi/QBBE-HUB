@@ -4,6 +4,7 @@ import {
   DEFAULT_TIME_ZONE,
 } from "@/lib/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
 import {
   applyPortfolioFilters,
   dashboardLens,
@@ -221,7 +222,7 @@ export async function getWorkload(
   people: WorkloadPerson[];
   teams: WorkloadTeam[];
 }> {
-  const supabase = await createSupabaseServerClient();
+  const [supabase, t] = await Promise.all([createSupabaseServerClient(), getT()]);
   const now = new Date();
   const today =
     calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
@@ -254,7 +255,7 @@ export async function getWorkload(
   const people = summarizeWorkload(
     tasks.map((task) => ({
       assigneeId: task.assignee_id,
-      assigneeName: task.assignee?.full_name ?? null,
+      assigneeName: task.assignee?.full_name ?? t("dashboard.unknown"),
       dueAt: task.due_at,
       estimateHours: task.estimate_hours,
     })),
@@ -271,7 +272,7 @@ export async function getWorkload(
       ((members ?? []) as { team_id: string; user_id: string }[]).map(
         (member) => ({
           teamId: member.team_id,
-          teamName: teamNames.get(member.team_id) ?? "Team",
+          teamName: teamNames.get(member.team_id) ?? t("dashboard.team"),
           userId: member.user_id,
         }),
       ),
@@ -289,7 +290,7 @@ export interface OutcomeRollup {
 }
 
 export async function getOutcomeRollup(): Promise<OutcomeRollup[]> {
-  const supabase = await createSupabaseServerClient();
+  const [supabase, t] = await Promise.all([createSupabaseServerClient(), getT()]);
   const { data } = await supabase
     .from("outcome_metric")
     .select(
@@ -313,7 +314,7 @@ export async function getOutcomeRollup(): Promise<OutcomeRollup[]> {
     return {
       id: metric.id,
       name: metric.name,
-      programName: metric.program?.name ?? "Program",
+      programName: metric.program?.name ?? t("dashboard.program"),
       unit: metric.unit,
       target: metric.target,
       latest: latest?.value ?? null,
@@ -323,7 +324,8 @@ export async function getOutcomeRollup(): Promise<OutcomeRollup[]> {
 
 export interface CommitmentItem {
   id: string;
-  kind: string;
+  /** A code; the page names it in the reader's language (#141). */
+  kind: "milestone" | "followUp" | "reporting";
   title: string;
   when: string;
   href: string;
@@ -366,7 +368,7 @@ export async function getCommitments(
   for (const milestone of milestones.data ?? []) {
     items.push({
       id: milestone.id as string,
-      kind: "Upcoming milestone",
+      kind: "milestone",
       title: milestone.name as string,
       when: milestone.due_date as string,
       href: `/projects/${milestone.project_id}`,
@@ -375,7 +377,7 @@ export async function getCommitments(
   for (const followUp of followUps.data ?? []) {
     items.push({
       id: followUp.id as string,
-      kind: "Relationship follow-up",
+      kind: "followUp",
       title: followUp.title as string,
       when: followUp.due_at as string,
       href: `/crm/${followUp.crm_organization_id}`,
@@ -396,7 +398,7 @@ export async function getCommitments(
     if (!stale && (due < today || due > plus30)) continue;
     items.push({
       id: `report-${project.id}`,
-      kind: "Reporting date",
+      kind: "reporting",
       title: project.name,
       when: due,
       href: `/projects/${project.id}?tab=updates`,

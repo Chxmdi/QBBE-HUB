@@ -19,7 +19,7 @@ import {
   parseTaskFilters,
   type TaskFilters,
 } from "@/features/tasks/filters";
-import { TASK_STATUS_LABELS } from "@/features/tasks/schemas";
+import { taskStatusText } from "@/features/tasks/schemas";
 import { getMyWork, getPickerOptions, getArchivedTasks } from "@/features/tasks/services/task.queries";
 import { RestoreTaskButton } from "@/features/tasks/components/restore-task-button";
 import { requireSession } from "@/lib/auth";
@@ -94,7 +94,7 @@ export default async function MyWorkPage({
               href={params.archived === "1" ? "/my-work" : "/my-work?archived=1"}
               className="text-[13px] font-medium text-brand-fg hover:underline"
             >
-              {params.archived === "1" ? "Open work" : "Archived"}
+              {params.archived === "1" ? t("myWork.openWork") : t("myWork.archived")}
             </Link>
             <TaskCreateDialog
               projects={options.projects}
@@ -126,7 +126,8 @@ export default async function MyWorkPage({
           // built on the board. It is not a mistake in the filters; it is a
           // filter that cannot apply here.
           scopedToUserId: session.userId,
-          statusLabel: (status) => TASK_STATUS_LABELS[status],
+          statusLabel: (status) => taskStatusText(status, t),
+          t,
         })}
       />
 
@@ -200,11 +201,11 @@ export default async function MyWorkPage({
       {params.archived === "1" ? (
         <section aria-labelledby="archived-tasks" className="mb-8">
           <h2 id="archived-tasks" className="section-heading mb-3">
-            Archived tasks
+            {t("myWork.archivedHeading")}
           </h2>
           {archivedTasks.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              Nothing archived that you can restore.
+              {t("myWork.archivedEmpty")}
             </p>
           ) : (
             <ul className="card divide-y divide-line">

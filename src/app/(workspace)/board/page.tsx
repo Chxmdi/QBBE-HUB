@@ -17,15 +17,18 @@ import {
   hasActiveFilters,
   parseTaskFilters,
 } from "@/features/tasks/filters";
-import { TASK_STATUS_LABELS } from "@/features/tasks/schemas";
+import { taskStatusText } from "@/features/tasks/schemas";
 import {
   getPickerOptions,
   getScopedTasks,
 } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Board" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("board.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function BoardPage({
@@ -34,6 +37,7 @@ export default async function BoardPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession();
+  const t = await getT();
   const params = await searchParams;
   const filters = parseTaskFilters(params);
   const today = calendarDateInZone(new Date(), session.timeZone) ?? "";
@@ -59,16 +63,16 @@ export default async function BoardPage({
   return (
     <div>
       <PageHeader
-        eyebrow={projectName ? "Project board" : "Organization board"}
-        title={projectName ?? "Board"}
-        description="Drag cards between columns, or move them with the keyboard — both act on the same durable records."
+        eyebrow={projectName ? t("board.projectEyebrow") : t("board.orgEyebrow")}
+        title={projectName ?? t("board.title")}
+        description={t("board.description")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href={filterQuery ? `/my-work?${filterQuery}` : "/my-work"}
               className="text-[13px] font-medium text-brand-fg hover:underline"
             >
-              Open as list
+              {t("board.openAsList")}
             </Link>
             <Suspense fallback={null}>
               <SaveViewButton path="/board" />
@@ -93,7 +97,8 @@ export default async function BoardPage({
 
       <FilterConflictNotice
         conflicts={describeFilterConflicts(filters, {
-          statusLabel: (status) => TASK_STATUS_LABELS[status],
+          statusLabel: (status) => taskStatusText(status, t),
+          t,
         })}
       />
 
@@ -103,17 +108,16 @@ export default async function BoardPage({
           className="rounded-(--radius-md) border border-danger/25 bg-danger/10 px-4 py-3"
         >
           <p className="text-[13.5px] font-medium text-danger-fg">
-            The board could not be loaded.
+            {t("board.loadFailed")}
           </p>
           <p className="mt-0.5 text-[13px] text-muted">
-            An empty board and a board that failed to load look alike, so this
-            says which happened. Nothing has been changed.
+            {t("board.loadFailedDetail")}
           </p>
           <Link
             href="/board"
             className="mt-2 inline-block text-[13px] font-medium text-brand-fg hover:underline"
           >
-            Try again
+            {t("common.tryAgain")}
           </Link>
         </div>
       ) : result.tasks.length === 0 ? (
@@ -121,15 +125,15 @@ export default async function BoardPage({
           icon={<KanbanSquare />}
           title={
             hasActiveFilters(filters)
-              ? "No tasks match these filters"
+              ? t("board.noMatchTitle")
               : projectName
-                ? "No tasks on this project board yet"
-                : "No tasks on the board yet"
+                ? t("board.noTasksProject")
+                : t("board.noTasks")
           }
           description={
             hasActiveFilters(filters)
-              ? "Try widening a filter, or clear them to see the whole board."
-              : "Cards appear here as soon as tasks exist. Create one with New task above, or from a project, meeting, or message."
+              ? t("board.noMatchBody")
+              : t("board.emptyBody")
           }
         />
       ) : (

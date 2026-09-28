@@ -7,12 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import {
   DUE_WINDOWS,
-  DUE_WINDOW_LABELS,
   TASK_PRIORITIES,
+  dueWindowLabel,
   countActiveFilters,
   type TaskFilters,
 } from "@/features/tasks/filters";
-import { TASK_STATUSES, TASK_STATUS_LABELS } from "@/features/tasks/schemas";
+import {
+  TASK_STATUSES,
+  taskPriorityText,
+  taskStatusText,
+} from "@/features/tasks/schemas";
+import { useT } from "@/lib/i18n/client";
 import type {
   MilestoneSelectOption,
   SelectOption,
@@ -46,6 +51,7 @@ export function TaskFilterBar({
   /** My Work is already scoped to one person, so an owner filter is noise. */
   showOwner?: boolean;
 }) {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const active = countActiveFilters(filters);
@@ -77,62 +83,62 @@ export function TaskFilterBar({
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="search"
-          placeholder="Search tasks…"
-          aria-label="Search tasks by title"
+          placeholder={t("tasks.filters.searchPlaceholder")}
+          aria-label={t("tasks.filters.searchLabel")}
           defaultValue={filters.q ?? ""}
           onChange={(e) => setFilter("q", e.target.value)}
           className="h-9 w-full sm:w-52"
         />
 
         <Select
-          aria-label="Filter by status"
+          aria-label={t("tasks.filters.status")}
           value={filters.status ?? ""}
           onChange={(e) => setFilter("status", e.target.value)}
           className="h-9 w-auto text-[13px]"
         >
-          <option value="">All open statuses</option>
+          <option value="">{t("tasks.filters.allOpenStatuses")}</option>
           {TASK_STATUSES.map((s) => (
             <option key={s} value={s}>
-              {TASK_STATUS_LABELS[s]}
+              {taskStatusText(s, t)}
             </option>
           ))}
         </Select>
 
         <Select
-          aria-label="Filter by priority"
+          aria-label={t("tasks.filters.priority")}
           value={filters.priority ?? ""}
           onChange={(e) => setFilter("priority", e.target.value)}
           className="h-9 w-auto text-[13px]"
         >
-          <option value="">Any priority</option>
+          <option value="">{t("tasks.filters.anyPriority")}</option>
           {TASK_PRIORITIES.map((p) => (
             <option key={p} value={p}>
-              {p.charAt(0).toUpperCase() + p.slice(1)}
+              {taskPriorityText(p, t)}
             </option>
           ))}
         </Select>
 
         <Select
-          aria-label="Filter by due date"
+          aria-label={t("tasks.filters.due")}
           value={filters.due ?? ""}
           onChange={(e) => setFilter("due", e.target.value)}
           className="h-9 w-auto text-[13px]"
         >
-          <option value="">Any due date</option>
+          <option value="">{t("tasks.filters.anyDue")}</option>
           {DUE_WINDOWS.map((w) => (
             <option key={w} value={w}>
-              {DUE_WINDOW_LABELS[w]}
+              {dueWindowLabel(w, t)}
             </option>
           ))}
         </Select>
 
         <Select
-          aria-label="Filter by program"
+          aria-label={t("tasks.filters.program")}
           value={filters.program ?? ""}
           onChange={(e) => setFilter("program", e.target.value)}
           className="h-9 w-auto max-w-44 text-[13px]"
         >
-          <option value="">Any program</option>
+          <option value="">{t("tasks.filters.anyProgram")}</option>
           {options.programs.map((p) => (
             <option key={p.id} value={p.id}>
               {p.label}
@@ -141,12 +147,12 @@ export function TaskFilterBar({
         </Select>
 
         <Select
-          aria-label="Filter by project"
+          aria-label={t("tasks.filters.project")}
           value={filters.project ?? ""}
           onChange={(e) => setFilter("project", e.target.value)}
           className="h-9 w-auto max-w-44 text-[13px]"
         >
-          <option value="">Any project</option>
+          <option value="">{t("tasks.filters.anyProject")}</option>
           {options.projects.map((p) => (
             <option key={p.id} value={p.id}>
               {p.label}
@@ -155,14 +161,16 @@ export function TaskFilterBar({
         </Select>
 
         <Select
-          aria-label="Filter by milestone"
+          aria-label={t("tasks.filters.milestone")}
           value={filters.milestone ?? ""}
           onChange={(e) => setFilter("milestone", e.target.value)}
           className="h-9 w-auto max-w-44 text-[13px]"
           disabled={milestones.length === 0}
         >
           <option value="">
-            {milestones.length === 0 ? "No milestones" : "Any milestone"}
+            {milestones.length === 0
+              ? t("tasks.filters.noMilestones")
+              : t("tasks.filters.anyMilestone")}
           </option>
           {milestones.map((m) => (
             <option key={m.id} value={m.id}>
@@ -173,12 +181,12 @@ export function TaskFilterBar({
 
         {showOwner ? (
           <Select
-            aria-label="Filter by owner"
+            aria-label={t("tasks.filters.owner")}
             value={filters.owner ?? ""}
             onChange={(e) => setFilter("owner", e.target.value)}
             className="h-9 w-auto max-w-44 text-[13px]"
           >
-            <option value="">Anyone</option>
+            <option value="">{t("tasks.filters.anyone")}</option>
             {options.people.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
@@ -188,14 +196,16 @@ export function TaskFilterBar({
         ) : null}
 
         <Select
-          aria-label="Filter by label"
+          aria-label={t("tasks.filters.label")}
           value={filters.label ?? ""}
           onChange={(e) => setFilter("label", e.target.value)}
           className="h-9 w-auto max-w-44 text-[13px]"
           disabled={options.labels.length === 0}
         >
           <option value="">
-            {options.labels.length === 0 ? "No labels" : "Any label"}
+            {options.labels.length === 0
+              ? t("tasks.filters.noLabels")
+              : t("tasks.filters.anyLabel")}
           </option>
           {options.labels.map((l) => (
             <option key={l.id} value={l.id}>
@@ -205,14 +215,14 @@ export function TaskFilterBar({
         </Select>
 
         <Select
-          aria-label="Filter by blocked state"
+          aria-label={t("tasks.filters.blocked")}
           value={filters.blocked ?? ""}
           onChange={(e) => setFilter("blocked", e.target.value)}
           className="h-9 w-auto text-[13px]"
         >
-          <option value="">Blocked or not</option>
-          <option value="yes">Blocked only</option>
-          <option value="no">Not blocked</option>
+          <option value="">{t("tasks.filters.blockedAny")}</option>
+          <option value="yes">{t("tasks.filters.blockedOnly")}</option>
+          <option value="no">{t("tasks.filters.notBlocked")}</option>
         </Select>
 
         {active > 0 ? (
@@ -222,7 +232,9 @@ export function TaskFilterBar({
             onClick={() => router.replace(basePath, { scroll: false })}
           >
             <X className="size-3.5" aria-hidden />
-            Clear {active} filter{active === 1 ? "" : "s"}
+            {active === 1
+              ? t("tasks.filters.clearOne", { count: active })
+              : t("tasks.filters.clearOther", { count: active })}
           </Button>
         ) : null}
       </div>
