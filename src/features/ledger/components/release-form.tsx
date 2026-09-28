@@ -1,20 +1,46 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { formatCents } from "@/features/ledger/money";
-import { releaseRestricted } from "@/features/ledger/services/ledger.commands";
-import { useLocale, useT } from "@/lib/i18n/client";
+import { fundAvailableOn, releaseRestricted } from "@/features/ledger/services/ledger.commands";
+import { useFormatters, useLocale, useT } from "@/lib/i18n/client";
 
 export interface ReleaseFundOption {
   id: string;
   code: string;
   name: string;
-  /** What the fund can release today; only for restricted funds. */
+  /** What the fund can release on the form's default date; only for restricted funds. */
   availableCents?: number;
+}
+
+/**
+ * What the chosen fund can release on the chosen date. Starts from the figure
+ * the page loaded for the default date, and asks again whenever the fund or
+ * the date changes, so the hint matches what the release will be checked
+ * against. `null` while asking or when the date is not a full date.
+ */
+function useAvailable(from: ReleaseFundOption | undefined, date: string, defaultDate: string) {
+  const [asked, setAsked] = useState<{ key: string; cents: number | null } | null>(null);
+  const key = from ? `${from.id}|${date}` : "";
+  const complete = /^\d{4}-\d{2}-\d{2}$/.test(date);
+  const isDefault = date === defaultDate && from?.availableCents !== undefined;
+  useEffect(() => {
+    if (!from || !complete || isDefault) return;
+    let current = true;
+    void fundAvailableOn(from.id, date).then((cents) => {
+      if (current) setAsked({ key, cents });
+    });
+    return () => {
+      current = false;
+    };
+  }, [from, date, key, complete, isDefault]);
+  if (!from || !complete) return null;
+  if (isDefault) return from.availableCents ?? null;
+  return asked?.key === key ? asked.cents : null;
 }
 
 /**
@@ -35,10 +61,13 @@ export function ReleaseForm({
   const { toast } = useToast();
   const t = useT();
   const locale = useLocale();
+  const format = useFormatters();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fromId, setFromId] = useState("");
+  const [date, setDate] = useState(defaultDate);
   const from = restricted.find((f) => f.id === fromId);
+  const available = useAvailable(from, date, defaultDate);
 
   return (
     <form
@@ -64,6 +93,7 @@ export function ReleaseForm({
         toast(t("finance.ledger.release.form.released"), { tone: "success" });
         formEl.reset();
         setFromId("");
+        setDate(defaultDate);
         router.refresh();
       }}
     >
@@ -83,13 +113,20 @@ export function ReleaseForm({
             </option>
           ))}
         </Select>
-        <FieldHint>
-          {from
-            ? t("finance.ledger.release.form.available", {
-                amount: formatCents(from.availableCents ?? 0, locale),
-              })
-            : t("finance.ledger.release.form.onlyRestricted")}
-        </FieldHint>
+        {/* Announced when it changes, so a screen reader hears the new figure. */}
+        <div aria-live="polite">
+          <FieldHint>
+            {!from
+              ? t("finance.ledger.release.form.onlyRestricted")
+              : available === null
+                ? t("finance.ledger.release.form.checkingAvailable")
+                : t("finance.ledger.release.form.available", {
+                    amount: formatCents(available, locale),
+                    // A date-only value: read in UTC so it never shows as the day before.
+                    date: format.inZone(date, "UTC", { year: "numeric", month: "short", day: "numeric" }),
+                  })}
+          </FieldHint>
+        </div>
       </div>
       <div>
         <Label htmlFor="release-to">{t("finance.ledger.release.form.toLabel")}</Label>
@@ -108,7 +145,14 @@ export function ReleaseForm({
       </div>
       <div>
         <Label htmlFor="release-date">{t("finance.ledger.release.form.date")}</Label>
-        <Input id="release-date" name="releaseDate" type="date" required defaultValue={defaultDate} />
+        <Input
+          id="release-date"
+          name="releaseDate"
+          type="date"
+          required
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
         <FieldHint>{t("finance.ledger.release.form.dateHint")}</FieldHint>
       </div>
       <div className="md:col-span-2">

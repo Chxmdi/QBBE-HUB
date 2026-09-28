@@ -448,6 +448,26 @@ export async function releaseRestricted(input: unknown): Promise<ActionResult> {
   return { ok: true, id: data as string };
 }
 
+/**
+ * What a restricted fund can release on a given date, for the release form's
+ * hint. The same database function the release itself checks, so the hint and
+ * the refusal agree. Read-only; returns null when it cannot be answered.
+ */
+export async function fundAvailableOn(fundId: unknown, date: unknown): Promise<number | null> {
+  const auth = await authorizeAdminAction();
+  if (!auth.ok) return null;
+  const parsed = z
+    .object({ fundId: z.string().uuid(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+    .safeParse({ fundId, date });
+  if (!parsed.success) return null;
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("ledger_fund_available_cents", {
+    p_fund: parsed.data.fundId,
+    p_as_of: parsed.data.date,
+  });
+  return error ? null : Number(data ?? 0);
+}
+
 // ---------------------------------------------------------------------------
 // Who may read the books
 // ---------------------------------------------------------------------------
