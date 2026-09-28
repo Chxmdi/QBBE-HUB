@@ -14,9 +14,12 @@ import type { Formatters } from "@/lib/i18n/format";
 import type { TranslateFn } from "@/lib/i18n/translate";
 import {
   attentionReasons,
+  attentionRules,
   sortForAttention,
+  thresholdsFrom,
   type TeamOverviewRow,
 } from "@/features/people/team-overview";
+import { personWorkHref } from "@/features/people/person-work";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("teamOverview.title") };
@@ -55,7 +58,7 @@ export default async function TeamOverviewPage({
   const today =
     calendarDateInZone(new Date(), session.timeZone) ?? new Date().toISOString().slice(0, 10);
 
-  const [overviewRes, projectsRes, teamsRes, teamMembersRes] = await Promise.all([
+  const [overviewRes, projectsRes, teamsRes, teamMembersRes, settingsRes] = await Promise.all([
     // rpc() is not covered by the page client's throw-on-error wrapper, so a
     // failed read would otherwise render as "No staff yet".
     supabase.rpc("team_overview", { p_today: today }).throwOnError(),
@@ -66,7 +69,16 @@ export default async function TeamOverviewPage({
       .is("archived_at", null),
     supabase.from("team").select("id, name").order("name"),
     supabase.from("team_member").select("team_id, user_id"),
+    // The organization's thresholds (Admin, Team signals); none saved means the defaults.
+    supabase
+      .from("team_signal_settings")
+      .select(
+        "overdue_count, overdue_age_days, blocked_no_update_days, in_progress_no_update_days, flag_project_reports, flag_overdue_decisions",
+      )
+      .eq("organization_id", session.organizationId)
+      .maybeSingle(),
   ]);
+  const thresholds = thresholdsFrom(settingsRes.data);
 
   const now = new Date();
   const staleByOwner = new Map<string, number>();
@@ -107,7 +119,7 @@ export default async function TeamOverviewPage({
     rows.map((row) => ({
       row,
       staleProjects: staleByOwner.get(row.user_id) ?? 0,
-      reasons: attentionReasons(row, today, staleByOwner.get(row.user_id) ?? 0, t),
+      reasons: attentionReasons(row, today, staleByOwner.get(row.user_id) ?? 0, t, thresholds),
     })),
   );
   const needingAttention = entries.filter((e) => e.reasons.length > 0).length;
@@ -191,7 +203,8 @@ export default async function TeamOverviewPage({
                           <Avatar name={row.full_name} src={row.avatar_url} size="md" />
                           <span>
                             <Link
-                              href={`/people?person=${row.user_id}`}
+                              href={personWorkHref(row.user_id)}
+                              aria-label={t("teamOverview.viewWork", { name: row.full_name })}
                               className="block font-medium hover:underline"
                             >
                               {row.full_name}
@@ -248,7 +261,14 @@ export default async function TeamOverviewPage({
               </table>
             </div>
           </div>
-          <p className="meta mt-3">{t("teamOverview.footnote")}</p>
+          <div className="meta mt-3">
+            <p>{t("teamOverview.footnoteIntro")}</p>
+            <ul className="mt-1 list-disc pl-5">
+              {attentionRules(thresholds, t).map((rule) => (
+                <li key={rule}>{rule}</li>
+              ))}
+            </ul>
+          </div>
         </>
       )}
     </div>

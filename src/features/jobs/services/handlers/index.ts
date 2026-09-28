@@ -19,6 +19,7 @@ import { retryWorkflowExecutions } from "./retry-workflow-executions";
 import { runExports } from "./run-exports";
 import { scheduledAnnouncements } from "./scheduled-announcements";
 import { staleProjectSweep } from "./stale-project-sweep";
+import { teamSignalDigest, teamSignalReminders } from "./team-signals";
 import { vmsSync } from "./vms-sync";
 
 /**
@@ -41,6 +42,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   "due-date-reminders": dueDateReminders,
   "grant-report-reminders": grantReportReminders,
   "stale-project-sweep": staleProjectSweep,
+  "team-signal-reminders": teamSignalReminders,
+  "team-signal-digest": teamSignalDigest,
 
   // External integrations
   "google-sync": googleSync,

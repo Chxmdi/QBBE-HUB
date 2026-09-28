@@ -82,6 +82,10 @@ export const opsFrCA: typeof opsEn = {
       },
     },
     descriptions: {
+      "team-signal-reminders":
+        "Rappelle avec bienveillance au personnel le travail qui requiert son attention, une fois par signal, là où les rappels sont activés.",
+      "team-signal-digest":
+        "Envoie chaque semaine aux propriétaires et aux administrateurs la liste des personnes ayant un signal de travail ouvert, là où le résumé est activé.",
       "drain-notifications":
         "Envoie les courriels de notification en attente et consigne chaque tentative.",
       "retry-failed-emails":
@@ -153,6 +157,19 @@ export const opsFrCA: typeof opsEn = {
         "Ce projet fait l’objet d’un compte rendu {cadence}. La dernière mise à jour de l’état date de plus de {days} jours.",
       cadenceWeekly: "hebdomadaire",
       cadenceMonthly: "mensuel",
+      teamSignalTitle: "Une partie de votre travail mérite peut-être un coup d’œil",
+      teamSignalBody:
+        "{reasons}. Votre résumé de travail donne les détails. Ce rappel n’est envoyé qu’une fois et ne se répète pas tant que la situation reste la même.",
+    },
+    teamDigest: {
+      subjectOne: "Signaux d’équipe : 1 personne a du travail qui requiert votre attention",
+      subjectOther: "Signaux d’équipe : {count} personnes ont du travail qui requiert votre attention",
+      intro:
+        "Ces personnes ont au moins un signal de travail ouvert cette semaine. Chaque ligne est un fait tiré de leurs dossiers de travail, pas un jugement.",
+      openSummary: "Ouvrir le résumé de travail",
+      openOverview: "Ouvrir la vue d’ensemble de l’équipe",
+      footer:
+        "Vous recevez ce message parce que vous êtes propriétaire ou administrateur de {organization} et que le résumé hebdomadaire de l’équipe est activé dans Administration, Signaux d’équipe.",
     },
   },
   retention: {

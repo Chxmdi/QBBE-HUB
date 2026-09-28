@@ -1,6 +1,7 @@
 /**
  * English text for people screens (#141). Mounted at the top level of the
- * catalogue; this file owns only these namespaces: people, teamOverview, crm.
+ * catalogue; this file owns only these namespaces: people, teamOverview, personWork,
+ * teamSignals, crm.
  */
 export const peopleEn = {
   people: {
@@ -65,8 +66,17 @@ export const peopleEn = {
     trendSame: "same as the week before",
     trendUp: "up from {count} the week before",
     trendDown: "down from {count} the week before",
-    footnote:
-      "“Needs attention” means 3 or more overdue tasks, a task overdue by more than 7 days, a blocked task with no update for 5 days, a task in progress with no update for 7 days, an overdue project report, or a decision past its due date.",
+    footnoteIntro:
+      "“Needs attention” means any of the following. Only work records are used; sign-ins and time online are not.",
+    rules: {
+      overdueCount: "{count} or more overdue tasks",
+      overdueAge: "a task overdue by more than {days} days",
+      blocked: "a blocked task with no update for {days} days",
+      inProgress: "a task in progress with no update for {days} days",
+      projectReports: "a project report overdue",
+      decisions: "a decision past its due date",
+    },
+    viewWork: "Work summary for {name}",
     reasons: {
       overdueOne: "{count} task overdue",
       overdueOther: "{count} tasks overdue",
@@ -80,6 +90,105 @@ export const peopleEn = {
       projectReportsOther: "{count} project reports overdue",
       decisionsOne: "{count} decision past due",
       decisionsOther: "{count} decisions past due",
+    },
+  },
+  personWork: {
+    metaTitle: "Work summary",
+    myWorkSummary: "My work summary",
+    eyebrow: "People",
+    titleSelf: "My work summary",
+    titleOther: "Work summary for {name}",
+    descriptionSelf:
+      "Your open work, exactly as an owner or admin sees it. Built only from tasks, projects, decisions, meeting action items and the activity feed. Sign-ins and time online are not tracked.",
+    descriptionOther:
+      "{name}’s open work, exactly as they see it on their own summary. Built only from work records. Sign-ins and time online are not tracked.",
+    backToOverview: "Back to team overview",
+    backToMyWork: "Back to My work",
+    lastWork: "last recorded work {date}",
+    reasonsLabel: "Why this needs attention",
+    figures: {
+      open: "Open tasks",
+      overdue: "Overdue",
+      blocked: "Blocked",
+      dueSoon: "Due in 7 days",
+      done7: "Done, last 7 days",
+      done30: "Done, last 30 days",
+      decisions: "Open decisions",
+      actions: "Meeting action items",
+    },
+    tasks: {
+      heading: "Open tasks",
+      none: "No open tasks.",
+      emptyGroup: "Nothing here.",
+      groups: {
+        overdue: "Overdue",
+        blocked: "Blocked",
+        this_week: "Due in the next 7 days",
+        later: "Later, or no due date",
+      },
+      due: "due {date}",
+      noDue: "no due date",
+      overdueBy: "due {date}, {count} days ago",
+      noRecentUpdate: "No update since {date}",
+    },
+    projects: {
+      heading: "Projects owned",
+      none: "No active projects owned.",
+      reportOverdue: "Report overdue",
+      reportOk: "Reporting up to date",
+      noCadence: "No reporting schedule",
+      lastUpdate: "last status update {date}",
+      neverUpdated: "no status update yet",
+    },
+    decisions: {
+      heading: "Open decisions",
+      none: "No open decisions.",
+      due: "due {date}",
+      pastDue: "past due",
+    },
+    actions: {
+      heading: "Meeting action items",
+      none: "No open meeting action items.",
+      fromMeeting: "from {meeting}",
+    },
+    activity: {
+      heading: "Recorded activity",
+      window: "What the activity feed recorded, back to {date}. Older entries are removed by the retention policy.",
+      none: "No recorded activity in this period.",
+      pagesLabel: "Activity pages",
+      older: "Show older activity",
+      latest: "Back to the latest",
+    },
+  },
+  teamSignals: {
+    title: "Team signals",
+    eyebrow: "Administration",
+    description:
+      "When a staff member’s work is flagged as needing attention, and who hears about it. Every rule reads work records only, never sign-ins, time online or messages.",
+    privacyNotice:
+      "Before switching on reminders or the digest, confirm the staff privacy notice covers this use of work records, and tell staff about it.",
+    rulesHeading: "When work needs attention",
+    deliveryHeading: "Who hears about it",
+    overdueCount: "Overdue tasks before flagging",
+    overdueCountHint: "Flag someone with this many overdue tasks or more. Default 3.",
+    overdueAgeDays: "Days overdue before flagging",
+    overdueAgeDaysHint: "Flag any single task overdue by more than this many days. Default 7.",
+    blockedDays: "Days a blocked task can go without an update",
+    blockedDaysHint: "Default 5.",
+    inProgressDays: "Days a task in progress can go without an update",
+    inProgressDaysHint: "Default 7.",
+    flagProjectReports: "Flag project reports that are overdue",
+    flagOverdueDecisions: "Flag decisions past their due date",
+    remindersEnabled: "Send each person a gentle reminder when a signal starts",
+    remindersHint:
+      "Once per signal, through their notifications and their own notification settings. A signal that stands does not repeat.",
+    digestEnabled: "Email owners and admins a weekly digest",
+    digestHint: "Mondays. Lists only people with open signals.",
+    save: "Save",
+    saved: "Saved.",
+    errors: {
+      range: "Enter a whole number from {min} to {max}.",
+      generic: "The settings could not be saved. Try again.",
     },
   },
   crm: {

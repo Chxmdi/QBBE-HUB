@@ -13,6 +13,7 @@ export const adminEn = {
       email: "Email",
       exports: "Exports",
       retention: "Retention",
+      teamSignals: "Team signals",
       records: "Records & holds",
       approvals: "Approvals",
       designSystem: "Design system",

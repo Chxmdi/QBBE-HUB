@@ -250,6 +250,7 @@ export const accountEn = {
         role: "role",
         sponsor: "sponsor",
         staleProject: "stale project",
+        workSignal: "work signal",
         announcement: "announcement",
       },
       categories: {

@@ -259,6 +259,7 @@ export const accountFrCA: typeof accountEn = {
         role: "rôle",
         sponsor: "parrainage",
         staleProject: "projet sans mise à jour",
+        workSignal: "signal de travail",
         announcement: "annonce",
       },
       categories: {

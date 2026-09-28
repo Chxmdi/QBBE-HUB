@@ -44,8 +44,8 @@ type RecordAccess = "manage" | "read" | "none";
 
 interface Row {
   account: QaAccount;
-  staffSurfaces: Access; // /crm, /reports
-  adminSurfaces: Access; // /admin, /admin/access, /people/overview
+  staffSurfaces: Access; // /crm, /reports, /people/me/work (their own work summary)
+  adminSurfaces: Access; // /admin, /admin/access, /people/overview, someone else's work summary
   newProject: boolean;
   projects: Record<string, RecordAccess>;
   programs: Record<string, RecordAccess>;
@@ -138,6 +138,11 @@ function idsByName(table: "project" | "program"): Record<string, string> {
 test.describe("role matrix", () => {
   const projectIds = idsByName("project");
   const programIds = idsByName("program");
+  // Someone else's work summary (#136): the owner is not in the matrix, so
+  // every account here is looking at another person's page.
+  const ownerSummary = `/people/${sql(
+    "select id::text from user_profile where email = 'qa-owner@example.com'",
+  )}/work`;
 
   for (const row of MATRIX) {
     test(`${row.account}: surfaces, records and actions match the matrix`, async ({ page }) => {
@@ -161,7 +166,7 @@ test.describe("role matrix", () => {
           expect(landed, `${row.account} is sent away from ${path}`).toBe("/");
         }
       }
-      for (const path of ADMIN_ONLY) {
+      for (const path of [...ADMIN_ONLY, ownerSummary]) {
         const landed = await where(path);
         if (row.adminSurfaces === "allowed") {
           expect(landed, `${row.account} reaches ${path}`).toBe(path);

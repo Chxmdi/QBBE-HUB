@@ -12,6 +12,7 @@ export const adminFrCA: typeof adminEn = {
       email: "Courriel",
       exports: "Exportations",
       retention: "Conservation",
+      teamSignals: "Signaux d’équipe",
       records: "Documents et mises en suspens",
       approvals: "Approbations",
       designSystem: "Système de design",

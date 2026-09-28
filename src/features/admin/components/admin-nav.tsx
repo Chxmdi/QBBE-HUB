@@ -19,6 +19,7 @@ const ADMIN_SECTIONS: { href: string; label: MessageKey }[] = [
   { href: "/admin/email", label: "admin.nav.email" },
   { href: "/admin/exports", label: "admin.nav.exports" },
   { href: "/admin/retention", label: "admin.nav.retention" },
+  { href: "/admin/team-signals", label: "admin.nav.teamSignals" },
   { href: "/admin/records", label: "admin.nav.records" },
   { href: "/admin/approvals", label: "admin.nav.approvals" },
   { href: "/admin/design-system", label: "admin.nav.designSystem" },
