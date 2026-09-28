@@ -244,6 +244,23 @@ export const accountFrCA: typeof accountEn = {
       threadFailed: "Impossible de mettre à jour ce fil.",
     },
     email: {
+      reasons: {
+        assigned: "attribution",
+        mentioned: "mention",
+        reply: "réponse",
+        approved: "approbation",
+        decisionRequested: "décision demandée",
+        dueDateChanged: "échéance modifiée",
+        dueDate: "échéance",
+        grantReportDue: "rapport de subvention à remettre",
+        projectClosed: "projet fermé",
+        resubmitted: "soumis de nouveau",
+        reviewRequested: "révision demandée",
+        role: "rôle",
+        sponsor: "parrainage",
+        staleProject: "projet sans mise à jour",
+        announcement: "annonce",
+      },
       categories: {
         assignment: "Qui vous est confié",
         mention: "Mentions",

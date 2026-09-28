@@ -178,6 +178,35 @@ function dueLabel(dueOn: string | null | undefined, locale: Locale): string | nu
   return formattersFor(locale).date(`${dueOn}T12:00:00Z`, "UTC");
 }
 
+// Why the recipient is told, as jobs store it: a code, or several joined by
+// ", " when notifications merge. Known codes read in the recipient's language;
+// anything else is shown as stored.
+const REASON_KEYS: Record<string, MessageKey> = {
+  "assigned": "notifications.email.reasons.assigned",
+  "mentioned": "notifications.email.reasons.mentioned",
+  "reply": "notifications.email.reasons.reply",
+  "approved": "notifications.email.reasons.approved",
+  "decision requested": "notifications.email.reasons.decisionRequested",
+  "due date changed": "notifications.email.reasons.dueDateChanged",
+  "due date": "notifications.email.reasons.dueDate",
+  "grant report due": "notifications.email.reasons.grantReportDue",
+  "project closed": "notifications.email.reasons.projectClosed",
+  "resubmitted": "notifications.email.reasons.resubmitted",
+  "review requested": "notifications.email.reasons.reviewRequested",
+  "role": "notifications.email.reasons.role",
+  "sponsor": "notifications.email.reasons.sponsor",
+  "stale project": "notifications.email.reasons.staleProject",
+  "announcement": "notifications.email.reasons.announcement",
+};
+
+function actionLabel(action: string | null | undefined, t: TranslateFn): string | null | undefined {
+  if (!action) return action;
+  return action
+    .split(", ")
+    .map((part) => (REASON_KEYS[part] ? t(REASON_KEYS[part]) : part))
+    .join(", ");
+}
+
 /** A single notification, sent as it happens. */
 export function renderNotificationEmail(input: NotificationEmailInput): EmailBody {
   const locale = recipientLocale(input.locale);
@@ -188,7 +217,7 @@ export function renderNotificationEmail(input: NotificationEmailInput): EmailBod
   const href = safeLink(input.link);
   const subject = input.title;
   const details = [
-    detailLine("notifications.email.detail.action", input.action),
+    detailLine("notifications.email.detail.action", actionLabel(input.action, t)),
     detailLine("notifications.email.detail.context", input.context),
     detailLine("notifications.email.detail.owner", input.ownerLabel),
     detailLine("notifications.email.detail.due", dueLabel(input.dueOn, locale)),

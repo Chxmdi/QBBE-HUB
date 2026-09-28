@@ -235,6 +235,23 @@ export const accountEn = {
       threadFailed: "Could not update that thread.",
     },
     email: {
+      reasons: {
+        assigned: "assigned",
+        mentioned: "mentioned",
+        reply: "reply",
+        approved: "approved",
+        decisionRequested: "decision requested",
+        dueDateChanged: "due date changed",
+        dueDate: "due date",
+        grantReportDue: "grant report due",
+        projectClosed: "project closed",
+        resubmitted: "resubmitted",
+        reviewRequested: "review requested",
+        role: "role",
+        sponsor: "sponsor",
+        staleProject: "stale project",
+        announcement: "announcement",
+      },
       categories: {
         assignment: "Assigned to you",
         mention: "Mentions",
