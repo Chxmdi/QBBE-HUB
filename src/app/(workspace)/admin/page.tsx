@@ -94,6 +94,14 @@ export default async function AdminPage({
 }) {
   const session = await requireAdminAal2();
   const t = await getT();
+  // Audit codes are written by the app and by database triggers. Known ones
+  // read in the interface language; one this list has not caught up with is
+  // shown as recorded, marked as English.
+  const auditCode = (group: "eventTypes" | "actions" | "objects", code: string, shown: string) => {
+    const key = `admin.workspace.audit.${group}.${code.replace(/\./g, "_")}`;
+    const label = labelOr(t, key, "");
+    return label ? label : <span lang="en" translate="no">{shown}</span>;
+  };
   const format = await getFormatters();
   const params = await searchParams;
   const auditPage = Math.max(1, Number(params.auditPage) || 1);
@@ -786,12 +794,16 @@ export default async function AdminPage({
                     <span className="font-medium">
                       {event.actor?.full_name ?? t("common.system")}
                     </span>{" "}
-                    · {event.action.replace(/_/g, " ")}
+                    · {auditCode("actions", event.action, event.action.replace(/_/g, " "))}
                     {event.object_type ? (
-                      <span className="text-muted"> ({event.object_type})</span>
+                      <span className="text-muted">
+                        {" "}({auditCode("objects", event.object_type, event.object_type)})
+                      </span>
                     ) : null}
                   </span>
-                  <Badge tone="neutral">{event.event_type}</Badge>
+                  <Badge tone="neutral">
+                    {auditCode("eventTypes", event.event_type, event.event_type)}
+                  </Badge>
                   <time
                     className="meta whitespace-nowrap"
                     dateTime={event.created_at}

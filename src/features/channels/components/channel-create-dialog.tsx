@@ -57,7 +57,9 @@ export function ChannelCreateDialog({ defaultOpen = false }: { defaultOpen?: boo
               autoFocus
             />
             <FieldHint>
-              {t("channels.create.nameHint")}
+              {t("channels.create.nameHint")}{" "}
+              {/* The prefixes are the slugs channels really use, in either language. */}
+              <span lang="en" translate="no">program-, project-, event-, team-.</span>
             </FieldHint>
           </div>
           <div>

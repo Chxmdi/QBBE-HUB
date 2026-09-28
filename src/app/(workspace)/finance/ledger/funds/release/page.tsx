@@ -121,7 +121,8 @@ export default async function ReleaseRestrictedPage() {
           {restricted.length === 0 || unrestricted.length === 0 ? (
             <p className="meta">
               {t("finance.ledger.release.needsFunds")}{" "}
-              <Link href="/finance/ledger/funds" className="text-brand-fg hover:underline">
+              {/* Underlined: inside a sentence, colour alone does not mark a link (WCAG 1.4.1). */}
+              <Link href="/finance/ledger/funds" className="text-brand-fg underline">
                 {t("finance.ledger.release.manageFunds")}
               </Link>
             </p>

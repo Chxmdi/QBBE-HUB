@@ -160,7 +160,7 @@ export const commsFrCA: typeof commsEn = {
       title: "Créer un canal",
       name: "Nom",
       namePlaceholder: "p. ex. programme-famille-dabord",
-      nameHint: "Utilisez des préfixes prévisibles : program-, project-, event-, team-.",
+      nameHint: "Utilisez des préfixes prévisibles :",
       purpose: "Objectif",
       purposePlaceholder: "À quoi sert ce canal?",
       privacy: "Confidentialité",

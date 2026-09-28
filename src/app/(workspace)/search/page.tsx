@@ -184,7 +184,11 @@ export default async function SearchPage({
                         </span>
                         {result.snippet ? (
                           <span className="meta block truncate">
-                            {result.snippet}
+                            {/* The search function labels message hits with a fixed English
+                                phrase; every other snippet is the record's own text. */}
+                            {result.snippet === "in conversation"
+                              ? t("shell.search.inConversation")
+                              : result.snippet}
                           </span>
                         ) : null}
                       </span>

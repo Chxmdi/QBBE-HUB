@@ -180,6 +180,7 @@ describe("workspace catalogues", () => {
 // Anything else identical in French is English that was copied across and
 // never translated.
 const SAME_OUTSIDE_FINANCE = new Set([
+  "communication", "document", "documents", "invitation", "signature",
   " · Version {number}", ".", "Action", "Actions", "Active", "Administration",
   "Budgets", "CSV", "Communication", "Contact", "Contacts", "Conversation",
   "Date", "Description", "Direct", "Discussion", "Document", "Documents",
@@ -188,8 +189,8 @@ const SAME_OUTSIDE_FINANCE = new Set([
   "Navigation", "Note", "Notes", "Notifications", "Occurrences", "Options",
   "PDF", "QBBE Hub", "Question {n}", "Questions", "Rose", "Sections",
   "Signature", "Signatures", "Type", "URL", "VMS", "Version {number}",
-  "Versions", "accent", "active", "activity", "association", "communications",
-  "compact", "completed", "danger", "direct", "discussion", "google",
+  "Versions", "accent", "active", "association", "communications",
+  "compact", "danger", "direct", "discussion", "google",
   "https://drive.google.com/…", "information", "message", "note", "{category} / {name}", "{count} min",
   "{count} minute", "{count} minutes", "{greeting}, {name}", "{label} — {description}", "{status} {count}", "← Messages",
 ]);

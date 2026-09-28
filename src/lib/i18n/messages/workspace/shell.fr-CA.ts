@@ -54,6 +54,7 @@ export const shellFrCA: typeof shellEn = {
       },
     },
     search: {
+      inConversation: "dans une conversation",
       title: "Recherche",
       resultsFor: "Résultats pour « {query} »",
       resultOne: "{count} résultat auquel vous avez accès.",

@@ -42,7 +42,7 @@ const OWNER = "qa-owner@example.com";
 // leaves out words both languages spell the same (date, message, document,
 // notes, contact, agenda, minutes, action, type, total, public, plan, location,
 // notifications, archive, import, signature, active, inactive, comment, lead,
-// admin), and "report", "export", "file", "due", "on", "no", "an" and "as",
+// admin, change, continue, urgent, sent, invite, sort), and "report", "export", "file", "due", "on", "no", "an" and "as",
 // which French also uses. Letters include accented ones: a plain \b would
 // split « Payée » after "Pay".
 const ENGLISH_WORDS = [
@@ -59,12 +59,12 @@ const ENGLISH_WORDS = [
   "add", "new", "save", "edit", "delete", "remove", "download", "print", "open", "close",
   "closed", "back", "view", "show", "hide", "search", "submit", "approve", "approved",
   "reject", "rejected", "pending", "cancel", "create", "upload", "choose", "select",
-  "enter", "send", "sent", "sign", "invite", "invited", "clear", "restore", "retry",
+  "enter", "send", "sign", "invited", "clear", "restore", "retry",
   "reply", "replies", "mark", "read", "unread", "join", "leave", "move", "copy",
-  "share", "shared", "assign", "assigned", "unassigned", "filter", "filters", "sort",
+  "share", "shared", "assign", "assigned", "unassigned", "filter", "filters",
   "apply", "update", "updated", "created", "deleted", "archived", "complete",
-  "completed", "done", "start", "started", "end", "ended", "change", "changes",
-  "manage", "continue", "next", "previous", "loading", "saving", "failed", "error",
+  "completed", "done", "start", "started", "end", "ended", 
+  "manage", "next", "previous", "loading", "saving", "failed", "error",
   // Things.
   "task", "tasks", "project", "projects", "program", "programs", "meeting", "meetings",
   "event", "events", "people", "person", "team", "teams", "member", "members",
@@ -80,7 +80,7 @@ const ENGLISH_WORDS = [
   "outcome", "outcomes", "milestone", "milestones", "attendees", "follow-up",
   "saved", "library", "folder", "folders", "signed", "account", "accounts", "jobs",
   "retention", "hold", "holds", "policy", "policies", "board", "results", "anyone",
-  "everyone", "high", "low", "medium", "urgent",
+  "everyone", "high", "low", "medium",
 ];
 const ENGLISH = new RegExp(
   `(?<![\\p{L}\\p{N}’'])(${ENGLISH_WORDS.join("|")})(?![\\p{L}\\p{N}’'])`,
@@ -88,9 +88,11 @@ const ENGLISH = new RegExp(
 );
 
 // Dates, times and amounts written the English way. French writes « 28 sept. »,
-// « 14 h 30 » and « 1 234,56 $ ». Case-sensitive: French « mar. » is Tuesday.
+// « 14 h 30 » and « 1 234,56 $ ». Case-sensitive, and short weekdays only
+// with the comma English puts after them: French « mar. » is Tuesday and
+// « Mon travail » is My work.
 const ENGLISH_FORMAT =
-  /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December) \d|\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b|\d ?(AM|PM|am|pm|a\.m\.|p\.m\.)\b|\$\d/;
+  /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December) \d|\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\b|\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun),|\d ?(AM|PM|am|pm|a\.m\.|p\.m\.)\b|\$\d/;
 
 /**
  * Every human-written value stored in the workspace, to set aside as data.
@@ -107,16 +109,18 @@ function recordedText(): string[] {
     const json = sql(
       `select coalesce(json_agg(to_jsonb(x)), '[]')::text from (select * from public.${table} limit 2000) x;`,
     );
-    const collect = (value: unknown) => {
+    const collect = (value: unknown, column = "") => {
       if (typeof value === "string") {
         const text = value.trim();
         // Enum codes ("in_review", "not_started") are not data: they must not
-        // hide an untranslated status label.
-        if (text.length > 1 && !/^[a-z]+(?:_[a-z]+)*$/.test(text)) values.add(text);
+        // hide an untranslated status label. Names are, even when they look
+        // like one: the "announcements" channel is called that in French too.
+        const named = /(^|_)(name|slug|title)$/.test(column);
+        if (text.length > 1 && (named || !/^[a-z]+(?:_[a-z]+)*$/.test(text))) values.add(text);
       } else if (Array.isArray(value)) {
-        value.forEach(collect);
+        for (const item of value) collect(item, column);
       } else if (value && typeof value === "object") {
-        Object.values(value).forEach(collect);
+        for (const [key, item] of Object.entries(value)) collect(item, key);
       }
     };
     for (const row of JSON.parse(json || "[]") as Record<string, unknown>[]) collect(row);
@@ -157,9 +161,15 @@ async function landmarkText(page: Page): Promise<string[]> {
 function withoutData(text: string, data: string[]): string {
   let rest = text;
   for (const value of data) if (rest.includes(value)) rest = rest.split(value).join(" ");
-  // Email addresses and URLs are not words in either language.
-  return rest.replace(/\S+@\S+|https?:\/\/\S+/g, " ");
+  for (const name of PRODUCT_NAMES) rest = rest.split(name).join(" ");
+  // Email addresses, URLs, template placeholders ({{person.name}}) and
+  // environment variable names (EMAIL_PROVIDER_API_KEY) are not words in
+  // either language.
+  return rest.replace(/\S+@\S+|https?:\/\/\S+|\{\{[^}]*\}\}|\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/g, " ");
 }
+
+// Product names are written the same in French.
+const PRODUCT_NAMES = ["Microsoft Teams", "Teams", "Google Meet", "Zoom"];
 
 async function expectFrench(page: Page, path: string, data: string[]) {
   const response = await page.goto(path);

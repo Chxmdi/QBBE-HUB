@@ -156,7 +156,7 @@ export const commsEn = {
       title: "Create channel",
       name: "Name",
       namePlaceholder: "e.g. program-family-first",
-      nameHint: "Use predictable prefixes: program-, project-, event-, team-.",
+      nameHint: "Use predictable prefixes:",
       purpose: "Purpose",
       purposePlaceholder: "What is this channel for?",
       privacy: "Privacy",

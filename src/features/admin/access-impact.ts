@@ -1,4 +1,5 @@
 import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+import { scopeRoleLabel } from "@/features/admin/labels";
 
 const ENGLISH = createTranslator("en");
 
@@ -59,7 +60,7 @@ export function buildAccessImpact(input: AccessImpactInput, t: TranslateFn = ENG
     for (const p of programs) {
       const direct = input.programMemberships.find(m => m.program_id === p.id && m.user_id === member.user_id);
       const persisted = input.programGrants?.find(g => g.program_id === p.id && g.user_id === member.user_id);
-      const sources = [admin ? t("admin.access.sources.orgAdmin") : "", portfolioViewer ? t("admin.access.sources.leadershipViewer") : "", p.lead_id === member.user_id ? t("admin.access.sources.programLead") : "", direct ? t("admin.access.sources.directMembership", { role: direct.role }) : "", persisted ? t("admin.access.sources.persistedGrant", { role: persisted.role }) : ""].filter(Boolean);
+      const sources = [admin ? t("admin.access.sources.orgAdmin") : "", portfolioViewer ? t("admin.access.sources.leadershipViewer") : "", p.lead_id === member.user_id ? t("admin.access.sources.programLead") : "", direct ? t("admin.access.sources.directMembership", { role: scopeRoleLabel(direct.role, t) }) : "", persisted ? t("admin.access.sources.persistedGrant", { role: scopeRoleLabel(persisted.role, t) }) : ""].filter(Boolean);
       if (sources.length) grants.push({ type: "program", id: p.id, name: p.name,
         manage: !readOnly && (admin || p.lead_id === member.user_id || !!direct && ["lead", "manager"].includes(direct.role) || !!persisted && ["lead", "manager"].includes(persisted.role)), sources });
     }
@@ -67,7 +68,7 @@ export function buildAccessImpact(input: AccessImpactInput, t: TranslateFn = ENG
       const inherited = grants.find(g => g.type === "program" && g.id === p.program_id);
       const direct = input.projectMemberships.find(m => m.project_id === p.id && m.user_id === member.user_id);
       const persisted = input.projectGrants?.find(g => g.project_id === p.id && g.user_id === member.user_id);
-      const sources = [admin ? t("admin.access.sources.orgAdmin") : "", portfolioViewer ? t("admin.access.sources.leadershipViewer") : "", p.owner_id === member.user_id ? t("admin.access.sources.projectOwner") : "", inherited ? t("admin.access.sources.programMembership", { name: inherited.name }) : "", direct ? t("admin.access.sources.directMembership", { role: direct.role }) : "", persisted ? t("admin.access.sources.persistedGrant", { role: persisted.role }) : ""].filter(Boolean);
+      const sources = [admin ? t("admin.access.sources.orgAdmin") : "", portfolioViewer ? t("admin.access.sources.leadershipViewer") : "", p.owner_id === member.user_id ? t("admin.access.sources.projectOwner") : "", inherited ? t("admin.access.sources.programMembership", { name: inherited.name }) : "", direct ? t("admin.access.sources.directMembership", { role: scopeRoleLabel(direct.role, t) }) : "", persisted ? t("admin.access.sources.persistedGrant", { role: scopeRoleLabel(persisted.role, t) }) : ""].filter(Boolean);
       if (sources.length) grants.push({ type: "project", id: p.id, name: p.name,
         manage: !readOnly && (admin || p.owner_id === member.user_id || !!inherited?.manage || direct?.role === "manager" || persisted?.role === "project_manager"), sources });
     }

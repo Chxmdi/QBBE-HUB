@@ -55,6 +55,7 @@ export const shellEn = {
       },
     },
     search: {
+      inConversation: "in conversation",
       title: "Search",
       resultsFor: "Results for “{query}”",
       resultOne: "{count} result you have access to.",
