@@ -8,9 +8,11 @@ import { SignatureRecord, type SignatureRow } from "@/features/forms/components/
 import { answerText, type FormField } from "@/features/forms/fields";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatInZone } from "@/lib/time";
+import { getFormatters, getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Form submission" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("forms.submission.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 type ScanStatus = "pending" | "clean" | "quarantined" | "rejected";
@@ -54,6 +56,7 @@ export default async function SubmissionPage({ params }: { params: Promise<{ id:
     ((files ?? []) as { id: string; field_key: string; file_name: string; scan_status: ScanStatus; content_sha256: string | null }[])
       .map((f) => [f.field_key, f]),
   );
+  const [t, format, locale] = await Promise.all([getT(), getFormatters(), getLocale()]);
   const check = (verification as { recomputed_sha256: string; matches: boolean }[] | null)?.[0];
 
   return (
@@ -61,25 +64,27 @@ export default async function SubmissionPage({ params }: { params: Promise<{ id:
       <div>
         <Breadcrumbs
           items={[
-            { label: "Forms", href: "/forms" },
+            { label: t("forms.title"), href: "/forms" },
             { label: row.form.title, href: `/forms/${row.form.id}` },
-            { label: "Submission" },
+            { label: t("forms.submission.crumb") },
           ]}
         />
         <PageHeader
-          eyebrow="Submission"
+          eyebrow={t("forms.submission.eyebrow")}
           title={row.form.title}
-          description={`Submitted by ${row.submitter?.full_name ?? "a member"} on ${formatInZone(
-            row.submitted_at,
-            session.timeZone,
-            { dateStyle: "long", timeStyle: "long" },
-          )}. Submissions cannot be changed.`}
+          description={t("forms.submission.description", {
+            name: row.submitter?.full_name ?? t("forms.submission.aMember"),
+            date: format.inZone(row.submitted_at, session.timeZone, {
+              dateStyle: "long",
+              timeStyle: "long",
+            }),
+          })}
         />
       </div>
 
       <section aria-labelledby="answers" className="card p-4">
         <h2 id="answers" className="mb-3 text-[15px] font-semibold">
-          Answers
+          {t("forms.submission.answers")}
         </h2>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-[14px] sm:grid-cols-[minmax(10rem,16rem)_1fr]">
           {row.form.fields.map((f) => {
@@ -94,7 +99,9 @@ export default async function SubmissionPage({ params }: { params: Promise<{ id:
                       <OpenFileButton kind="form-file" id={file.id} fileName={file.file_name} scanStatus={file.scan_status} />
                     </span>
                   ) : (
-                    answerText(f, row.answers[f.key]) || <span className="text-muted">No answer</span>
+                    answerText(f, row.answers[f.key], false, t, locale) || (
+                      <span className="text-muted">{t("forms.submission.noAnswer")}</span>
+                    )
                   )}
                 </dd>
               </div>
@@ -102,9 +109,13 @@ export default async function SubmissionPage({ params }: { params: Promise<{ id:
           })}
         </dl>
         <p className="meta mt-4">
-          SHA-256 recorded at submission:{" "}
+          {t("forms.submission.shaRecorded")}{" "}
           <span className="font-mono text-[12px] break-all">{row.content_sha256}</span>
-          {check ? (check.matches ? " (still matches)" : " (does not match what is stored now)") : null}
+          {check
+            ? check.matches
+              ? t("forms.submission.stillMatches")
+              : t("forms.submission.noMatch")
+            : null}
         </p>
       </section>
 

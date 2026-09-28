@@ -10,9 +10,11 @@ import { SignDocumentForm } from "@/features/forms/components/sign-document-form
 import { SignatureRecord, type SignatureRow } from "@/features/forms/components/signature-record";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatInZone } from "@/lib/time";
+import { getFormatters, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Document for signature" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("signatures.doc.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 type ScanStatus = "pending" | "clean" | "quarantined" | "rejected";
@@ -40,6 +42,7 @@ export default async function SigningDocumentPage({ params }: { params: Promise<
     uploader: { full_name: string } | null;
   };
 
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const [{ data: signers }, { data: signatures }] = await Promise.all([
     supabase
       .from("signing_document_signer")
@@ -68,46 +71,45 @@ export default async function SigningDocumentPage({ params }: { params: Promise<
   return (
     <div className="space-y-6">
       <div>
-        <Breadcrumbs items={[{ label: "Signatures", href: "/signatures" }, { label: document.title }]} />
+        <Breadcrumbs items={[{ label: t("signatures.title"), href: "/signatures" }, { label: document.title }]} />
         <PageHeader
-          eyebrow="Document for signature"
+          eyebrow={t("signatures.doc.eyebrow")}
           title={document.title}
-          description={`Sent by ${document.uploader?.full_name ?? "an administrator"} on ${formatInZone(
-            document.created_at,
-            session.timeZone,
-            { dateStyle: "long" },
-          )}.`}
+          description={t("signatures.doc.description", {
+            name: document.uploader?.full_name ?? t("signatures.doc.anAdmin"),
+            date: format.inZone(document.created_at, session.timeZone, { dateStyle: "long" }),
+          })}
         />
       </div>
       {document.message ? <p className="max-w-2xl text-[14px] whitespace-pre-wrap">{document.message}</p> : null}
 
       <section aria-labelledby="the-document" className="card space-y-2 p-4">
         <h2 id="the-document" className="text-[15px] font-semibold">
-          The document
+          {t("signatures.doc.theDocument")}
         </h2>
         <p className="flex flex-wrap items-center gap-2 text-[14px]">
           {document.file_name}
           <OpenFileButton kind="signing-document" id={document.id} fileName={document.file_name} scanStatus={document.scan_status} />
         </p>
         <p className="meta">
-          SHA-256 recorded when the file was checked:{" "}
-          <span className="font-mono text-[12px] break-all">{document.content_sha256 ?? "not yet recorded"}</span>
+          {t("signatures.doc.shaChecked")}{" "}
+          <span className="font-mono text-[12px] break-all">{document.content_sha256 ?? t("signatures.doc.notRecorded")}</span>
         </p>
       </section>
 
       {session.isAdmin && signerRows.length > 0 ? (
         <section aria-labelledby="signers" className="card p-4">
           <h2 id="signers" className="mb-2 text-[15px] font-semibold">
-            Signers
+            {t("signatures.doc.signers")}
           </h2>
           <ul className="space-y-1 text-[14px]">
             {signerRows.map((s) => (
               <li key={s.user_id} className="flex items-center gap-2">
-                {s.user_profile?.full_name ?? "Member"}
+                {s.user_profile?.full_name ?? t("signatures.member")}
                 {signatureRows.some((sig) => sig.signer_id === s.user_id) ? (
-                  <Badge tone="success">Signed</Badge>
+                  <Badge tone="success">{t("signatures.doc.signed")}</Badge>
                 ) : (
-                  <Badge tone="warning">Waiting</Badge>
+                  <Badge tone="warning">{t("signatures.doc.waiting")}</Badge>
                 )}
               </li>
             ))}
@@ -119,13 +121,13 @@ export default async function SigningDocumentPage({ params }: { params: Promise<
         document.scan_status === "clean" && document.content_sha256 ? (
           <section aria-labelledby="sign-here" className="space-y-2">
             <h2 id="sign-here" className="text-[15px] font-semibold">
-              Your signature
+              {t("signatures.doc.yourSignature")}
             </h2>
-            <p className="meta max-w-2xl">Open and read the document first. Signing applies to exactly this file.</p>
+            <p className="meta max-w-2xl">{t("signatures.doc.readFirst")}</p>
             <SignDocumentForm documentId={document.id} />
           </section>
         ) : (
-          <p className="meta">You can sign once the document&apos;s security check has passed.</p>
+          <p className="meta">{t("signatures.doc.afterCheck")}</p>
         )
       ) : null}
 

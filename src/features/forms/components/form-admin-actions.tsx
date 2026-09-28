@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { deleteDraftForm, setFormStatus } from "@/features/forms/services/form.commands";
+import { useT } from "@/lib/i18n/client";
 
 /** Publish, close, reopen or delete a form. The database enforces each step. */
 export function FormAdminActions({
@@ -17,6 +18,7 @@ export function FormAdminActions({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [busy, setBusy] = useState(false);
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>, done: string, to?: string) {
@@ -24,7 +26,7 @@ export function FormAdminActions({
     const result = await action();
     setBusy(false);
     if (!result.ok) {
-      toast(result.error ?? "Could not change the form.", { tone: "error" });
+      toast(result.error ?? t("forms.admin.changeFailed"), { tone: "error" });
       return;
     }
     toast(done);
@@ -40,28 +42,28 @@ export function FormAdminActions({
             href={`/forms/${formId}/edit`}
             className="inline-flex items-center px-2 text-[13px] font-medium text-brand-fg hover:underline"
           >
-            Edit draft
+            {t("forms.admin.editDraft")}
           </Link>
           <Button
             variant="secondary"
             disabled={busy}
             onClick={() => {
-              if (window.confirm("Delete this draft? This cannot be undone.")) {
-                void run(() => deleteDraftForm(formId), "Draft deleted.", "/forms");
+              if (window.confirm(t("forms.admin.deleteConfirm"))) {
+                void run(() => deleteDraftForm(formId), t("forms.admin.draftDeleted"), "/forms");
               }
             }}
           >
-            Delete draft
+            {t("forms.admin.deleteDraft")}
           </Button>
           <Button
             disabled={busy}
             onClick={() => {
-              if (window.confirm("Publish this form? Its questions cannot be changed afterwards.")) {
-                void run(() => setFormStatus(formId, "published"), "Form published.");
+              if (window.confirm(t("forms.admin.publishConfirm"))) {
+                void run(() => setFormStatus(formId, "published"), t("forms.admin.published"));
               }
             }}
           >
-            Publish
+            {t("forms.admin.publish")}
           </Button>
         </>
       ) : (
@@ -70,15 +72,15 @@ export function FormAdminActions({
             href={`/forms/${formId}/submissions`}
             className="inline-flex items-center px-2 text-[13px] font-medium text-brand-fg hover:underline"
           >
-            View submissions
+            {t("forms.admin.viewSubmissions")}
           </Link>
           {status === "published" ? (
-            <Button variant="secondary" disabled={busy} onClick={() => run(() => setFormStatus(formId, "closed"), "Form closed.")}>
-              Close form
+            <Button variant="secondary" disabled={busy} onClick={() => run(() => setFormStatus(formId, "closed"), t("forms.admin.closed"))}>
+              {t("forms.admin.close")}
             </Button>
           ) : (
-            <Button variant="secondary" disabled={busy} onClick={() => run(() => setFormStatus(formId, "published"), "Form reopened.")}>
-              Reopen form
+            <Button variant="secondary" disabled={busy} onClick={() => run(() => setFormStatus(formId, "published"), t("forms.admin.reopened"))}>
+              {t("forms.admin.reopen")}
             </Button>
           )}
         </>

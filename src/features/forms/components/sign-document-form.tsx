@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { SignatureFields } from "@/features/forms/components/signature-fields";
 import { signDocument } from "@/features/forms/services/signature.commands";
+import { useT } from "@/lib/i18n/client";
 
 export function SignDocumentForm({ documentId }: { documentId: string }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -26,15 +28,15 @@ export function SignDocumentForm({ documentId }: { documentId: string }) {
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not record your signature.");
+      setError(result.error ?? t("signatures.sign.failed"));
       return;
     }
-    toast("Signed.");
+    toast(t("signatures.sign.signed"));
     router.refresh();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-2xl space-y-3" aria-label="Sign this document">
+    <form onSubmit={handleSubmit} className="max-w-2xl space-y-3" aria-label={t("signatures.sign.label")}>
       <SignatureFields idPrefix="sd" />
       {error ? (
         <p role="alert" className="text-[13px] text-danger-fg">
@@ -44,7 +46,7 @@ export function SignDocumentForm({ documentId }: { documentId: string }) {
       <div className="flex justify-end">
         <Button type="submit" loading={saving}>
           <PenLine className="size-4" aria-hidden />
-          Sign
+          {t("signatures.sign.sign")}
         </Button>
       </div>
     </form>

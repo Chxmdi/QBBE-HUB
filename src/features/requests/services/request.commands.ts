@@ -5,6 +5,9 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { getT } from "@/lib/i18n/server";
+import { isLocale } from "@/lib/i18n/config";
+import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
 import {
   createProjectRequestSchema,
   decideApprovalSchema,
@@ -12,6 +15,7 @@ import {
   isDecidedRequest,
   REQUEST_STATUS_LABELS,
   requestApprovalSchema,
+  requestIssueText,
   updateProjectRequestSchema,
 } from "@/features/requests/schemas";
 import type { ProjectRequestStatus } from "@/features/requests/schemas";
@@ -36,7 +40,8 @@ async function notify(
     userId: string | null | undefined;
     actorId: string;
     organizationId: string;
-    title: string;
+    /** Written in the recipient's saved language, not the actor's. */
+    title: (t: TranslateFn) => string;
     link: string;
     sourceId: string;
     reason: string;
@@ -46,20 +51,39 @@ async function notify(
   },
 ) {
   if (!input.userId || input.userId === input.actorId) return;
+  const title = input.title(await recipientTranslator(supabase, input.userId));
   await createNotifications(supabase, [{
     user_id: input.userId,
     organization_id: input.organizationId,
     category: input.category ?? "approval",
-    title: input.title,
+    title,
     source_type: "request",
     source_id: input.sourceId,
     link: input.link,
     urgency: input.urgency ?? "normal",
     reason: input.reason,
-    context: input.title,
+    context: title,
     due_on: input.dueOn ?? null,
     dedupe_key: notificationDedupeKey("request", input.sourceId, input.userId, decisionStamp()),
   }]);
+}
+
+/**
+ * `t()` in the language the recipient chose (`user_profile.locale`; null or
+ * unreadable means English), so a notification reads in their language
+ * whoever triggered it.
+ */
+async function recipientTranslator(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  userId: string,
+): Promise<TranslateFn> {
+  const { data } = await supabase
+    .from("user_profile")
+    .select("locale")
+    .eq("id", userId)
+    .maybeSingle();
+  const locale = (data as { locale?: string | null } | null)?.locale;
+  return createTranslator(isLocale(locale) ? locale : "en");
 }
 
 /**
@@ -76,22 +100,22 @@ function decisionStamp(at: Date = new Date()): string {
   return at.toISOString().slice(0, 16);
 }
 
-/** What the requester is told, per decision. */
-const DECISION_NOTICE: Record<ProjectRequestStatus, string | null> = {
+/** What the requester is told, per decision (approving has its own notice). */
+const DECISION_NOTICE: Record<ProjectRequestStatus, MessageKey | null> = {
   submitted: null,
-  in_review: "Someone is looking at it",
-  approved: "Approved",
-  declined: "Not going ahead",
-  withdrawn: "Not going ahead",
-  deferred: "Deferred for now",
-  returned: "More information needed",
+  in_review: "requests.notifications.notices.in_review",
+  approved: null,
+  declined: "requests.notifications.notices.declined",
+  withdrawn: "requests.notifications.notices.withdrawn",
+  deferred: "requests.notifications.notices.deferred",
+  returned: "requests.notifications.notices.returned",
 };
 
 export async function submitProjectRequest(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = createProjectRequestSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: requestIssueText(parsed.error.issues[0]?.message, await getT()) };
   }
   const data = parsed.data;
 
@@ -114,7 +138,7 @@ export async function submitProjectRequest(input: unknown): Promise<ActionResult
     .single();
 
   if (error || !created) {
-    return { ok: false, error: "That request could not be submitted." };
+    return { ok: false, error: (await getT())("requests.errors.submitFailed") };
   }
 
   // A named sponsor is being volunteered for something; tell them.
@@ -122,7 +146,7 @@ export async function submitProjectRequest(input: unknown): Promise<ActionResult
     userId: data.sponsorId,
     actorId: session.userId,
     organizationId: session.organizationId,
-    title: `You are named as sponsor: ${data.title}`,
+    title: (t) => t("requests.notifications.sponsor", { title: data.title }),
     link: `/requests?request=${created.id}`,
     sourceId: created.id as string,
     reason: "sponsor",
@@ -137,7 +161,7 @@ export async function updateProjectRequest(input: unknown): Promise<ActionResult
   const session = await requireSession();
   const parsed = updateProjectRequestSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: requestIssueText(parsed.error.issues[0]?.message, await getT()) };
   }
   const { requestId, ...fields } = parsed.data;
 
@@ -163,7 +187,7 @@ export async function updateProjectRequest(input: unknown): Promise<ActionResult
     .maybeSingle();
 
   if (!existing) {
-    return { ok: false, error: "That request is not available to you." };
+    return { ok: false, error: (await getT())("requests.errors.notAvailable") };
   }
 
   // Answering a return puts the request back in the queue. Leaving it at
@@ -188,10 +212,7 @@ export async function updateProjectRequest(input: unknown): Promise<ActionResult
   if (error || (updated ?? []).length === 0) {
     // The edit policy covers your own request while it is submitted or
     // returned, so "no rows" here means it has already been picked up.
-    return {
-      ok: false,
-      error: "That request can no longer be edited — it is already being reviewed.",
-    };
+    return { ok: false, error: (await getT())("requests.errors.cannotEdit") };
   }
 
   if (resubmitting) {
@@ -199,7 +220,7 @@ export async function updateProjectRequest(input: unknown): Promise<ActionResult
       userId: existing.decided_by as string | null,
       actorId: session.userId,
       organizationId: session.organizationId,
-      title: `Answered and back with you: ${existing.title}`,
+      title: (t) => t("requests.notifications.resubmitted", { title: existing.title as string }),
       link: `/requests?request=${requestId}`,
       sourceId: requestId,
       reason: "resubmitted",
@@ -214,7 +235,7 @@ export async function decideProjectRequest(input: unknown): Promise<ActionResult
   const session = await requireSession();
   const parsed = decideProjectRequestSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: requestIssueText(parsed.error.issues[0]?.message, await getT()) };
   }
   const { requestId, status, decisionNote, projectName } = parsed.data;
 
@@ -226,7 +247,7 @@ export async function decideProjectRequest(input: unknown): Promise<ActionResult
     .maybeSingle();
 
   if (!existing) {
-    return { ok: false, error: "That request is not available to you." };
+    return { ok: false, error: (await getT())("requests.errors.notAvailable") };
   }
 
   if (status === "approved") {
@@ -238,18 +259,14 @@ export async function decideProjectRequest(input: unknown): Promise<ActionResult
     });
 
     if (error || !projectId) {
-      return {
-        ok: false,
-        error:
-          "That request could not be approved — you may not have permission to create projects.",
-      };
+      return { ok: false, error: (await getT())("requests.errors.approveFailed") };
     }
 
     await notify(supabase, {
       userId: existing.requested_by as string,
       actorId: session.userId,
       organizationId: session.organizationId,
-      title: `Approved: ${existing.title}`,
+      title: (t) => t("requests.notifications.approved", { title: existing.title as string }),
       link: `/projects/${projectId}`,
       sourceId: requestId,
       reason: "approved",
@@ -288,7 +305,7 @@ export async function decideProjectRequest(input: unknown): Promise<ActionResult
     .select("id");
 
   if (error || (updated ?? []).length === 0) {
-    return { ok: false, error: "That decision could not be recorded." };
+    return { ok: false, error: (await getT())("requests.errors.decisionFailed") };
   }
 
   const notice = DECISION_NOTICE[status];
@@ -297,7 +314,8 @@ export async function decideProjectRequest(input: unknown): Promise<ActionResult
       userId: existing.requested_by as string,
       actorId: session.userId,
       organizationId: session.organizationId,
-      title: `${notice}: ${existing.title}`,
+      title: (t) =>
+        t("requests.notifications.decided", { notice: t(notice), title: existing.title as string }),
       link: `/requests?request=${requestId}`,
       // Returning a request is the one decision that asks the requester to do
       // something, so it is worth interrupting them for.
@@ -325,7 +343,7 @@ export async function requestApproval(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = requestApprovalSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: requestIssueText(parsed.error.issues[0]?.message, await getT()) };
   }
   const data = parsed.data;
 
@@ -349,19 +367,16 @@ export async function requestApproval(input: unknown): Promise<ActionResult> {
     // The partial unique index is the likeliest refusal, and it means
     // something specific worth saying rather than "save failed".
     if (error.code === "23505") {
-      return {
-        ok: false,
-        error: "Someone is already being asked to decide this one.",
-      };
+      return { ok: false, error: (await getT())("requests.errors.alreadyAsked") };
     }
-    return { ok: false, error: "That approval could not be requested." };
+    return { ok: false, error: (await getT())("requests.errors.approvalFailed") };
   }
 
   await notify(supabase, {
     userId: data.approverId,
     actorId: session.userId,
     organizationId: session.organizationId,
-    title: "A decision is waiting on you",
+    title: (t) => t("requests.notifications.decisionWaiting"),
     link: `/requests#approval-${created!.id}`,
     sourceId: created!.id as string,
     reason: "decision requested",
@@ -378,7 +393,7 @@ export async function decideApproval(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = decideApprovalSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: requestIssueText(parsed.error.issues[0]?.message, await getT()) };
   }
   const { approvalId, decision, decisionNote } = parsed.data;
 
@@ -390,10 +405,10 @@ export async function decideApproval(input: unknown): Promise<ActionResult> {
     .maybeSingle();
 
   if (!existing) {
-    return { ok: false, error: "That approval is not available to you." };
+    return { ok: false, error: (await getT())("requests.errors.approvalNotAvailable") };
   }
   if (existing.decision !== "pending") {
-    return { ok: false, error: "That one has already been answered." };
+    return { ok: false, error: (await getT())("requests.errors.alreadyAnswered") };
   }
 
   const { data: updated, error } = await supabase
@@ -410,20 +425,17 @@ export async function decideApproval(input: unknown): Promise<ActionResult> {
   // The policy lets only the named approver (or an admin) through, so an
   // update that changes nothing is a permission answer, not a lost write.
   if (error || (updated ?? []).length === 0) {
-    return {
-      ok: false,
-      error: "Only the person asked can answer this — ask an administrator to reassign it.",
-    };
+    return { ok: false, error: (await getT())("requests.errors.onlyApprover") };
   }
 
   await notify(supabase, {
     userId: existing.requested_by as string,
     actorId: session.userId,
     organizationId: session.organizationId,
-    title:
+    title: (t) =>
       decision === "approved"
-        ? "Your approval request was approved"
-        : "Your approval request was answered",
+        ? t("requests.notifications.approvalApproved")
+        : t("requests.notifications.approvalAnswered"),
     link: `/requests#approval-${approvalId}`,
     sourceId: approvalId,
     reason: decision,

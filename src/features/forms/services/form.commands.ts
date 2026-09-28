@@ -7,6 +7,8 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { getLocale, getT } from "@/lib/i18n/server";
+import { createTranslator, type MessageKey } from "@/lib/i18n/translate";
 import {
   FIELD_TYPES,
   MAX_FIELDS,
@@ -17,7 +19,7 @@ import {
 
 const fieldSchema = z
   .object({
-    label: requiredText("Every field needs a label.", 200),
+    label: requiredText("forms.errors.fieldLabel" satisfies MessageKey, 200),
     type: z.enum(FIELD_TYPES),
     required: z.boolean().default(false),
     options: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
@@ -31,19 +33,28 @@ const fieldSchema = z
     ...(f.help ? { help: f.help } : {}),
   }))
   .refine((f) => f.type !== "choice" || (f.options?.length ?? 0) > 0, {
-    message: "A choice field needs at least one option.",
+    message: "forms.errors.choiceOption" satisfies MessageKey,
   });
 
 const formSchema = z.object({
-  title: requiredText("Give the form a title.", 200),
+  title: requiredText("forms.errors.title" satisfies MessageKey, 200),
   description: z.string().trim().max(2000).optional(),
   audience: z.enum(["members", "staff"]).default("members"),
   requiresSignature: z.boolean().default(false),
   fields: z
     .array(fieldSchema)
-    .min(1, "Add at least one field.")
-    .max(MAX_FIELDS, `A form has at most ${MAX_FIELDS} fields.`),
+    .min(1, "forms.errors.addField" satisfies MessageKey)
+    .max(MAX_FIELDS, "forms.errors.maxFields" satisfies MessageKey),
 });
+
+/**
+ * The schema messages above are catalogue keys; this reads one in the
+ * request's language. Zod's own wording is not a key and passes through.
+ */
+async function issueText(message: string | undefined): Promise<string> {
+  const t = await getT();
+  return message ? t(message as MessageKey, { max: MAX_FIELDS }) : t("forms.errors.check");
+}
 
 function formRow(data: z.infer<typeof formSchema>) {
   return {
@@ -79,7 +90,7 @@ export async function createForm(input: unknown): Promise<ActionResult> {
   const auth = await authorizeAdminAction();
   if (!auth.ok) return { ok: false, error: auth.error };
   const parsed = formSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form." };
+  if (!parsed.success) return { ok: false, error: await issueText(parsed.error.issues[0]?.message) };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -87,7 +98,7 @@ export async function createForm(input: unknown): Promise<ActionResult> {
     .insert({ organization_id: auth.session.organizationId, ...formRow(parsed.data) })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: "Could not save the form. Try again." };
+  if (error || !data) return { ok: false, error: (await getT())("forms.errors.saveFailed") };
   await audit(supabase, auth.session, "form_created", "form_definition", data.id);
   revalidatePath("/forms");
   return { ok: true, id: data.id as string };
@@ -97,9 +108,9 @@ export async function createForm(input: unknown): Promise<ActionResult> {
 export async function updateDraftForm(formId: string, input: unknown): Promise<ActionResult> {
   const auth = await authorizeAdminAction();
   if (!auth.ok) return { ok: false, error: auth.error };
-  if (!z.string().uuid().safeParse(formId).success) return { ok: false, error: "Form not found." };
+  if (!z.string().uuid().safeParse(formId).success) return { ok: false, error: (await getT())("forms.errors.notFound") };
   const parsed = formSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form." };
+  if (!parsed.success) return { ok: false, error: await issueText(parsed.error.issues[0]?.message) };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -110,7 +121,7 @@ export async function updateDraftForm(formId: string, input: unknown): Promise<A
     .select("id")
     .maybeSingle();
   if (error || !data) {
-    return { ok: false, error: "Only a draft can be edited. Make a new form to change a published one." };
+    return { ok: false, error: (await getT())("forms.errors.onlyDraftEdit") };
   }
   await audit(supabase, auth.session, "form_updated", "form_definition", formId);
   revalidatePath(`/forms/${formId}`);
@@ -130,7 +141,7 @@ export async function setFormStatus(
   const auth = await authorizeAdminAction();
   if (!auth.ok) return { ok: false, error: auth.error };
   if (!z.string().uuid().safeParse(formId).success || !(status in STATUS_ACTIONS)) {
-    return { ok: false, error: "Form not found." };
+    return { ok: false, error: (await getT())("forms.errors.notFound") };
   }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -142,7 +153,7 @@ export async function setFormStatus(
   if (error || !data) {
     return {
       ok: false,
-      error: error?.code === "23514" ? error.message : "Could not change the form. Try again.",
+      error: error?.code === "23514" ? error.message : (await getT())("forms.errors.changeFailed"),
     };
   }
   await audit(supabase, auth.session, STATUS_ACTIONS[status], "form_definition", formId);
@@ -154,7 +165,7 @@ export async function setFormStatus(
 export async function deleteDraftForm(formId: string): Promise<ActionResult> {
   const auth = await authorizeAdminAction();
   if (!auth.ok) return { ok: false, error: auth.error };
-  if (!z.string().uuid().safeParse(formId).success) return { ok: false, error: "Form not found." };
+  if (!z.string().uuid().safeParse(formId).success) return { ok: false, error: (await getT())("forms.errors.notFound") };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("form_definition")
@@ -163,7 +174,7 @@ export async function deleteDraftForm(formId: string): Promise<ActionResult> {
     .eq("status", "draft")
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: "Only a draft can be deleted." };
+  if (error || !data) return { ok: false, error: (await getT())("forms.errors.onlyDraftDelete") };
   await audit(supabase, auth.session, "form_draft_deleted", "form_definition", formId);
   revalidatePath("/forms");
   return { ok: true, id: formId };
@@ -186,7 +197,7 @@ export async function submitForm(input: unknown): Promise<ActionResult> {
   const limited = await enforceRateLimit("form:submit", session.userId);
   if (limited) return limited;
   const parsed = submitSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Form not found." };
+  if (!parsed.success) return { ok: false, error: (await getT())("forms.errors.notFound") };
 
   const supabase = await createSupabaseServerClient();
   const { data: form } = await supabase
@@ -195,12 +206,16 @@ export async function submitForm(input: unknown): Promise<ActionResult> {
     .eq("id", parsed.data.formId)
     .maybeSingle();
   if (!form || form.status !== "published") {
-    return { ok: false, error: "This form is not open for submissions." };
+    return { ok: false, error: (await getT())("forms.errors.notOpen") };
   }
-  const answers = parseAnswers(form.fields as FormField[], parsed.data.answers);
+  const answers = parseAnswers(
+    form.fields as FormField[],
+    parsed.data.answers,
+    createTranslator(await getLocale()),
+  );
   if (!answers.ok) return answers;
   if (form.requires_signature && (!parsed.data.signerName || !parsed.data.consent)) {
-    return { ok: false, error: "Type your full name and tick the consent box to sign." };
+    return { ok: false, error: (await getT())("forms.errors.signRequired") };
   }
 
   const { data: id, error } = await supabase.rpc("submit_form", {
@@ -215,7 +230,7 @@ export async function submitForm(input: unknown): Promise<ActionResult> {
       error:
         error?.code === "23514" || error?.code === "22023"
           ? error.message
-          : "Could not submit the form. Try again.",
+          : (await getT())("forms.errors.submitFailed"),
     };
   }
   revalidatePath("/forms");
@@ -225,21 +240,21 @@ export async function submitForm(input: unknown): Promise<ActionResult> {
 /** A one-minute link to an attachment, only once it has been scanned clean. */
 export async function openFormFile(fileId: string): Promise<ActionResult & { url?: string }> {
   const session = await requireSession();
-  if (!z.string().uuid().safeParse(fileId).success) return { ok: false, error: "File not found." };
+  if (!z.string().uuid().safeParse(fileId).success) return { ok: false, error: (await getT())("forms.errors.fileNotFound") };
   const supabase = await createSupabaseServerClient();
   const { data: file } = await supabase
     .from("form_file")
     .select("id, storage_path, scan_status")
     .eq("id", fileId)
     .maybeSingle();
-  if (!file) return { ok: false, error: "File not found or not accessible." };
+  if (!file) return { ok: false, error: (await getT())("forms.errors.fileNotAccessible") };
   if (file.scan_status !== "clean") {
-    return { ok: false, error: "This file is still being checked or has been quarantined." };
+    return { ok: false, error: (await getT())("forms.errors.fileChecking") };
   }
   const { data: signed, error } = await supabase.storage
     .from("form-files")
     .createSignedUrl(file.storage_path as string, 60);
-  if (error || !signed) return { ok: false, error: "Could not open the file." };
+  if (error || !signed) return { ok: false, error: (await getT())("forms.errors.openFailed") };
   await audit(supabase, session, "form_file_opened", "form_file", fileId);
   return { ok: true, url: signed.signedUrl };
 }

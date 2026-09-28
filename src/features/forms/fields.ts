@@ -5,6 +5,13 @@
  * Money is integer cents end to end; floats never touch a stored amount.
  */
 
+import type { Locale } from "@/lib/i18n/config";
+import { formatCurrency } from "@/lib/i18n/format";
+import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
+
+/** English by default, so callers and tests without a request read as before. */
+const EN = createTranslator("en");
+
 export const FIELD_TYPES = ["text", "number", "money", "date", "choice", "checkbox", "file"] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
 
@@ -16,6 +23,16 @@ export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   choice: "Choice from a list",
   checkbox: "Checkbox",
   file: "File (photo or PDF)",
+};
+
+export const FIELD_TYPE_KEYS: Record<FieldType, MessageKey> = {
+  text: "forms.fieldTypes.text",
+  number: "forms.fieldTypes.number",
+  money: "forms.fieldTypes.money",
+  date: "forms.fieldTypes.date",
+  choice: "forms.fieldTypes.choice",
+  checkbox: "forms.fieldTypes.checkbox",
+  file: "forms.fieldTypes.file",
 };
 
 export interface FormField {
@@ -87,8 +104,9 @@ export function parseMoneyToCents(input: string): number | null {
 
 const moneyFormatter = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
 
-export function formatCents(cents: number): string {
-  return moneyFormatter.format(cents / 100);
+/** `$42.18` in English (unchanged), `42,18 $` in French. */
+export function formatCents(cents: number, locale: Locale = "en"): string {
+  return locale === "en" ? moneyFormatter.format(cents / 100) : formatCurrency(cents / 100, locale);
 }
 
 /** Plain decimal for spreadsheets: 4218 → "42.18". */
@@ -111,20 +129,24 @@ export type ParsedAnswers = { ok: true; answers: Answers } | { ok: false; error:
  * file's path and name) into the answers the database stores. Unknown keys
  * are dropped; every refusal names the field.
  */
-export function parseAnswers(fields: FormField[], raw: Record<string, unknown>): ParsedAnswers {
+export function parseAnswers(
+  fields: FormField[],
+  raw: Record<string, unknown>,
+  t: TranslateFn = EN,
+): ParsedAnswers {
   const answers: Answers = {};
   for (const field of fields) {
     const value = raw[field.key];
     if (field.type === "checkbox") {
       const ticked = value === true || value === "true" || value === "on";
-      if (field.required && !ticked) return { ok: false, error: `Tick “${field.label}” to continue.` };
+      if (field.required && !ticked) return { ok: false, error: t("forms.parse.tick", { label: field.label }) };
       answers[field.key] = ticked;
       continue;
     }
     if (field.type === "file") {
       const file = value as Partial<FileAnswer> | null | undefined;
       if (!file || typeof file.path !== "string" || typeof file.name !== "string" || !file.path) {
-        if (field.required) return { ok: false, error: `Attach a file for “${field.label}”.` };
+        if (field.required) return { ok: false, error: t("forms.parse.attach", { label: field.label }) };
         continue;
       }
       answers[field.key] = { path: file.path.slice(0, 500), name: file.name.slice(0, 200) || "file" };
@@ -132,18 +154,18 @@ export function parseAnswers(fields: FormField[], raw: Record<string, unknown>):
     }
     const text = typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
     if (text === "") {
-      if (field.required) return { ok: false, error: `Answer “${field.label}”.` };
+      if (field.required) return { ok: false, error: t("forms.parse.answer", { label: field.label }) };
       continue;
     }
     switch (field.type) {
       case "text":
-        if (text.length > 5000) return { ok: false, error: `“${field.label}” can be at most 5,000 characters.` };
+        if (text.length > 5000) return { ok: false, error: t("forms.parse.tooLong", { label: field.label }) };
         answers[field.key] = text;
         break;
       case "number": {
         const n = Number(text.replace(",", "."));
         if (!Number.isFinite(n) || Math.abs(n) > 1e12) {
-          return { ok: false, error: `Enter a number for “${field.label}”.` };
+          return { ok: false, error: t("forms.parse.number", { label: field.label }) };
         }
         answers[field.key] = n;
         break;
@@ -151,18 +173,18 @@ export function parseAnswers(fields: FormField[], raw: Record<string, unknown>):
       case "money": {
         const cents = parseMoneyToCents(text);
         if (cents === null || cents > 100_000_000_000) {
-          return { ok: false, error: `Enter “${field.label}” as an amount, like 42.18.` };
+          return { ok: false, error: t("forms.parse.money", { label: field.label }) };
         }
         answers[field.key] = cents;
         break;
       }
       case "date":
-        if (!isRealDate(text)) return { ok: false, error: `Enter a real date for “${field.label}”.` };
+        if (!isRealDate(text)) return { ok: false, error: t("forms.parse.date", { label: field.label }) };
         answers[field.key] = text;
         break;
       case "choice":
         if (!field.options?.includes(text)) {
-          return { ok: false, error: `Choose one of the options for “${field.label}”.` };
+          return { ok: false, error: t("forms.parse.choice", { label: field.label }) };
         }
         answers[field.key] = text;
         break;
@@ -172,15 +194,21 @@ export function parseAnswers(fields: FormField[], raw: Record<string, unknown>):
 }
 
 /** How a stored answer reads on screen and in the CSV. */
-export function answerText(field: FormField, value: unknown, forSpreadsheet = false): string {
-  if (value === undefined || value === null) return field.type === "checkbox" ? "No" : "";
+export function answerText(
+  field: FormField,
+  value: unknown,
+  forSpreadsheet = false,
+  t: TranslateFn = EN,
+  locale: Locale = "en",
+): string {
+  if (value === undefined || value === null) return field.type === "checkbox" ? t("forms.answers.no") : "";
   switch (field.type) {
     case "money":
       return typeof value === "number"
-        ? forSpreadsheet ? centsToDecimal(value) : formatCents(value)
+        ? forSpreadsheet ? centsToDecimal(value) : formatCents(value, locale)
         : "";
     case "checkbox":
-      return value === true ? "Yes" : "No";
+      return value === true ? t("forms.answers.yes") : t("forms.answers.no");
     case "file":
       return typeof value === "object" && value && "name" in value ? String((value as FileAnswer).name) : "";
     default:

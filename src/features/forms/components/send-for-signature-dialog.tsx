@@ -9,6 +9,7 @@ import { Checkbox, FieldHint, Input, Label, Textarea } from "@/components/ui/inp
 import { useToast } from "@/components/ui/toast";
 import { createSigningDocument } from "@/features/forms/services/signature.commands";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n/client";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -28,6 +29,7 @@ export function SendForSignatureDialog({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -39,15 +41,15 @@ export function SendForSignatureDialog({
     const file = form.get("file") as File | null;
     const signerIds = form.getAll("signer").map(String);
     if (!file || file.size === 0) {
-      setError("Choose the PDF to be signed.");
+      setError(t("signatures.send.choosePdf"));
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError("Files must be 25 MB or smaller.");
+      setError(t("signatures.send.tooBig"));
       return;
     }
     if (signerIds.length === 0) {
-      setError("Choose at least one person to sign.");
+      setError(t("signatures.send.chooseSigner"));
       return;
     }
     setSaving(true);
@@ -59,7 +61,7 @@ export function SendForSignatureDialog({
       .upload(path, file, { contentType: "application/pdf" });
     if (uploadError) {
       setSaving(false);
-      setError("Upload failed. Only PDF files can be sent for signature; check your connection and try again.");
+      setError(t("signatures.send.uploadFailed"));
       return;
     }
     const result = await createSigningDocument({
@@ -72,10 +74,10 @@ export function SendForSignatureDialog({
     setSaving(false);
     if (!result.ok || !result.id) {
       await supabase.storage.from("signing-documents").remove([path]);
-      setError(result.error ?? "Could not send the document.");
+      setError(result.error ?? t("signatures.send.sendFailed"));
       return;
     }
-    toast("Sent for signature. It can be signed once its security check passes.");
+    toast(t("signatures.send.sent"));
     setOpen(false);
     router.push(`/signatures/${result.id}`);
   }
@@ -84,27 +86,28 @@ export function SendForSignatureDialog({
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus className="size-4" aria-hidden />
-        Send a PDF for signature
+        {t("signatures.send.button")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Send a PDF for signature">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("signatures.send.button")}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="sd-title">Title</Label>
-            <Input id="sd-title" name="title" required maxLength={200} placeholder="Volunteer agreement 2026" />
+            <Label htmlFor="sd-title">{t("signatures.send.title")}</Label>
+            <Input id="sd-title" name="title" required maxLength={200} placeholder={t("signatures.send.titlePlaceholder")} />
           </div>
           <div>
-            <Label htmlFor="sd-file">PDF</Label>
+            <Label htmlFor="sd-file">{t("signatures.send.pdf")}</Label>
             <Input id="sd-file" name="file" type="file" required accept="application/pdf" />
-            <FieldHint>Up to 25 MB. The file cannot be changed once sent.</FieldHint>
+            <FieldHint>{t("signatures.send.pdfHint")}</FieldHint>
           </div>
           <div>
             <Label htmlFor="sd-message">
-              Message to signers <span className="font-normal text-muted">(optional)</span>
+              {t("signatures.send.message")}{" "}
+              <span className="font-normal text-muted">{t("signatures.send.optional")}</span>
             </Label>
             <Textarea id="sd-message" name="message" maxLength={2000} rows={2} />
           </div>
           <fieldset>
-            <legend className="mb-1.5 text-[13px] font-medium">Who must sign</legend>
+            <legend className="mb-1.5 text-[13px] font-medium">{t("signatures.send.whoMustSign")}</legend>
             <div className="max-h-48 space-y-1 overflow-y-auto rounded-(--radius-sm) border border-line p-2">
               {members.map((m) => (
                 <label key={m.id} className="flex items-center gap-2 text-[13px]">
@@ -121,11 +124,11 @@ export function SendForSignatureDialog({
           ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("signatures.send.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
               <Send className="size-4" aria-hidden />
-              Send
+              {t("signatures.send.send")}
             </Button>
           </div>
         </form>
