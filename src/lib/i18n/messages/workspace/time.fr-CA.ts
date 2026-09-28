@@ -180,7 +180,7 @@ export const timeFrCA: typeof timeEn = {
       task: "Tâche : {title}",
       milestone: "Jalon : {title}",
       risk: "Risque : {title}",
-      issue: "Enjeu : {title}",
+      issue: "Problème : {title}",
       decision: "Décision : {title}",
     },
     triage: {

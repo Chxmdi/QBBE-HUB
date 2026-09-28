@@ -32,7 +32,7 @@ export const shellFrCA: typeof shellEn = {
       health: {
         on_track: "Sur la bonne voie",
         at_risk: "À risque",
-        off_track: "Hors de la bonne voie",
+        off_track: "En difficulté",
         paused: "En pause",
         unknown: "État non défini",
       },
@@ -85,7 +85,7 @@ export const shellFrCA: typeof shellEn = {
         contact: { singular: "Contact", plural: "Contacts" },
         document: { singular: "Document", plural: "Documents" },
         risk: { singular: "Risque", plural: "Risques" },
-        issue: { singular: "Enjeu", plural: "Enjeux" },
+        issue: { singular: "Problème", plural: "Problèmes" },
         opportunity: { singular: "Occasion", plural: "Occasions" },
         crm: { singular: "Relation", plural: "Relations" },
         comment: { singular: "Commentaire", plural: "Commentaires" },

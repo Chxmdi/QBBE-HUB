@@ -459,9 +459,9 @@ export const adminFrCA: typeof adminEn = {
         sent: "envoyé",
         queued: "en file d’attente",
         sending: "en cours d’envoi",
-        bounced: "refusé",
+        bounced: "rejeté",
         failed: "échoué",
-        suppressed: "supprimé",
+        suppressed: "non envoyé",
       },
       help: {
         sent: "Remis au fournisseur.",

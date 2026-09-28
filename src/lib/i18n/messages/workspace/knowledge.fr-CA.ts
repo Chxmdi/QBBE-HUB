@@ -70,7 +70,7 @@ export const knowledgeFrCA: typeof knowledgeEn = {
       upcomingMeeting: "Réunion · {date}",
     },
     health: {
-      on_track: "en bonne voie",
+      on_track: "sur la bonne voie",
       at_risk: "à risque",
       off_track: "en difficulté",
       paused: "en pause",
@@ -327,7 +327,7 @@ export const knowledgeFrCA: typeof knowledgeEn = {
     roles: {
       owner: "propriétaire",
       admin: "administrateur",
-      leadership_viewer: "direction (lecture)",
+      leadership_viewer: "observateur de la direction",
       staff: "personnel",
       volunteer: "bénévole",
       guest: "invité",

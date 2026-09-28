@@ -175,3 +175,35 @@ describe("workspace catalogues", () => {
     for (const key of seen.keys()) expect(en, key).toHaveProperty(key);
   });
 });
+
+// Words, names and codes written the same in both languages outside finance.
+// Anything else identical in French is English that was copied across and
+// never translated.
+const SAME_OUTSIDE_FINANCE = new Set([
+  " · Version {number}", ".", "Action", "Actions", "Active", "Administration",
+  "Budgets", "CSV", "Communication", "Contact", "Contacts", "Conversation",
+  "Date", "Description", "Direct", "Discussion", "Document", "Documents",
+  "English", "Français", "Gmail", "Google", "Google Drive", "Impact",
+  "Information", "Instructions", "Invitations", "Mentions", "Message", "Messages",
+  "Navigation", "Note", "Notes", "Notifications", "Occurrences", "Options",
+  "PDF", "QBBE Hub", "Question {n}", "Questions", "Rose", "Sections",
+  "Signature", "Signatures", "Type", "URL", "VMS", "Version {number}",
+  "Versions", "accent", "active", "activity", "association", "communications",
+  "compact", "completed", "danger", "direct", "discussion", "google",
+  "https://drive.google.com/…", "information", "message", "note", "{category} / {name}", "{count} min",
+  "{count} minute", "{count} minutes", "{greeting}, {name}", "{label} — {description}", "{status} {count}", "← Messages",
+]);
+
+describe("interface catalogues outside finance", () => {
+  it("translate every string that differs between the languages", () => {
+    const { finance: frenchFinance, ...frenchRest } = frCA;
+    const { finance: englishFinance, ...englishRest } = en;
+    void frenchFinance;
+    void englishFinance;
+    const french = flatten(frenchRest);
+    const copied = [...flatten(englishRest)]
+      .filter(([key, value]) => french.get(key) === value && !SAME_OUTSIDE_FINANCE.has(value))
+      .map(([key]) => key);
+    expect(copied).toEqual([]);
+  });
+});
