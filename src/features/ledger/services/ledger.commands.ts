@@ -385,6 +385,44 @@ export async function reverseEntry(input: unknown): Promise<ActionResult> {
 }
 
 // ---------------------------------------------------------------------------
+// Releasing restricted money (#149)
+// ---------------------------------------------------------------------------
+
+const releaseSchema = z.object({
+  fromFundId: z.string({ message: "Choose the restricted fund." }).uuid("Choose the restricted fund."),
+  toFundId: z.string({ message: "Choose the unrestricted fund." }).uuid("Choose the unrestricted fund."),
+  amount: requiredText("Enter the amount to release."),
+  releaseDate: isoDate("Enter the date of the release."),
+  condition: requiredText("Name the condition that was met.", 300),
+});
+
+/**
+ * Moves restricted money to an unrestricted fund once its condition is met.
+ * The database posts the balanced entry and refuses an unrestricted source,
+ * more than the fund's available balance, and a closed period.
+ */
+export async function releaseRestricted(input: unknown): Promise<ActionResult> {
+  const auth = await authorize();
+  if (!auth.ok) return auth.result;
+  const parsed = releaseSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message };
+  const cents = parseMoneyToCents(parsed.data.amount);
+  if (cents === null || cents <= 0) return { ok: false, error: "Enter an amount above zero, like 1250.00." };
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("ledger_release_restricted", {
+    p_organization: auth.organizationId,
+    p_from_fund: parsed.data.fromFundId,
+    p_to_fund: parsed.data.toFundId,
+    p_amount_cents: cents,
+    p_release_date: parsed.data.releaseDate,
+    p_condition: parsed.data.condition,
+  });
+  if (error || !data) return { ok: false, error: dbMessage(error, "Could not release the money. Try again.") };
+  revalidatePath(LEDGER, "layout");
+  return { ok: true, id: data as string };
+}
+
+// ---------------------------------------------------------------------------
 // Who may read the books
 // ---------------------------------------------------------------------------
 
