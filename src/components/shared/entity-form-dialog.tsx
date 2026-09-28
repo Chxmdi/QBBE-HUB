@@ -97,7 +97,7 @@ export function EntityFormDialog({
                 <Label htmlFor={id}>
                   {field.label}
                   {!field.required ? (
-                    <span className="ml-1 font-normal text-muted">(optional)</span>
+                    <span className="ml-1 font-normal text-muted">{t("shell.optional")}</span>
                   ) : null}
                 </Label>
                 {field.type === "textarea" ? (

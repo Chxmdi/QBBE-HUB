@@ -95,7 +95,7 @@ export function CommandPalette({
       })),
       ...remoteResults.map((r) => ({
         label: r.title,
-        sub: searchTypeLabel(r.result_type, "singular"),
+        sub: searchTypeLabel(r.result_type, "singular", t),
         href: r.href,
         icon: typeIcons[r.result_type] ?? (
           <Search className="size-4" aria-hidden />

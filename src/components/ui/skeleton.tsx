@@ -1,5 +1,8 @@
+"use client";
+
 import type * as React from "react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 export function Skeleton({ className }: { className?: string }) {
   return (
@@ -14,8 +17,9 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 export function ListSkeleton({ rows = 5 }: { rows?: number }) {
+  const t = useT();
   return (
-    <div className="space-y-3" role="status" aria-label="Loading">
+    <div className="space-y-3" role="status" aria-label={t("shell.loading.generic")}>
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="flex items-center gap-3">
           <Skeleton className="size-8 rounded-full" />
@@ -48,8 +52,9 @@ function LoadingFrame({ label, children }: { label: string; children: React.Reac
 }
 
 export function BoardSkeleton() {
+  const t = useT();
   return (
-    <LoadingFrame label="Loading the board">
+    <LoadingFrame label={t("shell.loading.board")}>
       <Skeleton className="mb-4 h-10 w-full" />
       <div className="grid gap-3 md:grid-cols-4">
         {Array.from({ length: 4 }).map((_, column) => (
@@ -65,9 +70,10 @@ export function BoardSkeleton() {
   );
 }
 
-export function TableSkeleton({ label = "Loading", rows = 8 }: { label?: string; rows?: number }) {
+export function TableSkeleton({ label, rows = 8 }: { label?: string; rows?: number }) {
+  const t = useT();
   return (
-    <LoadingFrame label={label}>
+    <LoadingFrame label={label ?? t("shell.loading.generic")}>
       <Skeleton className="mb-4 h-10 w-full" />
       <div className="divide-y divide-line rounded-(--radius-md) border border-line">
         {Array.from({ length: rows }).map((_, i) => (
@@ -84,8 +90,9 @@ export function TableSkeleton({ label = "Loading", rows = 8 }: { label?: string;
 }
 
 export function CalendarSkeleton() {
+  const t = useT();
   return (
-    <LoadingFrame label="Loading the calendar">
+    <LoadingFrame label={t("shell.loading.calendar")}>
       <Skeleton className="mb-4 h-10 w-72" />
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded-(--radius-md) border border-line">
         {Array.from({ length: 35 }).map((_, i) => (
@@ -96,9 +103,10 @@ export function CalendarSkeleton() {
   );
 }
 
-export function DetailSkeleton({ label = "Loading" }: { label?: string }) {
+export function DetailSkeleton({ label }: { label?: string }) {
+  const t = useT();
   return (
-    <LoadingFrame label={label}>
+    <LoadingFrame label={label ?? t("shell.loading.generic")}>
       <div className="mb-6 flex gap-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-8 w-24" />
@@ -119,8 +127,9 @@ export function DetailSkeleton({ label = "Loading" }: { label?: string }) {
 }
 
 export function MessagesSkeleton() {
+  const t = useT();
   return (
-    <LoadingFrame label="Loading messages">
+    <LoadingFrame label={t("shell.loading.messages")}>
       <div className="space-y-5">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="flex gap-3">
