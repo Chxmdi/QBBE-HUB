@@ -58,7 +58,13 @@ test("the owner releases restricted money and sees it on the statement of change
   await page.getByLabel("From restricted fund").selectOption({ label: `${code} ${fundName}` });
   await page.getByLabel("To unrestricted fund").selectOption({ label: "GEN General fund" });
   await page.getByLabel("Amount").fill("600.00");
+
+  // The hint follows the chosen release date: nothing the day before the grant
+  // arrived, all of it once it has, the same figure the release is checked against.
+  await page.getByLabel("Release date").fill("2026-10-02");
+  await expect(page.getByText(/^\$0\.00 available on Oct\.? 2, 2026\.$/)).toBeVisible({ timeout: 20_000 });
   await page.getByLabel("Release date").fill("2026-10-05");
+  await expect(page.getByText(/^\$500\.00 available on Oct\.? 5, 2026\.$/)).toBeVisible({ timeout: 20_000 });
   await page.getByLabel("Condition met").fill(condition);
   await clickWhenInteractive(page.getByRole("button", { name: "Release and post" }));
   await expect(page.getByRole("alert").filter({ hasText: `Fund ${code} has only 500.00 available` })).toBeVisible({

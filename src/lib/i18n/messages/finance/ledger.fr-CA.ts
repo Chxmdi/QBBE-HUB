@@ -132,7 +132,8 @@ export const ledgerFrCA: typeof ledgerEn = {
     form: {
       fromLabel: "Du fonds affecté",
       fromPlaceholder: "Choisissez un fonds affecté",
-      available: "{amount} disponible aujourd’hui.",
+      available: "{amount} disponible le {date}.",
+      checkingAvailable: "Vérification du montant disponible à cette date…",
       onlyRestricted: "Seuls les fonds affectés peuvent être libérés.",
       toLabel: "Vers le fonds non affecté",
       toPlaceholder: "Choisissez un fonds non affecté",

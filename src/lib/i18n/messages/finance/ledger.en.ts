@@ -128,7 +128,8 @@ export const ledgerEn = {
     form: {
       fromLabel: "From restricted fund",
       fromPlaceholder: "Choose a restricted fund",
-      available: "{amount} available today.",
+      available: "{amount} available on {date}.",
+      checkingAvailable: "Checking what is available on that date…",
       onlyRestricted: "Only restricted funds can be released.",
       toLabel: "To unrestricted fund",
       toPlaceholder: "Choose an unrestricted fund",

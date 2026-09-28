@@ -90,6 +90,8 @@ export default async function ReleaseRestrictedPage() {
   let restricted: ReleaseFundOption[] = [];
   let unrestricted: ReleaseFundOption[] = [];
   if (canManage) {
+    // Available on today, the form's default release date; the form asks
+    // again when a different date is chosen.
     const active = fundRows.filter((f) => f.is_active);
     restricted = await Promise.all(
       active
