@@ -4,7 +4,8 @@ import { updateSession } from "@/lib/supabase/middleware";
 
 vi.mock("@supabase/ssr", () => ({
   createServerClient: vi.fn(() => ({
-    auth: { getUser: async () => ({ data: { user: null } }) },
+    // Signed out: the proxy verifies sessions with getClaims (#138).
+    auth: { getClaims: async () => ({ data: null, error: null }) },
   })),
 }));
 
