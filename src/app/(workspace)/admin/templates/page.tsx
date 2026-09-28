@@ -1,15 +1,19 @@
 import type { Metadata } from "next";
+import { getT } from "@/lib/i18n/server";
 import { PageHeader } from "@/components/shared/page-header";
 import { AdminNav } from "@/features/admin/components/admin-nav";
 import { TemplateCatalog } from "@/features/admin/components/template-catalog";
 import { requireAdminAal2 } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 
-export const metadata: Metadata = { title: "Templates" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("admin.templates.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function AdminTemplatesPage() {
   const session = await requireAdminAal2();
+  const t = await getT();
   const supabase = await createSupabasePageClient();
   const [
     { data: projectTemplates },
@@ -42,9 +46,9 @@ export default async function AdminTemplatesPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Administration"
-        title="Templates"
-        description="Drafts stay unused until an administrator approves them. Using one copies structure only."
+        eyebrow={t("admin.eyebrow")}
+        title={t("admin.templates.title")}
+        description={t("admin.templates.description")}
       />
       <AdminNav />
       <TemplateCatalog

@@ -7,19 +7,22 @@ import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { calendarDateInZone } from "@/lib/time";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
-const saveViewSchema = z.object({
-  name: requiredText("Name the view.", 80),
+const saveViewSchema = (t: TranslateFn) => z.object({
+  name: requiredText(t("admin.errors.nameView"), 80),
   path: z.string().trim().min(1).max(120).default("/my-work"),
   query: z.record(z.string()).default({}),
   shared: z.boolean().optional(),
 });
 
 export async function saveView(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
-  const parsed = saveViewSchema.safeParse(input);
+  const parsed = saveViewSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid view." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("admin.errors.invalidView") };
   }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -34,12 +37,13 @@ export async function saveView(input: unknown): Promise<ActionResult> {
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: "Could not save the view." };
+  if (error || !data) return { ok: false, error: t("admin.errors.saveViewFailed") };
   revalidatePath(parsed.data.path);
   return { ok: true, id: data.id as string };
 }
 
 export async function deleteSavedView(id: string, path = "/my-work"): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
@@ -47,12 +51,12 @@ export async function deleteSavedView(id: string, path = "/my-work"): Promise<Ac
     .delete()
     .eq("id", id)
     .eq("user_id", session.userId);
-  if (error) return { ok: false, error: "Could not delete the view." };
+  if (error) return { ok: false, error: t("admin.errors.deleteViewFailed") };
   revalidatePath(path);
   return { ok: true };
 }
 
-const workflowSchema = z.object({
+const workflowSchema = (t: TranslateFn) => z.object({
   name: z.string().trim().min(1).max(120),
   triggerEvent: z.enum([
     "task_status_changed",
@@ -66,16 +70,17 @@ const workflowSchema = z.object({
   actionTeamId: z.string().uuid().optional(),
 }).superRefine((value, context) => {
   if (value.actionCategory === "notify_team" && !value.actionTeamId) {
-    context.addIssue({ code: "custom", path: ["actionTeamId"], message: "Select the team to notify." });
+    context.addIssue({ code: "custom", path: ["actionTeamId"], message: t("admin.errors.selectTeam") });
   }
 });
 
 export async function createWorkflowRule(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
-  const parsed = workflowSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid rule." };
+  const parsed = workflowSchema(t).safeParse(input);
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidRule") };
   const supabase = await createSupabaseServerClient();
   if (parsed.data.actionCategory === "notify_team") {
     const { data: team } = await supabase
@@ -83,7 +88,7 @@ export async function createWorkflowRule(input: unknown): Promise<ActionResult> 
       .select("id")
       .eq("id", parsed.data.actionTeamId!)
       .maybeSingle();
-    if (!team) return { ok: false, error: "Team not found." };
+    if (!team) return { ok: false, error: t("admin.errors.teamNotFound") };
   }
   const { data, error } = await supabase
     .from("workflow_rule")
@@ -102,7 +107,7 @@ export async function createWorkflowRule(input: unknown): Promise<ActionResult> 
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: "Could not create the rule." };
+  if (error || !data) return { ok: false, error: t("admin.errors.createRuleFailed") };
   revalidatePath("/admin");
   return { ok: true, id: data.id as string };
 }
@@ -111,6 +116,7 @@ export async function setWorkflowRuleEnabled(
   id: string,
   enabled: boolean,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const supabase = await createSupabaseServerClient();
@@ -120,7 +126,7 @@ export async function setWorkflowRuleEnabled(
     .eq("id", id)
     .select("id")
     .maybeSingle();
-  if (error || !updated) return { ok: false, error: "Could not update the rule." };
+  if (error || !updated) return { ok: false, error: t("admin.errors.updateRuleFailed") };
   revalidatePath("/admin");
   return { ok: true };
 }
@@ -132,10 +138,11 @@ const templateSchema = z.object({
 });
 
 export async function createProjectTemplate(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  if (!session.isStaff) return { ok: false, error: t("admin.errors.staffRequired") };
   const parsed = templateSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid template." };
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? t("admin.errors.invalidTemplate") };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("project_template")
@@ -148,15 +155,15 @@ export async function createProjectTemplate(input: unknown): Promise<ActionResul
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: "Could not save the template." };
+  if (error || !data) return { ok: false, error: t("admin.errors.saveTemplateFailed") };
   revalidatePath("/projects");
   return { ok: true, id: data.id as string };
 }
 
-const templateItemSchema = z.object({
+const templateItemSchema = (t: TranslateFn) => z.object({
   projectTemplateId: z.string().uuid(),
   kind: z.enum(["milestone", "task"]),
-  name: requiredText("Name the milestone or task.", 200),
+  name: requiredText(t("admin.errors.nameItem"), 200),
   description: z.string().trim().max(2000).optional(),
   /**
    * Days from the day the template is used. Null means "no date" — a standard
@@ -169,11 +176,12 @@ const templateItemSchema = z.object({
 
 /** Give a project template the structure it is supposed to reproduce. */
 export async function addProjectTemplateItem(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
-  const parsed = templateItemSchema.safeParse(input);
+  if (!session.isStaff) return { ok: false, error: t("admin.errors.staffRequired") };
+  const parsed = templateItemSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid item." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("admin.errors.invalidItem") };
   }
   const { projectTemplateId, kind, name, description, dayOffset, sortKey } = parsed.data;
 
@@ -191,16 +199,17 @@ export async function addProjectTemplateItem(input: unknown): Promise<ActionResu
     .select("id")
     .maybeSingle();
 
-  if (error || !data) return { ok: false, error: "Could not add that to the template." };
+  if (error || !data) return { ok: false, error: t("admin.errors.addItemFailed") };
   revalidatePath("/projects");
   return { ok: true, id: data.id as string };
 }
 
 export async function removeProjectTemplateItem(itemId: string): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  if (!session.isStaff) return { ok: false, error: t("admin.errors.staffRequired") };
   if (!z.string().uuid().safeParse(itemId).success) {
-    return { ok: false, error: "Invalid item." };
+    return { ok: false, error: t("admin.errors.invalidItem") };
   }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -209,7 +218,7 @@ export async function removeProjectTemplateItem(itemId: string): Promise<ActionR
     .eq("id", itemId)
     .select("id");
   if (error || (data ?? []).length === 0) {
-    return { ok: false, error: "That item could not be removed." };
+    return { ok: false, error: t("admin.errors.removeItemFailed") };
   }
   revalidatePath("/projects");
   return { ok: true, id: itemId };
@@ -259,10 +268,11 @@ export async function createProjectFromTemplate(
   templateId: string,
   options?: { programId?: string },
 ): Promise<ActionResult> {
+  const t = await getT();
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  if (!session.isStaff) return { ok: false, error: t("admin.errors.staffRequired") };
   if (!z.string().uuid().safeParse(templateId).success) {
-    return { ok: false, error: "Template not found." };
+    return { ok: false, error: t("admin.errors.templateNotFound") };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -271,9 +281,9 @@ export async function createProjectFromTemplate(
     .select("id, name, outcome, default_stage, approved_at")
     .eq("id", templateId)
     .maybeSingle();
-  if (!template) return { ok: false, error: "Template not found." };
+  if (!template) return { ok: false, error: t("admin.errors.templateNotFound") };
   if (!template.approved_at) {
-    return { ok: false, error: "That template has not been approved yet." };
+    return { ok: false, error: t("admin.errors.thatTemplateNotApproved") };
   }
 
   const { createProject } = await import("@/features/projects/services/project.commands");

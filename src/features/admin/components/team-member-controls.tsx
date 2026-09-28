@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { addTeamMember, removeTeamMember } from "@/features/admin/services/team.commands";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/client";
 
 export function TeamMemberControls({
   teamId,
@@ -19,6 +20,7 @@ export function TeamMemberControls({
   isOwner?: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
 
   async function toggle() {
@@ -27,7 +29,7 @@ export function TeamMemberControls({
       ? await removeTeamMember(teamId, userId)
       : await addTeamMember(teamId, userId);
     if (!result.ok) {
-      setError(result.error ?? "Update failed.");
+      setError(result.error ?? t("admin.teamControls.updateFailed"));
       return;
     }
     router.refresh();
@@ -40,10 +42,14 @@ export function TeamMemberControls({
         type="button"
         onClick={toggle}
         disabled={isOwner}
-        title={isOwner ? "Transfer team ownership before removing this person." : undefined}
+        title={isOwner ? t("admin.teamControls.ownerTitle") : undefined}
         className="h-8 text-[12.5px]"
       >
-        {isOwner ? "Team owner" : isMember ? `Remove ${label}` : `Add ${label}`}
+        {isOwner
+          ? t("admin.teamControls.teamOwner")
+          : isMember
+            ? t("admin.teamControls.remove", { label })
+            : t("admin.teamControls.add", { label })}
       </Button>
       {error ? <span className="text-[12px] text-danger-fg">{error}</span> : null}
     </span>

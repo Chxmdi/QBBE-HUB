@@ -12,6 +12,7 @@ import {
   setProjectTemplateApproval,
   setRecordTemplateApproval,
 } from "@/features/admin/services/template-catalog.commands";
+import { useT } from "@/lib/i18n/client";
 
 interface NamedRow {
   id: string;
@@ -34,11 +35,13 @@ export function TemplateCatalog({
   records: RecordRow[];
   projects: { id: string; name: string }[];
 }) {
+  const t = useT();
   return (
     <div className="space-y-10">
       <CatalogSection
-        title="Project templates"
-        empty="No project templates yet. Staff can draft one from Projects."
+        id="project-templates"
+        title={t("admin.templates.projectTemplates")}
+        empty={t("admin.templates.projectEmpty")}
         rows={projectTemplates}
         onApproval={setProjectTemplateApproval}
       />
@@ -49,11 +52,13 @@ export function TemplateCatalog({
 }
 
 function CatalogSection({
+  id,
   title,
   empty,
   rows,
   onApproval,
 }: {
+  id: string;
   title: string;
   empty: string;
   rows: NamedRow[];
@@ -63,8 +68,8 @@ function CatalogSection({
   ) => Promise<{ ok: boolean; error?: string }>;
 }) {
   return (
-    <section aria-labelledby={title}>
-      <h2 id={title} className="section-heading mb-3">
+    <section aria-labelledby={id}>
+      <h2 id={id} className="section-heading mb-3">
         {title}
       </h2>
       {rows.length === 0 ? (
@@ -95,6 +100,7 @@ function ApprovalRow({
   extra?: ReactNode;
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const approved = Boolean(row.approved_at);
@@ -103,7 +109,7 @@ function ApprovalRow({
     <li className="flex flex-wrap items-center gap-3 px-4 py-2.5">
       <span className="min-w-0 flex-1 text-[14px]">
         {row.name}
-        <span className="meta ml-2">{approved ? "Approved" : "Draft"}</span>
+        <span className="meta ml-2">{approved ? t("admin.templates.approved") : t("admin.templates.draft")}</span>
       </span>
       {extra}
       <Button
@@ -115,12 +121,12 @@ function ApprovalRow({
           start(async () => {
             const result = await onApproval(row.id, !approved);
             if (!result.ok)
-              setError(result.error ?? "Could not update approval.");
+              setError(result.error ?? t("admin.templates.approvalFailed"));
             else router.refresh();
           });
         }}
       >
-        {approved ? "Withdraw" : "Approve"}
+        {approved ? t("admin.templates.withdraw") : t("admin.templates.approve")}
       </Button>
       {error ? (
         <p className="basis-full text-[12.5px] text-danger">{error}</p>
@@ -131,13 +137,14 @@ function ApprovalRow({
 
 function AgendaSection({ agendas }: { agendas: NamedRow[] }) {
   const router = useRouter();
+  const t = useT();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   return (
     <section aria-labelledby="agenda-templates">
       <h2 id="agenda-templates" className="section-heading mb-3">
-        Agenda templates
+        {t("admin.templates.agendaTemplates")}
       </h2>
       <form
         className="card mb-3 space-y-3 p-4"
@@ -151,7 +158,7 @@ function AgendaSection({ agendas }: { agendas: NamedRow[] }) {
               name: String(form.get("name") ?? ""),
               items: String(form.get("items") ?? ""),
             });
-            if (!result.ok) setError(result.error ?? "Could not save.");
+            if (!result.ok) setError(result.error ?? t("admin.templates.saveFailed"));
             else {
               formEl.reset();
               router.refresh();
@@ -160,20 +167,20 @@ function AgendaSection({ agendas }: { agendas: NamedRow[] }) {
         }}
       >
         <label className="block text-[13px] font-medium">
-          Name
+          {t("admin.templates.name")}
           <Input name="name" required className="mt-1" />
         </label>
         <label className="block text-[13px] font-medium">
-          Items, one title per line
+          {t("admin.templates.items")}
           <Textarea name="items" required rows={4} className="mt-1" />
         </label>
         {error ? <p className="text-[12.5px] text-danger">{error}</p> : null}
         <Button type="submit" size="sm" loading={pending}>
-          Save draft
+          {t("admin.templates.saveDraft")}
         </Button>
       </form>
       {agendas.length === 0 ? (
-        <p className="text-[13px] text-muted">No agenda templates yet.</p>
+        <p className="text-[13px] text-muted">{t("admin.templates.agendaEmpty")}</p>
       ) : (
         <ul className="card divide-y divide-line">
           {agendas.map((row) => (
@@ -197,13 +204,14 @@ function RecordSection({
   projects: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   return (
     <section aria-labelledby="record-templates">
       <h2 id="record-templates" className="section-heading mb-3">
-        Task, event, update, and report templates
+        {t("admin.templates.recordTemplates")}
       </h2>
       <form
         className="card mb-3 grid gap-3 p-4 sm:grid-cols-2"
@@ -223,7 +231,7 @@ function RecordSection({
               progressSummary: String(form.get("progressSummary") ?? ""),
               reportType: String(form.get("reportType") ?? ""),
             });
-            if (!result.ok) setError(result.error ?? "Could not save.");
+            if (!result.ok) setError(result.error ?? t("admin.templates.saveFailed"));
             else {
               formEl.reset();
               router.refresh();
@@ -232,46 +240,50 @@ function RecordSection({
         }}
       >
         <label className="block text-[13px] font-medium">
-          Kind
+          {t("admin.templates.kind")}
           <Select name="kind" className="mt-1">
-            <option value="task">Task</option>
-            <option value="event">Event</option>
-            <option value="update">Update</option>
-            <option value="report">Report</option>
+            <option value="task">{t("admin.templates.kinds.task")}</option>
+            <option value="event">{t("admin.templates.kinds.event")}</option>
+            <option value="update">{t("admin.templates.kinds.update")}</option>
+            <option value="report">{t("admin.templates.kinds.report")}</option>
           </Select>
         </label>
         <label className="block text-[13px] font-medium">
-          Template name
+          {t("admin.templates.templateName")}
           <Input name="name" required className="mt-1" />
         </label>
         <label className="block text-[13px] font-medium">
-          Record title
+          {t("admin.templates.recordTitle")}
           <Input name="title" required className="mt-1" />
         </label>
         <label className="block text-[13px] font-medium">
-          Priority (tasks)
+          {t("admin.templates.priority")}
           <Select name="priority" className="mt-1">
-            <option value="">Default</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="critical">Critical</option>
+            <option value="">{t("admin.templates.priorities.default")}</option>
+            <option value="low">{t("admin.templates.priorities.low")}</option>
+            <option value="medium">{t("admin.templates.priorities.medium")}</option>
+            <option value="high">{t("admin.templates.priorities.high")}</option>
+            <option value="critical">{t("admin.templates.priorities.critical")}</option>
           </Select>
         </label>
         <label className="block text-[13px] font-medium sm:col-span-2">
-          Description
+          {t("admin.templates.descriptionLabel")}
           <Textarea name="description" rows={2} className="mt-1" />
         </label>
         <label className="block text-[13px] font-medium">
-          Event type
+          {t("admin.templates.eventType")}
           <Input name="eventType" className="mt-1" />
         </label>
         <label className="block text-[13px] font-medium">
-          Report type
-          <Input name="reportType" placeholder="activity" className="mt-1" />
+          {t("admin.templates.reportType")}
+          <Input
+            name="reportType"
+            placeholder={t("admin.templates.reportTypePlaceholder")}
+            className="mt-1"
+          />
         </label>
         <label className="block text-[13px] font-medium sm:col-span-2">
-          Update summary
+          {t("admin.templates.updateSummary")}
           <Textarea name="progressSummary" rows={2} className="mt-1" />
         </label>
         {error ? (
@@ -279,12 +291,12 @@ function RecordSection({
         ) : null}
         <div>
           <Button type="submit" size="sm" loading={pending}>
-            Save draft
+            {t("admin.templates.saveDraft")}
           </Button>
         </div>
       </form>
       {records.length === 0 ? (
-        <p className="text-[13px] text-muted">No record templates yet.</p>
+        <p className="text-[13px] text-muted">{t("admin.templates.recordEmpty")}</p>
       ) : (
         <ul className="card divide-y divide-line">
           {records.map((row) => (
@@ -320,6 +332,7 @@ function InstantiateButton({
   projects: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState("");
@@ -331,12 +344,12 @@ function InstantiateButton({
       kind === "event" ||
       kind === "report" ? (
         <Select
-          aria-label="Project for the new record"
+          aria-label={t("admin.templates.projectForRecord")}
           value={projectId}
           onChange={(event) => setProjectId(event.target.value)}
           className="h-8 w-auto px-2 text-[13px]"
         >
-          <option value="">No project</option>
+          <option value="">{t("admin.templates.noProject")}</option>
           {projects.map((project) => (
             <option key={project.id} value={project.id}>
               {project.name}
@@ -356,12 +369,12 @@ function InstantiateButton({
               projectId,
             });
             if (!result.ok)
-              setError(result.error ?? "Could not use this template.");
+              setError(result.error ?? t("admin.templates.useFailed"));
             else router.refresh();
           });
         }}
       >
-        {approved ? "Use" : "Try to use"}
+        {approved ? t("admin.templates.use") : t("admin.templates.tryToUse")}
       </Button>
       {error ? (
         <span className="basis-full text-[12.5px] text-danger">{error}</span>

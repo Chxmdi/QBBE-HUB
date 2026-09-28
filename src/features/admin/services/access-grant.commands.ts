@@ -10,6 +10,7 @@ import {
 import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
 
 const programGrantSchema = z.object({
   programId: z.string().uuid(),
@@ -24,13 +25,14 @@ const projectGrantSchema = z.object({
 });
 
 export async function setDirectProgramAccess(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
   const limited = await enforceRateLimit("access-grant:program", session.userId);
   if (limited) return limited;
   const parsed = programGrantSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Choose a valid program, member, and role." };
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidProgramGrant") };
 
   const db = await createSupabaseServerClient();
   const { error } = parsed.data.role === null
@@ -43,7 +45,7 @@ export async function setDirectProgramAccess(input: unknown): Promise<ActionResu
         p_user: parsed.data.userId,
         p_role: parsed.data.role,
       });
-  if (error) return { ok: false, error: "Could not update direct program access." };
+  if (error) return { ok: false, error: t("admin.errors.programGrantFailed") };
 
   revalidatePath("/admin/access");
   revalidatePath(`/programs/${parsed.data.programId}`);
@@ -51,13 +53,14 @@ export async function setDirectProgramAccess(input: unknown): Promise<ActionResu
 }
 
 export async function setDirectProjectAccess(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
   const limited = await enforceRateLimit("access-grant:project", session.userId);
   if (limited) return limited;
   const parsed = projectGrantSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Choose a valid project, member, and role." };
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidProjectGrant") };
 
   const db = await createSupabaseServerClient();
   const { error } = parsed.data.role === null
@@ -70,7 +73,7 @@ export async function setDirectProjectAccess(input: unknown): Promise<ActionResu
         p_user: parsed.data.userId,
         p_role: parsed.data.role,
       });
-  if (error) return { ok: false, error: "Could not update direct project access." };
+  if (error) return { ok: false, error: t("admin.errors.projectGrantFailed") };
 
   revalidatePath("/admin/access");
   revalidatePath(`/projects/${parsed.data.projectId}`);

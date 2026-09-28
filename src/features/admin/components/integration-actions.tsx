@@ -7,6 +7,7 @@ import {
   disconnectIntegration,
 } from "@/features/admin/services/integration.commands";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/client";
 
 export function IntegrationActions({
   provider,
@@ -22,6 +23,7 @@ export function IntegrationActions({
   vmsConfigured: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -31,7 +33,7 @@ export function IntegrationActions({
     setError(null);
     const result = await disconnectIntegration(provider);
     setBusy(false);
-    if (!result.ok) setError(result.error ?? "Disconnect failed.");
+    if (!result.ok) setError(result.error ?? t("admin.workspace.integrations.actions.disconnectFailed"));
     else router.refresh();
   }
 
@@ -40,7 +42,7 @@ export function IntegrationActions({
     setError(null);
     const result = await connectVolunteerSystem();
     setBusy(false);
-    if (!result.ok) setError(result.error ?? "Connect failed.");
+    if (!result.ok) setError(result.error ?? t("admin.workspace.integrations.actions.connectFailed"));
     else router.refresh();
   }
 
@@ -48,8 +50,8 @@ export function IntegrationActions({
     return (
       <p className="meta mt-2">
         {connected
-          ? "A provider key and sender address are configured. Delivery runs through the notification-email job."
-          : "Transactional email requires EMAIL_PROVIDER_API_KEY and EMAIL_FROM_ADDRESS. Local Mailpit is used only when no provider key is configured."}
+          ? t("admin.workspace.integrations.actions.emailConfigured")
+          : t("admin.workspace.integrations.actions.emailNotConfigured")}
       </p>
     );
   }
@@ -58,8 +60,7 @@ export function IntegrationActions({
     if (!googleConfigured && !connected) {
       return (
         <p className="meta mt-2">
-          Google OAuth credentials are not set. Connect stays unavailable until
-          GOOGLE_CLIENT_ID / SECRET / redirect URI exist.
+          {t("admin.workspace.integrations.actions.googleNotConfigured")}
         </p>
       );
     }
@@ -67,14 +68,16 @@ export function IntegrationActions({
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {connected ? (
           <Button variant="secondary" onClick={disconnect} loading={busy}>
-            Disconnect
+            {t("admin.workspace.integrations.actions.disconnect")}
           </Button>
         ) : (
           <a
             href={`/api/integrations/google/start?provider=${provider}`}
             className="inline-flex h-9 items-center rounded-(--radius-sm) bg-brand px-3 text-[13px] font-medium text-white hover:bg-brand-strong"
           >
-            {status === "authentication_expired" ? "Reauthenticate" : "Connect"}
+            {status === "authentication_expired"
+              ? t("admin.workspace.integrations.actions.reauthenticate")
+              : t("admin.workspace.integrations.actions.connect")}
           </a>
         )}
         {error ? <p className="text-[12.5px] text-danger-fg">{error}</p> : null}
@@ -86,15 +89,15 @@ export function IntegrationActions({
     <div className="mt-2 flex flex-wrap items-center gap-2">
       {connected ? (
         <Button variant="secondary" onClick={disconnect} loading={busy}>
-          Disconnect
+          {t("admin.workspace.integrations.actions.disconnect")}
         </Button>
       ) : (
         <Button onClick={connectVms} loading={busy} disabled={!vmsConfigured}>
-          Connect
+          {t("admin.workspace.integrations.actions.connect")}
         </Button>
       )}
       {!vmsConfigured ? (
-        <p className="meta">Set VMS_API_URL to enable Connect. Hub does not store a second volunteer database.</p>
+        <p className="meta">{t("admin.workspace.integrations.actions.vmsNotConfigured")}</p>
       ) : null}
       {error ? <p className="text-[12.5px] text-danger-fg">{error}</p> : null}
     </div>
