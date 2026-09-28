@@ -9,10 +9,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { generateReport } from "@/features/reports/services/report.commands";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDate, relativeTime } from "@/lib/utils";
+import { codeLabel, formatStoredDate } from "@/features/reports/snapshot-view";
+import { getFormatters, getT } from "@/lib/i18n/server";
 import type { ReportInstance } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Reports" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("reports.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
@@ -23,6 +26,7 @@ export default async function ReportsPage() {
   // page and was offered Generate report on it.
   if (!session.isStaff) redirect("/");
   const supabase = await createSupabasePageClient();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
 
   const [{ data: reports }, { data: programs }, { data: projects }] =
     await Promise.all([
@@ -46,43 +50,43 @@ export default async function ReportsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Reporting & evaluation"
-        title="Reports"
-        description="Reports are generated from versioned snapshots of live records — approved versions stay reproducible."
+        eyebrow={t("reports.eyebrow")}
+        title={t("reports.title")}
+        description={t("reports.description")}
         actions={
           <EntityFormDialog
-            triggerLabel="Generate report"
-            title="Generate report"
-            submitLabel="Generate"
+            triggerLabel={t("reports.generate.trigger")}
+            title={t("reports.generate.title")}
+            submitLabel={t("reports.generate.submit")}
             action={generateReport}
             fields={[
               {
                 name: "reportType",
-                label: "Type",
+                label: t("reports.generate.type"),
                 type: "select",
                 required: true,
                 defaultValue: "program_quarterly",
                 options: [
-                  { value: "program_quarterly", label: "Program quarterly report" },
-                  { value: "project", label: "Project report" },
+                  { value: "program_quarterly", label: t("reports.generate.typeProgram") },
+                  { value: "project", label: t("reports.generate.typeProject") },
                 ],
               },
               {
                 name: "programId",
-                label: "Program (for quarterly)",
+                label: t("reports.generate.program"),
                 type: "select",
                 colSpan: 1,
                 options: (programs ?? []).map((p) => ({ value: p.id, label: p.name })),
               },
               {
                 name: "projectId",
-                label: "Project (for project report)",
+                label: t("reports.generate.project"),
                 type: "select",
                 colSpan: 1,
                 options: (projects ?? []).map((p) => ({ value: p.id, label: p.name })),
               },
-              { name: "periodStart", label: "Period start", type: "date", required: true, colSpan: 1 },
-              { name: "periodEnd", label: "Period end", type: "date", required: true, colSpan: 1 },
+              { name: "periodStart", label: t("reports.generate.periodStart"), type: "date", required: true, colSpan: 1 },
+              { name: "periodEnd", label: t("reports.generate.periodEnd"), type: "date", required: true, colSpan: 1 },
             ]}
           />
         }
@@ -91,8 +95,8 @@ export default async function ReportsPage() {
       {reportList.length === 0 ? (
         <EmptyState
           icon={<BarChart3 />}
-          title="No reports generated yet"
-          description="Generate a quarterly program report or project report from live operational data."
+          title={t("reports.emptyTitle")}
+          description={t("reports.emptyDescription")}
         />
       ) : (
         <ul className="card divide-y divide-line">
@@ -106,8 +110,11 @@ export default async function ReportsPage() {
                   {report.title}
                 </Link>
                 <p className="meta">
-                  {formatDate(report.period_start)} → {formatDate(report.period_end)} ·
-                  generated {relativeTime(report.created_at)}
+                  {t("reports.listMeta", {
+                    start: formatStoredDate(format, report.period_start),
+                    end: formatStoredDate(format, report.period_end),
+                    when: format.relative(report.created_at),
+                  })}
                 </p>
               </div>
               <Badge
@@ -119,7 +126,7 @@ export default async function ReportsPage() {
                       : "neutral"
                 }
               >
-                {report.status.replace(/_/g, " ")}
+                {codeLabel(t, "reports.status", report.status)}
               </Badge>
             </li>
           ))}

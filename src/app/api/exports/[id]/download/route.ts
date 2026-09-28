@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { isDownloadable } from "@/features/exports/schemas";
 import type { ExportStatus } from "@/features/exports/schemas";
+import { getT } from "@/lib/i18n/server";
 
 /**
  * Handing over a finished export.
@@ -36,6 +37,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await requireSession();
+  const t = await getT();
   const { id } = await params;
 
   // Step 1: the user's own client, so the read policy applies.
@@ -47,11 +49,11 @@ export async function GET(
     .maybeSingle();
 
   if (!row) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ error: t("exports.errors.notFound") }, { status: 404 });
   }
   if (!row.storage_path) {
     return NextResponse.json(
-      { error: "That export has no file yet." },
+      { error: t("exports.errors.noFile") },
       { status: 409 },
     );
   }
@@ -62,7 +64,7 @@ export async function GET(
     )
   ) {
     return NextResponse.json(
-      { error: "That export has expired. Request a fresh one." },
+      { error: t("exports.errors.expired") },
       { status: 410 },
     );
   }
@@ -71,14 +73,14 @@ export async function GET(
 
   if (row.organization_id !== session.organizationId ||
       row.storage_path !== `${row.organization_id}/${row.id}.json`) {
-    return NextResponse.json({ error: "Invalid export file." }, { status: 403 });
+    return NextResponse.json({ error: t("exports.errors.invalidFile") }, { status: 403 });
   }
 
   // Step 3, before step 4. One statement, so two people downloading at the
   // same moment cannot lose a count between them.
   const { error: countError } = await service.rpc("count_export_download", { p_export_id: id });
   if (countError) {
-    return NextResponse.json({ error: "Could not record download." }, { status: 503 });
+    return NextResponse.json({ error: t("exports.errors.countFailed") }, { status: 503 });
   }
 
   const { error: auditError } = await service.from("audit_event").insert({
@@ -90,7 +92,7 @@ export async function GET(
     object_id: id,
   });
   if (auditError) {
-    return NextResponse.json({ error: "Could not audit download." }, { status: 503 });
+    return NextResponse.json({ error: t("exports.errors.auditFailed") }, { status: 503 });
   }
 
   const { data: signed, error } = await service.storage
@@ -104,7 +106,7 @@ export async function GET(
       JSON.stringify({ event: "export.sign_failed", id, error: error?.message }),
     );
     return NextResponse.json(
-      { error: "Could not prepare that download." },
+      { error: t("exports.errors.prepareFailed") },
       { status: 500 },
     );
   }

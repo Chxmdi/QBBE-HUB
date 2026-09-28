@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Requesting a data export.
@@ -60,6 +61,21 @@ export const EXPORT_STATUS_LABELS: Record<ExportStatus, string> = {
   expired: "Expired",
 };
 
+/** An export kind's name in the reader's language. */
+export function exportKindLabel(kind: ExportKind, t: TranslateFn): string {
+  return EXPORT_KINDS.includes(kind) ? t(`exports.kinds.${kind}`) : kind;
+}
+
+/** What an export kind contains, in the reader's language. */
+export function exportKindDescription(kind: ExportKind, t: TranslateFn): string {
+  return EXPORT_KINDS.includes(kind) ? t(`exports.kindDescriptions.${kind}`) : "";
+}
+
+/** An export status in the reader's language. */
+export function exportStatusLabel(status: ExportStatus, t: TranslateFn): string {
+  return EXPORT_STATUSES.includes(status) ? t(`exports.statuses.${status}`) : status;
+}
+
 export function isDownloadable(row: {
   status: ExportStatus;
   expires_at: string;
@@ -77,15 +93,20 @@ export function hoursUntilExpiry(expiresAt: string, now: Date): number {
   );
 }
 
-export const requestExportSchema = z
-  .object({
-    kind: z.enum(EXPORT_KINDS),
-    subjectUserId: z.string().uuid().nullable().optional(),
-  })
-  .refine(
-    (value) => value.kind !== "person_data" || Boolean(value.subjectUserId),
-    {
-      message: "Choose the person this export is about.",
-      path: ["subjectUserId"],
-    },
-  );
+/** The request schema, with its message in the language `t` speaks. */
+export function requestExportSchemaFor(t: TranslateFn) {
+  return z
+    .object({
+      kind: z.enum(EXPORT_KINDS),
+      subjectUserId: z.string().uuid().nullable().optional(),
+    })
+    .refine(
+      (value) => value.kind !== "person_data" || Boolean(value.subjectUserId),
+      {
+        message: t("exports.errors.choosePerson"),
+        path: ["subjectUserId"],
+      },
+    );
+}
+
+export const requestExportSchema = requestExportSchemaFor(createTranslator("en"));

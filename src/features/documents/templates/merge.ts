@@ -9,6 +9,8 @@
  * the PDF writer escapes every character of the result.
  */
 
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+
 export const TEMPLATE_KINDS = [
   { id: "letter", en: "Letter", fr: "Lettre" },
   { id: "contract", en: "Contract", fr: "Contrat" },
@@ -58,6 +60,26 @@ export const PLACEHOLDERS: Record<RecordType | "common", Record<string, { kind: 
     "gift.description": { kind: "text", help: "What was given, for an in-kind gift" },
   },
 };
+
+/** A template kind's name in the reader's language. */
+export function templateKindLabel(kind: string, t: TranslateFn): string {
+  const known = TEMPLATE_KINDS.find((k) => k.id === kind);
+  return known ? t(`documents.templates.kinds.${known.id}`) : kind;
+}
+
+/** "A member of the organization", in the reader's language. */
+export function recordTypeLabel(recordType: RecordType, t: TranslateFn): string {
+  return t(`documents.templates.recordTypes.${recordType}`);
+}
+
+/** What a placeholder fills, in the reader's language ("person.name" → "Full name"). */
+export function placeholderHelp(name: string, t: TranslateFn): string {
+  const key = `documents.templates.fields.${name.replace(/\./g, "_")}`;
+  const label = t(key as MessageKey);
+  if (label !== key) return label;
+  for (const group of Object.values(PLACEHOLDERS)) if (group[name]) return group[name].help;
+  return name;
+}
 
 export function placeholdersFor(recordType: RecordType): string[] {
   return [...Object.keys(PLACEHOLDERS.common), ...Object.keys(PLACEHOLDERS[recordType])];

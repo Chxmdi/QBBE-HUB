@@ -1,4 +1,5 @@
 import { readAll } from "@/lib/supabase/read-all";
+import { getT } from "@/lib/i18n/server";
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
 
 /**
@@ -32,12 +33,15 @@ export async function buildReportSnapshot(
   request: SnapshotRequest,
 ): Promise<SnapshotResult> {
   const { reportType, programId, projectId, periodStart, periodEnd } = request;
+  // The title is stored and shown to everyone; it is written in the language
+  // of whoever generated the report. The dates in it stay as recorded.
+  const t = await getT();
 
   if (reportType === "program_quarterly" && !programId) {
-    return { ok: false, error: "Pick a program for a quarterly report." };
+    return { ok: false, error: t("reports.errors.pickProgram") };
   }
   if (reportType === "project" && !projectId) {
-    return { ok: false, error: "Pick a project for a project report." };
+    return { ok: false, error: t("reports.errors.pickProject") };
   }
 
   const periodEndExclusive = new Date(
@@ -94,12 +98,16 @@ export async function buildReportSnapshot(
           .lt("created_at", periodEndExclusive)),
       ]);
     if (results.some(result => result.error)) {
-      return { ok: false, error: "Could not read all report data. Please retry." };
+      return { ok: false, error: t("reports.errors.readFailed") };
     }
     const [{ data: program }, { data: projects }, { data: tasks }, { data: meetings }, { data: decisions }, { data: events }, { data: updates }] = results;
 
-    if (!program) return { ok: false, error: "Program not found." };
-    title = `${program.name} — Quarterly report (${periodStart} → ${periodEnd})`;
+    if (!program) return { ok: false, error: t("reports.errors.programNotFound") };
+    title = t("reports.generatedTitle.quarterly", {
+      name: program.name as string,
+      start: periodStart,
+      end: periodEnd,
+    });
 
     const completedInPeriod = (tasks ?? []).filter(
       (t) =>
@@ -160,7 +168,7 @@ export async function buildReportSnapshot(
             .gte("due_date", periodStart)),
     ]);
     if (extras.some((result) => result.error)) {
-      return { ok: false, error: "Could not read all report data. Please retry." };
+      return { ok: false, error: t("reports.errors.readFailed") };
     }
     const [{ data: outcomes }, { data: risks }, { data: people }, { data: upcomingMilestones }] = extras;
     Object.assign(snapshot, {
@@ -176,7 +184,7 @@ export async function buildReportSnapshot(
       }),
       risks: risks ?? [],
       people: (people ?? []).map((person) => ({
-        name: (person.member as { full_name?: string } | null)?.full_name ?? "Unknown",
+        name: (person.member as { full_name?: string } | null)?.full_name ?? t("common.unknown"),
         role: person.role,
       })),
       upcoming: {
@@ -214,12 +222,16 @@ export async function buildReportSnapshot(
           .eq("project_id", projectId!)),
       ]);
     if (results.some(result => result.error)) {
-      return { ok: false, error: "Could not read all report data. Please retry." };
+      return { ok: false, error: t("reports.errors.readFailed") };
     }
     const [{ data: project }, { data: tasks }, { data: milestones }, { data: updates }, { data: decisions }] = results;
 
-    if (!project) return { ok: false, error: "Project not found." };
-    title = `${project.name} — Project report (${periodStart} → ${periodEnd})`;
+    if (!project) return { ok: false, error: t("reports.errors.projectNotFound") };
+    title = t("reports.generatedTitle.project", {
+      name: project.name as string,
+      start: periodStart,
+      end: periodEnd,
+    });
 
     Object.assign(snapshot, {
       project: {
@@ -256,7 +268,7 @@ export async function buildReportSnapshot(
         .order("created_at", { ascending: false })),
     ]);
     if (extras.some((result) => result.error)) {
-      return { ok: false, error: "Could not read all report data. Please retry." };
+      return { ok: false, error: t("reports.errors.readFailed") };
     }
     const [{ data: activity }] = extras;
     const latestUpdate = (updates ?? [])[0] as { next_steps?: string | null } | undefined;

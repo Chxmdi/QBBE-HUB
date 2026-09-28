@@ -3,9 +3,10 @@
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import {
   EXPORT_KINDS,
-  EXPORT_KIND_DESCRIPTIONS,
-  EXPORT_KIND_LABELS,
+  exportKindDescription,
+  exportKindLabel,
 } from "@/features/exports/schemas";
+import { useT } from "@/lib/i18n/client";
 import { requestExport } from "@/features/exports/services/export.commands";
 
 /**
@@ -22,30 +23,34 @@ export function RequestExportDialog({
 }: {
   people: { value: string; label: string }[];
 }) {
+  const t = useT();
   return (
     <EntityFormDialog
-      triggerLabel="Request an export"
-      title="Request a data export"
-      submitLabel="Queue it"
+      triggerLabel={t("exports.request.trigger")}
+      title={t("exports.request.title")}
+      submitLabel={t("exports.request.submit")}
       action={requestExport}
       fields={[
         {
           name: "kind",
-          label: "What to export",
+          label: t("exports.request.kind"),
           type: "select",
           required: true,
           defaultValue: "crm_contacts",
           options: EXPORT_KINDS.map((kind) => ({
             value: kind,
-            label: `${EXPORT_KIND_LABELS[kind]} — ${EXPORT_KIND_DESCRIPTIONS[kind]}`,
+            label: t("exports.kindOption", {
+              label: exportKindLabel(kind, t),
+              description: exportKindDescription(kind, t),
+            }),
           })),
         },
         {
           name: "subjectUserId",
-          label: "About which person",
+          label: t("exports.request.person"),
           type: "select",
           options: people,
-          hint: "Required only for a subject access request.",
+          hint: t("exports.request.personHint"),
         },
       ]}
     />
