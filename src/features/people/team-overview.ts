@@ -7,6 +7,13 @@
  * recognise it and could act on it.
  */
 
+import {
+  createTranslator,
+  type MessageKey,
+  type MessageVars,
+  type TranslateFn,
+} from "@/lib/i18n/translate";
+
 export interface TeamOverviewRow {
   user_id: string;
   organization_id: string;
@@ -43,8 +50,14 @@ function daysBetween(fromDate: string, toDate: string): number {
   );
 }
 
-function plural(count: number, one: string, many = `${one}s`) {
-  return `${count} ${count === 1 ? one : many}`;
+/** English unless the caller passes the viewer's translator (unit tests read English). */
+const english = createTranslator("en");
+
+type CountedKey = "overdue" | "oldest" | "blocked" | "inProgress" | "projectReports" | "decisions";
+
+function counted(t: TranslateFn, key: CountedKey, count: number, vars: MessageVars = {}) {
+  const suffix = count === 1 ? "One" : "Other";
+  return t(`teamOverview.reasons.${key}${suffix}` as MessageKey, { count, ...vars });
 }
 
 /**
@@ -56,29 +69,30 @@ export function attentionReasons(
   row: TeamOverviewRow,
   today: string,
   staleProjects = 0,
+  t: TranslateFn = english,
 ): string[] {
   const reasons: string[] = [];
   const oldestAge = row.oldest_overdue_due ? daysBetween(row.oldest_overdue_due, today) : 0;
   if (row.overdue >= ATTENTION.overdueCount || oldestAge > ATTENTION.overdueAgeDays) {
     reasons.push(
-      `${plural(row.overdue, "task")} overdue${oldestAge > 0 ? `, oldest ${plural(oldestAge, "day")}` : ""}`,
+      `${counted(t, "overdue", row.overdue)}${oldestAge > 0 ? counted(t, "oldest", oldestAge) : ""}`,
     );
   }
   if (row.blocked_stale > 0) {
     reasons.push(
-      `${plural(row.blocked_stale, "blocked task")} with no update for ${ATTENTION.blockedNoUpdateDays}+ days`,
+      counted(t, "blocked", row.blocked_stale, { days: ATTENTION.blockedNoUpdateDays }),
     );
   }
   if (row.in_progress_stale > 0) {
     reasons.push(
-      `${plural(row.in_progress_stale, "task")} in progress with no update for ${ATTENTION.inProgressNoUpdateDays}+ days`,
+      counted(t, "inProgress", row.in_progress_stale, { days: ATTENTION.inProgressNoUpdateDays }),
     );
   }
   if (staleProjects > 0) {
-    reasons.push(`${plural(staleProjects, "project report")} overdue`);
+    reasons.push(counted(t, "projectReports", staleProjects));
   }
   if (row.overdue_decisions > 0) {
-    reasons.push(`${plural(row.overdue_decisions, "decision")} past due`);
+    reasons.push(counted(t, "decisions", row.overdue_decisions));
   }
   return reasons;
 }

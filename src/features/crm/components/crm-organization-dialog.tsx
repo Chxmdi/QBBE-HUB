@@ -14,6 +14,8 @@ import {
   updateCrmOrganization,
   type DuplicateMatch,
 } from "@/features/crm/services/crm.commands";
+import { categoryLabel } from "@/features/crm/labels";
+import { useT } from "@/lib/i18n/client";
 
 const CATEGORIES = [
   "funder", "sponsor", "school", "university", "community",
@@ -40,6 +42,7 @@ export function CrmOrganizationDialog({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const editing = Boolean(organization);
   const [open, setOpen] = useState(defaultOpen);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[]>([]);
@@ -63,7 +66,7 @@ export function CrmOrganizationDialog({
     const form = new FormData(e.currentTarget);
 
     if (!editing && duplicates.length > 0 && !acknowledged) {
-      setError("Review the possible duplicates above, then confirm to continue.");
+      setError(t("crm.orgDialog.reviewDuplicates"));
       return;
     }
 
@@ -82,10 +85,10 @@ export function CrmOrganizationDialog({
       : await createCrmOrganization(payload);
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not save the organization.");
+      setError(result.error ?? t("crm.orgDialog.saveFailed"));
       return;
     }
-    toast(editing ? "Organization updated." : "Organization added.");
+    toast(editing ? t("crm.orgDialog.updated") : t("crm.orgDialog.added"));
     setOpen(false);
     setDuplicates([]);
     router.refresh();
@@ -95,16 +98,16 @@ export function CrmOrganizationDialog({
     <>
       <Button variant={editing ? "secondary" : "primary"} onClick={() => setOpen(true)}>
         {editing ? <Pencil className="size-4" aria-hidden /> : <Plus className="size-4" aria-hidden />}
-        {editing ? "Edit organization" : "New organization"}
+        {editing ? t("crm.orgDialog.editTrigger") : t("crm.orgDialog.newTrigger")}
       </Button>
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        title={editing ? "Edit organization" : "Add organization"}
+        title={editing ? t("crm.orgDialog.editTitle") : t("crm.orgDialog.addTitle")}
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="crm-name">Name</Label>
+            <Label htmlFor="crm-name">{t("crm.orgDialog.name")}</Label>
             <Input
               id="crm-name"
               name="name"
@@ -127,8 +130,8 @@ export function CrmOrganizationDialog({
               <p className="flex items-center gap-1.5 text-[13.5px] font-medium text-warning-fg">
                 <AlertTriangle className="size-4" aria-hidden />
                 {duplicates.length === 1
-                  ? "A similar organization already exists"
-                  : "Similar organizations already exist"}
+                  ? t("crm.orgDialog.duplicateOne")
+                  : t("crm.orgDialog.duplicateOther")}
               </p>
               <ul className="mt-1.5 space-y-1 text-[13px]">
                 {duplicates.map((duplicate) => (
@@ -139,7 +142,7 @@ export function CrmOrganizationDialog({
                     >
                       {duplicate.name}
                     </Link>
-                    <span className="text-muted"> · {duplicate.category}</span>
+                    <span className="text-muted"> · {categoryLabel(duplicate.category, t)}</span>
                   </li>
                 ))}
               </ul>
@@ -148,14 +151,14 @@ export function CrmOrganizationDialog({
                   checked={acknowledged}
                   onChange={(e) => setAcknowledged(e.target.checked)} className="mt-0.5"
                 />
-                This is a different organization — create it anyway.
+                {t("crm.orgDialog.createAnyway")}
               </label>
             </div>
           ) : null}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="crm-category">Category</Label>
+              <Label htmlFor="crm-category">{t("crm.orgDialog.category")}</Label>
               <Select
                 id="crm-category"
                 name="category"
@@ -164,14 +167,15 @@ export function CrmOrganizationDialog({
               >
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>
-                    {c}
+                    {categoryLabel(c, t)}
                   </option>
                 ))}
               </Select>
             </div>
             <div>
               <Label htmlFor="crm-website">
-                Website <span className="font-normal text-muted">(optional)</span>
+                {t("crm.orgDialog.website")}{" "}
+                <span className="font-normal text-muted">{t("crm.orgDialog.optional")}</span>
               </Label>
               <Input
                 id="crm-website"
@@ -191,7 +195,8 @@ export function CrmOrganizationDialog({
 
           <div>
             <Label htmlFor="crm-notes">
-              Notes <span className="font-normal text-muted">(optional)</span>
+              {t("crm.orgDialog.notes")}{" "}
+              <span className="font-normal text-muted">{t("crm.orgDialog.optional")}</span>
             </Label>
             <Textarea
               id="crm-notes"
@@ -202,7 +207,7 @@ export function CrmOrganizationDialog({
             />
           </div>
           <div>
-            <Label htmlFor="crm-next-action">Next action</Label>
+            <Label htmlFor="crm-next-action">{t("crm.orgDialog.nextAction")}</Label>
             <Input
               id="crm-next-action"
               name="nextActionAt"
@@ -214,7 +219,8 @@ export function CrmOrganizationDialog({
           {canEditSensitive ? (
             <div>
               <Label htmlFor="crm-sensitive">
-                Sensitive notes <span className="font-normal text-muted">(owner and admins only)</span>
+                {t("crm.orgDialog.sensitiveNotes")}{" "}
+                <span className="font-normal text-muted">{t("crm.orgDialog.ownerAdminsOnly")}</span>
               </Label>
               <Textarea
                 id="crm-sensitive"
@@ -234,10 +240,10 @@ export function CrmOrganizationDialog({
 
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("crm.orgDialog.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              {editing ? "Save organization" : "Add organization"}
+              {editing ? t("crm.orgDialog.saveSubmit") : t("crm.orgDialog.addSubmit")}
             </Button>
           </div>
         </form>

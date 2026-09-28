@@ -3,15 +3,18 @@ import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
-  KIND_LABELS,
   OPPORTUNITY_KINDS,
-  STAGE_LABELS,
   decisionOverdue,
   formatMoney,
 } from "@/features/crm/opportunity-schemas";
+import { kindLabel, stageLabel } from "@/features/crm/labels";
+import type { Locale } from "@/lib/i18n/config";
+import type { Formatters } from "@/lib/i18n/format";
+import { getFormatters, getLocale, getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 import type { OpportunityRow, Pipeline } from "@/features/crm/services/opportunity.queries";
 import { createOpportunity } from "@/features/crm/services/opportunity.commands";
-import { cn, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { OpportunityControls } from "./opportunity-controls";
 
 /**
@@ -39,7 +42,7 @@ const STAGE_TONE = {
   withdrawn: "neutral",
 } as const;
 
-export function OpportunityPipeline({
+export async function OpportunityPipeline({
   pipeline,
   crmOrganizationId,
   people,
@@ -58,6 +61,7 @@ export function OpportunityPipeline({
   today: string;
   highlightId?: string | null;
 }) {
+  const [t, format, locale] = await Promise.all([getT(), getFormatters(), getLocale()]);
   const option = (rows: { id: string; label: string }[]) =>
     rows.map((row) => ({ value: row.id, label: row.label }));
 
@@ -65,36 +69,36 @@ export function OpportunityPipeline({
     <section aria-labelledby="opportunities-heading">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 id="opportunities-heading" className="section-heading">
-          Opportunities
+          {t("crm.pipeline.heading")}
           <span className="ml-2 font-normal text-muted">
-            {pipeline.open.length} live
+            {t("crm.pipeline.live", { count: pipeline.open.length })}
           </span>
         </h2>
         <EntityFormDialog
-          triggerLabel="Add opportunity"
+          triggerLabel={t("crm.pipeline.addOpportunity")}
           triggerVariant="secondary"
-          title="Add opportunity"
-          submitLabel="Add"
+          title={t("crm.pipeline.addOpportunity")}
+          submitLabel={t("crm.add")}
           action={createOpportunity}
           extraValues={{ crmOrganizationId }}
           fields={[
-            { name: "title", label: "What is being asked for", type: "text", required: true },
-            { name: "description", label: "Detail", type: "textarea" },
+            { name: "title", label: t("crm.pipeline.fields.title"), type: "text", required: true },
+            { name: "description", label: t("crm.pipeline.fields.description"), type: "textarea" },
             {
               name: "kind",
-              label: "Type",
+              label: t("crm.pipeline.fields.kind"),
               type: "select",
               required: true,
               colSpan: 1,
               defaultValue: "grant",
               options: OPPORTUNITY_KINDS.map((value) => ({
                 value,
-                label: KIND_LABELS[value],
+                label: kindLabel(value, t),
               })),
             },
             {
               name: "ownerId",
-              label: "Owner",
+              label: t("crm.pipeline.fields.owner"),
               type: "select",
               required: true,
               colSpan: 1,
@@ -102,42 +106,42 @@ export function OpportunityPipeline({
             },
             {
               name: "amountRequested",
-              label: "Amount requested",
+              label: t("crm.pipeline.fields.amountRequested"),
               type: "number",
               colSpan: 1,
             },
             {
               name: "currency",
-              label: "Currency",
+              label: t("crm.pipeline.fields.currency"),
               type: "text",
               colSpan: 1,
               defaultValue: "GBP",
-              hint: "Three-letter code.",
+              hint: t("crm.pipeline.fields.currencyHint"),
             },
             {
               name: "decisionExpectedAt",
-              label: "Decision expected",
+              label: t("crm.pipeline.fields.decisionExpected"),
               type: "date",
               required: true,
               colSpan: 1,
             },
             {
               name: "contactId",
-              label: "Contact",
+              label: t("crm.pipeline.fields.contact"),
               type: "select",
               colSpan: 1,
               options: option(contacts),
             },
             {
               name: "programId",
-              label: "Funds this program",
+              label: t("crm.pipeline.fields.program"),
               type: "select",
               colSpan: 1,
               options: option(programs),
             },
             {
               name: "projectId",
-              label: "Funds this project",
+              label: t("crm.pipeline.fields.project"),
               type: "select",
               colSpan: 1,
               options: option(projects),
@@ -148,11 +152,11 @@ export function OpportunityPipeline({
 
       {pipeline.open.length > 0 || pipeline.awardedByCurrency.length > 0 ? (
         <dl className="mb-3 flex flex-wrap gap-x-8 gap-y-2">
-          <Total label="In play" totals={pipeline.requestedByCurrency} />
-          <Total label="Awarded" totals={pipeline.awardedByCurrency} />
+          <Total label={t("crm.pipeline.inPlay")} totals={pipeline.requestedByCurrency} locale={locale} />
+          <Total label={t("crm.pipeline.awarded")} totals={pipeline.awardedByCurrency} locale={locale} />
           {pipeline.overdueDecisions > 0 ? (
             <div>
-              <dt className="meta">Overdue decisions</dt>
+              <dt className="meta">{t("crm.pipeline.overdueDecisions")}</dt>
               <dd className="text-[15px] font-semibold text-warning-fg tabular-nums">
                 {pipeline.overdueDecisions}
               </dd>
@@ -164,8 +168,8 @@ export function OpportunityPipeline({
       {pipeline.open.length === 0 ? (
         <EmptyState
           icon={<Banknote aria-hidden />}
-          title="Nothing in play"
-          description="Record a grant, sponsorship or partnership while it is still a conversation, so the deadline does not arrive unnoticed."
+          title={t("crm.pipeline.emptyTitle")}
+          description={t("crm.pipeline.emptyDescription")}
         />
       ) : (
         <ul className="card divide-y divide-line">
@@ -175,6 +179,9 @@ export function OpportunityPipeline({
               opportunity={opportunity}
               today={today}
               highlighted={opportunity.id === highlightId}
+              t={t}
+              format={format}
+              locale={locale}
             />
           ))}
         </ul>
@@ -186,7 +193,7 @@ export function OpportunityPipeline({
           open={pipeline.settled.some((row) => row.id === highlightId)}
         >
           <summary className="cursor-pointer text-[13.5px] font-medium">
-            Decided ({pipeline.settled.length})
+            {t("crm.pipeline.decidedCount", { count: pipeline.settled.length })}
           </summary>
           <ul className="mt-2 divide-y divide-line">
             {pipeline.settled.map((opportunity) => (
@@ -204,17 +211,17 @@ export function OpportunityPipeline({
                   </span>
                   {opportunity.stage === "awarded" ? (
                     <span className="text-[13.5px] font-semibold tabular-nums">
-                      {formatMoney(opportunity.amount_awarded, opportunity.currency)}
+                      {formatMoney(opportunity.amount_awarded, opportunity.currency, locale)}
                     </span>
                   ) : null}
                   <Badge tone={STAGE_TONE[opportunity.stage]}>
-                    {STAGE_LABELS[opportunity.stage]}
+                    {stageLabel(opportunity.stage, t)}
                   </Badge>
                 </div>
                 <p className="meta mt-0.5">
                   {opportunity.decided_at
-                    ? `Decided ${formatDate(opportunity.decided_at)}`
-                    : "Decided"}
+                    ? t("crm.pipeline.decidedOn", { date: format.date(opportunity.decided_at) })
+                    : t("crm.pipeline.decided")}
                   {opportunity.owner ? ` · ${opportunity.owner.full_name}` : ""}
                 </p>
                 {opportunity.outcome_note ? (
@@ -234,9 +241,11 @@ export function OpportunityPipeline({
 function Total({
   label,
   totals,
+  locale,
 }: {
   label: string;
   totals: { currency: string; total: number; count: number }[];
+  locale: Locale;
 }) {
   if (totals.length === 0) return null;
   return (
@@ -246,7 +255,7 @@ function Total({
         {totals.map((entry, index) => (
           <span key={entry.currency}>
             {index > 0 ? <span className="mx-1.5 text-muted">+</span> : null}
-            {formatMoney(entry.total, entry.currency)}
+            {formatMoney(entry.total, entry.currency, locale)}
           </span>
         ))}
       </dd>
@@ -258,10 +267,16 @@ function OpportunityItem({
   opportunity,
   today,
   highlighted,
+  t,
+  format,
+  locale,
 }: {
   opportunity: OpportunityRow;
   today: string;
   highlighted: boolean;
+  t: TranslateFn;
+  format: Formatters;
+  locale: Locale;
 }) {
   const overdue = decisionOverdue(opportunity, today);
 
@@ -275,18 +290,18 @@ function OpportunityItem({
           {opportunity.title}
         </span>
         <span className="text-[13.5px] font-semibold tabular-nums">
-          {formatMoney(opportunity.amount_requested, opportunity.currency)}
+          {formatMoney(opportunity.amount_requested, opportunity.currency, locale)}
         </span>
         <Badge tone={STAGE_TONE[opportunity.stage]}>
-          {STAGE_LABELS[opportunity.stage]}
+          {stageLabel(opportunity.stage, t)}
         </Badge>
       </div>
 
       <p className="meta mt-0.5">
-        {KIND_LABELS[opportunity.kind]}
+        {kindLabel(opportunity.kind, t)}
         {opportunity.owner ? ` · ${opportunity.owner.full_name}` : ""}
         {opportunity.decision_expected_at
-          ? ` · decision ${formatDate(opportunity.decision_expected_at)}`
+          ? ` · ${t("crm.pipeline.decisionOn", { date: format.date(opportunity.decision_expected_at) })}`
           : ""}
         {opportunity.program ? ` · ${opportunity.program.name}` : ""}
         {opportunity.project ? ` · ${opportunity.project.name}` : ""}
@@ -294,7 +309,7 @@ function OpportunityItem({
 
       {overdue ? (
         <p className="mt-1 text-[13px] text-warning-fg">
-          The decision date has passed — worth chasing.
+          {t("crm.pipeline.chase")}
         </p>
       ) : null}
 

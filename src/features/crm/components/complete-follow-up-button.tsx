@@ -4,9 +4,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { completeFollowUp } from "@/features/crm/services/crm.commands";
+import { useT } from "@/lib/i18n/client";
 
 export function CompleteFollowUpButton({ followUpId }: { followUpId: string }) {
   const router = useRouter();
+  const t = useT();
   const [saving, setSaving] = useState(false);
 
   async function handleComplete() {
@@ -21,8 +23,8 @@ export function CompleteFollowUpButton({ followUpId }: { followUpId: string }) {
       type="button"
       onClick={handleComplete}
       disabled={saving}
-      aria-label="Mark follow-up done"
-      title="Mark done"
+      aria-label={t("crm.followUps.markDoneLabel")}
+      title={t("crm.followUps.markDone")}
       className="rounded-(--radius-sm) p-1.5 text-muted transition-colors hover:bg-surface-soft hover:text-success-fg disabled:opacity-50"
     >
       <Check className="size-4" aria-hidden />

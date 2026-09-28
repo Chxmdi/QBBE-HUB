@@ -76,3 +76,21 @@ describe("sortForAttention", () => {
     ]);
   });
 });
+
+describe("attentionReasons in French (#141)", () => {
+  it("uses the translator it is given", async () => {
+    const { createTranslator } = await import("@/lib/i18n/translate");
+    expect(
+      attentionReasons(
+        { ...base, overdue: 3, oldest_overdue_due: "2026-09-24", overdue_decisions: 1 },
+        "2026-09-26",
+        2,
+        createTranslator("fr-CA"),
+      ),
+    ).toEqual([
+      "3 tâches en retard, la plus ancienne depuis 2 jours",
+      "2 rapports de projet en retard",
+      "1 décision en retard",
+    ]);
+  });
+});
