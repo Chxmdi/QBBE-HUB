@@ -4,6 +4,10 @@
  */
 export const workEn = {
   home: {
+    denied: {
+      title: "That page isn’t available to you",
+      body: "Your role doesn’t include it, so you were brought back here. If you need it for your work, ask an administrator.",
+    },
     title: "Home",
     greeting: {
       morning: "Good morning",

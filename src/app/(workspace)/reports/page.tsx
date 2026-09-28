@@ -7,7 +7,7 @@ import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { generateReport } from "@/features/reports/services/report.commands";
-import { requireSession } from "@/lib/auth";
+import { requireSession, NO_ACCESS_REDIRECT } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { codeLabel, formatStoredDate } from "@/features/reports/snapshot-view";
 import { getFormatters, getT } from "@/lib/i18n/server";
@@ -24,7 +24,7 @@ export default async function ReportsPage() {
   // treats them that way — config/navigation.ts marks this entry `staff` — but
   // hiding a link is not a boundary. Anyone who typed the address reached the
   // page and was offered Generate report on it.
-  if (!session.isStaff) redirect("/");
+  if (!session.isStaff) redirect(NO_ACCESS_REDIRECT);
   const supabase = await createSupabasePageClient();
   const [t, format] = await Promise.all([getT(), getFormatters()]);
 

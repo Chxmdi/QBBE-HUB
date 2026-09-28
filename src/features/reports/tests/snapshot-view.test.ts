@@ -49,7 +49,7 @@ it("writes the headings, codes and dates in French when asked", async () => {
     { t: createTranslator("fr-CA"), date: (value) => formatStoredDate(format, value) },
   );
   expect(sections[0].title).toBe("Résultat visé");
-  expect(sections[1].rows[0].primary).toBe("en bonne voie");
+  expect(sections[1].rows[0].primary).toBe("sur la bonne voie");
   expect(sections[2].rows[0].primary).toBe("50 %");
   expect(sections[3].rows[0].secondary).toBe("Ouvert · échéance le 28 sept. 2026");
 });

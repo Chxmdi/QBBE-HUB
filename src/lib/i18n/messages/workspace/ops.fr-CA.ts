@@ -3,6 +3,16 @@ import type { opsEn } from "./ops.en";
 /** Français québécois — jobs, retention, records (#141). À faire réviser. */
 export const opsFrCA: typeof opsEn = {
   jobs: {
+    runner: {
+      title: "Les tâches planifiées ne s’exécutent pas",
+      fix: {
+        not_configured: "Les tâches planifiées ne sont pas reliées à ce site : les fichiers téléversés ne passent jamais leur contrôle de sécurité et aucun courriel d’avis n’est envoyé. Dans l’éditeur SQL de Supabase, exécutez : select app.configure_job_runner('<adresse de ce site>', '<CRON_JOB_SECRET>');",
+        other_site: "Les tâches planifiées sont reliées à une autre adresse que celle de ce site. Exécutez de nouveau app.configure_job_runner avec l’adresse de ce site.",
+        secret_mismatch: "Le secret des tâches enregistré dans la base de données ne correspond pas au CRON_JOB_SECRET de ce site : chaque appel de tâche est donc refusé. Exécutez de nouveau app.configure_job_runner avec le secret actuel du site.",
+        app_secret_missing: "Ce site n’a pas de CRON_JOB_SECRET : il refuse donc chaque appel de tâche. Ajoutez-le dans les paramètres de l’hébergement (au moins 32 caractères), puis redéployez.",
+        unknown: "L’état de l’exécuteur de tâches n’a pas pu être lu. Vérifiez que SUPABASE_SERVICE_ROLE_KEY est défini pour ce site.",
+      },
+    },
     title: "Tâches planifiées",
     unconfiguredLead: "Aucune tâche n’a encore été exécutée.",
     unconfiguredBefore:

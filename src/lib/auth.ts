@@ -105,6 +105,13 @@ export const getSessionContext = cache(
   },
 );
 
+/**
+ * Where a signed-in member lands when a page is not theirs to see. Home reads
+ * `denied` and says so; a bare redirect to "/" left people wondering whether
+ * the link was broken.
+ */
+export const NO_ACCESS_REDIRECT = "/?denied=1";
+
 /** Redirects to sign-in when unauthenticated; inactive members get a dedicated page. */
 export async function requireSession(): Promise<SessionContext> {
   const session = await getSessionContext();
@@ -128,14 +135,14 @@ export async function requireSession(): Promise<SessionContext> {
  */
 export async function requireStaff(): Promise<SessionContext> {
   const session = await requireSession();
-  if (!session.isStaff) redirect("/");
+  if (!session.isStaff) redirect(NO_ACCESS_REDIRECT);
   return session;
 }
 
 /** Route gate for admin-only surfaces. */
 export async function requireAdmin(): Promise<SessionContext> {
   const session = await requireSession();
-  if (!session.isAdmin) redirect("/");
+  if (!session.isAdmin) redirect(NO_ACCESS_REDIRECT);
   return session;
 }
 
@@ -195,6 +202,6 @@ export async function authorizeAdminAction(options?: {
 export async function requireAdminAal2(): Promise<SessionContext> {
   const authorization = await authorizeAdminAction();
   if (authorization.ok) return authorization.session;
-  if (authorization.reason === "role") redirect("/");
+  if (authorization.reason === "role") redirect(NO_ACCESS_REDIRECT);
   redirect("/mfa");
 }
