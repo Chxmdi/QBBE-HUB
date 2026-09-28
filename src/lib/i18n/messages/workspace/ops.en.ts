@@ -5,9 +5,10 @@
 export const opsEn = {
   jobs: {
     runner: {
+      command: "select app.configure_job_runner('<this site's address>', '<CRON_JOB_SECRET>');",
       title: "Background jobs are not running",
       fix: {
-        not_configured: "Background jobs are not connected to this site, so uploads never pass their security check and no notification email is sent. In the Supabase SQL editor run: select app.configure_job_runner('<this site's address>', '<CRON_JOB_SECRET>');",
+        not_configured: "Background jobs are not connected to this site, so uploads never pass their security check and no notification email is sent. In the Supabase SQL editor run:",
         other_site: "Background jobs are connected to a different site address than this one. Run app.configure_job_runner again with this site's address.",
         secret_mismatch: "The job secret stored in the database does not match this site's CRON_JOB_SECRET, so every job call is refused. Run app.configure_job_runner again with the site's current secret.",
         app_secret_missing: "This site has no CRON_JOB_SECRET set, so it refuses every job call. Add it in the hosting settings (at least 32 characters) and redeploy.",

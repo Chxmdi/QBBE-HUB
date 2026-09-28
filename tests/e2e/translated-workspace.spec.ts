@@ -142,7 +142,8 @@ async function landmarkText(page: Page): Promise<string[]> {
     const out: string[] = [];
     for (const root of roots) {
       for (const element of [root, ...Array.from(root.querySelectorAll("*"))]) {
-        if (element.closest("script, style, template, noscript")) continue;
+        // Code (an SQL command to run, say) is not prose in either language.
+        if (element.closest("script, style, template, noscript, code, pre, kbd, samp")) continue;
         // Quoted content in another language, marked as such, is not interface.
         if (element.closest("[lang]:not([lang^=fr])")) continue;
         for (const attribute of ["aria-label", "title", "placeholder", "alt"]) {

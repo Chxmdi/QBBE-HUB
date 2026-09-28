@@ -32,7 +32,15 @@ export default async function AdminJobsPage() {
         >
           <p className="text-[13.5px] font-semibold">{t("jobs.runner.title")}</p>
           {/* Full-contrast text: the muted colour on this tint falls under 4.5:1. */}
-          <p className="text-[12.5px] text-ink">{t(`jobs.runner.fix.${runner}`)}</p>
+          <p className="text-[12.5px] text-ink">
+            {t(`jobs.runner.fix.${runner}`)}
+            {runner === "not_configured" ? (
+              <>
+                {" "}
+                <code className="font-mono break-all">{t("jobs.runner.command")}</code>
+              </>
+            ) : null}
+          </p>
         </div>
       ) : null}
       <JobHealthPanel {...health} />

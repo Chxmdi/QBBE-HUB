@@ -8,7 +8,12 @@ import { frCA } from "@/lib/i18n/messages/fr-CA";
 // status that can show the banner needs a French line too.
 describe("job runner banner text", () => {
   it("matches JOB_RUNNER_FIX in English and covers every status in French", () => {
-    expect(en.jobs.runner.fix).toEqual(JOB_RUNNER_FIX);
+    // The not_configured advice ends with the SQL to run, shown as code.
+    const english = {
+      ...en.jobs.runner.fix,
+      not_configured: `${en.jobs.runner.fix.not_configured} ${en.jobs.runner.command}`,
+    };
+    expect(english).toEqual(JOB_RUNNER_FIX);
     expect(Object.keys(frCA.jobs.runner.fix).sort()).toEqual(Object.keys(JOB_RUNNER_FIX).sort());
   });
 });
