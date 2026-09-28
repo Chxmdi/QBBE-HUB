@@ -7,7 +7,7 @@ description: Run the QBBE Hub app locally against the local Supabase stack and d
 
 ## Build and start (local stack only; never the hosted project)
 
-1. Start the local stack: `npx supabase start -x studio,edge-runtime,logflare,vector,supavisor,imgproxy`
+1. Create the local Auth signing key once (`bash scripts/local-signing-key.sh`; `supabase start` refuses to run without it), then start the local stack: `npx supabase start -x studio,edge-runtime,logflare,vector,supavisor,imgproxy`
 2. `npx supabase db reset && npm run db:seed` (seed prints `qa-owner@example.com / QaTest!2026`).
 3. Export the app variables from `npx supabase status -o env` **before building**:
    `NEXT_PUBLIC_SUPABASE_URL=$API_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000`.
