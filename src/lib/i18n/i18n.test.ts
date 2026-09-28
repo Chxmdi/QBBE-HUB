@@ -180,7 +180,8 @@ describe("workspace catalogues", () => {
 // Anything else identical in French is English that was copied across and
 // never translated.
 const SAME_OUTSIDE_FINANCE = new Set([
-  "communication", "document", "documents", "invitation", "signature",
+  "communication", "document", "documents", "invitation", "mention", "notification",
+  "signature",
   " · Version {number}", ".", "Action", "Actions", "Active", "Administration",
   "Budgets", "CSV", "Communication", "Contact", "Contacts", "Conversation",
   "Date", "Description", "Direct", "Discussion", "Document", "Documents",

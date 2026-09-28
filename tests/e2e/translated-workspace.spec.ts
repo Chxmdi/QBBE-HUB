@@ -200,7 +200,7 @@ const setOwnerLocale = (locale: string | null) =>
 
 // The workspace routes every spec relies on, beyond the feature files.
 const CORE_ROUTES = [
-  "/", "/my-work", "/board", "/requests", "/forms", "/forms/new", "/projects", "/programs",
+  "/", "/?denied=1", "/my-work", "/board", "/requests", "/forms", "/forms/new", "/projects", "/programs",
   "/approvals", "/approvals?tab=away", "/inbox", "/channels", "/messages", "/saved",
   "/announcements", "/calendar", "/schedule", "/meetings", "/events", "/people",
   "/people/overview", "/crm", "/reports", "/search", "/search?q=workshop", "/documents",

@@ -14,6 +14,23 @@ import {
 import { requireAdminAal2 } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { getFormatters, getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
+import { labelOr } from "@/features/admin/labels";
+
+/**
+ * Why an email was not sent, as the delivery rules record it: a code, or
+ * `preference:<category>` / `digest-only:<mode>`. English shows the code as
+ * it always has; an unknown one is shown as recorded.
+ */
+function suppressedReasonLabel(reason: string, t: TranslateFn): string {
+  const [code, detail] = reason.split(/:(.*)/s);
+  if (detail !== undefined && (code === "preference" || code === "digest-only")) {
+    return t(`admin.email.reasons.${code}`, {
+      detail: labelOr(t, `admin.email.categories.${detail}`, detail),
+    });
+  }
+  return labelOr(t, `admin.email.reasons.${code}`, reason);
+}
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("admin.email.title") };
@@ -158,7 +175,8 @@ export default async function AdminEmailPage({
                         <td className="px-4 py-3">
                           <span className="block">{row.subject}</span>
                           <span className="meta">
-                            {row.kind} · {row.category}
+                            {labelOr(t, `admin.email.kinds.${row.kind}`, row.kind)} ·{" "}
+                            {labelOr(t, `admin.email.categories.${row.category}`, row.category)}
                             {row.provider ? t("admin.email.via", { provider: row.provider }) : ""}
                             {row.attempt > 1 ? t("admin.email.attempt", { attempt: row.attempt }) : ""}
                           </span>
@@ -169,7 +187,7 @@ export default async function AdminEmailPage({
                           ) : null}
                           {row.suppressedReason ? (
                             <span className="meta mt-1 block">
-                              {t("admin.email.suppressed", { reason: row.suppressedReason })}
+                              {t("admin.email.suppressed", { reason: suppressedReasonLabel(row.suppressedReason, t) })}
                             </span>
                           ) : null}
                         </td>

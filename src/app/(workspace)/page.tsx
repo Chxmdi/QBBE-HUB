@@ -228,7 +228,8 @@ export default async function HomePage({
             <AlertTriangle className="mt-0.5 size-4.5 shrink-0 text-warning-fg" aria-hidden />
             <div>
               <p className="text-[13.5px] font-semibold">{t("home.denied.title")}</p>
-              <p className="meta">{t("home.denied.body")}</p>
+              {/* Full-contrast text: the muted colour on this tint falls under 4.5:1. */}
+              <p className="text-[12.5px] text-ink">{t("home.denied.body")}</p>
             </div>
           </div>
         ) : null}

@@ -31,7 +31,8 @@ export default async function AdminJobsPage() {
           className="mb-5 rounded-(--radius-md) border border-danger/40 bg-danger/10 px-4 py-3"
         >
           <p className="text-[13.5px] font-semibold">{t("jobs.runner.title")}</p>
-          <p className="meta">{t(`jobs.runner.fix.${runner}`)}</p>
+          {/* Full-contrast text: the muted colour on this tint falls under 4.5:1. */}
+          <p className="text-[12.5px] text-ink">{t(`jobs.runner.fix.${runner}`)}</p>
         </div>
       ) : null}
       <JobHealthPanel {...health} />
