@@ -1,6 +1,7 @@
 import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { FUND_RESTRICTIONS, FUND_RESTRICTION_KEY, formatCents } from "@/features/ledger/money";
 import type { ByClass, StatementLine, Statements } from "@/features/ledger/year-end";
+import type { FundChanges } from "@/features/ledger/fund-changes";
 import type { Locale } from "@/lib/i18n/config";
 import { getLocale, getT } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
@@ -201,6 +202,53 @@ export async function OperationsTable({ current, prior }: { current: Statements;
         )}
         {totalRow(t("finance.ledgerReports.statementTables.transfersDirect"), c.direct, prior?.changes.direct.total)}
         {totalRow(t("finance.ledgerReports.statementTables.netAssetsEnd"), c.ending, prior?.changes.ending.total)}
+      </tbody>
+    </DataTable>
+  );
+}
+
+/** Statement of changes in fund balances (#149): one row per fund, then all funds. */
+export async function FundChangesTable({ changes }: { changes: FundChanges }) {
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
+  const totals = changes.totals;
+  return (
+    <DataTable minWidth="860px">
+      <TableHead>
+        <TableHeader>{t("finance.ledgerReports.statementTables.fund")}</TableHeader>
+        <TableHeader className="w-32 text-right">
+          {t("finance.ledgerReports.statementTables.balanceAt", { date: changes.from })}
+        </TableHeader>
+        <TableHeader className="w-32 text-right">{t("finance.ledgerReports.statementTables.revenue")}</TableHeader>
+        <TableHeader className="w-32 text-right">{t("finance.ledgerReports.statementTables.expenses")}</TableHeader>
+        <TableHeader className="w-32 text-right">
+          {t("finance.ledgerReports.statementTables.transfersReleases")}
+        </TableHeader>
+        <TableHeader className="w-32 text-right">
+          {t("finance.ledgerReports.statementTables.balanceAt", { date: changes.to })}
+        </TableHeader>
+      </TableHead>
+      <tbody>
+        {changes.funds.map((f) => (
+          <TableRow key={f.fund_id}>
+            <TableCell>
+              <span className="font-mono">{f.code}</span> {f.name}
+              <p className="meta">{t(FUND_RESTRICTION_KEY[f.restriction])}</p>
+            </TableCell>
+            <AmountCell cents={f.opening_cents} locale={locale} />
+            <AmountCell cents={f.revenue_cents} locale={locale} />
+            <AmountCell cents={f.expenses_cents} locale={locale} />
+            <AmountCell cents={f.transfers_cents} locale={locale} />
+            <AmountCell cents={f.closing_cents} strong locale={locale} />
+          </TableRow>
+        ))}
+        <TableRow>
+          <TableCell className="font-semibold">{t("finance.ledgerReports.statementTables.allFunds")}</TableCell>
+          <AmountCell cents={totals.opening_cents} strong locale={locale} />
+          <AmountCell cents={totals.revenue_cents} strong locale={locale} />
+          <AmountCell cents={totals.expenses_cents} strong locale={locale} />
+          <AmountCell cents={totals.transfers_cents} strong locale={locale} />
+          <AmountCell cents={totals.closing_cents} strong locale={locale} />
+        </TableRow>
       </tbody>
     </DataTable>
   );

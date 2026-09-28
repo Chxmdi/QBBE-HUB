@@ -404,6 +404,51 @@ export async function reverseEntry(input: unknown): Promise<ActionResult> {
 }
 
 // ---------------------------------------------------------------------------
+// Releasing restricted money (#149)
+// ---------------------------------------------------------------------------
+
+const releaseSchema = z.object({
+  fromFundId: z
+    .string({ message: K("finance.ledger.release.errors.chooseRestricted") })
+    .uuid(K("finance.ledger.release.errors.chooseRestricted")),
+  toFundId: z
+    .string({ message: K("finance.ledger.release.errors.chooseUnrestricted") })
+    .uuid(K("finance.ledger.release.errors.chooseUnrestricted")),
+  amount: requiredText(K("finance.ledger.release.errors.amount")),
+  releaseDate: isoDate(K("finance.ledger.release.errors.date")),
+  condition: requiredText(K("finance.ledger.release.errors.condition"), 300),
+});
+
+/**
+ * Moves restricted money to an unrestricted fund once its condition is met.
+ * The database posts the balanced entry and refuses an unrestricted source,
+ * more than the fund's available balance, and a closed period.
+ */
+export async function releaseRestricted(input: unknown): Promise<ActionResult> {
+  const auth = await authorize();
+  if (!auth.ok) return auth.result;
+  const t = await getT();
+  const parsed = releaseSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: issueMessage(t, parsed.error.issues[0]?.message) };
+  const cents = parseMoneyToCents(parsed.data.amount);
+  if (cents === null || cents <= 0) {
+    return { ok: false, error: t("finance.ledger.release.errors.amountPositive") };
+  }
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("ledger_release_restricted", {
+    p_organization: auth.organizationId,
+    p_from_fund: parsed.data.fromFundId,
+    p_to_fund: parsed.data.toFundId,
+    p_amount_cents: cents,
+    p_release_date: parsed.data.releaseDate,
+    p_condition: parsed.data.condition,
+  });
+  if (error || !data) return { ok: false, error: dbMessage(t, error, t("finance.ledger.release.errors.failed")) };
+  revalidatePath(LEDGER, "layout");
+  return { ok: true, id: data as string };
+}
+
+// ---------------------------------------------------------------------------
 // Who may read the books
 // ---------------------------------------------------------------------------
 

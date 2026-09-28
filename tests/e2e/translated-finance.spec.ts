@@ -197,6 +197,7 @@ test("every finance screen is in French, with French formats and no axe violatio
     "/finance/ledger",
     "/finance/ledger/accounts",
     "/finance/ledger/funds",
+    "/finance/ledger/funds/release",
     "/finance/ledger/periods",
     "/finance/ledger/journal",
     "/finance/ledger/journal/new",

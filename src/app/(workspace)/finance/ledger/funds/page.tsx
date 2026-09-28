@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Input, Label } from "@/components/ui/input";
@@ -43,7 +44,19 @@ export default async function LedgerFundsPage({
       eyebrow={t("finance.ledger.title")}
       title={t("finance.ledger.funds.title")}
       description={t("finance.ledger.funds.description")}
-      actions={canRead && canManage ? <FundDialog programs={programList} /> : undefined}
+      actions={
+        canRead ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/finance/ledger/funds/release"
+              className="inline-flex h-9.5 items-center gap-2 rounded-(--radius-sm) border border-line bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-soft"
+            >
+              {canManage ? t("finance.ledger.funds.releaseLink") : t("finance.ledger.funds.releasesLink")}
+            </Link>
+            {canManage ? <FundDialog programs={programList} /> : null}
+          </div>
+        ) : undefined
+      }
     />
   );
   if (!canRead) {

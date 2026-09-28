@@ -1,0 +1,4 @@
+{
+  "staffOnly": ["/finance/ledger/funds/release"],
+  "qa": [{ "path": "/finance/ledger/funds/release", "name": "ledger-fund-release" }]
+}

@@ -41,7 +41,7 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
   statements: {
     title: "États financiers",
     description:
-      "État de la situation financière et état des résultats établis à partir des écritures comptabilisées, par catégorie de fonds, avec l’exercice précédent s’il existe.",
+      "État de la situation financière, état des résultats et état de l’évolution des soldes de fonds établis à partir des écritures comptabilisées, avec l’exercice précédent s’il existe.",
     emptyYearDescription:
       "Les états s’affichent dès que les périodes d’un exercice existent et que des écritures sont comptabilisées.",
     positionCsv: "Situation financière (CSV)",
@@ -53,6 +53,10 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
     footnote:
       "Présentés par catégorie de fonds (non affectés, affectés d’origine interne, affectés d’origine externe) à partir des fonds du grand livre. Les écritures de clôture sont exclues des résultats. Les notes, les flux de trésorerie et tout reclassement selon la présentation du comptable sont préparés par le comptable.",
     noPriorYear: " Aucune colonne pour l’exercice précédent : rien n’y a été comptabilisé.",
+    fundChangesCsv: "CSV de l’évolution des soldes de fonds",
+    fundChangesHeading: "État de l’évolution des soldes de fonds, du {from} au {to}",
+    fundChangesNote:
+      "Le solde de fin de chaque fonds correspond à son solde à la page Fonds au {date}. Les virements et les libérations déplacent l’actif net d’un fonds à l’autre; pour l’ensemble des fonds, leur total est donc nul.",
   },
   statementTables: {
     positionTitle: "État de la situation financière",
@@ -73,6 +77,12 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
     netAssetsBeginning: "Actif net au début de l’exercice",
     transfersDirect: "Virements et écritures directes à l’actif net",
     netAssetsEnd: "Actif net à la fin de l’exercice",
+    fund: "Fonds",
+    fundName: "Nom",
+    restriction: "Affectation",
+    balanceAt: "Solde au {date}",
+    transfersReleases: "Virements et libérations",
+    allFunds: "Tous les fonds",
   },
   yearPicker: {
     label: "Exercice",
@@ -270,6 +280,7 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
     fileAvailable: "Fichier disponible",
     yes: "oui",
     noWithStatus: "non ({status})",
+    fundChangesTitle: "État de l’évolution des soldes de fonds du {from} au {to}",
   },
   api: {
     noAccess: "Vous n’avez pas accès au grand livre.",
@@ -283,5 +294,6 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
     receiptNotFound: "Pièce introuvable.",
     fileNotClean: "Ce fichier est encore en cours d’analyse ou a été mis en quarantaine.",
     fileOpenFailed: "Impossible d’ouvrir le fichier.",
+    fundChangesFailed: "Impossible d’exporter l’état. Réessayez.",
   },
 };

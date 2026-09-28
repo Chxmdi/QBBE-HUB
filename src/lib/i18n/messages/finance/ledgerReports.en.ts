@@ -39,7 +39,7 @@ export const ledgerReportsEn = {
   statements: {
     title: "Financial statements",
     description:
-      "Statement of financial position and statement of operations from posted entries, by fund class, with the prior year when there is one.",
+      "Statement of financial position, statement of operations and statement of changes in fund balances from posted entries, with the prior year when there is one.",
     emptyYearDescription: "Statements appear once a fiscal year's periods exist and entries are posted.",
     positionCsv: "Financial position CSV",
     operationsCsv: "Operations CSV",
@@ -50,6 +50,10 @@ export const ledgerReportsEn = {
     footnote:
       "Presented by fund class (unrestricted, internally restricted, externally restricted) from the ledger's funds. Closing entries are left out of operations. Notes, cash flows and any reclassification to the accountant's presentation are prepared by the accountant.",
     noPriorYear: " No prior-year column: nothing was posted in the previous fiscal year.",
+    fundChangesCsv: "Changes in fund balances CSV",
+    fundChangesHeading: "Statement of changes in fund balances, {from} to {to}",
+    fundChangesNote:
+      "Each fund's balance at the end is its balance on the Funds page for {date}. Transfers and releases move net assets between funds, so across all funds they add up to zero.",
   },
   statementTables: {
     positionTitle: "Statement of financial position",
@@ -70,6 +74,12 @@ export const ledgerReportsEn = {
     netAssetsBeginning: "Net assets, beginning of year",
     transfersDirect: "Transfers and direct entries to net assets",
     netAssetsEnd: "Net assets, end of year",
+    fund: "Fund",
+    fundName: "Name",
+    restriction: "Restriction",
+    balanceAt: "Balance {date}",
+    transfersReleases: "Transfers and releases",
+    allFunds: "All funds",
   },
   yearPicker: {
     label: "Fiscal year",
@@ -262,6 +272,7 @@ export const ledgerReportsEn = {
     fileAvailable: "File available",
     yes: "yes",
     noWithStatus: "no ({status})",
+    fundChangesTitle: "Statement of changes in fund balances {from} to {to}",
   },
   api: {
     noAccess: "You do not have access to the ledger.",
@@ -275,5 +286,6 @@ export const ledgerReportsEn = {
     receiptNotFound: "Receipt not found.",
     fileNotClean: "This file is still being checked or has been quarantined.",
     fileOpenFailed: "Could not open the file.",
+    fundChangesFailed: "Could not export the statement. Try again.",
   },
 };

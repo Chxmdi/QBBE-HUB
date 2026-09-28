@@ -62,6 +62,26 @@ read-only login arrives with B7; until then, give the accountant CSV exports.
    2026-10-01. Total debits must equal total credits and match the
    accountant's figures. Use **Export CSV** to send it to them.
 
+## Releasing restricted money (#149)
+
+When a restricted fund's condition is met (the funder accepted the report,
+the board lifted its designation), move the money to the general fund:
+
+1. Ledger, then Funds, then **Release restricted money**.
+2. Choose the restricted fund (the hint shows what it can release today), the
+   unrestricted fund (usually `GEN`), the amount, the date and the condition
+   that was met, then **Release and post**. You should see the release in the
+   list below the form, with a link to its entry.
+3. The entry debits the restricted fund's net assets (3100 or 3200) and
+   credits 2900 Due to other funds, and in the unrestricted fund debits 1900
+   Due from other funds and credits 3000. The memo names the condition. The
+   bank balance does not move.
+
+It is refused, with the reason on screen, when the source fund is
+unrestricted, the target is restricted, the amount is more than the fund's
+available balance (its lowest balance from the release date on), or the date
+is in a closed period. A mistaken release is corrected by reversing its entry.
+
 ## Month end
 
 Post or delete every draft in the month, check the trial balance, then close
@@ -108,7 +128,10 @@ Approvals screen.
    first.
 2. **Review the statements.** Ledger, then Statements, choose the year. You
    should see the statement of financial position and the statement of
-   operations by fund class, with the prior year when there is one. **Print**
+   operations by fund class, with the prior year when there is one, and the
+   statement of changes in fund balances: per fund, the balance at the start,
+   revenue, expenses, transfers and releases, and the balance at the end (the
+   same figure as the Funds page on the last day of the year). **Print**
    gives a paper-style copy; the CSV links give spreadsheets.
 3. **Close the year.** Ledger, then Year-end, then **Close year** on that
    year's row. **This posts a closing entry and closes all twelve months.**
@@ -140,6 +163,6 @@ be reversed from its own page.
 ## Not built yet
 
 The statement of cash flows and notes, per-funder spending statements,
-automatic release of restricted funds, interfund transfers, form-by-form
+general interfund transfers other than releases, form-by-form
 mapping of the returns (GIFI line numbers and Quebec equivalents), and tracking
 whether each return has been filed. See the pull request's "Not included" list.

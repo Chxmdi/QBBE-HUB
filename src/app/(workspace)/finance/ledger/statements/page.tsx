@@ -5,11 +5,11 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
-import { OperationsTable, PositionTable } from "@/features/ledger/components/statement-tables";
+import { FundChangesTable, OperationsTable, PositionTable } from "@/features/ledger/components/statement-tables";
 import { PrintButton } from "@/features/ledger/components/year-end-forms";
 import { NotFiledNotice, YearPicker } from "@/features/ledger/components/year-picker";
 import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
-import { loadFiscalYears, pickYear, yearStatements } from "@/features/ledger/services/year-end.queries";
+import { loadFiscalYears, pickYear, yearFundChanges, yearStatements } from "@/features/ledger/services/year-end.queries";
 import { getT } from "@/lib/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -56,8 +56,11 @@ export default async function StatementsPage({
       </div>
     );
   }
-  const { current, prior, error } = await yearStatements(supabase, session.organizationId, year);
-  if (error) throw new Error(`Could not load the statements: ${error}`);
+  const [{ current, prior, error }, fundChanges] = await Promise.all([
+    yearStatements(supabase, session.organizationId, year),
+    yearFundChanges(supabase, session.organizationId, year),
+  ]);
+  if (error ?? fundChanges.error) throw new Error(`Could not load the statements: ${error ?? fundChanges.error}`);
   const csv = (statement: string) => `/api/finance/ledger/statements?year=${year.startsOn}&statement=${statement}`;
 
   return (
@@ -86,6 +89,14 @@ export default async function StatementsPage({
             <Download className="size-4" aria-hidden />
             {t("finance.ledgerReports.statements.operationsCsv")}
           </Link>
+          <Link
+            href={csv("fund-changes")}
+            prefetch={false}
+            className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
+          >
+            <Download className="size-4" aria-hidden />
+            {t("finance.ledgerReports.statements.fundChangesCsv")}
+          </Link>
           <PrintButton />
         </div>
       </div>
@@ -108,6 +119,15 @@ export default async function StatementsPage({
               {t("finance.ledgerReports.statements.operationsHeading", { from: current.from, to: current.to })}
             </h2>
             <OperationsTable current={current} prior={prior} />
+          </section>
+          <section aria-labelledby="fund-changes-heading">
+            <h2 id="fund-changes-heading" className="mb-2 text-base font-semibold">
+              {t("finance.ledgerReports.statements.fundChangesHeading", { from: current.from, to: current.to })}
+            </h2>
+            <FundChangesTable changes={fundChanges.changes} />
+            <p className="meta mt-2">
+              {t("finance.ledgerReports.statements.fundChangesNote", { date: current.to })}
+            </p>
           </section>
           <p className="meta">
             {t("finance.ledgerReports.statements.footnote")}

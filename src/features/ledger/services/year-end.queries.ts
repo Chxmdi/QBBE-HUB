@@ -8,6 +8,12 @@ import {
   type StatementTotalRow,
   type Statements,
 } from "@/features/ledger/year-end";
+import {
+  buildFundChanges,
+  normalizeFundChangeRow,
+  type FundChangeRow,
+  type FundChanges,
+} from "@/features/ledger/fund-changes";
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -54,17 +60,25 @@ export async function loadFiscalYears(supabase: Client, organizationId: string):
   ]);
   const periodRows = (periods ?? []) as { starts_on: string; ends_on: string; status: "open" | "closed" }[];
   const closeRows = (closes ?? []) as unknown as YearClose[];
-  return fiscalYearsFromPeriods(periodRows).map((year) => {
-    const inYear = periodRows.filter((p) => p.starts_on >= year.startsOn && p.ends_on <= year.endsOn);
-    const history = closeRows.filter((c) => c.starts_on === year.startsOn);
-    return {
-      ...year,
-      periods: inYear.length,
-      openPeriods: inYear.filter((p) => p.status === "open").length,
-      close: history.find((c) => !c.reopened_at) ?? null,
-      history,
-    };
-  });
+  return (
+    fiscalYearsFromPeriods(periodRows)
+      .map((year) => {
+        const inYear = periodRows.filter((p) => p.starts_on >= year.startsOn && p.ends_on <= year.endsOn);
+        const history = closeRows.filter((c) => c.starts_on === year.startsOn);
+        return {
+          ...year,
+          periods: inYear.length,
+          openPeriods: inYear.filter((p) => p.status === "open").length,
+          close: history.find((c) => !c.reopened_at) ?? null,
+          history,
+        };
+      })
+      // A year with no periods at all is a gap, not a year the books were
+      // kept for. Listing every one between the first period and a far-future
+      // one (browser specs open periods thousands of years ahead) rendered
+      // thousands of empty rows on Year-end and in every year picker.
+      .filter((year) => year.periods > 0 || year.history.length > 0)
+  );
 }
 
 /** The year a `?year=YYYY-MM-DD` parameter names, or the latest one that has started. */
@@ -108,6 +122,21 @@ export async function yearStatements(supabase: Client, organizationId: string, y
     priorYear: prior,
     error: current.error ?? previous.error,
   };
+}
+
+/** The statement of changes in fund balances for a year. Row-level security applies. */
+export async function yearFundChanges(
+  supabase: Client,
+  organizationId: string,
+  year: FiscalYear,
+): Promise<{ changes: FundChanges; error: string | null }> {
+  const { data, error } = await supabase.rpc("ledger_fund_changes", {
+    p_organization: organizationId,
+    p_from: year.startsOn,
+    p_to: year.endsOn,
+  });
+  const rows = ((data ?? []) as FundChangeRow[]).map(normalizeFundChangeRow);
+  return { changes: buildFundChanges(rows, year.startsOn, year.endsOn), error: error?.message ?? null };
 }
 
 /** Every posted line between two dates, fetched a page at a time. */
