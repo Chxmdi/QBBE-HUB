@@ -1,3 +1,4 @@
+import { recipientLocales, reminderDate, translators } from "../i18n";
 import { createNotifications, type NotificationDraft } from "../notify";
 import type { JobContext, JobResult } from "../runner";
 
@@ -36,6 +37,8 @@ type Kind = "upcoming" | "due" | "overdue";
 
 function dateInZone(timezone: string, at: Date): string {
   try {
+    // "en-CA" here is a machine format, not display: it yields YYYY-MM-DD,
+    // which is compared with due dates as a string.
     return new Intl.DateTimeFormat("en-CA", {
       timeZone: timezone,
       year: "numeric",
@@ -139,24 +142,46 @@ export async function grantReportReminders({ db, definition, now }: JobContext):
     }
   }
 
+  const recipientsFor = (report: ReportRow): string[] => {
+    const responsible = report.grant?.responsible_user_id;
+    return responsible && staff.has(`${report.organization_id}:${responsible}`)
+      ? [responsible]
+      : (admins.get(report.organization_id) ?? []);
+  };
+  // Each person reads their reminder in their own saved language.
+  const locales = await recipientLocales(
+    db,
+    due.flatMap(({ report }) => recipientsFor(report)),
+  );
+  const translatorFor = translators();
+
   const drafts: NotificationDraft[] = [];
   for (const { report, kind, today } of due) {
-    const responsible = report.grant?.responsible_user_id;
-    const recipients =
-      responsible && staff.has(`${report.organization_id}:${responsible}`)
-        ? [responsible]
-        : (admins.get(report.organization_id) ?? []);
-    const label = kind === "overdue" ? "Overdue" : kind === "due" ? "Due today" : "Coming up";
+    const recipients = recipientsFor(report);
     for (const userId of recipients) {
+      const locale = locales.get(userId) ?? "en";
+      const t = translatorFor(locale);
+      const date = reminderDate(report.due_on, locale);
+      const label = t(
+        kind === "overdue"
+          ? "jobs.notify.overdue"
+          : kind === "due"
+            ? "jobs.notify.dueToday"
+            : "jobs.notify.comingUp",
+      );
       drafts.push({
         user_id: userId,
         organization_id: report.organization_id,
         category: "due_date",
-        title: `${label}: ${report.title} for ${report.grant?.title ?? "a grant"}`,
+        title: t("jobs.notify.grantTitle", {
+          label,
+          report: report.title,
+          grant: report.grant?.title ?? t("jobs.notify.aGrant"),
+        }),
         body:
           kind === "overdue"
-            ? `This grant report was due ${report.due_on}. Submit it to the funder, then mark it submitted.`
-            : `Grant report due ${report.due_on}.`,
+            ? t("jobs.notify.grantOverdueBody", { date })
+            : t("jobs.notify.grantDueBody", { date }),
         source_type: "grant_report",
         source_id: report.id,
         link: `/finance/gifts/grants/${report.grant_id}`,

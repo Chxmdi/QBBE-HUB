@@ -1,4 +1,5 @@
 import { cadenceDays, isProjectStale } from "@/features/projects/stale";
+import { recipientLocales, translators } from "../i18n";
 import { createNotifications, type NotificationDraft } from "../notify";
 import type { JobContext, JobResult } from "../runner";
 
@@ -58,17 +59,30 @@ export async function staleProjectSweep({
   }
 
   const week = isoWeekKey(now);
-  const drafts: NotificationDraft[] = projects
-    .filter((project) => isProjectStale({ ...project, stage: "active" }, now))
+  const stale = projects.filter((project) =>
+    isProjectStale({ ...project, stage: "active" }, now),
+  );
+  // Each lead reads the reminder in their own saved language.
+  const locales = await recipientLocales(
+    db,
+    stale.map((project) => project.owner_id!),
+  );
+  const translatorFor = translators();
+  const drafts: NotificationDraft[] = stale
     .map((project) => {
+      const t = translatorFor(locales.get(project.owner_id!) ?? "en");
       const days = cadenceDays(project.reporting_cadence) ?? 0;
-      const cadence = project.reporting_cadence === "monthly" ? "monthly" : "weekly";
+      const cadence = t(
+        project.reporting_cadence === "monthly"
+          ? "jobs.notify.cadenceMonthly"
+          : "jobs.notify.cadenceWeekly",
+      );
       return {
         user_id: project.owner_id!,
         organization_id: project.organization_id,
         category: "system",
-        title: `Status update due: ${project.name}`,
-        body: `This project reports ${cadence}. The last status update is older than ${days} days.`,
+        title: t("jobs.notify.staleTitle", { name: project.name }),
+        body: t("jobs.notify.staleBody", { cadence, days }),
         source_type: "project",
         source_id: project.id,
         link: `/projects/${project.id}?tab=updates`,

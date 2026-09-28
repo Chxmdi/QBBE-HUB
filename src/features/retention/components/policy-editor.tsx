@@ -4,9 +4,10 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea, Checkbox } from "@/components/ui/input";
+import { useFormatters, useLocale, useT } from "@/lib/i18n/client";
 import {
-  ACTION_LABELS,
-  describeDuration,
+  actionLabel,
+  describeDuration as describeDays,
   policyIsAllowed,
   type RetentionSubject,
 } from "@/features/retention/schemas";
@@ -32,6 +33,11 @@ export function PolicyEditor({
   wouldAffect: number | null;
 }) {
   const router = useRouter();
+  const t = useT();
+  const locale = useLocale();
+  const format = useFormatters();
+  const number = (value: number) => format.number(value);
+  const describeDuration = (value: number) => describeDays(value, t, number);
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -42,14 +48,14 @@ export function PolicyEditor({
 
   const parsedDays = Number(days);
   const check = Number.isFinite(parsedDays)
-    ? policyIsAllowed(subject, { retainDays: parsedDays, action })
-    : { ok: false as const, reason: "Enter a number of days." };
+    ? policyIsAllowed(subject, { retainDays: parsedDays, action }, t, number)
+    : { ok: false as const, reason: t("retention.errors.enterDays") };
 
   if (!open) {
     return (
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-          {policy ? "Change" : "Set a policy"}
+          {policy ? t("retention.editor.change") : t("retention.editor.setPolicy")}
         </Button>
         {error ? <span className="text-[12.5px] text-danger-fg">{error}</span> : null}
       </div>
@@ -66,11 +72,17 @@ export function PolicyEditor({
 
         if (enabled && wouldAffect && wouldAffect > 0) {
           const confirmed = window.confirm(
-            `Switching this on will ${
-              action === "delete" ? "permanently delete" : "redact"
-            } ${wouldAffect.toLocaleString()} ${subject.label.toLowerCase()} records on the next nightly run, and more as they age past ${describeDuration(
-              parsedDays,
-            )}. Continue?`,
+            t("retention.editor.confirm", {
+              verb: t(
+                action === "delete"
+                  ? "retention.editor.verbDelete"
+                  : "retention.editor.verbRedact",
+              ),
+              count: format.number(wouldAffect),
+              // French quotes the label as a name, so it keeps its capitals.
+              label: locale === "en" ? subject.label.toLowerCase() : subject.label,
+              duration: describeDuration(parsedDays),
+            }),
           );
           if (!confirmed) return;
         }
@@ -87,7 +99,7 @@ export function PolicyEditor({
         setBusy(false);
 
         if (!result.ok) {
-          setError(result.error ?? "That didn't work. Try again.");
+          setError(result.error ?? t("retention.errors.generic"));
           return;
         }
         setOpen(false);
@@ -95,7 +107,7 @@ export function PolicyEditor({
       }}
     >
       <div>
-        <Label htmlFor={`days-${subject.key}`}>Keep for (days)</Label>
+        <Label htmlFor={`days-${subject.key}`}>{t("retention.editor.keepForDays")}</Label>
         <Input
           id={`days-${subject.key}`}
           value={days}
@@ -104,15 +116,15 @@ export function PolicyEditor({
           aria-describedby={`floor-${subject.key}`}
         />
         <p id={`floor-${subject.key}`} className="meta mt-1">
-          At least {describeDuration(subject.minimum_days)}.
+          {t("retention.editor.atLeast", { duration: describeDuration(subject.minimum_days) })}
           {Number.isFinite(parsedDays) && parsedDays >= subject.minimum_days
-            ? ` That is ${describeDuration(parsedDays)}.`
+            ? t("retention.editor.thatIs", { duration: describeDuration(parsedDays) })
             : ""}
         </p>
       </div>
 
       <div>
-        <Label htmlFor={`action-${subject.key}`}>What happens</Label>
+        <Label htmlFor={`action-${subject.key}`}>{t("retention.editor.whatHappens")}</Label>
         <Select
           id={`action-${subject.key}`}
           value={action}
@@ -122,14 +134,14 @@ export function PolicyEditor({
         >
           {subject.allowed_actions.map((value) => (
             <option key={value} value={value}>
-              {ACTION_LABELS[value]}
+              {actionLabel(value, t)}
             </option>
           ))}
         </Select>
       </div>
 
       <div className="sm:col-span-2">
-        <Label htmlFor={`note-${subject.key}`}>Why (optional)</Label>
+        <Label htmlFor={`note-${subject.key}`}>{t("retention.editor.why")}</Label>
         <Textarea
           id={`note-${subject.key}`}
           name="note"
@@ -143,7 +155,7 @@ export function PolicyEditor({
           name="enabled"
           defaultChecked={policy?.enabled ?? false}
         />
-        Apply this every night
+        {t("retention.editor.applyNightly")}
       </label>
 
       {!check.ok ? (
@@ -154,7 +166,7 @@ export function PolicyEditor({
 
       <div className="flex items-center gap-2 sm:col-span-2">
         <Button type="submit" size="sm" loading={busy} disabled={busy || !check.ok}>
-          Save
+          {t("retention.editor.save")}
         </Button>
         <Button
           type="button"
@@ -165,7 +177,7 @@ export function PolicyEditor({
             setError(null);
           }}
         >
-          Cancel
+          {t("retention.editor.cancel")}
         </Button>
         {error ? (
           <span role="alert" className="text-[12.5px] text-danger-fg">

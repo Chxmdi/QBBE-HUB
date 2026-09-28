@@ -4,8 +4,11 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Input, Label, Select, Textarea } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
 import {
   MONTHS,
+  confirmerLabel,
+  monthName,
   type LegalHoldRow,
   type RecordCategory,
   type RetentionRuleRow,
@@ -28,6 +31,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 function useSubmit() {
   const router = useRouter();
+  const t = useT();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const run = React.useCallback(
@@ -37,13 +41,13 @@ function useSubmit() {
       const result = await action();
       setBusy(false);
       if (!result.ok) {
-        setError(result.error ?? "That didn't work. Try again.");
+        setError(result.error ?? t("records.errors.generic"));
         return;
       }
       onDone?.();
       router.refresh();
     },
-    [router],
+    [router, t],
   );
   return { busy, error, run };
 }
@@ -63,14 +67,16 @@ export function RuleEditor({
   category: RecordCategory;
   rule: RetentionRuleRow | null;
 }) {
+  const t = useT();
   const [open, setOpen] = React.useState(false);
   const { busy, error, run } = useSubmit();
+  const who = confirmerLabel(category.confirm_with, t);
   const permanent = category.retention_basis === "permanent";
 
   if (!open) {
     return (
       <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-        Change or confirm
+        {t("records.forms.changeOrConfirm")}
       </Button>
     );
   }
@@ -95,36 +101,38 @@ export function RuleEditor({
     >
       {permanent ? null : (
         <div>
-          <Label htmlFor={`years-${category.key}`}>Keep for (years)</Label>
+          <Label htmlFor={`years-${category.key}`}>{t("records.forms.keepForYears")}</Label>
           <Input
             id={`years-${category.key}`}
             name="years"
             inputMode="numeric"
             defaultValue={String(rule?.retain_years ?? category.default_years ?? "")}
           />
-          <p className="meta mt-1">At least {category.minimum_years} years.</p>
+          <p className="meta mt-1">
+            {t("records.forms.atLeastYears", { n: category.minimum_years ?? "" })}
+          </p>
         </div>
       )}
       <div className={permanent ? "sm:col-span-2" : undefined}>
-        <Label htmlFor={`note-${category.key}`}>Confirmation note (optional)</Label>
+        <Label htmlFor={`note-${category.key}`}>{t("records.forms.confirmationNote")}</Label>
         <Textarea
           id={`note-${category.key}`}
           name="note"
           rows={2}
           defaultValue={rule?.confirmation_note ?? ""}
-          placeholder={`e.g. Confirmed by the ${category.confirm_with} by email on …`}
+          placeholder={t("records.forms.notePlaceholder", { who })}
         />
       </div>
       <label className="flex items-center gap-2 text-[13.5px] sm:col-span-2">
         <Checkbox name="confirmed" defaultChecked={Boolean(rule?.confirmed_at)} />
-        The {category.confirm_with} has confirmed this period
+        {t("records.forms.hasConfirmed", { who })}
       </label>
       <div className="flex items-center gap-2 sm:col-span-2">
         <Button type="submit" size="sm" loading={busy} disabled={busy}>
-          Save
+          {t("records.forms.save")}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
+          {t("records.forms.cancel")}
         </Button>
       </div>
       <div className="sm:col-span-2">
@@ -139,6 +147,7 @@ export function FiscalYearEndForm({
 }: {
   current: { month: number; day: number } | null;
 }) {
+  const t = useT();
   const { busy, error, run } = useSubmit();
   return (
     <form
@@ -152,17 +161,17 @@ export function FiscalYearEndForm({
       }}
     >
       <div>
-        <Label htmlFor="fye-month">Month</Label>
+        <Label htmlFor="fye-month">{t("records.forms.month")}</Label>
         <Select id="fye-month" name="month" defaultValue={String(current?.month ?? 3)}>
           {MONTHS.map((name, index) => (
             <option key={name} value={index + 1}>
-              {name}
+              {monthName(index + 1, t)}
             </option>
           ))}
         </Select>
       </div>
       <div>
-        <Label htmlFor="fye-day">Day</Label>
+        <Label htmlFor="fye-day">{t("records.forms.day")}</Label>
         <Input
           id="fye-day"
           name="day"
@@ -172,7 +181,7 @@ export function FiscalYearEndForm({
         />
       </div>
       <Button type="submit" size="sm" loading={busy} disabled={busy}>
-        Save year end
+        {t("records.forms.saveYearEnd")}
       </Button>
       <ErrorLine error={error} />
     </form>
@@ -186,6 +195,7 @@ export function PlaceHoldForm({
   categories: RecordCategory[];
   documents: DocumentOption[];
 }) {
+  const t = useT();
   const [scope, setScope] = React.useState<"record" | "category">("record");
   const { busy, error, run } = useSubmit();
   const formRef = React.useRef<HTMLFormElement>(null);
@@ -211,21 +221,23 @@ export function PlaceHoldForm({
       }}
     >
       <div>
-        <Label htmlFor="hold-scope">Hold</Label>
+        <Label htmlFor="hold-scope">{t("records.forms.hold")}</Label>
         <Select
           id="hold-scope"
           value={scope}
           onChange={(event) => setScope(event.currentTarget.value as "record" | "category")}
         >
-          <option value="record">One document</option>
-          <option value="category">A whole record category</option>
+          <option value="record">{t("records.forms.oneDocument")}</option>
+          <option value="category">{t("records.forms.wholeCategory")}</option>
         </Select>
       </div>
       <div>
-        <Label htmlFor="hold-target">{scope === "category" ? "Category" : "Document"}</Label>
+        <Label htmlFor="hold-target">
+          {scope === "category" ? t("records.forms.category") : t("records.forms.document")}
+        </Label>
         <Select id="hold-target" name="target" key={scope} defaultValue="">
           <option value="" disabled>
-            Choose…
+            {t("records.forms.choose")}
           </option>
           {scope === "category"
             ? categories.map((category) => (
@@ -241,17 +253,17 @@ export function PlaceHoldForm({
         </Select>
       </div>
       <div className="sm:col-span-2">
-        <Label htmlFor="hold-reason">Reason</Label>
+        <Label htmlFor="hold-reason">{t("records.forms.reason")}</Label>
         <Textarea
           id="hold-reason"
           name="reason"
           rows={2}
-          placeholder="e.g. Revenu Québec audit of the 2025 fiscal year"
+          placeholder={t("records.forms.reasonPlaceholder")}
         />
       </div>
       <div className="flex items-center gap-2 sm:col-span-2">
         <Button type="submit" size="sm" loading={busy} disabled={busy}>
-          Place hold
+          {t("records.forms.placeHold")}
         </Button>
         <ErrorLine error={error} />
       </div>
@@ -260,13 +272,14 @@ export function PlaceHoldForm({
 }
 
 export function ReleaseHoldForm({ hold }: { hold: LegalHoldRow }) {
+  const t = useT();
   const [open, setOpen] = React.useState(false);
   const { busy, error, run } = useSubmit();
 
   if (!open) {
     return (
       <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-        Release
+        {t("records.forms.release")}
       </Button>
     );
   }
@@ -283,14 +296,14 @@ export function ReleaseHoldForm({ hold }: { hold: LegalHoldRow }) {
         );
       }}
     >
-      <Label htmlFor={`release-${hold.id}`}>Why is the hold being released?</Label>
+      <Label htmlFor={`release-${hold.id}`}>{t("records.forms.releaseWhy")}</Label>
       <Textarea id={`release-${hold.id}`} name="reason" rows={2} />
       <div className="flex items-center gap-2">
         <Button type="submit" size="sm" loading={busy} disabled={busy}>
-          Release hold
+          {t("records.forms.releaseHold")}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
-          Cancel
+          {t("records.forms.cancel")}
         </Button>
       </div>
       <ErrorLine error={error} />
@@ -305,6 +318,7 @@ export function ClassifyDocumentForm({
   categories: RecordCategory[];
   documents: DocumentOption[];
 }) {
+  const t = useT();
   const { busy, error, run } = useSubmit();
   const [documentId, setDocumentId] = React.useState("");
   const selected = documents.find((document) => document.id === documentId) ?? null;
@@ -325,14 +339,14 @@ export function ClassifyDocumentForm({
       }}
     >
       <div>
-        <Label htmlFor="classify-document">Document</Label>
+        <Label htmlFor="classify-document">{t("records.forms.document")}</Label>
         <Select
           id="classify-document"
           value={documentId}
           onChange={(event) => setDocumentId(event.currentTarget.value)}
         >
           <option value="" disabled>
-            Choose…
+            {t("records.forms.choose")}
           </option>
           {documents.map((document) => (
             <option key={document.id} value={document.id}>
@@ -342,14 +356,14 @@ export function ClassifyDocumentForm({
         </Select>
       </div>
       <div>
-        <Label htmlFor="classify-category">Category</Label>
+        <Label htmlFor="classify-category">{t("records.forms.category")}</Label>
         <Select
           id="classify-category"
           name="category"
           key={`category-${documentId}`}
           defaultValue={selected?.record_category ?? ""}
         >
-          <option value="">Not a business record</option>
+          <option value="">{t("records.forms.notBusinessRecord")}</option>
           {categories.map((category) => (
             <option key={category.key} value={category.key}>
               {category.label}
@@ -358,7 +372,7 @@ export function ClassifyDocumentForm({
         </Select>
       </div>
       <div>
-        <Label htmlFor="classify-date">Record date</Label>
+        <Label htmlFor="classify-date">{t("records.forms.recordDate")}</Label>
         <Input
           id="classify-date"
           name="recordDate"
@@ -369,7 +383,7 @@ export function ClassifyDocumentForm({
       </div>
       <div className="flex items-center gap-2 sm:col-span-3">
         <Button type="submit" size="sm" loading={busy} disabled={busy || !documentId}>
-          Save classification
+          {t("records.forms.saveClassification")}
         </Button>
         <ErrorLine error={error} />
       </div>

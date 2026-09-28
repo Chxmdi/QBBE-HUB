@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { authorizeAdminAction } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import { opsEn } from "@/lib/i18n/messages/workspace/ops.en";
+import type { MessageKey } from "@/lib/i18n/translate";
 import {
+  localizeSubject,
   policyIsAllowed,
   savePolicySchema,
   type RetentionSubject,
@@ -26,9 +30,16 @@ export async function saveRetentionPolicy(input: unknown): Promise<ActionResult>
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
+  const t = await getT();
+  const format = await getFormatters();
   const parsed = savePolicySchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    // The schema's English sentences are the English catalogue values, so each
+    // finds its key; anything else (zod's own defaults) falls through as-is.
+    const message = parsed.error.issues[0]?.message;
+    if (!message) return { ok: false, error: t("retention.errors.invalidInput") };
+    const key = Object.entries(opsEn.retention.errors).find(([, text]) => text === message)?.[0];
+    return { ok: false, error: key ? t(`retention.errors.${key}` as MessageKey) : message };
   }
   const { subjectKey, retainDays, action, enabled, note } = parsed.data;
 
@@ -40,13 +51,15 @@ export async function saveRetentionPolicy(input: unknown): Promise<ActionResult>
     .maybeSingle();
 
   if (!subject) {
-    return { ok: false, error: "That record type cannot be governed by a policy." };
+    return { ok: false, error: t("retention.errors.notGovernable") };
   }
 
-  const allowed = policyIsAllowed(subject as unknown as RetentionSubject, {
-    retainDays,
-    action,
-  });
+  const allowed = policyIsAllowed(
+    localizeSubject(subject as unknown as RetentionSubject, t),
+    { retainDays, action },
+    t,
+    (value) => format.number(value),
+  );
   if (!allowed.ok) return { ok: false, error: allowed.reason };
 
   const { error } = await supabase

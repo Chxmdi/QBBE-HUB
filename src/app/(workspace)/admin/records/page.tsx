@@ -11,15 +11,19 @@ import {
   RuleEditor,
 } from "@/features/record-retention/components/record-retention-forms";
 import {
-  MONTHS,
+  confirmerLabel,
   describePeriod,
   describeRetainUntil,
+  localizeCategory,
+  monthName,
 } from "@/features/record-retention/schemas";
 import { getRecordRetentionOverview } from "@/features/record-retention/services/record-retention.queries";
 import { requireAdminAal2 } from "@/lib/auth";
-import { formatDateTime } from "@/lib/utils";
+import { getFormatters, getLocale, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Records & holds" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("records.title") };
+}
 export const dynamic = "force-dynamic";
 
 /**
@@ -33,34 +37,44 @@ export const dynamic = "force-dynamic";
 export default async function AdminRecordsPage() {
   const session = await requireAdminAal2();
   const overview = await getRecordRetentionOverview(session.organizationId);
-  const { categories, rules, fiscalYearEnd, holds, register, documents, latestReport } =
-    overview;
+  const { rules, fiscalYearEnd, holds, register, documents, latestReport } = overview;
+  const t = await getT();
+  const format = await getFormatters();
+  const locale = await getLocale();
+  // Seeded category text in the reader's language; the forms get it too.
+  const categories = overview.categories.map((category) => localizeCategory(category, t));
+  // A stored YYYY-MM-DD date. English shows it as stored; French reads "28 sept. 2026".
+  const calendarDate = (isoDate: string) =>
+    locale === "en" ? isoDate : format.date(`${isoDate.slice(0, 10)}T12:00:00Z`, "UTC");
 
   const categoryLabel = (key: string | null) =>
-    categories.find((category) => category.key === key)?.label ?? "Not classified";
+    categories.find((category) => category.key === key)?.label ?? t("records.notClassified");
   const documentTitle = (id: string | null) =>
     documents.find((document) => document.id === id)?.title ??
     register.find((row) => row.record_id === id)?.title ??
-    "A document";
+    t("records.aDocument");
   const pastRetention = register.filter((row) => row.past_retention && !row.held);
 
   return (
     <div>
       <AdminNav />
       <PageHeader
-        eyebrow="Administration"
-        title="Records & holds"
-        description="How long each kind of business record is kept, and legal holds that stop deletion. Classified records cannot be deleted before their retention date or while held — by anyone."
+        eyebrow={t("records.eyebrow")}
+        title={t("records.title")}
+        description={t("records.description")}
       />
 
       <section aria-labelledby="records-year-end" className="mb-8">
         <h2 id="records-year-end" className="section-heading mb-2">
-          Fiscal year end
+          {t("records.yearEndHeading")}
         </h2>
         <p className="meta mb-3 max-w-2xl">
           {fiscalYearEnd
-            ? `Financial records are counted from ${MONTHS[fiscalYearEnd.month - 1]} ${fiscalYearEnd.day}.`
-            : "Not set. Until it is, the Hub counts from one year after each record's date, which can only keep records longer."}
+            ? t("records.yearEndSet", {
+                month: monthName(fiscalYearEnd.month, t),
+                day: fiscalYearEnd.day,
+              })
+            : t("records.yearEndUnset")}
         </p>
         <div className="card px-4 py-3">
           <FiscalYearEndForm current={fiscalYearEnd} />
@@ -69,7 +83,7 @@ export default async function AdminRecordsPage() {
 
       <section aria-labelledby="records-rules" className="mb-8">
         <h2 id="records-rules" className="section-heading mb-3">
-          Retention rules
+          {t("records.rulesHeading")}
         </h2>
         <ul className="space-y-3">
           {categories.map((category) => {
@@ -81,17 +95,25 @@ export default async function AdminRecordsPage() {
                   <span className="min-w-0 flex-1 text-[13.5px] font-medium">
                     {category.label}
                   </span>
-                  <Badge tone="neutral">{describePeriod(category, years)}</Badge>
+                  <Badge tone="neutral">{describePeriod(category, years, t)}</Badge>
                   {rule?.confirmed_at ? (
-                    <Badge tone="success">Confirmed by the {category.confirm_with}</Badge>
+                    <Badge tone="success">
+                      {t("records.confirmedBy", { who: confirmerLabel(category.confirm_with, t) })}
+                    </Badge>
                   ) : (
-                    <Badge tone="warning">Needs {category.confirm_with} confirmation</Badge>
+                    <Badge tone="warning">
+                      {t("records.needsConfirmation", {
+                        who: confirmerLabel(category.confirm_with, t),
+                      })}
+                    </Badge>
                   )}
                 </div>
                 <p className="meta mt-0.5">{category.description}</p>
                 <p className="mt-1 text-[13px] text-muted">{category.legal_reference}</p>
                 {rule?.confirmation_note ? (
-                  <p className="meta mt-1">Note: {rule.confirmation_note}</p>
+                  <p className="meta mt-1">
+                    {t("records.note", { note: rule.confirmation_note })}
+                  </p>
                 ) : null}
                 <div className="mt-2">
                   <RuleEditor category={category} rule={rule} />
@@ -104,10 +126,10 @@ export default async function AdminRecordsPage() {
 
       <section aria-labelledby="records-holds" className="mb-8">
         <h2 id="records-holds" className="section-heading mb-3">
-          Legal holds
+          {t("records.holdsHeading")}
         </h2>
         {holds.length === 0 ? (
-          <p className="card mb-3 px-4 py-4 text-[13px] text-muted">No active holds.</p>
+          <p className="card mb-3 px-4 py-4 text-[13px] text-muted">{t("records.noHolds")}</p>
         ) : (
           <ul className="card mb-3 divide-y divide-line">
             {holds.map((hold) => (
@@ -116,10 +138,17 @@ export default async function AdminRecordsPage() {
                   <Lock className="size-4 shrink-0" aria-hidden />
                   <span className="font-medium">
                     {hold.scope === "category"
-                      ? `All ${categoryLabel(hold.category_key).toLowerCase()}`
+                      ? t("records.wholeCategory", {
+                          category:
+                            locale === "en"
+                              ? categoryLabel(hold.category_key).toLowerCase()
+                              : categoryLabel(hold.category_key),
+                        })
                       : documentTitle(hold.record_id)}
                   </span>
-                  <span className="meta ml-auto">Placed {formatDateTime(hold.placed_at)}</span>
+                  <span className="meta ml-auto">
+                    {t("records.placed", { when: format.dateTime(hold.placed_at) })}
+                  </span>
                 </div>
                 <p className="meta mt-0.5">{hold.reason}</p>
                 <div className="mt-2">
@@ -136,13 +165,10 @@ export default async function AdminRecordsPage() {
 
       <section aria-labelledby="records-classify" className="mb-8">
         <h2 id="records-classify" className="section-heading mb-2">
-          Classify a document
+          {t("records.classifyHeading")}
         </h2>
         <p className="meta mb-3 max-w-2xl">
-          The record date is the date the record relates to — the purchase, the
-          statement, or the day a contract ended. Left blank, the date the
-          document was added is used. A classification cannot be changed in a
-          way that shortens how long a record must be kept.
+          {t("records.classifyHelp")}
         </p>
         <div className="card px-4 py-3">
           <ClassifyDocumentForm categories={categories} documents={documents} />
@@ -151,19 +177,25 @@ export default async function AdminRecordsPage() {
 
       <section aria-labelledby="records-register" className="mb-8">
         <h2 id="records-register" className="section-heading mb-2">
-          Records register
+          {t("records.registerHeading")}
         </h2>
         <p className="meta mb-3 max-w-2xl">
           {latestReport
-            ? `Last nightly check ${formatDateTime(latestReport.generated_at)}: ${latestReport.past_retention_count} past retention, ${latestReport.held_count} held.`
-            : "The nightly check has not run yet."}{" "}
+            ? t("records.lastCheck", {
+                when: format.dateTime(latestReport.generated_at),
+                past: format.number(latestReport.past_retention_count),
+                held: format.number(latestReport.held_count),
+              })
+            : t("records.notRunYet")}{" "}
           {pastRetention.length > 0
-            ? `${pastRetention.length} record${pastRetention.length === 1 ? " has" : "s have"} reached the end of retention and may now be disposed of. Nothing is deleted automatically.`
-            : "No record has reached the end of its retention period."}
+            ? t(pastRetention.length === 1 ? "records.pastOne" : "records.pastOther", {
+                count: format.number(pastRetention.length),
+              })
+            : t("records.nonePast")}
         </p>
         {register.length === 0 ? (
           <p className="card px-4 py-4 text-[13px] text-muted">
-            No document is classified or held yet.
+            {t("records.registerEmpty")}
           </p>
         ) : (
           <ul className="card divide-y divide-line">
@@ -171,14 +203,17 @@ export default async function AdminRecordsPage() {
               <li key={`${row.record_type}-${row.record_id}`} className="px-4 py-2.5 text-[13px]">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="min-w-0 flex-1 font-medium">{row.title}</span>
-                  {row.held ? <Badge tone="danger">On hold</Badge> : null}
+                  {row.held ? <Badge tone="danger">{t("records.onHold")}</Badge> : null}
                   {row.past_retention && !row.held ? (
-                    <Badge tone="warning">Past retention</Badge>
+                    <Badge tone="warning">{t("records.pastRetention")}</Badge>
                   ) : null}
                 </div>
                 <p className="meta">
-                  {categoryLabel(row.category_key)} · dated {row.record_date} · keep until{" "}
-                  {describeRetainUntil(row.retain_until)}
+                  {t("records.registerMeta", {
+                    category: categoryLabel(row.category_key),
+                    date: calendarDate(row.record_date),
+                    until: describeRetainUntil(row.retain_until, t, calendarDate),
+                  })}
                 </p>
               </li>
             ))}

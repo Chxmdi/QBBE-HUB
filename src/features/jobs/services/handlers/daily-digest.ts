@@ -14,6 +14,8 @@ import {
   type DeliveryPreferences,
 } from "@/features/notifications/services/delivery-rules";
 import { renderDigestEmail } from "@/features/notifications/services/email-templates";
+import { isLocale } from "@/lib/i18n/config";
+import { createTranslator } from "@/lib/i18n/translate";
 import { enqueue } from "../queue";
 import type { JobContext, JobResult } from "../runner";
 
@@ -181,15 +183,20 @@ async function buildDigestFor(
   if (!content || !organizationId) return null;
 
   const [{ data: profile }, { data: organization }] = await Promise.all([
-    db.from("user_profile").select("full_name, email").eq("id", userId).maybeSingle(),
+    db.from("user_profile").select("full_name, email, locale").eq("id", userId).maybeSingle(),
     db.from("organization").select("name").eq("id", organizationId).maybeSingle(),
   ]);
 
   const recipient = (profile?.email as string | undefined) ?? null;
   if (!recipient || !recipient.includes("@")) return null;
 
+  // The digest goes out in the recipient's saved language (null means English).
+  const locale = (profile?.locale as string | null | undefined) ?? null;
   const email = renderDigestEmail({
-    recipientName: (profile?.full_name as string | undefined) || "there",
+    locale,
+    recipientName:
+      (profile?.full_name as string | undefined) ||
+      createTranslator(isLocale(locale) ? locale : "en")("jobs.email.fallbackName"),
     organizationName: (organization?.name as string | undefined) ?? "QBBE",
     groups: content.groups,
     totalCount: content.totalCount,

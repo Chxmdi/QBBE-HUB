@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { opsEn } from "@/lib/i18n/messages/workspace/ops.en";
+import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Retention policies.
@@ -18,6 +20,13 @@ export const ACTION_LABELS: Record<RetentionAction, string> = {
   anonymise: "Keep the record, remove the content",
 };
 
+const ENGLISH = createTranslator("en");
+
+/** How an action reads, in the reader's language. */
+export function actionLabel(action: RetentionAction, t: TranslateFn = ENGLISH): string {
+  return t(`retention.actions.${action}` as MessageKey);
+}
+
 export interface RetentionSubject {
   key: string;
   label: string;
@@ -28,15 +37,50 @@ export interface RetentionSubject {
   caution: string | null;
 }
 
-/** Years, for a number of days that is only ever read as a duration. */
-export function describeDuration(days: number): string {
-  if (days < 30) return `${days} days`;
+/**
+ * Years, for a number of days that is only ever read as a duration.
+ *
+ * `t` and `number` pick the language ("2,5 ans" in French); English by
+ * default, which is what tests and shared callers read.
+ */
+export function describeDuration(
+  days: number,
+  t: TranslateFn = ENGLISH,
+  number: (value: number) => string = String,
+): string {
+  if (days < 30) {
+    return t(days === 1 ? "retention.duration.dayOne" : "retention.duration.dayOther", {
+      n: number(days),
+    });
+  }
   if (days < 365) {
     const months = Math.round(days / 30);
-    return `${months} ${months === 1 ? "month" : "months"}`;
+    return t(months === 1 ? "retention.duration.monthOne" : "retention.duration.monthOther", {
+      n: number(months),
+    });
   }
   const years = Math.round((days / 365) * 10) / 10;
-  return `${years} ${years === 1 ? "year" : "years"}`;
+  return t(years === 1 ? "retention.duration.yearOne" : "retention.duration.yearOther", {
+    n: number(years),
+  });
+}
+
+type SubjectText = Pick<RetentionSubject, "key" | "label" | "description" | "caution">;
+
+/**
+ * A subject's label, description and caution in the reader's language. They
+ * are seeded reference rows, so a known key reads from the catalogue; an
+ * unknown one shows what the database holds.
+ */
+export function localizeSubject<T extends SubjectText>(subject: T, t: TranslateFn): T {
+  if (!(subject.key in opsEn.retention.subjects)) return subject;
+  const base = `retention.subjects.${subject.key}`;
+  return {
+    ...subject,
+    label: t(`${base}.label` as MessageKey),
+    description: t(`${base}.description` as MessageKey),
+    caution: subject.caution === null ? null : t(`${base}.caution` as MessageKey),
+  };
 }
 
 /**
@@ -48,21 +92,27 @@ export function describeDuration(days: number): string {
 export function policyIsAllowed(
   subject: RetentionSubject,
   policy: { retainDays: number; action: RetentionAction },
+  t: TranslateFn = ENGLISH,
+  number: (value: number) => string = String,
 ): { ok: true } | { ok: false; reason: string } {
   if (policy.retainDays < subject.minimum_days) {
     return {
       ok: false,
-      reason: `${subject.label} must be kept for at least ${describeDuration(
-        subject.minimum_days,
-      )}.`,
+      reason: t("retention.errors.mustKeep", {
+        label: subject.label,
+        duration: describeDuration(subject.minimum_days, t, number),
+      }),
     };
   }
   if (!subject.allowed_actions.includes(policy.action)) {
     return {
       ok: false,
-      reason: `${subject.label} cannot be ${
-        policy.action === "anonymise" ? "anonymised" : "deleted"
-      }.`,
+      reason: t(
+        policy.action === "anonymise"
+          ? "retention.errors.cannotAnonymise"
+          : "retention.errors.cannotDelete",
+        { label: subject.label },
+      ),
     };
   }
   return { ok: true };
@@ -73,6 +123,7 @@ export const savePolicySchema = z.object({
   retainDays: z.preprocess(
     (value) => (typeof value === "string" ? Number(value.trim()) : value),
     z
+      // English here; the server action translates through `retention.errors`.
       .number({ invalid_type_error: "Enter a number of days." })
       .int("Enter a whole number of days.")
       .min(1, "Retention has to be at least a day."),

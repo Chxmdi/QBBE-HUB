@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { authorizeAdminAction } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
+import { opsEn } from "@/lib/i18n/messages/workspace/ops.en";
+import type { MessageKey } from "@/lib/i18n/translate";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
   classifyDocumentSchema,
@@ -23,15 +26,24 @@ import {
 
 const PATH = "/admin/records";
 
-function firstIssue(error: { issues: { message: string }[] }): string {
-  return error.issues[0]?.message ?? "Invalid input.";
+/**
+ * The first validation problem, in the reader's language. The schemas keep
+ * their English sentences, which are the English catalogue values, so the
+ * sentence finds its key; anything else (zod's own defaults) falls through.
+ */
+async function firstIssue(error: { issues: { message: string }[] }): Promise<string> {
+  const t = await getT();
+  const message = error.issues[0]?.message;
+  if (!message) return t("records.errors.invalidInput");
+  const key = Object.entries(opsEn.records.errors).find(([, text]) => text === message)?.[0];
+  return key ? t(`records.errors.${key}` as MessageKey) : message;
 }
 
 export async function saveRetentionRule(input: unknown): Promise<ActionResult> {
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = saveRuleSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  if (!parsed.success) return { ok: false, error: await firstIssue(parsed.error) };
   const { categoryKey, retainYears, confirmed, confirmationNote } = parsed.data;
   const session = authorization.session;
 
@@ -73,7 +85,7 @@ export async function saveFiscalYearEnd(input: unknown): Promise<ActionResult> {
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = fiscalYearEndSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  if (!parsed.success) return { ok: false, error: await firstIssue(parsed.error) };
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("record_retention_setting").upsert(
@@ -84,7 +96,7 @@ export async function saveFiscalYearEnd(input: unknown): Promise<ActionResult> {
     },
     { onConflict: "organization_id" },
   );
-  if (error) return { ok: false, error: "The fiscal year end could not be saved." };
+  if (error) return { ok: false, error: (await getT())("records.errors.yearEndNotSaved") };
 
   revalidatePath(PATH);
   return { ok: true };
@@ -94,7 +106,7 @@ export async function placeLegalHold(input: unknown): Promise<ActionResult> {
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = placeHoldSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  if (!parsed.success) return { ok: false, error: await firstIssue(parsed.error) };
   const session = authorization.session;
 
   const target =
@@ -123,7 +135,7 @@ export async function releaseLegalHold(input: unknown): Promise<ActionResult> {
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = releaseHoldSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  if (!parsed.success) return { ok: false, error: await firstIssue(parsed.error) };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -135,7 +147,7 @@ export async function releaseLegalHold(input: unknown): Promise<ActionResult> {
     .select("id");
   if (error) return { ok: false, error: error.message };
   if (!data || data.length === 0) {
-    return { ok: false, error: "That hold is not active any more." };
+    return { ok: false, error: (await getT())("records.errors.holdNotActive") };
   }
 
   revalidatePath(PATH);
@@ -146,7 +158,7 @@ export async function classifyDocument(input: unknown): Promise<ActionResult> {
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = classifyDocumentSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
+  if (!parsed.success) return { ok: false, error: await firstIssue(parsed.error) };
 
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
@@ -161,7 +173,9 @@ export async function classifyDocument(input: unknown): Promise<ActionResult> {
   // The guard's message says why: a hold, or a change that would shorten
   // how long the record must be kept.
   if (error) return { ok: false, error: error.message };
-  if (!data || data.length === 0) return { ok: false, error: "That document was not found." };
+  if (!data || data.length === 0) {
+    return { ok: false, error: (await getT())("records.errors.documentNotFound") };
+  }
 
   revalidatePath(PATH);
   return { ok: true };
