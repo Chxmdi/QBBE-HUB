@@ -156,3 +156,22 @@ describe("Quebec formats", () => {
     expect(dueLabel(null, "America/Toronto", "fr-CA").label).toBe("Aucune échéance");
   });
 });
+
+// Each screen area owns its own top-level namespaces in `messages/workspace`,
+// spread into the catalogue. Two areas claiming the same namespace would make
+// one silently replace the other, so that fails here.
+describe("workspace catalogues", () => {
+  it("never claim the same top-level namespace twice", async () => {
+    const modules = import.meta.glob("./messages/workspace/*.en.ts", { eager: true });
+    const seen = new Map<string, string>();
+    for (const [file, mod] of Object.entries(modules)) {
+      for (const catalogue of Object.values(mod as Record<string, object>)) {
+        for (const key of Object.keys(catalogue)) {
+          expect(seen.get(key), `${key} in ${file}`).toBeUndefined();
+          seen.set(key, file);
+        }
+      }
+    }
+    for (const key of seen.keys()) expect(en, key).toHaveProperty(key);
+  });
+});

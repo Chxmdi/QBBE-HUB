@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { cache } from "react";
 import {
+  DEFAULT_LOCALE,
   isLocale,
   LOCALE_COOKIE,
   localeFromAcceptLanguage,
@@ -23,11 +24,19 @@ import { formattersFor } from "@/lib/i18n/format";
  * on a device that does not have it yet.
  */
 export const getLocale = cache(async (): Promise<Locale> => {
-  const jar = await cookies();
+  let jar: Awaited<ReturnType<typeof cookies>>;
+  let headerList: Awaited<ReturnType<typeof headers>>;
+  try {
+    jar = await cookies();
+    headerList = await headers();
+  } catch {
+    // Outside a request (a unit test, a script) there is no one to ask, so
+    // shared service code that calls `getT()` falls back to English. Jobs
+    // writing to a person use that person's saved language instead.
+    return DEFAULT_LOCALE;
+  }
   const fromCookie = jar.get(LOCALE_COOKIE)?.value;
   if (isLocale(fromCookie)) return fromCookie;
-
-  const headerList = await headers();
   return localeFromAcceptLanguage(headerList.get("accept-language"));
 });
 
