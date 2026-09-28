@@ -1,6 +1,6 @@
 import type { peopleEn } from "./people.en";
 
-/** Français québécois — people, teamOverview, crm (#141). À faire réviser. */
+/** Français québécois — people, teamOverview, personWork, teamSignals, crm (#141). À faire réviser. */
 export const peopleFrCA: typeof peopleEn = {
   people: {
     title: "Personnes",
@@ -66,8 +66,17 @@ export const peopleFrCA: typeof peopleEn = {
     trendSame: "comme la semaine précédente",
     trendUp: "en hausse par rapport à {count} la semaine précédente",
     trendDown: "en baisse par rapport à {count} la semaine précédente",
-    footnote:
-      "« Requiert votre attention » signifie 3 tâches en retard ou plus, une tâche en retard de plus de 7 jours, une tâche bloquée sans mise à jour depuis 5 jours, une tâche en cours sans mise à jour depuis 7 jours, un rapport de projet en retard ou une décision dont l’échéance est passée.",
+    footnoteIntro:
+      "« Requiert votre attention » signifie l’un des cas suivants. Seuls les dossiers de travail sont utilisés; les connexions et le temps en ligne ne le sont pas.",
+    rules: {
+      overdueCount: "{count} tâches en retard ou plus",
+      overdueAge: "une tâche en retard de plus de {days} jours",
+      blocked: "une tâche bloquée sans mise à jour depuis {days} jours",
+      inProgress: "une tâche en cours sans mise à jour depuis {days} jours",
+      projectReports: "un rapport de projet en retard",
+      decisions: "une décision dont l’échéance est passée",
+    },
+    viewWork: "Résumé du travail de {name}",
     reasons: {
       overdueOne: "{count} tâche en retard",
       overdueOther: "{count} tâches en retard",
@@ -81,6 +90,107 @@ export const peopleFrCA: typeof peopleEn = {
       projectReportsOther: "{count} rapports de projet en retard",
       decisionsOne: "{count} décision en retard",
       decisionsOther: "{count} décisions en retard",
+    },
+  },
+  personWork: {
+    metaTitle: "Résumé du travail",
+    myWorkSummary: "Mon résumé de travail",
+    eyebrow: "Personnes",
+    titleSelf: "Mon résumé de travail",
+    titleOther: "Résumé du travail de {name}",
+    descriptionSelf:
+      "Votre travail en cours, tel que le voient les propriétaires et les administrateurs. Établi uniquement à partir des tâches, des projets, des décisions, des suivis de réunion et du fil d’activité. Les connexions et le temps en ligne ne sont pas suivis.",
+    descriptionOther:
+      "Le travail en cours de {name}, exactement comme cette personne le voit dans son propre résumé. Établi uniquement à partir des dossiers de travail. Les connexions et le temps en ligne ne sont pas suivis.",
+    backToOverview: "Retour à la vue d’ensemble de l’équipe",
+    backToMyWork: "Retour à Mon travail",
+    lastWork: "dernier travail consigné le {date}",
+    reasonsLabel: "Pourquoi cela requiert votre attention",
+    figures: {
+      open: "Tâches ouvertes",
+      overdue: "En retard",
+      blocked: "Bloquées",
+      dueSoon: "Échéance d’ici 7 jours",
+      done7: "Terminées, 7 derniers jours",
+      done30: "Terminées, 30 derniers jours",
+      decisions: "Décisions ouvertes",
+      actions: "Suivis de réunion",
+    },
+    tasks: {
+      heading: "Tâches ouvertes",
+      none: "Aucune tâche ouverte.",
+      emptyGroup: "Rien ici.",
+      groups: {
+        overdue: "En retard",
+        blocked: "Bloquées",
+        this_week: "Échéance dans les 7 prochains jours",
+        later: "Plus tard, ou sans échéance",
+      },
+      due: "échéance le {date}",
+      noDue: "sans échéance",
+      overdueBy: "échéance le {date}, il y a {count} jours",
+      noRecentUpdate: "Aucune mise à jour depuis le {date}",
+    },
+    projects: {
+      heading: "Projets sous sa responsabilité",
+      none: "Aucun projet actif sous sa responsabilité.",
+      reportOverdue: "Rapport en retard",
+      reportOk: "Rapports à jour",
+      noCadence: "Aucun calendrier de rapport",
+      lastUpdate: "dernier bilan le {date}",
+      neverUpdated: "aucun bilan pour l’instant",
+    },
+    decisions: {
+      heading: "Décisions ouvertes",
+      none: "Aucune décision ouverte.",
+      due: "échéance le {date}",
+      pastDue: "échéance passée",
+    },
+    actions: {
+      heading: "Suivis de réunion",
+      none: "Aucun suivi de réunion ouvert.",
+      fromMeeting: "de la réunion {meeting}",
+    },
+    activity: {
+      heading: "Activité consignée",
+      window:
+        "Ce que le fil d’activité a consigné, depuis le {date}. Les entrées plus anciennes sont supprimées par la politique de conservation.",
+      none: "Aucune activité consignée pendant cette période.",
+      pagesLabel: "Pages d’activité",
+      older: "Afficher l’activité plus ancienne",
+      latest: "Revenir aux plus récentes",
+    },
+  },
+  teamSignals: {
+    title: "Signaux d’équipe",
+    eyebrow: "Administration",
+    description:
+      "Quand le travail d’un membre du personnel est signalé comme requérant votre attention, et qui en est informé. Chaque règle lit seulement les dossiers de travail, jamais les connexions, le temps en ligne ou les messages.",
+    privacyNotice:
+      "Avant d’activer les rappels ou le résumé, confirmez que l’avis de confidentialité du personnel couvre cet usage des dossiers de travail, et informez-en le personnel.",
+    rulesHeading: "Quand le travail requiert votre attention",
+    deliveryHeading: "Qui en est informé",
+    overdueCount: "Tâches en retard avant le signalement",
+    overdueCountHint: "Signaler une personne ayant au moins ce nombre de tâches en retard. Par défaut : 3.",
+    overdueAgeDays: "Jours de retard avant le signalement",
+    overdueAgeDaysHint:
+      "Signaler toute tâche en retard de plus de ce nombre de jours. Par défaut : 7.",
+    blockedDays: "Jours sans mise à jour permis pour une tâche bloquée",
+    blockedDaysHint: "Par défaut : 5.",
+    inProgressDays: "Jours sans mise à jour permis pour une tâche en cours",
+    inProgressDaysHint: "Par défaut : 7.",
+    flagProjectReports: "Signaler les rapports de projet en retard",
+    flagOverdueDecisions: "Signaler les décisions dont l’échéance est passée",
+    remindersEnabled: "Envoyer un rappel bienveillant à la personne quand un signal apparaît",
+    remindersHint:
+      "Une fois par signal, dans ses notifications et selon ses propres préférences de notification. Un signal qui persiste n’est pas répété.",
+    digestEnabled: "Envoyer un résumé hebdomadaire par courriel aux propriétaires et aux administrateurs",
+    digestHint: "Le lundi. Ne nomme que les personnes ayant un signal ouvert.",
+    save: "Enregistrer",
+    saved: "Enregistré.",
+    errors: {
+      range: "Entrez un nombre entier de {min} à {max}.",
+      generic: "Les paramètres n’ont pas pu être enregistrés. Réessayez.",
     },
   },
   crm: {

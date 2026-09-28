@@ -1,0 +1,8 @@
+{
+  "staffOnly": ["/people/me/work"],
+  "adminOnly": ["/admin/team-signals"],
+  "qa": [
+    { "path": "/people/me/work", "name": "my-work-summary" },
+    { "path": "/admin/team-signals", "name": "team-signals" }
+  ]
+}

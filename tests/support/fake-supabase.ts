@@ -79,6 +79,8 @@ export class FakeSupabase {
   readonly archives = new Map<string, QueueMessage[]>();
   /** Every rpc call, in order — useful for asserting what the handler did. */
   readonly rpcCalls: { name: string; args: Row }[] = [];
+  /** Answers for database functions this fake does not model itself. */
+  private readonly rpcAnswers = new Map<string, (args: Row) => unknown>();
 
   private nextMsgId = 1;
   private clockMs: number;
@@ -99,6 +101,11 @@ export class FakeSupabase {
   /** Moves the clock forward, which is how visibility timeouts lapse. */
   advance(seconds: number): void {
     this.clockMs += seconds * 1000;
+  }
+
+  /** Stand in for a database function: `answer` receives the call's arguments. */
+  onRpc(name: string, answer: (args: Row) => unknown): void {
+    this.rpcAnswers.set(name, answer);
   }
 
   seed(table: string, rows: Row[]): void {
@@ -258,8 +265,11 @@ export class FakeSupabase {
         return { data: orphans, error: null };
       }
 
-      default:
+      default: {
+        const answer = this.rpcAnswers.get(name);
+        if (answer) return { data: answer(args), error: null };
         return { data: null, error: { code: "42883", message: `no rpc ${name}` } };
+      }
     }
   }
 }

@@ -82,6 +82,10 @@ export const opsEn = {
     },
     /** Keyed by job name; the text matches the seeded `job_definition` rows. */
     descriptions: {
+      "team-signal-reminders":
+        "Gently reminds staff of work that needs attention, once per signal, where reminders are switched on.",
+      "team-signal-digest":
+        "Emails owners and admins a weekly list of people with open work signals, where the digest is switched on.",
       "drain-notifications": "Delivers queued notification email and records every attempt.",
       "retry-failed-emails":
         "Recovers deliveries left in flight by a crashed run and retries transient failures with backoff.",
@@ -144,6 +148,19 @@ export const opsEn = {
         "This project reports {cadence}. The last status update is older than {days} days.",
       cadenceWeekly: "weekly",
       cadenceMonthly: "monthly",
+      teamSignalTitle: "Some of your work may need a look",
+      teamSignalBody:
+        "{reasons}. Your work summary shows the details. This reminder is sent once and does not repeat while things stay as they are.",
+    },
+    teamDigest: {
+      subjectOne: "Team signals: 1 person has work that needs attention",
+      subjectOther: "Team signals: {count} people have work that needs attention",
+      intro:
+        "These people have at least one open work signal this week. Each line is a fact from their work records, not a judgement.",
+      openSummary: "Open work summary",
+      openOverview: "Open the team overview",
+      footer:
+        "You receive this because you are an owner or admin of {organization} and the weekly team digest is switched on in Admin, Team signals.",
     },
   },
   retention: {

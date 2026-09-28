@@ -90,6 +90,14 @@ export default async function MyWorkPage({
             <Suspense fallback={null}>
               <SaveViewButton path="/my-work" />
             </Suspense>
+            {session.isStaff ? (
+              <Link
+                href="/people/me/work"
+                className="text-[13px] font-medium text-brand-fg hover:underline"
+              >
+                {t("personWork.myWorkSummary")}
+              </Link>
+            ) : null}
             <Link
               href={params.archived === "1" ? "/my-work" : "/my-work?archived=1"}
               className="text-[13px] font-medium text-brand-fg hover:underline"

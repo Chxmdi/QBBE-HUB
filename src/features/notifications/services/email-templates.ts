@@ -196,6 +196,7 @@ const REASON_KEYS: Record<string, MessageKey> = {
   "role": "notifications.email.reasons.role",
   "sponsor": "notifications.email.reasons.sponsor",
   "stale project": "notifications.email.reasons.staleProject",
+  "work signal": "notifications.email.reasons.workSignal",
   "announcement": "notifications.email.reasons.announcement",
 };
 
@@ -331,6 +332,74 @@ ${button(safeLink("/inbox"), t("notifications.email.openInbox"))}`;
         name: input.recipientName,
         organization: input.organizationName,
       }),
+      locale,
+      t,
+    ),
+  };
+}
+
+export interface TeamDigestEmailInput {
+  /** The recipient's `user_profile.locale`; null means English. */
+  locale?: string | null;
+  recipientName: string;
+  organizationName: string;
+  /** Only people with open signals; each reason already in the recipient's language. */
+  people: { name: string; link: string; reasons: string[] }[];
+}
+
+/**
+ * The weekly team digest for owners and admins (#136, phase 3). Lists only
+ * people with open work signals, each with the facts behind it and a link to
+ * their work summary. Nothing about sign-ins or time online.
+ */
+export function renderTeamDigestEmail(input: TeamDigestEmailInput): EmailBody {
+  const locale = recipientLocale(input.locale);
+  const t = createTranslator(locale);
+  const count = formattersFor(locale).number(input.people.length);
+  const subject =
+    input.people.length === 1
+      ? t("jobs.teamDigest.subjectOne")
+      : t("jobs.teamDigest.subjectOther", { count });
+  const hello = t("notifications.email.hello", { name: input.recipientName });
+  const intro = t("jobs.teamDigest.intro");
+
+  const text = [
+    hello,
+    ``,
+    intro,
+    ``,
+    ...input.people.map(
+      (person) =>
+        `${person.name}\n${person.reasons.map((reason) => `  · ${reason}`).join("\n")}\n  ${safeLink(person.link)}`,
+    ),
+    ``,
+    `${t("jobs.teamDigest.openOverview")}: ${safeLink("/people/overview")}`,
+  ].join("\n");
+
+  const rows = input.people
+    .map(
+      (person) => `<tr><td style="padding:9px 0;border-top:1px solid ${LINE};">
+<a href="${safeLink(person.link)}" style="font-weight:600;color:${INK};text-decoration:none;">${escapeHtml(person.name)}</a>
+<ul style="margin:4px 0 0;padding-left:18px;font-size:13px;color:${MUTED};">${person.reasons
+        .map((reason) => `<li>${escapeHtml(reason)}</li>`)
+        .join("")}</ul>
+</td></tr>`,
+    )
+    .join("");
+
+  const inner = `
+<p style="margin:0 0 4px;font:600 18px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">${escapeHtml(hello)}</p>
+<p style="margin:0 0 14px;color:${MUTED};font-size:14px;">${escapeHtml(intro)}</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+${button(safeLink("/people/overview"), t("jobs.teamDigest.openOverview"))}`;
+
+  return {
+    subject,
+    text,
+    html: shell(
+      subject,
+      inner,
+      t("jobs.teamDigest.footer", { organization: input.organizationName }),
       locale,
       t,
     ),

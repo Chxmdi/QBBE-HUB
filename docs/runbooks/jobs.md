@@ -78,6 +78,8 @@ All times are UTC, because pg_cron evaluates in UTC.
 | `vms-sync` | 08:00 | Refreshes volunteer availability from the Volunteer Management System. |
 | `scan-documents` | every minute | Scans pending private uploads; only a clean ClamAV verdict releases a download. |
 | `purge-job-history` | 06:00 | Trims `job_run` and `email_delivery` past retention. |
+| `team-signal-reminders` | 13:20 | Where Admin, Team signals has reminders on: records each person's open work signals and sends one gentle notification per new signal (#136). |
+| `team-signal-digest` | Mondays 12:40 | Where Admin, Team signals has the digest on: emails owners and admins the people with open work signals; no email when there are none (#136). |
 
 The digest runs hourly rather than at a fixed time on purpose: each recipient's
 `notification_preference.timezone` and `digest_hour` decide whether this tick is
