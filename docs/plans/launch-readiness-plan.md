@@ -22,6 +22,8 @@ and #17.
 
 ## Task checklist
 
+QBBE's own steps, in order, are in [`owner-checklist.md`](owner-checklist.md).
+
 ### A. QBBE setup (blocks everything below)
 Follow `docs/runbooks/qbbe-ownership-and-environments.md` (#52) in phase order,
 then `docs/runbooks/staging-provisioning.md` (#55).
@@ -55,7 +57,7 @@ then `docs/runbooks/staging-provisioning.md` (#55).
   record p95 ≤ 2 s and realtime ≤ 5 s (#115).
 - [ ] Split or shard the Database security CI job, which reached its time limit
   on 2026-09-27 (see the bookkeeping plan).
-- [ ] Proxy: check the session locally instead of making an Auth round trip on
+- [x] Proxy: check the session locally instead of making an Auth round trip on
   every request (#138).
 - [ ] Freeze a candidate commit and run the full matrix at that exact commit,
   with evidence (#50). Then close #18.
@@ -77,7 +79,7 @@ then `docs/runbooks/staging-provisioning.md` (#55).
   production verification (#58, #22).
 
 ### F. Product follow-ups (not launch blockers)
-- [ ] Team oversight: let admins see who is on track, from the work itself
+- [x] Team oversight: let admins see who is on track, from the work itself
   (#136).
 
 ## Order for the fastest path to staff using the app
