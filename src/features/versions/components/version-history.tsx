@@ -12,21 +12,23 @@ import type { VersionSummary } from "../services/version.queries";
 
 /**
  * The list of an object's versions, newest first, with "Save version" for
- * people who can edit it. Compare and restore (M16b) hang off each row.
+ * people who can edit it. Each row links to the compare screen (M16b).
  */
 export function VersionHistory({
   object,
   versions,
   canEdit,
-  renderActions,
+  compareBase,
 }: {
   object: ObjectRef;
   versions: VersionSummary[];
   canEdit: boolean;
-  renderActions?: (version: VersionSummary) => React.ReactNode;
+  /** The compare screen's address with `?type=`; each row links to it with this version and the current state. */
+  compareBase?: string;
 }) {
   const m = versionsText(useLocale()).history;
   const errors = versionsText(useLocale()).errors;
+  const compare = versionsText(useLocale()).compare;
   const format = useFormatters();
   const router = useRouter();
   const headingId = useId();
@@ -91,7 +93,18 @@ export function VersionHistory({
                   {version.label ? ` · ${m.kinds[version.kind]}` : ""}
                 </p>
               </div>
-              {renderActions ? <div className="flex gap-1">{renderActions(version)}</div> : null}
+              {compareBase ? (
+                <a
+                  href={`${compareBase}&from=${version.id}&to=current`}
+                  className="text-[13px] font-medium text-brand-fg hover:underline"
+                >
+                  {compare.compareWithCurrent}
+                  <span className="sr-only">
+                    {" "}
+                    ({version.label ?? m.kinds[version.kind]}, {format.dateTime(version.createdAt)})
+                  </span>
+                </a>
+              ) : null}
             </li>
           ))}
         </ol>

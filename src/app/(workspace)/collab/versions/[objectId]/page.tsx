@@ -74,7 +74,12 @@ export default async function ObjectVersionsPage({
         initialText={block?.text ?? ""}
         disabled={canEdit !== true || trashed}
       />
-      <VersionHistory object={object} versions={versions} canEdit={canEdit === true && !trashed} />
+      <VersionHistory
+        object={object}
+        versions={versions}
+        canEdit={canEdit === true && !trashed}
+        compareBase={`/collab/versions/${object.id}/compare?type=${object.type}`}
+      />
     </>
   );
 }

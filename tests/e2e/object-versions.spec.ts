@@ -39,7 +39,7 @@ test("autosave, versions, trash and restore on an object", async ({ page }) => {
   await page.getByRole("button", { name: "Save version" }).click();
   await expect(page.getByText("Version saved.")).toBeVisible();
   const history = page.getByRole("region", { name: "Version history" });
-  await expect(history.getByText("Kick-off")).toBeVisible();
+  await expect(history.getByText("Kick-off", { exact: true })).toBeVisible();
   await expect(history.getByText("Automatic", { exact: true })).toBeVisible();
 
   const scan = await new AxeBuilder({ page }).withTags(WCAG).analyze();

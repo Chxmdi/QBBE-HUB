@@ -94,3 +94,44 @@ export async function isInTrash(objectId: string): Promise<boolean> {
     .limit(1);
   return (data ?? []).length > 0;
 }
+
+export interface VersionDetail extends VersionSummary {
+  objectId: string;
+  objectType: string;
+  content: unknown;
+  properties: Record<string, unknown>;
+}
+
+/** One version with its snapshot, or null when the reader cannot see it. */
+export async function getObjectVersion(versionId: string): Promise<VersionDetail | null> {
+  const db = await createSupabaseServerClient();
+  const { data } = await db
+    .from("object_version")
+    .select("id, object_id, object_type, kind, label, content, properties, created_at, created_by")
+    .eq("id", versionId)
+    .maybeSingle();
+  if (!data) return null;
+  const row = data as {
+    id: string;
+    object_id: string;
+    object_type: string;
+    kind: VersionSummary["kind"];
+    label: string | null;
+    content: unknown;
+    properties: Record<string, unknown> | null;
+    created_at: string;
+    created_by: string | null;
+  };
+  const people = await names(db, [row.created_by ?? ""]);
+  return {
+    id: row.id,
+    objectId: row.object_id,
+    objectType: row.object_type,
+    kind: row.kind,
+    label: row.label,
+    content: row.content,
+    properties: row.properties ?? {},
+    createdAt: row.created_at,
+    createdByName: row.created_by ? people.get(row.created_by) ?? null : null,
+  };
+}
