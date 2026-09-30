@@ -1,6 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import type { Page } from "@playwright/test";
-import { expect, test } from "./fixtures";
+import { expect, test, type Page } from "./fixtures";
 import { signIn, signOut } from "./auth";
 import { sql } from "./db";
 
@@ -32,8 +31,11 @@ test("a task form turns an answer into a task, and is hidden while its switch is
   setSwitch(false);
   try {
     await signIn(page, "owner");
-    const hidden = await page.goto("/forms-v2");
-    expect(hidden?.status(), "the module is hidden while its switch is off").toBe(404);
+    // The workspace streams its pages, so a hidden module answers with the
+    // not-found screen rather than a 404 status.
+    await page.goto("/forms-v2");
+    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Forms", level: 1 })).toHaveCount(0);
 
     setSwitch(true);
     await page.goto("/forms-v2/new");
@@ -72,7 +74,9 @@ test("a task form turns an answer into a task, and is hidden while its switch is
     );
     expect(created).toBe("high|true");
 
-    // The same form in Quebec French.
+    // The same form in Quebec French: the saved profile choice is the record,
+    // and the cookie follows it.
+    sql(`update user_profile set locale = 'fr-CA' where email = 'qa-volunteer@example.com'`);
     await context.addCookies([{ name: "qbbe-locale", value: "fr-CA", url: page.url() }]);
     await page.goto("/forms-v2");
     await expect(page.getByRole("heading", { name: "Formulaires", level: 1 })).toBeVisible();
@@ -80,6 +84,7 @@ test("a task form turns an answer into a task, and is hidden while its switch is
     expect(await axeProblems(page), "French list accessibility").toEqual([]);
   } finally {
     setSwitch(false);
+    sql(`update user_profile set locale = null where email = 'qa-volunteer@example.com'`);
     sql(`delete from task where title = '${taskTitle}'`);
     sql(`delete from form_v2 where title_en = '${formTitle}'`);
   }
