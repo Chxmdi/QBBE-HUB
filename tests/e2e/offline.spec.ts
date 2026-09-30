@@ -66,8 +66,19 @@ test("offline changes sync when back online, with the overwritten value shown fo
     await page.goBack();
     await expect(page.getByText("3 changes waiting to be sent.")).toBeVisible();
 
+    // The first send after reconnecting fails, as it can while a connection
+    // settles; the page tries again on its own.
+    let dropped = 0;
+    await page.route("**/offline", (route) => {
+      if (route.request().method() === "POST" && dropped === 0) {
+        dropped += 1;
+        return route.abort("internetdisconnected");
+      }
+      return route.fallback();
+    });
     await context.setOffline(false);
     await expect(page.getByText("Nothing waiting to be sent.")).toBeVisible({ timeout: 30_000 });
+    expect(dropped, "the first send was dropped").toBe(1);
     await expect(
       page.getByText(`A later change to status on “${contested}” was kept: Completed. Yours was In progress.`),
     ).toBeVisible();
