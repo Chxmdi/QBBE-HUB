@@ -88,8 +88,6 @@ export async function readSource(
 ): Promise<Record<string, unknown> | null> {
   if (!source.id) return {};
   const spec = SOURCE_TABLES[source.type];
-  // Capture items get a table with the capture inbox (M18); until then the
-  // capture screen is the only caller and it has just read the item itself.
   if (!spec) return {};
   const columns = ["id", spec.title, ...(spec.extra ?? [])].join(", ");
   const { data } = await db.from(spec.table).select(columns).eq("id", source.id).maybeSingle();
