@@ -306,6 +306,28 @@ begin
     not exists (select 1 from public.object_version where object_id = t_volunteer),
     'purging removes the object''s versions'
   );
+  -- A registry object held as `object`: the purge skips it, then removes
+  -- the registry row once the hold is released.
+  insert into public.object_type (organization_id, key, name_en, name_fr, kind)
+  values (v_org, 'wos_versions_test', 'Test', 'Test', 'custom')
+  returning id into v_id;
+  insert into public.object (organization_id, type_id, title)
+  values (v_org, v_id, 'Held registry object')
+  returning id into v_id;
+  insert into public.object_trash (organization_id, object_id, object_type, title, deleted_by, purge_after)
+  values (v_org, v_id, 'wos_versions_test', 'Held registry object', v_owner, now() - interval '1 minute');
+  insert into public.legal_hold (organization_id, scope, record_type, record_id, reason, placed_by)
+  values (v_org, 'record', 'object', v_id, 'Held as a registry object', v_owner)
+  returning id into v_hold;
+  perform tests.ok(app.purge_object_trash() = 0, 'a hold placed on a registry object stops its purge');
+  update public.legal_hold set released_at = now(), released_by = v_owner, release_reason = 'Released'
+  where id = v_hold;
+  perform tests.ok(app.purge_object_trash() = 1, 'the released registry object is purged');
+  perform tests.ok(
+    not exists (select 1 from public.object where id = v_id),
+    'purging removes the object from the registry'
+  );
+
   perform tests.authenticate(v_owner, 'aal2');
   v_failed := false;
   begin

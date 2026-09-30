@@ -19,16 +19,16 @@
 --   hold (#146): a held object cannot be put in the trash at all, and one
 --   placed on hold while in the trash is never purged.
 --
--- The object registry (stream S1, M1a) owns `object.deleted_at`. Until that
--- table exists the trash is this ledger alone; once it exists, trashing,
--- restoring and purging also set, clear and delete the registry row.
+-- The object registry (stream S1, M1a) owns `object.deleted_at`: trashing,
+-- restoring and purging also set, clear and delete the registry row (a no-op
+-- for objects not registered yet).
 
 -- Legal holds name a table (app.legal_hold_guard looks the record up in it).
--- Tasks and projects, the objects that exist today, become holdable; the
--- registry's `object` table joins when stream S1 creates it, and the checks
--- below already look for a hold under either name.
+-- Registry objects (M1a) and the native tasks and projects become holdable;
+-- the checks below look for a hold under the object's own type or `object`,
+-- so a hold placed either way is respected.
 insert into public.retention_record_type (key, label)
-values ('task', 'Task'), ('project', 'Project')
+values ('object', 'Workspace object'), ('task', 'Task'), ('project', 'Project')
 on conflict (key) do nothing;
 
 -- Whether an object is under legal hold, under its own type or as `object`.
