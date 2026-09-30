@@ -520,7 +520,7 @@ test.describe("W0-5 BlockNote accessibility", () => {
     for (const s of steps) console.log(`${s.ok ? "PASS" : "FAIL"} ${s.step}${s.detail ? ` — ${s.detail}` : ""}`);
     // The must-haves for keyboard-only people. Everything else is a finding.
     const must = steps.filter((s) =>
-      (m === "mitigated" ? /^slash menu creates|reorder|turn into: keyboard|menu navigation|Tab from the page|no keyboard trap|formatting toolbar reachable/ : /^slash menu creates|reorder|turn into: keyboard|menu navigation|Tab from the page/).test(s.step),
+      (m === "mitigated" ? /slash menu creates|reorder|turn into: keyboard|menu navigation|Tab from the page|no keyboard trap|formatting toolbar reachable/ : /slash menu creates|reorder|turn into: keyboard|menu navigation|Tab from the page/).test(s.step),
     );
     expect(must.filter((s) => !s.ok).map((s) => `${s.step}: ${s.detail}`)).toEqual([]);
   });

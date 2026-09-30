@@ -68,6 +68,9 @@ self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
 self.addEventListener("message", (event) => {
+  // Only this app's own pages may tell the worker who is signed in or to
+  // clear the cache.
+  if (event.origin !== self.location.origin) return;
   const data = event.data || {};
   if (data.type === "user" && typeof data.userId === "string" && /^[0-9a-f-]{36}$/i.test(data.userId)) {
     event.waitUntil(setUser(data.userId));
