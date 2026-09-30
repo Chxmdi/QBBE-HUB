@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/page-header";
-import { Label } from "@/components/ui/input";
+import { Label, Select } from "@/components/ui/input";
 import { ReviewButtons } from "@/features/upkeep/components/review-buttons";
 import { requireUpkeep } from "@/features/upkeep/gate";
 import { fill, upkeepText, type UpkeepText } from "@/features/upkeep/messages";
@@ -85,18 +85,13 @@ export default async function UpkeepPage({ searchParams }: { searchParams: Promi
         <form method="get" className="flex flex-wrap items-end gap-3">
           <div>
             <Label htmlFor="upkeep-days">{text.thresholdLabel}</Label>
-            <select
-              id="upkeep-days"
-              name="days"
-              defaultValue={String(days)}
-              className="h-9.5 rounded-(--radius-sm) border border-line bg-surface px-3 text-sm text-ink"
-            >
+            <Select id="upkeep-days" name="days" defaultValue={String(days)}>
               {STALE_THRESHOLDS.map((d) => (
                 <option key={d} value={d}>
                   {fill(text.days, { days: d })}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
           <button type="submit" className="h-9.5 rounded-(--radius-sm) border border-line bg-surface px-3 text-sm text-ink hover:bg-surface-soft">
             {text.show}
