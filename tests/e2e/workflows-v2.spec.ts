@@ -180,6 +180,63 @@ test.describe("workflows v2", () => {
     }
   });
 
+  test("the run debugger explains a failed run and retries it from a step", async ({ page }) => {
+    test.setTimeout(180_000);
+    setSwitch(true);
+    const org = sql(`select organization_id::text from organization_membership m
+      join user_profile p on p.id = m.user_id where p.email = 'qa-admin@example.com' limit 1`);
+    const admin = sql(`select id::text from user_profile where email = 'qa-admin@example.com'`);
+    const missingTask = "00000000-0000-4000-8000-000000000000";
+    const graph = JSON.stringify({
+      version: 1, trigger: { objectTypes: ["task"], verbs: ["updated"] }, start: "send",
+      steps: [{ id: "send", kind: "action", action: "task.set_priority", input: { taskId: missingTask, priority: "high" }, next: null }],
+    });
+    const name = `E2E debugger ${Date.now()}`;
+    const rule = sql(`insert into workflow_rule (organization_id, name, trigger_event, engine, graph, created_by, run_as_user_id)
+      values ('${org}', '${name}', 'object_event', 'graph_v2', '${graph}', '${admin}', '${admin}') returning id::text`);
+    const event = JSON.stringify({
+      id: "11111111-2222-4333-8444-555555555555", organizationId: org, object: { id: missingTask, type: "task" },
+      actor: { kind: "person", id: admin }, verb: "updated", changes: [], summary: "e2e", occurredAt: new Date().toISOString(),
+    });
+    const run = sql(`insert into workflow_execution (organization_id, rule_id, rule_name, trigger_event, source_type, source_id,
+        outcome, engine, trigger_payload, started_at, finished_at, detail, run_state)
+      values ('${org}', '${rule}', '${name}', 'object_event', 'task', '${missingTask}', 'failed', 'graph_v2', '${event}',
+        now(), now(), 'forbidden: the workflow''s owner may not do this.', '{"steps":{},"stepsTaken":1,"depth":0}')
+      returning id::text`);
+    sql(`insert into workflow_execution_step (execution_id, organization_id, position, step_id, step_kind, status, input, output, error, started_at, finished_at)
+      values ('${run}', '${org}', 0, 'trigger', 'trigger', 'succeeded', null, '{"verb":"updated"}', null, now(), now()),
+             ('${run}', '${org}', 1, 'send', 'action', 'failed', '{"priority":"high"}', null,
+              'forbidden: the workflow''s owner may not do this.', now(), now() + interval '12 milliseconds')`);
+    const number = sql(`select run_number from workflow_execution where id = '${run}'`);
+    try {
+      await signIn(page, "admin");
+      await page.goto(`/workflows/${rule}`);
+      await page.getByRole("link", { name: `Run #${number}` }).click();
+      await page.waitForURL(`**/workflows/${rule}/runs/${run}`);
+      await expect(page.getByRole("heading", { name: `Run #${number}`, level: 1 })).toBeVisible();
+      await expect(page.getByText(
+        `Run #${number}: ✓ Trigger trigger ✕ Action send (forbidden: the workflow's owner may not do this.)`,
+        { exact: true },
+      )).toBeAttached();
+      const failed = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: "Action send" }) });
+      await expect(failed).toContainText("Reason: forbidden: the workflow's owner may not do this.");
+      await expect(failed).toContainText("12 ms");
+      await failed.getByText("Input").click();
+      await expect(failed.getByText('"priority": "high"')).toBeVisible();
+      await axe(page, "/workflows/[id]/runs/[runId]");
+
+      await failed.getByRole("button", { name: "Retry from this step: Action send" }).click();
+      const started = page.getByRole("link", { name: /^Open run #\d+$/ });
+      await expect(started).toBeVisible({ timeout: 30_000 });
+      await started.click();
+      await expect(page.getByRole("link", { name: `Retries run #${number}` })).toBeVisible();
+      expect(sql(`select count(*) from workflow_execution where retry_of = '${run}'`)).toBe("1");
+    } finally {
+      sql(`delete from workflow_rule where id = '${rule}'`);
+      sql(`delete from workflow_execution where rule_id is null and rule_name = '${name}'`);
+    }
+  });
+
   test("staff cannot open the workflow screens", async ({ page }) => {
     setSwitch(true);
     await signIn(page, "staff");

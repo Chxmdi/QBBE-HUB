@@ -82,7 +82,7 @@ export default async function WorkflowPage({
       />
       {graph.ok && graph.graph.steps.some((step) => step.kind === "webhook") ? <SigningKeyPanel id={workflow.id} m={m} /> : null}
       <TestRunPanel id={workflow.id} m={m} defaultObjectId="" />
-      <RunHistory runs={runs} m={m} f={f} timeZone={session.timeZone} />
+      <RunHistory runs={runs} m={m} f={f} timeZone={session.timeZone} workflowId={workflow.id} />
     </div>
   );
 }

@@ -110,6 +110,35 @@ export async function listRuns(ruleId: string, limit = 50): Promise<RunRow[]> {
   return (data ?? []) as RunRow[];
 }
 
+export interface RunDetail extends RunRow {
+  rule_id: string;
+  retry_of: string | null;
+  parent_execution_id: string | null;
+}
+
+/** One run of one workflow, through the admin's session (RLS). */
+export async function getRun(ruleId: string, runId: string): Promise<RunDetail | null> {
+  const db = await createSupabasePageClient();
+  const { data } = await db
+    .from("workflow_execution")
+    .select(`${RUN_COLUMNS}, rule_id, retry_of, parent_execution_id`)
+    .eq("id", runId)
+    .eq("rule_id", ruleId)
+    .eq("engine", "graph_v2")
+    .maybeSingle();
+  return (data as RunDetail | null) ?? null;
+}
+
+/** Run numbers for a few runs, to name linked runs. */
+export async function runNumbers(ids: string[]): Promise<Map<string, { number: number; ruleId: string | null }>> {
+  const wanted = ids.filter(Boolean);
+  if (wanted.length === 0) return new Map();
+  const db = await createSupabasePageClient();
+  const { data } = await db.from("workflow_execution").select("id, run_number, rule_id").in("id", wanted);
+  return new Map(((data ?? []) as { id: string; run_number: number; rule_id: string | null }[])
+    .map((row) => [row.id, { number: row.run_number, ruleId: row.rule_id }]));
+}
+
 export async function listRunSteps(executionId: string): Promise<StepRow[]> {
   const db = await createSupabasePageClient();
   const { data } = await db
