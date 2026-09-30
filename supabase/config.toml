@@ -332,6 +332,17 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
+# Google sign-in (V2-9, epic #199). Off locally. On the hosted projects it
+# is turned on in the Supabase dashboard; docs/runbooks/google-sign-in.md
+# has every step. Sign-up stays invite-only: an uninvited Google account is
+# refused by the same database check as an uninvited email.
+[auth.external.google]
+enabled = false
+client_id = ""
+# DO NOT commit the secret. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+skip_nonce_check = false
+
 [auth.external.apple]
 enabled = false
 client_id = ""

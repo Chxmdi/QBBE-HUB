@@ -49,6 +49,9 @@ export default async function SpacesPage() {
               <Link href="/spaces/roles" className="text-sm font-medium text-brand-fg underline underline-offset-2">
                 {t("manageRoles")}
               </Link>
+              <Link href="/spaces/admin" className="text-sm font-medium text-brand-fg underline underline-offset-2">
+                {t("admin.link")}
+              </Link>
               {publicPages ? (
                 <Link href="/spaces/publish" className="text-sm font-medium text-brand-fg underline underline-offset-2">
                   {pt("title")}
