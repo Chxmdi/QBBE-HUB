@@ -6,6 +6,8 @@ import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
 import { CommandBar } from "@/features/commands/components/command-bar";
 import { commandsT } from "@/features/commands/i18n";
+import { HomeTabs } from "@/features/home/components/home-tabs";
+import { homeT } from "@/features/home/i18n";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: commandsT(await getLocale())("bar.title") };
@@ -45,6 +47,7 @@ export default async function CommandsPage() {
   return (
     <div>
       <PageHeader title={t("bar.title")} description={t("bar.description")} />
+      <HomeTabs active="commands" t={homeT(locale)} />
       <CommandBar autoFocus />
       <section aria-labelledby="command-examples" className="mt-8 max-w-2xl">
         <h2 id="command-examples" className="text-sm font-semibold text-ink">
