@@ -19,14 +19,15 @@
 --
 --   workspace  owner/admin: everything (view only without two-step sign-in)
 --              staff: view, comment, edit_content
---              leadership_viewer: view
+--              leadership_viewer: view (as everywhere in the organization)
 --              volunteer, guest: nothing
 --   program    today's program rules, through has_program_capability, with
 --              the same mapping the app.can stand-in uses
 --   private    its owner: everything (owner/admin roles: view only without
 --              two-step sign-in, as everywhere else); nobody else, admins
 --              included
---   custom     owner/admin: everything (view only without two-step sign-in)
+--   custom     owner/admin: everything (view only without two-step sign-in);
+--              leadership_viewer: view
 --
 -- An archived space keeps only view and manage (so it can be restored).
 
@@ -163,7 +164,7 @@ begin
     v_result := v_all;
   elsif v_space.kind = 'workspace' and v_role = 'staff' then
     v_result := array['view', 'comment', 'edit_content'];
-  elsif v_space.kind = 'workspace' and v_role = 'leadership_viewer' then
+  elsif v_role = 'leadership_viewer' then
     v_result := array['view'];
   end if;
 

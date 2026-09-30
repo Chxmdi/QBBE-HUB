@@ -177,8 +177,9 @@ begin
   perform tests.authenticate(v_viewer);
   perform tests.ok(public.space_capabilities(v_workspace) = array['view']
       and public.space_capabilities(v_program) = array['view']
-      and cardinality(public.space_capabilities(v_custom)) = 0,
-    'leadership viewer: view the workspace and programs, nothing in custom spaces');
+      and public.space_capabilities(v_custom) = array['view']
+      and cardinality(public.space_capabilities(v_staff_private)) = 0,
+    'leadership viewer: view the workspace, programs and custom spaces, never someone''s private space');
   reset role;
 
   foreach v_rows in array array[1, 2] loop
