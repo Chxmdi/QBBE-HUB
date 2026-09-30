@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
 import { isLocale, DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
@@ -26,10 +27,7 @@ type Db = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 const MAX_BODY = 5000;
 
 const bodySchema = (m: ObjectCommentsText) =>
-  z
-    .string()
-    .trim()
-    .min(1, m.errors.bodyRequired)
+  requiredText(m.errors.bodyRequired)
     .max(MAX_BODY, m.errors.tooLong)
     .refine((body) => {
       const { people, objects } = extractMentions(body);

@@ -146,7 +146,7 @@ export function MentionComposer({
         role="listbox"
         aria-label={m.mentionListLabel}
         hidden={!open}
-        className="card absolute z-10 mt-1 max-h-64 w-full overflow-y-auto py-1 shadow-(--shadow-pop)"
+        className="card absolute z-(--z-overlay) mt-1 max-h-64 w-full overflow-y-auto py-1 shadow-(--shadow-pop)"
       >
         {open && options.length === 0 ? (
           <li role="option" aria-selected={false} aria-disabled className="meta px-3 py-2">
