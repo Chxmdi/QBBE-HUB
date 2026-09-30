@@ -30,9 +30,9 @@ export interface TableState {
   search: string;
 }
 
-/** Title first and wide; every other property after it in catalog order. */
+/** Title first and wide; every other shown property after it in catalog order. */
 export function defaultColumns(type: CatalogType): ColumnState[] {
-  return type.properties.map((p) => ({
+  return type.properties.filter((p) => !p.filterOnly).map((p) => ({
     key: p.key,
     width: p.key === "title" ? 320 : 160,
     hidden: false,

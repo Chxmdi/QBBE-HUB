@@ -32,6 +32,7 @@ const type: CatalogType = {
     },
     { key: "estimate", kind: "number", propertyKind: "number", name: { en: "Estimate", fr: "Estimation" }, sortable: true, groupable: false },
     { key: "assignee", kind: "person", propertyKind: "person", name: { en: "Assignee", fr: "Responsable" }, sortable: false, groupable: true },
+    { key: "review_role", kind: "person", propertyKind: "person", name: { en: "Role", fr: "Rôle" }, sortable: false, groupable: false, filterOnly: true },
   ],
 };
 
