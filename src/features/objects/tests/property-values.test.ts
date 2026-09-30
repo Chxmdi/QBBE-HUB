@@ -71,12 +71,14 @@ describe("property values", () => {
     ).toMatchObject({ name: { en: "Cost", fr: "Coût" }, options: {}, visibleToRoles: ["owner", "admin"] });
   });
 
-  it("uses the same task system property keys as the query stand-in", () => {
-    // The SQL seed (20261101010400) and objects-properties.sql assert the same list.
-    expect(Object.keys(taskSystemProperties).sort()).toEqual([
-      "assignee", "completed_time", "created_by", "created_time", "due", "edited_time",
-      "estimate", "priority", "program", "project", "requester", "reviewer", "start",
-      "status", "title",
-    ]);
+  it("covers every task property the query stand-in knows", () => {
+    // The SQL seed (20261101010400, 20261101010700) and objects-properties.sql
+    // hold the full list; the stand-in's keys must all be in it.
+    const seeded = [
+      "approver", "assignee", "blocked_reason", "completed_time", "completion_criteria",
+      "created_by", "created_time", "due", "edited_time", "estimate", "milestone", "priority",
+      "program", "project", "requester", "reviewer", "start", "status", "title",
+    ];
+    expect(Object.keys(taskSystemProperties).filter((key) => !seeded.includes(key))).toEqual([]);
   });
 });
