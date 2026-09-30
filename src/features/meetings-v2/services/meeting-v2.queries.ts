@@ -1,4 +1,6 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
+// Page reads: the page client throws on a failed query, so an outage reaches
+// the error page instead of reading as "not found" or an empty list (P0-UX-05).
 import type { SemanticBlockKind } from "../editor-adapter";
 
 export interface MeetingObject {
@@ -58,7 +60,7 @@ type Named = { id: string; full_name: string | null } | null;
 
 /** One meeting with everything the object page shows. Null when RLS hides it. */
 export async function getMeetingObject(meetingId: string): Promise<MeetingObjectView | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const { data: row } = await supabase
     .from("meeting")
     .select("id, title, purpose, starts_at, status, notes, project_id, organizer:organizer_id(id, full_name)")
