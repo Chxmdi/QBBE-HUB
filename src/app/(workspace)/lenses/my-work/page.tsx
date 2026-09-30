@@ -9,6 +9,8 @@ import { calendarDateInZone } from "@/lib/time";
 import { myWorkBucket } from "@/lib/utils";
 import type { LensRow } from "@/lib/query/run";
 import { requireLensesEnabled } from "@/features/lenses/flag";
+import { listLenses } from "@/features/lenses/services/lens-store.queries";
+import { LensChips } from "@/features/lenses/components/lens-chips";
 import { getLensT } from "@/features/lenses/i18n/server";
 import { myOwnedSpec, myReviewSpec } from "@/features/lenses/task-specs";
 import { loadTaskLens } from "@/features/lenses/load";
@@ -39,6 +41,7 @@ export default async function LensMyWorkPage({
     loadTaskLens([owned.spec, review.spec], session.timeZone),
     getPickerOptions(),
   ]);
+  const saved = await listLenses(session.userId, { path: "/my-work" });
   const [ownedResult, reviewResult] = results;
 
   const buckets: Record<ReturnType<typeof myWorkBucket>, LensRow[]> = { overdue: [], today: [], this_week: [], later: [] };
@@ -58,6 +61,7 @@ export default async function LensMyWorkPage({
   return (
     <div>
       <PageHeader eyebrow={t("types.task")} title={t("myWork.title")} description={t("myWork.description")} />
+      <LensChips lenses={saved} label={t("saved.chips")} />
       <Suspense fallback={<div className="mb-5 h-9" />}>
         <TaskFilterBar filters={filters} options={options} basePath="/lenses/my-work" showOwner={false} />
       </Suspense>

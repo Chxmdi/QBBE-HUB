@@ -13,6 +13,7 @@ import { updateLensCell } from "@/features/lenses/services/lens.actions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { runLensAll } from "@/lib/query/run";
 import { editorFor, type EditorKind } from "./editable";
+import { SaveLensButton, type OpenLens } from "@/features/lenses/components/save-lens-button";
 import {
   buildDisplayRows,
   ensureInWindow,
@@ -48,6 +49,8 @@ interface Props {
   initialState: TableState;
   people: PersonOption[];
   timeZone: string;
+  /** The saved lens this table was opened from, if any. */
+  savedLens?: OpenLens | null;
 }
 
 const STORAGE_PREFIX = "qbbe-lens-table:";
@@ -77,10 +80,11 @@ function queryKey(state: TableState): string {
     state.groupBy,
     state.search.trim(),
     visibleColumns(state.columns).map((c) => c.key).sort(),
+    state.filters ?? [],
   ]);
 }
 
-export function TableLens({ type, initial, initialState, people, timeZone }: Props) {
+export function TableLens({ type, initial, initialState, people, timeZone, savedLens = null }: Props) {
   const t = useLensT();
   const locale = useLocale();
   const format = useFormatters();
@@ -455,6 +459,12 @@ export function TableLens({ type, initial, initialState, people, timeZone }: Pro
             </fieldset>
           ) : null}
         </div>
+        <SaveLensButton
+          kind="table"
+          current={savedLens}
+          basePath="/lenses/table"
+          read={() => ({ spec: { ...specFor(type.key, { ...state, search: "" }), offset: 0 }, layout: { columns: state.columns } })}
+        />
         <p className="ml-auto text-[13px] text-muted" aria-live="polite">
           {loading && rows.length < Math.min(total, MAX_ROWS)
             ? t("common.loadingMore")
