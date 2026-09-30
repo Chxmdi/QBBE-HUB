@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { Locale } from "@/lib/i18n/config";
 import type { SpacesT } from "../i18n";
@@ -31,7 +32,11 @@ export function SpaceList({
           {spaces.map((space) => (
             <li key={space.id} className="card p-4" data-space-id={space.id}>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-[14.5px] font-semibold text-ink">{spaceName(space, locale)}</h3>
+                <h3 className="text-[14.5px] font-semibold text-ink">
+                  <Link href={`/spaces/${space.id}`} className="hover:underline">
+                    {spaceName(space, locale)}
+                  </Link>
+                </h3>
                 <Badge tone={space.kind === "private" ? "accent" : "neutral"}>{t(`kinds.${space.kind}`)}</Badge>
                 {space.archivedAt ? <Badge tone="warning">{t("archived")}</Badge> : null}
               </div>
