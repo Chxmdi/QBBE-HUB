@@ -99,3 +99,27 @@ export async function loadCatalog(client: RpcClient): Promise<LensCatalog> {
   if (error || !data) throw queryErrorFrom(error);
   return toCatalog(data as Parameters<typeof toCatalog>[0]);
 }
+
+/**
+ * Every row of a lens up to `maxRows`, in order: the first page, then the
+ * remaining pages at once (the total is known after the first). Each page is
+ * its own engine call under the viewer's RLS, so the result is the same as
+ * paging by hand.
+ */
+export async function runLensAll(
+  client: RpcClient,
+  input: unknown,
+  options: RunOptions & { maxRows?: number } = {},
+): Promise<LensResult> {
+  const spec = parseLensSpec(input);
+  const pageSize = spec.limit ?? LIMITS.maxPageSize;
+  const start = spec.offset ?? 0;
+  const first = await runLens(client, { ...spec, limit: pageSize, offset: start }, options);
+  const end = Math.min(first.total, start + (options.maxRows ?? LIMITS.maxOffset + pageSize));
+  const offsets: number[] = [];
+  for (let offset = start + first.rows.length; offset < end && offset <= LIMITS.maxOffset; offset += pageSize) {
+    offsets.push(offset);
+  }
+  const pages = await Promise.all(offsets.map((offset) => runLens(client, { ...spec, limit: pageSize, offset }, options)));
+  return { ...first, rows: [first, ...pages].flatMap((page) => page.rows).slice(0, Math.max(0, end - start)), offset: start };
+}
