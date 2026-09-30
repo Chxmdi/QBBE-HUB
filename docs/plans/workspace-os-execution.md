@@ -87,8 +87,10 @@ W0-1). They are estimates. Section 7 lists what would make them slip.
   - Signatures and stand-ins for the object registry, `app.can`, the query-spec format, the action registry and event writing.
   - TypeScript types in `src/lib/objects/contracts.ts`.
 - [ ] **W0-4 Feature switches (S1):** one switch per module, readable on the server, with a staging override.
-- [ ] **W0-5 Spike: editor accessibility (S3)**, same as P0-1. Go/no-go in 3 days.
-- [ ] **W0-6 Spike: co-editing (S3)**, same as P0-2.
+- [x] **W0-5 Spike: editor accessibility (S3)**, same as P0-1. Go/no-go in 3 days.
+  - **Go** (BlockNote). The screen-reader check passed.
+- [x] **W0-6 Spike: co-editing (S3)**, same as P0-2.
+  - **Go** (Yjs over Supabase Realtime). No fallback server is needed.
 - [ ] **W0-7 Spike: access check speed (S2)**, same as P0-3.
 - [ ] **W0-8 Spike: query engine (S4)**, same as P0-4.
 - [ ] **W0-9 Design note merged**, same as P0-5: tables, migration order and each stream's timestamp range.
