@@ -170,6 +170,12 @@ function CommentItem({
   return (
     <article id={`comment-${comment.id}`} aria-label={`${comment.authorName}, ${format.dateTime(comment.createdAt)}`}>
       <p className="text-[12.5px] font-medium">{comment.authorName}</p>
+      {comment.quote ? (
+        <blockquote className="meta mt-1 border-l-2 border-accent pl-2 italic">
+          <span className="sr-only">{m.onSelection} </span>
+          {comment.quote}
+        </blockquote>
+      ) : null}
       {mode === "edit" ? (
         <form
           className="mt-1 space-y-2"
