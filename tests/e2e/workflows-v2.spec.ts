@@ -101,6 +101,58 @@ test.describe("workflows v2", () => {
     }
   });
 
+  test("an admin edits branches as JSON and uses the stop switch", async ({ page }) => {
+    test.setTimeout(180_000);
+    setSwitch(true);
+    const name = `E2E branch ${Date.now()}`;
+    const org = sql(`select organization_id::text from organization_membership m
+      join user_profile p on p.id = m.user_id where p.email = 'qa-admin@example.com' limit 1`);
+    const admin = sql(`select id::text from user_profile where email = 'qa-admin@example.com'`);
+    const graph = JSON.stringify({
+      version: 1, trigger: { objectTypes: ["task"], verbs: ["updated"] }, start: "a",
+      steps: [{ id: "a", kind: "action", action: "task.set_priority", input: { taskId: "{{event.object.id}}", priority: "high" }, next: null }],
+    });
+    const id = sql(`insert into workflow_rule (organization_id, name, trigger_event, engine, graph, created_by)
+      values ('${org}', '${name}', 'object_event', 'graph_v2', '${graph}', '${admin}') returning id::text`);
+    try {
+      await signIn(page, "admin");
+      await page.goto(`/workflows/${id}`);
+      await page.getByRole("link", { name: "Edit as JSON" }).click();
+      const definition = page.getByLabel("Workflow definition (JSON)");
+      await expect(definition).toBeVisible();
+
+      // Broken JSON is caught before it is sent.
+      await definition.fill("{ nope");
+      await page.getByRole("button", { name: "Save workflow" }).click();
+      await expect(page.getByRole("alert").filter({ hasText: "That is not valid JSON" })).toBeVisible();
+
+      // A branch the step list cannot show.
+      await definition.fill(JSON.stringify({
+        version: 1, trigger: { objectTypes: ["task"], verbs: ["updated"] }, start: "check",
+        steps: [
+          { id: "check", kind: "branch", when: { path: "event.changes.status.after", op: "eq", value: "blocked" }, then: "raise", else: null },
+          { id: "raise", kind: "action", action: "task.set_priority", input: { taskId: "{{event.object.id}}", priority: "high" },
+            retry: { attempts: 3, backoffSeconds: 30 }, next: null },
+        ],
+      }));
+      await page.getByRole("button", { name: "Save workflow" }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Workflow saved." })).toBeVisible();
+      await page.goto(`/workflows/${id}`);
+      await expect(page.getByText("This workflow uses steps the step list cannot show")).toBeVisible();
+      await axe(page, "/workflows/[id]?mode=json");
+
+      // The stop switch.
+      await page.getByRole("button", { name: "Stop this workflow now" }).click();
+      await expect(page.getByRole("button", { name: "Allow runs again" })).toBeVisible();
+      expect(sql(`select stopped_at is not null from workflow_rule where id = '${id}'`)).toBe("t");
+      await page.getByRole("button", { name: "Allow runs again" }).click();
+      await expect(page.getByRole("button", { name: "Stop this workflow now" })).toBeVisible();
+      expect(sql(`select stopped_at is null from workflow_rule where id = '${id}'`)).toBe("t");
+    } finally {
+      sql(`delete from workflow_rule where id = '${id}'`);
+    }
+  });
+
   test("staff cannot open the workflow screens", async ({ page }) => {
     setSwitch(true);
     await signIn(page, "staff");

@@ -9,11 +9,13 @@ import type { ConditionNode, ConditionScalar } from "./graph";
  *   event.object.id                   the object the event is about
  *   event.changes.status.after        a changed property's new value
  *   steps.<stepId>.<field>            an earlier step's output
+ *   loop.item / loop.index            the current item, inside a loop body
  */
 export interface RunScope {
   event: EventScope;
   steps: Record<string, unknown>;
   workflow: { id: string; name: string };
+  loop?: { item: unknown; index: number };
 }
 
 export interface EventScope {

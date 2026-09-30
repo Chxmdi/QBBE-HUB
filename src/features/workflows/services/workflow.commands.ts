@@ -8,10 +8,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { ObjectEvent } from "@/lib/objects/contracts";
 import { workflowActionKeys } from "../actions-catalog";
-import { saveWorkflowSchema, testRunSchema } from "../editor-model";
+import { retrySchema, saveWorkflowSchema, stopSchema, testRunSchema } from "../editor-model";
 import { validateGraph } from "../graph";
 import { fill, workflowMessages } from "../i18n";
-import { executeWorkflowRun, type GraphRule } from "./run";
+import { executeWorkflowRun, retryRunFromStep, type GraphRule } from "./run";
 
 /**
  * Saving and test-running workflows (M14c). Admins only, at the two-step
@@ -66,6 +66,7 @@ export async function saveWorkflow(input: unknown): Promise<WorkflowCommandResul
     name: parsed.data.name,
     description: parsed.data.description || null,
     enabled: parsed.data.enabled,
+    max_runs_per_hour: parsed.data.maxRunsPerHour,
     graph: graph.graph,
     updated_by: checked.userId,
     updated_at: new Date().toISOString(),
@@ -170,4 +171,61 @@ export async function testRunWorkflow(input: unknown): Promise<TestRunResult> {
   } catch {
     return { ok: false, error: m.errors.testFailed };
   }
+}
+
+/**
+ * The instant stop switch (V1-12). Through the admin's own session, so the
+ * workflow_rule admin policy decides. Waiting runs are stopped by the
+ * workflow-resume job within a minute, and no new run starts from now.
+ */
+export async function setWorkflowStopped(input: unknown): Promise<WorkflowCommandResult> {
+  const checked = await guard();
+  if (!checked.ok) return checked;
+  const parsed = stopSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: checked.m.errors.stopFailed };
+  const db = await createSupabaseServerClient();
+  const { data, error } = await db
+    .from("workflow_rule")
+    .update(parsed.data.stop
+      ? { stopped_at: new Date().toISOString(), stopped_by: checked.userId }
+      : { stopped_at: null, stopped_by: null })
+    .eq("id", parsed.data.id)
+    .eq("organization_id", checked.organizationId)
+    .eq("engine", "graph_v2")
+    .select("id")
+    .maybeSingle();
+  if (error || !data) return { ok: false, error: checked.m.errors.stopFailed };
+  revalidatePath(`/workflows/${parsed.data.id}`);
+  revalidatePath("/workflows");
+  return { ok: true, id: parsed.data.id };
+}
+
+/** "Retry from this step": a new run from the chosen step, with the run's earlier outputs. */
+export async function retryWorkflowFromStep(input: unknown): Promise<
+  { ok: true; executionId: string; runNumber: number; ruleId: string } | { ok: false; error: string }
+> {
+  const checked = await guard();
+  if (!checked.ok) return checked;
+  const parsed = retrySchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: checked.m.errors.retryFailed };
+
+  // The admin must be able to see the run through RLS before anything happens.
+  const userDb = await createSupabaseServerClient();
+  const { data: visible } = await userDb
+    .from("workflow_execution")
+    .select("id, rule_id")
+    .eq("id", parsed.data.executionId)
+    .eq("organization_id", checked.organizationId)
+    .maybeSingle();
+  if (!visible?.rule_id) return { ok: false, error: checked.m.errors.notFound };
+
+  const record = await retryRunFromStep(
+    createSupabaseServiceClient(),
+    parsed.data.executionId,
+    parsed.data.stepId,
+    checked.organizationId,
+  );
+  if (record.status !== "recorded") return { ok: false, error: checked.m.errors.retryFailed };
+  revalidatePath(`/workflows/${visible.rule_id}`);
+  return { ok: true, executionId: record.executionId, runNumber: record.runNumber, ruleId: visible.rule_id as string };
 }

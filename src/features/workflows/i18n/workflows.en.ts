@@ -22,8 +22,26 @@ export const workflowsEn = {
     description: "Description",
     enabled: "Turned on",
     enabledHint: "When off, the workflow never runs on real changes. Test runs still work.",
+    maxRunsPerHour: "Most runs per hour",
+    maxRunsPerHourHint: "A safety limit. Changes beyond it are skipped and shown as rate limited in the history.",
     save: "Save workflow",
     saved: "Workflow saved.",
+  },
+  stop: {
+    heading: "Stop switch",
+    running: "The workflow runs normally.",
+    stopped: "Stopped {when}. No run starts, and runs that were waiting are stopped.",
+    stop: "Stop this workflow now",
+    resume: "Allow runs again",
+    done: "Done.",
+  },
+  json: {
+    open: "Edit as JSON",
+    back: "Back to the step list",
+    label: "Workflow definition (JSON)",
+    hint: "Branches, loops, sub-workflows and retries are edited here. The definition is checked when you save.",
+    invalidJson: "That is not valid JSON: {detail}",
+    unsupported: "This workflow uses steps the step list cannot show, so it opens as JSON.",
   },
   trigger: {
     heading: "When",
@@ -158,6 +176,9 @@ export const workflowsEn = {
     trigger: "Trigger",
     condition: "Condition",
     action: "Action",
+    branch: "Branch",
+    loop: "Loop",
+    subworkflow: "Sub-workflow",
   },
   errors: {
     invalid: "Check the workflow: {detail}",
@@ -165,6 +186,8 @@ export const workflowsEn = {
     notFound: "That workflow does not exist.",
     testFailed: "The test run could not start.",
     invalidId: "Enter the id of an item (a UUID).",
+    retryFailed: "That step cannot be retried.",
+    stopFailed: "The stop switch could not be changed.",
   },
 } as const;
 

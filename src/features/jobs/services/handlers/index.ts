@@ -22,6 +22,7 @@ import { staleProjectSweep } from "./stale-project-sweep";
 import { teamSignalDigest, teamSignalReminders } from "./team-signals";
 import { vmsSync } from "./vms-sync";
 import { workflowEvents } from "@/features/workflows/services/event-runner";
+import { workflowResume } from "@/features/workflows/services/resume-runner";
 
 /**
  * The job registry.
@@ -37,6 +38,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   "retry-workflow-executions": retryWorkflowExecutions,
   // Step-graph workflows (Workspace OS S6, behind wos_workflows_v2)
   "workflow-events": workflowEvents,
+  "workflow-resume": workflowResume,
   "daily-digest": dailyDigest,
 
   // Sweeps over Hub data
