@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requiredText } from "@/lib/schema";
 import { propertyKinds, type LensKind, type PropertyKind } from "@/lib/objects/contracts";
 
 /**
@@ -22,8 +23,8 @@ export const blueprintKeyPattern = /^[a-z][a-z0-9_]{0,47}$/;
 const key = z.string().regex(blueprintKeyPattern, "invalidKey");
 
 export const localizedTextSchema = z.object({
-  en: z.string().trim().min(1, "missingEnglish").max(120, "tooLong"),
-  fr: z.string().trim().min(1, "missingFrench").max(120, "tooLong"),
+  en: requiredText("missingEnglish").max(120, "tooLong"),
+  fr: requiredText("missingFrench").max(120, "tooLong"),
 });
 
 /**

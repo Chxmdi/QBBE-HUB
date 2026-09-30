@@ -198,7 +198,7 @@ export function BlueprintCanvas({
                   >
                     <Link2 className="size-3.5" aria-hidden />
                     {connecting ? messages.canvas.cancelConnect : messages.canvas.connect}
-                    <span className="sr-only">{name}</span>
+                    <span className="sr-only"> {name}</span>
                   </Button>
                 )}
               </div>

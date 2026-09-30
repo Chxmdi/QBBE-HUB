@@ -10,7 +10,7 @@ import { listBlueprints } from "@/features/blueprints/services/blueprint.queries
 import { requireSession } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function BuilderPage() {
   const session = await requireSession();
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   if (!(await isEnabled("wos_objects", supabase)) || !session.isStaff) notFound();
 
   const locale = await getLocale();

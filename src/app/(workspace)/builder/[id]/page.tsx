@@ -7,7 +7,7 @@ import { getBlueprint, liveBuild } from "@/features/blueprints/services/blueprin
 import { requireSession } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function BlueprintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await requireSession();
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   if (!(await isEnabled("wos_objects", supabase)) || !session.isStaff) notFound();
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
