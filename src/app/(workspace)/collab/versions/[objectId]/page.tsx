@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
 import { requireSession } from "@/lib/auth";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { contentAdapterFor } from "@/features/versions/adapters/registry";
 import { versionsText } from "@/features/versions/messages";
 import { objectTypeKeySchema } from "@/features/versions/schema";
@@ -50,7 +50,7 @@ export default async function ObjectVersionsPage({
     );
   }
 
-  const db = await createSupabaseServerClient();
+  const db = await createSupabasePageClient();
   const [{ data: canEdit }, { data: canManage }, versions, trashed] = await Promise.all([
     db.rpc("can", { object_id: object.id, capability: "edit_content" }),
     db.rpc("can", { object_id: object.id, capability: "manage" }),
