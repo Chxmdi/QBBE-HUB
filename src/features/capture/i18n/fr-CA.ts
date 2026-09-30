@@ -1,0 +1,68 @@
+import type { Translation } from "@/features/universal-tasks/i18n/module-i18n";
+import type { CaptureMessages } from "./en";
+
+/** Boîte de saisie : catalogue en français du Québec (M18). */
+export const captureFrCA: Translation<CaptureMessages> = {
+  page: {
+    title: "Saisie rapide",
+    description: "Notez-le maintenant, classez-le plus tard. Vous seul voyez votre boîte de saisie.",
+  },
+  form: {
+    legend: "Que voulez-vous saisir?",
+    kind: {
+      text: "Note",
+      link: "Lien",
+      file: "Fichier",
+      photo: "Photo",
+      email: "Courriel transféré",
+    },
+    text: "Que voulez-vous retenir?",
+    url: "Adresse Web",
+    note: "Note (facultative)",
+    file: "Choisissez un fichier",
+    photo: "Prenez ou choisissez une photo",
+    photoHint: "Le texte de la photo est lu sur cet appareil et conservé avec elle, pour la retrouver et la classer.",
+    reading: "Lecture de la photo… {percent} %",
+    readFailed: "La photo n’a pas pu être lue. Elle sera conservée sans son texte.",
+    email: "Collez le courriel transféré",
+    emailHint: "Incluez les lignes De et Objet; elles servent à suggérer où le classer.",
+    submit: "Saisir",
+    saving: "Enregistrement…",
+    captured: "Saisi.",
+  },
+  inbox: {
+    title: "Boîte de saisie",
+    empty: "Votre boîte de saisie est vide.",
+    count: "{count} éléments en attente",
+    suggestions: "Classer",
+    fileTask: "Tâche dans {project}",
+    fileTaskNoProject: "Tâche, sans projet",
+    fileDocument: "Document dans {project}",
+    fileDocumentNoProject: "Document, sans projet",
+    fileInteraction: "Consigner le courriel pour {contact}",
+    dismiss: "Écarter",
+    filed: "Classé.",
+    dismissed: "Écarté.",
+    from: "De : {from}",
+    because: {
+      link: "y renvoie",
+      mention: "le nomme",
+      keyword: "partage ses mots",
+      sender: "l’expéditeur est ce contact",
+    },
+    fileActions: "Choix de classement pour {title}",
+  },
+  errors: {
+    unavailable: "La boîte de saisie n’est pas activée.",
+    textRequired: "Écrivez quelque chose à saisir.",
+    urlInvalid: "Entrez une adresse Web commençant par http:// ou https://.",
+    emailRequired: "Collez le courriel à saisir.",
+    fileRequired: "Choisissez un fichier.",
+    tooLarge: "Les fichiers peuvent faire au plus 25 Mo.",
+    uploadFailed: "Le fichier n’a pas pu être téléversé. Réessayez.",
+    saveFailed: "Impossible de l’enregistrer. Réessayez.",
+    notFound: "Cet élément n’est plus dans votre boîte.",
+    fileFailed: "Impossible de le classer : {message}",
+    noContact: "Choisissez un contact pour consigner ce courriel.",
+  },
+};
