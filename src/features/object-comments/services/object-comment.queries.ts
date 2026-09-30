@@ -13,6 +13,8 @@ export interface ObjectCommentView {
   authorName: string;
   parentCommentId: string | null;
   blockId: string | null;
+  /** The selected text the comment is about, when it is about a selection. */
+  quote: string | null;
   createdAt: string;
   editedAt: string | null;
   resolvedAt: string | null;
@@ -41,6 +43,7 @@ interface CommentRow {
   author_id: string;
   parent_comment_id: string | null;
   block_id: string | null;
+  anchor: { quote?: string } | null;
   created_at: string;
   edited_at: string | null;
   resolved_at: string | null;
@@ -97,7 +100,7 @@ export async function loadObjectComments(
   let query = db
     .from("record_comment")
     .select(
-      "id, body, author_id, parent_comment_id, block_id, created_at, edited_at, resolved_at, resolved_by, deleted_at",
+      "id, body, author_id, parent_comment_id, block_id, anchor, created_at, edited_at, resolved_at, resolved_by, deleted_at",
     )
     .eq("parent_type", target.parentType)
     .eq("parent_id", target.parentId)
@@ -156,6 +159,7 @@ export async function loadObjectComments(
       authorName: nameOf(row.author_id),
       parentCommentId: row.parent_comment_id,
       blockId: row.block_id,
+      quote: typeof row.anchor?.quote === "string" ? row.anchor.quote : null,
       createdAt: row.created_at,
       editedAt: row.edited_at,
       resolvedAt: row.resolved_at,

@@ -12,6 +12,9 @@ import { collabText } from "@/features/collab/messages";
 import { getObjectLock } from "@/features/collab/services/collab.queries";
 import { LiveView } from "@/features/collab/components/live-view";
 import { LockControl } from "@/features/collab/components/lock-control";
+import { listOpenSuggestions } from "@/features/collab/services/suggestion.queries";
+import { ObjectComments } from "@/features/object-comments/components/object-comments";
+import { commentTargetFor } from "@/features/object-comments/target";
 
 export const dynamic = "force-dynamic";
 
@@ -46,11 +49,16 @@ export default async function LiveObjectPage({
     );
   }
   const db = await createSupabasePageClient();
-  const [{ data: canEdit }, { data: canManage }, lock] = await Promise.all([
-    db.rpc("can", { object_id: object.id, capability: "edit_content" }),
-    db.rpc("can", { object_id: object.id, capability: "manage" }),
-    getObjectLock(object.id),
-  ]);
+  const target = commentTargetFor(object);
+  const [{ data: canEdit }, { data: canManage }, { data: canSuggest }, { data: canComment }, lock, suggestions] =
+    await Promise.all([
+      db.rpc("can", { object_id: object.id, capability: "edit_content" }),
+      db.rpc("can", { object_id: object.id, capability: "manage" }),
+      db.rpc("can", { object_id: object.id, capability: "comment" }),
+      db.rpc("can_post_comment", { p_type: target.parentType, p_id: target.parentId }),
+      getObjectLock(object.id),
+      listOpenSuggestions(object.id),
+    ]);
   const block = snapshot.content.blocks[0];
 
   return (
@@ -61,10 +69,14 @@ export default async function LiveObjectPage({
         object={object}
         me={session.userId}
         canEdit={canEdit === true}
+        canSuggest={canSuggest === true}
+        canComment={canComment === true}
         locked={lock !== null}
         blockId={block?.id ?? "description"}
         initialText={block?.text ?? ""}
+        suggestions={suggestions}
       />
+      <ObjectComments object={object} blockId={block?.id ?? "description"} />
     </>
   );
 }

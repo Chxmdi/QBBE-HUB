@@ -12,6 +12,7 @@ export const objectCommentsFr: Catalogue<typeof objectCommentsEn> = {
   filterResolved: "Résolus",
   filterAll: "Tous",
   openCount: "{count} ouverts",
+  onSelection: "À propos du texte :",
   replies: "Réponses",
   reply: "Répondre",
   replyTo: "Répondre à {name}",

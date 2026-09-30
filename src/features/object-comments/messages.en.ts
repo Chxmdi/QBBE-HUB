@@ -9,6 +9,7 @@ export const objectCommentsEn = {
   filterResolved: "Resolved",
   filterAll: "All",
   openCount: "{count} open",
+  onSelection: "About the text:",
   replies: "Replies",
   reply: "Reply",
   replyTo: "Reply to {name}",

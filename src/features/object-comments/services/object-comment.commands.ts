@@ -38,6 +38,16 @@ const addSchema = (m: ObjectCommentsText) =>
   z.object({
     object: z.object({ id: z.string().uuid(), type: objectTypeKeySchema }),
     blockId: blockIdSchema.nullable().optional(),
+    /** A stretch of the block's text the comment is about (V1-17). */
+    anchor: z
+      .object({
+        start: z.number().int().min(0),
+        end: z.number().int().min(1),
+        quote: z.string().min(1).max(500),
+      })
+      .refine((anchor) => anchor.end > anchor.start)
+      .nullable()
+      .optional(),
     parentCommentId: z.string().uuid().nullable().optional(),
     body: bodySchema(m),
   });
@@ -139,6 +149,7 @@ export async function addObjectComment(input: unknown): Promise<CommentActionRes
       parent_type: target.parentType,
       parent_id: target.parentId,
       block_id: target.blockId,
+      anchor: target.blockId && data.anchor ? data.anchor : null,
       parent_comment_id: data.parentCommentId ?? null,
       author_id: session.userId,
       body: data.body,
