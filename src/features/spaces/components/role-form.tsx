@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useId, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Checkbox, Input } from "@/components/ui/input";
 import { workspaceCapabilities } from "@/lib/objects/contracts";
 import { useSpacesT } from "../i18n/client";
 import { createRole, deleteRole, updateRole } from "../services/roles.commands";
@@ -67,12 +67,10 @@ export function RoleForm({ role }: { role?: AccessRole }) {
         <div className="grid gap-1.5 sm:grid-cols-2">
           {workspaceCapabilities.map((capability) => (
             <label key={capability} className="flex items-center gap-2 text-[13.5px] text-ink">
-              <input
-                type="checkbox"
+              <Checkbox
                 name="capabilities"
                 value={capability}
                 defaultChecked={role ? role.capabilities.includes(capability) : capability === "view"}
-                className="h-4 w-4 accent-brand"
               />
               {t(`capabilities.${capability}`)}
             </label>
