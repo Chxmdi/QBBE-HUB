@@ -1,4 +1,6 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
+// Page reads: the page client throws on a failed query, so an outage reaches
+// the error page instead of reading as "not found" or an empty list (P0-UX-05).
 
 export interface DecisionRecord {
   id: string;
@@ -76,7 +78,7 @@ export async function getDecision(decisionId: string): Promise<{
   canManage: boolean;
   people: { id: string; name: string }[];
 } | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const { data } = await supabase.from("decision").select(SELECT).eq("id", decisionId).maybeSingle();
   if (!data) return null;
   const [{ data: canManage }, { data: members }] = await Promise.all([
@@ -96,7 +98,7 @@ export async function getDecisionTrail(projectId: string): Promise<{
   project: { id: string; name: string };
   decisions: DecisionRecord[];
 } | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const { data: project } = await supabase.from("project").select("id, name").eq("id", projectId).maybeSingle();
   if (!project) return null;
   const { data } = await supabase
