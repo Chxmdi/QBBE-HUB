@@ -13,17 +13,18 @@ the answers today's rules give, and stay fast on a board?
 
 - **Correct:** EQUIVALENCE_SUMMARY
 - **Fast for lists, when lists use the set-based form.** On a 500-task
-  board, a policy that reads the new cache is within 1 ms of today's policy
-  (from 1.5 ms faster to 0.7 ms slower), and returns exactly the same rows.
+  board, a policy that reads the new cache is within 1.3 ms of today's
+  policy (from 1.2 ms faster to 1.3 ms slower), and returns exactly the same
+  rows.
   The target was under 20 ms added.
 - **Too slow when called once per row.** Calling `app.can()` on each row of
   a 500-row board adds 40 to 340 ms, so it fails the target. `app.can()` is
   for one record at a time (a drawer, a page, an action's permission check).
   Lists must use the set-based form, as the #115 rewrite already does today.
-- **Cheap to keep current.** Giving someone a 1,000-task program costs 32 ms;
-  moving a 500-task project to another program costs 24 ms.
+- **Cheap to keep current.** Giving someone a 1,000-task program costs 33 ms;
+  moving a 500-task project to another program costs 26 ms.
 - **One weak spot to fix before M10c:** a bulk insert of 500 tasks costs
-  1.06 s instead of 39 ms, because the prototype's triggers work one row at a
+  0.6 to 1.1 s instead of about 40 ms, because the prototype's triggers work one row at a
   time. Statement-level triggers fix that (see "Before building for real").
 
 ## What was built
@@ -59,7 +60,9 @@ including the triggers it adds to today's tables. The check is called
   same table.
 - **Grants** (`access_grant`): role R on object O, to a person, a team, or
   everyone holding an organization role. A grant reaches everything under O
-  unless it is marked "this object only".
+  by default. A grant's **reach** can instead be "this object only", or
+  "this object and the tasks directly in it" (only needed to copy today's
+  lead column exactly, finding 3).
 - **Cache** (`access_cache`): one row per (person, object) holding the
   combined capabilities from person and team grants. Triggers keep it
   current: a grant change refreshes only its people and only the objects
@@ -98,7 +101,7 @@ update policy: manage) is **manage**.
 | Today's source | In the new model |
 |---|---|
 | `program_access_grant` | its role on the program's space, inherited by the projects and tasks under it |
-| `program.lead_id` | manager on the program's space, **this object only** (see finding 2) |
+| `program.lead_id` | manager on the program's space and the tasks directly in it, **not its projects** (finding 3) |
 | `project_access_grant` | its role on the project, inherited by its tasks. Rows with source `program_inherited` are **not** copied: inheritance gives the same answer |
 | `project.owner_id` | manager on the project |
 | task assignee, requester | contributor on the task |
@@ -126,12 +129,12 @@ builds it (every unarchived task the person can read, in sort order), at
 
 | Board and person | a. today | e. cache policy | Added | b. today + `can(view)` per row |
 |---|---|---|---|---|
-| Project board, owner (MFA) | 0.81 (1.03) | 0.88 (1.07) | +0.1 | 62.0 (91.8) |
-| Project board, staff with project grant | 2.88 (3.65) | 2.55 (2.84) | −0.3 | 64.3 (91.7) |
-| Project board, volunteer with 20 assigned | 2.20 (2.91) | 1.44 (1.64) | −0.8 | 5.3 (8.4) |
-| Workspace board, owner (MFA) | 1.91 (2.30) | 2.65 (3.52) | +0.7 | 382.5 (508.7) |
-| Workspace board, staff with project grant | 4.15 (4.34) | 3.81 (6.66) | −0.3 | 178.8 (230.3) |
-| Workspace board, volunteer | 3.68 (5.30) | 2.21 (2.31) | −1.5 | 56.5 (84.6) |
+| Project board, owner (MFA) | 1.10 (1.57) | 0.99 (2.10) | −0.1 | 63.1 (90.7) |
+| Project board, staff with project grant | 2.78 (3.23) | 4.10 (4.47) | +1.3 | 59.3 (68.6) |
+| Project board, volunteer with 20 assigned | 2.15 (2.45) | 1.40 (1.55) | −0.8 | 4.9 (5.3) |
+| Workspace board, owner (MFA) | 1.95 (2.27) | 2.36 (3.17) | +0.4 | 350.7 (387.3) |
+| Workspace board, staff with project grant | 5.12 (6.58) | 3.95 (4.56) | −1.2 | 192.4 (223.4) |
+| Workspace board, volunteer | 3.33 (3.69) | 3.25 (3.97) | −0.1 | 53.3 (67.6) |
 
 Every person saw exactly the same rows under both policies (500, 500, 20,
 500, 500 and 420).
@@ -141,10 +144,10 @@ most. Today the only way is `has_task_capability` per row:
 
 | Board and person | d. today, `has_task_capability` flag | c. `app.can` flag per row | f. set-based flag from the cache |
 |---|---|---|---|
-| Project board, owner | 412 | 66.2 | 1.24 |
-| Project board, staff | 1,705 | 66.1 | 4.88 |
-| Workspace board, staff | 1,808 | 62.8 | 5.96 |
-| Workspace board, volunteer | 1,313 | 53.9 | 3.21 |
+| Project board, owner | 386 | 61.4 | 1.15 |
+| Project board, staff | 1,670 | 66.3 | 5.01 |
+| Workspace board, staff | 1,691 | 63.8 | 6.57 |
+| Workspace board, volunteer | 1,338 | 52.4 | 3.44 |
 
 The per-row `app.can` is 10 to 40 times faster than today's function, but
 only the set-based form is within budget.
@@ -163,16 +166,20 @@ tables, then the cache refresh).
 
 | Change | ms |
 |---|---|
-| Add a person to the 1,000-task program (program grant) | 32.1 |
-| Remove that grant | 13.0 |
-| Add a person to one 500-task project | 17.2 |
-| A person joins a team that has the 1,000-task program | 14.2 |
-| Move a 500-task project to another program (everyone recomputed) | 23.5 |
-| Change the program lead | 46.3 |
-| Change one task's assignee | 4.3 |
-| Insert one task | 2.1 |
-| **Insert 500 tasks in one statement** | **1,058** (39 without the prototype) |
-| Rebuild the whole cache (59 people, 3,086 objects) | 339 |
+| Add a person to the 1,000-task program (program grant) | 32.9 |
+| Remove that grant | 11.9 |
+| Add a person to one 500-task project | 13.0 |
+| A person joins a team that has the 1,000-task program | 19.6 |
+| Move a 500-task project to another program (everyone recomputed) | 25.6 |
+| Change the program lead | 52.1 |
+| Change one task's assignee | 3.8 |
+| Insert one task | 1.8 |
+| **Insert 500 tasks in one statement** | **641** (42 without the prototype) |
+| Rebuild the whole cache (59 people, 3,086 objects) | 384 |
+
+The timings above are from the final run. Across the four timing runs made
+during the spike, the medians moved by up to about 1.5 ms on the boards, and
+the 500-task insert ranged from 641 to 1,114 ms.
 
 Cache size: 32,766 rows for 59 people and 3,086 objects, about 555 rows a
 person, 4.7 MB with indexes. It grows with people times the objects each can
@@ -216,10 +223,12 @@ not cached.
    lead was set before that trigger existed, or whose `record_lead` row is
    missing for any other reason (the migration logs these in
    `scoped_access_backfill_issue`), gives its lead the program but not its
-   projects. The prototype reproduces this exactly: the lead column is a
-   "this object only" grant, and the `record_lead` grant is the inherited
-   one. Equivalence round 2 removes a lead's `record_lead` row to test this
-   case. **Decision needed:** this is almost certainly unintended. The real
+   projects. The prototype first modelled the lead column as "this object
+   only", and equivalence round 2 caught it: 12 answers, for one lead on one
+   program-level task, which today's rules allow. The lead column reaches the
+   program *and the tasks directly in it*. With that reach, the case matches
+   exactly. Round 2 removes a lead's `record_lead` row on purpose to test
+   this. **Decision needed:** this is almost certainly unintended. The real
    build should make the lead one inherited grant, which is a deliberate
    behaviour change. Before migrating, check the hosted
    `scoped_access_backfill_issue` rows (read-only) to see whether any real
@@ -249,8 +258,9 @@ not cached.
 1. **Keep the model as prototyped:** objects with a stored parent chain;
    spaces (Workspace, one per program, Private, custom); capability bits;
    roles as capability bundles (built-in rows now, custom roles in M10d);
-   grants to a person, a team or an organization role, inherited unless marked
-   "this object only".
+   grants to a person, a team or an organization role, reaching everything
+   below unless marked "this object only". Drop the "object and its direct
+   tasks" reach once finding 3 is decided.
 2. **Cache person and team grants; answer organization roles, role
    ceilings, membership and MFA live.** This keeps the cache small, and makes suspension and MFA take
    effect immediately.
@@ -268,7 +278,7 @@ not cached.
 5. **Before building for real:**
    - Make the dual-write and refresh triggers statement-level, with
      transition tables, so a bulk insert of N tasks is one refresh, not N
-     (fixes the 1.1 s bulk insert).
+     (fixes the slow bulk insert).
    - Keep the equivalence test's fixture small enough for CI. The full run
      here takes about an hour, because today's `has_task_capability` costs
      about 2 ms a call for a person without access, and a full round is about
