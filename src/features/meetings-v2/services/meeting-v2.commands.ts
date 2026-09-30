@@ -9,7 +9,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createActionRegistryStub, createCanStub } from "@/lib/objects/stubs";
 import { meetingsV2T } from "../i18n";
 import { extractSemanticBlocks, semanticBlockKinds } from "../editor-adapter";
-import { CREATE_TASK_ACTION_KEY, createTaskActionDefinition } from "../create-task-action";
+import { taskCreateAction } from "@/features/universal-tasks/task-create-action";
+import { meetingTaskInput } from "../meeting-task";
 import { planReview, summarizeSteps } from "../review";
 import { RECORDING_TAG } from "./meeting-v2.queries";
 import { meetingsV2Enabled } from "../flag";
@@ -132,14 +133,14 @@ const reviewSchema = z.object({
   choices: z.record(uuid, z.enum(["approve", "dismiss"])),
 });
 
-function registryFor(supabase: Client) {
+function registryFor(supabase: Client, actor: { userId: string; organizationId: string; displayName: string }) {
   const registry = createActionRegistryStub({
     // Undo of a created task waits for persisted change sets (M13).
     apply: async () => {
       throw new Error("Undo is not available until change sets are persisted.");
     },
   });
-  registry.register(createTaskActionDefinition((fn, args) => supabase.rpc(fn, args)));
+  registry.register(taskCreateAction(supabase, actor));
   return registry;
 }
 
@@ -162,7 +163,7 @@ export async function applyMeetingReview(input: unknown): Promise<CommandResult>
 
   const supabase = await createSupabaseServerClient();
   const [{ data: meeting }, { data: canManage }, { data: rows }] = await Promise.all([
-    supabase.from("meeting").select("id, organization_id, project_id").eq("id", meetingId).maybeSingle(),
+    supabase.from("meeting").select("id, organization_id, project_id, program_id").eq("id", meetingId).maybeSingle(),
     supabase.rpc("can_manage_meeting", { p_meeting: meetingId }),
     supabase
       .from("meeting_capture")
@@ -179,7 +180,11 @@ export async function applyMeetingReview(input: unknown): Promise<CommandResult>
   }[];
   const byId = new Map(captures.map((c) => [c.id, c]));
   const steps = planReview(captures, choices);
-  const registry = registryFor(supabase);
+  const registry = registryFor(supabase, {
+    userId: session.userId,
+    organizationId: session.organizationId,
+    displayName: session.profile.full_name,
+  });
   const context = { actor: { kind: "person" as const, id: session.userId }, can: createCanStub(supabase) };
 
   let failed = 0;
@@ -191,18 +196,23 @@ export async function applyMeetingReview(input: unknown): Promise<CommandResult>
     } else if (step.op === "keep") {
       update = { status: "approved" };
     } else if (step.op === "create_task") {
-      const result = await registry.run(
-        CREATE_TASK_ACTION_KEY,
-        {
-          title: capture.body,
-          ownerId: capture.owner_id,
-          dueOn: capture.due_on,
-          origin: { type: "meeting", id: meetingId, captureId: capture.id },
-        },
-        context,
-      );
+      // The shared task.create action (M7a) makes the task and records the
+      // meeting as its source; meeting_action keeps the meeting's own list
+      // of actions, as the classic meeting page shows them.
+      const result = await registry.run("task.create", meetingTaskInput(capture, meeting), context);
       const created = result.ok ? result.changeSet.changes[0] : null;
       if (!created || created.kind !== "create") {
+        failed += 1;
+        continue;
+      }
+      const { error: linkError } = await supabase.from("meeting_action").insert({
+        meeting_id: meetingId,
+        task_id: created.object.id,
+        title: capture.body,
+        owner_id: capture.owner_id,
+        due_at: capture.due_on,
+      });
+      if (linkError) {
         failed += 1;
         continue;
       }

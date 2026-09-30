@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { extractSemanticBlocks } from "../editor-adapter";
 import { planReview, summarizeSteps } from "../review";
-import { createTaskActionDefinition, UnsupportedTaskOriginError } from "../create-task-action";
+import { meetingTaskInput } from "../meeting-task";
+import { universalTaskInputSchema } from "@/features/universal-tasks/create-task";
 import { overrideTurnsOn } from "../flag";
 import { meetingsV2En } from "../i18n/en";
 import { meetingsV2FrCA } from "../i18n/fr-CA";
@@ -70,36 +71,31 @@ describe("planReview", () => {
   });
 });
 
-describe("create-task action", () => {
-  it("creates a meeting task through create_meeting_action and reports the change", async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: "task-1", error: null });
-    const action = createTaskActionDefinition(rpc);
-    const changes = await action.run(
-      { actor: { kind: "person", id: "me" }, can: async () => true },
-      { title: "  Book the hall ", ownerId: "owner", dueOn: "2026-10-05", origin: { type: "meeting", id: "m1", captureId: "c1" } },
-    );
-    expect(rpc).toHaveBeenCalledWith("create_meeting_action", {
-      p_meeting: "m1",
-      p_title: "Book the hall",
-      p_owner: "owner",
-      p_due: "2026-10-05T12:00:00Z",
+describe("meeting task input for the shared task.create action", () => {
+  const capture = { body: "  Book the hall ", detail: "Ask for the big room", owner_id: "11111111-1111-4111-8111-111111111111", due_on: "2026-10-05" };
+
+  it("puts the task in the meeting's project and records the meeting as its source", () => {
+    const input = meetingTaskInput(capture, { id: "22222222-2222-4222-8222-222222222222", project_id: "33333333-3333-4333-8333-333333333333", program_id: "44444444-4444-4444-8444-444444444444" });
+    expect(input).toEqual({
+      title: "Book the hall",
+      description: "Ask for the big room",
+      projectId: "33333333-3333-4333-8333-333333333333",
+      programId: undefined,
+      assigneeId: "11111111-1111-4111-8111-111111111111",
+      dueAt: "2026-10-05",
+      source: { type: "meeting", id: "22222222-2222-4222-8222-222222222222" },
     });
-    expect(changes).toEqual([
-      {
-        kind: "create",
-        object: { type: "task", id: "task-1" },
-        values: { title: "Book the hall", ownerId: "owner", dueOn: "2026-10-05", origin: { type: "meeting", id: "m1", captureId: "c1" } },
-      },
-    ]);
+    expect(universalTaskInputSchema.safeParse(input).success).toBe(true);
   });
 
-  it("fails when the database refuses, and refuses origins it does not know yet", async () => {
-    const refused = createTaskActionDefinition(vi.fn().mockResolvedValue({ data: null, error: { message: "denied" } }));
-    const context = { actor: { kind: "person" as const, id: "me" }, can: async () => true };
-    await expect(refused.run(context, { title: "x", origin: { type: "meeting", id: "m" } })).rejects.toThrow("denied");
-    await expect(refused.run(context, { title: "x", origin: { type: "page", id: "p" } })).rejects.toBeInstanceOf(
-      UnsupportedTaskOriginError,
+  it("falls back to the meeting's program when it has no project", () => {
+    const input = meetingTaskInput(
+      { body: "Call", detail: null, owner_id: null, due_on: null },
+      { id: "22222222-2222-4222-8222-222222222222", project_id: null, program_id: "44444444-4444-4444-8444-444444444444" },
     );
+    expect(input.projectId).toBeUndefined();
+    expect(input.programId).toBe("44444444-4444-4444-8444-444444444444");
+    expect(universalTaskInputSchema.safeParse(input).success).toBe(true);
   });
 });
 
