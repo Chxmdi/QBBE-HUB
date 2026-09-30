@@ -52,6 +52,14 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Reuse the previous build's cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-verify-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'next.config.*') }}
+          restore-keys: |
+            next-verify-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
       - name: Production build
         run: npm run build
         env:
@@ -59,6 +67,12 @@ jobs:
           # environment. Never real secrets in CI config (ENV-003).
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+
+      - name: Reuse downloaded test browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
@@ -114,101 +128,20 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  database-security:
-    name: Database security
+  # The database and signed-in browser checks used to run as one job that
+  # took 40 minutes and gated every merge. They now run as parallel jobs, each
+  # with its own throwaway local Supabase, and one final job keeps the
+  # "Database security" name that branch protection requires (#199, W0-1).
+  database-core:
+    name: "Database security: RLS, advisor, realtime"
     runs-on: ubuntu-latest
-    # Three browsers take roughly three times as long as one. With the request
-    # proxy running (#135) every request, prefetches included, makes an Auth
-    # round trip first, and the chromium job went from ~19 to ~29.5 minutes;
-    # 30 left no margin. Raised by half until the proxy's per-request check
-    # is made cheaper (verifying the session token locally instead).
-    # 45 -> 60: every bookkeeping feature added database and browser tests to
-    # this job, and by #172 the chromium run reached 45 minutes with every test
-    # still passing (cancelled mid qa-matrix). 60 keeps a margin until the job
-    # is split or sharded.
-    # 60 -> 80: the signed-in spec list is now built from the folder, which adds
-    # eight finance specs that never ran before. Splitting the job is tracked in
-    # docs/plans/paperless-bookkeeping-plan.md section B.
-    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 150 || 80 }}
-    env:
-      SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/local-supabase
         with:
-          node-version: 22
-          cache: npm
-
-      - name: Install from lockfile
-        run: npm ci
-
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v3
-        with:
-          version: 2.114.0
-
-      # supabase/config.toml points Auth at an ES256 signing key so sessions
-      # are verified locally, as on the hosted projects (#138). The key is
-      # generated per run and never committed.
-      - name: Local Auth signing key
-        run: scripts/local-signing-key.sh
-
-      - name: Avoid local DB port collisions on CI runners
-        run: |
-          if lsof -iTCP:54322 -sTCP:LISTEN -t >/dev/null; then
-            sed -i 's/^port = 54322$/port = 65432/' supabase/config.toml
-          fi
-
-      - name: Authenticate to ghcr.io before pulling service images
-        # Anonymous pulls from ghcr.io draw on a shared allowance, and on
-        # 2026-09-23 that allowance refused every image for three consecutive
-        # attempts across three minutes — a database job failing on a registry.
-        # An authenticated pull uses this repository's own allowance instead.
-        # This token is issued to the workflow run and needs no secret to be
-        # configured.
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Start migrated local database
-        # `supabase start` pulls a dozen images, and a registry refusing them
-        # fails this job before a single assertion runs. That happened four
-        # times on 2026-09-23, during a GitHub incident, with the database job
-        # reporting a registry problem as a database security failure.
-        #
-        # Three things are done about it.
-        #
-        # The services this job never uses are excluded, so their images are
-        # not pulled at all: Studio is a web UI nothing here opens,
-        # edge-runtime serves functions this project does not have, and
-        # logflare, vector and supavisor are analytics and pooling. What stays
-        # is what the checks below need — gotrue for sign-in, kong and
-        # postgrest for the API, realtime for the revocation spec, storage-api
-        # for uploads, mailpit for the recovery email, and postgres-meta for
-        # the advisor.
-        #
-        # `supabase/setup-cli` pins SUPABASE_INTERNAL_IMAGE_REGISTRY to
-        # ghcr.io, so every image comes from one registry and one registry's
-        # bad day stops everything. The later attempts fall back to Docker Hub,
-        # which publishes the same images.
-        #
-        # The retry then covers a transient refusal from either.
-        run: |
-          for attempt in 1 2 3; do
-            if [ "$attempt" = 1 ]; then
-              export SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io
-            else
-              export SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io
-            fi
-            echo "Attempt $attempt, pulling from $SUPABASE_INTERNAL_IMAGE_REGISTRY"
-            if supabase start -x studio,edge-runtime,logflare,vector,supavisor; then
-              exit 0
-            fi
-            echo "::warning::supabase start failed on attempt $attempt via $SUPABASE_INTERNAL_IMAGE_REGISTRY"
-            supabase stop --no-backup || true
-            sleep $((attempt * 20))
-          done
-          echo "::error::supabase start failed three times across both registries"
-          exit 1
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: RLS allow/deny matrix
         run: npm run test:db
@@ -216,79 +149,130 @@ jobs:
       - name: Database security advisor
         run: supabase db advisors --local --type security --fail-on error
 
-      - name: Configure synthetic local Auth for browser checks
-        run: |
-          supabase status -o json > "$RUNNER_TEMP/supabase-status.json"
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const status = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/supabase-status.json`, 'utf8'));
-          if (!status.API_URL || !status.ANON_KEY) throw new Error('Local Supabase configuration missing');
-          if (!status.SERVICE_ROLE_KEY) throw new Error('Local service role key missing');
-          fs.appendFileSync(process.env.GITHUB_ENV,
-            `NEXT_PUBLIC_SUPABASE_URL=${status.API_URL}\nNEXT_PUBLIC_SUPABASE_ANON_KEY=${status.ANON_KEY}\n`);
-          // Jobs run as the service role; the notification checks drain the
-          // queue into the local Mailpit (SMTP 54325) and read it back. Both are
-          // the throwaway local stack's, never a hosted project's.
-          fs.appendFileSync(process.env.GITHUB_ENV,
-            `SUPABASE_SERVICE_ROLE_KEY=${status.SERVICE_ROLE_KEY}\nSMTP_HOST=127.0.0.1\nSMTP_PORT=54325\n`);
-          fs.unlinkSync(`${process.env.RUNNER_TEMP}/supabase-status.json`);
-          NODE
-
-      - name: Seed the workspace the browser checks read
-        # The suite above rolls its fixtures back, as every database test
-        # should. That leaves a migrated but empty workspace, and the access
-        # inventory has programmes and projects to show only if some exist —
-        # it used to read whatever rls.sql had committed. This is the same
-        # seeding path docs/runbooks/qa.md documents for running these suites
-        # locally, so CI and a developer machine now start from one fixture.
+      - name: Seed the workspace the realtime probe reads
         run: npm run db:seed
-
-      - name: Build authenticated test app
-        run: npm run build
-
-      - name: Install authenticated test browsers
-        run: npx playwright install --with-deps chromium firefox webkit
-
-      - name: Authenticated lifecycle and access checks
-        env:
-          # A per-run value: the job routes need one, and nothing outside this
-          # runner ever sees it.
-          CRON_JOB_SECRET: ci-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          npx next start -p 3000 -H 127.0.0.1 &
-          npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
-          # Every signed-in spec runs: the list is built from the folder, so a new
-          # feature's spec is picked up without editing this line. public-routes
-          # and qa-matrix run in their own steps. Until this, eight finance specs
-          # (bank, budgets, ledger, payables, receipts, sales-tax, team-overview,
-          # year-end) were never added by hand and never ran in CI.
-          SPECS=$(ls tests/e2e/*.spec.ts | grep -vE '/(public-routes|qa-matrix)\.spec\.ts$')
-          npx playwright test $SPECS $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
-
-      - name: Signed-in accessibility, responsive and keyboard matrix
-        # WCAG 2.2 AA axe scans in both themes, a 6-width x 2-theme overflow
-        # sweep, 200% zoom and keyboard paths across every workspace route
-        # (#101). It ran nowhere before this step existed. The server started
-        # in the previous step is still listening.
-        run: npx playwright test qa-matrix $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
-
-      - name: Phone emulation (qa-matrix and public routes)
-        if: inputs.mobile
-        run: npx playwright test qa-matrix public-routes --project=mobile-chrome --project=mobile-safari
 
       - name: Realtime latency (p95 within 5 s)
         # 30 messages from one signed-in member to another over Realtime;
         # fails if any is lost or the 95th percentile exceeds 5 s (#113).
         run: npm run qa:realtime-latency
 
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop
+
+  browsers:
+    # Every signed-in spec runs: the list is built from the folder, so a new
+    # feature's spec is picked up without editing this file. The specs are
+    # split by file across three machines; qa-matrix, the longest single file
+    # (WCAG 2.2 AA axe scans in both themes, a 6-width x 2-theme overflow
+    # sweep, 200% zoom and keyboard paths across every workspace route, #101),
+    # is split by test across two more. Playwright still runs one worker per
+    # machine, so no two tests ever share a database.
+    name: "Database security: ${{ matrix.suite }} ${{ matrix.shard }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 90 || 40 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { suite: signed-in, shard: 1/3 }
+          - { suite: signed-in, shard: 2/3 }
+          - { suite: signed-in, shard: 3/3 }
+          - { suite: qa-matrix, shard: 1/2 }
+          - { suite: qa-matrix, shard: 2/2 }
+    env:
+      SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/local-supabase
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Seed the workspace the browser checks read
+        # A migrated but empty workspace has no programmes or projects for
+        # the access inventory to show. Same seeding path as
+        # docs/runbooks/qa.md, so CI and a developer machine start alike.
+        run: npm run db:seed
+
+      - name: Reuse the previous build's cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'next.config.*') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
+      - name: Build authenticated test app
+        run: npm run build
+
+      - name: Reuse downloaded test browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install authenticated test browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Start the app
+        env:
+          # A per-run value: the job routes need one, and nothing outside this
+          # runner ever sees it.
+          CRON_JOB_SECRET: ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          nohup npx next start -p 3000 -H 127.0.0.1 > "$RUNNER_TEMP/next.log" 2>&1 &
+          npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
+
+      - name: Signed-in lifecycle and access checks
+        if: matrix.suite == 'signed-in'
+        run: |
+          SPECS=$(ls tests/e2e/*.spec.ts | grep -vE '/(public-routes|qa-matrix)\.spec\.ts$')
+          npx playwright test $SPECS --shard=${{ matrix.shard }} $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+
+      - name: Signed-in accessibility, responsive and keyboard matrix
+        if: matrix.suite == 'qa-matrix'
+        run: npx playwright test qa-matrix --fully-parallel --shard=${{ matrix.shard }} $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+
+      - name: Phone emulation (qa-matrix and public routes)
+        if: matrix.suite == 'qa-matrix' && inputs.mobile
+        run: npx playwright test qa-matrix public-routes --fully-parallel --shard=${{ matrix.shard }} --project=mobile-chrome --project=mobile-safari
+
+      - name: Name the evidence after this part
+        if: failure()
+        id: evidence
+        run: echo "name=authenticated-browser-failures-${{ matrix.suite }}-${{ strategy.job-index }}" >> "$GITHUB_OUTPUT"
+
       - name: Preserve authenticated failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: authenticated-browser-failures
-          path: test-results/
+          name: ${{ steps.evidence.outputs.name }}
+          path: |
+            test-results/
+            ${{ runner.temp }}/next.log
           retention-days: 7
 
       - name: Stop local Supabase
         if: always()
         run: supabase stop
+
+  database-security:
+    # The check branch protection requires (scripts/protect-main.sh). It passes
+    # only when every part above passed; a skipped, cancelled or failed part
+    # fails it.
+    name: Database security
+    needs: [database-core, browsers]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every database and browser part passed
+        env:
+          CORE: ${{ needs.database-core.result }}
+          BROWSERS: ${{ needs.browsers.result }}
+        run: |
+          echo "Database, advisor and realtime: $CORE"
+          echo "Signed-in browser parts: $BROWSERS"
+          [ "$CORE" = success ] && [ "$BROWSERS" = success ] || { echo "::error::A database security part did not pass."; exit 1; }

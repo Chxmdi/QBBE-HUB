@@ -1,0 +1,95 @@
+name: Local Supabase for checks
+description: >
+  Installs dependencies, starts the migrated local Supabase stack and exports
+  its URL and keys for the steps that follow. Shared by every database and
+  signed-in browser job, which each get their own throwaway stack.
+inputs:
+  github-token:
+    description: The run's GITHUB_TOKEN, for authenticated image pulls from ghcr.io
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+
+    - name: Install from lockfile
+      shell: bash
+      run: npm ci
+
+    - name: Set up Supabase CLI
+      uses: supabase/setup-cli@v3
+      with:
+        version: 2.114.0
+
+    # supabase/config.toml points Auth at an ES256 signing key so sessions
+    # are verified locally, as on the hosted projects (#138). The key is
+    # generated per run and never committed.
+    - name: Local Auth signing key
+      shell: bash
+      run: scripts/local-signing-key.sh
+
+    - name: Avoid local DB port collisions on CI runners
+      shell: bash
+      run: |
+        if lsof -iTCP:54322 -sTCP:LISTEN -t >/dev/null; then
+          sed -i 's/^port = 54322$/port = 65432/' supabase/config.toml
+        fi
+
+    # Anonymous pulls from ghcr.io draw on a shared allowance, and on
+    # 2026-09-23 that allowance refused every image for three consecutive
+    # attempts across three minutes. An authenticated pull uses this
+    # repository's own allowance instead. The token is issued to the run.
+    - name: Authenticate to ghcr.io before pulling service images
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.github-token }}
+      run: echo "$TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+    # Services nothing here uses are excluded so their images are never
+    # pulled: Studio, edge-runtime, and the logflare/vector/supavisor
+    # analytics and pooling. What stays is what the checks need: gotrue,
+    # kong, postgrest, realtime, storage-api, mailpit and postgres-meta.
+    # setup-cli pins ghcr.io; later attempts fall back to Docker Hub, which
+    # publishes the same images, so one registry's bad day does not fail a
+    # database check (four times on 2026-09-23).
+    - name: Start migrated local database
+      shell: bash
+      run: |
+        for attempt in 1 2 3; do
+          if [ "$attempt" = 1 ]; then
+            export SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io
+          else
+            export SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io
+          fi
+          echo "Attempt $attempt, pulling from $SUPABASE_INTERNAL_IMAGE_REGISTRY"
+          if supabase start -x studio,edge-runtime,logflare,vector,supavisor; then
+            exit 0
+          fi
+          echo "::warning::supabase start failed on attempt $attempt via $SUPABASE_INTERNAL_IMAGE_REGISTRY"
+          supabase stop --no-backup || true
+          sleep $((attempt * 20))
+        done
+        echo "::error::supabase start failed three times across both registries"
+        exit 1
+
+    - name: Export the local stack's URL and keys
+      shell: bash
+      run: |
+        supabase status -o json > "$RUNNER_TEMP/supabase-status.json"
+        node --input-type=module <<'NODE'
+        import fs from 'node:fs';
+        const status = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/supabase-status.json`, 'utf8'));
+        if (!status.API_URL || !status.ANON_KEY) throw new Error('Local Supabase configuration missing');
+        if (!status.SERVICE_ROLE_KEY) throw new Error('Local service role key missing');
+        fs.appendFileSync(process.env.GITHUB_ENV,
+          `NEXT_PUBLIC_SUPABASE_URL=${status.API_URL}\nNEXT_PUBLIC_SUPABASE_ANON_KEY=${status.ANON_KEY}\n`);
+        // Jobs run as the service role; the notification checks drain the
+        // queue into the local Mailpit (SMTP 54325) and read it back. Both are
+        // the throwaway local stack's, never a hosted project's.
+        fs.appendFileSync(process.env.GITHUB_ENV,
+          `SUPABASE_SERVICE_ROLE_KEY=${status.SERVICE_ROLE_KEY}\nSMTP_HOST=127.0.0.1\nSMTP_PORT=54325\n`);
+        fs.unlinkSync(`${process.env.RUNNER_TEMP}/supabase-status.json`);
+        NODE
