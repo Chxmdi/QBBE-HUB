@@ -8,6 +8,12 @@ export const blueprintsFrCA: BlueprintsMessages = {
   newBlueprint: "Nouveau plan",
   empty: "Aucun plan pour l’instant. Commencez par un plan vierge.",
   readOnly: "Seuls les propriétaires et les administrateurs peuvent modifier les plans. Vous pouvez les consulter ici.",
+  starters: {
+    heading: "Partir d’un modèle",
+    intro: "Des plans prêts à l’emploi en anglais et en français. En choisir un crée un brouillon que vous pouvez modifier avant toute construction.",
+    use: "Utiliser {name}",
+    types: "{count} types",
+  },
   status: {
     draft: "Brouillon",
     approved: "Approuvé",

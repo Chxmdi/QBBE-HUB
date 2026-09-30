@@ -1,0 +1,362 @@
+{
+  "version": 1,
+  "key": "volunteer_intake",
+  "name": {
+    "en": "Volunteer intake",
+    "fr": "Accueil des bénévoles"
+  },
+  "description": {
+    "en": "Volunteer applications, screening and the shifts they sign up for.",
+    "fr": "Les demandes de bénévolat, la vérification et les quarts auxquels les bénévoles s’inscrivent."
+  },
+  "types": [
+    {
+      "key": "volunteer",
+      "name": {
+        "en": "Volunteer",
+        "fr": "Bénévole"
+      },
+      "icon": "hand-heart",
+      "properties": [
+        {
+          "key": "email",
+          "name": {
+            "en": "Email",
+            "fr": "Courriel"
+          },
+          "kind": "email",
+          "required": true
+        },
+        {
+          "key": "phone",
+          "name": {
+            "en": "Phone",
+            "fr": "Téléphone"
+          },
+          "kind": "phone"
+        },
+        {
+          "key": "status",
+          "name": {
+            "en": "Status",
+            "fr": "Statut"
+          },
+          "kind": "status",
+          "choices": [
+            {
+              "key": "applied",
+              "label": {
+                "en": "Applied",
+                "fr": "Demande reçue"
+              }
+            },
+            {
+              "key": "screening",
+              "label": {
+                "en": "Screening",
+                "fr": "Vérification"
+              }
+            },
+            {
+              "key": "active",
+              "label": {
+                "en": "Active",
+                "fr": "Actif"
+              }
+            },
+            {
+              "key": "inactive",
+              "label": {
+                "en": "Inactive",
+                "fr": "Inactif"
+              }
+            }
+          ]
+        },
+        {
+          "key": "skills",
+          "name": {
+            "en": "Skills",
+            "fr": "Compétences"
+          },
+          "kind": "multi_select",
+          "choices": [
+            {
+              "key": "tutoring",
+              "label": {
+                "en": "Tutoring",
+                "fr": "Tutorat"
+              }
+            },
+            {
+              "key": "mentoring",
+              "label": {
+                "en": "Mentoring",
+                "fr": "Mentorat"
+              }
+            },
+            {
+              "key": "events",
+              "label": {
+                "en": "Events",
+                "fr": "Événements"
+              }
+            },
+            {
+              "key": "admin",
+              "label": {
+                "en": "Office help",
+                "fr": "Soutien administratif"
+              }
+            },
+            {
+              "key": "translation",
+              "label": {
+                "en": "Translation",
+                "fr": "Traduction"
+              }
+            }
+          ]
+        },
+        {
+          "key": "availability",
+          "name": {
+            "en": "Availability",
+            "fr": "Disponibilités"
+          },
+          "kind": "multi_select",
+          "choices": [
+            {
+              "key": "weekdays",
+              "label": {
+                "en": "Weekdays",
+                "fr": "En semaine"
+              }
+            },
+            {
+              "key": "evenings",
+              "label": {
+                "en": "Evenings",
+                "fr": "Soirs"
+              }
+            },
+            {
+              "key": "weekends",
+              "label": {
+                "en": "Weekends",
+                "fr": "Fins de semaine"
+              }
+            }
+          ]
+        },
+        {
+          "key": "languages",
+          "name": {
+            "en": "Languages",
+            "fr": "Langues"
+          },
+          "kind": "multi_select",
+          "choices": [
+            {
+              "key": "english",
+              "label": {
+                "en": "English",
+                "fr": "Anglais"
+              }
+            },
+            {
+              "key": "french",
+              "label": {
+                "en": "French",
+                "fr": "Français"
+              }
+            }
+          ]
+        },
+        {
+          "key": "background_check",
+          "name": {
+            "en": "Background check done",
+            "fr": "Vérification des antécédents faite"
+          },
+          "kind": "checkbox"
+        }
+      ],
+      "layout": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "key": "volunteer_shift",
+      "name": {
+        "en": "Shift",
+        "fr": "Quart"
+      },
+      "icon": "clock",
+      "properties": [
+        {
+          "key": "starts_on",
+          "name": {
+            "en": "Date",
+            "fr": "Date"
+          },
+          "kind": "date",
+          "required": true
+        },
+        {
+          "key": "location",
+          "name": {
+            "en": "Location",
+            "fr": "Lieu"
+          },
+          "kind": "text"
+        },
+        {
+          "key": "spots",
+          "name": {
+            "en": "Spots",
+            "fr": "Places"
+          },
+          "kind": "number"
+        },
+        {
+          "key": "state",
+          "name": {
+            "en": "State",
+            "fr": "État"
+          },
+          "kind": "select",
+          "choices": [
+            {
+              "key": "open",
+              "label": {
+                "en": "Open",
+                "fr": "Ouvert"
+              }
+            },
+            {
+              "key": "full",
+              "label": {
+                "en": "Full",
+                "fr": "Complet"
+              }
+            },
+            {
+              "key": "done",
+              "label": {
+                "en": "Done",
+                "fr": "Terminé"
+              }
+            }
+          ]
+        },
+        {
+          "key": "volunteers",
+          "name": {
+            "en": "Volunteers",
+            "fr": "Bénévoles"
+          },
+          "kind": "relation",
+          "relation": "signed_up_for"
+        }
+      ],
+      "layout": {
+        "x": 360,
+        "y": 40
+      }
+    }
+  ],
+  "relations": [
+    {
+      "key": "signed_up_for",
+      "from": "volunteer",
+      "to": "volunteer_shift",
+      "name": {
+        "en": "signed up for",
+        "fr": "inscrit à"
+      },
+      "reverseName": {
+        "en": "volunteers",
+        "fr": "bénévoles"
+      },
+      "cardinality": "many_to_many"
+    }
+  ],
+  "lenses": [
+    {
+      "key": "shift_calendar",
+      "type": "volunteer_shift",
+      "kind": "calendar",
+      "name": {
+        "en": "Shift calendar",
+        "fr": "Calendrier des quarts"
+      },
+      "groupBy": "starts_on"
+    }
+  ],
+  "forms": [
+    {
+      "key": "volunteer_signup",
+      "type": "volunteer",
+      "name": {
+        "en": "Volunteer with us",
+        "fr": "Devenir bénévole"
+      },
+      "fields": [
+        "title",
+        "email",
+        "phone",
+        "skills",
+        "availability",
+        "languages"
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "key": "new_volunteer",
+      "type": "volunteer",
+      "name": {
+        "en": "New application",
+        "fr": "Nouvelle demande"
+      },
+      "trigger": {
+        "on": "created"
+      },
+      "steps": [
+        {
+          "kind": "create_task",
+          "title": {
+            "en": "Review the application and check references",
+            "fr": "Examiner la demande et vérifier les références"
+          },
+          "dueInDays": 3
+        }
+      ]
+    },
+    {
+      "key": "volunteer_active",
+      "type": "volunteer",
+      "name": {
+        "en": "Volunteer approved",
+        "fr": "Bénévole approuvé"
+      },
+      "trigger": {
+        "on": "property_changed",
+        "property": "status",
+        "to": "active"
+      },
+      "steps": [
+        {
+          "kind": "notify",
+          "role": "staff",
+          "message": {
+            "en": "A new volunteer is ready for shifts.",
+            "fr": "Un nouveau bénévole peut prendre des quarts."
+          }
+        }
+      ]
+    }
+  ]
+}

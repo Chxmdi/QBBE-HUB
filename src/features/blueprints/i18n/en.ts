@@ -10,6 +10,12 @@ export const blueprintsEn = {
   newBlueprint: "New blueprint",
   empty: "No blueprints yet. Start from a blank one.",
   readOnly: "Only owners and admins can change blueprints. You can look at them here.",
+  starters: {
+    heading: "Start from a starter",
+    intro: "Ready-made blueprints in English and French. Using one makes a draft you can change before anything is built.",
+    use: "Use {name}",
+    types: "{count} types",
+  },
   status: {
     draft: "Draft",
     approved: "Approved",
