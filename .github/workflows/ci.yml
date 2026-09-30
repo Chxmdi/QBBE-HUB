@@ -164,25 +164,31 @@ jobs:
   browsers:
     # Every signed-in spec runs: the list is built from the folder, so a new
     # feature's spec is picked up without editing this file. The specs are
-    # split by file across three machines; qa-matrix, the longest single file
-    # (WCAG 2.2 AA axe scans in both themes, a 6-width x 2-theme overflow
-    # sweep, 200% zoom and keyboard paths across every workspace route, #101),
-    # is split by test across two more. Playwright still runs one worker per
-    # machine, so no two tests ever share a database.
-    name: "Database security: ${{ matrix.suite }} ${{ matrix.shard }}"
+    # split across four machines by measured time (scripts/ci/spec-groups.mjs),
+    # keeping specs that read each other's records on one machine; qa-matrix,
+    # the longest single file (WCAG 2.2 AA axe scans in both themes, a 6-width
+    # x 2-theme overflow sweep, 200% zoom and keyboard paths across every
+    # workspace route, #101), is split by test across three more. Playwright
+    # still runs one worker per machine, so no two tests share a database.
+    name: "Database security: ${{ matrix.suite }} ${{ matrix.part }}/${{ matrix.parts }}"
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 90 || 40 }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { suite: signed-in, shard: 1/3 }
-          - { suite: signed-in, shard: 2/3 }
-          - { suite: signed-in, shard: 3/3 }
-          - { suite: qa-matrix, shard: 1/2 }
-          - { suite: qa-matrix, shard: 2/2 }
+          - { suite: signed-in, part: 1, parts: 4 }
+          - { suite: signed-in, part: 2, parts: 4 }
+          - { suite: signed-in, part: 3, parts: 4 }
+          - { suite: signed-in, part: 4, parts: 4 }
+          - { suite: qa-matrix, part: 1, parts: 3 }
+          - { suite: qa-matrix, part: 2, parts: 3 }
+          - { suite: qa-matrix, part: 3, parts: 3 }
     env:
       SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
+      # A per-run value: the job routes and the specs that call them need the
+      # same one, and nothing outside this runner ever sees it.
+      CRON_JOB_SECRET: ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v4
 
@@ -214,13 +220,13 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install authenticated test browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+        # Only the browsers this run uses: installing all three pulls every
+        # engine's system packages, which took 14 minutes on one runner.
+        env:
+          MOBILE: ${{ inputs.mobile && 'chromium webkit' || '' }}
+        run: npx playwright install --with-deps $(echo $SIGNED_IN_BROWSERS $MOBILE | tr ' ' '\n' | sort -u)
 
       - name: Start the app
-        env:
-          # A per-run value: the job routes need one, and nothing outside this
-          # runner ever sees it.
-          CRON_JOB_SECRET: ci-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           nohup npx next start -p 3000 -H 127.0.0.1 > "$RUNNER_TEMP/next.log" 2>&1 &
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
@@ -228,16 +234,16 @@ jobs:
       - name: Signed-in lifecycle and access checks
         if: matrix.suite == 'signed-in'
         run: |
-          SPECS=$(ls tests/e2e/*.spec.ts | grep -vE '/(public-routes|qa-matrix)\.spec\.ts$')
-          npx playwright test $SPECS --shard=${{ matrix.shard }} $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+          SPECS=$(node scripts/ci/spec-groups.mjs ${{ matrix.part }} ${{ matrix.parts }})
+          npx playwright test $SPECS $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
 
       - name: Signed-in accessibility, responsive and keyboard matrix
         if: matrix.suite == 'qa-matrix'
-        run: npx playwright test qa-matrix --fully-parallel --shard=${{ matrix.shard }} $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+        run: npx playwright test qa-matrix --fully-parallel --shard=${{ matrix.part }}/${{ matrix.parts }} $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
 
       - name: Phone emulation (qa-matrix and public routes)
         if: matrix.suite == 'qa-matrix' && inputs.mobile
-        run: npx playwright test qa-matrix public-routes --fully-parallel --shard=${{ matrix.shard }} --project=mobile-chrome --project=mobile-safari
+        run: npx playwright test qa-matrix public-routes --fully-parallel --shard=${{ matrix.part }}/${{ matrix.parts }} --project=mobile-chrome --project=mobile-safari
 
       - name: Name the evidence after this part
         if: failure()
