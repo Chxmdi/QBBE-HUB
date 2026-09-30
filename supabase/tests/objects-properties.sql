@@ -59,10 +59,10 @@ begin
   -- M2a: system properties.
   perform tests.ok(
     (select array_agg(key order by key) from public.property_definition where type_id = v_task_type)
-      = array['assignee', 'completed_time', 'created_by', 'created_time', 'due', 'edited_time',
-              'estimate', 'priority', 'program', 'project', 'requester', 'reviewer', 'start',
-              'status', 'title'],
-    'the task''s native columns are its system properties, matching taskSystemProperties in stubs.ts'
+      = array['approver', 'assignee', 'blocked_reason', 'completed_time', 'completion_criteria',
+              'created_by', 'created_time', 'due', 'edited_time', 'estimate', 'milestone', 'priority',
+              'program', 'project', 'requester', 'reviewer', 'start', 'status', 'title'],
+    'the task''s native columns are its system properties: taskSystemProperties in stubs.ts plus the four task history tracks (M9b)'
   );
   perform tests.ok(
     (select bool_and(system_column is not null and name_en <> '' and name_fr <> '')
@@ -174,7 +174,7 @@ begin
       format('%s cannot add a property', v_person)
     );
     select count(*) into v_count from public.property_definition where type_id = v_task_type;
-    perform tests.ok(v_count >= 17, format('%s reads the task''s property definitions', v_person));
+    perform tests.ok(v_count >= 21, format('%s reads the task''s property definitions', v_person));
     reset role;
   end loop;
 
