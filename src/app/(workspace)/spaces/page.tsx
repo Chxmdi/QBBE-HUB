@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { CreateSpaceForm } from "@/features/spaces/components/create-space-form";
@@ -29,7 +30,17 @@ export default async function SpacesPage() {
 
   return (
     <div>
-      <PageHeader title={t("title")} description={t("description")} />
+      <PageHeader
+        title={t("title")}
+        description={t("description")}
+        actions={
+          session.isAdmin ? (
+            <Link href="/spaces/roles" className="text-sm font-medium text-brand-fg underline underline-offset-2">
+              {t("manageRoles")}
+            </Link>
+          ) : null
+        }
+      />
       {session.isAdmin ? <CreateSpaceForm /> : null}
       <SpaceList id="spaces-workspace" heading={t("sections.workspace")} spaces={groups.workspace} empty={t("nothingYet")} locale={locale} t={t} />
       <SpaceList id="spaces-private" heading={t("sections.private")} spaces={groups.private} empty={t("nothingYet")} locale={locale} t={t} />
