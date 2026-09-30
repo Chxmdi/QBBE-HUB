@@ -26,6 +26,10 @@ on:
 
 permissions:
   contents: read
+  # The verify job calls ci.yml, which pulls the Supabase images from ghcr.io.
+  # A called workflow cannot hold more than its caller grants, so without this
+  # GitHub refuses to start the run at all (startup_failure).
+  packages: read
 
 concurrency:
   group: netlify-${{ inputs.environment }}
