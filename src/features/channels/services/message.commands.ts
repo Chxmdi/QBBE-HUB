@@ -487,37 +487,33 @@ export async function convertMessageToTask(
   const channel = message.channel as unknown as ChannelRef;
   const title = (message.body as string).split("\n")[0].slice(0, 200);
 
-  const { data: task, error } = await supabase
-    .from("task")
-    .insert({
-      organization_id: session.organizationId,
-      project_id: channel?.project_id ?? null,
-      program_id: channel?.program_id ?? null,
+  // Through the shared create-task action (M7a); the task records the message
+  // as its source (M7b) and keeps `source_message_id` for older readers.
+  const { createUniversalTask } = await import("@/features/universal-tasks/create-task");
+  const created = await createUniversalTask(
+    supabase,
+    {
+      userId: session.userId,
+      organizationId: session.organizationId,
+      displayName: session.profile.full_name,
+    },
+    {
       title,
-      description: t("messages.taskDescription", { body: message.body as string }),
-      assignee_id: session.userId,
-      requester_id: session.userId,
-      source_message_id: messageId,
-      created_by: session.userId,
-    })
-    .select("id")
-    .single();
-
-  if (error || !task) return { ok: false, error: t("messages.errors.taskFailed") };
-
-  await supabase.from("activity_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    verb: "created",
-    source_type: "task",
-    source_id: task.id,
-    project_id: channel?.project_id ?? null,
-    program_id: channel?.program_id ?? null,
-    summary: `converted a message into task “${title}”`,
-  });
+      description: t("messages.taskDescription", { body: message.body as string }).slice(0, 5000),
+      projectId: channel?.project_id ?? undefined,
+      programId: channel?.program_id ?? undefined,
+      assigneeId: session.userId,
+      source: { type: "message", id: messageId },
+    },
+    {
+      extra: { source_message_id: messageId },
+      activitySummary: `converted a message into task “${title}”`,
+    },
+  );
+  if (!created.ok) return { ok: false, error: t("messages.errors.taskFailed") };
 
   revalidatePath("/my-work");
-  return { ok: true, id: task.id as string };
+  return { ok: true, id: created.id };
 }
 
 const startConversationSchema = z.object({
