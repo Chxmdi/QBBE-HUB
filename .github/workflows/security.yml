@@ -60,6 +60,10 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      # gitleaks lists the pull request's commits through the API.
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
