@@ -29,6 +29,7 @@ export function ObjectEditor({
   initialState = null,
   initialVersion,
   editable,
+  label,
 }: {
   objectId: string;
   objectType: "page" | "task";
@@ -36,6 +37,8 @@ export function ObjectEditor({
   initialState?: string | null;
   initialVersion: number | null;
   editable: boolean;
+  /** Accessible name for the editor; defaults to "Document content". */
+  label?: string;
 }) {
   const t = useEditorT();
   const hintId = React.useId();
@@ -184,6 +187,7 @@ export function ObjectEditor({
         onChange={editable ? onChange : undefined}
         files={files}
         hintId={editable ? hintId : undefined}
+        label={label}
       />
     </div>
   );

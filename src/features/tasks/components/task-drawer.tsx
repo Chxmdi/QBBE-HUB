@@ -23,6 +23,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useFormatters, useT } from "@/lib/i18n/client";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import type { Task, TaskComment, TaskPriority } from "@/types/entities";
+import { TaskDescriptionField } from "@/features/editor/components/task-description-field";
 
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "critical"];
 
@@ -366,17 +367,20 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
 
           <div>
             <Label htmlFor="drawer-description">{t("tasks.drawer.description")}</Label>
-            <Textarea
-              id="drawer-description"
-              defaultValue={task.description ?? ""}
-              rows={4}
-              placeholder={t("tasks.drawer.descriptionPlaceholder")}
-              onBlur={(e) => {
-                if (e.target.value !== (task.description ?? "")) {
-                  void handleFieldSave({ description: e.target.value || null });
-                }
-              }}
-            />
+            {/* The block editor when the wos_editor switch is on (M4d), else this field. */}
+            <TaskDescriptionField taskId={task.id} label={t("tasks.drawer.description")}>
+              <Textarea
+                id="drawer-description"
+                defaultValue={task.description ?? ""}
+                rows={4}
+                placeholder={t("tasks.drawer.descriptionPlaceholder")}
+                onBlur={(e) => {
+                  if (e.target.value !== (task.description ?? "")) {
+                    void handleFieldSave({ description: e.target.value || null });
+                  }
+                }}
+              />
+            </TaskDescriptionField>
           </div>
 
           <div>
