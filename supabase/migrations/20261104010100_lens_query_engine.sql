@@ -279,6 +279,7 @@ begin
       day_end := (date_trunc('month', p_today) + interval '1 month')::date - 1;
     when 'last_7_days' then day_start := p_today - 6; day_end := p_today;
     when 'next_7_days' then day_start := p_today; day_end := p_today + 6;
+    when 'next_30_days' then day_start := p_today; day_end := p_today + 29;
     else perform public.lens__fail('bad_value', 'Unknown relative date.');
   end case;
 end;
