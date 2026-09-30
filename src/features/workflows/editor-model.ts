@@ -190,6 +190,11 @@ export const saveWorkflowSchema = z.object({
 
 export const stopSchema = z.object({ id: uuid, stop: z.boolean() });
 export const retrySchema = z.object({ executionId: uuid, stepId: z.string().trim().min(1).max(64) });
+export const decideReviewSchema = z.object({
+  id: uuid,
+  decision: z.enum(["approved", "rejected"]),
+  comment: z.string().trim().max(2000).default(""),
+});
 
 export const testRunSchema = z.object({
   id: uuid,

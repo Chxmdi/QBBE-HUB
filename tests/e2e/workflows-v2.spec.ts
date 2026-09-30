@@ -153,6 +153,33 @@ test.describe("workflows v2", () => {
     }
   });
 
+  test("a reviewer approves a workflow review on its page", async ({ page }) => {
+    setSwitch(true);
+    const org = sql(`select organization_id::text from organization_membership m
+      join user_profile p on p.id = m.user_id where p.email = 'qa-staff@example.com' limit 1`);
+    const staff = sql(`select id::text from user_profile where email = 'qa-staff@example.com'`);
+    const rule = sql(`insert into workflow_rule (organization_id, name, trigger_event, engine, graph)
+      values ('${org}', 'E2E review ${Date.now()}', 'object_event', 'graph_v2',
+      '{"version":1,"trigger":{"objectTypes":[],"verbs":[]},"start":null,"steps":[]}') returning id::text`);
+    const run = sql(`insert into workflow_execution (organization_id, rule_id, rule_name, trigger_event, source_type, source_id, outcome, engine)
+      values ('${org}', '${rule}', 'E2E review', 'object_event', 'task', gen_random_uuid(), 'waiting', 'graph_v2') returning id::text`);
+    const review = sql(`insert into workflow_review (organization_id, execution_id, step_id, reviewer_id, instructions)
+      values ('${org}', '${run}', 'check', '${staff}', 'Is the budget right?') returning id::text`);
+    try {
+      await signIn(page, "staff");
+      await page.goto(`/workflows/reviews/${review}`);
+      await expect(page.getByRole("heading", { name: "Review requested", level: 1 })).toBeVisible();
+      await expect(page.getByText("Is the budget right?")).toBeVisible();
+      await axe(page, "/workflows/reviews/[id]");
+      await page.getByLabel("Comment (optional)").fill("Yes");
+      await page.getByRole("button", { name: "Approve" }).click();
+      await expect(page.getByText("You approved this review.")).toBeVisible();
+      expect(sql(`select status || ':' || coalesce(comment, '') from workflow_review where id = '${review}'`)).toBe("approved:Yes");
+    } finally {
+      sql(`delete from workflow_rule where id = '${rule}'`);
+    }
+  });
+
   test("staff cannot open the workflow screens", async ({ page }) => {
     setSwitch(true);
     await signIn(page, "staff");

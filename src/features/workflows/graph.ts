@@ -18,8 +18,17 @@ import type { FilterOperator, ObjectEventVerb } from "@/lib/objects/contracts";
  *   loop         runs the steps from `body` once per item of a list, with the
  *                item at `loop.item` (at most MAX_LOOP_ITERATIONS items).
  *   subworkflow  runs another workflow of the organization with the same event.
+ *   wait         pauses the run for a time, or until a date in the scope; the
+ *                workflow-resume job continues it.
+ *   approval     submits an item to the approval engine as the workflow's owner
+ *                and waits until it is approved, rejected or withdrawn.
+ *   review       asks a person to approve or reject, and waits for them.
+ *   webhook      POSTs JSON to an https address, signed with the workflow's key.
+ *   email        sends an email through the email provider, only to addresses
+ *                the environment's allow-list accepts.
  *
- * An action may retry with backoff: the run waits and resumes the same step.
+ * Actions, webhooks and emails may retry with backoff: the run waits and
+ * resumes the same step.
  */
 
 export const WORKFLOW_GRAPH_VERSION = 1;
@@ -31,6 +40,9 @@ export const MAX_LOOP_ITERATIONS = 50;
 export const MAX_STEP_ATTEMPTS = 5;
 /** How deep sub-workflows may nest. */
 export const MAX_SUBWORKFLOW_DEPTH = 3;
+/** The longest a wait step may pause a run. */
+export const MAX_WAIT_SECONDS = 30 * 24 * 3600;
+export const approvalSubjectTypes = ["other", "contract", "form"] as const;
 
 export const objectEventVerbs = [
   "created",
@@ -161,13 +173,80 @@ export const subworkflowStepSchema = z.object({
   next,
 }).strict();
 
+export const waitStepSchema = z.object({
+  id: stepId,
+  kind: z.literal("wait"),
+  label,
+  /** Pause this long, or */
+  seconds: z.number().int().min(1).max(MAX_WAIT_SECONDS).optional(),
+  /** until the date at this path in the scope (never longer than the maximum). */
+  until: pathSchema.optional(),
+  next,
+}).strict().refine((step) => (step.seconds === undefined) !== (step.until === undefined), {
+  message: "A wait has either seconds or until, not both.",
+});
+
+const text = (max: number) => z.string().trim().min(1).max(max);
+
+export const approvalStepSchema = z.object({
+  id: stepId,
+  kind: z.literal("approval"),
+  label,
+  subjectType: z.enum(approvalSubjectTypes).default("other"),
+  title: text(200),
+  description: z.string().trim().max(2000).optional(),
+  next,
+}).strict();
+
+export const reviewStepSchema = z.object({
+  id: stepId,
+  kind: z.literal("review"),
+  label,
+  /** The reviewer's id, or a `{{path}}` to one. */
+  reviewer: text(200),
+  instructions: text(2000),
+  next,
+}).strict();
+
+export const webhookStepSchema = z.object({
+  id: stepId,
+  kind: z.literal("webhook"),
+  label,
+  url: z.string().trim().url().max(2000).refine((url) => url.startsWith("https://"), "A webhook address must use https."),
+  /** The JSON body. Strings may hold `{{path}}` placeholders. */
+  body: z.record(z.unknown()).default({}),
+  retry: retrySchema.optional(),
+  next,
+}).strict();
+
+export const emailStepSchema = z.object({
+  id: stepId,
+  kind: z.literal("email"),
+  label,
+  to: text(320),
+  subject: text(200),
+  body: text(5000),
+  retry: retrySchema.optional(),
+  next,
+}).strict();
+
 export const stepSchema = z.discriminatedUnion("kind", [
   conditionStepSchema,
   actionStepSchema,
   branchStepSchema,
   loopStepSchema,
   subworkflowStepSchema,
-]);
+  // A refined schema is not a plain object, so the wait is listed by its shape.
+  waitStepSchema.innerType(),
+  approvalStepSchema,
+  reviewStepSchema,
+  webhookStepSchema,
+  emailStepSchema,
+]).superRefine((step, context) => {
+  if (step.kind === "wait" && (step.seconds === undefined) === (step.until === undefined)) {
+    context.addIssue({ code: "custom", message: "A wait has either seconds or until, not both." });
+  }
+});
 
 export const graphSchema = z.object({
   version: z.literal(WORKFLOW_GRAPH_VERSION),
@@ -183,6 +262,11 @@ export type BranchStep = z.infer<typeof branchStepSchema>;
 export type LoopStep = z.infer<typeof loopStepSchema>;
 export type SubworkflowStep = z.infer<typeof subworkflowStepSchema>;
 export type RetrySettings = z.infer<typeof retrySchema>;
+export type WaitStep = z.infer<typeof waitStepSchema>;
+export type ApprovalStep = z.infer<typeof approvalStepSchema>;
+export type ReviewStep = z.infer<typeof reviewStepSchema>;
+export type WebhookStep = z.infer<typeof webhookStepSchema>;
+export type EmailStep = z.infer<typeof emailStepSchema>;
 export type WorkflowStep = z.infer<typeof stepSchema>;
 export type WorkflowGraph = z.infer<typeof graphSchema>;
 

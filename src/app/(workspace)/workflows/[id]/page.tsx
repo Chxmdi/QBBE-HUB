@@ -7,6 +7,7 @@ import { requireAdminAal2 } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getFormatters, getLocale } from "@/lib/i18n/server";
 import { JsonWorkflowEditor, StopSwitch } from "@/features/workflows/components/advanced-controls";
+import { SigningKeyPanel } from "@/features/workflows/components/review-and-signing";
 import { RunHistory } from "@/features/workflows/components/run-history";
 import { TestRunPanel, WorkflowEditor } from "@/features/workflows/components/workflow-editor";
 import { graphToEditor } from "@/features/workflows/editor-model";
@@ -79,6 +80,7 @@ export default async function WorkflowPage({
         stoppedLabel={workflow.stopped_at ? f.dateTime(workflow.stopped_at, session.timeZone) : ""}
         m={m}
       />
+      {graph.ok && graph.graph.steps.some((step) => step.kind === "webhook") ? <SigningKeyPanel id={workflow.id} m={m} /> : null}
       <TestRunPanel id={workflow.id} m={m} defaultObjectId="" />
       <RunHistory runs={runs} m={m} f={f} timeZone={session.timeZone} />
     </div>
