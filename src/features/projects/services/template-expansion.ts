@@ -56,6 +56,7 @@ export async function expandProjectTemplate(input: {
         description: planned.description ?? undefined,
         projectId: input.projectId,
         dueAt: planned.dueDate ?? undefined,
+        source: { type: "project", id: input.projectId },
       });
       if (result.ok) tasks += 1;
     }
