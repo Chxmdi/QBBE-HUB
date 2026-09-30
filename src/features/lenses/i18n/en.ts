@@ -194,6 +194,22 @@ export const lensesEn = {
     rowsLabel: "Tasks",
     undated: "{count} tasks have no dates and are not shown.",
   },
+  gallery: {
+    title: "Gallery",
+    description: "Records as cards, with the facts that matter at a glance.",
+    cards: "{type} cards",
+    type: "Records",
+  },
+  feed: {
+    title: "Feed",
+    description: "What changed most recently, newest first.",
+    updated: "Updated {when}",
+    created: "Created {when}",
+    older: "Show older",
+    newer: "Show newer",
+    day: "{day}",
+    stream: "Recent changes",
+  },
   types: {
     task: "Tasks",
     project: "Projects",

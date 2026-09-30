@@ -192,6 +192,22 @@ export const lensesFrCA: LensMessages = {
     rowsLabel: "Tâches",
     undated: "{count} tâches n’ont pas de date et ne sont pas affichées.",
   },
+  gallery: {
+    title: "Galerie",
+    description: "Les éléments en fiches, avec l’essentiel en un coup d’œil.",
+    cards: "Fiches : {type}",
+    type: "Éléments",
+  },
+  feed: {
+    title: "Fil",
+    description: "Ce qui a changé le plus récemment, du plus récent au plus ancien.",
+    updated: "Modifié {when}",
+    created: "Créé {when}",
+    older: "Voir plus anciens",
+    newer: "Voir plus récents",
+    day: "{day}",
+    stream: "Changements récents",
+  },
   types: {
     task: "Tâches",
     project: "Projets",
