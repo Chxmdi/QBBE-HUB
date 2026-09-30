@@ -64,6 +64,7 @@ export const versionsFr: Catalogue<typeof versionsEn> = {
     inTrash: "Restaurez cet élément de la corbeille avant de le modifier.",
     notFound: "Cet élément n’existe pas ou vous ne pouvez pas l’ouvrir.",
     unsupported: "Les versions ne sont pas encore offertes pour ce type d’élément.",
+    locked: "Cet élément est verrouillé. Demandez à une personne qui le gère de le déverrouiller.",
     restoreFailed: "La restauration n’a pas abouti. L’état précédent est enregistré comme version.",
     failed: "Cela n’a pas fonctionné. Réessayez.",
   },

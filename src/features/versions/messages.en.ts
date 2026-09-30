@@ -61,6 +61,7 @@ export const versionsEn = {
     inTrash: "Restore this item from the trash before editing it.",
     notFound: "This item does not exist or you can't open it.",
     unsupported: "Versions aren't available for this kind of item yet.",
+    locked: "This item is locked. Ask someone who manages it to unlock it.",
     restoreFailed: "The restore did not finish. The state before it is saved as a version.",
     failed: "That didn't work. Try again.",
   },
