@@ -8,6 +8,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { createEditorT } from "@/features/editor/i18n";
 import { contentToPlainText, normalizeContent } from "@/features/editor/adapter/content";
 import { documentIdFromRef, documentRef } from "@/features/editor/adapter/files";
+import { base64ToByteaHex, MAX_STATE_BASE64 } from "@/features/editor/adapter/state";
 import { getDocumentDownloadUrl, registerUploadedDocument } from "@/features/documents/services/document.commands";
 
 /**
@@ -26,6 +27,8 @@ const saveSchema = z.object({
   /** The version the client last saw; null for a first save. */
   baseVersion: z.number().int().positive().nullable(),
   content: z.unknown(),
+  /** The editor's Yjs state, base64 (M4c). */
+  state: z.string().max(MAX_STATE_BASE64).regex(/^[A-Za-z0-9+/]*={0,2}$/).optional(),
 });
 
 const MAX_CONTENT_BYTES = 4 * 1024 * 1024;
@@ -39,7 +42,8 @@ export async function saveEditorDocument(input: unknown): Promise<SaveResult> {
   if (JSON.stringify(content).length > MAX_CONTENT_BYTES) return { ok: false, reason: "invalid" };
   const text = contentToPlainText(content).slice(0, 500000);
   const supabase = await createSupabaseServerClient();
-  const { objectId, objectType, baseVersion } = parsed.data;
+  const { objectId, objectType, baseVersion, state } = parsed.data;
+  const yjs = state ? { yjs_state: base64ToByteaHex(state) } : {};
 
   if (baseVersion === null) {
     const { data, error } = await supabase
@@ -50,6 +54,7 @@ export async function saveEditorDocument(input: unknown): Promise<SaveResult> {
         organization_id: session.organizationId,
         content,
         content_text: text,
+        ...yjs,
         created_by: session.userId,
       })
       .select("version")
@@ -61,7 +66,7 @@ export async function saveEditorDocument(input: unknown): Promise<SaveResult> {
 
   const { data, error } = await supabase
     .from("editor_document")
-    .update({ content, content_text: text })
+    .update({ content, content_text: text, ...yjs })
     .eq("object_id", objectId)
     .eq("version", baseVersion)
     .select("version");

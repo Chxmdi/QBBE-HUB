@@ -13,6 +13,7 @@ export const editorFrCA: EditorMessages = {
     offline: "Hors ligne. Vos modifications seront enregistrées à votre retour en ligne.",
     conflict: "Quelqu’un d’autre a enregistré ce contenu dans une autre fenêtre. Rechargez pour voir la dernière version; vos dernières modifications n’ont pas été enregistrées.",
     forbidden: "Vous ne pouvez plus modifier ce contenu. Vos dernières modifications n’ont pas été enregistrées.",
+    tooLarge: "Ce contenu est trop volumineux pour être enregistré. Répartissez-le sur plusieurs pages ou retirez le gros contenu collé.",
   },
   blockMenu: {
     label: "Menu du bloc",

@@ -9,10 +9,12 @@ import type { EditorContent } from "@/features/editor/adapter/content";
 import { documentIdFromRef, MAX_UPLOAD_BYTES, storagePathFor } from "@/features/editor/adapter/files";
 import { registerEditorUpload, resolveEditorFile, saveEditorDocument } from "@/features/editor/services/editor-document.commands";
 
-type SaveState = "idle" | "saving" | "saved" | "failed" | "offline" | "conflict" | "forbidden";
+type SaveState = "idle" | "saving" | "saved" | "failed" | "offline" | "conflict" | "forbidden" | "tooLarge";
 
 const SAVE_DELAY_MS = 800;
 const RETRY_MS = 5000;
+/** Next.js caps a server action's request at 1 MB; stay under it with room for the envelope. */
+const MAX_SAVE_CHARS = 950_000;
 
 /**
  * The body of a page (or, from M4d, a task): the block editor with autosave.
@@ -24,12 +26,14 @@ export function ObjectEditor({
   objectId,
   objectType,
   initialContent,
+  initialState = null,
   initialVersion,
   editable,
 }: {
   objectId: string;
   objectType: "page" | "task";
   initialContent: EditorContent;
+  initialState?: string | null;
   initialVersion: number | null;
   editable: boolean;
 }) {
@@ -37,7 +41,7 @@ export function ObjectEditor({
   const hintId = React.useId();
   const [state, setState] = React.useState<SaveState>("idle");
   const version = React.useRef<number | null>(initialVersion);
-  const pending = React.useRef<EditorContent | null>(null);
+  const pending = React.useRef<{ content: EditorContent; state: string } | null>(null);
   const saving = React.useRef(false);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopped = React.useRef(false);
@@ -50,13 +54,24 @@ export function ObjectEditor({
       setState("offline");
       return;
     }
-    const content = pending.current;
+    const next = pending.current;
+    if (JSON.stringify(next.content).length + next.state.length > MAX_SAVE_CHARS) {
+      // Kept pending: a later, smaller version of the document can still save.
+      setState("tooLarge");
+      return;
+    }
     pending.current = null;
     saving.current = true;
     setState("saving");
     let result: Awaited<ReturnType<typeof saveEditorDocument>>;
     try {
-      result = await saveEditorDocument({ objectId, objectType, baseVersion: version.current, content });
+      result = await saveEditorDocument({
+        objectId,
+        objectType,
+        baseVersion: version.current,
+        content: next.content,
+        state: next.state,
+      });
     } catch {
       result = { ok: false, reason: "failed" };
     }
@@ -73,7 +88,7 @@ export function ObjectEditor({
       return;
     }
     // Keep the newest content and try again shortly.
-    pending.current = pending.current ?? content;
+    pending.current = pending.current ?? next;
     setState("failed");
     timer.current = setTimeout(() => again.current(), RETRY_MS);
   }, [objectId, objectType]);
@@ -97,9 +112,9 @@ export function ObjectEditor({
   }, [flush]);
 
   const onChange = React.useCallback(
-    (content: EditorContent) => {
+    (content: EditorContent, state: string) => {
       if (stopped.current) return;
-      pending.current = content;
+      pending.current = { content, state };
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void flush(), SAVE_DELAY_MS);
     },
@@ -142,8 +157,9 @@ export function ObjectEditor({
     offline: t("save.offline"),
     conflict: t("save.conflict"),
     forbidden: t("save.forbidden"),
+    tooLarge: t("save.tooLarge"),
   };
-  const alert = state === "conflict" || state === "forbidden";
+  const alert = state === "conflict" || state === "forbidden" || state === "tooLarge";
 
   return (
     <div>
@@ -163,6 +179,7 @@ export function ObjectEditor({
       ) : null}
       <BlockEditor
         initialContent={initialContent}
+        initialState={initialState}
         editable={editable && state !== "conflict" && state !== "forbidden"}
         onChange={editable ? onChange : undefined}
         files={files}

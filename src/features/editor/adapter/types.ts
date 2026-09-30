@@ -11,8 +11,14 @@ export interface EditorFileHandlers {
 /** The only editor interface the rest of the app uses. */
 export interface BlockEditorProps {
   initialContent: EditorContent;
+  /**
+   * The saved collaboration state (a Yjs update, base64), when there is one.
+   * Without it the editor starts from `initialContent`.
+   */
+  initialState?: string | null;
   editable: boolean;
-  onChange?: (content: EditorContent) => void;
+  /** The document as JSON and its collaboration state, after every change. */
+  onChange?: (content: EditorContent, state: string) => void;
   files?: EditorFileHandlers;
   /** Id of the element describing the editor's keys; rendered by the caller. */
   hintId?: string;

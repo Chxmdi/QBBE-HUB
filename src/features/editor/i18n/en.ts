@@ -11,6 +11,7 @@ export const editorEn = {
     offline: "Offline. Your changes will be saved when you're back online.",
     conflict: "Someone else saved this in another window. Reload to see the latest version; your last changes were not saved.",
     forbidden: "You can no longer change this. Your last changes were not saved.",
+    tooLarge: "This is too large to save. Split it into several pages, or remove large pasted content.",
   },
   blockMenu: {
     label: "Block menu",
