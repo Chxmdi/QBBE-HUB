@@ -16,6 +16,7 @@ import {
   resizeColumn,
   setHidden,
   specFor,
+  stateFromLens,
   virtualWindow,
   visibleColumns,
   ROW_HEIGHT,
@@ -175,5 +176,28 @@ describe("cell text", () => {
     expect(rawText(type.properties[1], "ready", "fr-CA")).toBe("Prête");
     expect(rawText(type.properties[3], { id: "u", label: "Ada" }, "en")).toBe("Ada");
     expect(rawText(type.properties[2], null, "en")).toBeNull();
+  });
+});
+
+describe("saved lenses", () => {
+  it("open with their columns, sort, grouping and conditions, and save back the same spec", () => {
+    const condition = { property: "status", operator: "is", value: "ready" } as const;
+    const state = stateFromLens(
+      type,
+      { version: 1, type: "task", where: { and: [condition] }, sort: [{ property: "estimate", direction: "desc" }], groupBy: { property: "status" } },
+      { columns: [{ key: "estimate", width: 200, hidden: false }] },
+    );
+    expect(state.sort).toEqual({ property: "estimate", direction: "desc" });
+    expect(state.groupBy).toBe("status");
+    expect(state.columns[0]).toEqual({ key: "estimate", width: 200, hidden: false });
+    const spec = specFor("task", { ...state, search: "x" });
+    expect(spec.where).toEqual({ and: [condition, { property: "title", operator: "contains", value: "x" }] });
+  });
+
+  it("drops what the table cannot show", () => {
+    const state = stateFromLens(type, { sort: [{ property: "assignee" }], groupBy: { property: "title" } }, {});
+    expect(state.sort).toBeNull();
+    expect(state.groupBy).toBeNull();
+    expect(state.filters).toEqual([]);
   });
 });

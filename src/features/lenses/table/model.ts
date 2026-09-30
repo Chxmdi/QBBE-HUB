@@ -6,7 +6,7 @@
 
 import type { CatalogProperty, CatalogType } from "@/lib/query/catalog";
 import type { LensGroupCount, LensRow, LensValue } from "@/lib/query/run";
-import type { LensSpec } from "@/lib/query/spec";
+import type { LensNode, LensSpec } from "@/lib/query/spec";
 
 export const MIN_WIDTH = 80;
 export const MAX_WIDTH = 640;
@@ -28,6 +28,8 @@ export interface TableState {
   sort: { property: string; direction: "asc" | "desc" } | null;
   groupBy: string | null;
   search: string;
+  /** Conditions a saved lens brings with it, kept under the search box. */
+  filters?: LensNode[];
 }
 
 /** Title first and wide; every other shown property after it in catalog order. */
@@ -97,10 +99,14 @@ export function specFor(typeKey: string, state: TableState, offset = 0): LensSpe
     .filter((k) => k !== "title")
     .slice(0, 30);
   const search = state.search.trim().slice(0, 500);
+  const conditions: LensNode[] = [
+    ...(state.filters ?? []),
+    ...(search ? [{ property: "title", operator: "contains" as const, value: search }] : []),
+  ];
   return {
     version: 1,
     type: typeKey,
-    ...(search ? { where: { and: [{ property: "title", operator: "contains", value: search }] } } : {}),
+    ...(conditions.length ? { where: { and: conditions } } : {}),
     ...(state.sort ? { sort: [state.sort] } : {}),
     ...(state.groupBy ? { groupBy: { property: state.groupBy } } : {}),
     select,
@@ -269,4 +275,29 @@ export function rawText(property: CatalogProperty, value: LensValue, locale: str
   }
   if (typeof value === "boolean") return value ? "✓" : "";
   return String(value);
+}
+
+/**
+ * The table state a saved lens opens with: its columns, sort, grouping and
+ * conditions. Anything the table cannot show (an unknown column, a second
+ * sort key) is dropped rather than failing the page.
+ */
+export function stateFromLens(
+  type: CatalogType,
+  spec: Partial<LensSpec> | Record<string, unknown>,
+  layout: { columns?: ColumnState[] } | Record<string, unknown>,
+): TableState {
+  const s = spec as Partial<LensSpec>;
+  const where = s.where;
+  const filters: LensNode[] = where ? ("and" in where ? where.and : [where]) : [];
+  const first = s.sort?.[0];
+  const sortable = first && type.properties.some((p) => p.key === first.property && p.sortable);
+  const groupable = s.groupBy && type.properties.some((p) => p.key === s.groupBy!.property && p.groupable);
+  return {
+    columns: reconcileColumns(type, (layout as { columns?: ColumnState[] }).columns ?? null),
+    sort: sortable ? { property: first!.property, direction: first!.direction ?? "asc" } : null,
+    groupBy: groupable ? s.groupBy!.property : null,
+    search: "",
+    filters,
+  };
 }

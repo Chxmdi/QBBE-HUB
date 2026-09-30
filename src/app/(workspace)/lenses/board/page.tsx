@@ -7,6 +7,8 @@ import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
 import { requireLensesEnabled } from "@/features/lenses/flag";
+import { listLenses } from "@/features/lenses/services/lens-store.queries";
+import { LensChips } from "@/features/lenses/components/lens-chips";
 import { getLensT } from "@/features/lenses/i18n/server";
 import { boardSpec } from "@/features/lenses/task-specs";
 import { loadTaskLens } from "@/features/lenses/load";
@@ -36,11 +38,13 @@ export default async function LensBoardPage({
     loadTaskLens([spec], session.timeZone),
     getPickerOptions(),
   ]);
+  const saved = await listLenses(session.userId, { path: "/board" });
   const result = results[0];
 
   return (
     <div>
       <PageHeader eyebrow={t("types.task")} title={t("board.title")} description={t("board.description")} />
+      <LensChips lenses={saved} label={t("saved.chips")} />
       <Suspense fallback={<div className="mb-5 h-9" />}>
         <TaskFilterBar filters={filters} options={options} basePath="/lenses/board" />
       </Suspense>

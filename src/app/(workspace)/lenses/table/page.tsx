@@ -9,7 +9,8 @@ import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireLensesEnabled } from "@/features/lenses/flag";
 import { getLensT } from "@/features/lenses/i18n/server";
 import { TableLens } from "@/features/lenses/table/table-lens";
-import { defaultColumns, specFor, type TableState } from "@/features/lenses/table/model";
+import { defaultColumns, specFor, stateFromLens, type TableState } from "@/features/lenses/table/model";
+import { getLens } from "@/features/lenses/services/lens-store.queries";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getLensT())("table.title") };
@@ -39,13 +40,16 @@ export default async function TableLensPage({
     reportError(error, { lens: "table", step: "catalog" });
     catalog = {};
   }
-  const requested = typeof params.type === "string" ? params.type : "task";
+  const lens = typeof params.lens === "string" ? await getLens(session.userId, params.lens) : null;
+  const requested = lens?.typeKey ?? (typeof params.type === "string" ? params.type : "task");
   const typeKey = catalog[requested] ? requested : "task";
   const type = catalog[typeKey];
 
-  const initialState: TableState | null = type
-    ? { columns: defaultColumns(type), sort: { property: "title", direction: "asc" }, groupBy: null, search: "" }
-    : null;
+  const initialState: TableState | null = !type
+    ? null
+    : lens && lens.typeKey === typeKey
+      ? stateFromLens(type, lens.spec, lens.layout)
+      : { columns: defaultColumns(type), sort: { property: "title", direction: "asc" }, groupBy: null, search: "" };
 
   let initial: LensResult | null = null;
   if (initialState) {
@@ -62,17 +66,18 @@ export default async function TableLensPage({
     <div>
       <PageHeader
         eyebrow={t(`types.${typeKey}` as "types.task")}
-        title={t("table.title")}
+        title={lens?.name ?? t("table.title")}
         description={t("table.description")}
       />
       {type && initialState ? (
         <TableLens
-          key={typeKey}
+          key={lens?.id ?? typeKey}
           type={type}
           initial={initial}
           initialState={initialState}
           people={people}
           timeZone={session.timeZone}
+          savedLens={lens ? { id: lens.id, name: lens.name, mine: lens.mine } : null}
         />
       ) : (
         <p role="alert" className="text-[13.5px] text-danger-fg">
