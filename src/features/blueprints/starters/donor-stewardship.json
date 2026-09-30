@@ -1,0 +1,361 @@
+{
+  "version": 1,
+  "key": "donor_stewardship",
+  "name": {
+    "en": "Donor stewardship",
+    "fr": "Relations avec les donateurs"
+  },
+  "description": {
+    "en": "Donors, their gifts and every conversation that keeps the relationship going.",
+    "fr": "Les donateurs, leurs dons et chaque échange qui entretient la relation."
+  },
+  "types": [
+    {
+      "key": "donor",
+      "name": {
+        "en": "Donor",
+        "fr": "Donateur"
+      },
+      "icon": "heart-handshake",
+      "properties": [
+        {
+          "key": "email",
+          "name": {
+            "en": "Email",
+            "fr": "Courriel"
+          },
+          "kind": "email"
+        },
+        {
+          "key": "phone",
+          "name": {
+            "en": "Phone",
+            "fr": "Téléphone"
+          },
+          "kind": "phone"
+        },
+        {
+          "key": "tier",
+          "name": {
+            "en": "Tier",
+            "fr": "Catégorie"
+          },
+          "kind": "status",
+          "choices": [
+            {
+              "key": "prospect",
+              "label": {
+                "en": "Prospect",
+                "fr": "Donateur potentiel"
+              }
+            },
+            {
+              "key": "community",
+              "label": {
+                "en": "Community",
+                "fr": "Communautaire"
+              }
+            },
+            {
+              "key": "mid",
+              "label": {
+                "en": "Mid-level",
+                "fr": "Intermédiaire"
+              }
+            },
+            {
+              "key": "major",
+              "label": {
+                "en": "Major",
+                "fr": "Majeur"
+              }
+            }
+          ]
+        },
+        {
+          "key": "preferred_language",
+          "name": {
+            "en": "Preferred language",
+            "fr": "Langue préférée"
+          },
+          "kind": "select",
+          "choices": [
+            {
+              "key": "english",
+              "label": {
+                "en": "English",
+                "fr": "Anglais"
+              }
+            },
+            {
+              "key": "french",
+              "label": {
+                "en": "French",
+                "fr": "Français"
+              }
+            }
+          ]
+        },
+        {
+          "key": "steward",
+          "name": {
+            "en": "Relationship lead",
+            "fr": "Responsable de la relation"
+          },
+          "kind": "person"
+        },
+        {
+          "key": "next_contact",
+          "name": {
+            "en": "Next contact",
+            "fr": "Prochain contact"
+          },
+          "kind": "date"
+        }
+      ],
+      "layout": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "key": "donor_gift",
+      "name": {
+        "en": "Gift",
+        "fr": "Don"
+      },
+      "icon": "gift",
+      "properties": [
+        {
+          "key": "amount",
+          "name": {
+            "en": "Amount",
+            "fr": "Montant"
+          },
+          "kind": "currency",
+          "currency": "CAD",
+          "required": true
+        },
+        {
+          "key": "received_on",
+          "name": {
+            "en": "Received",
+            "fr": "Reçu le"
+          },
+          "kind": "date",
+          "required": true
+        },
+        {
+          "key": "method",
+          "name": {
+            "en": "Method",
+            "fr": "Mode"
+          },
+          "kind": "select",
+          "choices": [
+            {
+              "key": "cheque",
+              "label": {
+                "en": "Cheque",
+                "fr": "Chèque"
+              }
+            },
+            {
+              "key": "card",
+              "label": {
+                "en": "Card",
+                "fr": "Carte"
+              }
+            },
+            {
+              "key": "transfer",
+              "label": {
+                "en": "Transfer",
+                "fr": "Virement"
+              }
+            },
+            {
+              "key": "cash",
+              "label": {
+                "en": "Cash",
+                "fr": "Comptant"
+              }
+            }
+          ]
+        },
+        {
+          "key": "thanked",
+          "name": {
+            "en": "Thanked",
+            "fr": "Remercié"
+          },
+          "kind": "checkbox"
+        },
+        {
+          "key": "donor",
+          "name": {
+            "en": "Donor",
+            "fr": "Donateur"
+          },
+          "kind": "relation",
+          "relation": "given_by"
+        }
+      ],
+      "layout": {
+        "x": 320,
+        "y": 40
+      }
+    },
+    {
+      "key": "touchpoint",
+      "name": {
+        "en": "Touchpoint",
+        "fr": "Contact"
+      },
+      "icon": "message-circle",
+      "properties": [
+        {
+          "key": "happened_on",
+          "name": {
+            "en": "Date",
+            "fr": "Date"
+          },
+          "kind": "date",
+          "required": true
+        },
+        {
+          "key": "channel",
+          "name": {
+            "en": "Channel",
+            "fr": "Moyen"
+          },
+          "kind": "select",
+          "choices": [
+            {
+              "key": "call",
+              "label": {
+                "en": "Call",
+                "fr": "Appel"
+              }
+            },
+            {
+              "key": "email",
+              "label": {
+                "en": "Email",
+                "fr": "Courriel"
+              }
+            },
+            {
+              "key": "meeting",
+              "label": {
+                "en": "Meeting",
+                "fr": "Rencontre"
+              }
+            },
+            {
+              "key": "event",
+              "label": {
+                "en": "Event",
+                "fr": "Événement"
+              }
+            },
+            {
+              "key": "letter",
+              "label": {
+                "en": "Letter",
+                "fr": "Lettre"
+              }
+            }
+          ]
+        },
+        {
+          "key": "summary",
+          "name": {
+            "en": "Summary",
+            "fr": "Résumé"
+          },
+          "kind": "text"
+        },
+        {
+          "key": "donor",
+          "name": {
+            "en": "Donor",
+            "fr": "Donateur"
+          },
+          "kind": "relation",
+          "relation": "touchpoint_with"
+        }
+      ],
+      "layout": {
+        "x": 600,
+        "y": 40
+      }
+    }
+  ],
+  "relations": [
+    {
+      "key": "given_by",
+      "from": "donor_gift",
+      "to": "donor",
+      "name": {
+        "en": "is given by",
+        "fr": "est fait par"
+      },
+      "reverseName": {
+        "en": "gifts",
+        "fr": "dons"
+      },
+      "cardinality": "one_to_many"
+    },
+    {
+      "key": "touchpoint_with",
+      "from": "touchpoint",
+      "to": "donor",
+      "name": {
+        "en": "is with",
+        "fr": "est avec"
+      },
+      "reverseName": {
+        "en": "touchpoints",
+        "fr": "contacts"
+      },
+      "cardinality": "one_to_many"
+    }
+  ],
+  "lenses": [
+    {
+      "key": "next_contacts",
+      "type": "donor",
+      "kind": "calendar",
+      "name": {
+        "en": "Next contacts",
+        "fr": "Prochains contacts"
+      },
+      "groupBy": "next_contact"
+    }
+  ],
+  "forms": [],
+  "workflows": [
+    {
+      "key": "gift_received",
+      "type": "donor_gift",
+      "name": {
+        "en": "Gift received",
+        "fr": "Don reçu"
+      },
+      "trigger": {
+        "on": "created"
+      },
+      "steps": [
+        {
+          "kind": "create_task",
+          "title": {
+            "en": "Send a thank-you within 48 hours",
+            "fr": "Envoyer un remerciement dans les 48 heures"
+          },
+          "dueInDays": 2
+        }
+      ]
+    }
+  ]
+}

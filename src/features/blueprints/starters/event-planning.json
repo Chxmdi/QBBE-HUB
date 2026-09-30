@@ -1,0 +1,368 @@
+{
+  "version": 1,
+  "key": "event_planning",
+  "name": {
+    "en": "Event",
+    "fr": "Événement"
+  },
+  "description": {
+    "en": "Plan an event with its sessions, speakers and registrations.",
+    "fr": "Planifiez un événement avec ses séances, ses conférenciers et ses inscriptions."
+  },
+  "types": [
+    {
+      "key": "planned_event",
+      "name": {
+        "en": "Event",
+        "fr": "Événement"
+      },
+      "icon": "calendar-days",
+      "properties": [
+        {
+          "key": "starts_on",
+          "name": {
+            "en": "Starts",
+            "fr": "Début"
+          },
+          "kind": "date",
+          "required": true
+        },
+        {
+          "key": "ends_on",
+          "name": {
+            "en": "Ends",
+            "fr": "Fin"
+          },
+          "kind": "date"
+        },
+        {
+          "key": "venue",
+          "name": {
+            "en": "Venue",
+            "fr": "Lieu"
+          },
+          "kind": "location"
+        },
+        {
+          "key": "status",
+          "name": {
+            "en": "Status",
+            "fr": "Statut"
+          },
+          "kind": "status",
+          "choices": [
+            {
+              "key": "planning",
+              "label": {
+                "en": "Planning",
+                "fr": "En préparation"
+              }
+            },
+            {
+              "key": "confirmed",
+              "label": {
+                "en": "Confirmed",
+                "fr": "Confirmé"
+              }
+            },
+            {
+              "key": "done",
+              "label": {
+                "en": "Done",
+                "fr": "Terminé"
+              }
+            },
+            {
+              "key": "cancelled",
+              "label": {
+                "en": "Cancelled",
+                "fr": "Annulé"
+              }
+            }
+          ]
+        },
+        {
+          "key": "budget",
+          "name": {
+            "en": "Budget",
+            "fr": "Budget"
+          },
+          "kind": "currency",
+          "currency": "CAD"
+        },
+        {
+          "key": "capacity",
+          "name": {
+            "en": "Capacity",
+            "fr": "Capacité"
+          },
+          "kind": "number"
+        }
+      ],
+      "layout": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "key": "event_session",
+      "name": {
+        "en": "Session",
+        "fr": "Séance"
+      },
+      "icon": "presentation",
+      "properties": [
+        {
+          "key": "starts_at",
+          "name": {
+            "en": "Time",
+            "fr": "Heure"
+          },
+          "kind": "date"
+        },
+        {
+          "key": "room",
+          "name": {
+            "en": "Room",
+            "fr": "Salle"
+          },
+          "kind": "text"
+        },
+        {
+          "key": "event",
+          "name": {
+            "en": "Event",
+            "fr": "Événement"
+          },
+          "kind": "relation",
+          "relation": "session_of"
+        },
+        {
+          "key": "speakers",
+          "name": {
+            "en": "Speakers",
+            "fr": "Conférenciers"
+          },
+          "kind": "relation",
+          "relation": "speaks_at"
+        }
+      ],
+      "layout": {
+        "x": 320,
+        "y": 40
+      }
+    },
+    {
+      "key": "speaker",
+      "name": {
+        "en": "Speaker",
+        "fr": "Conférencier"
+      },
+      "icon": "mic",
+      "properties": [
+        {
+          "key": "email",
+          "name": {
+            "en": "Email",
+            "fr": "Courriel"
+          },
+          "kind": "email"
+        },
+        {
+          "key": "organization",
+          "name": {
+            "en": "Organization",
+            "fr": "Organisme"
+          },
+          "kind": "text"
+        },
+        {
+          "key": "bio",
+          "name": {
+            "en": "Bio",
+            "fr": "Biographie"
+          },
+          "kind": "text"
+        }
+      ],
+      "layout": {
+        "x": 600,
+        "y": 40
+      }
+    },
+    {
+      "key": "registration",
+      "name": {
+        "en": "Registration",
+        "fr": "Inscription"
+      },
+      "icon": "ticket",
+      "properties": [
+        {
+          "key": "email",
+          "name": {
+            "en": "Email",
+            "fr": "Courriel"
+          },
+          "kind": "email",
+          "required": true
+        },
+        {
+          "key": "status",
+          "name": {
+            "en": "Status",
+            "fr": "Statut"
+          },
+          "kind": "status",
+          "choices": [
+            {
+              "key": "registered",
+              "label": {
+                "en": "Registered",
+                "fr": "Inscrit"
+              }
+            },
+            {
+              "key": "waitlisted",
+              "label": {
+                "en": "Waitlisted",
+                "fr": "En liste d’attente"
+              }
+            },
+            {
+              "key": "cancelled",
+              "label": {
+                "en": "Cancelled",
+                "fr": "Annulé"
+              }
+            },
+            {
+              "key": "attended",
+              "label": {
+                "en": "Attended",
+                "fr": "Présent"
+              }
+            }
+          ]
+        },
+        {
+          "key": "event",
+          "name": {
+            "en": "Event",
+            "fr": "Événement"
+          },
+          "kind": "relation",
+          "relation": "registered_for"
+        }
+      ],
+      "layout": {
+        "x": 320,
+        "y": 220
+      }
+    }
+  ],
+  "relations": [
+    {
+      "key": "session_of",
+      "from": "event_session",
+      "to": "planned_event",
+      "name": {
+        "en": "is part of",
+        "fr": "fait partie de"
+      },
+      "reverseName": {
+        "en": "sessions",
+        "fr": "séances"
+      },
+      "cardinality": "one_to_many"
+    },
+    {
+      "key": "speaks_at",
+      "from": "speaker",
+      "to": "event_session",
+      "name": {
+        "en": "speaks at",
+        "fr": "présente"
+      },
+      "reverseName": {
+        "en": "speakers",
+        "fr": "conférenciers"
+      },
+      "cardinality": "many_to_many"
+    },
+    {
+      "key": "registered_for",
+      "from": "registration",
+      "to": "planned_event",
+      "name": {
+        "en": "is for",
+        "fr": "concerne"
+      },
+      "reverseName": {
+        "en": "registrations",
+        "fr": "inscriptions"
+      },
+      "cardinality": "one_to_many"
+    }
+  ],
+  "lenses": [
+    {
+      "key": "event_calendar",
+      "type": "planned_event",
+      "kind": "calendar",
+      "name": {
+        "en": "Event calendar",
+        "fr": "Calendrier des événements"
+      },
+      "groupBy": "starts_on"
+    }
+  ],
+  "forms": [
+    {
+      "key": "event_registration",
+      "type": "registration",
+      "name": {
+        "en": "Register",
+        "fr": "S’inscrire"
+      },
+      "fields": [
+        "title",
+        "email",
+        "event"
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "key": "event_confirmed",
+      "type": "planned_event",
+      "name": {
+        "en": "Event confirmed",
+        "fr": "Événement confirmé"
+      },
+      "trigger": {
+        "on": "property_changed",
+        "property": "status",
+        "to": "confirmed"
+      },
+      "steps": [
+        {
+          "kind": "create_task",
+          "title": {
+            "en": "Send the invitations",
+            "fr": "Envoyer les invitations"
+          },
+          "dueInDays": 7
+        },
+        {
+          "kind": "create_task",
+          "title": {
+            "en": "Book the room and catering",
+            "fr": "Réserver la salle et le traiteur"
+          },
+          "dueInDays": 14
+        }
+      ]
+    }
+  ]
+}
