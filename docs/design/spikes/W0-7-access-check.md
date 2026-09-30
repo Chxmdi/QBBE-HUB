@@ -13,16 +13,17 @@ the answers today's rules give, and stay fast on a board?
 
 - **Correct:** EQUIVALENCE_SUMMARY
 - **Fast for lists, when lists use the set-based form.** On a 500-task
-  board, a policy that reads the new cache adds 0.1 to 6 ms over today's
-  policy, and returns exactly the same rows. The target was under 20 ms.
+  board, a policy that reads the new cache is within 1 ms of today's policy
+  (from 1.5 ms faster to 0.7 ms slower), and returns exactly the same rows.
+  The target was under 20 ms added.
 - **Too slow when called once per row.** Calling `app.can()` on each row of
   a 500-row board adds 40 to 340 ms, so it fails the target. `app.can()` is
   for one record at a time (a drawer, a page, an action's permission check).
   Lists must use the set-based form, as the #115 rewrite already does today.
-- **Cheap to keep current.** Giving someone a 1,000-task program costs 24 ms;
-  moving a 500-task project to another program costs 29 ms.
+- **Cheap to keep current.** Giving someone a 1,000-task program costs 32 ms;
+  moving a 500-task project to another program costs 24 ms.
 - **One weak spot to fix before M10c:** a bulk insert of 500 tasks costs
-  1.1 s instead of 42 ms, because the prototype's triggers work one row at a
+  1.06 s instead of 39 ms, because the prototype's triggers work one row at a
   time. Statement-level triggers fix that (see "Before building for real").
 
 ## What was built
@@ -69,6 +70,10 @@ including the triggers it adds to today's tables. The check is called
   live from a five-row table. So a promotion, a suspension or a session
   without MFA takes effect on the very next query, with nothing to refresh,
   and the cache does not need a row per admin per object.
+- **Some organization roles are also ceilings**, applied live
+  (`org_role_ceiling`): an owner or admin is read-only everywhere until the
+  session completes MFA, and a leadership viewer is always read-only, whatever
+  grants they hold (finding 1).
 - **Membership is checked live too**: a deactivated person loses everything
   at once, even though their cache rows are still there.
 
@@ -121,12 +126,12 @@ builds it (every unarchived task the person can read, in sort order), at
 
 | Board and person | a. today | e. cache policy | Added | b. today + `can(view)` per row |
 |---|---|---|---|---|
-| Project board, owner (MFA) | 0.79 (0.86) | 0.87 (0.94) | +0.1 | 45.2 (77.2) |
-| Project board, staff with project grant | 4.16 (5.10) | 11.09 (11.66) | **+6.9** | 55.6 (81.7) |
-| Project board, volunteer with 20 assigned | 7.56 (9.82) | 3.76 (5.05) | −3.8 | 11.9 (13.0) |
-| Workspace board, owner (MFA) | 2.52 (3.34) | 3.55 (4.10) | +1.0 | 344.9 (424.4) |
-| Workspace board, staff with project grant | 7.34 (8.27) | 13.19 (15.50) | **+5.9** | 163.9 (228.9) |
-| Workspace board, volunteer | 6.57 (10.29) | 4.61 (4.84) | −2.0 | 54.2 (81.7) |
+| Project board, owner (MFA) | 0.81 (1.03) | 0.88 (1.07) | +0.1 | 62.0 (91.8) |
+| Project board, staff with project grant | 2.88 (3.65) | 2.55 (2.84) | −0.3 | 64.3 (91.7) |
+| Project board, volunteer with 20 assigned | 2.20 (2.91) | 1.44 (1.64) | −0.8 | 5.3 (8.4) |
+| Workspace board, owner (MFA) | 1.91 (2.30) | 2.65 (3.52) | +0.7 | 382.5 (508.7) |
+| Workspace board, staff with project grant | 4.15 (4.34) | 3.81 (6.66) | −0.3 | 178.8 (230.3) |
+| Workspace board, volunteer | 3.68 (5.30) | 2.21 (2.31) | −1.5 | 56.5 (84.6) |
 
 Every person saw exactly the same rows under both policies (500, 500, 20,
 500, 500 and 420).
@@ -136,10 +141,10 @@ most. Today the only way is `has_task_capability` per row:
 
 | Board and person | d. today, `has_task_capability` flag | c. `app.can` flag per row | f. set-based flag from the cache |
 |---|---|---|---|
-| Project board, owner | 532 | 49.7 | 1.25 |
-| Project board, staff | 2,061 | 49.2 | 23.7 |
-| Workspace board, staff | 2,043 | 62.3 | 23.2 |
-| Workspace board, volunteer | 1,671 | 56.1 | 7.9 |
+| Project board, owner | 412 | 66.2 | 1.24 |
+| Project board, staff | 1,705 | 66.1 | 4.88 |
+| Workspace board, staff | 1,808 | 62.8 | 5.96 |
+| Workspace board, volunteer | 1,313 | 53.9 | 3.21 |
 
 The per-row `app.can` is 10 to 40 times faster than today's function, but
 only the set-based form is within budget.
@@ -158,16 +163,16 @@ tables, then the cache refresh).
 
 | Change | ms |
 |---|---|
-| Add a person to the 1,000-task program (program grant) | 24.0 |
-| Remove that grant | 11.6 |
-| Add a person to one 500-task project | 13.3 |
-| A person joins a team that has the 1,000-task program | 16.1 |
-| Move a 500-task project to another program (everyone recomputed) | 28.7 |
-| Change the program lead | 53.8 |
-| Change one task's assignee | 5.6 |
-| Insert one task | 2.4 |
-| **Insert 500 tasks in one statement** | **1,114** (42 without the prototype) |
-| Rebuild the whole cache (59 people, 3,086 objects) | 410 |
+| Add a person to the 1,000-task program (program grant) | 32.1 |
+| Remove that grant | 13.0 |
+| Add a person to one 500-task project | 17.2 |
+| A person joins a team that has the 1,000-task program | 14.2 |
+| Move a 500-task project to another program (everyone recomputed) | 23.5 |
+| Change the program lead | 46.3 |
+| Change one task's assignee | 4.3 |
+| Insert one task | 2.1 |
+| **Insert 500 tasks in one statement** | **1,058** (39 without the prototype) |
+| Rebuild the whole cache (59 people, 3,086 objects) | 339 |
 
 Cache size: 32,766 rows for 59 people and 3,086 objects, about 555 rows a
 person, 4.7 MB with indexes. It grows with people times the objects each can
@@ -176,7 +181,64 @@ not cached.
 
 ## Findings
 
-FINDINGS_SECTION
+1. **Organization roles are ceilings as well as grants (found by the
+   equivalence test, fixed).** Round 1 of the first full run disagreed on
+   about 12,000 answers, all "today says no, the prototype says yes", for two
+   people only:
+   - the **owner without MFA** (aal1) on every task, project and program they
+     own or lead: today's functions refuse an owner or admin everything but
+     read until the session completes MFA, *even through their own grants*;
+   - the **leadership viewer** (perf person 10, who also holds contributor
+     grants) at both levels: today a leadership viewer is read-only
+     everywhere, whatever else they hold.
+
+   The prototype had added the owner's own project-owner grants on top. The
+   fix is a per-role **ceiling** (`org_role_ceiling`): owner and admin are
+   capped at view and comment without MFA, and leadership viewer always is. It
+   is applied live, like the role's own grants, so the cache is unchanged.
+   After the fix those people match exactly. The real build needs this
+   concept: A6 did not mention it.
+2. **Owner/admin MFA is checked two different ways today.** The task,
+   project and program functions accept the session's `aal2` claim alone.
+   `app.is_org_admin`, used by the admin screens, also requires a verified
+   TOTP factor to exist. In practice the claim implies the factor, so the
+   risk is low. The prototype copies the claim-only rule so it can be proved
+   equal. **Recommendation:** in the real `app.can`, require the verified
+   factor too (as `is_org_admin` does). That is deliberately stricter than
+   today, so the equivalence test would be updated on purpose, in the same
+   change.
+3. **A program lead's reach depends on how they became lead.**
+   `has_program_capability` checks `program.lead_id` directly, which reaches
+   the program and its program-level tasks. `has_project_capability` does
+   not look at `lead_id`; the lead reaches the projects only through the
+   `record_lead` grant a trigger writes. That trigger writes nothing if the
+   person is not an active member at the moment they are named, and nothing
+   rewrites it when they are reactivated. So such a lead can see the program
+   but not its projects. The prototype reproduces this exactly: the lead
+   column is a "this object only" grant, and the `record_lead` grant is the
+   one that is inherited. Equivalence round 2 tests this case. **Decision
+   needed:** this is almost certainly unintended. The real build should
+   probably make the lead a single inherited grant, which is a deliberate
+   behaviour change.
+4. **`program_inherited` project grants are redundant.** They are the old
+   model's copy of a program grant onto each project. The prototype does not
+   copy them and gets the same answers from inheritance, so they can be
+   retired once `app.can` is the only check.
+5. **Reading the session in a per-row expression is expensive.** The first
+   ceiling fix read the MFA level once per cache row, which pushed the staff
+   board from 3 ms to 19 ms. Working it out once per organization brought it
+   back to 3 ms. Any real policy must read session values once per query.
+6. **The external accountant has no task access to model.** The accountant
+   is a Guest plus a time-limited ledger grant. The ledger grant gives books
+   access through `app.can_read_ledger`, not tasks, so the accountant reads
+   only tasks they are assigned, today and in the prototype (tested). Ledger
+   access is out of this spike's scope. It would later become a Finance
+   space, with the grant's expiry date and its MFA requirement carried over.
+7. **Not covered by `app.can`:**
+   - which **fields** a reviewer may change (`enforce_scoped_task_update`).
+     That is per-property access, M10e;
+   - **channels** (`channel_access_grant`), meetings and documents. They
+     follow the same pattern and are M10c work.
 
 ## Recommended design (for M10a to M10c)
 
@@ -185,8 +247,8 @@ FINDINGS_SECTION
    roles as capability bundles (built-in rows now, custom roles in M10d);
    grants to a person, a team or an organization role, inherited unless marked
    "this object only".
-2. **Cache person and team grants; answer organization roles, membership and
-   MFA live.** This keeps the cache small, and makes suspension and MFA take
+2. **Cache person and team grants; answer organization roles, role
+   ceilings, membership and MFA live.** This keeps the cache small, and makes suspension and MFA take
    effect immediately.
 3. **Two forms of one check, from the same cache:**
    - `app.can(object_id, capability)` for one record at a time (about 70 µs);
