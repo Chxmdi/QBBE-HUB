@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/shared/page-header";
+import { reportError } from "@/lib/observability";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadCatalog, runLens, type LensResult } from "@/lib/query/run";
@@ -33,7 +34,9 @@ export default async function TableLensPage({
   let catalog: LensCatalog = {};
   try {
     catalog = await loadCatalog(supabase);
-  } catch {
+  } catch (error) {
+    // Shown as "could not be loaded" below, never as an empty table.
+    reportError(error, { lens: "table", step: "catalog" });
     catalog = {};
   }
   const requested = typeof params.type === "string" ? params.type : "task";
@@ -48,7 +51,8 @@ export default async function TableLensPage({
   if (initialState) {
     try {
       initial = await runLens(supabase, specFor(typeKey, initialState), { timeZone: session.timeZone });
-    } catch {
+    } catch (error) {
+      reportError(error, { lens: "table", step: "rows" });
       initial = null;
     }
   }
