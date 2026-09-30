@@ -21,6 +21,14 @@ on:
         required: false
         default: false
 
+# A new push to a pull request replaces its previous run, so parallel work
+# does not queue behind runs nobody will read. Pushes to main, deploys,
+# nightly and release-candidate calls get a group of their own run, so they
+# are never cancelled.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
   # Pulling the Supabase service images from ghcr.io as an authenticated
