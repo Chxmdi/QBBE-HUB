@@ -1,4 +1,6 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
+// Page reads: the page client throws on a failed query, so an outage reaches
+// the error page instead of reading as "not found" or an empty list (P0-UX-05).
 import { goalProgress, progressPart, type ProgressInput, type ProgressPart } from "../progress";
 
 export type GoalStatus = "active" | "achieved" | "dropped";
@@ -19,7 +21,7 @@ export interface GoalDetail extends GoalSummary {
   canManage: boolean;
 }
 
-type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+type Client = Awaited<ReturnType<typeof createSupabasePageClient>>;
 type Named = { id: string; full_name: string | null } | null;
 
 const SELECT = "id, title, description, status, target_on, program:program_id(id, name), owner:owner_id(id, full_name)";
@@ -54,7 +56,7 @@ function summary(row: Row, parts: ProgressPart[]): GoalSummary {
 
 /** Every goal the viewer can read, with live progress. */
 export async function listGoals(): Promise<GoalSummary[]> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const { data } = await supabase
     .from("goal")
     .select(SELECT)
@@ -67,7 +69,7 @@ export async function listGoals(): Promise<GoalSummary[]> {
 }
 
 export async function getGoal(goalId: string): Promise<GoalDetail | null> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const { data } = await supabase.from("goal").select(SELECT).eq("id", goalId).maybeSingle();
   if (!data) return null;
   const [parts, { data: canManage }] = await Promise.all([
@@ -84,7 +86,7 @@ export async function getGoalOptions(): Promise<{
   projects: { id: string; name: string }[];
   metrics: { id: string; name: string }[];
 }> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = await createSupabasePageClient();
   const [programs, members, projects, metrics] = await Promise.all([
     supabase.from("program").select("id, name").order("name"),
     supabase.from("organization_membership").select("user_profile:user_id(id, full_name)").eq("status", "active"),
