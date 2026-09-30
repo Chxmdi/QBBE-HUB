@@ -47,7 +47,10 @@ begin
   from public.organization_membership where user_id = v_owner limit 1;
   update public.organization_membership set status = 'active'
   where organization_id = v_org and user_id in (v_staff, v_volunteer, v_admin, v_guest);
-  select id into v_project from public.project where organization_id = v_org limit 1;
+  -- Its own project, so the test does not depend on seed data (CI has none).
+  insert into public.project (organization_id, name, created_by)
+  values (v_org, 'Forms v2 test project', v_owner)
+  returning id into v_project;
 
   -- ---------------------------------------------------------- building
   for r in select * from (values
