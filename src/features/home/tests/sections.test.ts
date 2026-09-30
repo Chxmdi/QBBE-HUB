@@ -7,7 +7,7 @@ import { ME, OTHER, activity, data, task } from "./fixtures";
 const ids = (items: { id: string }[]) => items.map((item) => item.id);
 
 describe("Now", () => {
-  it("lists my overdue, then due-today, then under-way work, and nothing else", () => {
+  it("lists my work that scores enough attention, highest first, with its reasons", () => {
     const overdue = task({ due_at: "2026-10-01" });
     const today = task({ due_at: "2026-10-07" });
     const doing = task({ status: "in_progress", due_at: "2026-10-20" });
@@ -15,8 +15,10 @@ describe("Now", () => {
     const done = task({ due_at: "2026-10-01", status: "completed" });
     const theirs = task({ due_at: "2026-10-01", assignee_id: OTHER });
     const sections = buildHomeSections(data({ tasks: [later, doing, today, overdue, done, theirs] }));
-    expect(ids(sections.now)).toEqual([overdue.id, today.id, doing.id]);
+    // Under way but due in two weeks scores 12 (assignee 10, medium 2): below the bar.
+    expect(ids(sections.now)).toEqual([overdue.id, today.id]);
     expect(sections.now[0].facts[0]).toEqual({ kind: "due", date: "2026-10-01", overdue: true, today: false });
+    expect(sections.now[0].attention).toMatchObject({ score: 64, reasons: [{ rule: "overdue", days: 6 }, { rule: "role" }, { rule: "task_priority" }] });
   });
 
   it("uses the organization's day, not UTC's", () => {

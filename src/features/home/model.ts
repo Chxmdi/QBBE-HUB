@@ -1,4 +1,5 @@
 import type { TaskPriority, TaskStatus } from "@/types/entities";
+import type { AttentionScore } from "./attention";
 
 /**
  * What Home reads (M17). Every row comes through the viewer's own client, so
@@ -77,6 +78,9 @@ export interface HomeActivity {
 
 export interface HomeMention {
   id: string;
+  source_type?: string | null;
+  source_id?: string | null;
+  project_id?: string | null;
   title: string;
   body: string | null;
   link: string | null;
@@ -98,6 +102,8 @@ export interface HomeData {
   /** Recent activity by the viewer (Continue) and by others (Changes). */
   activity: HomeActivity[];
   mentions: HomeMention[];
+  /** Open tasks blocked by one of the viewer's tasks (task_dependency). */
+  dependencies: { blocking_task_id: string; blocked_task_id: string }[];
 }
 
 /** One line on Home: what it is, where it goes, and the facts shown under it. */
@@ -109,6 +115,8 @@ export interface HomeItem {
   href: string;
   /** Short facts, already worked out, for the component to label and format. */
   facts: HomeFact[];
+  /** The attention score and its reasons, on the items Now ranks (M17c). */
+  attention?: AttentionScore;
 }
 
 export type HomeFact =

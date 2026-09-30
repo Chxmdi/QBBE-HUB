@@ -101,7 +101,7 @@ export async function loadHomeData(
       .limit(40),
     db
       .from("notification")
-      .select("id, title, body, link, created_at, read_at")
+      .select("id, title, body, link, created_at, read_at, source_type, source_id, project_id")
       .eq("user_id", userId)
       .eq("category", "mention")
       .gte("created_at", since(MENTION_DAYS))
@@ -123,7 +123,7 @@ export async function loadHomeData(
     .filter((id) => !projectMap.has(id));
   const myTaskIds = taskRows.filter((task) => task.assignee_id === userId).map((task) => task.id);
 
-  const [taskProjects, others] = await Promise.all([
+  const [taskProjects, others, dependencies] = await Promise.all([
     taskProjectIds.length
       ? db.from("project").select(PROJECT_COLUMNS).in("id", taskProjectIds).is("archived_at", null)
       : Promise.resolve({ data: [] }),
@@ -143,6 +143,16 @@ export async function loadHomeData(
         .order("created_at", { ascending: false })
         .limit(40);
     })(),
+    // Open tasks my tasks block. The blocked task is read through RLS too, so
+    // a dependency on a task the viewer cannot see is not counted.
+    myTaskIds.length
+      ? db
+          .from("task_dependency")
+          .select("blocking_task_id, blocked_task_id, blocked:blocked_task_id!inner(status, archived_at)")
+          .in("blocking_task_id", myTaskIds)
+          .in("blocked.status", [...OPEN_STATUSES])
+          .is("blocked.archived_at", null)
+      : Promise.resolve({ data: [] }),
   ]);
   for (const project of rows<HomeProject>(taskProjects)) projectMap.set(project.id, project);
 
@@ -157,5 +167,8 @@ export async function loadHomeData(
     decisions: rows<HomeDecision>(decisions),
     activity: [...rows<HomeActivity>(mine), ...rows<HomeActivity>(others)],
     mentions: rows<HomeMention>(mentions),
+    dependencies: rows<{ blocking_task_id: string; blocked_task_id: string }>(dependencies).map(
+      ({ blocking_task_id, blocked_task_id }) => ({ blocking_task_id, blocked_task_id }),
+    ),
   };
 }
