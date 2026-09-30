@@ -13,6 +13,7 @@ import { updateLensCell } from "@/features/lenses/services/lens.actions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { runLensAll } from "@/lib/query/run";
 import { editorFor, type EditorKind } from "./editable";
+import { formatLensValue } from "@/features/lenses/format";
 import { SaveLensButton, type OpenLens } from "@/features/lenses/components/save-lens-button";
 import {
   buildDisplayRows,
@@ -370,19 +371,7 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
   const typeName = t(`types.${type.key}` as "types.task") || type.name.en;
   const collator = React.useMemo(() => new Intl.NumberFormat(intlLocale(locale), { maximumFractionDigits: 2 }), [locale]);
 
-  const cellText = (p: CatalogProperty, value: LensValue): string => {
-    if (value === null || value === undefined || value === "") return "";
-    if (p.kind === "date" && typeof value === "string") {
-      if (p.timestamp) return format.date(value, timeZone);
-      return new Intl.DateTimeFormat(intlLocale(locale), { dateStyle: "medium", timeZone: "UTC" }).format(
-        new Date(`${value.slice(0, 10)}T00:00:00Z`),
-      );
-    }
-    if (p.kind === "number" && (typeof value === "number" || typeof value === "string")) {
-      return collator.format(Number(value));
-    }
-    return rawText(p, value, locale) ?? "";
-  };
+  const cellText = (p: CatalogProperty, value: LensValue): string => formatLensValue(p, value, locale, timeZone);
 
   const tabIndexFor = (row: number, col: number) => (focus.row === row && focus.col === col ? 0 : -1);
 
