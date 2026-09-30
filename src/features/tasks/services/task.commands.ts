@@ -6,6 +6,10 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { TaskStatus } from "@/types/entities";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import {
+  createUniversalTask,
+  universalTaskInputSchema,
+} from "@/features/universal-tasks/create-task";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import {
   TASK_STATUSES,
@@ -165,91 +169,32 @@ export async function createTask(input: unknown): Promise<ActionResult> {
       error: translateTaskError(t, parsed.error.issues[0]?.message) ?? t("tasks.errors.invalidInput"),
     };
   }
-  const {
-    title, description, projectId, milestoneId, assigneeId, priority, dueAt,
-    completionCriteria, reviewerId, approverId, status,
-  } = parsed.data;
-
-  const supabase = await createSupabaseServerClient();
-
-  let programId: string | null = null;
-  if (projectId) {
-    const { data: project } = await supabase
-      .from("project")
-      .select("program_id")
-      .eq("id", projectId)
-      .maybeSingle();
-    programId = (project?.program_id as string | null) ?? null;
+  // Where the task came from (M7b). The form sends none, so it is "manual";
+  // other callers name their source and the shared action checks the caller
+  // can see it.
+  const source = universalTaskInputSchema.shape.source.safeParse(
+    (input as { source?: unknown } | null)?.source,
+  );
+  if (!source.success) {
+    return { ok: false, error: t("tasks.errors.invalidInput") };
   }
 
-  const { data: task, error } = await supabase
-    .from("task")
-    .insert({
-      organization_id: session.organizationId,
-      program_id: programId,
-      project_id: projectId ?? null,
-      milestone_id: milestoneId ?? null,
-      title,
-      description: description || null,
-      priority,
-      assignee_id: assigneeId ?? null,
-      requester_id: session.userId,
-      due_at: dueAt || null,
-      completion_criteria: completionCriteria || null,
-      reviewer_id: reviewerId ?? null,
-      approver_id: approverId ?? null,
-      created_by: session.userId,
-      status: status ?? "not_started",
-      // Status and completion time are one fact with two spellings. Recording
-      // work that is already finished is a supported case (P0-TSK-01), but
-      // writing `completed` without the timestamp produces a task that every
-      // report measuring completion by date cannot see — the same split-fact
-      // defect #28 repaired on `milestone`, where every completed milestone
-      // still reported `status = 'planned'`.
-      completed_at: status === "completed" ? new Date().toISOString() : null,
-    })
-    .select("id")
-    .single();
-
-  if (error || !task) {
+  const supabase = await createSupabaseServerClient();
+  const created = await createUniversalTask(
+    supabase,
+    {
+      userId: session.userId,
+      organizationId: session.organizationId,
+      displayName: session.profile.full_name,
+    },
+    { ...parsed.data, source: source.data },
+  );
+  if (!created.ok) {
     return { ok: false, error: t("tasks.errors.saveTask") };
   }
 
-  await supabase.from("activity_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    verb: "created",
-    source_type: "task",
-    source_id: task.id,
-    project_id: projectId ?? null,
-    program_id: programId,
-    summary: `created task “${title}”`,
-  });
-
-  // Deduplicated assignment notification (P0-NOT-04): one per task+assignee.
-  if (assigneeId && assigneeId !== session.userId) {
-    const tFor = await recipientTranslators(supabase, [assigneeId]);
-    await createNotifications(supabase, [{
-      user_id: assigneeId,
-      organization_id: session.organizationId,
-      category: "assignment",
-      title: tFor(assigneeId)("tasks.notify.assigned", { name: session.profile.full_name }),
-      body: title,
-      source_type: "task",
-      source_id: task.id as string,
-      link: `/my-work?task=${task.id}`,
-      urgency: priority === "critical" ? "high" : "normal",
-      reason: "assigned",
-      context: title,
-      owner_label: session.profile.full_name,
-      due_on: dueAt || null,
-      project_id: projectId ?? null,
-      dedupe_key: notificationDedupeKey("task", task.id as string, assigneeId),
-    }]);
-  }
-
   revalidatePath("/", "layout");
-  return { ok: true, id: task.id as string };
+  return { ok: true, id: created.id };
 }
 
 export async function updateTaskStatus(
