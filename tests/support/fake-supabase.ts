@@ -379,6 +379,11 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
     return this;
   }
 
+  gt(column: string, value: string) {
+    this.filters.push((row) => String(row[column] ?? "") > value);
+    return this;
+  }
+
   gte(column: string, value: string) {
     this.filters.push((row) => String(row[column] ?? "") >= value);
     return this;

@@ -53,7 +53,22 @@ export async function dailyDigest({
 
   if (error) throw new Error(`could not load digest subscribers: ${error.message}`);
 
-  const due = ((prefRows ?? []) as PreferenceRow[]).filter((row) =>
+  // People who asked for followed changes in a daily or weekly digest get one
+  // even with the general digest off; only their follow_* categories go in it,
+  // because every other category falls back to email_digest (false).
+  const { data: followRows } = await db
+    .from("follow_rule_v2")
+    .select("user_id")
+    .in("email", ["daily", "weekly"])
+    .limit(definition.batch_size);
+  const followers = [...new Set((followRows ?? []).map((row) => row.user_id as string))].filter(
+    (userId) => !(prefRows ?? []).some((row) => row.user_id === userId),
+  );
+  const { data: followerPrefs } = followers.length
+    ? await db.from("notification_preference").select(`user_id, ${PREFERENCE_COLUMNS}`).in("user_id", followers)
+    : { data: [] };
+
+  const due = [...((prefRows ?? []) as PreferenceRow[]), ...((followerPrefs ?? []) as PreferenceRow[])].filter((row) =>
     isDigestDue(withPreferenceDefaults(row), now),
   );
 

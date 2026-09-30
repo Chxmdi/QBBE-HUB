@@ -24,6 +24,7 @@ import { vmsSync } from "./vms-sync";
 import { workflowEvents } from "@/features/workflows/services/event-runner";
 import { decisionRevisitReminders } from "@/features/decisions/jobs/revisit-reminders";
 import { workflowResume } from "@/features/workflows/services/resume-runner";
+import { followFanout } from "@/features/following/fanout";
 
 /**
  * The job registry.
@@ -40,6 +41,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   // Step-graph workflows (Workspace OS S6, behind wos_workflows_v2)
   "workflow-events": workflowEvents,
   "workflow-resume": workflowResume,
+  // Following (Workspace OS S6b, behind wos_objects)
+  "follow-events": followFanout,
   "daily-digest": dailyDigest,
 
   // Sweeps over Hub data
