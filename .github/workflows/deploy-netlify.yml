@@ -104,6 +104,29 @@ jobs:
           esac
           echo "Site ${NETLIFY_SITE_ID} reads Supabase project ${SUPABASE_PROJECT_REF}."
 
+      # WORKSPACE_OS_FLAGS turns unfinished Workspace OS modules on without
+      # touching the feature_flag table (src/lib/feature-flags.ts). It is for
+      # staging only; on production it would show unfinished screens to
+      # everyone. Read the production site's variables the same way as the
+      # database check above, and fail closed: a list that cannot be read
+      # stops the deploy too.
+      - name: Refuse Workspace OS switch overrides on production
+        if: inputs.environment == 'production'
+        run: |
+          npx --yes netlify-cli@27.5.0 env:list --json \
+            --context production --site "$NETLIFY_SITE_ID" > site-env.json 2>/dev/null \
+            || { echo "::error::Could not read the production site's environment variables."; exit 1; }
+          node -e '
+            const vars = JSON.parse(require("fs").readFileSync("site-env.json", "utf8"));
+            // Present at all counts, even empty or hidden as a secret value.
+            if (!vars || typeof vars !== "object" || Object.hasOwn(vars, "WORKSPACE_OS_FLAGS")) {
+              console.log("::error::WORKSPACE_OS_FLAGS is set on the production Netlify site (or its variables could not be read). Delete it (Site configuration > Environment variables) and deploy again.");
+              process.exit(1);
+            }
+          ' || exit 1
+          rm -f site-env.json
+          echo "Production site ${NETLIFY_SITE_ID} has no WORKSPACE_OS_FLAGS override."
+
       - uses: supabase/setup-cli@v3
         with:
           version: 2.114.0
