@@ -5,6 +5,21 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useEditorT } from "@/features/editor/i18n/client";
 import { BlockEditor, type EditorFileHandlers } from "@/features/editor/adapter/block-editor";
+import type { EditorSemanticHandlers } from "@/features/editor/adapter/types";
+import { documentRef } from "@/features/editor/adapter/files";
+import { removedTaskIds, taskBlockIds } from "@/features/editor/semantic/removed";
+import {
+  archiveTaskFromBlock,
+  createTaskFromBlock,
+  listTaskProjects,
+  runQueryBlock,
+  searchObjects,
+  setTaskDone,
+  summarizeObjects,
+} from "@/features/editor/services/semantic.commands";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/toast";
 import type { EditorContent } from "@/features/editor/adapter/content";
 import { documentIdFromRef, MAX_UPLOAD_BYTES, storagePathFor } from "@/features/editor/adapter/files";
 import { registerEditorUpload, resolveEditorFile, saveEditorDocument } from "@/features/editor/services/editor-document.commands";
@@ -12,6 +27,8 @@ import { registerEditorUpload, resolveEditorFile, saveEditorDocument } from "@/f
 type SaveState = "idle" | "saving" | "saved" | "failed" | "offline" | "conflict" | "forbidden" | "tooLarge";
 
 const SAVE_DELAY_MS = 800;
+/** A task block cut and pasted elsewhere reappears within this time; only then is it "removed". */
+const REMOVAL_GRACE_MS = 1500;
 const RETRY_MS = 5000;
 /** Next.js caps a server action's request at 1 MB; stay under it with room for the envelope. */
 const MAX_SAVE_CHARS = 950_000;
@@ -50,6 +67,9 @@ export function ObjectEditor({
   const stopped = React.useRef(false);
   // Lets a save schedule the next one without the callback naming itself.
   const again = React.useRef<() => void>(() => {});
+  const { toast } = useToast();
+  const latest = React.useRef<EditorContent>(initialContent);
+  const [removal, setRemoval] = React.useState<{ id: string; title: string } | null>(null);
 
   const flush = React.useCallback(async () => {
     if (saving.current || stopped.current || !pending.current) return;
@@ -117,6 +137,20 @@ export function ObjectEditor({
   const onChange = React.useCallback(
     (content: EditorContent, state: string) => {
       if (stopped.current) return;
+      const removed = removedTaskIds(latest.current, content);
+      latest.current = content;
+      if (removed.length > 0) {
+        setTimeout(() => {
+          // Still gone after the grace period: ask about the first one.
+          const present = taskBlockIds(latest.current);
+          const id = removed.find((taskId) => !present.has(taskId));
+          if (!id) return;
+          void summarizeObjects([{ kind: "task", id }]).then((rows) => {
+            const task = rows[0];
+            if (task && !task.archived) setRemoval({ id, title: task.title });
+          });
+        }, REMOVAL_GRACE_MS);
+      }
       pending.current = { content, state };
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void flush(), SAVE_DELAY_MS);
@@ -150,6 +184,25 @@ export function ObjectEditor({
       },
     }),
     [t],
+  );
+
+  const semantic = React.useMemo<EditorSemanticHandlers>(
+    () => ({
+      summarize: (refs) => summarizeObjects(refs),
+      search: (kind, query) => searchObjects(kind, query),
+      projects: () => listTaskProjects(),
+      createTask: async (title, projectId) => {
+        const result = await createTaskFromBlock(title, projectId ?? undefined);
+        return result.ok ? result.task : null;
+      },
+      setTaskDone: async (taskId, done) => (await setTaskDone(taskId, done)).ok,
+      runQuery: async (spec) => {
+        const result = await runQueryBlock(spec);
+        return result.ok ? result.rows : null;
+      },
+      openFile: (documentId) => resolveEditorFile(documentRef(documentId)),
+    }),
+    [],
   );
 
   const message: Record<SaveState, string | null> = {
@@ -186,9 +239,32 @@ export function ObjectEditor({
         editable={editable && state !== "conflict" && state !== "forbidden"}
         onChange={editable ? onChange : undefined}
         files={files}
+        semantic={semantic}
         hintId={editable ? hintId : undefined}
         label={label}
       />
+      {removal ? (
+        <Dialog open onClose={() => setRemoval(null)} title={t("semantic.removed.title")}>
+          <p className="text-body-sm text-ink">{t("semantic.removed.body", { title: removal.title })}</p>
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" onClick={() => setRemoval(null)}>
+              {t("semantic.removed.keep")}
+            </Button>
+            <Button
+              variant="danger"
+              onClick={async () => {
+                const result = await archiveTaskFromBlock(removal.id);
+                setRemoval(null);
+                toast(result.ok ? t("semantic.removed.archived") : (result.error ?? t("semantic.failed")), {
+                  tone: result.ok ? "success" : "error",
+                });
+              }}
+            >
+              {t("semantic.removed.archive")}
+            </Button>
+          </div>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
