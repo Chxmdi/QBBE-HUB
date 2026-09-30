@@ -10,6 +10,7 @@ import { isContentSnapshot, type PropertySnapshot } from "../content";
 import { restoreBlockInto } from "../diff";
 import { versionsText } from "../messages";
 import { getObjectVersion } from "./version.queries";
+import { isObjectLocked } from "@/features/collab/lock";
 
 export interface RestoreResult {
   ok: boolean;
@@ -45,6 +46,7 @@ export async function restoreFromVersion(input: unknown): Promise<RestoreResult>
   if (!current) return { ok: false, error: m.errors.notFound };
 
   const db = await createSupabaseServerClient();
+  if (await isObjectLocked(db, object.id)) return { ok: false, error: m.errors.locked };
   const { error: saveError } = await db.rpc("save_object_version", {
     p_object: object.id,
     p_type: object.type,

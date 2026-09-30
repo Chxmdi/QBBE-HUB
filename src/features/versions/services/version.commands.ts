@@ -9,6 +9,7 @@ import { contentAdapterFor } from "../adapters/registry";
 import { isContentSnapshot } from "../content";
 import { versionsText, type VersionsText } from "../messages";
 import { objectRefSchema } from "../schema";
+import { isObjectLocked } from "@/features/collab/lock";
 
 export interface VersionActionResult {
   ok: boolean;
@@ -20,6 +21,7 @@ export interface VersionActionResult {
 function translate(message: string | undefined, m: VersionsText): string {
   if (!message) return m.errors.failed;
   if (message.includes("legal hold")) return m.errors.held;
+  if (message.includes("is locked")) return m.errors.locked;
   if (message.includes("already in the trash")) return m.errors.alreadyInTrash;
   if (message.includes("not in the trash")) return m.errors.notInTrash;
   if (message.includes("from the trash before")) return m.errors.inTrash;
@@ -80,6 +82,9 @@ export async function autosaveObjectContent(input: unknown): Promise<VersionActi
   const { object, content } = parsed.data;
   const adapter = contentAdapterFor(object.type);
   if (!adapter) return { ok: false, error: m.errors.unsupported };
+  if (await isObjectLocked(await createSupabaseServerClient(), object.id)) {
+    return { ok: false, error: m.errors.locked };
+  }
   try {
     await adapter.writeContent(object, content);
   } catch (writeError) {

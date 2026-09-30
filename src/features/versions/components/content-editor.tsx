@@ -19,11 +19,14 @@ export function ContentEditor({
   initialText,
   blockId,
   disabled,
+  onCursor,
 }: {
   object: ObjectRef;
   initialText: string;
   blockId: string;
   disabled?: boolean;
+  /** Where the caret or selection is, for presence (V1-17). */
+  onCursor?: (cursor: { blockId: string; offset: number; length: number } | null) => void;
 }) {
   const m = versionsText(useLocale()).editor;
   const [text, setText] = useState(initialText);
@@ -60,7 +63,18 @@ export function ContentEditor({
           setText(event.target.value);
           autosave.change(event.target.value);
         }}
-        onBlur={() => void autosave.flush()}
+        onBlur={() => {
+          void autosave.flush();
+          onCursor?.(null);
+        }}
+        onSelect={(event) => {
+          const field = event.currentTarget;
+          onCursor?.({
+            blockId,
+            offset: field.selectionStart,
+            length: field.selectionEnd - field.selectionStart,
+          });
+        }}
         className="mt-1 min-h-40 w-full rounded-(--radius-sm) border border-line bg-surface px-3 py-2 text-sm leading-normal text-ink focus:border-brand disabled:cursor-not-allowed disabled:opacity-60"
       />
       <p id={hintId} className="meta mt-1">
