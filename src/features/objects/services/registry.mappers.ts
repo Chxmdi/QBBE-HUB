@@ -36,7 +36,7 @@ export const OBJECT_TYPE_COLUMNS =
   "id, key, name_en, name_fr, icon, kind, native_table, default_lens, default_template_id";
 
 export const OBJECT_COLUMNS =
-  "id, organization_id, space_id, parent_object_id, title, icon, cover, owner_id, created_by, created_at, updated_by, updated_at, archived_at, deleted_at, object_type:type_id(key)";
+  "id, organization_id, space_id, parent_object_id, title, icon, cover, owner_id, created_by, created_at, updated_by, updated_at, archived_at, deleted_at, object_type!object_type_id_organization_id_fkey(key)";
 
 export function toObjectType(row: ObjectTypeRow): ObjectType {
   return {
