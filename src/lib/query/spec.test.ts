@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { QueryError, queryErrorFrom } from "./errors";
-import { parseLensSpec, runLens, type RpcClient } from "./run";
+import { parseLensSpec, runLens, runLensAll, type RpcClient } from "./run";
 import { LIMITS, type LensNode } from "./spec";
 
 /** Payloads from the W0-8 spike: quote breaks, statements, comments, casts, NUL. */
@@ -168,5 +168,26 @@ describe("runLens", () => {
     const result = await runLens(ok({ type: "task", rows: null, total: 0, groups: null, limit: 100, offset: 0 }), base);
     expect(result.rows).toEqual([]);
     expect(result.columns).toEqual([]);
+  });
+});
+
+describe("runLensAll", () => {
+  it("loads the first page, then the rest at once, in order, up to maxRows", async () => {
+    const offsets: number[] = [];
+    const client: RpcClient = {
+      rpc: async (_fn, args) => {
+        const spec = (args as { spec: { offset: number; limit: number } }).spec;
+        offsets.push(spec.offset);
+        const rows = Array.from({ length: Math.min(spec.limit, 2500 - spec.offset) }, (_, i) => ({
+          id: String(spec.offset + i), title: "", group: null, values: {},
+        }));
+        return { data: { type: "task", columns: [], groupBy: null, rows, total: 2500, groups: null, limit: spec.limit, offset: spec.offset }, error: null };
+      },
+    };
+    const all = await runLensAll(client, { ...base, limit: 1000 });
+    expect(all.rows.map((r) => r.id)).toEqual(Array.from({ length: 2500 }, (_, i) => String(i)));
+    expect(offsets.sort((a, b) => a - b)).toEqual([0, 1000, 2000]);
+    const capped = await runLensAll(client, { ...base, limit: 1000 }, { maxRows: 1500 });
+    expect(capped.rows).toHaveLength(1500);
   });
 });
