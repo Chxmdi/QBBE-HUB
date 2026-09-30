@@ -12,6 +12,8 @@ export function SpaceList({
   empty,
   locale,
   t,
+  publicIds,
+  publicLabel,
 }: {
   id: string;
   heading: string;
@@ -19,6 +21,9 @@ export function SpaceList({
   empty: string;
   locale: Locale;
   t: SpacesT;
+  /** Spaces with a live public page (V1-18), and the badge's text. */
+  publicIds?: ReadonlySet<string>;
+  publicLabel?: string;
 }) {
   return (
     <section aria-labelledby={id} className="mb-8">
@@ -39,6 +44,7 @@ export function SpaceList({
                 </h3>
                 <Badge tone={space.kind === "private" ? "accent" : "neutral"}>{t(`kinds.${space.kind}`)}</Badge>
                 {space.archivedAt ? <Badge tone="warning">{t("archived")}</Badge> : null}
+                {publicIds?.has(space.id) && publicLabel ? <Badge tone="success">{publicLabel}</Badge> : null}
               </div>
               {space.description ? (
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{space.description}</p>
