@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { mobileEnabled } from "@/features/mobile/flag";
+import { PhoneStatusProvider } from "@/features/mobile/components/phone-status";
 import { TabBar } from "@/features/mobile/components/tab-bar";
 
 /**
@@ -11,7 +12,7 @@ export default async function PhoneLayout({ children }: { children: React.ReactN
   return (
     <div className="mx-auto w-full max-w-md">
       <TabBar />
-      {children}
+      <PhoneStatusProvider>{children}</PhoneStatusProvider>
     </div>
   );
 }
