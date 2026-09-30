@@ -5,6 +5,7 @@ a task checklist. Tick items off in the PR that completes them.
 
 | Plan | Covers | State (2026-09-27) |
 |---|---|---|
+| [workspace-os-execution.md](workspace-os-execution.md) | Fastest build order for Workspace OS: 6 parallel streams, waves, checklist, test-time cut, QBBE touchpoints | Ready to start (2026-09-30) |
 | [workspace-os-plan.md](workspace-os-plan.md) | Workspace OS without AI: universal objects, types, relations, block editor, lenses, spaces and permissions, workflows, Home and Attention, capture; MVP then V1–V3 | Planned (2026-09-30); Phase 0 next; 3 decisions owed |
 | [owner-checklist.md](owner-checklist.md) | Everything only QBBE can do: accounts, staging, services, accountant, sign-offs | Start here (2026-09-29) |
 | [paperless-bookkeeping-plan.md](paperless-bookkeeping-plan.md) | #157 roadmap, #139 paperless, #140 bookkeeping, #141 French | Most features merged; payroll (#177) and gifts (#172) in review; accountant, counsel and French-review inputs owed |
