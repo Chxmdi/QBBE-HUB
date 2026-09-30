@@ -1,0 +1,63 @@
+/** Home, My World and attention: English source catalogue (M17). */
+export const homeEn = {
+  page: {
+    title: "Home",
+    description: "What needs you now, what is on today, and what changed.",
+    worldTitle: "My World",
+    worldDescription: "Everything that is yours: tasks, meetings, projects, and what others owe you.",
+    tabs: "Home views",
+    home: "Home",
+    world: "My World",
+    commands: "Commands",
+  },
+  section: {
+    now: { title: "Now", empty: "Nothing urgent. Nothing is overdue or due today." },
+    today: { title: "Today", empty: "No meetings and nothing due today." },
+    waiting: { title: "Waiting", empty: "You are not waiting on anyone." },
+    continue: { title: "Continue", empty: "Nothing recent to pick up again." },
+    decisions: { title: "Decisions", empty: "No decisions waiting on you, and none made recently." },
+    changes: { title: "Changes", empty: "Nothing has changed on your work in the last three days." },
+  },
+  world: {
+    tasks: { title: "My tasks", empty: "No open tasks are assigned to you." },
+    meetings: { title: "Meetings", empty: "No meetings in the next two weeks." },
+    projects: { title: "Projects", empty: "You do not own, sponsor or work on any open project." },
+    waitingOn: { title: "Waiting on", empty: "Nobody owes you anything right now." },
+    mentions: { title: "Mentions", empty: "No mentions in the last 30 days." },
+    decisionsNeeded: { title: "Decisions needed", empty: "No approvals or reviews are waiting on you." },
+  },
+  fact: {
+    due: "Due {date}",
+    overdue: "Overdue since {date}",
+    dueToday: "Due today",
+    target: "Target {date}",
+    project: "Project: {name}",
+    person: "{name}",
+    reason: "Blocked: {text}",
+    reviewer: "You review",
+    approver: "You approve",
+    requester: "You asked",
+    owner: "You own it",
+    approvalFallback: "Approval request",
+  },
+  health: {
+    on_track: "On track",
+    at_risk: "At risk",
+    off_track: "Off track",
+    paused: "Paused",
+    unknown: "Health not set",
+  },
+  status: {
+    not_started: "Not started",
+    ready: "Ready",
+    in_progress: "In progress",
+    waiting: "Waiting",
+    blocked: "Blocked",
+    in_review: "In review",
+    completed: "Completed",
+    cancelled: "Cancelled",
+  },
+  count: "{count} items",
+} as const;
+
+export type HomeMessages = typeof homeEn;
