@@ -11,13 +11,18 @@ import { removedTaskIds, taskBlockIds } from "@/features/editor/semantic/removed
 import {
   archiveTaskFromBlock,
   createTaskFromBlock,
+  listPeople,
   listTaskProjects,
+  turnIntoPage,
   runQueryBlock,
   searchObjects,
   setTaskDone,
   summarizeObjects,
 } from "@/features/editor/services/semantic.commands";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/input";
+import { calendarDateInZone, DEFAULT_TIME_ZONE } from "@/lib/time";
+import type { TaskSuggestionOptions } from "@/features/editor/adapter/types";
 import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import type { EditorContent } from "@/features/editor/adapter/content";
@@ -29,6 +34,48 @@ type SaveState = "idle" | "saving" | "saved" | "failed" | "offline" | "conflict"
 const SAVE_DELAY_MS = 800;
 /** A task block cut and pasted elsewhere reappears within this time; only then is it "removed". */
 const REMOVAL_GRACE_MS = 1500;
+/** Each person's choice to hide "Make a task" suggestions, kept in this browser. */
+const SUGGESTIONS_KEY = "qbbe-editor-task-suggestions";
+
+const settingListeners = new Set<() => void>();
+
+function readSuggestionsSetting(): boolean {
+  try {
+    return window.localStorage.getItem(SUGGESTIONS_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+
+function writeSuggestionsSetting(on: boolean) {
+  try {
+    window.localStorage.setItem(SUGGESTIONS_KEY, on ? "on" : "off");
+  } catch {
+    // Private windows may refuse storage; the switch still works for this page.
+    memorySetting = on;
+  }
+  settingListeners.forEach((listener) => listener());
+}
+
+let memorySetting: boolean | null = null;
+
+function subscribeSuggestionsSetting(listener: () => void) {
+  settingListeners.add(listener);
+  window.addEventListener("storage", listener);
+  return () => {
+    settingListeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+/** Each person's choice, kept in this browser; on by default and during the server render. */
+function useSuggestionsSetting(): boolean {
+  return React.useSyncExternalStore(
+    subscribeSuggestionsSetting,
+    () => memorySetting ?? readSuggestionsSetting(),
+    () => true,
+  );
+}
 const RETRY_MS = 5000;
 /** Next.js caps a server action's request at 1 MB; stay under it with room for the envelope. */
 const MAX_SAVE_CHARS = 950_000;
@@ -47,6 +94,7 @@ export function ObjectEditor({
   initialVersion,
   editable,
   label,
+  timeZone = DEFAULT_TIME_ZONE,
 }: {
   objectId: string;
   objectType: "page" | "task";
@@ -56,6 +104,8 @@ export function ObjectEditor({
   editable: boolean;
   /** Accessible name for the editor; defaults to "Document content". */
   label?: string;
+  /** The organization's zone, for resolving "tomorrow" in suggestions. */
+  timeZone?: string;
 }) {
   const t = useEditorT();
   const hintId = React.useId();
@@ -70,6 +120,20 @@ export function ObjectEditor({
   const { toast } = useToast();
   const latest = React.useRef<EditorContent>(initialContent);
   const [removal, setRemoval] = React.useState<{ id: string; title: string } | null>(null);
+  const suggestionsOn = useSuggestionsSetting();
+  const [people, setPeople] = React.useState<{ id: string; name: string }[]>([]);
+  const suggestionsId = React.useId();
+
+  React.useEffect(() => {
+    if (!editable || !suggestionsOn) return;
+    let active = true;
+    void listPeople()
+      .then((rows) => active && setPeople(rows))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [editable, suggestionsOn]);
 
   const flush = React.useCallback(async () => {
     if (saving.current || stopped.current || !pending.current) return;
@@ -191,8 +255,8 @@ export function ObjectEditor({
       summarize: (refs) => summarizeObjects(refs),
       search: (kind, query) => searchObjects(kind, query),
       projects: () => listTaskProjects(),
-      createTask: async (title, projectId) => {
-        const result = await createTaskFromBlock(title, projectId ?? undefined);
+      createTask: async (title, projectId, extras) => {
+        const result = await createTaskFromBlock(title, projectId ?? undefined, extras);
         return result.ok ? result.task : null;
       },
       setTaskDone: async (taskId, done) => (await setTaskDone(taskId, done)).ok,
@@ -201,8 +265,24 @@ export function ObjectEditor({
         return result.ok ? result.rows : null;
       },
       openFile: (documentId) => resolveEditorFile(documentRef(documentId)),
+      turnIntoPage:
+        objectType === "page"
+          ? async (title, content) => {
+              const result = await turnIntoPage({ parentPageId: objectId, title, content });
+              return result.ok ? result.page : null;
+            }
+          : undefined,
     }),
-    [],
+    [objectId, objectType],
+  );
+
+  const taskSuggestions = React.useMemo<TaskSuggestionOptions>(
+    () => ({
+      enabled: suggestionsOn && people.length > 0,
+      people,
+      today: calendarDateInZone(new Date(), timeZone) ?? new Date().toISOString().slice(0, 10),
+    }),
+    [suggestionsOn, people, timeZone],
   );
 
   const message: Record<SaveState, string | null> = {
@@ -224,6 +304,14 @@ export function ObjectEditor({
           <p id={hintId} className="text-caption text-muted">
             {t("keyboardHint")}
           </p>
+          <label htmlFor={suggestionsId} className="flex min-h-6 items-center gap-2 text-caption text-ink" title={t("progressive.toggleHint")}>
+            <Switch
+              id={suggestionsId}
+              checked={suggestionsOn}
+              onChange={(event) => writeSuggestionsSetting(event.target.checked)}
+            />
+            {t("progressive.toggle")}
+          </label>
           <p
             role={alert ? "alert" : "status"}
             data-testid="editor-save-state"
@@ -240,6 +328,7 @@ export function ObjectEditor({
         onChange={editable ? onChange : undefined}
         files={files}
         semantic={semantic}
+        taskSuggestions={taskSuggestions}
         hintId={editable ? hintId : undefined}
         label={label}
       />
