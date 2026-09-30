@@ -32,6 +32,8 @@ declare
 begin
   select organization_id into strict v_org
   from public.organization_membership where user_id = v_owner;
+  -- Start from no visits, whatever a browser run left behind (rolled back).
+  delete from public.home_visit where organization_id = v_org;
 
   -- The accountant is a Guest with a live ledger grant (#154).
   update public.organization_membership set role = 'guest'
