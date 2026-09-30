@@ -33,6 +33,11 @@ the answers today's rules give, and stay fast on a board?
   0.6 to 1.1 s instead of about 40 ms, because the prototype's triggers work
   one row at a time. Statement-level triggers fix that (see "Before building for real").
 
+- **Two changes to the agreed design (W0-9) follow from this.** The cache
+  must be refreshed straight away when access changes, not deleted and
+  recomputed on the next check. And organization roles need a "ceiling"
+  rule. Both are explained in "How this fits the agreed design".
+
 ## What was built
 
 Everything is in `supabase/spikes/w0-7-access/`. It is **not a migration**:
@@ -331,7 +336,8 @@ not cached.
 2. **Cache person and team grants; answer organization roles, role
    ceilings, membership and MFA live.** This keeps the cache small, and makes
    suspension and MFA take effect immediately.
-3. **Two forms of one check, from the same cache:**
+3. **Two forms of one check, from the same cache** (the W0-3 signature,
+   `app.can(object_id, capability)`, is unchanged):
    - `app.can(object_id, capability)` for one record at a time (about 70 µs);
    - for lists, the policy form: `organization_id = any(my orgs) and
      (organization_id = any(orgs where my role gives it) or id in
@@ -352,6 +358,56 @@ not cached.
      a million calls. A CI version with the edge-case fixture and the QA
      users, rather than all 2,000 perf tasks, takes seconds.
    - Decide the MFA question in finding 2 and the lead question in finding 3.
+
+## How this fits the agreed design (W0-9)
+
+`docs/design/workspace-os-object-layer.md` section 7 (merged in #201 while
+this spike ran) fixes the shape of spaces, grants and `app.can`. The spike
+agrees with most of it; these are the points where the measurements say
+something different, for the lead session to decide:
+
+1. **Capability names: the agreed map wins.** The stand-in maps comment to
+   manage, collaborate, review or approve; edit content to manage or
+   collaborate; and run workflow, share and edit structure to manage. The
+   spike used a different naming, but what it proved is lower level: the
+   cache holds today's five record capabilities (read, collaborate, review,
+   approve, manage) exactly, for every person and record. Any name map is
+   then one bit expression over them. **Recommendation:** store those five
+   (plus any new ones) as bits, and keep the name map in one place, inside
+   `app.can`, exactly as in the stand-in. The spike's own naming should not
+   be adopted.
+2. **Refresh the cache at once; don't delete and compute on a miss.**
+   Section 7.3 says triggers delete cache rows and the next check computes
+   them. Three measurements argue against that:
+   - A list can only use the fast set-based form if a missing row means "no
+     access". With compute-on-miss it could also mean "not worked out yet",
+     so lists would fall back to per-row checks: 40 to 340 ms on a 500-task
+     board.
+   - Computing a miss for a task means calling today's functions, about
+     0.5 to 2 ms each. A board of 500 cold tasks would take up to about 1 s.
+   - Refreshing at once is cheap: 33 ms to give someone a 1,000-task
+     program, 26 ms to move a 500-task project.
+
+   **Recommendation:** triggers recompute the affected people on the affected
+   objects straight away, as prototyped. The nightly job becomes a full
+   rebuild (384 ms here) compared against the kept cache, which is the
+   spike's round 3 check.
+3. **Organization roles, ceilings and membership are not cache inputs.**
+   They are answered live (see "The model"), so `organization_membership` is
+   not on the trigger list, and a suspension needs no refresh. Section 7
+   should also add the ceiling rule (finding 1); it is not there today.
+4. **Bits rather than `capabilities text[]`.** The spike stored an integer
+   bit mask. A text array was not measured, but a list test on an array
+   costs more than a bitwise AND on every cache row read.
+5. **Reading `program_access_grant` through, not copying it:** both work.
+   The spike copied it with a trigger, which let the cache logic see only one
+   grant table. Reading it through (one source of truth, as section 7
+   prefers) gives the same answers as long as the compute query unions both
+   tables. The spike's `compute` function is the place to do that.
+6. **The M10c equivalence test** should grow from the stand-in's
+   `supabase/tests/workspace-os-can.sql`, adding this spike's edge cases:
+   the ceilings, a lead without a `record_lead` row, team grants, moves, and
+   the external accountant. That keeps it fast enough for CI.
 
 ## How to reproduce
 
@@ -386,11 +442,12 @@ All steps run against the local database only.
 - The timings above; the final timing run is the one reported.
 - On every board, the cache policy returned exactly the same rows as
   today's policy.
-- `npm run lint` (0 errors; the 2 warnings are in files this change does not
-  touch), `npm run typecheck`, and `npm test` (109 files, 977 tests) all pass.
-- `npm run test:db`: 1,843 assertions pass. It was run on a freshly reset
-  database with the prototype not applied, because nothing in this change is
-  a migration. The prototype is never applied by the suite or by CI.
+- After merging the latest `main` into this branch: `npm run lint` (0
+  errors; the 2 warnings are in files this change does not touch),
+  `npm run typecheck`, and `npm test` (121 files, 1,250 tests) all pass.
+- `npm run test:db`: 2,040 assertions pass across 65 files, on a freshly reset
+  database with the prototype not applied. Nothing in this change is a
+  migration, and neither the suite nor CI ever applies the prototype.
 
 **Not verified:**
 - Nothing was run against a hosted database. The finding 3 check of the
