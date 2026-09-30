@@ -17,7 +17,7 @@ const TASK_COLUMNS =
   "id, title, status, priority, due_at, assignee_id, requester_id, reviewer_id, approver_id, project_id, " +
   "blocked_reason, updated_at, project:project_id(id, name), assignee:assignee_id(full_name)";
 const MEETING_COLUMNS = "id, title, starts_at, ends_at, status, organizer_id";
-const PROJECT_COLUMNS = "id, name, stage, health, priority, target_date, owner_id, sponsor_id, updated_at";
+const PROJECT_COLUMNS = "id, name, stage, health, priority, target_date, owner_id, sponsor_id, updated_at, program_id";
 const ACTIVITY_COLUMNS =
   "id, actor_id, verb, source_type, source_id, project_id, summary, created_at, actor:actor_id(full_name)";
 

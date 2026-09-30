@@ -84,6 +84,51 @@ test("Home shows my urgent work, what I wait on, and My World gathers it; nobody
   await expect(page.getByRole("region", { name: /^My tasks/ }).getByRole("link", { name: asked })).toBeVisible();
 });
 
+test("While you were away lists others' changes to my work since my last visit, ranked", async ({ page }) => {
+  test.setTimeout(120_000);
+  const suffix = randomUUID().slice(0, 8);
+  const org = sql(`select organization_id from organization_membership where user_id = '${OWNER_ID}'`);
+  const staff = sql(`select id from user_profile where full_name = 'QA Staff'`);
+  const blocked = `Blocked while away ${suffix}`;
+  const moved = `Moved while away ${suffix}`;
+  const [blockedId, movedId] = sql(
+    `insert into task (organization_id, title, created_by, requester_id, assignee_id)
+     values ('${org}', '${blocked}', '${OWNER_ID}', '${OWNER_ID}', '${OWNER_ID}'),
+            ('${org}', '${moved}', '${OWNER_ID}', '${OWNER_ID}', '${OWNER_ID}') returning id`,
+  ).split("\n");
+
+  await signIn(page, "owner");
+  await page.goto("/home");
+  await expect(page.getByRole("region", { name: "While you were away" })).toBeVisible();
+
+  // The visit ended two hours ago; then a colleague changed two of my tasks.
+  sql(`update home_visit set last_seen_at = now() - interval '2 hours' where user_id = '${OWNER_ID}'`);
+  sql(`insert into activity_event (organization_id, actor_id, verb, source_type, source_id, summary, metadata) values
+    ('${org}', '${staff}', 'updated', 'task', '${movedId}', 'updated a task',
+     '{"changes":[{"field":"due_at","from":"2026-12-20","to":"2026-12-10"}]}'),
+    ('${org}', '${staff}', 'updated', 'task', '${blockedId}', 'updated a task',
+     '{"changes":[{"field":"status","from":"ready","to":"blocked"},{"field":"blocked_reason","from":null,"to":"Waiting on the venue"}]}')`);
+
+  await page.reload();
+  const digest = page.getByRole("region", { name: "While you were away" });
+  await expect(digest.getByText(/^Changes since /)).toBeVisible();
+  const entries = digest.getByRole("listitem");
+  await expect(entries.nth(0)).toContainText("Newly blocked");
+  await expect(entries.nth(0)).toContainText(blocked);
+  await expect(entries.nth(0)).toContainText("Blocked: Waiting on the venue · By QA Staff");
+  await expect(entries.nth(1)).toContainText("Deadline moved");
+  await expect(entries.nth(1)).toContainText(/Moved sooner: .+ to .+/);
+  expect(await axeProblems(page), "digest accessibility").toEqual([]);
+
+  // A reload during the same visit keeps the digest.
+  await page.reload();
+  await expect(page.getByRole("region", { name: "While you were away" }).getByText(blocked)).toBeVisible();
+
+  // The entry opens the task.
+  await page.getByRole("region", { name: "While you were away" }).getByRole("link", { name: blocked }).click();
+  await expect(page).toHaveURL(new RegExp(`/my-work\\?task=${blockedId}`));
+});
+
 test("Home speaks French", async ({ page, context }) => {
   await signIn(page, "owner");
   await context.addCookies([{ name: "qbbe-locale", value: "fr-CA", url: "http://127.0.0.1:3000" }]);
