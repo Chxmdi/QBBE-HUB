@@ -419,8 +419,9 @@ export async function convertFollowUpToTask(followUpId: string): Promise<ActionR
   const { createTask } = await import("@/features/tasks/services/task.commands");
   const created = await createTask({
     title: followUp.title,
-    dueAt: followUp.due_at,
-    assigneeId: followUp.owner_id,
+    dueAt: followUp.due_at ?? undefined,
+    assigneeId: followUp.owner_id ?? undefined,
+    source: { type: "contact", id: followUp.id },
   });
   if (!created.ok || !created.id) return created;
 
