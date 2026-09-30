@@ -78,13 +78,13 @@ declare
 begin
   perform tests.authenticate('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'aal2');
 
-  select array_agg(title order by title) into v_titles from public.find('reunion ecole zyxfind', array['task']);
+  select array_agg(title order by title collate "C") into v_titles from public.find('reunion ecole zyxfind', array['task']);
   perform tests.ok(v_titles = array['Zyxfind Réunion du conseil d''ÉCOLE'], 'accents and case are ignored');
-  select array_agg(title order by title) into v_titles from public.find('ÉCOLE zyxfind conseil', array['task']);
+  select array_agg(title order by title collate "C") into v_titles from public.find('ÉCOLE zyxfind conseil', array['task']);
   perform tests.ok(v_titles = array['Zyxfind Réunion du conseil d''ÉCOLE'], 'words match in any order');
   perform tests.ok(not exists (select 1 from public.find('zyxfind archived')), 'archived records are left out');
 
-  select array_agg(title order by title) into v_titles from public.find('réunion zyxfind', array['task']);
+  select array_agg(title order by title collate "C") into v_titles from public.find('réunion zyxfind', array['task']);
   perform tests.ok('Zyxfind rapport annuel' = any (v_titles),
     'descriptions match by French stem ("réunion" finds "réunions")');
 
@@ -93,11 +93,11 @@ begin
   select array_agg(result_type) into v_titles from public.find('zyxfind ecole', array['project']);
   perform tests.ok(v_titles = array['project'], 'the type filter narrows the result');
 
-  select array_agg(title order by title) into v_titles
+  select array_agg(title order by title collate "C") into v_titles
   from public.find('zyxfind', null, (select id from find_fx where name = 'program_a'));
   perform tests.ok(v_titles = array['Zyxfind Réunion du conseil d''ÉCOLE', 'Zyxfind projet école'],
     'the space filter keeps a program''s records, including tasks through their project');
-  select array_agg(title order by title) into v_titles
+  select array_agg(title order by title collate "C") into v_titles
   from public.find('zyxfind', null, (select id from find_fx where name = 'program_b'));
   perform tests.ok(v_titles = array['Zyxfind rapport annuel'], 'the space filter uses a task''s own program');
 
