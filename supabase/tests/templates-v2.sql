@@ -31,7 +31,10 @@ begin
   from public.organization_membership where user_id = v_owner limit 1;
   update public.organization_membership set status = 'active'
   where organization_id = v_org and user_id in (v_staff, v_volunteer, v_admin, v_guest);
-  select id into strict v_program from public.program where organization_id = v_org order by created_at limit 1;
+  -- Its own program, so the test does not depend on seed data (CI has none).
+  insert into public.program (organization_id, name, slug, created_by)
+  values (v_org, 'Templates v2 test program', 'templates-v2-test-' || substr(md5(random()::text), 1, 8), v_owner)
+  returning id into v_program;
   select id into strict v_space from public.template_v2
   where organization_id = v_org and scope = 'space' and created_by is null;
   select id into strict v_page from public.template_v2
