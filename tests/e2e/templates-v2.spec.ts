@@ -50,7 +50,7 @@ test("a space template previews real dates and creates its projects and tasks", 
     expect(await axeProblems(page), "template accessibility").toEqual([]);
 
     const program = sql(`select name from program order by created_at limit 1`);
-    await page.getByLabel("Program").selectOption({ label: program });
+    await page.getByLabel("Program", { exact: true }).selectOption({ label: program });
     await page.getByRole("button", { name: "Use this template" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Created 5 records." })).toBeVisible({ timeout: 20_000 });
     expect(
