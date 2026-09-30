@@ -8,7 +8,7 @@ export interface EditorFileHandlers {
   resolve: (ref: string) => Promise<string | null>;
 }
 
-export type SemanticKind = "task" | "decision" | "person" | "document";
+export type SemanticKind = "task" | "decision" | "person" | "document" | "page";
 
 /** What a semantic block shows about the object it points at. */
 export interface SemanticSummary {
@@ -34,10 +34,24 @@ export interface EditorSemanticHandlers {
   search: (kind: SemanticKind, query: string) => Promise<SemanticSummary[]>;
   /** Projects a new task can be created in. */
   projects: () => Promise<{ id: string; name: string }[]>;
-  createTask: (title: string, projectId: string | null) => Promise<SemanticSummary | null>;
+  createTask: (
+    title: string,
+    projectId: string | null,
+    extras?: { assigneeId?: string; dueAt?: string },
+  ) => Promise<SemanticSummary | null>;
+  /** "Turn into page" (M6); absent where there is no page to nest under. */
+  turnIntoPage?: (title: string, content: EditorContent) => Promise<SemanticSummary | null>;
   setTaskDone: (taskId: string, done: boolean) => Promise<boolean>;
   runQuery: (spec: string) => Promise<QueryRowSummary[] | null>;
   openFile: (documentId: string) => Promise<string | null>;
+}
+
+/** The rule-based "Make a task" suggestion (M6). */
+export interface TaskSuggestionOptions {
+  enabled: boolean;
+  people: { id: string; name: string }[];
+  /** Today's calendar date in the organization's zone, YYYY-MM-DD. */
+  today: string;
 }
 
 /** The only editor interface the rest of the app uses. */
@@ -54,6 +68,7 @@ export interface BlockEditorProps {
   files?: EditorFileHandlers;
   /** Enables the semantic blocks (task, decision, person, status, query, library file). */
   semantic?: EditorSemanticHandlers;
+  taskSuggestions?: TaskSuggestionOptions;
   /** Id of the element describing the editor's keys; rendered by the caller. */
   hintId?: string;
   /** Accessible name; defaults to "Document content". */

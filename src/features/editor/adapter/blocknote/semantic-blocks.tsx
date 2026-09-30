@@ -230,7 +230,7 @@ export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: Handl
   const app = createTranslator(locale);
   const format = formattersFor(locale);
 
-  const objectBlock = (type: "task" | "decision" | "person" | "libraryFile", kind: SemanticKind) =>
+  const objectBlock = (type: "task" | "decision" | "person" | "libraryFile" | "pageLink", kind: SemanticKind) =>
     createReactBlockSpec(
       { type, propSchema: { objectId: { default: "" } }, content: "none" },
       {
@@ -320,6 +320,7 @@ export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: Handl
     decision: objectBlock("decision", "decision"),
     person: objectBlock("person", "person"),
     libraryFile: objectBlock("libraryFile", "document"),
+    pageLink: objectBlock("pageLink", "page"),
     status,
     query,
   };
@@ -433,6 +434,23 @@ function ObjectCard({
           </Link>
         ) : (
           <span className="truncate text-ink">{summary.title}</span>
+        )}
+      </div>
+    );
+  }
+
+  if (summary.kind === "page") {
+    return (
+      <div className={box} contentEditable={false}>
+        <span className="inline-flex size-4 shrink-0 items-center justify-center" aria-hidden>
+          {summary.detail ?? <FileText className="size-4 text-muted" />}
+        </span>
+        {summary.href ? (
+          <Link href={summary.href} className="min-w-0 flex-1 truncate text-ink underline-offset-2 hover:underline">
+            {summary.title}
+          </Link>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-ink">{summary.title}</span>
         )}
       </div>
     );

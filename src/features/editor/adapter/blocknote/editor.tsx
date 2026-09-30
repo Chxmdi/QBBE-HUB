@@ -21,16 +21,17 @@ import {
   type DefaultReactSuggestionItem,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/ariakit";
-import { Activity, Bookmark, FileText, Gavel, ListChecks, ListTodo, MessageSquareWarning, PanelTop, UserRound } from "lucide-react";
+import { Activity, Bookmark, FileText, Gavel, Link2, ListChecks, ListTodo, MessageSquareWarning, PanelTop, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { useLocale } from "@/lib/i18n/client";
 import { useEditorT } from "@/features/editor/i18n/client";
 import type { EditorT } from "@/features/editor/i18n";
 import { CONTENT_VERSION, type EditorBlock, type EditorContent } from "@/features/editor/adapter/content";
-import type { BlockEditorProps } from "@/features/editor/adapter/types";
+import type { BlockEditorProps, EditorSemanticHandlers } from "@/features/editor/adapter/types";
 import { createWorkspaceBlocks } from "./blocks";
 import { createSemanticBlocks, HandlersBox } from "./semantic-blocks";
+import { SuggestionLayer, TurnIntoTasksDialog, turnIntoPage } from "./progressive";
 import type { Locale } from "@/lib/i18n/config";
 import { rankByTitle } from "@/features/editor/adapter/slash";
 import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
@@ -60,6 +61,7 @@ function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
       decision: s.decision(),
       person: s.person(),
       libraryFile: s.libraryFile(),
+      pageLink: s.pageLink(),
       status: s.status(),
       query: s.query(),
     },
@@ -268,7 +270,7 @@ function workspaceSlashItems(editor: Editor, t: EditorT): DefaultReactSuggestion
   ];
 }
 
-type SemanticItem = "task" | "decision" | "person" | "status" | "query" | "libraryFile";
+type SemanticItem = "task" | "decision" | "person" | "status" | "query" | "libraryFile" | "pageLink";
 
 function semanticSlashItems(editor: Editor, t: EditorT): DefaultReactSuggestionItem[] {
   const group = t("slash.group");
@@ -279,6 +281,7 @@ function semanticSlashItems(editor: Editor, t: EditorT): DefaultReactSuggestionI
     status: <Activity size={18} aria-hidden />,
     query: <ListTodo size={18} aria-hidden />,
     libraryFile: <FileText size={18} aria-hidden />,
+    pageLink: <Link2 size={18} aria-hidden />,
   };
   return (Object.keys(icons) as SemanticItem[]).map((key) => ({
     title: t(`semantic.items.${key}.title`),
@@ -322,7 +325,22 @@ const TURN_INTO: { key: TurnIntoKey; block: PartialBlock<Schema["blockSchema"]> 
 
 const TEXT_TYPES = new Set(["paragraph", "heading", "bulletListItem", "numberedListItem", "checkListItem", "toggleListItem", "quote", "callout", "codeBlock"]);
 
-function BlockMenu({ editor, t, onClose }: { editor: Editor; t: EditorT; onClose: () => void }) {
+function BlockMenu({
+  editor,
+  t,
+  onClose,
+  selection,
+  semantic,
+  onTurnIntoTasks,
+}: {
+  editor: Editor;
+  t: EditorT;
+  onClose: () => void;
+  /** The blocks selected when the menu opened (the cursor's block if none). */
+  selection: EditorBlock[];
+  semantic?: EditorSemanticHandlers;
+  onTurnIntoTasks: () => void;
+}) {
   const current = editor.getTextCursorPosition().block;
   const done = (announce?: string) => {
     onClose();
@@ -354,6 +372,25 @@ function BlockMenu({ editor, t, onClose }: { editor: Editor; t: EditorT; onClose
         >
           {t("blockMenu.duplicate")}
         </Button>
+        {semantic && canTurn ? (
+          <div className="my-1 border-t border-line pt-1">
+            <Button variant="ghost" className="w-full justify-start" onClick={() => { onClose(); onTurnIntoTasks(); }}>
+              {t("progressive.turnIntoTask")}
+            </Button>
+            {semantic.turnIntoPage ? (
+              <Button
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={async () => {
+                  const ok = await turnIntoPage(editor as never, selection as never, semantic, t);
+                  done(ok ? undefined : t("semantic.failed"));
+                }}
+              >
+                {t("progressive.turnIntoPage")}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         {canTurn ? (
           <div className="my-1 border-t border-line pt-1">
             {TURN_INTO.map(({ key, block }) => (
@@ -392,6 +429,7 @@ export default function BlockNoteEditorImpl({
   onChange,
   files,
   semantic,
+  taskSuggestions,
   hintId,
   label,
 }: BlockEditorProps) {
@@ -400,6 +438,9 @@ export default function BlockNoteEditorImpl({
   const theme = useDocumentTheme();
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [selection, setSelection] = React.useState<EditorBlock[]>([]);
+  const [turningIntoTasks, setTurningIntoTasks] = React.useState(false);
+  const [version, setVersion] = React.useState(0);
   // Blocks read the latest handlers through a ref, so new handler objects do
   // not rebuild the schema (which would remount the editor).
   const [semanticBox] = React.useState(() => new HandlersBox(semantic ?? null));
@@ -432,7 +473,10 @@ export default function BlockNoteEditorImpl({
 
   useAccessibleNames(editor, t);
   const openBlockMenu = React.useCallback(() => {
-    if (editor.isEditable) setMenuOpen(true);
+    if (!editor.isEditable) return;
+    const picked = editor.getSelection()?.blocks ?? [editor.getTextCursorPosition().block];
+    setSelection(JSON.parse(JSON.stringify(picked)) as EditorBlock[]);
+    setMenuOpen(true);
   }, [editor]);
   useKeyboardConditions(containerRef, openBlockMenu);
 
@@ -444,6 +488,7 @@ export default function BlockNoteEditorImpl({
       editor.insertBlocks([{ type: "paragraph" }], last, "after");
       return;
     }
+    setVersion((n) => n + 1);
     onChange?.(toContent(blocks), bytesToBase64(Y.encodeStateAsUpdate(doc)));
   }, [editor, editable, onChange, doc]);
 
@@ -464,7 +509,7 @@ export default function BlockNoteEditorImpl({
   );
 
   return (
-    <div ref={containerRef} className="qbbe-editor">
+    <div ref={containerRef} className="qbbe-editor relative">
       <BlockNoteView
         editor={editor}
         theme={theme}
@@ -476,7 +521,35 @@ export default function BlockNoteEditorImpl({
         <SuggestionMenuController triggerCharacter="/" getItems={getItems} />
       </BlockNoteView>
       <p id="qbbe-editor-live" className="sr-only" aria-live="polite" />
-      {menuOpen ? <BlockMenu editor={editor} t={t} onClose={() => setMenuOpen(false)} /> : null}
+      {menuOpen ? (
+        <BlockMenu
+          editor={editor}
+          t={t}
+          onClose={() => setMenuOpen(false)}
+          selection={selection}
+          semantic={semantic}
+          onTurnIntoTasks={() => setTurningIntoTasks(true)}
+        />
+      ) : null}
+      {turningIntoTasks && semantic ? (
+        <TurnIntoTasksDialog
+          editor={editor as never}
+          blocks={selection as never}
+          handlers={semantic}
+          t={t}
+          onClose={() => setTurningIntoTasks(false)}
+        />
+      ) : null}
+      {semantic && taskSuggestions && editable ? (
+        <SuggestionLayer
+          editor={editor as never}
+          containerRef={containerRef}
+          options={taskSuggestions}
+          handlers={semantic}
+          t={t}
+          version={version}
+        />
+      ) : null}
     </div>
   );
 }
