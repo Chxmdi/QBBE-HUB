@@ -75,7 +75,7 @@ export function WeeklyBars({
   return (
     <figure className="rounded-(--radius-md) border border-line bg-surface p-4">
       <figcaption className="mb-2 text-body font-semibold text-ink">{title}</figcaption>
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-auto w-full" role="img" aria-label={summary}>
+      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-auto max-h-56 w-full" role="img" aria-label={summary}>
         {(Number.isInteger(max / 2) ? [0, max / 2, max] : [0, max]).map((tick) => (
           <g key={tick}>
             <line x1={PAD.left} x2={WIDTH - PAD.right} y1={y(tick)} y2={y(tick)} className="stroke-line" strokeWidth={1} />
