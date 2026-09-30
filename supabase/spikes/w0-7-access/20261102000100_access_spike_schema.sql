@@ -373,6 +373,26 @@ $$;
 -- (a page, a drawer, an action's permission check). About 60-80 microseconds a
 -- call, so a list must not call it per row: lists use the set-based form
 -- below, which gives the same answer from the same cache.
+-- Ceilings: some organization roles cap what ANY grant can give. Today's rules
+-- make an owner or admin read-only everywhere until the session completes
+-- MFA, even on a project they own, and a leadership viewer read-only
+-- everywhere, even with a contributor grant. Roles without a row have no
+-- ceiling. Like org_role_caps this is applied live, never cached.
+create table spike_access.org_role_ceiling (
+  org_role public.org_role primary key,
+  ceiling integer not null,        -- without MFA
+  ceiling_aal2 integer not null    -- in a session that completed MFA
+);
+insert into spike_access.org_role_ceiling (org_role, ceiling, ceiling_aal2) values
+  ('owner', 1|2, 511),
+  ('admin', 1|2, 511),
+  ('leadership_viewer', 1|2, 1|2);
+revoke all on spike_access.org_role_ceiling from public, anon, authenticated;
+
+-- app.can in the real build: one object, one capability. For a single record
+-- (a page, a drawer, an action's permission check). About 60-80 microseconds a
+-- call, so a list must not call it per row: lists use the set-based form
+-- below, which gives the same answer from the same cache.
 create or replace function spike_access.can(p_object uuid, p_capability text)
 returns boolean
 language sql stable security definer
@@ -382,6 +402,8 @@ as $$
     select (coalesce(c.caps, 0)
             | case when spike_access.session_is_aal2() then coalesce(rc.caps_aal2, 0)
                    else coalesce(rc.caps, 0) end)
+           & case when spike_access.session_is_aal2() then coalesce(ce.ceiling_aal2, 511)
+                  else coalesce(ce.ceiling, 511) end
            & spike_access.cap_bit(p_capability) <> 0
     from spike_access.object o
     join public.organization_membership m
@@ -390,6 +412,7 @@ as $$
      and m.status = 'active'
     left join spike_access.org_role_caps rc
       on rc.organization_id = o.organization_id and rc.org_role = m.role
+    left join spike_access.org_role_ceiling ce on ce.org_role = m.role
     left join spike_access.access_cache c
       on c.user_id = m.user_id and c.object_id = o.id
     where o.id = p_object
@@ -423,7 +446,8 @@ as $$
         & spike_access.cap_bit(p_capability) <> 0;
 $$;
 
--- Objects the caller holds the capability on through person or team grants.
+-- Objects the caller holds the capability on through person or team grants,
+-- within their role's ceiling, in organizations they are active in.
 -- For list queries: `id in (select spike_access.cached_ids('view'))` is a
 -- semi-join on the cache's primary key.
 create or replace function spike_access.cached_ids(p_capability text)
@@ -431,9 +455,22 @@ returns setof uuid
 language sql stable security definer
 set search_path = ''
 as $$
-  select c.object_id from spike_access.access_cache c
-  where c.user_id = (select auth.uid())
-    and c.caps & spike_access.cap_bit(p_capability) <> 0;
+  -- The ceiling is worked out once per organization, not once per cache row:
+  -- reading the session's MFA level per row cost ~10 ms on a 1,500-row cache.
+  with mine as materialized (
+    select m.organization_id,
+           case when spike_access.session_is_aal2() then coalesce(ce.ceiling_aal2, 511)
+                else coalesce(ce.ceiling, 511) end
+           & spike_access.cap_bit(p_capability) as mask
+    from public.organization_membership m
+    left join spike_access.org_role_ceiling ce on ce.org_role = m.role
+    where m.user_id = (select auth.uid()) and m.status = 'active'
+  )
+  select c.object_id
+  from mine
+  join spike_access.access_cache c
+    on c.user_id = (select auth.uid()) and c.organization_id = mine.organization_id
+  where c.caps & mine.mask <> 0;
 $$;
 
 revoke all on all functions in schema spike_access from public, anon;

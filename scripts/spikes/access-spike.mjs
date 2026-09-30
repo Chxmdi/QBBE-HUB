@@ -69,7 +69,7 @@ async function round(name) {
   const started = Date.now();
   const shards = await Promise.all(
     Array.from({ length: SHARDS }, (_, shard) =>
-      psql(file("equivalence-compare.sql"), { round: `'${name}'`, shard, shards: SHARDS }),
+      psql(file("equivalence-compare.sql"), { round: name, shard, shards: SHARDS }),
     ),
   );
   for (const [shard, result] of shards.entries()) {
