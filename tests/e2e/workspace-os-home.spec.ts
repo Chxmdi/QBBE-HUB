@@ -36,8 +36,8 @@ test("Home shows my urgent work, what I wait on, and My World gathers it; nobody
   const overdue = `Overdue for Home ${suffix}`;
   const asked = `Asked of the volunteer ${suffix}`;
   sql(`insert into task (organization_id, title, created_by, requester_id, assignee_id, due_at)
-       values ('${org}', '${overdue}', '${OWNER_ID}', '${OWNER_ID}', '${OWNER_ID}', current_date - 3),
-              ('${org}', '${asked}', '${OWNER_ID}', '${OWNER_ID}', '${VOLUNTEER_ID}', current_date + 2)`);
+       values ('${org}', '${overdue}', '${OWNER_ID}', '${OWNER_ID}', '${OWNER_ID}', (now() at time zone 'America/Toronto')::date - 3),
+              ('${org}', '${asked}', '${OWNER_ID}', '${OWNER_ID}', '${VOLUNTEER_ID}', (now() at time zone 'America/Toronto')::date + 2)`);
 
   await signIn(page, "owner");
   await page.goto("/home");
@@ -46,6 +46,9 @@ test("Home shows my urgent work, what I wait on, and My World gathers it; nobody
   const now = page.getByRole("region", { name: /^Now/ });
   await expect(now.getByRole("link", { name: overdue })).toBeVisible();
   await expect(now.getByText(/Overdue since/).first()).toBeVisible();
+  // The attention explanation (M17c): the rules that put it there, in words.
+  const item = now.getByRole("listitem").filter({ hasText: overdue });
+  await expect(item.getByText("Overdue by 3 days; Assigned to you")).toBeVisible();
   const waiting = page.getByRole("region", { name: /^Waiting/ });
   await expect(waiting.getByRole("link", { name: asked })).toBeVisible();
   for (const name of ["Today", "Continue", "Decisions", "Changes"]) {
@@ -74,8 +77,9 @@ test("Home shows my urgent work, what I wait on, and My World gathers it; nobody
   await page.goto("/home");
   await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
   await expect(page.getByRole("link", { name: overdue })).toHaveCount(0);
-  // The task asked of the volunteer is theirs now.
-  await expect(page.getByRole("region", { name: /^Now|^Today|^Continue/ }).getByRole("link", { name: asked })).toHaveCount(0);
+  // The task asked of the volunteer is theirs: due in two days, it is in Now.
+  const theirNow = page.getByRole("region", { name: /^Now/ }).getByRole("listitem").filter({ hasText: asked });
+  await expect(theirNow.getByText("Due in 2 days; Assigned to you")).toBeVisible();
   await page.goto("/home/world");
   await expect(page.getByRole("region", { name: /^My tasks/ }).getByRole("link", { name: asked })).toBeVisible();
 });

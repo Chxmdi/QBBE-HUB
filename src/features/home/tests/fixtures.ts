@@ -52,6 +52,7 @@ export function data(overrides: Partial<HomeData> = {}): HomeData {
     decisions: [],
     activity: [],
     mentions: [],
+    dependencies: [],
     ...overrides,
   };
 }

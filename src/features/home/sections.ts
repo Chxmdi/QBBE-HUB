@@ -1,4 +1,5 @@
 import { addCalendarDays, calendarDateInZone } from "@/lib/time";
+import { rankByAttention, type AttentionInput } from "./attention";
 import {
   isOpen,
   type HomeActivity,
@@ -148,22 +149,75 @@ function mine(data: HomeData): HomeTask[] {
   return data.tasks.filter((task) => task.assignee_id === data.userId && isOpen(task));
 }
 
+/** An item needs to reach this attention score to be in Now. */
+export const NOW_THRESHOLD = 30;
+
+const RECENT_MS = 2 * DAY_MS;
+
 /**
- * Now: my open work that needs attention today, in this order: overdue, due
- * today, then under way. Item 4 (M17c) replaces the order with the attention
- * score; the membership rule stays.
+ * The attention inputs for my open tasks and my projects (M17c): the facts
+ * the rules in ./attention.ts score, counted from rows already loaded.
  */
-export function nowTasks(data: HomeData): HomeTask[] {
+export function attentionCandidates(data: HomeData): { item: HomeItem; input: AttentionInput }[] {
   const time = clock(data);
-  const rank = (task: HomeTask) => {
-    const due = task.due_at?.slice(0, 10);
-    if (due && due < time.today) return 0;
-    if (due === time.today) return 1;
-    return 2;
-  };
-  return mine(data)
-    .filter((task) => rank(task) < 2 || task.status === "in_progress")
-    .sort((a, b) => rank(a) - rank(b) || byDue(a, b));
+  const projects = new Map(data.projects.map((project) => [project.id, project]));
+  const myTasks = mine(data);
+  const unread = data.mentions.filter((mention) => !mention.read_at);
+  const changesBy = (id: string, type: string) =>
+    data.activity.filter(
+      (activity) =>
+        activity.actor_id !== data.userId &&
+        activity.source_type === type &&
+        activity.source_id === id &&
+        time.msAgo(activity.created_at) <= RECENT_MS,
+    ).length;
+
+  const tasks = myTasks.map((task) => {
+    const project = task.project_id ? projects.get(task.project_id) : undefined;
+    const input: AttentionInput = {
+      kind: "task",
+      id: task.id,
+      title: task.title,
+      due: task.due_at?.slice(0, 10) ?? null,
+      status: task.status,
+      taskPriority: task.priority,
+      project: project ? { name: project.name, target: project.target_date, priority: project.priority } : null,
+      role: "assignee",
+      // Dependencies arrive already limited to open blocked tasks. Only the
+      // count is shown, never the blocked task itself.
+      blocks: data.dependencies.filter((dependency) => dependency.blocking_task_id === task.id).length,
+      unreadMentions: unread.filter((mention) => mention.source_id === task.id).length,
+      recentChanges: changesBy(task.id, "task"),
+    };
+    return { item: taskItem(task, time), input };
+  });
+
+  const projectItems = data.projects
+    .filter((project) => project.owner_id === data.userId || project.sponsor_id === data.userId || myTasks.some((task) => task.project_id === project.id))
+    .map((project) => {
+      const input: AttentionInput = {
+        kind: "project",
+        id: project.id,
+        title: project.name,
+        due: project.target_date,
+        project: { name: project.name, target: null, priority: project.priority },
+        role: project.owner_id === data.userId ? "owner" : project.sponsor_id === data.userId ? "sponsor" : null,
+        blocks: myTasks.filter((task) => task.project_id === project.id).length,
+        unreadMentions: unread.filter((mention) => mention.source_id === project.id || mention.project_id === project.id).length,
+        recentChanges: changesBy(project.id, "project"),
+      };
+      return { item: projectItem(project, input.role === "owner" ? "owner" : null), input };
+    });
+
+  return [...tasks, ...projectItems];
+}
+
+/** Now: my tasks and projects that need attention, highest score first (M17c). */
+export function nowItems(data: HomeData): HomeItem[] {
+  const time = clock(data);
+  return rankByAttention(attentionCandidates(data), time.today)
+    .filter((entry) => entry.attention.score >= NOW_THRESHOLD)
+    .map((entry) => ({ ...entry.item, attention: entry.attention }));
 }
 
 /** Waiting: open work somebody else holds that I asked for, and my own blocked or waiting tasks. */
@@ -210,7 +264,7 @@ export function decisionsNeeded(data: HomeData): HomeItem[] {
 export function buildHomeSections(data: HomeData): HomeSections {
   const time = clock(data);
 
-  const now = nowTasks(data).map((task) => taskItem(task, time));
+  const now = nowItems(data);
   const nowIds = new Set(now.map((item) => item.id));
 
   const todaysMeetings = data.meetings
