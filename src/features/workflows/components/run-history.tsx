@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { Formatters } from "@/lib/i18n/format";
 import { fill, type WorkflowsMessages } from "../i18n";
@@ -19,11 +20,13 @@ export function RunHistory({
   m,
   f,
   timeZone,
+  workflowId,
 }: {
   runs: RunRow[];
   m: WorkflowsMessages;
   f: Formatters;
   timeZone: string;
+  workflowId: string;
 }) {
   return (
     <section className="rounded-(--radius-md) border border-line bg-surface p-4 sm:p-5" aria-labelledby="workflow-history">
@@ -46,7 +49,9 @@ export function RunHistory({
               {runs.map((run) => (
                 <tr key={run.id} className="border-t border-line">
                   <td className="py-2 pr-3 whitespace-nowrap">
-                    <span className="font-medium text-ink">{fill(m.history.run, { number: run.run_number })}</span>
+                    <Link href={`/workflows/${workflowId}/runs/${run.id}`} className="font-medium text-brand-fg underline-offset-2 hover:underline">
+                      {fill(m.history.run, { number: run.run_number })}
+                    </Link>
                     {run.is_test ? <Badge className="ml-2">{m.history.test}</Badge> : null}
                   </td>
                   <td className="py-2 pr-3 whitespace-nowrap">{f.dateTime(run.started_at ?? run.created_at, timeZone)}</td>
