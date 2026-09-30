@@ -1,5 +1,5 @@
 -- Workspace OS app.can stand-in (W0-3): it must give exactly today's answers
--- for tasks and projects, and deny everything else. Run after qa-users.sql and
+-- for tasks and projects, and deny what it does not know. Run after qa-users.sql and
 -- rls.sql. All mutations are rolled back.
 --
 -- The equivalence block is the important one: for every fixture person, at
@@ -162,9 +162,13 @@ begin
   reset role;
 
   perform tests.authenticate(v_owner);
+  -- M10a/M10c: a program is its space (same id), and can answers with
+  -- today's program rules (spaces-can-equivalence.sql checks every role).
   perform tests.ok(
-    public.can(v_program, 'view') is false,
-    'a program is not an object yet: the stand-in knows tasks and projects only'
+    public.can(v_program, 'view') = public.has_program_capability(v_program, 'read')
+      and public.can(v_program, 'manage') = public.has_program_capability(v_program, 'manage')
+      and public.can(v_program, 'view'),
+    'a program is its space: can answers with the program rules'
   );
   perform tests.ok(
     public.can(v_project, 'manage') and public.can(t_unrelated, 'share'),
