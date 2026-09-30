@@ -24,6 +24,7 @@ export interface OfflineTask {
 }
 
 const SW_URL = "/wos-offline-sw.js";
+const RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 30_000];
 
 function subscribeOnline(onChange: () => void) {
   window.addEventListener("online", onChange);
@@ -61,6 +62,10 @@ export function OfflineWorkspace({ userId, tasks, text }: { userId: string; task
   const [state, setState] = useState<"idle" | "syncing" | "synced" | "failed">("idle");
   const [newTitle, setNewTitle] = useState("");
   const syncing = useRef(false);
+  // A send that fails while the device reports online (the connection often
+  // returns before requests get through) is retried a few times on its own.
+  const retry = useRef<{ attempt: number; timer: ReturnType<typeof setTimeout> | null }>({ attempt: 0, timer: null });
+  const syncRef = useRef<() => Promise<void>>(async () => {});
 
   const refresh = useCallback(async () => {
     if (!store.current) return;
@@ -68,9 +73,11 @@ export function OfflineWorkspace({ userId, tasks, text }: { userId: string; task
     setReviews(await store.current.reviews());
   }, []);
 
-  const sync = useCallback(async () => {
+  const sync = useCallback(async (): Promise<void> => {
     const s = store.current;
     if (!s || syncing.current || !navigator.onLine) return;
+    if (retry.current.timer) clearTimeout(retry.current.timer);
+    retry.current.timer = null;
     const queued = await s.all();
     if (queued.length === 0) return;
     syncing.current = true;
@@ -87,21 +94,37 @@ export function OfflineWorkspace({ userId, tasks, text }: { userId: string; task
       setFailures((f) => [...f, ...failedTitles]);
       await s.remove(result.outcomes.map((o) => o.opId));
       setState("synced");
+      retry.current.attempt = 0;
     } catch {
       // Still offline or the server was unreachable: keep everything.
       setState("failed");
+      const attempt = retry.current.attempt;
+      if (attempt < RETRY_DELAYS_MS.length) {
+        retry.current.attempt = attempt + 1;
+        retry.current.timer = setTimeout(() => void syncRef.current(), RETRY_DELAYS_MS[attempt]);
+      }
     } finally {
       syncing.current = false;
       await refresh();
     }
   }, [refresh]);
+  useEffect(() => {
+    syncRef.current = sync;
+  }, [sync]);
 
   useEffect(() => {
     store.current = new IdbOpStore(userId);
     void refresh().then(sync);
-    const up = () => void sync();
+    const up = () => {
+      retry.current.attempt = 0;
+      void sync();
+    };
     window.addEventListener("online", up);
-    return () => window.removeEventListener("online", up);
+    const pending = retry.current;
+    return () => {
+      window.removeEventListener("online", up);
+      if (pending.timer) clearTimeout(pending.timer);
+    };
   }, [userId, refresh, sync]);
 
   // What the person sees: the server's values with their queued edits on top.
