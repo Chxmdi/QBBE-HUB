@@ -27,7 +27,7 @@ async function axeProblems(page: Page): Promise<string[]> {
 const NOT_FOUND = "Not found — or not yours to see";
 
 function setSwitch(on: boolean) {
-  sql(`update public.feature_flag set enabled = ${on} where key = 'wos_meetings_v2';`);
+  sql(`update public.feature_flag set enabled = ${on} where key = any (array['wos_meetings_v2']);`);
 }
 
 test.afterAll(() => setSwitch(false));
