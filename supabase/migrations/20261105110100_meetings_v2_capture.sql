@@ -17,11 +17,8 @@
 --   review   a meeting manager (app.can_manage_meeting) only
 --   delete   the author while open, or a meeting manager
 --
--- The module is hidden behind the `wos_meetings_v2` switch until sign-off.
-
-insert into public.feature_flag (key, enabled, description) values
-  ('wos_meetings_v2', false, 'Workspace OS: meetings as objects with captures and an end-of-meeting review.')
-on conflict (key) do nothing;
+-- The module is hidden behind the `wos_meetings_v2` switch until sign-off
+-- (20261105110000_s5b_feature_switches).
 
 create table public.meeting_capture (
   id uuid primary key default gen_random_uuid(),
