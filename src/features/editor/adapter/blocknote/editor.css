@@ -1,0 +1,44 @@
+/*
+ * W0-5 spike conditions for BlockNote's Ariakit UI, scoped to .qbbe-editor.
+ * Colours come from the design tokens so both themes pass.
+ */
+
+.qbbe-editor .bn-container {
+  --bn-colors-editor-background: transparent;
+  --bn-colors-editor-text: var(--color-ink);
+  --bn-font-family: inherit;
+}
+
+/* 2.4.7 Focus Visible: BlockNote removes the editor's outline. */
+.qbbe-editor .bn-editor:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.dark .qbbe-editor .bn-editor:focus-visible {
+  outline-color: var(--color-accent);
+}
+
+/* 1.4.3 Contrast: the highlighted slash option and the group labels. */
+.bn-suggestion-menu-item[aria-selected="true"],
+.bn-ak-menu-item[aria-selected="true"],
+.bn-suggestion-menu-item[aria-selected="true"] .bn-ak-suggestion-menu-item-subtitle {
+  background-color: var(--color-brand-soft);
+  color: var(--color-brand-fg);
+}
+.bn-suggestion-menu-label,
+.bn-ak-group-label {
+  color: var(--color-ink);
+}
+
+/* 2.5.8 Target Size (Minimum): check-list boxes were 12 x 24 px. */
+.qbbe-editor [data-content-type="checkListItem"] input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+}
+
+/* 1.4.3 Contrast: BlockNote greys quote text below 4.5:1. */
+.qbbe-editor [data-content-type="quote"] blockquote {
+  color: var(--color-ink);
+  border-left-color: var(--color-line);
+}

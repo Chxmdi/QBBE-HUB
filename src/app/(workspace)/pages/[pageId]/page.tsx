@@ -7,6 +7,10 @@ import { loadPage, loadSidebar } from "@/features/pages/services/page.queries";
 import { recordPageVisit } from "@/features/pages/services/page.commands";
 import { PagesShell } from "@/features/pages/components/pages-shell";
 import { PageView } from "@/features/pages/components/page-view";
+import { canEditPage } from "@/features/pages/access";
+import { isEnabled } from "@/lib/feature-flags";
+import { loadEditorDocument } from "@/features/editor/services/editor-document.queries";
+import { ObjectEditor } from "@/features/editor/components/object-editor";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,13 +29,29 @@ export default async function PageRoute({ params }: { params: Promise<{ pageId: 
   if (!UUID.test(pageId)) notFound();
   const session = await requireSession();
   const supabase = await createSupabasePageClient();
-  const [page, sidebar] = await Promise.all([loadPage(supabase, pageId), loadSidebar(supabase, session.userId)]);
+  const [page, sidebar, editorOn] = await Promise.all([
+    loadPage(supabase, pageId),
+    loadSidebar(supabase, session.userId),
+    isEnabled("wos_editor"),
+  ]);
   if (!page) notFound();
   if (!page.deletedAt) await recordPageVisit(page.id);
+  const body = editorOn ? await loadEditorDocument(supabase, page.id) : null;
 
   return (
     <PagesShell session={session} sidebar={sidebar} currentPageId={page.id}>
-      <PageView session={session} page={page} sidebar={sidebar} />
+      <PageView session={session} page={page} sidebar={sidebar}>
+        {body ? (
+          <ObjectEditor
+            key={page.id}
+            objectId={page.id}
+            objectType="page"
+            initialContent={body.content}
+            initialVersion={body.version}
+            editable={canEditPage({ userId: session.userId, role: session.role }, page)}
+          />
+        ) : null}
+      </PageView>
     </PagesShell>
   );
 }
