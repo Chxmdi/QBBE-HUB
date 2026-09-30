@@ -43,6 +43,7 @@ export interface HomeProject {
   owner_id: string | null;
   sponsor_id: string | null;
   updated_at: string;
+  program_id?: string | null;
 }
 
 export interface HomeApproval {
