@@ -1,0 +1,18 @@
+{
+  "_about": "Seconds each signed-in spec file took in CI on Chromium (run 36732905529, 2026-09-30). scripts/ci/spec-groups.mjs uses them to give each machine an even share. Files not listed count as 30 s. Refresh when a file grows a lot.",
+  "access-impact.spec.ts": 27, "approval-delegation.spec.ts": 12, "approvals.spec.ts": 29,
+  "bank.spec.ts": 16, "budgets.spec.ts": 11, "collaboration.spec.ts": 28, "crm.spec.ts": 15,
+  "document-search.spec.ts": 14, "documents-library.spec.ts": 10, "documents.spec.ts": 7,
+  "epic05-administration.spec.ts": 13, "epic05-continuity.spec.ts": 5, "error-states.spec.ts": 6,
+  "events.spec.ts": 14, "forms-esign.spec.ts": 19, "french-ui.spec.ts": 7,
+  "fund-accounting.spec.ts": 9, "gifts.spec.ts": 8, "identity-lifecycle.spec.ts": 37,
+  "ledger.spec.ts": 10, "meetings-comments.spec.ts": 14, "mfa.spec.ts": 13, "milestones.spec.ts": 26,
+  "my-work.spec.ts": 32, "payables.spec.ts": 12, "payroll.spec.ts": 10, "person-work.spec.ts": 16,
+  "portfolio-search.spec.ts": 7, "programs.spec.ts": 25, "projects.spec.ts": 34,
+  "hello-hub.spec.ts": 16, "notifications.spec.ts": 30, "raid-decisions.spec.ts": 7,
+  "realtime-delivery.spec.ts": 10, "realtime-revocation.spec.ts": 8, "receipts.spec.ts": 19,
+  "records-retention.spec.ts": 7, "reports-export.spec.ts": 4, "reports.spec.ts": 6,
+  "role-matrix.spec.ts": 366, "sales-tax.spec.ts": 12, "task-core.spec.ts": 24,
+  "team-overview.spec.ts": 3, "translated-finance.spec.ts": 120, "translated-workspace.spec.ts": 122,
+  "work-planning.spec.ts": 42, "year-end.spec.ts": 14
+}
