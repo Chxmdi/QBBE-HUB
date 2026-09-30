@@ -32,6 +32,7 @@ export const RELATIVE_DATES = [
   "this_month",
   "last_7_days",
   "next_7_days",
+  "next_30_days",
 ] as const;
 export type RelativeDate = (typeof RELATIVE_DATES)[number];
 

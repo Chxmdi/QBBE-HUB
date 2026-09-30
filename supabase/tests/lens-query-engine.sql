@@ -243,6 +243,8 @@ begin
     'date is today');
   perform tests.ok(pg_temp.lens_titles('{"property":"due","operator":"before","value":{"relative":"today"}}') = array['Lens loose task'],
     'date before today');
+  perform tests.ok(pg_temp.lens_titles('{"property":"due","operator":"is","value":{"relative":"next_30_days"}}') = array['Lens 100% literal'],
+    'next_30_days covers today to 29 days ahead (day 30 is outside)');
   perform tests.ok(pg_temp.lens_titles('{"property":"due","operator":"is_empty"}') = array['Lens closed work'],
     'date is_empty');
   perform tests.ok(cardinality(pg_temp.lens_titles('{"property":"created_time","operator":"is","value":{"relative":"today"}}')) = 4,
