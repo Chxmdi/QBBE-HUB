@@ -4,6 +4,7 @@
 //   node scripts/spikes/access-spike.mjs apply        # schema + dual write + backfill
 //   node scripts/spikes/access-spike.mjs equivalence  # app.can vs today's rules
 //   node scripts/spikes/access-spike.mjs equivalence resume  # from the changes on
+//   node scripts/spikes/access-spike.mjs equivalence round2  # round 2's missing shards, then the report
 //   node scripts/spikes/access-spike.mjs timing       # board query and refresh cost
 //   node scripts/spikes/access-spike.mjs drop         # remove the prototype
 //
@@ -66,14 +67,27 @@ async function step(label, sql, variables) {
   console.log(`-- ${label}: ${((Date.now() - started) / 1000).toFixed(1)} s`);
 }
 
+// Run one round's shards in parallel. A shard already recorded in eq_run for
+// this round is skipped, so a round interrupted part-way (a container restart
+// takes the sessions with it) resumes with only the shards still missing.
 async function round(name) {
   const started = Date.now();
-  const shards = await Promise.all(
-    Array.from({ length: SHARDS }, (_, shard) =>
+  const done = await psql(
+    `select coalesce(string_agg(shard::text, ','), '') from spike_access.eq_run where round = :'round';`,
+    { round: name },
+  );
+  const finished = new Set(
+    done.status === 0 ? done.output.split(/[\s,]+/).filter((s) => /^\d+$/.test(s)).map(Number) : [],
+  );
+  const pending = Array.from({ length: SHARDS }, (_, shard) => shard).filter((s) => !finished.has(s));
+  if (finished.size > 0) console.log(`-- round ${name}: shards ${[...finished].join(", ")} already done`);
+  const results = await Promise.all(
+    pending.map((shard) =>
       psql(file("equivalence-compare.sql"), { round: name, shard, shards: SHARDS }),
     ),
   );
-  for (const [shard, result] of shards.entries()) {
+  for (const [index, result] of results.entries()) {
+    const shard = pending[index];
     if (result.status !== 0) {
       process.stdout.write(result.output);
       console.error(`\nEquivalence round "${name}", shard ${shard} failed (psql exit ${result.status}).`);
@@ -94,11 +108,15 @@ switch (command) {
   case "equivalence":
     // `equivalence resume` picks up after a completed round 1 (its fixture is
     // committed), so a failure in the changes does not cost the first round.
-    if (process.argv[3] !== "resume") {
+    // `equivalence round2` picks up after the changes, with only the round 2
+    // shards still missing.
+    if (!["resume", "round2"].includes(process.argv[3])) {
       await step("setup", file("equivalence-setup.sql"));
       await round("1 backfilled");
     }
-    await step("changes", file("equivalence-changes.sql"));
+    if (process.argv[3] !== "round2") {
+      await step("changes", file("equivalence-changes.sql"));
+    }
     await round("2 after changes");
     await step("report", file("equivalence-report.sql"));
     console.log("\nThe fixture and changes are committed: reset the local database now.");
