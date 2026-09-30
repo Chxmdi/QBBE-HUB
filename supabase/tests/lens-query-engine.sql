@@ -27,7 +27,7 @@ begin
     'every lens function runs with the caller''s rights and an empty search_path'
   );
   perform tests.ok(
-    (select count(*) = 15 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    (select count(*) = 16 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where n.nspname = 'public' and (p.proname like 'lens\_\_%' or p.proname in ('lens_catalog', 'lens_compile', 'lens_query'))),
     'the grant list in the migration covers every lens function'
   );
@@ -310,6 +310,57 @@ begin
 end;
 $$;
 
+-- Task roles held in a link table, approver, milestone and blocked reason.
+do $$
+declare
+  v_owner uuid := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1';
+  v_org uuid := (select id from lens_fx where name = 'org');
+  v_approve uuid;
+  v_review uuid;
+  v_result jsonb;
+begin
+  insert into public.task (organization_id, title, created_by, approver_id, status, blocked_reason)
+  values (v_org, 'Role check approve', v_owner, v_owner, 'blocked', 'Waiting on the funder')
+  returning id into v_approve;
+  insert into public.task (organization_id, title, created_by)
+  values (v_org, 'Role check review', v_owner)
+  returning id into v_review;
+  insert into public.task_assignment (task_id, user_id, role) values (v_review, v_owner, 'reviewer');
+
+  perform tests.authenticate(v_owner, 'aal2');
+  v_result := public.lens_query('{"version":1,"type":"task","select":["approver","blocked_reason","milestone"],"where":{"and":[{"property":"title","operator":"starts_with","value":"Role check"},{"property":"approver","operator":"contains","value":{"relative":"me"}}]}}');
+  perform tests.ok((v_result ->> 'total')::int = 1
+      and v_result #>> '{rows,0,values,blocked_reason}' = 'Waiting on the funder'
+      and v_result #>> '{rows,0,values,approver,id}' = v_owner::text
+      and v_result #> '{rows,0,values,milestone}' = 'null'::jsonb,
+    'approver filter and blocked reason, approver and milestone columns');
+  v_result := public.lens_query('{"version":1,"type":"task","where":{"and":[{"property":"title","operator":"starts_with","value":"Role check"},{"property":"review_role","operator":"contains","value":{"relative":"me"}}]}}');
+  perform tests.ok((v_result ->> 'total')::int = 1 and v_result #>> '{rows,0,title}' = 'Role check review',
+    'a reviewer role held in task_assignment is found through review_role');
+  v_result := public.lens_query('{"version":1,"type":"task","where":{"and":[{"property":"title","operator":"starts_with","value":"Role check"},{"property":"review_role","operator":"is_empty"}]}}');
+  perform tests.ok((v_result ->> 'total')::int = 1 and v_result #>> '{rows,0,title}' = 'Role check approve',
+    'review_role is_empty finds tasks with no reviewer or approver role');
+  v_result := public.lens_query('{"version":1,"type":"task","where":{"and":[{"property":"title","operator":"starts_with","value":"Role check"},{"property":"review_role","operator":"not_contains","value":{"relative":"me"}}]}}');
+  perform tests.ok((v_result ->> 'total')::int = 1, 'review_role not_contains');
+  begin
+    perform public.lens_query('{"version":1,"type":"task","select":["review_role"]}');
+    raise exception 'FAIL: a filter-only property was shown';
+  exception when others then
+    perform tests.ok(sqlerrm like 'lens:invalid_spec:%', 'filter-only properties cannot be columns');
+  end;
+  reset role;
+
+  -- Task roles are read under task_assignment's own RLS: the volunteer, who
+  -- cannot see the owner's review task, finds nothing through it.
+  perform tests.authenticate('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', 'aal2');
+  v_result := public.lens_query(jsonb_build_object('version', 1, 'type', 'task', 'where', jsonb_build_object('and', jsonb_build_array(
+    jsonb_build_object('property', 'review_role', 'operator', 'contains', 'value', v_owner)))));
+  perform tests.ok(not exists (select 1 from jsonb_array_elements(v_result -> 'rows') r where r ->> 'id' = v_review::text),
+    'the volunteer cannot find the owner''s review task through its roles');
+  reset role;
+end;
+$$;
+
 -- ---------------------------------------------------------------------------
 -- 5. Injection: a payload in every field
 -- ---------------------------------------------------------------------------
@@ -338,6 +389,7 @@ declare
     '{"version":1,"type":"task","where":{"and":[{"property":"program","operator":"is","value":PAYLOAD}]}}',
     '{"version":1,"type":"task","where":{"and":[{"property":"assignee","operator":"contains","value":PAYLOAD}]}}',
     '{"version":1,"type":"task","where":{"and":[{"property":"assignee","operator":"contains","value":{"relative":PAYLOAD}}]}}',
+    '{"version":1,"type":"task","where":{"and":[{"property":"review_role","operator":"contains","value":PAYLOAD}]}}',
     '{"version":1,"type":"task","where":{"and":[{"property":"project","operator":"contains","value":PAYLOAD}]}}',
     '{"version":1,"type":"task","where":{"and":[{"property":"project","operator":"matches","value":{"where":{"and":[{"property":PAYLOAD,"operator":"is","value":"active"}]}}}]}}',
     '{"version":1,"type":"task","where":{"and":[{"property":"project","operator":"matches","value":{"where":{"and":[{"property":"title","operator":"contains","value":PAYLOAD}]}}}]}}',

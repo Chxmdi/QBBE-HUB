@@ -45,6 +45,9 @@
 -- ref:         for id-valued columns, the table and label column to show.
 -- target:      for relations, the related type key.
 -- timestamp:   timestamptz columns compare by the viewer's calendar day.
+-- via:         a person held in a link table (task roles), filter only:
+--              `filterOnly` properties can be filtered on but not shown,
+--              sorted or grouped, because a row can have several.
 create or replace function public.lens_catalog()
 returns jsonb
 language sql
@@ -92,6 +95,12 @@ select $json$
       { "key": "reviewer", "column": "reviewer_id", "kind": "person", "propertyKind": "person",
         "ref": { "table": "user_profile", "label": "full_name" },
         "name": { "en": "Reviewer", "fr": "Réviseur" }, "sortable": false, "groupable": true },
+      { "key": "approver", "column": "approver_id", "kind": "person", "propertyKind": "person",
+        "ref": { "table": "user_profile", "label": "full_name" },
+        "name": { "en": "Approver", "fr": "Approbateur" }, "sortable": false, "groupable": true },
+      { "key": "review_role", "kind": "person", "propertyKind": "person", "filterOnly": true,
+        "via": { "table": "task_assignment", "from": "task_id", "person": "user_id", "roleColumn": "role", "roles": ["reviewer", "approver"] },
+        "name": { "en": "Reviewer or approver (task role)", "fr": "Réviseur ou approbateur (rôle)" }, "sortable": false, "groupable": false },
       { "key": "start", "column": "start_at", "kind": "date", "propertyKind": "date",
         "name": { "en": "Start", "fr": "Début" }, "sortable": true, "groupable": false },
       { "key": "due", "column": "due_at", "kind": "date", "propertyKind": "date",
@@ -103,6 +112,11 @@ select $json$
       { "key": "program", "column": "program_id", "kind": "select", "propertyKind": "relation",
         "ref": { "table": "program", "label": "name" },
         "name": { "en": "Program", "fr": "Programme" }, "sortable": false, "groupable": true },
+      { "key": "milestone", "column": "milestone_id", "kind": "select", "propertyKind": "relation",
+        "ref": { "table": "milestone", "label": "name" },
+        "name": { "en": "Milestone", "fr": "Jalon" }, "sortable": false, "groupable": true },
+      { "key": "blocked_reason", "column": "blocked_reason", "kind": "text", "propertyKind": "text",
+        "name": { "en": "Blocked because", "fr": "Bloquée parce que" }, "sortable": false, "groupable": false },
       { "key": "completed_time", "column": "completed_at", "kind": "date", "propertyKind": "date", "timestamp": true,
         "name": { "en": "Completed", "fr": "Terminée le" }, "sortable": true, "groupable": false },
       { "key": "created_by", "column": "created_by", "kind": "person", "propertyKind": "created_by",
@@ -409,6 +423,24 @@ begin
 end;
 $$;
 
+-- For people held in a link table (`via`): "the row has a link to a person",
+-- optionally a specific one. Table, columns and roles come from the catalog.
+create or replace function public.lens__via_exists(p_alias text, p_property jsonb, p_person_ref text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select format(
+    'exists (select 1 from public.%I va where va.%I = %I.id and va.%I = any(%L::text[])%s)',
+    p_property #>> '{via,table}', p_property #>> '{via,from}', p_alias,
+    p_property #>> '{via,roleColumn}',
+    (select array_agg(r)::text from jsonb_array_elements_text(p_property #> '{via,roles}') r),
+    case when p_person_ref is null then ''
+      else format(' and va.%I = %s', p_property #>> '{via,person}', p_person_ref) end
+  );
+$$;
+
 -- ---------------------------------------------------------------------------
 -- Conditions
 -- ---------------------------------------------------------------------------
@@ -485,6 +517,11 @@ begin
     if p_node ? 'value' then
       perform public.lens__fail('bad_value', 'This operator takes no value.');
     end if;
+    if v_prop ? 'via' then
+      sql := format(case v_op when 'is_empty' then '(not %s)' else '(%s)' end,
+        public.lens__via_exists(p_alias, v_prop, null));
+      return;
+    end if;
     v_col := public.lens__visible_id(p_alias, v_prop);
     if v_kind = 'text' then
       sql := case v_op
@@ -501,7 +538,9 @@ begin
     perform public.lens__fail('bad_value', 'This operator needs a value.');
   end if;
 
-  v_col := public.lens__column(p_alias, v_prop);
+  if not (v_prop ? 'via') then
+    v_col := public.lens__column(p_alias, v_prop);
+  end if;
 
   case v_kind
   when 'text' then
@@ -631,6 +670,11 @@ begin
       params := params || jsonb_build_array(lower(v_value #>> '{}'));
     else
       perform public.lens__fail('bad_value', 'Expected a person id or "me".');
+    end if;
+    if v_prop ? 'via' then
+      sql := format(case v_op when 'contains' then '(%s)' else '(not %s)' end,
+        public.lens__via_exists(p_alias, v_prop, public.lens__ref(jsonb_array_length(params) - 1, 'uuid')));
+      return;
     end if;
     v_pred := format('%s = %s', public.lens__visible_id(p_alias, v_prop),
       public.lens__ref(jsonb_array_length(params) - 1, 'uuid'));
@@ -883,6 +927,9 @@ begin
     end if;
     for v_key in select * from jsonb_array_elements(spec -> 'select') loop
       v_prop := public.lens__property(v_type, v_key);
+      if coalesce((v_prop ->> 'filterOnly')::boolean, false) then
+        perform public.lens__fail('invalid_spec', format('"%s" can be filtered on but not shown.', v_prop ->> 'key'));
+      end if;
       if (v_prop ->> 'key') = any (v_seen) then
         continue;
       end if;
@@ -994,6 +1041,7 @@ begin
     'public.lens__column(text, jsonb)',
     'public.lens__visible_id(text, jsonb)',
     'public.lens__display(jsonb, text)',
+    'public.lens__via_exists(text, jsonb, text)',
     'public.lens__condition(jsonb, jsonb, text, integer, boolean, date, jsonb, integer, integer)',
     'public.lens__group(jsonb, jsonb, text, integer, boolean, date, jsonb, integer, integer)',
     'public.lens_compile(jsonb, text)',

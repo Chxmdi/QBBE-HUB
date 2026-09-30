@@ -27,6 +27,8 @@ export interface CatalogProperty {
   /** Present on id-valued properties shown with a label (people, programs). */
   ref?: { table: string; label: string };
   timestamp?: boolean;
+  /** Can be filtered on but not shown, sorted or grouped (a person in a link table). */
+  filterOnly?: boolean;
 }
 
 export interface CatalogType {
@@ -67,6 +69,7 @@ export function toCatalog(raw: Record<string, RawType>): LensCatalog {
         ...(p.target ? { target: p.target } : {}),
         ...(p.ref ? { ref: { table: p.ref.table, label: p.ref.label } } : {}),
         ...(p.timestamp ? { timestamp: true } : {}),
+        ...(p.filterOnly ? { filterOnly: true } : {}),
       })),
     };
   }
