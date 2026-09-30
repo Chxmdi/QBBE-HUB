@@ -105,19 +105,21 @@ test("While you were away lists others' changes to my work since my last visit, 
   sql(`update home_visit set last_seen_at = now() - interval '2 hours' where user_id = '${OWNER_ID}'`);
   sql(`insert into activity_event (organization_id, actor_id, verb, source_type, source_id, summary, metadata) values
     ('${org}', '${staff}', 'updated', 'task', '${movedId}', 'updated a task',
-     '{"changes":[{"field":"due_at","from":"2026-12-20","to":"2026-12-10"}]}'),
+     '{"changes":[{"field":"due_at","from":"2026-12-10","to":"2026-12-20"}]}'),
     ('${org}', '${staff}', 'updated', 'task', '${blockedId}', 'updated a task',
      '{"changes":[{"field":"status","from":"ready","to":"blocked"},{"field":"blocked_reason","from":null,"to":"Waiting on the venue"}]}')`);
 
   await page.reload();
   const digest = page.getByRole("region", { name: "While you were away" });
   await expect(digest.getByText(/^Changes since /)).toBeVisible();
-  const entries = digest.getByRole("listitem");
+  // Only this run's entries: earlier runs may have left others in the window.
+  const entries = digest.getByRole("listitem").filter({ hasText: suffix });
+  await expect(entries).toHaveCount(2);
   await expect(entries.nth(0)).toContainText("Newly blocked");
   await expect(entries.nth(0)).toContainText(blocked);
   await expect(entries.nth(0)).toContainText("Blocked: Waiting on the venue · By QA Staff");
   await expect(entries.nth(1)).toContainText("Deadline moved");
-  await expect(entries.nth(1)).toContainText(/Moved sooner: .+ to .+/);
+  await expect(entries.nth(1)).toContainText(/Moved later: .+ to .+/);
   expect(await axeProblems(page), "digest accessibility").toEqual([]);
 
   // A reload during the same visit keeps the digest.
