@@ -23,7 +23,7 @@ async function axeProblems(page: Page): Promise<string[]> {
 }
 
 function setSwitch(on: boolean) {
-  sql(`update public.feature_flag set enabled = ${on} where key = 'wos_goals';`);
+  sql(`update public.feature_flag set enabled = ${on} where key = any (array['wos_goals']);`);
 }
 
 test.afterAll(() => setSwitch(false));
