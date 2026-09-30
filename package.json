@@ -28,6 +28,9 @@
     "qa:realtime-latency": "node scripts/qa/realtime-latency.mjs"
   },
   "dependencies": {
+    "@blocknote/ariakit": "0.55.0",
+    "@blocknote/core": "0.55.0",
+    "@blocknote/react": "0.55.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.4",
     "@tesseract.js-data/eng": "1.0.0",
@@ -40,6 +43,9 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "tesseract.js": "7.0.0",
+    "y-prosemirror": "1.3.7",
+    "y-protocols": "1.0.7",
+    "yjs": "13.6.33",
     "zod": "^3.24.4"
   },
   "devDependencies": {

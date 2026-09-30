@@ -1,0 +1,16 @@
+{
+  "htmlLang": "fr-CA",
+  "firstOptions": [
+    "Titre 1Utilisé pour un titre de premier niveauCtrl-Alt-1",
+    "Titre 2Titre de deuxième niveau Utilisé pour les sections clésCtrl-Alt-2",
+    "Titre 3Titre de troisième niveau utilisé pour les sous-sections et les titres de groupeCtrl-Alt-3",
+    "CitationCitation ou extrait"
+  ],
+  "filteredTitre": "Titre 1",
+  "filteredListe": "Liste repliable",
+  "typed": "Élève à l’école : « Ça va? » — œuvre, naïve, Noël, où, çà, ÀÉÈÊËÎÏÔÙÛÜŸÇ",
+  "stored": "Envoyer le procès-verbalÉlève à l’école : « Ça va? » — œuvre, naïve, Noël, où, çà, ÀÉÈÊËÎÏÔÙÛÜŸÇ éèêë",
+  "typedMatches": true,
+  "compositionMatches": true,
+  "spellcheckLang": "fr-CA"
+}

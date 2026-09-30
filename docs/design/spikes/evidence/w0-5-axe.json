@@ -1,0 +1,1005 @@
+{
+  "findings": [
+    {
+      "state": "editor at rest",
+      "theme": "raw light",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "editor at rest",
+      "theme": "raw light",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 1,
+      "targets": [
+        "input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "editor at rest",
+      "theme": "raw light",
+      "id": "target-size",
+      "impact": "serious",
+      "help": "All touch targets must be 24px large, or leave sufficient space",
+      "nodes": 1,
+      "targets": [
+        "input"
+      ],
+      "summary": "Fix any of the following:\n  Target has insufficient size (12px by 24px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 12px instead of at least 24px."
+    },
+    {
+      "state": "slash menu open",
+      "theme": "raw light",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"true\""
+    },
+    {
+      "state": "slash menu open",
+      "theme": "raw light",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 2,
+      "targets": [
+        ".tiptap",
+        "#bn-suggestion-menu"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "raw light",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "raw light",
+      "id": "scrollable-region-focusable",
+      "impact": "serious",
+      "help": "Scrollable region must have keyboard access",
+      "nodes": 1,
+      "targets": [
+        "#bn-suggestion-menu"
+      ],
+      "summary": "Fix any of the following:\n  Element should have focusable content\n  Element should be focusable"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "raw light",
+      "id": "target-size",
+      "impact": "serious",
+      "help": "All touch targets must be 24px large, or leave sufficient space",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Target has insufficient size (12px by 24px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 12px instead of at least 24px."
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "raw light",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "raw light",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "raw light",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "raw light",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "raw light",
+      "id": "target-size",
+      "impact": "serious",
+      "help": "All touch targets must be 24px large, or leave sufficient space",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Target has insufficient size (12px by 24px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 12px instead of at least 24px."
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "raw light",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "raw light",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "raw light",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "raw light",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "raw light",
+      "id": "target-size",
+      "impact": "serious",
+      "help": "All touch targets must be 24px large, or leave sufficient space",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Target has insufficient size (12px by 24px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 12px instead of at least 24px."
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw light",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw light",
+      "id": "aria-hidden-focus",
+      "impact": "serious",
+      "help": "ARIA hidden element must not be focusable or contain focusable elements",
+      "nodes": 4,
+      "targets": [
+        ".__focus-trap-inner-before",
+        ".__focus-trap-inner-after",
+        ".__focus-trap-outer-before"
+      ],
+      "summary": "Fix all of the following:\n  Focusable content should have tabindex=\"-1\" or be removed from the DOM"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw light",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw light",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw light",
+      "id": "color-contrast",
+      "impact": "serious",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element has insufficient color contrast of 1.04 (foreground color: #f9fafa, background color: #ffffff, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw light",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw light",
+      "id": "target-size",
+      "impact": "serious",
+      "help": "All touch targets must be 24px large, or leave sufficient space",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Target has insufficient size (12px by 24px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 12px instead of at least 24px."
+    },
+    {
+      "state": "editor at rest",
+      "theme": "raw dark",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "editor at rest",
+      "theme": "raw dark",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 1,
+      "targets": [
+        "input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "editor at rest",
+      "theme": "raw dark",
+      "id": "target-size",
+      "impact": "serious",
+      "help": "All touch targets must be 24px large, or leave sufficient space",
+      "nodes": 1,
+      "targets": [
+        "input"
+      ],
+      "summary": "Fix any of the following:\n  Target has insufficient size (12px by 24px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 12px instead of at least 24px."
+    },
+    {
+      "state": "slash menu open",
+      "theme": "raw dark",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"true\""
+    },
+    {
+      "state": "slash menu open",
+      "theme": "raw dark",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 2,
+      "targets": [
+        ".tiptap",
+        "#bn-suggestion-menu"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "raw dark",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "raw dark",
+      "id": "scrollable-region-focusable",
+      "impact": "serious",
+      "help": "Scrollable region must have keyboard access",
+      "nodes": 1,
+      "targets": [
+        "#bn-suggestion-menu"
+      ],
+      "summary": "Fix any of the following:\n  Element should have focusable content\n  Element should be focusable"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "raw dark",
+      "id": "target-size",
+      "impact": "serious",
+      "help": "All touch targets must be 24px large, or leave sufficient space",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Target has insufficient size (12px by 24px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 12px instead of at least 24px."
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "raw dark",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "raw dark",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "raw dark",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "raw dark",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "raw dark",
+      "id": "target-size",
+      "impact": "serious",
+      "help": "All touch targets must be 24px large, or leave sufficient space",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Target has insufficient size (12px by 24px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 12px instead of at least 24px."
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "raw dark",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "raw dark",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "raw dark",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "raw dark",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "raw dark",
+      "id": "target-size",
+      "impact": "serious",
+      "help": "All touch targets must be 24px large, or leave sufficient space",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Target has insufficient size (12px by 24px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 12px instead of at least 24px."
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw dark",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw dark",
+      "id": "aria-hidden-focus",
+      "impact": "serious",
+      "help": "ARIA hidden element must not be focusable or contain focusable elements",
+      "nodes": 4,
+      "targets": [
+        ".__focus-trap-inner-before",
+        ".__focus-trap-inner-after",
+        ".__focus-trap-outer-before"
+      ],
+      "summary": "Fix all of the following:\n  Focusable content should have tabindex=\"-1\" or be removed from the DOM"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw dark",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw dark",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "raw dark",
+      "id": "target-size",
+      "impact": "serious",
+      "help": "All touch targets must be 24px large, or leave sufficient space",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Target has insufficient size (12px by 24px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 12px instead of at least 24px."
+    },
+    {
+      "state": "editor at rest",
+      "theme": "mitigated light",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 1,
+      "targets": [
+        "input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "mitigated light",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"true\""
+    },
+    {
+      "state": "slash menu open",
+      "theme": "mitigated light",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 1,
+      "targets": [
+        "#bn-suggestion-menu"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "mitigated light",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "mitigated light",
+      "id": "scrollable-region-focusable",
+      "impact": "serious",
+      "help": "Scrollable region must have keyboard access",
+      "nodes": 1,
+      "targets": [
+        "#bn-suggestion-menu"
+      ],
+      "summary": "Fix any of the following:\n  Element should have focusable content\n  Element should be focusable"
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "mitigated light",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "mitigated light",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "mitigated light",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "mitigated light",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "mitigated light",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "mitigated light",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "mitigated light",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "mitigated light",
+      "id": "aria-hidden-focus",
+      "impact": "serious",
+      "help": "ARIA hidden element must not be focusable or contain focusable elements",
+      "nodes": 4,
+      "targets": [
+        ".__focus-trap-inner-before",
+        ".__focus-trap-inner-after",
+        ".__focus-trap-outer-before"
+      ],
+      "summary": "Fix all of the following:\n  Focusable content should have tabindex=\"-1\" or be removed from the DOM"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "mitigated light",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "mitigated light",
+      "id": "color-contrast",
+      "impact": "serious",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element has insufficient color contrast of 1.08 (foreground color: #f5f5f6, background color: #ffffff, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "mitigated light",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "editor at rest",
+      "theme": "mitigated dark",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 1,
+      "targets": [
+        "input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "mitigated dark",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"true\""
+    },
+    {
+      "state": "slash menu open",
+      "theme": "mitigated dark",
+      "id": "aria-input-field-name",
+      "impact": "serious",
+      "help": "ARIA input fields must have an accessible name",
+      "nodes": 1,
+      "targets": [
+        "#bn-suggestion-menu"
+      ],
+      "summary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "mitigated dark",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "slash menu open",
+      "theme": "mitigated dark",
+      "id": "scrollable-region-focusable",
+      "impact": "serious",
+      "help": "Scrollable region must have keyboard access",
+      "nodes": 1,
+      "targets": [
+        "#bn-suggestion-menu"
+      ],
+      "summary": "Fix any of the following:\n  Element should have focusable content\n  Element should be focusable"
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "mitigated dark",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "mitigated dark",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "formatting toolbar open",
+      "theme": "mitigated dark",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "mitigated dark",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "mitigated dark",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "side menu (drag handle) shown",
+      "theme": "mitigated dark",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "mitigated dark",
+      "id": "aria-allowed-attr",
+      "impact": "critical",
+      "help": "Elements must only use supported ARIA attributes",
+      "nodes": 1,
+      "targets": [
+        ".tiptap"
+      ],
+      "summary": "Fix all of the following:\n  ARIA attribute is not allowed: aria-expanded=\"false\""
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "mitigated dark",
+      "id": "aria-hidden-focus",
+      "impact": "serious",
+      "help": "ARIA hidden element must not be focusable or contain focusable elements",
+      "nodes": 4,
+      "targets": [
+        ".__focus-trap-inner-before",
+        ".__focus-trap-inner-after",
+        ".__focus-trap-outer-before"
+      ],
+      "summary": "Fix all of the following:\n  Focusable content should have tabindex=\"-1\" or be removed from the DOM"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "mitigated dark",
+      "id": "button-name",
+      "impact": "critical",
+      "help": "Buttons must have discernible text",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have inner text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  "
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "mitigated dark",
+      "id": "color-contrast",
+      "impact": "serious",
+      "help": "Elements must meet minimum color contrast ratio thresholds",
+      "nodes": 1,
+      "targets": [
+        "#_r_8_"
+      ],
+      "summary": "Fix any of the following:\n  Element has insufficient color contrast of 1.13 (foreground color: #222b48, background color: #18213e, font size: 12.0pt (16px), font weight: normal). Expected contrast ratio of 4.5:1"
+    },
+    {
+      "state": "drag-handle block menu open",
+      "theme": "mitigated dark",
+      "id": "label",
+      "impact": "critical",
+      "help": "Form elements must have labels",
+      "nodes": 2,
+      "targets": [
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(4) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input",
+        ".bn-block-outer[data-node-type=\"blockOuter\"]:nth-child(5) > .bn-block[data-node-type=\"blockContainer\"] > .bn-block-content[data-content-type=\"checkListItem\"] > div[contenteditable=\"false\"] > input"
+      ],
+      "summary": "Fix any of the following:\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Elem"
+    }
+  ],
+  "aria": {
+    "slashMenu": "- listbox:\n  - text: Headings\n  - option \"Heading 1 Top-level heading Ctrl-Alt-1\" [selected]:\n    - img\n    - text: Heading 1 Top-level heading Ctrl-Alt-1\n  - option \"Heading 2 Key section heading Ctrl-Alt-2\":\n    - img\n    - text: Heading 2 Key section heading Ctrl-Alt-2\n  - option \"Heading 3 Subsection and group heading Ctrl-Alt-3\":\n    - img\n    - text: Heading 3 Subsection and group heading Ctrl-Alt-3\n  - text: Basic blocks\n  - option \"Quote Quote or excerpt\":\n    - img\n    - text: Quote Quote or excerpt\n  - option \"Toggle List List with hideable sub-items Ctrl-Shift-6\":\n    - img\n    - text: Toggle List List with hideable sub-items Ctrl-Shift-6\n  - option \"Numbered List List with ordered items Ctrl-Shift-7\":\n    - img\n    - text: Numbered List List with ordered items Ctrl-Shift-7\n  - option \"Bullet List List with unordered items Ctrl-Shift-8\":\n    - img\n    - text: Bullet List List with unordered items Ctrl-Shift-8\n  - option \"Check List List with checkboxes Ctrl-Shift-9\":\n    - img\n    - text: Check List List with checkboxes Ctrl-Shift-9\n  - option \"Paragraph The body of your document Ctrl-Alt-0\":\n    - img\n    - text: Paragraph The body of your document Ctrl-Alt-0\n  - option \"Code Block Code block with syntax highlighting Ctrl-Alt-c\":\n    - img\n    - text: Code Block Code block with syntax highlighting Ctrl-Alt-c\n  - option \"Divider Visually divide blocks\":\n    - img\n    - text: Divider Visually divide blocks\n  - text: Advanced\n  - option \"Table Table with editable cel",
+    "formattingToolbar": "- toolbar:\n  - combobox:\n    - img\n    - text: Heading 2\n  - button \"Bold\":\n    - img\n  - button \"Italic\":\n    - img\n  - button \"Underline\":\n    - img\n  - button \"Strike\":\n    - img\n  - button \"Align text left\" [pressed]:\n    - img\n  - button \"Align text center\":\n    - img\n  - button \"Align text right\":\n    - img\n  - button \"Colors\": A\n  - button \"Nest block\" [disabled]:\n    - img\n  - button \"Unnest block\" [disabled]:\n    - img\n  - button \"Create link\":\n    - img",
+    "sideMenu": "- group:\n  - button \"Add block\":\n    - img\n  - button \"Open block menu\":\n    - img",
+    "blockMenu": "- menu \"Open block menu\":\n  - menuitem \"Delete\"\n  - menuitem \"Colors\"",
+    "editorRoot": "aria-autocomplete=\"list\" aria-haspopup=\"listbox\" contenteditable=\"true\" role=\"textbox\" tabindex=\"0\" aria-label=\"Document content\" aria-describedby=\"editor-spike-hint\" translate=\"no\" aria-expanded=\"false\""
+  }
+}

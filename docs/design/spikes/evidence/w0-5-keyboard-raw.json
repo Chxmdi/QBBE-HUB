@@ -1,0 +1,181 @@
+[
+  {
+    "step": "Tab from the page reaches the editor",
+    "ok": true,
+    "detail": "after 1 Tab"
+  },
+  {
+    "step": "slash menu creates Heading 1",
+    "ok": true,
+    "detail": "0 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Heading 2",
+    "ok": true,
+    "detail": "1 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Heading 3",
+    "ok": true,
+    "detail": "2 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Heading 4",
+    "ok": true,
+    "detail": "19 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Heading 5",
+    "ok": true,
+    "detail": "20 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Heading 6",
+    "ok": true,
+    "detail": "21 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Toggle Heading 1",
+    "ok": true,
+    "detail": "16 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Toggle Heading 2",
+    "ok": true,
+    "detail": "17 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Toggle Heading 3",
+    "ok": true,
+    "detail": "18 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Quote",
+    "ok": true,
+    "detail": "3 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Toggle List",
+    "ok": true,
+    "detail": "4 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Numbered List",
+    "ok": true,
+    "detail": "5 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Bullet List",
+    "ok": true,
+    "detail": "6 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Check List",
+    "ok": true,
+    "detail": "7 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Paragraph",
+    "ok": true,
+    "detail": "8 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Code Block",
+    "ok": true,
+    "detail": "9 ArrowDown presses. left the code block with Shift+Enter: paragraph"
+  },
+  {
+    "step": "slash menu creates Divider",
+    "ok": true,
+    "detail": "10 ArrowDown presses."
+  },
+  {
+    "step": "slash menu creates Image",
+    "ok": true,
+    "detail": "12 ArrowDown presses. focus after insert: {\"tag\":\"div\",\"role\":\"textbox\",\"name\":\"Board meeting notesType / for the block \",\"classes\":\"tiptap ProseMirror bn-editor bn-default-styles placeholder-selector-021ef347-eb1\",\"outline\":\"none 0px rgb(63, 63, 63)\",\"boxShadow\":\"none\",\"inEditor\":true}; after Escape inEditor=true"
+  },
+  {
+    "step": "slash menu creates Video",
+    "ok": true,
+    "detail": "13 ArrowDown presses. focus after insert: {\"tag\":\"div\",\"role\":\"textbox\",\"name\":\"Board meeting notesType / for the block \",\"classes\":\"tiptap ProseMirror bn-editor bn-default-styles placeholder-selector-021ef347-eb1\",\"outline\":\"none 0px rgb(63, 63, 63)\",\"boxShadow\":\"none\",\"inEditor\":true}; after Escape inEditor=true"
+  },
+  {
+    "step": "slash menu creates Audio",
+    "ok": true,
+    "detail": "14 ArrowDown presses. focus after insert: {\"tag\":\"div\",\"role\":\"textbox\",\"name\":\"Board meeting notesType / for the block \",\"classes\":\"tiptap ProseMirror bn-editor bn-default-styles placeholder-selector-021ef347-eb1\",\"outline\":\"none 0px rgb(63, 63, 63)\",\"boxShadow\":\"none\",\"inEditor\":true}; after Escape inEditor=true"
+  },
+  {
+    "step": "slash menu creates File",
+    "ok": true,
+    "detail": "15 ArrowDown presses. focus after insert: {\"tag\":\"div\",\"role\":\"textbox\",\"name\":\"Board meeting notesType / for the block \",\"classes\":\"tiptap ProseMirror bn-editor bn-default-styles placeholder-selector-021ef347-eb1\",\"outline\":\"none 0px rgb(63, 63, 63)\",\"boxShadow\":\"none\",\"inEditor\":true}; after Escape inEditor=true"
+  },
+  {
+    "step": "slash menu creates Table",
+    "ok": true,
+    "detail": "11 ArrowDown presses. first cells: [\"A1\",\"B1\"]; ArrowDown out of the table lands in: table"
+  },
+  {
+    "step": "slash menu inserts an emoji (grid picker)",
+    "ok": true,
+    "detail": "inserted 😄; picker ARIA {\"role\":\"grid\",\"childRoles\":[\"option\"],\"editorControls\":\"bn-suggestion-menu\",\"editorActiveDescendant\":\"bn-suggestion-menu-item-0\",\"gridId\":\"bn-grid-suggestion-menu\"}"
+  },
+  {
+    "step": "menu navigation: Escape closes, Up/Down/Home move, aria-activedescendant follows",
+    "ok": true,
+    "detail": "first=Heading 1 third=Heading 3 back=Heading 2 up-past-top=Emoji filtered=Quote aria-expanded open=true closed=false"
+  },
+  {
+    "step": "reorder a block with the keyboard (Ctrl+Shift+ArrowUp / Down)",
+    "ok": true,
+    "detail": "before [\"Board meeting notes\",\"Type / for the block menu. Select text for formatting.\",\"Review the budget\",\"Send the minutes\"] → up [\"Board meeting notes\",\"Review the budget\",\"Type / for the block menu. Select text for formatting.\",\"Send the minutes\"] → down twice [\"Board meeting notes\",\"Type / for the block menu. Select text for formatting.\",\"Send the minutes\",\"Review the budget\"]; caret stays in \"Review the budget\""
+  },
+  {
+    "step": "turn into: keyboard shortcut Ctrl+Alt+1 on a paragraph",
+    "ok": true,
+    "detail": "heading, then Ctrl+Alt+0 back to paragraph"
+  },
+  {
+    "step": "turn into: Markdown shortcut '## '",
+    "ok": true
+  },
+  {
+    "step": "turn into: slash menu on a block that already has text",
+    "ok": true,
+    "detail": "block with text is now paragraph (text \"Has text \")"
+  },
+  {
+    "step": "formatting toolbar reachable from the keyboard",
+    "ok": false,
+    "detail": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByRole('toolbar')\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" with timeout 5000ms\n  - waiting for getByRole('toolbar')\n"
+  },
+  {
+    "step": "drag handle / block menu reachable from the keyboard",
+    "ok": false,
+    "detail": "Error: side menu never focused; Tab went: {\"tag\":\"input\",\"role\":null,\"name\":\"\",\"classes\":\"\",\"outline\":\"solid 2px rgb(42, 60, 144)\",\"boxShadow\":\"none\",\"inEditor\":true} ; {\"tag\":\"body\",\"role\":null,\"name\":\"Editor spikeWave 0 experiment. Not a pro\",\"classes\":\"\",\"outline\":\"none 0px rgb(25, 34, 64)\",\"boxShadow\":\"none\",\"inEditor\":false} ; {\"tag\":\"div\",\"role\":\"textbox\",\"name\":\"Board meeting notesType / fo"
+  },
+  {
+    "step": "no keyboard trap: leaving the editor from a paragraph",
+    "ok": true,
+    "detail": "Tab: leaves after 2 press(es), Shift+Tab: leaves after 1 press(es), Escape Tab: leaves after 2 press(es), Escape Shift+Tab: leaves after 1 press(es)"
+  },
+  {
+    "step": "no keyboard trap: leaving the editor from a bullet list",
+    "ok": true,
+    "detail": "Tab: leaves after 2 press(es), Shift+Tab: leaves after 1 press(es), Escape Tab: leaves after 2 press(es), Escape Shift+Tab: leaves after 1 press(es)"
+  },
+  {
+    "step": "no keyboard trap: leaving the editor from a code block",
+    "ok": true,
+    "detail": "Tab: leaves after 2 press(es), Shift+Tab: leaves after 1 press(es), Escape Tab: leaves after 2 press(es), Escape Shift+Tab: leaves after 1 press(es)"
+  },
+  {
+    "step": "no keyboard trap: leaving the editor from a table",
+    "ok": true,
+    "detail": "Tab: stays, Shift+Tab: stays, Escape Tab: leaves after 1 press(es), Escape Shift+Tab: leaves after 1 press(es)"
+  },
+  {
+    "step": "focus indicator on the editor itself",
+    "ok": true,
+    "detail": "{\"tag\":\"div\",\"role\":\"textbox\",\"name\":\"Board meeting notesType / for the block \",\"classes\":\"tiptap ProseMirror bn-editor bn-default-styles placeholder-selector-ecdac004-e3b\",\"outline\":\"none 0px rgb(63, 63, 63)\",\"boxShadow\":\"none\",\"inEditor\":true}"
+  }
+]

@@ -1,0 +1,32 @@
+/*
+ * W0-5 mitigations for gaps found in BlockNote's Ariakit UI. Applied only
+ * inside .qbbe-editor, so the spike can also show BlockNote untouched
+ * (/dev/editor-spike?raw=1). Each rule names the axe rule or WCAG criterion
+ * it answers.
+ */
+
+/* 2.4.7 Focus Visible: BlockNote removes the editor's outline. */
+.qbbe-editor .bn-editor:focus-visible,
+.qbbe-editor .bn-editor:focus {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.dark .qbbe-editor .bn-editor:focus-visible,
+.dark .qbbe-editor .bn-editor:focus {
+  outline-color: var(--color-accent);
+}
+
+/* 1.4.3 Contrast: the active slash-menu option was white on BlockNote's blue (4.35:1). */
+.qbbe-editor .bn-suggestion-menu-item[aria-selected="true"],
+.qbbe-editor .bn-ak-menu-item[aria-selected="true"],
+.qbbe-editor .bn-suggestion-menu-item[aria-selected="true"] .bn-ak-suggestion-menu-item-subtitle {
+  background-color: var(--color-brand-soft);
+  color: var(--color-brand-fg);
+}
+
+/* 2.5.8 Target Size (Minimum): check-list boxes were 12 x 24 px. */
+.qbbe-editor .bn-block-content[data-content-type="checkListItem"] > div:first-child input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+}

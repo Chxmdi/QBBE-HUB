@@ -1,0 +1,236 @@
+{
+  "edits": {
+    "A": {
+      "insert": 298,
+      "newBlock": 76,
+      "bold": 52,
+      "delete": 74
+    },
+    "B": {
+      "insert": 295,
+      "delete": 63,
+      "bold": 66,
+      "newBlock": 76
+    },
+    "total": 1000
+  },
+  "timeline": {
+    "dropAtMs": 2015,
+    "restoreAtMs": 6700,
+    "editsDoneAtMs": 10480,
+    "convergedAfterEditsMs": 22,
+    "statusLog": [
+      {
+        "t": 2015,
+        "status": "connected"
+      },
+      {
+        "t": 2299,
+        "status": "connected"
+      },
+      {
+        "t": 2581,
+        "status": "connected"
+      },
+      {
+        "t": 2870,
+        "status": "connected"
+      },
+      {
+        "t": 3146,
+        "status": "connected"
+      },
+      {
+        "t": 3433,
+        "status": "connected"
+      },
+      {
+        "t": 3722,
+        "status": "connected"
+      },
+      {
+        "t": 4002,
+        "status": "connected"
+      },
+      {
+        "t": 4289,
+        "status": "connected"
+      },
+      {
+        "t": 4580,
+        "status": "connected"
+      },
+      {
+        "t": 4884,
+        "status": "connected"
+      },
+      {
+        "t": 5170,
+        "status": "connected"
+      },
+      {
+        "t": 5467,
+        "status": "connected"
+      },
+      {
+        "t": 5786,
+        "status": "connected"
+      },
+      {
+        "t": 6095,
+        "status": "connected"
+      },
+      {
+        "t": 6395,
+        "status": "connected"
+      },
+      {
+        "t": 6700,
+        "status": "connected"
+      }
+    ]
+  },
+  "expectedTokens": 610,
+  "deletedTokens": 135,
+  "clientA": {
+    "missing": [
+      "[B115à]"
+    ],
+    "duplicated": [],
+    "resurrected": [],
+    "unexpected": []
+  },
+  "clientB": {
+    "missing": [
+      "[B115à]"
+    ],
+    "duplicated": [],
+    "resurrected": [],
+    "unexpected": []
+  },
+  "reloadedFromDatabase": {
+    "missing": [
+      "[B115à]"
+    ],
+    "duplicated": [],
+    "resurrected": [],
+    "unexpected": []
+  },
+  "vanishedWithoutDelete": {
+    "A": [],
+    "B": [
+      {
+        "t": "[B115à]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 2175
+      }
+    ]
+  },
+  "elementDeletions": {
+    "A": [
+      {
+        "names": [
+          "eR"
+        ],
+        "local": false,
+        "fromPeer": true,
+        "atMs": 113
+      }
+    ],
+    "B": [
+      {
+        "names": [
+          "eR"
+        ],
+        "local": true,
+        "fromPeer": false,
+        "atMs": 76
+      }
+    ]
+  },
+  "shownOutOfStep": {
+    "A": [],
+    "B": []
+  },
+  "identicalText": true,
+  "charactersLostOrDuplicated": [],
+  "interleavedTokens": {
+    "count": 1,
+    "ratePercent": 0.16,
+    "examples": [
+      {
+        "token": "[B115à]",
+        "context": "97è][A207ç]B115à][[B166è"
+      }
+    ]
+  },
+  "persistence": {
+    "rowsWrittenA": 11,
+    "rowsWrittenB": 10,
+    "failedWritesWhileOffline": 0,
+    "unsavedAfterFlush": 0
+  },
+  "finalDocumentBytes": 56421,
+  "messages": {
+    "A": {
+      "messages": 249,
+      "p50Bytes": 133,
+      "p95Bytes": 453,
+      "maxBytes": 697,
+      "peakMessagesPerSecond": 25,
+      "byEvent": {
+        "y-sync1": {
+          "count": 2,
+          "maxBytes": 78,
+          "totalBytes": 142
+        },
+        "y-aw": {
+          "count": 1,
+          "maxBytes": 143,
+          "totalBytes": 143
+        },
+        "y-sync2": {
+          "count": 1,
+          "maxBytes": 64,
+          "totalBytes": 64
+        },
+        "y-update": {
+          "count": 245,
+          "maxBytes": 697,
+          "totalBytes": 52781
+        }
+      }
+    },
+    "B": {
+      "messages": 237,
+      "p50Bytes": 145,
+      "p95Bytes": 461,
+      "maxBytes": 721,
+      "peakMessagesPerSecond": 26,
+      "byEvent": {
+        "y-sync1": {
+          "count": 1,
+          "maxBytes": 64,
+          "totalBytes": 64
+        },
+        "y-aw": {
+          "count": 1,
+          "maxBytes": 139,
+          "totalBytes": 139
+        },
+        "y-sync2": {
+          "count": 1,
+          "maxBytes": 64,
+          "totalBytes": 64
+        },
+        "y-update": {
+          "count": 234,
+          "maxBytes": 721,
+          "totalBytes": 52262
+        }
+      }
+    }
+  }
+}
