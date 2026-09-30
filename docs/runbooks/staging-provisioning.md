@@ -114,10 +114,39 @@ them:
 | `SUPABASE_SERVICE_ROLE_KEY` | the **staging** service-role key; mark it secret |
 | `CRON_JOB_SECRET` | 32+ random characters (`openssl rand -base64 48`); the same value goes into step 5b |
 | `EMAIL_RECIPIENT_ALLOWLIST` | QBBE test addresses, e.g. `@qbbe.org`; never blank on staging |
+| `WORKSPACE_OS_FLAGS` | Workspace OS modules to switch on for staging: `all`, or a comma-separated list such as `wos_objects,wos_lenses`. **Staging only; never set it on production** (see 4d) |
 
 **Check every value against production before saving.** A production
 service-role key pasted into staging means a staging deploy can rewrite
 production data, and nothing later in this runbook would notice.
+
+**d. Workspace OS feature switches.** Each Workspace OS module (epic #199) is
+merged unfinished behind a switch in the `feature_flag` table, all off
+(`wos_objects`, `wos_spaces`, `wos_pages`, `wos_editor`, `wos_lenses`,
+`wos_home`, `wos_capture`, `wos_workflows_v2`, `wos_forms_v2`,
+`wos_public_pages`, `wos_offline`). Staging shows them through the
+`WORKSPACE_OS_FLAGS` variable in 4c instead of changing the table, so the
+staging database keeps the same switch values as production.
+
+- The variable can only switch a module **on**. Names it does not recognise
+  are ignored, so a typo leaves that module off rather than breaking the build.
+- It covers Workspace OS switches only. `gmail_inbox` and the other older
+  switches are still changed in the table.
+- After saving it, trigger a new deploy: Netlify reads the variable at build
+  and run time. **You should see** the switched-on module's screens on
+  staging. If they are missing, check the spelling against the list above.
+
+On **production**, never set `WORKSPACE_OS_FLAGS`. A module is switched on
+there after its wave's sign-off, in the production project's SQL editor:
+
+```sql
+update public.feature_flag set enabled = true where key = 'wos_objects';
+```
+
+**You should see** `UPDATE 1`. `UPDATE 0` means the key is misspelled.
+Switching it back off (`enabled = false`) is the rollback. Signed-in people,
+admins included, cannot change these switches through the app
+(`20261101000300_feature_flag_workspace_rows_locked`).
 
 ## 5. Deploy the frozen commit
 
