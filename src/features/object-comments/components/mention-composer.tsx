@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useLocale } from "@/lib/i18n/client";
 import { fill } from "@/features/collab/i18n";
 import { activeMentionQuery, insertMention } from "../mentions";
@@ -39,7 +39,21 @@ export function MentionComposer({
   const [options, setOptions] = useState<MentionCandidate[]>([]);
   const [highlight, setHighlight] = useState(0);
   const [dismissed, setDismissed] = useState(false);
+  // Where the caret goes once React has written an inserted mention into the
+  // textarea. Setting it later (a frame after) let keys typed in between land
+  // before the jump and the rest after it, scrambling the text on a slow
+  // machine.
+  const pendingCaret = useRef<number | null>(null);
   const open = active !== null && !dismissed;
+
+  useLayoutEffect(() => {
+    const caret = pendingCaret.current;
+    const textarea = ref.current;
+    if (caret === null || !textarea) return;
+    pendingCaret.current = null;
+    textarea.focus();
+    textarea.setSelectionRange(caret, caret);
+  }, [value]);
 
   useEffect(() => {
     if (!active || dismissed) return;
@@ -71,13 +85,10 @@ export function MentionComposer({
       id: option.id,
       label: option.label,
     });
+    pendingCaret.current = result.caret;
     onChange(result.text);
     setActive(null);
     setOptions([]);
-    requestAnimationFrame(() => {
-      textarea.focus();
-      textarea.setSelectionRange(result.caret, result.caret);
-    });
   }
 
   function typeName(type: string | undefined): string {

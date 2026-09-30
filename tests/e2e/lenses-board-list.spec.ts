@@ -66,14 +66,18 @@ async function oldBoardTitles(page: Page) {
   await page.goto(`/board?q=${encodeURIComponent(RUN)}`);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 30_000 });
   // Expand every column so nothing is hidden behind "Show more".
-  for (const more of await page.getByRole("button", { name: /^Show \d+ more$/ }).all()) await more.click();
+  // Each click removes its own button, so always take the first one left.
+  const more = page.getByRole("button", { name: /^Show \d+ more$/ });
+  while ((await more.count()) > 0) await more.first().click();
   return sorted(await page.locator("main article").evaluateAll((els) => els.map((e) => e.querySelector("button")?.textContent)));
 }
 
 async function newBoardTitles(page: Page) {
   await page.goto(`/lenses/board?q=${encodeURIComponent(RUN)}`);
   await expect(page.getByRole("heading", { level: 1, name: "Board" })).toBeVisible({ timeout: 30_000 });
-  for (const more of await page.getByRole("button", { name: /^Show \d+ more$/ }).all()) await more.click();
+  // Each click removes its own button, so always take the first one left.
+  const more = page.getByRole("button", { name: /^Show \d+ more$/ });
+  while ((await more.count()) > 0) await more.first().click();
   return sorted(await page.locator("[data-lens-card] a").allInnerTexts());
 }
 

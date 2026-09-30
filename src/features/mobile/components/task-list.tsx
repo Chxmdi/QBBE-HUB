@@ -6,6 +6,7 @@ import { Check } from "lucide-react";
 import { updateTaskStatus } from "@/features/tasks/services/task.commands";
 import { useFormatters } from "@/lib/i18n/client";
 import type { PhoneTask } from "../services/mobile.queries";
+import { usePhoneStatus } from "./phone-status";
 import { useMobileT } from "./use-mobile-t";
 
 /** Tasks with a large "done" button each, uses the ordinary task action. */
@@ -14,7 +15,11 @@ export function TaskList({ tasks }: { tasks: PhoneTask[] }) {
   const format = useFormatters();
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
-  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [localStatus, setLocalStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  // On the phone screens the layout shows it, so it survives the refresh below.
+  const phoneStatus = usePhoneStatus();
+  const setStatus = phoneStatus ?? setLocalStatus;
+  const status = phoneStatus ? null : localStatus;
 
   async function done(task: PhoneTask) {
     setBusy(task.id);

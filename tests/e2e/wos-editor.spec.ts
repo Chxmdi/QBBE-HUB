@@ -163,10 +163,15 @@ test("staff write a page with the block editor, from the keyboard", async ({ pag
   expect(await page.evaluate(() => Boolean(document.activeElement?.closest(".bn-editor")))).toBe(false);
 
   // Alt+F10 reaches the formatting toolbar once text is selected; Escape returns.
+  // ProseMirror re-applies its own selection 20 ms after the editor gains
+  // focus; on a loaded machine that lands after these key presses and undoes
+  // the selection, so select again until the toolbar is up.
   await reloaded.locator("h2").click();
-  await page.keyboard.press("Home");
-  await page.keyboard.press("Shift+End");
-  await expect(page.locator(".bn-formatting-toolbar")).toBeVisible();
+  await expect(async () => {
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Shift+End");
+    await expect(page.locator(".bn-formatting-toolbar")).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
   await page.keyboard.press("Alt+F10");
   expect(await page.evaluate(() => Boolean(document.activeElement?.closest(".bn-formatting-toolbar")))).toBe(true);
   await page.keyboard.press("Escape");
