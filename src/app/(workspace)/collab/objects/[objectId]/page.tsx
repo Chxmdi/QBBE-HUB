@@ -7,7 +7,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { objectCommentsText } from "@/features/object-comments/messages";
 import { ObjectComments } from "@/features/object-comments/components/object-comments";
 import { loadObjectTitle } from "@/features/object-comments/services/object-comment.queries";
-import { objectTypeKeySchema } from "@/features/object-comments/schema";
+import { blockIdSchema, objectTypeKeySchema } from "@/features/object-comments/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +32,7 @@ export default async function ObjectCollaborationPage({
   const query = await searchParams;
   const id = z.string().uuid().safeParse(objectId);
   const type = objectTypeKeySchema.safeParse(query.type ?? "object");
-  const block = z.string().uuid().safeParse(query.block);
+  const block = blockIdSchema.safeParse(query.block);
   if (!id.success || !type.success) notFound();
 
   const m = objectCommentsText(await getLocale());

@@ -9,3 +9,6 @@ export const objectRefSchema = z.object({
   id: z.string().uuid(),
   type: objectTypeKeySchema,
 });
+
+/** The editor's id for a block (S3); short and URL-safe. */
+export const blockIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);

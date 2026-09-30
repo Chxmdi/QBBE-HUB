@@ -23,7 +23,7 @@ declare
   t_open uuid;       -- nobody in particular: owners and admins only
   t_volunteer uuid;  -- assigned to the volunteer
   t_staff uuid;      -- reviewed by the staff member
-  v_block uuid := gen_random_uuid();
+  v_block text := 'block-' || substr(md5(random()::text), 1, 8);
   c_owner uuid;
   c_volunteer uuid;
   c_staff uuid;
@@ -207,10 +207,17 @@ begin
   -- The block a comment is pinned to cannot move.
   v_failed := false;
   begin
-    update public.record_comment set block_id = gen_random_uuid() where id = c_owner;
+    update public.record_comment set block_id = 'another-block' where id = c_owner;
   exception when insufficient_privilege then v_failed := true;
   end;
   perform tests.ok(v_failed, 'a comment''s block cannot change');
+  v_failed := false;
+  begin
+    insert into public.record_comment (organization_id, parent_type, parent_id, author_id, body, block_id)
+    values (v_org, 'object', t_open, v_owner, 'Bad block', 'not a block id!');
+  exception when check_violation then v_failed := true;
+  end;
+  perform tests.ok(v_failed, 'a block id is the editor''s short id, nothing else');
 
   -- Resolve and reopen stamp and clear who resolved.
   update public.record_comment set resolved_at = now() where id = c_owner;

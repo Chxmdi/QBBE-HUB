@@ -9,7 +9,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { isLocale, DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import { fill } from "@/features/collab/i18n";
-import { objectTypeKeySchema } from "../schema";
+import { blockIdSchema, objectTypeKeySchema } from "../schema";
 import { extractMentions, MAX_MENTIONS, plainText } from "../mentions";
 import { reactionKeys } from "../reactions";
 import { commentTargetFor, objectCommentsPath } from "../target";
@@ -37,7 +37,7 @@ const bodySchema = (m: ObjectCommentsText) =>
 const addSchema = (m: ObjectCommentsText) =>
   z.object({
     object: z.object({ id: z.string().uuid(), type: objectTypeKeySchema }),
-    blockId: z.string().uuid().nullable().optional(),
+    blockId: blockIdSchema.nullable().optional(),
     parentCommentId: z.string().uuid().nullable().optional(),
     body: bodySchema(m),
   });

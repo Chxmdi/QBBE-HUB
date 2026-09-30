@@ -9,10 +9,10 @@
 --     posting and reacting need app.can(object, 'comment'). Native records
 --     (task, project, meeting…) keep their own parent type and rules, so one
 --     record never has two threads.
---   * `block_id` pins a comment to one block of the object's content. Blocks
---     are rows derived from the live document (stream S3, M4c); there is no
---     foreign key until that table exists, and the comment's access is always
---     its object's.
+--   * `block_id` pins a comment to one block of the object's content, by the
+--     editor's block id. Blocks are rows derived from the live document
+--     (stream S3, M4c); there is no foreign key until that table exists, and
+--     the comment's access is always its object's.
 --   * Reactions: a fixed set, one of each per person per comment.
 --   * Mentions: `@person` and `@object`, recorded per comment so mentioned
 --     people are notified once and objects can list where they were mentioned.
@@ -34,8 +34,14 @@ alter table public.record_comment
     'object'
   ));
 
+-- Block ids are the editor's own (short strings, not necessarily uuids).
 alter table public.record_comment
-  add column if not exists block_id uuid;
+  add column if not exists block_id text;
+alter table public.record_comment
+  drop constraint if exists record_comment_block_id_shape;
+alter table public.record_comment
+  add constraint record_comment_block_id_shape
+  check (block_id is null or block_id ~ '^[A-Za-z0-9_-]{1,100}$');
 
 create index if not exists idx_record_comment_block
   on public.record_comment (parent_id, block_id)
