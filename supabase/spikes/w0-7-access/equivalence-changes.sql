@@ -83,6 +83,10 @@ begin
   -- member leaves the team, which removes their grant by cascade.
   insert into public.team (organization_id, name, owner_id)
   values (v_org, 'Eq team', v_owner) returning id into v_team;
+  -- Every team has exactly one team channel (checked at commit).
+  insert into public.channel (organization_id, name, slug, type, privacy, owner_id, team_id, created_by)
+  values (v_org, 'Eq team', 'eq-team-' || substr(gen_random_uuid()::text, 1, 8),
+          'team', 'private', v_owner, v_team, v_owner);
   insert into public.team_member (team_id, user_id, organization_id)
   values (v_team, v_p30, v_org), (v_team, v_p31, v_org);
   insert into public.program_access_grant

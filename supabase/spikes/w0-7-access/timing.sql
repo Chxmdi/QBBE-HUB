@@ -279,6 +279,10 @@ begin
   from public.organization_membership where user_id = v_owner limit 1;
   insert into public.team (organization_id, name, owner_id)
   values (v_org, 'Bench team', v_owner) returning id into v_team;
+  -- Every team has exactly one team channel (checked at commit).
+  insert into public.channel (organization_id, name, slug, type, privacy, owner_id, team_id, created_by)
+  values (v_org, 'Bench team', 'bench-team-' || substr(gen_random_uuid()::text, 1, 8),
+          'team', 'private', v_owner, v_team, v_owner);
   insert into spike_access.access_grant (organization_id, object_id, principal_kind, team_id, role_key, source)
   select v_org, p.id, 'team', v_team, 'contributor', 'direct'
   from public.program p where p.slug = 'bench-program';
