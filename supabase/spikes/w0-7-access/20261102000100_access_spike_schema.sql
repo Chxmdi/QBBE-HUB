@@ -19,7 +19,7 @@
 --                 as the program), private (one per person), custom.
 --   access_role   named bundles of capabilities; built-in rows below, custom
 --                 roles (M10d) are more rows.
---   access_grant  role R on object O (and, if it inherits, everything under O)
+--   access_grant  role R on object O and, depending on its reach, what is under O
 --                 to a person, a team, or everyone holding an organization role.
 --   access_cache  capabilities per (person, object), from person and team
 --                 grants, kept current by triggers. Organization-role grants on
@@ -115,8 +115,16 @@ create table spike_access.access_grant (
   team_id uuid references public.team (id) on delete cascade,
   org_role public.org_role,
   role_key text not null references spike_access.access_role (key),
-  -- false = "this object only": the grant does not flow to children.
-  inherits boolean not null default true,
+  -- How far down the grant reaches:
+  --   subtree                everything under the object (the normal case)
+  --   self                   this object only
+  --   self_and_direct_tasks  this object and the tasks directly in it, not
+  --                          its projects: exactly what program.lead_id gives
+  --                          today (finding 3). A legacy shape, kept only so
+  --                          the lead column can be proved equal; the real
+  --                          build should make the lead a subtree grant.
+  reach text not null default 'subtree'
+    check (reach in ('subtree', 'self', 'self_and_direct_tasks')),
   -- Where the grant came from while the old tables are still the source of
   -- truth (dual write). 'direct' for grants made in the new model.
   source text not null,
@@ -154,7 +162,7 @@ grant all on all tables in schema spike_access to service_role;
 -- The capabilities person and team grants give, for the given objects and
 -- (optionally) only the given people. The single definition of inheritance:
 -- a grant on the object itself always applies; a grant on an ancestor applies
--- if it inherits.
+-- if its reach covers this object.
 create or replace function spike_access.compute(p_objects uuid[], p_users uuid[] default null)
 returns table (user_id uuid, object_id uuid, organization_id uuid, caps integer)
 language sql stable
@@ -167,7 +175,9 @@ as $$
     on g.object_id = a.id
    and g.organization_id = o.organization_id
    and g.principal_kind <> 'org_role'
-   and (a.depth = 1 or g.inherits)
+   and (a.depth = 1
+        or g.reach = 'subtree'
+        or (g.reach = 'self_and_direct_tasks' and a.depth = 2 and o.kind = 'task'))
   join spike_access.access_role r on r.key = g.role_key
   cross join lateral (
     select g.user_id where g.principal_kind = 'person'
@@ -228,6 +238,21 @@ as $$
   end;
 $$;
 
+-- The objects a grant reaches (the same rule as compute, from the top).
+create or replace function spike_access.grant_reach(p_object uuid, p_reach text)
+returns uuid[]
+language sql stable
+set search_path = ''
+as $$
+  select case p_reach
+    when 'subtree' then spike_access.subtree(p_object)
+    when 'self' then array[p_object]
+    else array[p_object] || (
+      select coalesce(array_agg(o.id), '{}') from spike_access.object o
+      where o.parent_id = p_object and o.kind = 'task')
+  end;
+$$;
+
 -- A grant changed: only its people, and only the objects it reaches.
 create or replace function spike_access.on_grant_change()
 returns trigger
@@ -237,12 +262,12 @@ as $$
 begin
   if tg_op in ('DELETE', 'UPDATE') then
     perform spike_access.refresh(
-      case when old.inherits then spike_access.subtree(old.object_id) else array[old.object_id] end,
+      spike_access.grant_reach(old.object_id, old.reach),
       spike_access.grant_people(old));
   end if;
   if tg_op in ('INSERT', 'UPDATE') then
     perform spike_access.refresh(
-      case when new.inherits then spike_access.subtree(new.object_id) else array[new.object_id] end,
+      spike_access.grant_reach(new.object_id, new.reach),
       spike_access.grant_people(new));
   end if;
   return null;
@@ -299,7 +324,7 @@ begin
   select coalesce(array_agg(distinct s.id), '{}') into v_objects
   from spike_access.access_grant g
   cross join lateral unnest(
-    case when g.inherits then spike_access.subtree(g.object_id) else array[g.object_id] end
+    spike_access.grant_reach(g.object_id, g.reach)
   ) as s (id)
   where g.principal_kind = 'team' and g.team_id = v_row.team_id;
   perform spike_access.refresh(v_objects, array[v_row.user_id]);

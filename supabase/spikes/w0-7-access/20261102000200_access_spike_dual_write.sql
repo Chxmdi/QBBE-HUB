@@ -8,9 +8,9 @@
 --                           owner, admin        -> org_reader, org_admin (MFA)
 --                           leadership_viewer   -> org_reader
 --   program               a space with the program's id, under the workspace
---   program.lead_id       manager on the space, this object only (today the
---                         lead column reaches the program and its
---                         program-level tasks, not its projects)
+--   program.lead_id       manager on the space and the tasks directly in it,
+--                         not its projects (reach self_and_direct_tasks:
+--                         exactly what the lead column gives today)
 --   program_access_grant  its role on the space, inherited by the projects
 --                         and tasks under it
 --   project               object under its program's space, or the workspace
@@ -86,7 +86,7 @@ $$;
 -- Replace the single grant a column gives (lead, owner, a task actor).
 create or replace function spike_access.put_column_grant(
   p_organization uuid, p_object uuid, p_source text, p_user uuid,
-  p_role text, p_inherits boolean
+  p_role text, p_reach text
 )
 returns void
 language plpgsql security definer
@@ -98,8 +98,8 @@ begin
     and g.user_id is distinct from p_user;
   if p_user is not null then
     insert into spike_access.access_grant
-      (organization_id, object_id, principal_kind, user_id, role_key, inherits, source, legacy_id)
-    values (p_organization, p_object, 'person', p_user, p_role, p_inherits, p_source, p_object)
+      (organization_id, object_id, principal_kind, user_id, role_key, reach, source, legacy_id)
+    values (p_organization, p_object, 'person', p_user, p_role, p_reach, p_source, p_object)
     on conflict do nothing;
   end if;
 end;
@@ -117,7 +117,7 @@ begin
   values (p.id, p.organization_id, 'program', p.id, p.name)
   on conflict (id) do update set name = excluded.name;
   perform spike_access.put_column_grant(
-    p.organization_id, p.id, 'program.lead_id', p.lead_id, 'manager', false);
+    p.organization_id, p.id, 'program.lead_id', p.lead_id, 'manager', 'self_and_direct_tasks');
 end;
 $$;
 
@@ -145,7 +145,7 @@ begin
     p.id, p.organization_id, 'project',
     coalesce(p.program_id, spike_access.ensure_workspace(p.organization_id)));
   perform spike_access.put_column_grant(
-    p.organization_id, p.id, 'project.owner_id', p.owner_id, 'manager', true);
+    p.organization_id, p.id, 'project.owner_id', p.owner_id, 'manager', 'subtree');
 end;
 $$;
 
@@ -177,10 +177,10 @@ begin
       when t.program_id is not null then t.program_id
       else spike_access.ensure_workspace(t.organization_id)
     end);
-  perform spike_access.put_column_grant(t.organization_id, t.id, 'task.assignee_id', t.assignee_id, 'contributor', true);
-  perform spike_access.put_column_grant(t.organization_id, t.id, 'task.requester_id', t.requester_id, 'contributor', true);
-  perform spike_access.put_column_grant(t.organization_id, t.id, 'task.reviewer_id', t.reviewer_id, 'approver', true);
-  perform spike_access.put_column_grant(t.organization_id, t.id, 'task.approver_id', t.approver_id, 'approver', true);
+  perform spike_access.put_column_grant(t.organization_id, t.id, 'task.assignee_id', t.assignee_id, 'contributor', 'subtree');
+  perform spike_access.put_column_grant(t.organization_id, t.id, 'task.requester_id', t.requester_id, 'contributor', 'subtree');
+  perform spike_access.put_column_grant(t.organization_id, t.id, 'task.reviewer_id', t.reviewer_id, 'approver', 'subtree');
+  perform spike_access.put_column_grant(t.organization_id, t.id, 'task.approver_id', t.approver_id, 'approver', 'subtree');
 end;
 $$;
 
