@@ -52,8 +52,11 @@ test("a program lead links a project and a metric, and the goal's progress follo
   `);
   sql(`
     with who as (${who}), metric as (
-      insert into public.outcome_metric (organization_id, program_id, name, baseline, target, created_by)
-      select organization_id, '${programId}', '${metricName}', 0, 10, user_id from who
+      -- An explicit unit: the default ("people") is a lowercase English word,
+      -- and the French sweep in translated-workspace.spec.ts, which later reads
+      -- Home on the same database, cannot tell it from untranslated text.
+      insert into public.outcome_metric (organization_id, program_id, name, unit, baseline, target, created_by)
+      select organization_id, '${programId}', '${metricName}', 'Families ${stamp}', 0, 10, user_id from who
       returning id, organization_id
     )
     insert into public.outcome_measurement (organization_id, metric_id, measured_on, value)
