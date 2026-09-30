@@ -22,6 +22,14 @@ for name in NETLIFY_SITE_ID NETLIFY_AUTH_TOKEN SUPABASE_PROJECT_REF SUPABASE_ACC
   [[ -n "${!name:-}" ]] || fail "Missing ${name} for ${TARGET_ENVIRONMENT:-?}."
 done
 
+# A project ref is 20 lowercase letters. Anything else (a placeholder such as
+# "staging ref", a pasted URL) would otherwise pass as long as both copies of
+# it match, and only fail later, further into the deploy.
+for name in SUPABASE_PROJECT_REF STAGING_SUPABASE_REF PRODUCTION_SUPABASE_REF; do
+  [[ "${!name}" =~ ^[a-z]{20}$ ]] \
+    || fail "${name} for ${TARGET_ENVIRONMENT:-?} is not a Supabase project ref (20 lowercase letters, from the project's dashboard address)."
+done
+
 case "${TARGET_ENVIRONMENT:-}" in
   staging)
     expected_site_id='2169b17a-8dc3-49de-a466-4281e1285de2'

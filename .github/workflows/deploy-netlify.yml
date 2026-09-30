@@ -108,6 +108,13 @@ jobs:
         with:
           version: 2.114.0
 
+      # supabase/config.toml names a local-only signing key file (#138), and
+      # `db push` refuses to run while that file is missing. This creates a
+      # throwaway one on the runner so the config reads; `db push` only
+      # applies migrations and sends nothing from this file to the project.
+      - name: Local config's signing key
+        run: scripts/local-signing-key.sh
+
       - name: Link the environment's database
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
 
@@ -115,6 +122,9 @@ jobs:
       # this commit does not have (drift), so an out-of-band change stops the
       # deploy here rather than being silently built on.
       - name: Migrations this deploy will apply (dry run)
+        # Explicit bash adds pipefail, so a failed dry run fails this step
+        # instead of being hidden by `tee`.
+        shell: bash
         run: |
           supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD" | tee migration-plan.txt
           {

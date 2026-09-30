@@ -10,6 +10,9 @@ import { describe, expect, it } from "vitest";
 const script = join(process.cwd(), "scripts/check-deploy-environment.sh");
 const STAGING_SITE = "2169b17a-8dc3-49de-a466-4281e1285de2";
 const PRODUCTION_SITE = "a34499c8-0d84-47d5-bfb2-502c2b9b9071";
+// Real refs are 20 lowercase letters.
+const STAGING_REF = "stagingrefaaaaaaaaaa";
+const PRODUCTION_REF = "productionrefbbbbbbb";
 
 function run(overrides: Record<string, string>) {
   const env: NodeJS.ProcessEnv = {
@@ -19,11 +22,11 @@ function run(overrides: Record<string, string>) {
     NETLIFY_AUTH_TOKEN: "token",
     SUPABASE_ACCESS_TOKEN: "token",
     SUPABASE_DB_PASSWORD: "password",
-    STAGING_SUPABASE_REF: "stagingref",
-    PRODUCTION_SUPABASE_REF: "productionref",
+    STAGING_SUPABASE_REF: STAGING_REF,
+    PRODUCTION_SUPABASE_REF: PRODUCTION_REF,
     TARGET_ENVIRONMENT: "staging",
     NETLIFY_SITE_ID: STAGING_SITE,
-    SUPABASE_PROJECT_REF: "stagingref",
+    SUPABASE_PROJECT_REF: STAGING_REF,
     ...overrides,
   };
   const result = spawnSync("bash", [script], { env, encoding: "utf8" });
@@ -37,13 +40,13 @@ describe("check-deploy-environment.sh", () => {
       run({
         TARGET_ENVIRONMENT: "production",
         NETLIFY_SITE_ID: PRODUCTION_SITE,
-        SUPABASE_PROJECT_REF: "productionref",
+        SUPABASE_PROJECT_REF: PRODUCTION_REF,
       }).ok,
     ).toBe(true);
   });
 
   it("refuses staging pointed at the production database", () => {
-    const result = run({ SUPABASE_PROJECT_REF: "productionref" });
+    const result = run({ SUPABASE_PROJECT_REF: PRODUCTION_REF });
     expect(result.ok).toBe(false);
     expect(result.output).toContain("not its registered project");
   });
@@ -52,14 +55,14 @@ describe("check-deploy-environment.sh", () => {
     const result = run({
       TARGET_ENVIRONMENT: "production",
       NETLIFY_SITE_ID: STAGING_SITE,
-      SUPABASE_PROJECT_REF: "productionref",
+      SUPABASE_PROJECT_REF: PRODUCTION_REF,
     });
     expect(result.ok).toBe(false);
     expect(result.output).toContain("wrong Netlify site ID");
   });
 
   it("refuses when staging and production share one database", () => {
-    const result = run({ PRODUCTION_SUPABASE_REF: "stagingref" });
+    const result = run({ PRODUCTION_SUPABASE_REF: STAGING_REF });
     expect(result.ok).toBe(false);
     expect(result.output).toContain("same Supabase project");
   });
@@ -83,6 +86,17 @@ describe("check-deploy-environment.sh", () => {
       expect(result.ok, name).toBe(false);
       expect(result.output, name).toContain(`Missing ${name}`);
     }
+  });
+
+  it("refuses a ref that is not a project ref, even when both copies match", () => {
+    for (const bad of ["staging ref", "https://abcdefghijklmnopqrst.supabase.co", "ABCDEFGHIJKLMNOPQRST", "short"]) {
+      const result = run({ SUPABASE_PROJECT_REF: bad, STAGING_SUPABASE_REF: bad });
+      expect(result.ok, bad).toBe(false);
+      expect(result.output, bad).toContain("is not a Supabase project ref");
+    }
+    const result = run({ PRODUCTION_SUPABASE_REF: "production ref" });
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("PRODUCTION_SUPABASE_REF");
   });
 
   it("refuses an unknown environment", () => {
