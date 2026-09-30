@@ -11,12 +11,18 @@ the answers today's rules give, and stay fast on a board?
 
 **GO, with one condition on how lists use it.**
 
-- **Correct:** EQUIVALENCE_SUMMARY
+- **Correct.** For all 60 organization members plus a stranger, at both
+  sign-in levels, on every task, project and program (2,042 objects, then
+  2,040 after the changes delete two), the new check gives exactly the
+  answer today's rules give. That is zero mismatches across 2,963,532
+  checks, before and after about 20 kinds of change made through today's
+  tables. The trigger-kept cache also matched a full
+  rebuild row for row. Getting there found three rules the A6 design had
+  not spelled out (findings 1 and 3); all are now modelled.
 - **Fast for lists, when lists use the set-based form.** On a 500-task
   board, a policy that reads the new cache is within 1.3 ms of today's
   policy (from 1.2 ms faster to 1.3 ms slower), and returns exactly the same
-  rows.
-  The target was under 20 ms added.
+  rows. The target was under 20 ms added.
 - **Too slow when called once per row.** Calling `app.can()` on each row of
   a 500-row board adds 40 to 340 ms, so it fails the target. `app.can()` is
   for one record at a time (a drawer, a page, an action's permission check).
@@ -24,8 +30,8 @@ the answers today's rules give, and stay fast on a board?
 - **Cheap to keep current.** Giving someone a 1,000-task program costs 33 ms;
   moving a 500-task project to another program costs 26 ms.
 - **One weak spot to fix before M10c:** a bulk insert of 500 tasks costs
-  0.6 to 1.1 s instead of about 40 ms, because the prototype's triggers work one row at a
-  time. Statement-level triggers fix that (see "Before building for real").
+  0.6 to 1.1 s instead of about 40 ms, because the prototype's triggers work
+  one row at a time. Statement-level triggers fix that (see "Before building for real").
 
 ## What was built
 
@@ -111,7 +117,68 @@ update policy: manage) is **manage**.
 
 ## Equivalence
 
-EQUIVALENCE_SECTION
+**Result: pass. Zero mismatches.**
+
+| Round | People | Checks | Mismatches | Slowest of 4 sessions |
+|---|---|---|---|---|
+| 1. After the backfill | 61 | 1,482,492 | 0 | 26 min |
+| 2. After the changes | 61 | 1,481,040 | 0 | 31 min |
+| 3. Trigger-kept cache against a full rebuild | 32,000+ rows | every row | 0 | under 1 s |
+
+**Who:** every organization member (the owner, an admin, staff, volunteers,
+guests, the 50 perf people, the QA scoped-role users), a leadership viewer,
+the external accountant (a Guest with a current ledger grant), and one
+stranger with no membership. Each is checked twice, before and after MFA
+(aal1 and aal2), except the stranger.
+
+**What:** every task (2,021), project (14) and program (5), which is the
+seed, the #115 performance fixture, and an edge-case fixture. Each is
+checked for six answers: view, edit, manage, collaborate, review and
+approve.
+
+**Today's side** is what the live rules decide. View is observed as the
+person, by reading the rows today's select policies let them see. The other
+answers come from the functions the update policies call
+(`has_task_capability`, `has_project_capability`,
+`has_program_capability`).
+
+**Edge-case fixture:** one person per program role, and one per project
+role; a program and project nobody below owner/admin reaches; a project with
+no program; a project task whose own program column names another program;
+program-level and organization-level tasks; each task actor column
+(assignee, requester, reviewer, approver) and each assignment role; the
+accountant assigned one task.
+
+**Round 2's changes**, all made through today's tables so they reach the new
+model only through triggers:
+- a volunteer given the whole 2,000-task program;
+- a project grant removed, and another changed to a different role;
+- one project moved to another program with its 200 tasks, and one moved
+  out of every program;
+- a project owner and a program lead changed;
+- a lead's `record_lead` grant row removed (finding 3), and the lead
+  deactivated and then reactivated;
+- tasks moved from a project to program level, and to organization level;
+- 25 tasks reassigned, reviewer and approver columns changed, assignments
+  removed and added;
+- a team grant created, then one member leaving the team;
+- one person deactivated, a staff member promoted to admin, and an admin
+  demoted to staff;
+- a task and a project deleted.
+
+**Mismatches found on the way, and their causes** (all fixed before the
+final run):
+
+| Run | Mismatches | Cause | Fix |
+|---|---|---|---|
+| First full run, round 1 | 12,000+ answers for 2 people | Organization roles are also ceilings: owner/admin without MFA and leadership viewers are read-only whatever grants they hold (finding 1) | `org_role_ceiling`, applied live |
+| Second full run, round 2 | 12 answers, 1 person, 1 task | The lead column reaches the program's direct tasks, not only the program (finding 3) | Grant reach "this object and its direct tasks" |
+
+View never disagreed in any run.
+
+The run takes about an hour on 4 cores. Most of that is today's side:
+`has_task_capability` costs about 2 ms a call for a person without access,
+and each round makes about a million such calls.
 
 ## Speed
 
@@ -139,7 +206,7 @@ builds it (every unarchived task the person can read, in sort order), at
 Every person saw exactly the same rows under both policies (500, 500, 20,
 500, 500 and 420).
 
-**An "can I edit this?" flag on every card** is where the new model helps
+**A "can I edit this?" flag on every card** is where the new model helps
 most. Today the only way is `has_task_capability` per row:
 
 | Board and person | d. today, `has_task_capability` flag | c. `app.can` flag per row | f. set-based flag from the cache |
@@ -262,8 +329,8 @@ not cached.
    below unless marked "this object only". Drop the "object and its direct
    tasks" reach once finding 3 is decided.
 2. **Cache person and team grants; answer organization roles, role
-   ceilings, membership and MFA live.** This keeps the cache small, and makes suspension and MFA take
-   effect immediately.
+   ceilings, membership and MFA live.** This keeps the cache small, and makes
+   suspension and MFA take effect immediately.
 3. **Two forms of one check, from the same cache:**
    - `app.can(object_id, capability)` for one record at a time (about 70 µs);
    - for lists, the policy form: `organization_id = any(my orgs) and
@@ -284,7 +351,7 @@ not cached.
      about 2 ms a call for a person without access, and a full round is about
      a million calls. A CI version with the edge-case fixture and the QA
      users, rather than all 2,000 perf tasks, takes seconds.
-   - Decide the MFA question in finding 1.
+   - Decide the MFA question in finding 2 and the lead question in finding 3.
 
 ## How to reproduce
 
@@ -306,10 +373,36 @@ All steps run against the local database only.
    an hour on 4 cores). **Warning: this commits its fixture and changes to
    the local database**, because it runs four parallel sessions, which only
    see committed rows. It ends with `EQUIVALENCE PASS` or fails with the
-   mismatches listed.
+   mismatches listed. If it stops part-way, `equivalence resume` restarts
+   from the changes (round 1 kept), and `equivalence round2` runs only the
+   round 2 sessions still missing, then the report.
 7. Put the local database back: `npx supabase db reset && npm run db:seed`.
    Or, to remove only the prototype: `node scripts/spikes/access-spike.mjs drop`.
 
 ## What was and was not verified
 
-VERIFIED_SECTION
+**Verified, on the local database only:**
+- The equivalence result above: zero mismatches over the full run.
+- The timings above; the final timing run is the one reported.
+- On every board, the cache policy returned exactly the same rows as
+  today's policy.
+- `npm run lint` (0 errors; the 2 warnings are in files this change does not
+  touch), `npm run typecheck`, and `npm test` (109 files, 977 tests) all pass.
+- `npm run test:db`: 1,843 assertions pass. It was run on a freshly reset
+  database with the prototype not applied, because nothing in this change is
+  a migration. The prototype is never applied by the suite or by CI.
+
+**Not verified:**
+- Nothing was run against a hosted database. The finding 3 check of the
+  hosted `scoped_access_backfill_issue` table is left for the lead session,
+  read-only.
+- The timings are from one local machine (4 cores), not staging, and are
+  single-user: no concurrent load was measured.
+- Channels, documents, meetings, ledger access and per-field rules are not
+  modelled (finding 7).
+- The equivalence test covers the policies' `USING` checks, not the
+  `enforce_scoped_task_update` trigger that limits which fields a reviewer
+  may change.
+- The recommended fixes are not built: statement-level refresh triggers, the
+  MFA factor check (finding 2), and a single inherited lead grant
+  (finding 3).
