@@ -8,10 +8,10 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { ObjectEvent } from "@/lib/objects/contracts";
 import { workflowActionKeys } from "../actions-catalog";
-import { retrySchema, saveWorkflowSchema, stopSchema, testRunSchema } from "../editor-model";
+import { decideReviewSchema, retrySchema, saveWorkflowSchema, stopSchema, testRunSchema } from "../editor-model";
 import { validateGraph } from "../graph";
 import { fill, workflowMessages } from "../i18n";
-import { executeWorkflowRun, retryRunFromStep, type GraphRule } from "./run";
+import { executeWorkflowRun, retryRunFromStep, webhookSecret, type GraphRule } from "./run";
 
 /**
  * Saving and test-running workflows (M14c). Admins only, at the two-step
@@ -228,4 +228,43 @@ export async function retryWorkflowFromStep(input: unknown): Promise<
   if (record.status !== "recorded") return { ok: false, error: checked.m.errors.retryFailed };
   revalidatePath(`/workflows/${visible.rule_id}`);
   return { ok: true, executionId: record.executionId, runNumber: record.runNumber, ruleId: visible.rule_id as string };
+}
+
+/** The reviewer's decision on a workflow review (V1-12). The database decides who may. */
+export async function decideWorkflowReview(input: unknown): Promise<WorkflowCommandResult> {
+  const m = workflowMessages(await getLocale());
+  if (!(await isEnabled("wos_workflows_v2"))) return { ok: false, error: m.errors.notFound };
+  const parsed = decideReviewSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: m.review.failed };
+  const db = await createSupabaseServerClient();
+  const { error } = await db.rpc("decide_workflow_review", {
+    p_review: parsed.data.id,
+    p_decision: parsed.data.decision,
+    p_comment: parsed.data.comment || null,
+  });
+  if (error) return { ok: false, error: m.review.failed };
+  revalidatePath(`/workflows/reviews/${parsed.data.id}`);
+  return { ok: true, id: parsed.data.id };
+}
+
+/** Shows an admin the key their workflow's webhooks are signed with. */
+export async function revealWebhookSecret(input: unknown): Promise<{ ok: true; secret: string } | { ok: false; error: string }> {
+  const checked = await guard();
+  if (!checked.ok) return checked;
+  const parsed = stopSchema.pick({ id: true }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: checked.m.signing.failed };
+  const userDb = await createSupabaseServerClient();
+  const { data: rule } = await userDb
+    .from("workflow_rule")
+    .select("id, organization_id")
+    .eq("id", parsed.data.id)
+    .eq("organization_id", checked.organizationId)
+    .eq("engine", "graph_v2")
+    .maybeSingle();
+  if (!rule) return { ok: false, error: checked.m.errors.notFound };
+  try {
+    return { ok: true, secret: await webhookSecret(createSupabaseServiceClient(), rule as { id: string; organization_id: string }) };
+  } catch {
+    return { ok: false, error: checked.m.signing.failed };
+  }
 }

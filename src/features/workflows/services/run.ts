@@ -5,6 +5,9 @@ import { createWorkflowActionRegistry } from "../actions";
 import { runGraph, type EnginePorts, type RunResult, type RunState, type StepRecord } from "../engine";
 import { validateGraph, type WorkflowGraph } from "../graph";
 import { eventScope } from "../scope";
+import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
+import { recipientIsAllowed, sendEmail } from "@/features/notifications/services/email-provider";
+import { checkWebhookUrl, newWebhookSecret, signWebhook, SIGNATURE_HEADER, WEBHOOK_TIMEOUT_MS } from "../webhook";
 
 /**
  * Starts, resumes, retries and records workflow runs (M14a/b, V1-12).
@@ -116,6 +119,119 @@ export function createRunPorts(
       }
       return "ok";
     },
+    async submitApproval({ subjectType, title, description }) {
+      if (!owner) throw new Error("the workflow has no owner to submit as.");
+      const { data, error } = await db.rpc("workflow_submit_approval", {
+        p_user: owner,
+        p_organization: rule.organization_id,
+        p_subject_type: subjectType,
+        p_title: title,
+        p_description: description,
+      });
+      if (error || !data) throw new Error(error?.message ?? "the approval was not submitted.");
+      return data as string;
+    },
+    async createReview({ stepId, reviewerId, instructions }) {
+      if (!(await isActiveMember(db, rule.organization_id, reviewerId))) {
+        throw new Error("the reviewer is not an active member of the organization.");
+      }
+      const { data, error } = await db
+        .from("workflow_review")
+        .insert({
+          organization_id: rule.organization_id,
+          execution_id: runId,
+          step_id: stepId,
+          reviewer_id: reviewerId,
+          instructions: instructions.slice(0, 2000),
+        })
+        .select("id")
+        .single();
+      if (error || !data) throw new Error(error?.message ?? "the review was not created.");
+      const id = data.id as string;
+      await createNotifications(db, [{
+        user_id: reviewerId,
+        organization_id: rule.organization_id,
+        category: "assignment",
+        title: `Review requested by workflow "${rule.name}"`,
+        body: instructions.slice(0, 500),
+        source_type: "workflow_review",
+        source_id: id,
+        link: `/workflows/reviews/${id}`,
+        urgency: "normal",
+        reason: "workflow",
+        dedupe_key: notificationDedupeKey("workflow_review", id, reviewerId),
+      }]).catch(() => undefined);
+      return id;
+    },
+    async readDecision(waitingOn) {
+      if (waitingOn.kind === "approval") {
+        const { data } = await db.from("approval_item").select("status").eq("id", waitingOn.id).maybeSingle();
+        const status = (data as { status?: string } | null)?.status;
+        return !status || status === "pending" ? null : { status };
+      }
+      const { data } = await db.from("workflow_review").select("status, comment").eq("id", waitingOn.id).maybeSingle();
+      const review = data as { status: string; comment: string | null } | null;
+      return !review || review.status === "pending" ? null : { status: review.status, comment: review.comment };
+    },
+    async callWebhook({ stepId, url, body, attempt }) {
+      const checked = await checkWebhookUrl(url);
+      if (!checked.ok) return { ok: false, error: `refused: ${checked.reason}.` };
+      const secret = await webhookSecret(db, rule);
+      const payload = JSON.stringify({
+        workflow: { id: rule.id, name: rule.name },
+        run: runId,
+        step: stepId,
+        event: { id: run.event.id, verb: run.event.verb, object: run.event.object },
+        data: body,
+      });
+      const timestamp = Math.floor(Date.now() / 1000);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+      try {
+        const response = await fetch(checked.url, {
+          method: "POST",
+          // A redirect could lead somewhere the address check never saw.
+          redirect: "manual",
+          signal: controller.signal,
+          headers: {
+            "content-type": "application/json",
+            "user-agent": "QBBE-Hub-Workflows/1",
+            [SIGNATURE_HEADER]: signWebhook(secret, payload, timestamp),
+            "X-QBBE-Delivery": `${runId}:${stepId}:${attempt}`,
+          },
+          body: payload,
+        });
+        if (response.status >= 200 && response.status < 300) return { ok: true, output: { status: response.status } };
+        return { ok: false, error: `failed: the receiver answered ${response.status}.` };
+      } catch (cause) {
+        return { ok: false, error: `failed: ${cause instanceof Error && cause.name === "AbortError" ? "no answer in time" : "the request did not complete"}.` };
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    async sendEmail({ stepId, to, subject, body }) {
+      const address = to.trim().toLowerCase();
+      // Only people in the organization, and only those the environment's
+      // allow-list accepts (staging mails nobody real).
+      if (!(await isMemberEmail(db, rule.organization_id, address))) {
+        return { ok: false, error: "refused: workflows only email active members of the organization." };
+      }
+      if (!recipientIsAllowed(address)) {
+        return { ok: false, error: "refused: recipient_not_allowlisted in this environment." };
+      }
+      try {
+        const sent = await sendEmail({
+          idempotencyKey: `workflow:${runId}:${stepId}`,
+          to: address,
+          subject,
+          text: body,
+          html: `<p>${escapeHtml(body).replace(/\n/g, "<br>")}</p>`,
+        });
+        return { ok: true, output: { provider: sent.provider } };
+      } catch (cause) {
+        return { ok: false, error: `failed: ${cause instanceof Error ? cause.message : "the email was not sent"}.` };
+      }
+    },
     async runSubworkflow(workflowId, depth) {
       const sub = await loadRunnableRule(db, rule.organization_id, workflowId);
       if (!sub) return { outcome: "failed", runNumber: null, error: "unknown_workflow: the sub-workflow does not exist, is off or is stopped." };
@@ -131,6 +247,37 @@ export function createRunPorts(
       return { outcome: record.result.outcome, runNumber: record.runNumber, error: record.result.error };
     },
   };
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+async function isActiveMember(db: SupabaseClient, organizationId: string, userId: string): Promise<boolean> {
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) return false;
+  const { data } = await db
+    .from("organization_membership")
+    .select("user_id")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .maybeSingle();
+  return Boolean(data);
+}
+
+async function isMemberEmail(db: SupabaseClient, organizationId: string, email: string): Promise<boolean> {
+  const { data: profile } = await db.from("user_profile").select("id").eq("email", email).maybeSingle();
+  return profile ? isActiveMember(db, organizationId, (profile as { id: string }).id) : false;
+}
+
+/** The workflow's signing key, created the first time it is needed. */
+export async function webhookSecret(db: SupabaseClient, rule: Pick<GraphRule, "id" | "organization_id">): Promise<string> {
+  await db
+    .from("workflow_webhook_secret")
+    .upsert({ rule_id: rule.id, organization_id: rule.organization_id, secret: newWebhookSecret() }, { onConflict: "rule_id", ignoreDuplicates: true });
+  const { data, error } = await db.from("workflow_webhook_secret").select("secret").eq("rule_id", rule.id).single();
+  if (error || !data) throw new Error("the signing key is missing.");
+  return data.secret as string;
 }
 
 /** An enabled, not stopped graph workflow of the organization, or null. */
@@ -215,6 +362,8 @@ async function continueRun(db: SupabaseClient, run: Continuation): Promise<RunRe
       resume_step_id: waiting ? result.resume!.stepId : null,
       resume_attempt: waiting ? result.resume!.attempt : null,
       resume_at: waiting ? result.resume!.at : null,
+      waiting_on_kind: waiting ? result.resume!.waitingOn?.kind ?? null : null,
+      waiting_on_id: waiting ? result.resume!.waitingOn?.id ?? null : null,
     })
     .eq("id", run.executionId);
   if (stepsError || finishError) {
@@ -370,6 +519,13 @@ export async function resumeWaitingRun(
   return "resumed";
 }
 
+/** The run's state without the retried step's own output, so it starts afresh. */
+function freshFrom(state: RunState | null, stepId: string): RunState {
+  const steps = { ...(state?.steps ?? {}) };
+  delete steps[stepId];
+  return { steps, stepsTaken: 0, depth: state?.depth ?? 0 };
+}
+
 /**
  * "Retry from this step": a new run of the same workflow and event, starting
  * at `stepId` with the step outputs the earlier run had. The earlier run is
@@ -397,6 +553,6 @@ export async function retryRunFromStep(
     rule,
     event: row.trigger_payload,
     test: row.is_test,
-    retry: { of: row.id, stepId, state: row.run_state ?? { steps: {}, stepsTaken: 0, depth: 0 } },
+    retry: { of: row.id, stepId, state: freshFrom(row.run_state, stepId) },
   });
 }
