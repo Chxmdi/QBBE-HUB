@@ -3,7 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # Only pull requests into main. Workspace OS work is batched on
+  # wos/integration (checked locally per PR) and tested here once, through
+  # its pull request to main.
   pull_request:
+    branches: [main]
   workflow_call:
     inputs:
       browsers:
