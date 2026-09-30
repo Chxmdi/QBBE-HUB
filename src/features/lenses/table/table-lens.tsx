@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ChevronDown, ChevronRight, Columns3, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Checkbox, Select } from "@/components/ui/input";
 import { useFormatters, useLocale } from "@/lib/i18n/client";
 import { intlLocale } from "@/lib/i18n/config";
 import type { CatalogProperty, CatalogType } from "@/lib/query/catalog";
@@ -404,10 +405,10 @@ export function TableLens({ type, initial, initialState, people, timeZone }: Pro
         </label>
         <label className="flex flex-col gap-1 text-[13px] font-medium text-ink">
           {t("table.groupBy")}
-          <select
+          <Select
             value={state.groupBy ?? ""}
             onChange={(e) => update((s) => ({ ...s, groupBy: e.target.value || null }))}
-            className="h-9 rounded-(--radius-sm) border border-line bg-surface px-2 text-[14px] text-ink"
+            className="h-9! w-auto! px-2! text-[14px]!"
           >
             <option value="">{t("table.noGrouping")}</option>
             {groupable.map((p) => (
@@ -415,7 +416,7 @@ export function TableLens({ type, initial, initialState, people, timeZone }: Pro
                 {locale.startsWith("fr") ? p.name.fr : p.name.en}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <div className="relative">
           <button
@@ -431,7 +432,7 @@ export function TableLens({ type, initial, initialState, people, timeZone }: Pro
           {columnsOpen ? (
             <fieldset
               id={`${gridId}-columns`}
-              className="absolute left-0 z-20 mt-1 w-64 rounded-(--radius-md) border border-line bg-surface p-3 shadow-lg"
+              className="absolute left-0 z-(--z-overlay) mt-1 w-64 rounded-(--radius-md) border border-line bg-surface p-3 shadow-lg"
               onKeyDown={(e) => {
                 if (e.key === "Escape") setColumnsOpen(false);
               }}
@@ -442,8 +443,7 @@ export function TableLens({ type, initial, initialState, people, timeZone }: Pro
                 if (!p) return null;
                 return (
                   <label key={c.key} className="flex items-center gap-2 py-1 text-[13.5px] text-ink">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={!c.hidden}
                       disabled={c.key === "title"}
                       onChange={(e) => update((s) => ({ ...s, columns: setHidden(s.columns, c.key, !e.target.checked) }))}
@@ -501,7 +501,7 @@ export function TableLens({ type, initial, initialState, people, timeZone }: Pro
             style={{ width: totalWidth, minWidth: "100%" }}
             className="text-[13.5px] text-ink"
           >
-            <div role="rowgroup" className="sticky top-0 z-10 bg-surface-soft">
+            <div role="rowgroup" className="sticky top-0 z-(--z-raised) bg-surface-soft">
               <div role="row" aria-rowindex={1} className="flex border-b border-line">
                 {shown.map((c, col) => {
                   const p = properties.get(c.key)!;
@@ -741,7 +741,7 @@ function ColumnMenu({
           setActive(items.length - 1);
         }
       }}
-      className="absolute left-0 top-full z-30 mt-1 min-w-48 rounded-(--radius-md) border border-line bg-surface py-1 font-normal text-ink shadow-lg"
+      className="absolute left-0 top-full z-(--z-overlay) mt-1 min-w-48 rounded-(--radius-md) border border-line bg-surface py-1 font-normal text-ink shadow-lg"
     >
       {items.map((item, i) => (
         <button
@@ -822,30 +822,30 @@ function CellEditor({
     autoFocus: true,
     onKeyDown,
     onBlur: finish,
-    className: "h-7 w-full rounded-(--radius-sm) border border-brand bg-surface px-1.5 text-[13.5px] text-ink",
+    className: "h-7! w-full rounded-(--radius-sm) border border-brand! bg-surface px-1.5! text-[13.5px]! text-ink",
   };
 
   if (kind === "select") {
     return (
-      <select {...common} value={draft} onChange={(e) => setDraft(e.target.value)}>
+      <Select {...common} value={draft} onChange={(e) => setDraft(e.target.value)}>
         {(property.choices ?? []).map((c) => (
           <option key={c.key} value={c.key}>
             {locale.startsWith("fr") ? c.label.fr : c.label.en}
           </option>
         ))}
-      </select>
+      </Select>
     );
   }
   if (kind === "person") {
     return (
-      <select {...common} value={draft} onChange={(e) => setDraft(e.target.value)}>
+      <Select {...common} value={draft} onChange={(e) => setDraft(e.target.value)}>
         <option value="">{notSet}</option>
         {people.map((p) => (
           <option key={p.id} value={p.id}>
             {p.label}
           </option>
         ))}
-      </select>
+      </Select>
     );
   }
   return (
