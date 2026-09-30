@@ -1,0 +1,56 @@
+/** Public pages (V1-18): English. */
+export const publicPagesEn = {
+  metaTitle: "Public pages",
+  title: "Public pages",
+  description:
+    "Publish a read-only copy of chosen fields of a space, project or page. Another owner or administrator reviews it first; unpublishing takes it down at once. Private properties are never offered.",
+  publicBadge: "Public",
+  ask: {
+    heading: "Ask to publish",
+    source: "What to publish",
+    choose: "Choose fields",
+    fields: "Fields to publish",
+    fieldsHelp: "Only what you tick is copied. Private properties are not listed and can never be published.",
+    slug: "Web address",
+    slugHelp: "Lower-case letters, numbers and hyphens, at least 3 characters. The page will be at /p/ followed by it.",
+    submit: "Send for review",
+    sent: "Sent for review. Another owner or administrator must approve it.",
+    none: "Choose…",
+    empty: "(empty)",
+  },
+  review: {
+    heading: "Waiting for review",
+    empty: "Nothing is waiting for review.",
+    askedBy: "Asked by {name}",
+    preview: "What will be published",
+    approve: "Approve and publish",
+    reject: "Reject",
+    note: "Note (optional)",
+    yours: "You asked for this, so another owner or administrator must review it.",
+    approved: "Published.",
+    rejected: "Rejected.",
+  },
+  live: {
+    heading: "Published",
+    empty: "Nothing is published.",
+    open: "Open the public page",
+    unpublish: "Unpublish",
+    unpublished: "Taken down.",
+  },
+  history: {
+    heading: "Earlier",
+    rejected: "Rejected",
+    unpublished: "Unpublished",
+  },
+  page: {
+    published: "Published {date}",
+    footer: "Published by QBBE. This page is a copy and does not change when the original does.",
+  },
+  errors: {
+    invalid: "Choose at least one field and a web address of 3 or more lower-case letters, numbers or hyphens.",
+    taken: "That web address is already used, or this is already published or waiting. Choose another.",
+    forbidden: "Only an owner or administrator with two-step sign-in can do this.",
+    own: "Another owner or administrator must review what you asked to publish.",
+    failed: "That didn’t work. Try again.",
+  },
+} as const;

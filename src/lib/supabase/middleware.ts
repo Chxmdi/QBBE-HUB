@@ -3,7 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth", "/account-inactive", "/forgot-password", "/reset-password"];
+// "/p" is Workspace OS public pages (V1-18): they read only the published
+// copy table, as a visitor, and answer not-found while switched off.
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth", "/account-inactive", "/forgot-password", "/reset-password", "/p"];
 
 /**
  * Refreshes the Supabase session on every request and redirects
