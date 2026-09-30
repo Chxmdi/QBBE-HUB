@@ -43,8 +43,8 @@ export function sourceNeedsId(type: TaskSourceType): boolean {
  * to label the link back. `title` is the column shown in the link.
  *
  * `comment` names record_comment; task comments are reached through their
- * task, which the link already opens. `capture` has no table until the capture
- * inbox (M18) adds `capture_item`.
+ * task, which the link already opens. `capture` names the capture inbox item
+ * (M18), which only its owner can read.
  */
 export const SOURCE_TABLES: Partial<
   Record<TaskSourceType, { table: string; title: string; extra?: string[] }>
@@ -58,6 +58,7 @@ export const SOURCE_TABLES: Partial<
   contact: { table: "crm_follow_up", title: "title", extra: ["crm_organization_id"] },
   template: { table: "record_template", title: "name" },
   recurrence: { table: "task", title: "title" },
+  capture: { table: "capture_item", title: "title" },
 };
 
 /** Record-comment parents that have a page of their own. */

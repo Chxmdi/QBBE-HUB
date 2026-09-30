@@ -3,7 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # Only pull requests into main. Workspace OS work is batched on
+  # wos/integration (checked locally per PR) and tested here once, through
+  # its pull request to main.
   pull_request:
+    branches: [main]
   workflow_call:
     inputs:
       browsers:
@@ -20,6 +24,14 @@ on:
         type: boolean
         required: false
         default: false
+
+# A new push to a pull request replaces its previous run, so parallel work
+# does not queue behind runs nobody will read. Pushes to main, deploys,
+# nightly and release-candidate calls get a group of their own run, so they
+# are never cancelled.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -244,6 +256,12 @@ jobs:
       - name: Phone emulation (qa-matrix and public routes)
         if: matrix.suite == 'qa-matrix' && inputs.mobile
         run: npx playwright test qa-matrix public-routes --fully-parallel --shard=${{ matrix.part }}/${{ matrix.parts }} --project=mobile-chrome --project=mobile-safari
+
+      - name: Show the app server log after a failure
+        # Server-side errors behind a failed browser check, readable in the
+        # job log without downloading the evidence artifact.
+        if: failure()
+        run: tail -n 300 "$RUNNER_TEMP/next.log" || true
 
       - name: Name the evidence after this part
         if: failure()

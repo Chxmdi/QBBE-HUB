@@ -65,3 +65,12 @@ describe("object registry mappers", () => {
     expect(toObjectRecord({ ...row, object_type: [] })).toBeNull();
   });
 });
+
+describe("object select", () => {
+  it("embeds the type through the composite foreign key by name", async () => {
+    // `object_type:type_id(key)` fails in PostgREST (PGRST200) because the
+    // foreign key is (type_id, organization_id); the constraint name works.
+    const { OBJECT_COLUMNS } = await import("@/features/objects/services/registry.mappers");
+    expect(OBJECT_COLUMNS).toContain("object_type!object_type_id_organization_id_fkey(key)");
+  });
+});

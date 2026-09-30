@@ -3,7 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
-const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth", "/account-inactive", "/forgot-password", "/reset-password"];
+// "/p" is Workspace OS public pages (V1-18): they read only the published
+// copy table, as a visitor, and answer not-found while switched off.
+const PUBLIC_PATHS = ["/sign-in", "/sign-up", "/auth", "/account-inactive", "/forgot-password", "/reset-password", "/p"];
 
 /**
  * Refreshes the Supabase session on every request and redirects
@@ -15,9 +17,11 @@ export async function updateSession(request: NextRequest) {
   // Cron/job routes authenticate with CRON_JOB_SECRET, not a user session;
   // provider webhooks authenticate with their own signatures. The job-runner
   // health check is read by the deploy smoke test before anyone signs in and
-  // answers a single status word.
+  // answers a single status word. The private API (/api/v1) authenticates
+  // every call with its own access token (src/features/api-tokens).
   if (
     path.startsWith("/api/jobs/") ||
+    path.startsWith("/api/v1/") ||
     path === "/api/health/jobs" ||
     path === "/api/integrations/gmail/push" ||
     path === "/api/integrations/email/webhook"

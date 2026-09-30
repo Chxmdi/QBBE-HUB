@@ -1,0 +1,14 @@
+{
+  "turnIntoOps": 22,
+  "expected": 391,
+  "lost": 6,
+  "lostTokens": [
+    "[A38ô]",
+    "[A40à]",
+    "[A95à]",
+    "[B13ç]",
+    "[B150ç]",
+    "[B172é]"
+  ],
+  "convergeMs": 118
+}

@@ -1,0 +1,93 @@
+/**
+ * English strings for Workspace OS pages (M4a). Kept in the module rather than
+ * the shared catalogue so parallel streams do not collide on one file;
+ * integration can fold it into `src/lib/i18n/messages` later.
+ */
+export const pagesEn = {
+  meta: { title: "Pages" },
+  home: {
+    eyebrow: "Workspace",
+    title: "Pages",
+    description: "Notes, guides and plans your team writes together.",
+    emptyTitle: "No pages yet",
+    emptyBody: "Create a page to start writing. Pages can hold other pages.",
+  },
+  sidebar: {
+    label: "Pages",
+    favourites: "Favourites",
+    recent: "Recent",
+    workspace: "Workspace",
+    private: "Private",
+    noFavourites: "Star a page to keep it here.",
+    noRecent: "Pages you open appear here.",
+    noPages: "No pages here yet.",
+    newPage: "New page",
+    newPrivatePage: "New private page",
+    newSubpage: "Add a page inside {title}",
+    expand: "Expand {title}",
+    collapse: "Collapse {title}",
+    actions: "Actions for {title}",
+  },
+  page: {
+    untitled: "Untitled",
+    titleLabel: "Page title",
+    titlePlaceholder: "Untitled",
+    breadcrumb: "Page location",
+    private: "Private",
+    trashed: "This page is in the trash.",
+    readOnly: "You can read this page but not change it.",
+    bodyComingSoon: "The page body opens here once the editor is turned on.",
+    subpages: "Pages inside",
+  },
+  actions: {
+    favourite: "Add to favourites",
+    unfavourite: "Remove from favourites",
+    rename: "Rename",
+    icon: "Change icon",
+    removeIcon: "Remove icon",
+    cover: "Change cover",
+    removeCover: "Remove cover",
+    move: "Move to…",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    duplicate: "Duplicate",
+    trash: "Move to trash",
+    restore: "Restore",
+  },
+  dialogs: {
+    renameTitle: "Rename page",
+    iconTitle: "Choose an icon",
+    iconLabel: "Icon (an emoji or up to 32 characters)",
+    coverTitle: "Choose a cover",
+    moveTitle: "Move page",
+    moveLabel: "Move inside",
+    moveTopLevel: "Top level of {area}",
+    save: "Save",
+    cancel: "Cancel",
+  },
+  covers: {
+    brand: "Brand",
+    accent: "Accent",
+    success: "Green",
+    warning: "Amber",
+    info: "Blue",
+    soft: "Plain",
+  },
+  toasts: {
+    created: "Page created.",
+    duplicated: "Page duplicated.",
+    moved: "Page moved.",
+    trashed: "Page moved to the trash.",
+    restored: "Page restored.",
+  },
+  errors: {
+    invalidInput: "Check the page details and try again.",
+    notAllowed: "You don't have permission to change this page.",
+    notFound: "That page no longer exists or you can't see it.",
+    cannotMoveInside: "A page can't be moved inside itself or its own pages.",
+    failed: "Something went wrong. Try again.",
+  },
+  copySuffix: "{title} (copy)",
+};
+
+export type PagesMessages = typeof pagesEn;

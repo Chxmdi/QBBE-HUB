@@ -1,0 +1,10 @@
+{
+  "offlineForMs": 100,
+  "reconnectMs": 1910,
+  "convergeAfterReconnectMs": 12,
+  "offlineEditsFromA": 50,
+  "concurrentEditsFromB": 50,
+  "expectedTokens": 57,
+  "missingOnB": [],
+  "missingOnA": []
+}

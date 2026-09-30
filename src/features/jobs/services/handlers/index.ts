@@ -22,6 +22,9 @@ import { staleProjectSweep } from "./stale-project-sweep";
 import { teamSignalDigest, teamSignalReminders } from "./team-signals";
 import { vmsSync } from "./vms-sync";
 import { workflowEvents } from "@/features/workflows/services/event-runner";
+import { decisionRevisitReminders } from "@/features/decisions/jobs/revisit-reminders";
+import { workflowResume } from "@/features/workflows/services/resume-runner";
+import { followFanout } from "@/features/following/fanout";
 
 /**
  * The job registry.
@@ -37,6 +40,9 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   "retry-workflow-executions": retryWorkflowExecutions,
   // Step-graph workflows (Workspace OS S6, behind wos_workflows_v2)
   "workflow-events": workflowEvents,
+  "workflow-resume": workflowResume,
+  // Following (Workspace OS S6b, behind wos_objects)
+  "follow-events": followFanout,
   "daily-digest": dailyDigest,
 
   // Sweeps over Hub data
@@ -47,6 +53,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   "stale-project-sweep": staleProjectSweep,
   "team-signal-reminders": teamSignalReminders,
   "team-signal-digest": teamSignalDigest,
+  // Workspace OS V1-10; silent while wos_decisions_v2 is off.
+  "decision-revisit-reminders": decisionRevisitReminders,
 
   // External integrations
   "google-sync": googleSync,

@@ -60,6 +60,9 @@ const securityHeaders = [
         "https://gmail.googleapis.com https://www.googleapis.com",
         "https://*.ingest.sentry.io",
       ].join(" "),
+      // Allow-listed editor embeds only (M4b). Must match EMBED_FRAME_ORIGINS
+      // in src/features/editor/adapter/embeds.ts; a unit test checks it.
+      "frame-src https://www.youtube-nocookie.com https://player.vimeo.com https://docs.google.com https://drive.google.com https://www.loom.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",

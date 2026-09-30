@@ -1,0 +1,415 @@
+{
+  "samples": 100,
+  "p50Ms": 39,
+  "p95Ms": 44,
+  "p99Ms": 47,
+  "maxMs": 49,
+  "minMs": 35,
+  "transportOnly": {
+    "p50Ms": 12,
+    "p95Ms": 17
+  },
+  "flushBatchingMs": 25,
+  "raw": [
+    {
+      "direction": "A→B",
+      "ms": 41
+    },
+    {
+      "direction": "B→A",
+      "ms": 45
+    },
+    {
+      "direction": "A→B",
+      "ms": 40
+    },
+    {
+      "direction": "B→A",
+      "ms": 41
+    },
+    {
+      "direction": "A→B",
+      "ms": 37
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 40
+    },
+    {
+      "direction": "B→A",
+      "ms": 38
+    },
+    {
+      "direction": "A→B",
+      "ms": 49
+    },
+    {
+      "direction": "B→A",
+      "ms": 41
+    },
+    {
+      "direction": "A→B",
+      "ms": 42
+    },
+    {
+      "direction": "B→A",
+      "ms": 43
+    },
+    {
+      "direction": "A→B",
+      "ms": 41
+    },
+    {
+      "direction": "B→A",
+      "ms": 43
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 37
+    },
+    {
+      "direction": "B→A",
+      "ms": 37
+    },
+    {
+      "direction": "A→B",
+      "ms": 43
+    },
+    {
+      "direction": "B→A",
+      "ms": 38
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 37
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 41
+    },
+    {
+      "direction": "B→A",
+      "ms": 43
+    },
+    {
+      "direction": "A→B",
+      "ms": 42
+    },
+    {
+      "direction": "B→A",
+      "ms": 42
+    },
+    {
+      "direction": "A→B",
+      "ms": 43
+    },
+    {
+      "direction": "B→A",
+      "ms": 45
+    },
+    {
+      "direction": "A→B",
+      "ms": 39
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 35
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 36
+    },
+    {
+      "direction": "B→A",
+      "ms": 36
+    },
+    {
+      "direction": "A→B",
+      "ms": 36
+    },
+    {
+      "direction": "B→A",
+      "ms": 35
+    },
+    {
+      "direction": "A→B",
+      "ms": 35
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 39
+    },
+    {
+      "direction": "B→A",
+      "ms": 37
+    },
+    {
+      "direction": "A→B",
+      "ms": 39
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 41
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 36
+    },
+    {
+      "direction": "B→A",
+      "ms": 36
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 41
+    },
+    {
+      "direction": "A→B",
+      "ms": 37
+    },
+    {
+      "direction": "B→A",
+      "ms": 40
+    },
+    {
+      "direction": "A→B",
+      "ms": 46
+    },
+    {
+      "direction": "B→A",
+      "ms": 42
+    },
+    {
+      "direction": "A→B",
+      "ms": 40
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 40
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 36
+    },
+    {
+      "direction": "A→B",
+      "ms": 37
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 37
+    },
+    {
+      "direction": "B→A",
+      "ms": 41
+    },
+    {
+      "direction": "A→B",
+      "ms": 42
+    },
+    {
+      "direction": "B→A",
+      "ms": 37
+    },
+    {
+      "direction": "A→B",
+      "ms": 39
+    },
+    {
+      "direction": "B→A",
+      "ms": 44
+    },
+    {
+      "direction": "A→B",
+      "ms": 39
+    },
+    {
+      "direction": "B→A",
+      "ms": 42
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 37
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 38
+    },
+    {
+      "direction": "A→B",
+      "ms": 37
+    },
+    {
+      "direction": "B→A",
+      "ms": 47
+    },
+    {
+      "direction": "A→B",
+      "ms": 40
+    },
+    {
+      "direction": "B→A",
+      "ms": 39
+    },
+    {
+      "direction": "A→B",
+      "ms": 42
+    },
+    {
+      "direction": "B→A",
+      "ms": 38
+    },
+    {
+      "direction": "A→B",
+      "ms": 42
+    },
+    {
+      "direction": "B→A",
+      "ms": 37
+    },
+    {
+      "direction": "A→B",
+      "ms": 40
+    },
+    {
+      "direction": "B→A",
+      "ms": 37
+    },
+    {
+      "direction": "A→B",
+      "ms": 39
+    },
+    {
+      "direction": "B→A",
+      "ms": 38
+    },
+    {
+      "direction": "A→B",
+      "ms": 41
+    },
+    {
+      "direction": "B→A",
+      "ms": 44
+    },
+    {
+      "direction": "A→B",
+      "ms": 37
+    },
+    {
+      "direction": "B→A",
+      "ms": 38
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 40
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 35
+    },
+    {
+      "direction": "A→B",
+      "ms": 37
+    },
+    {
+      "direction": "B→A",
+      "ms": 36
+    },
+    {
+      "direction": "A→B",
+      "ms": 38
+    },
+    {
+      "direction": "B→A",
+      "ms": 42
+    },
+    {
+      "direction": "A→B",
+      "ms": 40
+    },
+    {
+      "direction": "B→A",
+      "ms": 36
+    }
+  ]
+}

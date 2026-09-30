@@ -9,7 +9,13 @@ import {
   matchesTrigger,
   type ActivityEventRow,
 } from "../trigger";
-import { executeWorkflowRun, type GraphRule } from "./run";
+import {
+  executeWorkflowRun,
+  GRAPH_RULE_COLUMNS,
+  overRateLimit,
+  recordRateLimited,
+  type GraphRule,
+} from "./run";
 
 /**
  * The `workflow-events` job (M14b): reads events written since its cursor and
@@ -69,17 +75,21 @@ async function readEvents(db: SupabaseClient, cursor: Cursor, limit: number): Pr
   return (data ?? []) as ActivityEventRow[];
 }
 
-export async function loadGraphRules(db: SupabaseClient, organizationIds: string[]): Promise<GraphRule[]> {
+export type LimitedRule = GraphRule & { max_runs_per_hour: number };
+
+/** Enabled graph workflows that are not stopped (the instant stop switch). */
+export async function loadGraphRules(db: SupabaseClient, organizationIds: string[]): Promise<LimitedRule[]> {
   if (organizationIds.length === 0) return [];
   const { data, error } = await db
     .from("workflow_rule")
-    .select("id, organization_id, name, graph, run_as_user_id, created_by")
+    .select(`${GRAPH_RULE_COLUMNS}, max_runs_per_hour`)
     .eq("engine", "graph_v2")
     .eq("enabled", true)
+    .is("stopped_at", null)
     .in("organization_id", organizationIds);
   if (error) throw new Error(`could not load workflows: ${error.message}`);
-  const rules: GraphRule[] = [];
-  for (const row of (data ?? []) as (Omit<GraphRule, "graph"> & { graph: unknown })[]) {
+  const rules: LimitedRule[] = [];
+  for (const row of (data ?? []) as (Omit<LimitedRule, "graph"> & { graph: unknown })[]) {
     const checked = validateGraph(row.graph);
     // A graph that no longer validates is not run; the screen shows why.
     if (checked.ok) rules.push({ ...row, graph: checked.graph });
@@ -87,7 +97,7 @@ export async function loadGraphRules(db: SupabaseClient, organizationIds: string
   return rules;
 }
 
-export function rulesForEvent(rules: GraphRule[], event: ObjectEvent): GraphRule[] {
+export function rulesForEvent<R extends GraphRule>(rules: R[], event: ObjectEvent): R[] {
   if (isAutomationEvent(event)) return [];
   return rules.filter(
     (rule) => rule.organization_id === event.organizationId && matchesTrigger(rule.graph.trigger, event),
@@ -114,9 +124,15 @@ export async function workflowEvents({ db, definition, now }: JobContext): Promi
   let processed = 0;
   let failed = 0;
   let duplicates = 0;
+  let rateLimited = 0;
   for (const event of events) {
     for (const rule of rulesForEvent(rules, event)) {
       try {
+        if (await overRateLimit(db, rule.id, rule.max_runs_per_hour, now)) {
+          rateLimited += 1;
+          await recordRateLimited(db, rule, event, now);
+          continue;
+        }
         const record = await executeWorkflowRun(db, { rule, event });
         if (record.status === "duplicate") duplicates += 1;
         else if (record.result.outcome === "failed") failed += 1;
@@ -135,5 +151,5 @@ export async function workflowEvents({ db, definition, now }: JobContext): Promi
   const last = rows[rows.length - 1];
   await writeCursor(db, { last_created_at: last.created_at, last_id: last.id }, now);
   // A failed run is recorded on the run; it is not a failure of this job.
-  return { processed, failed: 0, metadata: { events: rows.length, runsFailed: failed, duplicates } };
+  return { processed, failed: 0, metadata: { events: rows.length, runsFailed: failed, duplicates, rateLimited } };
 }
