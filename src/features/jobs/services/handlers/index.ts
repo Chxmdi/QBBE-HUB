@@ -21,6 +21,7 @@ import { scheduledAnnouncements } from "./scheduled-announcements";
 import { staleProjectSweep } from "./stale-project-sweep";
 import { teamSignalDigest, teamSignalReminders } from "./team-signals";
 import { vmsSync } from "./vms-sync";
+import { decisionRevisitReminders } from "@/features/decisions/jobs/revisit-reminders";
 
 /**
  * The job registry.
@@ -44,6 +45,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   "stale-project-sweep": staleProjectSweep,
   "team-signal-reminders": teamSignalReminders,
   "team-signal-digest": teamSignalDigest,
+  // Workspace OS V1-10; silent while wos_decisions_v2 is off.
+  "decision-revisit-reminders": decisionRevisitReminders,
 
   // External integrations
   "google-sync": googleSync,
