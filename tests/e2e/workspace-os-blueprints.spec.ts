@@ -11,6 +11,15 @@ import { sql } from "./db";
 
 const KEY = `e2e_hiring_${Date.now().toString(36)}`;
 
+/** Removes this file's blueprints, builds first (a built blueprint cannot be deleted). */
+function cleanUp() {
+  sql(`
+    delete from public.blueprint_build where blueprint_id in (select id from public.blueprint where key like 'e2e\\_hiring\\_%' or key like 'new\\_blueprint%');
+    update public.blueprint set status = 'draft', approved_hash = null, approved_by = null, approved_at = null where key like 'e2e\\_hiring\\_%' or key like 'new\\_blueprint%';
+    delete from public.blueprint where key like 'e2e\\_hiring\\_%' or key like 'new\\_blueprint%';
+  `);
+}
+
 async function noSeriousViolations(page: Page, label: string) {
   const result = await new AxeBuilder({ page }).analyze();
   const violations = result.violations.filter((v) => v.impact === "critical" || v.impact === "serious");
@@ -22,7 +31,7 @@ test.beforeAll(() => {
 });
 
 test.afterAll(() => {
-  sql(`delete from public.blueprint where key like 'e2e\\_hiring\\_%' or key like 'new\\_blueprint%';`);
+  cleanUp();
   sql("update public.feature_flag set enabled = false where key = 'wos_objects' and organization_id is null;");
 });
 
