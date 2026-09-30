@@ -28,7 +28,7 @@ describe("editor model", () => {
     const graph = editorToGraph(state);
     expect(validateGraph(graph, new Set(workflowActionKeys)).ok).toBe(true);
     expect(graph.start).toBe("step-1");
-    expect(graph.steps.map((step) => [step.id, step.next])).toEqual([
+    expect(graph.steps.map((step) => [step.id, (step as { next?: string | null }).next])).toEqual([
       ["step-1", "step-2"],
       ["step-2", "step-3"],
       ["step-3", null],

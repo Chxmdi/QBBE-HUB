@@ -42,6 +42,7 @@ export interface EditorState {
   name: string;
   description: string;
   enabled: boolean;
+  maxRunsPerHour: number;
   objectType: string;
   verbs: string[];
   changedProperty: string;
@@ -68,6 +69,7 @@ export function emptyEditorState(): EditorState {
     name: "",
     description: "",
     enabled: true,
+    maxRunsPerHour: 60,
     objectType: "task",
     verbs: ["updated"],
     changedProperty: "status",
@@ -135,7 +137,7 @@ function stringOf(value: unknown): string {
  */
 export function graphToEditor(
   graph: WorkflowGraph,
-  meta: { name: string; description: string | null; enabled: boolean },
+  meta: { name: string; description: string | null; enabled: boolean; maxRunsPerHour?: number },
 ): EditorState | null {
   const byId = new Map(graph.steps.map((step) => [step.id, step]));
   const steps: EditorStep[] = [];
@@ -166,6 +168,7 @@ export function graphToEditor(
     name: meta.name,
     description: meta.description ?? "",
     enabled: meta.enabled,
+    maxRunsPerHour: meta.maxRunsPerHour ?? 60,
     objectType: graph.trigger.objectTypes[0] ?? "",
     verbs: [...graph.trigger.verbs],
     changedProperty: graph.trigger.changedProperty ?? "",
@@ -181,8 +184,12 @@ export const saveWorkflowSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).default(""),
   enabled: z.boolean(),
+  maxRunsPerHour: z.number().int().min(1).max(1000).default(60),
   graph: z.unknown(),
 });
+
+export const stopSchema = z.object({ id: uuid, stop: z.boolean() });
+export const retrySchema = z.object({ executionId: uuid, stepId: z.string().trim().min(1).max(64) });
 
 export const testRunSchema = z.object({
   id: uuid,

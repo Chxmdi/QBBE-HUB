@@ -51,6 +51,7 @@ export function WorkflowEditor({ id, initial, m }: Props) {
         name: state.name,
         description: state.description,
         enabled: state.enabled,
+        maxRunsPerHour: state.maxRunsPerHour,
         graph: editorToGraph(state),
       });
       if (!result.ok) {
@@ -88,6 +89,20 @@ export function WorkflowEditor({ id, initial, m }: Props) {
               <label htmlFor="workflow-enabled" className="text-sm font-medium text-ink">{m.form.enabled}</label>
               <p id="workflow-enabled-hint" className="text-[12.5px] text-muted">{m.form.enabledHint}</p>
             </div>
+          </div>
+          <div>
+            <Label htmlFor="workflow-max-runs">{m.form.maxRunsPerHour}</Label>
+            <Input
+              id="workflow-max-runs"
+              type="number"
+              min={1}
+              max={1000}
+              required
+              value={state.maxRunsPerHour}
+              aria-describedby="workflow-max-runs-hint"
+              onChange={(event) => update({ maxRunsPerHour: Number(event.target.value) })}
+            />
+            <p id="workflow-max-runs-hint" className="mt-1 text-[12.5px] text-muted">{m.form.maxRunsPerHourHint}</p>
           </div>
           <div className="sm:col-span-2">
             <Label htmlFor="workflow-description">{m.form.description}</Label>

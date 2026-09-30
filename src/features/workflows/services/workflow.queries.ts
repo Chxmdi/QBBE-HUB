@@ -24,6 +24,8 @@ export interface WorkflowRow {
   enabled: boolean;
   graph: unknown;
   definition_version: number;
+  max_runs_per_hour: number;
+  stopped_at: string | null;
 }
 
 export interface RunRow {
@@ -88,7 +90,7 @@ export async function getWorkflow(organizationId: string, id: string): Promise<W
   const db = await createSupabasePageClient();
   const { data } = await db
     .from("workflow_rule")
-    .select("id, name, description, enabled, graph, definition_version")
+    .select("id, name, description, enabled, graph, definition_version, max_runs_per_hour, stopped_at")
     .eq("organization_id", organizationId)
     .eq("engine", "graph_v2")
     .eq("id", id)
