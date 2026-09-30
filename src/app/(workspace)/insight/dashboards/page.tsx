@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatTile, WeeklyBars } from "@/features/insight/components/charts";
+import { GoalTile } from "@/features/insight/components/goal-tile";
 import {
   buildDashboard,
   dashboardTemplates,
@@ -15,6 +16,8 @@ import { loadDashboardRows } from "@/features/insight/dashboards/dashboards.sour
 import { requireInsightEnabled } from "@/features/insight/gate";
 import { getInsightT } from "@/features/insight/i18n/translate";
 import { direction } from "@/features/insight/metrics";
+import { goalTrajectory } from "@/features/insight/operations/operations";
+import { loadGoals } from "@/features/insight/operations/operations.source";
 import { requireSession } from "@/lib/auth";
 import { getFormatters } from "@/lib/i18n/server";
 import { createSupabasePageClient } from "@/lib/supabase/page";
@@ -47,6 +50,9 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
   const now = new Date();
   const { rows, empty, truncated } = await loadDashboardRows(client, sourcesFor(template), now, session.timeZone);
   const data = buildDashboard(template, rows, now, session.timeZone);
+  // Goal trajectory tiles (V3-5) belong on the Programmes dashboard.
+  const goals = template.key === "programs" ? await loadGoals(client) : null;
+  const trajectories = goals ? goals.metrics.map((metric) => goalTrajectory(metric, goals.measurements)) : [];
 
   const show = (value: StatValue) =>
     value.kind === "money" ? format.currency(value.cents / 100) : format.number(value.value);
@@ -118,6 +124,22 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
           })}
         </div>
       </section>
+
+      {goals ? (
+        <section aria-labelledby="dash-goals" className="mb-8">
+          <h2 id="dash-goals" className="mb-1 text-title font-semibold text-ink">{t("operations.goalsHeading")}</h2>
+          <p className="mb-3 text-body-sm text-muted">{t("operations.goalsCaption")}</p>
+          {trajectories.length ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {trajectories.map((trajectory) => (
+                <GoalTile key={trajectory.metric.id} trajectory={trajectory} t={t} format={format} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-body-sm text-muted">{t("operations.noGoals")}</p>
+          )}
+        </section>
+      ) : null}
 
       {template.spaceTotals ? (
         <section aria-labelledby="dash-spaces">
