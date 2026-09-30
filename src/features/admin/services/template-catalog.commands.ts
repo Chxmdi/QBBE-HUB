@@ -242,33 +242,28 @@ export async function instantiateRecordTemplate(input: unknown): Promise<ActionR
   const description = structure.description || null;
 
   if (template.kind === "task") {
-    let programId: string | null = null;
-    if (projectId) {
-      const { data: project } = await db
-        .from("project")
-        .select("program_id")
-        .eq("id", projectId)
-        .maybeSingle();
-      programId = (project?.program_id as string | null) ?? null;
-    }
-    const { data, error } = await db
-      .from("task")
-      .insert({
-        organization_id: staff.session.organizationId,
-        program_id: programId,
-        project_id: projectId,
+    // Through the shared create-task action (M7a), so the task records the
+    // template it came from (M7b) and gets the same activity entry as any other.
+    const { createUniversalTask } = await import("@/features/universal-tasks/create-task");
+    const created = await createUniversalTask(
+      db,
+      {
+        userId: staff.session.userId,
+        organizationId: staff.session.organizationId,
+        displayName: staff.session.profile.full_name,
+      },
+      {
         title,
-        description,
-        priority: structure.priority || "medium",
-        requester_id: staff.session.userId,
-        created_by: staff.session.userId,
+        description: description ?? undefined,
+        projectId: projectId ?? undefined,
+        priority: (structure.priority || "medium") as "low" | "medium" | "high" | "critical",
         status: "not_started",
-      })
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { ok: false, error: t("admin.errors.createTaskFailed") };
+        source: { type: "template", id: template.id as string },
+      },
+    );
+    if (!created.ok) return { ok: false, error: t("admin.errors.createTaskFailed") };
     revalidatePath("/my-work");
-    return { ok: true, id: data.id as string };
+    return { ok: true, id: created.id };
   }
 
   if (template.kind === "event") {
