@@ -1,0 +1,478 @@
+{
+  "edits": {
+    "A": {
+      "insert": 298,
+      "newBlock": 76,
+      "bold": 52,
+      "delete": 74
+    },
+    "B": {
+      "insert": 295,
+      "delete": 63,
+      "bold": 66,
+      "newBlock": 76
+    },
+    "total": 1000
+  },
+  "timeline": {
+    "dropAtMs": 2059,
+    "restoreAtMs": 6735,
+    "editsDoneAtMs": 10371,
+    "convergedAfterEditsMs": 29,
+    "statusLog": [
+      {
+        "t": 2059,
+        "status": "disconnected"
+      },
+      {
+        "t": 2348,
+        "status": "disconnected"
+      },
+      {
+        "t": 2627,
+        "status": "disconnected"
+      },
+      {
+        "t": 2909,
+        "status": "disconnected"
+      },
+      {
+        "t": 3194,
+        "status": "disconnected"
+      },
+      {
+        "t": 3490,
+        "status": "disconnected"
+      },
+      {
+        "t": 3777,
+        "status": "disconnected"
+      },
+      {
+        "t": 4075,
+        "status": "disconnected"
+      },
+      {
+        "t": 4358,
+        "status": "disconnected"
+      },
+      {
+        "t": 4645,
+        "status": "disconnected"
+      },
+      {
+        "t": 4916,
+        "status": "disconnected"
+      },
+      {
+        "t": 5191,
+        "status": "disconnected"
+      },
+      {
+        "t": 5500,
+        "status": "disconnected"
+      },
+      {
+        "t": 5813,
+        "status": "disconnected"
+      },
+      {
+        "t": 6118,
+        "status": "disconnected"
+      },
+      {
+        "t": 6437,
+        "status": "disconnected"
+      },
+      {
+        "t": 6735,
+        "status": "disconnected"
+      },
+      {
+        "t": 7242,
+        "status": "disconnected"
+      },
+      {
+        "t": 7533,
+        "status": "disconnected"
+      },
+      {
+        "t": 7806,
+        "status": "disconnected"
+      },
+      {
+        "t": 8090,
+        "status": "disconnected"
+      },
+      {
+        "t": 8371,
+        "status": "disconnected"
+      },
+      {
+        "t": 8662,
+        "status": "disconnected"
+      },
+      {
+        "t": 8958,
+        "status": "disconnected"
+      },
+      {
+        "t": 9236,
+        "status": "disconnected"
+      },
+      {
+        "t": 9522,
+        "status": "disconnected"
+      },
+      {
+        "t": 9798,
+        "status": "disconnected"
+      },
+      {
+        "t": 10072,
+        "status": "disconnected"
+      },
+      {
+        "t": 10359,
+        "status": "connected"
+      }
+    ]
+  },
+  "expectedTokens": 613,
+  "deletedTokens": 132,
+  "clientA": {
+    "missing": [
+      "[A101è]",
+      "[A154ç]",
+      "[A167é]",
+      "[A332à]",
+      "[A343è]",
+      "[A454è]",
+      "[A483è]",
+      "[A499é]",
+      "[B21ç]",
+      "[B54è]",
+      "[B115à]",
+      "[B187à]",
+      "[B197ç]",
+      "[B221à]",
+      "[B243à]",
+      "[B262à]",
+      "[B338é]",
+      "[B408ô]"
+    ],
+    "duplicated": [],
+    "resurrected": [],
+    "unexpected": []
+  },
+  "clientB": {
+    "missing": [
+      "[A101è]",
+      "[A154ç]",
+      "[A167é]",
+      "[A332à]",
+      "[A343è]",
+      "[A454è]",
+      "[A483è]",
+      "[A499é]",
+      "[B21ç]",
+      "[B54è]",
+      "[B115à]",
+      "[B187à]",
+      "[B197ç]",
+      "[B221à]",
+      "[B243à]",
+      "[B262à]",
+      "[B338é]",
+      "[B408ô]"
+    ],
+    "duplicated": [],
+    "resurrected": [],
+    "unexpected": []
+  },
+  "reloadedFromDatabase": {
+    "missing": [
+      "[A101è]",
+      "[A154ç]",
+      "[A167é]",
+      "[A332à]",
+      "[A343è]",
+      "[A454è]",
+      "[A483è]",
+      "[A499é]",
+      "[B21ç]",
+      "[B54è]",
+      "[B115à]",
+      "[B187à]",
+      "[B197ç]",
+      "[B221à]",
+      "[B243à]",
+      "[B262à]",
+      "[B338é]",
+      "[B408ô]"
+    ],
+    "duplicated": [],
+    "resurrected": [],
+    "unexpected": []
+  },
+  "vanishedWithoutDelete": {
+    "A": [
+      {
+        "t": "[A343è]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10207
+      },
+      {
+        "t": "[A483è]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10207
+      },
+      {
+        "t": "[A154ç]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10207
+      },
+      {
+        "t": "[A101è]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10207
+      },
+      {
+        "t": "[A454è]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10207
+      },
+      {
+        "t": "[A499é]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10207
+      },
+      {
+        "t": "[A167é]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10207
+      },
+      {
+        "t": "[A332à]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10207
+      },
+      {
+        "t": "[B54è]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10207
+      }
+    ],
+    "B": [
+      {
+        "t": "[B21ç]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 517
+      },
+      {
+        "t": "[B262à]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10292
+      },
+      {
+        "t": "[B115à]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10292
+      },
+      {
+        "t": "[B243à]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10292
+      },
+      {
+        "t": "[B221à]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10292
+      },
+      {
+        "t": "[B187à]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10292
+      },
+      {
+        "t": "[A101è]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10292
+      },
+      {
+        "t": "[B408ô]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10292
+      },
+      {
+        "t": "[B338é]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10292
+      },
+      {
+        "t": "[B197ç]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10292
+      },
+      {
+        "t": "[B54è]",
+        "local": false,
+        "fromPeer": true,
+        "status": "connected",
+        "atMs": 10292
+      }
+    ]
+  },
+  "elementDeletions": {
+    "A": [],
+    "B": []
+  },
+  "shownOutOfStep": {
+    "A": [],
+    "B": []
+  },
+  "identicalText": true,
+  "charactersLostOrDuplicated": [
+    {
+      "ch": "[",
+      "expected": 613,
+      "actual": 612
+    },
+    {
+      "ch": "A",
+      "expected": 306,
+      "actual": 305
+    }
+  ],
+  "interleavedTokens": {
+    "count": 18,
+    "ratePercent": 2.94,
+    "examples": [
+      {
+        "token": "[A101è]",
+        "context": null
+      },
+      {
+        "token": "[A154ç]",
+        "context": "3ç][243à][BA154ç][A237é]"
+      },
+      {
+        "token": "[A167é]",
+        "context": "8é][B203ô][B167à][A210ô]"
+      },
+      {
+        "token": "[A332à]",
+        "context": "0à][B49ô][BA332à][54è][A"
+      },
+      {
+        "token": "[A343è]",
+        "context": "[262à][BA343è][A116à]"
+      }
+    ]
+  },
+  "persistence": {
+    "rowsWrittenA": 9,
+    "rowsWrittenB": 10,
+    "failedWritesWhileOffline": 2,
+    "unsavedAfterFlush": 0
+  },
+  "finalDocumentBytes": 55806,
+  "messages": {
+    "A": {
+      "messages": 58,
+      "p50Bytes": 145,
+      "p95Bytes": 681,
+      "maxBytes": 29932,
+      "peakMessagesPerSecond": 24,
+      "byEvent": {
+        "y-sync1": {
+          "count": 3,
+          "maxBytes": 80,
+          "totalBytes": 222
+        },
+        "y-aw": {
+          "count": 2,
+          "maxBytes": 147,
+          "totalBytes": 294
+        },
+        "y-sync2": {
+          "count": 2,
+          "maxBytes": 29932,
+          "totalBytes": 29996
+        },
+        "y-update": {
+          "count": 51,
+          "maxBytes": 689,
+          "totalBytes": 11155
+        }
+      }
+    },
+    "B": {
+      "messages": 237,
+      "p50Bytes": 141,
+      "p95Bytes": 493,
+      "maxBytes": 29912,
+      "peakMessagesPerSecond": 25,
+      "byEvent": {
+        "y-sync1": {
+          "count": 2,
+          "maxBytes": 94,
+          "totalBytes": 158
+        },
+        "y-aw": {
+          "count": 1,
+          "maxBytes": 139,
+          "totalBytes": 139
+        },
+        "y-sync2": {
+          "count": 2,
+          "maxBytes": 29912,
+          "totalBytes": 29976
+        },
+        "y-update": {
+          "count": 232,
+          "maxBytes": 761,
+          "totalBytes": 51588
+        }
+      }
+    }
+  }
+}
