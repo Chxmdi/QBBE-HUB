@@ -10,7 +10,10 @@ declare
   v_keys constant text[] := array[
     'wos_objects', 'wos_spaces', 'wos_pages', 'wos_editor', 'wos_lenses',
     'wos_home', 'wos_capture', 'wos_workflows_v2', 'wos_forms_v2',
-    'wos_public_pages', 'wos_offline'
+    'wos_public_pages', 'wos_offline',
+    -- Stream S5b (20261105110000_s5b_feature_switches).
+    'wos_meetings_v2', 'wos_decisions_v2', 'wos_goals', 'wos_mobile',
+    'wos_object_approvals'
   ];
   n integer;
 begin
