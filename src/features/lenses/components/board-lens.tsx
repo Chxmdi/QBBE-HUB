@@ -77,7 +77,9 @@ export function BoardLens({
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
-      <div className="overflow-x-auto pb-3">
+      {/* The columns scroll sideways; the scroller takes focus so a keyboard
+          can scroll it even when no column has a card (WCAG 2.1.1). */}
+      <div className="overflow-x-auto pb-3" tabIndex={0} role="region" aria-label={t("board.title")}>
         <div className="flex gap-3">
           {choices.map((choice) => {
             const columnRows = rows.filter((r) => statusOf(r) === choice.key);
