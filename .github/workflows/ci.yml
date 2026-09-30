@@ -257,6 +257,12 @@ jobs:
         if: matrix.suite == 'qa-matrix' && inputs.mobile
         run: npx playwright test qa-matrix public-routes --fully-parallel --shard=${{ matrix.part }}/${{ matrix.parts }} --project=mobile-chrome --project=mobile-safari
 
+      - name: Show the app server log after a failure
+        # Server-side errors behind a failed browser check, readable in the
+        # job log without downloading the evidence artifact.
+        if: failure()
+        run: tail -n 300 "$RUNNER_TEMP/next.log" || true
+
       - name: Name the evidence after this part
         if: failure()
         id: evidence
