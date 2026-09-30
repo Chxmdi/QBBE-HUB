@@ -12,9 +12,11 @@ import { describe, expect, it } from "vitest";
 const ROOT = process.cwd();
 
 // Places that cannot read CSS variables: the browser-chrome <meta> colours,
-// and email HTML. Both are checked against the tokens below instead.
+// the web app manifest, and email HTML. All are checked against the tokens
+// below instead.
 const ALLOWED = new Set([
   "src/app/layout.tsx",
+  "src/app/manifest.ts",
   "src/features/notifications/services/email-templates.ts",
 ]);
 
@@ -64,6 +66,12 @@ describe("design tokens", () => {
     const layout = readFileSync(join(ROOT, "src/app/layout.tsx"), "utf8").toLowerCase();
     expect(layout).toContain(`"(prefers-color-scheme: light)", color: "${token("canvas")}"`);
     expect(layout).toContain(`"(prefers-color-scheme: dark)", color: "${token("canvas", "dark")}"`);
+  });
+
+  it("the web app manifest uses the canvas and brand tokens", () => {
+    const manifest = readFileSync(join(ROOT, "src/app/manifest.ts"), "utf8").toLowerCase();
+    expect(manifest).toContain(`background_color: "${token("canvas")}"`);
+    expect(manifest).toContain(`theme_color: "${token("brand")}"`);
   });
 
   it("form controls come from the primitives, not bare elements (UI-004)", () => {
