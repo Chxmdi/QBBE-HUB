@@ -3,14 +3,16 @@
 import "@blocknote/ariakit/style.css";
 import "./editor.css";
 import * as React from "react";
+import * as Y from "yjs";
 import {
+  BlockNoteEditor,
   BlockNoteSchema,
   defaultBlockSpecs,
   filterSuggestionItems,
   insertOrUpdateBlockForSlashMenu,
-  type BlockNoteEditor,
   type PartialBlock,
 } from "@blocknote/core";
+import { blocksToYDoc, withCollaboration } from "@blocknote/core/yjs";
 import { en, fr } from "@blocknote/core/locales";
 import {
   getDefaultReactSlashMenuItems,
@@ -29,6 +31,7 @@ import { CONTENT_VERSION, type EditorBlock, type EditorContent } from "@/feature
 import type { BlockEditorProps } from "@/features/editor/adapter/types";
 import { createWorkspaceBlocks } from "./blocks";
 import { rankByTitle } from "@/features/editor/adapter/slash";
+import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
 
 /**
  * BlockNote behind the adapter (M4b). Carries the W0-5 spike's accessibility
@@ -51,6 +54,32 @@ function buildSchema(t: EditorT) {
 
 type Schema = ReturnType<typeof buildSchema>;
 type Editor = BlockNoteEditor<Schema["blockSchema"], Schema["inlineContentSchema"], Schema["styleSchema"]>;
+
+/** The Yjs fragment that holds the document (the same name co-editing will sync). */
+const FRAGMENT = "document-store";
+
+/**
+ * The document's Yjs state: the saved state when there is one, otherwise the
+ * JSON content converted once (older saves, and task descriptions converted
+ * from plain text). The conversion uses a headless editor with the same schema.
+ */
+function createDocument(schema: Schema, initialState: string | null | undefined, blocks: EditorBlock[]): Y.Doc {
+  const doc = new Y.Doc();
+  if (initialState) {
+    try {
+      Y.applyUpdate(doc, base64ToBytes(initialState));
+      return doc;
+    } catch {
+      // A damaged state falls back to the JSON, which is always saved with it.
+    }
+  }
+  if (blocks.length > 0) {
+    const headless = BlockNoteEditor.create({ schema });
+    const seeded = blocksToYDoc(headless, blocks as PartialBlock<Schema["blockSchema"]>[], FRAGMENT);
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(seeded));
+  }
+  return doc;
+}
 
 function quebecDictionary() {
   return {
@@ -318,23 +347,20 @@ function toContent(blocks: unknown[]): EditorContent {
   return { version: CONTENT_VERSION, blocks: JSON.parse(JSON.stringify(blocks)) as EditorBlock[] };
 }
 
-export default function BlockNoteEditorImpl({ initialContent, editable, onChange, files, hintId, label }: BlockEditorProps) {
+export default function BlockNoteEditorImpl({ initialContent, initialState, editable, onChange, files, hintId, label }: BlockEditorProps) {
   const locale = useLocale();
   const t = useEditorT();
   const theme = useDocumentTheme();
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
   const schema = React.useMemo(() => buildSchema(t), [t]);
-  // The first content only: the editor owns the document after it mounts.
-  const [initialBlocks] = React.useState(() =>
-    initialContent.blocks.length > 0 ? (initialContent.blocks as PartialBlock<Schema["blockSchema"]>[]) : undefined,
-  );
+  // The first state only: the editor owns the document after it mounts.
+  const [doc] = React.useState(() => createDocument(schema, initialState, initialContent.blocks));
 
   const editor = useCreateBlockNote(
-    {
+    withCollaboration({
       schema,
       dictionary: locale === "fr-CA" ? quebecDictionary() : en,
-      initialContent: initialBlocks,
       domAttributes: {
         editor: {
           "aria-label": label ?? t("label"),
@@ -342,12 +368,14 @@ export default function BlockNoteEditorImpl({ initialContent, editable, onChange
         },
       },
       uploadFile: files ? (file: File) => files.upload(file) : undefined,
-      resolveFileUrl: files
-        ? async (url: string) => (await files.resolve(url)) ?? ""
-        : undefined,
-    },
-    [schema, locale],
-  ) as Editor;
+      resolveFileUrl: files ? async (url: string) => (await files.resolve(url)) ?? "" : undefined,
+      collaboration: {
+        fragment: doc.getXmlFragment(FRAGMENT),
+        user: { name: "", color: "var(--color-brand)" },
+      },
+    }),
+    [schema, locale, doc],
+  ) as unknown as Editor;
 
   useAccessibleNames(editor, t);
   const openBlockMenu = React.useCallback(() => {
@@ -363,8 +391,8 @@ export default function BlockNoteEditorImpl({ initialContent, editable, onChange
       editor.insertBlocks([{ type: "paragraph" }], last, "after");
       return;
     }
-    onChange?.(toContent(blocks));
-  }, [editor, editable, onChange]);
+    onChange?.(toContent(blocks), bytesToBase64(Y.encodeStateAsUpdate(doc)));
+  }, [editor, editable, onChange, doc]);
 
   const getItems = React.useCallback(
     async (query: string) =>

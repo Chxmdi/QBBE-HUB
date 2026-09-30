@@ -107,7 +107,7 @@ test("staff write a page with the block editor, from the keyboard", async ({ pag
   await expect(page.getByRole("link", { name: "Open example.org in a new tab" })).toBeVisible();
 
   // An embed: refused when not on the allow-list, framed when it is.
-  await caretAtEnd(page, editor.locator("h2"));
+  await caretAtEnd(page, editor.locator("[data-content-type='heading']").first());
   await page.keyboard.press("Enter");
   await page.keyboard.type("/embed");
   await expect(page.getByRole("option", { name: /^Embed/, selected: true })).toBeVisible();

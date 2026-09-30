@@ -47,6 +47,7 @@ export default async function PageRoute({ params }: { params: Promise<{ pageId: 
             objectId={page.id}
             objectType="page"
             initialContent={body.content}
+            initialState={body.state}
             initialVersion={body.version}
             editable={canEditPage({ userId: session.userId, role: session.role }, page)}
           />
