@@ -1,0 +1,3 @@
+-- One shard of an equivalence round (see equivalence-setup.sql). Run by
+-- scripts/spikes/access-spike.mjs with -v round=... -v shard=... -v shards=...
+select spike_access.eq_compare(:'round', :shard, :shards);
