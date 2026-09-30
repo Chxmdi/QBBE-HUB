@@ -89,7 +89,7 @@ const notesSchema = z.object({ meetingId: uuid, notes: z.string().max(20000) });
  * themselves need meeting management (the meeting's own rule); the captures
  * are written as the person saving.
  */
-export async function saveNotesWithCaptures(input: unknown): Promise<CommandResult & { captured?: number }> {
+export async function saveNotesWithCaptures(input: unknown): Promise<CommandResult & { captured?: number; notes?: string }> {
   const blocked = await guard();
   if (blocked) return blocked;
   const session = await requireSession();
@@ -122,6 +122,7 @@ export async function saveNotesWithCaptures(input: unknown): Promise<CommandResu
   return {
     ok: true,
     captured: blocks.length,
+    notes,
     message: blocks.length > 0 ? t("notes.savedWithCaptures", { count: blocks.length }) : t("notes.saved"),
   };
 }

@@ -44,13 +44,13 @@ export default async function MeetingReviewPage({ params }: { params: Promise<{ 
         <p role="note" className="card mb-6 p-4 text-sm text-ink">{t("review.notOrganizer")}</p>
       ) : null}
 
-      {open.length === 0 ? (
-        <p className="mb-6 text-sm text-muted">{t("review.nothingOpen")}</p>
-      ) : canManage ? (
+      {canManage ? (
         <ReviewForm
           meetingId={meeting.id}
           captures={open.map((c) => ({ id: c.id, kind: c.kind, body: c.body, ownerName: c.ownerName, dueOn: c.dueOn }))}
         />
+      ) : open.length === 0 ? (
+        <p className="mb-6 text-sm text-muted">{t("review.nothingOpen")}</p>
       ) : (
         <ul className="mb-6 space-y-2">
           {open.map((c) => (

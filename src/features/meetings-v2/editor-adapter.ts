@@ -23,8 +23,12 @@ export interface MeetingNotesEditorProps {
   meetingId: Uuid;
   initialContent: string;
   readOnly: boolean;
-  /** Saves the notes and captures every semantic block in them for the review. */
-  onSave: (content: string) => Promise<{ ok: boolean; captured: number }>;
+  /**
+   * Saves the notes and captures every semantic block in them for the review.
+   * `content` is the notes as saved (captured lines rewritten); the editor
+   * shows it from then on so the same block is never captured twice.
+   */
+  onSave: (content: string) => Promise<{ ok: boolean; captured: number; content: string }>;
 }
 
 export type MeetingNotesEditor = ComponentType<MeetingNotesEditorProps>;

@@ -24,12 +24,16 @@ export function ReviewForm({ meetingId, captures }: { meetingId: string; capture
     Object.fromEntries(captures.map((c) => [c.id, "approve" as const])),
   );
   const [saving, setSaving] = useState(false);
+  const choiceFor = (id: string): ReviewChoice => choices[id] ?? "approve";
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
-    const result = await applyMeetingReview({ meetingId, choices });
+    const result = await applyMeetingReview({
+      meetingId,
+      choices: Object.fromEntries(captures.map((c) => [c.id, choiceFor(c.id)])),
+    });
     setSaving(false);
     setStatus({ ok: result.ok, text: result.ok ? (result.message ?? "") : (result.error ?? t("review.error")) });
     router.refresh();
@@ -37,6 +41,7 @@ export function ReviewForm({ meetingId, captures }: { meetingId: string; capture
 
   return (
     <form onSubmit={submit} className="space-y-3">
+      {captures.length === 0 ? <p className="text-sm text-muted">{t("review.nothingOpen")}</p> : null}
       <ul className="space-y-3">
         {captures.map((capture) => (
           <li key={capture.id} className="card p-4">
@@ -57,7 +62,7 @@ export function ReviewForm({ meetingId, captures }: { meetingId: string; capture
                       type="radio"
                       name={`choice-${capture.id}`}
                       value={choice}
-                      checked={choices[capture.id] === choice}
+                      checked={choiceFor(capture.id) === choice}
                       onChange={() => setChoices((prev) => ({ ...prev, [capture.id]: choice }))}
                       className="size-4 accent-brand"
                     />
@@ -75,7 +80,7 @@ export function ReviewForm({ meetingId, captures }: { meetingId: string; capture
             {status.text}
           </span>
         ) : null}
-        <Button type="submit" loading={saving}>{t("review.apply")}</Button>
+        {captures.length > 0 ? <Button type="submit" loading={saving}>{t("review.apply")}</Button> : null}
       </div>
     </form>
   );

@@ -23,7 +23,7 @@ export function MeetingNotes({
       readOnly={readOnly}
       onSave={async (content) => {
         const result = await saveNotesWithCaptures({ meetingId, notes: content });
-        return { ok: result.ok, captured: result.captured ?? 0 };
+        return { ok: result.ok, captured: result.captured ?? 0, content: result.notes ?? content };
       }}
     />
   );

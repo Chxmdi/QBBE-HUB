@@ -35,6 +35,7 @@ export function PlaceholderNotesEditor({ initialContent, readOnly, onSave }: Mee
       setState({ kind: "error", text: t("notes.error") });
       return;
     }
+    setNotes(result.content);
     setState({
       kind: "done",
       text: result.captured > 0 ? t("notes.savedWithCaptures", { count: result.captured }) : t("notes.saved"),
