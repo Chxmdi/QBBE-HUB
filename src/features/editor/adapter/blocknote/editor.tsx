@@ -21,7 +21,7 @@ import {
   type DefaultReactSuggestionItem,
 } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/ariakit";
-import { Bookmark, MessageSquareWarning, PanelTop } from "lucide-react";
+import { Activity, Bookmark, FileText, Gavel, ListChecks, ListTodo, MessageSquareWarning, PanelTop, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { useLocale } from "@/lib/i18n/client";
@@ -30,6 +30,8 @@ import type { EditorT } from "@/features/editor/i18n";
 import { CONTENT_VERSION, type EditorBlock, type EditorContent } from "@/features/editor/adapter/content";
 import type { BlockEditorProps } from "@/features/editor/adapter/types";
 import { createWorkspaceBlocks } from "./blocks";
+import { createSemanticBlocks, HandlersBox } from "./semantic-blocks";
+import type { Locale } from "@/lib/i18n/config";
 import { rankByTitle } from "@/features/editor/adapter/slash";
 import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
 
@@ -45,10 +47,22 @@ import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
  *   F8           Quebec wording over BlockNote's France French
  */
 
-function buildSchema(t: EditorT) {
+function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
   const { callout, bookmark, embed } = createWorkspaceBlocks(t);
+  const s = createSemanticBlocks(t, locale, semantic);
   return BlockNoteSchema.create({
-    blockSpecs: { ...defaultBlockSpecs, callout: callout(), bookmark: bookmark(), embed: embed() },
+    blockSpecs: {
+      ...defaultBlockSpecs,
+      callout: callout(),
+      bookmark: bookmark(),
+      embed: embed(),
+      task: s.task(),
+      decision: s.decision(),
+      person: s.person(),
+      libraryFile: s.libraryFile(),
+      status: s.status(),
+      query: s.query(),
+    },
   });
 }
 
@@ -254,6 +268,30 @@ function workspaceSlashItems(editor: Editor, t: EditorT): DefaultReactSuggestion
   ];
 }
 
+type SemanticItem = "task" | "decision" | "person" | "status" | "query" | "libraryFile";
+
+function semanticSlashItems(editor: Editor, t: EditorT): DefaultReactSuggestionItem[] {
+  const group = t("slash.group");
+  const icons: Record<SemanticItem, React.JSX.Element> = {
+    task: <ListChecks size={18} aria-hidden />,
+    decision: <Gavel size={18} aria-hidden />,
+    person: <UserRound size={18} aria-hidden />,
+    status: <Activity size={18} aria-hidden />,
+    query: <ListTodo size={18} aria-hidden />,
+    libraryFile: <FileText size={18} aria-hidden />,
+  };
+  return (Object.keys(icons) as SemanticItem[]).map((key) => ({
+    title: t(`semantic.items.${key}.title`),
+    subtext: t(`semantic.items.${key}.subtext`),
+    aliases: t(`semantic.items.${key}.aliases`).split(","),
+    group,
+    icon: icons[key],
+    onItemClick: () => {
+      insertOrUpdateBlockForSlashMenu(editor, { type: key } as PartialBlock<Schema["blockSchema"]>);
+    },
+  }));
+}
+
 /** Turn-into targets offered by the block menu. */
 type TurnIntoKey =
   | "paragraph"
@@ -347,13 +385,28 @@ function toContent(blocks: unknown[]): EditorContent {
   return { version: CONTENT_VERSION, blocks: JSON.parse(JSON.stringify(blocks)) as EditorBlock[] };
 }
 
-export default function BlockNoteEditorImpl({ initialContent, initialState, editable, onChange, files, hintId, label }: BlockEditorProps) {
+export default function BlockNoteEditorImpl({
+  initialContent,
+  initialState,
+  editable,
+  onChange,
+  files,
+  semantic,
+  hintId,
+  label,
+}: BlockEditorProps) {
   const locale = useLocale();
   const t = useEditorT();
   const theme = useDocumentTheme();
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const schema = React.useMemo(() => buildSchema(t), [t]);
+  // Blocks read the latest handlers through a ref, so new handler objects do
+  // not rebuild the schema (which would remount the editor).
+  const [semanticBox] = React.useState(() => new HandlersBox(semantic ?? null));
+  React.useEffect(() => {
+    semanticBox.set(semantic ?? null);
+  }, [semantic, semanticBox]);
+  const schema = React.useMemo(() => buildSchema(t, locale, semanticBox), [t, locale, semanticBox]);
   // The first state only: the editor owns the document after it mounts.
   const [doc] = React.useState(() => createDocument(schema, initialState, initialContent.blocks));
 
@@ -401,12 +454,13 @@ export default function BlockNoteEditorImpl({ initialContent, initialState, edit
           [
             ...getDefaultReactSlashMenuItems(editor).filter((item) => (item as { key?: string }).key !== "emoji"),
             ...workspaceSlashItems(editor, t),
+            ...(semantic ? semanticSlashItems(editor, t) : []),
           ],
           query,
         ),
         query,
       ),
-    [editor, t],
+    [editor, t, semantic],
   );
 
   return (
