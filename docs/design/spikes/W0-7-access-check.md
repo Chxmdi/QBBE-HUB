@@ -207,19 +207,23 @@ not cached.
    factor too (as `is_org_admin` does). That is deliberately stricter than
    today, so the equivalence test would be updated on purpose, in the same
    change.
-3. **A program lead's reach depends on how they became lead.**
+3. **A program lead's reach depends on a grant row, not the lead column.**
    `has_program_capability` checks `program.lead_id` directly, which reaches
    the program and its program-level tasks. `has_project_capability` does
-   not look at `lead_id`; the lead reaches the projects only through the
-   `record_lead` grant a trigger writes. That trigger writes nothing if the
-   person is not an active member at the moment they are named, and nothing
-   rewrites it when they are reactivated. So such a lead can see the program
-   but not its projects. The prototype reproduces this exactly: the lead
-   column is a "this object only" grant, and the `record_lead` grant is the
-   one that is inherited. Equivalence round 2 tests this case. **Decision
-   needed:** this is almost certainly unintended. The real build should
-   probably make the lead a single inherited grant, which is a deliberate
-   behaviour change.
+   not look at `lead_id`: the lead reaches the projects only through the
+   `record_lead` grant a trigger writes. Today the app refuses to name an
+   inactive person as lead, so new data always has both. But a program whose
+   lead was set before that trigger existed, or whose `record_lead` row is
+   missing for any other reason (the migration logs these in
+   `scoped_access_backfill_issue`), gives its lead the program but not its
+   projects. The prototype reproduces this exactly: the lead column is a
+   "this object only" grant, and the `record_lead` grant is the inherited
+   one. Equivalence round 2 removes a lead's `record_lead` row to test this
+   case. **Decision needed:** this is almost certainly unintended. The real
+   build should make the lead one inherited grant, which is a deliberate
+   behaviour change. Before migrating, check the hosted
+   `scoped_access_backfill_issue` rows (read-only) to see whether any real
+   program is affected.
 4. **`program_inherited` project grants are redundant.** They are the old
    model's copy of a program grant onto each project. The prototype does not
    copy them and gets the same answers from inheritance, so they can be

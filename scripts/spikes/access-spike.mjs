@@ -3,6 +3,7 @@
 //
 //   node scripts/spikes/access-spike.mjs apply        # schema + dual write + backfill
 //   node scripts/spikes/access-spike.mjs equivalence  # app.can vs today's rules
+//   node scripts/spikes/access-spike.mjs equivalence resume  # from the changes on
 //   node scripts/spikes/access-spike.mjs timing       # board query and refresh cost
 //   node scripts/spikes/access-spike.mjs drop         # remove the prototype
 //
@@ -91,8 +92,12 @@ switch (command) {
     break;
   }
   case "equivalence":
-    await step("setup", file("equivalence-setup.sql"));
-    await round("1 backfilled");
+    // `equivalence resume` picks up after a completed round 1 (its fixture is
+    // committed), so a failure in the changes does not cost the first round.
+    if (process.argv[3] !== "resume") {
+      await step("setup", file("equivalence-setup.sql"));
+      await round("1 backfilled");
+    }
     await step("changes", file("equivalence-changes.sql"));
     await round("2 after changes");
     await step("report", file("equivalence-report.sql"));

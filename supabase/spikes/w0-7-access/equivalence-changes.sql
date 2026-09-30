@@ -52,12 +52,16 @@ begin
   update public.project set owner_id = v_staff where name = 'Perf Project 04';
   update public.program set lead_id = v_volunteer where id = v_closed_program;
 
-  -- A lead who is not an active member when named: today no record_lead grant
-  -- is written, so once reactivated they reach the program and its
-  -- program-level tasks through lead_id, but not its projects.
+  -- A lead with no record_lead grant, as rows from before that trigger look
+  -- (the app no longer lets an inactive person be named, which was the other
+  -- way to get one): today lead_id reaches the program and its program-level
+  -- tasks, but not its projects. Then the lead is deactivated and
+  -- reactivated, which today leaves their grants in place.
+  update public.program set lead_id = v_p33 where id = v_roles_program;
+  delete from public.program_access_grant
+  where program_id = v_roles_program and user_id = v_p33 and source = 'record_lead';
   update public.organization_membership set status = 'deactivated'
   where organization_id = v_org and user_id = v_p33;
-  update public.program set lead_id = v_p33 where id = v_roles_program;
   update public.organization_membership set status = 'active'
   where organization_id = v_org and user_id = v_p33;
 
