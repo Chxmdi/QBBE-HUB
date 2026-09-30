@@ -46,7 +46,7 @@ export function typeLabel(t: InsightT, type: ObjectTypeKey): string {
   return label === key ? type : label;
 }
 
-function shorten(title: string, max = 26): string {
+function shorten(title: string, max = 24): string {
   return title.length > max ? `${title.slice(0, max - 1)}…` : title;
 }
 
@@ -155,7 +155,12 @@ function GraphPicture({
                   x={node.x}
                   y={node.y + (isRoot ? 28 : 22)}
                   textAnchor="middle"
-                  className={`fill-ink text-[11px] ${isRoot ? "font-semibold" : ""}`}
+                  // A surface-coloured outline under the letters keeps lines
+                  // from striking through a label.
+                  paintOrder="stroke"
+                  strokeWidth={4}
+                  strokeLinejoin="round"
+                  className={`fill-ink stroke-surface text-[11px] ${isRoot ? "font-semibold" : ""}`}
                 >
                   {shorten(node.title)}
                 </text>

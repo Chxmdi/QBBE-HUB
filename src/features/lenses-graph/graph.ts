@@ -159,15 +159,17 @@ export function layoutGraph(
   }
   const ringNumbers = [...rings.keys()].sort((a, b) => a - b);
   const outer = ringNumbers.filter((ring) => ring > 0).length || 1;
-  const step = (centre - 40) / outer;
+  // The outer ring stays far enough in for a centred label to fit either side.
+  const step = (centre - 100) / outer;
   const placed: PlacedNode[] = [];
   ringNumbers.forEach((ring, index) => {
     const members = rings.get(ring)!.sort(
       (a, b) => a.ref.type.localeCompare(b.ref.type) || a.title.localeCompare(b.title) || a.ref.id.localeCompare(b.ref.id),
     );
     const radius = ring === 0 ? 0 : step * (ringNumbers[0] === 0 ? index : index + 1);
-    // Offset alternate rings so their labels do not line up on one spoke.
-    const offset = index % 2 === 0 ? 0 : Math.PI / Math.max(members.length, 1);
+    // Turn each ring by a different fixed angle so nodes on neighbouring
+    // rings do not line up on one spoke or one row, where labels collide.
+    const offset = index * 0.61;
     members.forEach((node, position) => {
       const angle = offset + (2 * Math.PI * position) / members.length - Math.PI / 2;
       placed.push({
