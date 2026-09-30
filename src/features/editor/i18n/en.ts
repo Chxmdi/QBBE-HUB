@@ -76,6 +76,7 @@ export const editorEn = {
   },
   readOnly: "You can read this but not change it.",
   a11y: {
+    blockType: "Block type",
     checkbox: "Done",
     slashList: "Blocks",
     toolbarControl: "Formatting option",

@@ -78,6 +78,7 @@ export const editorFrCA: EditorMessages = {
   },
   readOnly: "Vous pouvez lire ce contenu, mais pas le modifier.",
   a11y: {
+    blockType: "Type de bloc",
     checkbox: "Terminé",
     slashList: "Blocs",
     toolbarControl: "Option de mise en forme",
