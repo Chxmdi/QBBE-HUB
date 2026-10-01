@@ -110,4 +110,57 @@ the "later" bucket always holds the task.
 
 ## 4. How CI should run the suite with the switches on
 
-(Proposal; I3/lead own `ci.yml`.)
+Proposal only; I3 and the lead own `ci.yml`.
+
+**Recommendation: a second matrix dimension on the `browsers` job, not a
+nightly.** The switches are what the integration phase is about; a failure
+with them on should block the pull request that caused it, and a nightly
+would report it a day late to a queue nobody owns. The job already builds
+the app once per machine, so the only change is the environment:
+
+```yaml
+strategy:
+  matrix:
+    include:
+      - { suite: signed-in, part: 1, parts: 4 }
+      # … the seven rows as today …
+    flags: [off, all]          # new dimension: 14 rows instead of 7
+env:
+  WORKSPACE_OS_FLAGS: ${{ matrix.flags == 'all' && 'all' || '' }}
+```
+
+`WORKSPACE_OS_FLAGS` must be set on **both** the build step and the
+`next start` step (the server reads it per request; the client bundle does
+not need it). The `database-security` gate job needs no change: it already
+waits for every row of `browsers`.
+
+What the `all` rows must not run: the tests that assert a screen is hidden
+while its switch is off (section 3 lists them). They cannot pass under an
+override that can only turn switches on, and they are not wrong: they test
+the off state, which the `off` rows still cover. Two ways to express that,
+for the lead to choose:
+
+1. Title convention plus `--grep-invert`. Each such test already says so in
+   its title ("stays hidden while the switch is off", "Off by default", "with
+   the switch off"); normalise them to one phrase, e.g. end the title with
+   `[switch off]`, and the `all` rows run
+   `npx playwright test $SPECS --grep-invert "\[switch off\]"`. Cheap, and
+   visible in the test list. The `off` rows run everything, as today.
+2. A guard in the specs: `test.skip(process.env.WORKSPACE_OS_FLAGS === "all", "needs the switch off")`
+   at the top of those tests. Self-describing, but it marks them "skipped"
+   in the `all` report, which reads like a weakened suite.
+
+Either way the exit spec (`wos-mvp-exit.spec.ts`) is the inverse: it needs
+the switches on and should be excluded from the `off` rows the same way
+(`[switches on]`), or it fails there on its first `goto`.
+
+Cost: the signed-in parts take about 12–13 minutes each (section 3 has the
+measured times), so the extra dimension adds seven parallel machines of
+roughly the same length and no wall-clock time while the runner pool has
+room. If it does not, the fallback is the nightly workflow (`workflow_call`
+with a new `flags: all` input, the way `browsers` and `mobile` are passed
+today), accepting the day's delay.
+
+`tests/e2e/durations.json` has no entry for any `wos-*`, `workspace-os-*`
+or `lenses-*` spec, so `spec-groups.mjs` counts each as 30 s; the measured
+times in section 3 should go into that file so the four parts stay even.
