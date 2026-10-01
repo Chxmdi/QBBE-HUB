@@ -177,9 +177,9 @@ as $$
              when 'person' then 1 when 'task' then 2 when 'project' then 3
              when 'program' then 4 when 'channel' then 5 when 'meeting' then 6
              when 'event' then 7 when 'agenda' then 8 when 'contact' then 9
-             when 'document' then 10 when 'risk' then 11 when 'issue' then 12
-             when 'opportunity' then 13 when 'crm' then 14 when 'comment' then 15
-             else 16
+             when 'document' then 10 when 'page' then 11 when 'risk' then 12 when 'issue' then 13
+             when 'opportunity' then 14 when 'crm' then 15 when 'comment' then 16
+             else 17
            end,
            r.sort_key
   limit p_limit;
