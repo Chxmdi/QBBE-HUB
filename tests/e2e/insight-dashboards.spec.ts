@@ -8,6 +8,17 @@ import { expectAccessible, qaIds, setLensesSwitch } from "./insight";
  * Programmes), cross-programme totals and twelve-week trends with a table
  * alternative. Hidden until the lenses switch is on.
  */
+test("the dashboards are hidden while the switch is off [switch off]", async ({ page }) => {
+  const before = setLensesSwitch(false);
+  try {
+    await signIn(page, "owner");
+    await page.goto("/insight/dashboards");
+    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+  } finally {
+    setLensesSwitch(before);
+  }
+});
+
 test("the dashboards show role templates, programme totals and trends with a table view", async ({ page }) => {
   test.setTimeout(150_000);
   const marker = `Dash ${Date.now()}`;
@@ -24,13 +35,9 @@ test("the dashboards show role templates, programme totals and trends with a tab
        ('${orgId}', '${program}', '${marker} done', '${ownerId}', 'completed', null, now())`,
   );
 
-  const before = setLensesSwitch(false);
+  const before = setLensesSwitch(true);
   try {
     await signIn(page, "owner");
-    await page.goto("/insight/dashboards");
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-
-    setLensesSwitch(true);
     await page.goto("/insight/dashboards");
     await expect(page.getByRole("heading", { name: "Dashboards", exact: true })).toBeVisible();
     const templates = page.getByRole("navigation", { name: "Dashboard" });

@@ -22,6 +22,13 @@ const setSwitch = (on: boolean) =>
  * are seeded directly, so nothing reaches Google: the owner turns a calendar
  * event into a meeting, sends a Gmail message to capture and links a Drive file.
  */
+test("the Google page is hidden while the switch is off [switch off]", async ({ page }) => {
+  setSwitch(false);
+  await signIn(page, "owner");
+  await page.goto("/google");
+  await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+});
+
 test("a calendar event becomes a meeting, mail goes to capture, a Drive file is linked", async ({ page, context }) => {
   test.setTimeout(180_000);
   const stamp = Date.now();
@@ -39,13 +46,9 @@ test("a calendar event becomes a meeting, mail goes to capture, a Drive file is 
        values ('${orgId}', '${ownerId}', '${connection}', 'e2e-${stamp}', '${eventTitle}', now() + interval '3 days')`);
   sql(`insert into gmail_message (organization_id, user_id, connection_id, external_id, subject, snippet, from_address, received_at)
        values ('${orgId}', '${ownerId}', '${connection}', 'e2e-${stamp}', '${subject}', 'The hall is free', 'venue@example.com', now())`);
-  setSwitch(false);
+  setSwitch(true);
   try {
     await signIn(page, "owner");
-    await page.goto("/google");
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-
-    setSwitch(true);
     await page.goto("/google");
     await expect(page.getByRole("heading", { name: "Google in the Hub", level: 1 })).toBeVisible();
     expect(await axeProblems(page), "Google page accessibility").toEqual([]);

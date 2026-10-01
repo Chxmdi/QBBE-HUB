@@ -7,7 +7,7 @@ import type {
   ChangeSet,
   Uuid,
 } from "@/lib/objects/contracts";
-import { invertChanges } from "@/lib/objects/stubs";
+import { invertChanges } from "@/lib/objects/changes";
 
 /** Where change sets are kept (the change_set tables, or memory in tests). */
 export interface ChangeSetStore {
@@ -64,22 +64,33 @@ function failure(error: unknown): ActionResult {
 }
 
 /**
- * The persisted action registry (plan A8, replaces createActionRegistryStub).
- * Every run checks the action's capability on every target, runs it, and
- * records what it did as a change set. Undo checks the capability again on
- * everything touched, refuses when a value has changed since (and says which),
- * applies the inverse in reverse order and records it with undo_of.
+ * The persisted action registry (plan A8, M13). Every run checks the action's
+ * capability on every target, runs it, and records what it did as a change
+ * set. Undo checks the capability again on everything touched, refuses when a
+ * value has changed since (and says which), applies the inverse in reverse
+ * order and records it with undo_of.
+ *
+ * An action that changed nothing is a failure ("Nothing changed.") by
+ * default, as a bulk edit should be. `onEmpty: "ok"` is for runners whose
+ * steps may legitimately change no object (a workflow setting a status the
+ * task already has, or sending a notification): the step succeeds and the
+ * result carries an empty change set that is not stored, since there is
+ * nothing to undo.
  */
 export function createActionRegistry(options: {
   store: ChangeSetStore;
   writer: ObjectWriter;
   now?: () => Date;
+  onEmpty?: "fail" | "ok";
 }): ActionRegistry {
   const actions = new Map<string, ActionDefinition>();
   const now = options.now ?? (() => new Date());
 
+  // An action with no targets has nothing to pre-check: its own run decides
+  // (the table's RLS, the SQL function's rule), as for a task created outside
+  // any project or an approval request. Bulk edit refuses an empty selection
+  // itself, in its targets.
   const allowed = async (ids: Uuid[], capability: ActionDefinition["capability"], context: ActionContext) => {
-    if (ids.length === 0) return false;
     for (const id of ids) {
       if (!(await context.can(id, capability))) return false;
     }
@@ -106,7 +117,20 @@ export function createActionRegistry(options: {
       try {
         const marker = await options.store.begin();
         const changes = await action.run(context, input);
-        if (changes.length === 0) return { ok: false, reason: "failed", message: "Nothing changed." };
+        if (changes.length === 0) {
+          if (options.onEmpty !== "ok") return { ok: false, reason: "failed", message: "Nothing changed." };
+          return {
+            ok: true,
+            changeSet: {
+              id: crypto.randomUUID(),
+              actionKey: key,
+              actor: context.actor,
+              createdAt: now().toISOString(),
+              changes: [],
+              undoOf: null,
+            },
+          };
+        }
         const changeSet = await options.store.save({ actionKey: key, changes, context, marker, undoOf: null });
         return { ok: true, changeSet };
       } catch (error) {

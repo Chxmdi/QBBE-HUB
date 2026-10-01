@@ -1,45 +1,70 @@
 import type { Locale } from "@/lib/i18n/config";
-import type { TranslateFn, MessageKey } from "@/lib/i18n/translate";
 import type { PropertyValue, QueryResult, QuerySpec, RunQuery } from "@/lib/objects/contracts";
+import { findProperty, localized, type CatalogProperty, type LensCatalog } from "@/lib/query/catalog";
+import { isQueryRefusal } from "@/lib/query/errors";
 import { fill, pick, type AppsMessages } from "../i18n";
 import type { AppScreen } from "../schema";
 
 /**
  * One app screen. Views and dashboard tiles run a QuerySpec through `query`
- * (the task stand-in today, the S4 engine later), so the viewer only ever sees
- * records their own access allows. Types the stand-in cannot answer yet say
- * so plainly instead of showing an empty list that looks like "no records".
+ * (the lens query engine, as the viewer), so the viewer only ever sees
+ * records their own access allows. The engine's catalog says which columns a
+ * type has and how its options are labelled, in both languages. A type the
+ * engine does not know says so plainly instead of showing an empty list that
+ * looks like "no records".
  */
 
 const LIST_LIMIT = 25;
 const TILE_LIST_LIMIT = 5;
-/** Counts stop here and show "100+"; exact totals arrive with the query engine's count (S4). */
+/** Counts stop here and show "100+". */
 const COUNT_LIMIT = 100;
+/** Shown beside the title when the type has them, in this order, two at most. */
+const PREFERRED_COLUMNS = ["status", "due", "starts", "decided_time", "stage", "kind", "score", "likelihood", "edited_time"];
 
 type Props = {
   screen: AppScreen;
   query: RunQuery;
+  catalog: LensCatalog;
   messages: AppsMessages;
   locale: Locale;
-  t: TranslateFn;
 };
 
 async function tryQuery(query: RunQuery, spec: QuerySpec): Promise<QueryResult | null> {
   try {
     return await query(spec);
   } catch (error) {
-    // Only "this type is not queryable yet" becomes a notice; real failures reach the error boundary.
-    if (error instanceof Error && error.name === "QueryNotSupportedError") return null;
+    // Only a refusal ("this type or spec cannot be answered") becomes a notice; real failures reach the error boundary.
+    if (isQueryRefusal(error)) return null;
     throw error;
   }
 }
 
-function display(value: PropertyValue | null | undefined, t: TranslateFn, locale: Locale): string {
+/** The columns a screen shows for a type: the preferred ones it has, shown and sortable or grouped. */
+export function screenColumns(catalog: LensCatalog, type: string): CatalogProperty[] {
+  const properties = catalog[type]?.properties ?? [];
+  return PREFERRED_COLUMNS.map((key) => properties.find((p) => p.key === key && !p.filterOnly))
+    .filter((p): p is CatalogProperty => p !== undefined)
+    .slice(0, 2);
+}
+
+/** The property a board groups by: the screen's choice, else status, else the first groupable one with options. */
+export function boardGroup(catalog: LensCatalog, type: string, chosen: string | undefined): string | undefined {
+  const properties = catalog[type]?.properties ?? [];
+  if (chosen) return chosen;
+  return (properties.find((p) => p.key === "status" && p.groupable) ?? properties.find((p) => p.groupable && p.choices))?.key;
+}
+
+function label(property: CatalogProperty | undefined, key: string, locale: Locale): string {
+  const choice = property?.choices?.find((c) => c.key === key);
+  return choice ? localized(choice.label, locale) : key;
+}
+
+function display(property: CatalogProperty | undefined, value: PropertyValue | null | undefined, locale: Locale): string {
   if (!value || value.value === null || value.value === undefined) return "—";
-  if (value.kind === "status" && typeof value.value === "string") {
-    return t(`shell.status.task.${value.value}` as MessageKey);
+  if ((value.kind === "status" || value.kind === "select") && typeof value.value === "string") {
+    return label(property, value.value, locale);
   }
-  if (value.kind === "date" && typeof value.value === "string") {
+  if ((value.kind === "date" || value.kind === "created_time" || value.kind === "edited_time") && typeof value.value === "string") {
     const date = new Date(value.value.length === 10 ? `${value.value}T12:00:00Z` : value.value);
     return Number.isNaN(date.getTime()) ? value.value : new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(date);
   }
@@ -48,9 +73,7 @@ function display(value: PropertyValue | null | undefined, t: TranslateFn, locale
   return String(value.value);
 }
 
-const COLUMNS = ["status", "due"] as const;
-
-function RowsTable({ result, messages, locale, t, caption }: { result: QueryResult; messages: AppsMessages; locale: Locale; t: TranslateFn; caption: string }) {
+function RowsTable({ result, columns, messages, locale, caption }: { result: QueryResult; columns: CatalogProperty[]; messages: AppsMessages; locale: Locale; caption: string }) {
   if (result.rows.length === 0) return <p className="text-[13.5px] text-muted">{messages.screens.empty}</p>;
   return (
     <div className="overflow-x-auto rounded-(--radius-md) border border-line bg-surface">
@@ -59,9 +82,9 @@ function RowsTable({ result, messages, locale, t, caption }: { result: QueryResu
         <thead className="border-b border-line bg-surface-soft text-[12.5px] text-muted">
           <tr>
             <th scope="col" className="px-3 py-2 font-medium">{messages.screens.title}</th>
-            {COLUMNS.map((c) => (
-              <th key={c} scope="col" className="px-3 py-2 font-medium">
-                {c === "status" ? messages.screens.status : messages.screens.due}
+            {columns.map((c) => (
+              <th key={c.key} scope="col" className="px-3 py-2 font-medium">
+                {localized(c.name, locale)}
               </th>
             ))}
           </tr>
@@ -70,8 +93,8 @@ function RowsTable({ result, messages, locale, t, caption }: { result: QueryResu
           {result.rows.map((row) => (
             <tr key={row.ref.id}>
               <td className="px-3 py-2 text-ink">{row.title}</td>
-              {COLUMNS.map((c) => (
-                <td key={c} className="px-3 py-2 text-muted">{display(row.values[c], t, locale)}</td>
+              {columns.map((c) => (
+                <td key={c.key} className="px-3 py-2 text-muted">{display(c, row.values[c.key], locale)}</td>
               ))}
             </tr>
           ))}
@@ -81,7 +104,7 @@ function RowsTable({ result, messages, locale, t, caption }: { result: QueryResu
   );
 }
 
-export async function AppScreenView({ screen, query, messages, locale, t }: Props) {
+export async function AppScreenView({ screen, query, catalog, messages, locale }: Props) {
   const title = pick(screen.title, locale);
 
   if (screen.kind === "page") {
@@ -92,25 +115,28 @@ export async function AppScreenView({ screen, query, messages, locale, t }: Prop
   }
 
   if (screen.kind === "lens") {
+    const columns = screenColumns(catalog, screen.type);
+    const groupBy = screen.lens === "board" ? boardGroup(catalog, screen.type, screen.groupBy) : undefined;
     const spec: QuerySpec = {
       version: 1,
       types: [screen.type],
-      properties: [...COLUMNS],
+      properties: columns.map((c) => c.key),
       limit: LIST_LIMIT,
-      ...(screen.lens === "board" ? { groupBy: screen.groupBy ?? "status" } : {}),
+      ...(groupBy ? { groupBy } : {}),
     };
-    const result = await tryQuery(query, spec);
+    const result = catalog[screen.type] ? await tryQuery(query, spec) : null;
     const kind = messages.lensKinds[screen.lens];
     if (!result) {
       return <p className="text-[13.5px] text-muted">{fill(messages.screens.notYet, { type: screen.type, kind })}</p>;
     }
-    if (screen.lens === "board" && result.groups) {
+    if (screen.lens === "board" && result.groups && groupBy) {
+      const property = findProperty(catalog, screen.type, groupBy);
       return (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label={title}>
           {result.groups.map((group) => (
             <li key={group.key ?? "none"} className="rounded-(--radius-md) border border-line bg-surface-soft/60 p-3">
               <h3 className="mb-2 text-[13px] font-semibold text-ink">
-                {group.key ? display({ kind: "status", value: group.key }, t, locale) : "—"}{" "}
+                {group.key ? label(property, group.key, locale) : "—"}{" "}
                 <span className="font-normal text-muted">({group.rowIds.length})</span>
               </h3>
               <ul className="space-y-1.5">
@@ -128,7 +154,7 @@ export async function AppScreenView({ screen, query, messages, locale, t }: Prop
     }
     return (
       <div className="space-y-2">
-        <RowsTable result={result} messages={messages} locale={locale} t={t} caption={title} />
+        <RowsTable result={result} columns={columns} messages={messages} locale={locale} caption={title} />
         {result.nextCursor ? <p className="text-[12.5px] text-muted">{fill(messages.screens.more, { count: LIST_LIMIT })}</p> : null}
       </div>
     );
@@ -140,11 +166,11 @@ export async function AppScreenView({ screen, query, messages, locale, t }: Prop
       const spec: QuerySpec = {
         version: 1,
         types: [widget.type],
-        properties: [...COLUMNS],
+        properties: screenColumns(catalog, widget.type).map((c) => c.key),
         limit: widget.kind === "count" ? COUNT_LIMIT : TILE_LIST_LIMIT,
         ...(widget.filter ? { filter: { property: widget.filter.property, op: "eq" as const, value: widget.filter.value } } : {}),
       };
-      return { widget, result: await tryQuery(query, spec) };
+      return { widget, result: catalog[widget.type] ? await tryQuery(query, spec) : null };
     }),
   );
   return (

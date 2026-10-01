@@ -9,6 +9,7 @@ export const universalTasksEn = {
       manual: "task form",
       meeting: "meeting",
       document: "document",
+      page: "page",
       comment: "comment",
       project: "project template",
       message: "message",

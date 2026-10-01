@@ -21,6 +21,13 @@ const setSwitch = (on: boolean) =>
  * Workspace upkeep (V3-2): the owner sees a stale page with its owner and
  * confirms it is still current, and sees possible duplicate tasks.
  */
+test("upkeep is hidden while the switch is off [switch off]", async ({ page }) => {
+  setSwitch(false);
+  await signIn(page, "owner");
+  await page.goto("/upkeep");
+  await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+});
+
 test("upkeep lists a stale page for review and possible duplicates", async ({ page, context }) => {
   test.setTimeout(150_000);
   const stamp = Date.now();
@@ -34,13 +41,9 @@ test("upkeep lists a stale page for review and possible duplicates", async ({ pa
   );
   sql(`set session_replication_role = replica; update document set updated_at = now() - interval '400 days' where id = '${docId}'`);
   sql(`insert into task (organization_id, title, created_by) values ('${orgId}', '${taskTitle}', '${ownerId}'), ('${orgId}', '${taskTitle.toLowerCase()}!', '${ownerId}')`);
-  setSwitch(false);
+  setSwitch(true);
   try {
     await signIn(page, "owner");
-    await page.goto("/upkeep");
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-
-    setSwitch(true);
     await page.goto("/upkeep?days=365");
     await expect(page.getByRole("heading", { name: "Workspace upkeep", level: 1 })).toBeVisible();
     const stale = page.getByRole("listitem").filter({ hasText: docTitle });

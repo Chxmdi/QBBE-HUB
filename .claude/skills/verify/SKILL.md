@@ -29,14 +29,24 @@ description: Run the QBBE Hub app locally against the local Supabase stack and d
   itself follows the browser language, so its labels change too).
 - Don't `pkill -f "next start"` from a command whose own text contains that
   phrase; it kills the shell running it.
+- Browser specs against the running build, the way CI runs them:
+  `NO_PROXY='*' npx playwright test <specs> --project=chromium --grep-invert "\[switch off\]"`
+  for a `WORKSPACE_OS_FLAGS=all` build (`--grep-invert "\[switches on\]"` for a
+  plain one). Without `--project` Playwright runs all five browser projects,
+  five times the work. After a `db reset`, delete `playwright/.auth/qa-owner-totp`
+  and `qa-admin-totp`: the stored secrets belong to factors the reset removed.
 
 ## Known local limits
 
-- Background jobs (virus scans, notification email, Gmail sync) need
-  `app.configure_job_runner(url, secret)`; without it uploaded and generated
-  files stay "Security check pending" and cannot be opened.
-  `GET /api/health/jobs` reports the status. The database container cannot
-  reach 127.0.0.1:3000, so jobs still do not run locally even when it reads
-  "ready".
+- Background jobs (virus scans, notification email, Gmail sync) are fired by
+  the database's cron through `app.configure_job_runner(url, secret)`, and the
+  database container cannot reach 127.0.0.1:3000, so they never fire locally.
+  Run one by hand instead: start the site with `CRON_JOB_SECRET=<32+ chars>`
+  and `CRON_JOB_SECRET=<same> npm run jobs:run -- <job>`.
+- Uploads stay "Security check pending" until `scan-documents` (receipts:
+  `scan-receipts`; forms: `scan-form-files`) has a scanner. Locally run
+  `docker run --rm -p 3310:3310 clamav/clamav` (it needs to download
+  signatures once) and start the site with `CLAMAV_HOST=127.0.0.1`, then run
+  the job. Without a scanner the file stays pending, by design.
 - The seed has no fiscal year and an unapproved chart of accounts, so ledger
   posting, statements and fund releases need setup before they show data.
