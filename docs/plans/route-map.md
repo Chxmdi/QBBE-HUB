@@ -118,6 +118,7 @@ Not migration, on purpose:
 | `/lenses/feed` | beta | `wos_lenses` |  | Feed lens (V1-4) |
 | `/lenses/dashboard` | beta | `wos_lenses` |  | Dashboard lens (V1-5) |
 | `/lenses/find` | beta | `wos_lenses` |  | Find (M12) |
+| `/lenses/import` | beta | `wos_lenses` |  | CSV import (U15) |
 | `/lenses/embed` | beta | `wos_lenses` |  | Query block preview harness (M8e) |
 | `/pages` | beta | `wos_pages` |  | Pages: sidebar tree, favourites, recent (M4a) |
 | `/pages/[pageId]` | beta | `wos_pages` |  | One page in the block editor (M4b; editor also behind wos_editor) |
