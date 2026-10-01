@@ -11,6 +11,8 @@ import { workflowActionKeys } from "../actions-catalog";
 import { decideReviewSchema, retrySchema, saveWorkflowSchema, stopSchema, testRunSchema } from "../editor-model";
 import { validateGraph } from "../graph";
 import { fill, workflowMessages } from "../i18n";
+import { describeTestStep, type TestStepDetail } from "../test-run-detail";
+import { activityRowToEvent, type ActivityEventRow } from "../trigger";
 import { executeWorkflowRun, retryRunFromStep, webhookSecret, type GraphRule } from "./run";
 
 /**
@@ -28,6 +30,8 @@ export interface TestRunStep {
   kind: string;
   status: string;
   error: string | null;
+  /** What the step saw and would have done, for the test panel (U10). */
+  detail: TestStepDetail;
 }
 
 export type TestRunResult =
@@ -136,7 +140,7 @@ export async function testRunWorkflow(input: unknown): Promise<TestRunResult> {
 
   const rule: GraphRule = { ...(visible as Omit<GraphRule, "graph">), graph: graph.graph };
   const objectType = rule.graph.trigger.objectTypes[0] ?? "task";
-  const event: ObjectEvent = {
+  let event: ObjectEvent = {
     id: crypto.randomUUID(),
     organizationId: checked.organizationId,
     object: { id: parsed.data.objectId, type: objectType },
@@ -150,6 +154,19 @@ export async function testRunWorkflow(input: unknown): Promise<TestRunResult> {
     summary: "Test run",
     occurredAt: new Date().toISOString(),
   };
+  if (parsed.data.eventId) {
+    // A real recent event, read through the admin's session (members may
+    // read activity), replayed as it happened.
+    const { data: row } = await userDb
+      .from("activity_event")
+      .select("id, organization_id, actor_id, verb, source_type, source_id, project_id, program_id, summary, metadata, created_at")
+      .eq("id", parsed.data.eventId)
+      .eq("organization_id", checked.organizationId)
+      .maybeSingle();
+    const replayed = row ? activityRowToEvent(row as ActivityEventRow) : null;
+    if (!replayed) return { ok: false, error: m.errors.eventNotFound };
+    event = replayed;
+  }
 
   try {
     const record = await executeWorkflowRun(createSupabaseServiceClient(), { rule, event, test: true });
@@ -166,6 +183,7 @@ export async function testRunWorkflow(input: unknown): Promise<TestRunResult> {
         kind: step.kind,
         status: step.status,
         error: step.error,
+        detail: describeTestStep(step),
       })),
     };
   } catch {

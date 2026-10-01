@@ -45,6 +45,15 @@ const VERB_ALIASES: Record<string, ObjectEventVerb> = {
   commented_on: "commented",
 };
 
+/** The raw activity verbs that become these contract verbs, for reading events back. */
+export function activityVerbsFor(verbs: readonly string[]): string[] {
+  const wanted = new Set(verbs);
+  const raw = new Set<string>();
+  for (const verb of objectEventVerbs) if (wanted.has(verb)) raw.add(verb);
+  for (const [alias, verb] of Object.entries(VERB_ALIASES)) if (wanted.has(verb)) raw.add(alias);
+  return [...raw];
+}
+
 function toVerb(raw: string): ObjectEventVerb | null {
   if ((objectEventVerbs as readonly string[]).includes(raw)) return raw as ObjectEventVerb;
   return VERB_ALIASES[raw] ?? null;
