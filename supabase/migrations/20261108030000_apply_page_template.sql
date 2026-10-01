@@ -164,7 +164,8 @@ begin
   -- the workspace. The parent decides the visibility, as the page trigger does.
   if p_parent is not null then
     select p.visibility into v_visibility from public.page p
-    where p.id = p_parent and p.deleted_at is null;
+    where p.id = p_parent and p.deleted_at is null
+      and p.organization_id = v_template.organization_id;
     if not found then
       raise exception 'The parent page is not available' using errcode = 'P0002';
     end if;

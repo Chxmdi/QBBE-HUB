@@ -124,6 +124,10 @@ export async function applyPageTemplateV2(input: unknown): Promise<TemplatesV2Re
   if (limited) return limited;
   const { templateId, parentPageId, title, start, locale, variables } = parsed.data;
   const supabase = await createSupabaseServerClient();
+  // Someone in two organizations sees both galleries; a page is made only in
+  // the organization they are working in, as createPage does.
+  const { data: owner } = await supabase.from("template_v2").select("organization_id").eq("id", templateId).maybeSingle();
+  if (!owner || owner.organization_id !== session.organizationId) return { ok: false, error: m.errors.unavailable };
   const { data, error } = await supabase.rpc("apply_page_template_v2", {
     p_template: templateId,
     p_parent: parentPageId,
@@ -152,15 +156,19 @@ export interface PageTemplateSummary {
   body: PageBody;
 }
 
-/** The published page templates, named in the reader's language, for the pages sidebar. */
-export async function listPageTemplatesV2(): Promise<PageTemplateSummary[]> {
-  if (!(await isEnabled(TEMPLATES_FLAG)) || !(await isEnabled("wos_pages"))) return [];
-  await requireSession();
+/**
+ * The published page templates of the reader's organization, named in their
+ * language, for the pages sidebar; null while templates are switched off.
+ */
+export async function listPageTemplatesV2(): Promise<PageTemplateSummary[] | null> {
+  if (!(await isEnabled(TEMPLATES_FLAG)) || !(await isEnabled("wos_pages"))) return null;
+  const session = await requireSession();
   const fr = (await getLocale()) === "fr-CA";
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("template_v2")
     .select("id, name_en, name_fr, description_en, description_fr, body")
+    .eq("organization_id", session.organizationId)
     .eq("scope", "page")
     .eq("status", "published")
     .order(fr ? "name_fr" : "name_en")

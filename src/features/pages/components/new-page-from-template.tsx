@@ -38,6 +38,8 @@ export function NewPageFromTemplate({
   const id = React.useId();
   const [open, setOpen] = React.useState(false);
   const [templates, setTemplates] = React.useState<PageTemplateSummary[] | null>(null);
+  /** Why there is no list: templates switched off, or the request failed. */
+  const [problem, setProblem] = React.useState<string | null>(null);
   const [chosen, setChosen] = React.useState("");
   const label = t("sidebar.newPageFromTemplate");
 
@@ -50,17 +52,26 @@ export function NewPageFromTemplate({
   }, [pages, editableIds]);
 
   React.useEffect(() => {
-    if (!open || templates !== null) return;
+    if (!open || templates !== null || problem !== null) return;
     let cancelled = false;
-    listPageTemplatesV2().then((rows) => {
-      if (cancelled) return;
-      setTemplates(rows);
-      setChosen((current) => current || rows[0]?.id || "");
-    });
+    listPageTemplatesV2().then(
+      (rows) => {
+        if (cancelled) return;
+        if (rows === null) {
+          setProblem(text.pageForm.templatesOff);
+          return;
+        }
+        setTemplates(rows);
+        setChosen((current) => current || rows[0]?.id || "");
+      },
+      () => {
+        if (!cancelled) setProblem(text.errors.generic);
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [open, templates]);
+  }, [open, templates, problem, text]);
 
   const template = templates?.find((row) => row.id === chosen) ?? null;
 
@@ -75,9 +86,22 @@ export function NewPageFromTemplate({
       >
         <LayoutTemplate className="size-4" aria-hidden />
       </button>
-      <Dialog open={open} onClose={() => setOpen(false)} title={label} className="lg:w-[min(900px,calc(100vw-2rem))]">
+      <Dialog
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          // A failed load is tried again on the next open.
+          setProblem(null);
+        }}
+        title={label}
+        className="lg:w-[min(900px,calc(100vw-2rem))]"
+      >
         <div className="space-y-4 p-5">
-          {templates === null ? (
+          {problem ? (
+            <p className="text-sm text-muted" role="alert">
+              {problem}
+            </p>
+          ) : templates === null ? (
             <p className="text-sm text-muted" role="status">
               {text.pageForm.loading}
             </p>
