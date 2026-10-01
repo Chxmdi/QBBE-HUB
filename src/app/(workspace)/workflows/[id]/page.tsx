@@ -7,13 +7,23 @@ import { requireAdminAal2 } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getFormatters, getLocale } from "@/lib/i18n/server";
 import { JsonWorkflowEditor, StopSwitch } from "@/features/workflows/components/advanced-controls";
+import { FailureHistory } from "@/features/workflows/components/failure-history";
 import { SigningKeyPanel } from "@/features/workflows/components/review-and-signing";
 import { RunHistory } from "@/features/workflows/components/run-history";
-import { TestRunPanel, WorkflowEditor } from "@/features/workflows/components/workflow-editor";
+import { TestRunPanel } from "@/features/workflows/components/test-run-panel";
+import { WorkflowEditor } from "@/features/workflows/components/workflow-editor";
 import { graphToEditor } from "@/features/workflows/editor-model";
 import { validateGraph } from "@/features/workflows/graph";
 import { fill, workflowMessages } from "@/features/workflows/i18n";
-import { getWorkflow, listRuns } from "@/features/workflows/services/workflow.queries";
+import {
+  getWorkflow,
+  listFailedRuns,
+  listRecentEvents,
+  listRuns,
+  listWorkflowNames,
+  loadWorkflowCatalog,
+  parseOutcomeFilter,
+} from "@/features/workflows/services/workflow.queries";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: workflowMessages(await getLocale()).editTitle };
@@ -27,17 +37,19 @@ export default async function WorkflowPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ mode?: string }>;
+  searchParams: Promise<{ mode?: string; outcome?: string }>;
 }) {
   if (!(await isEnabled("wos_workflows_v2"))) notFound();
   const session = await requireAdminAal2();
   const { id } = await params;
-  const { mode } = await searchParams;
+  const { mode, outcome: rawOutcome } = await searchParams;
+  const outcome = parseOutcomeFilter(rawOutcome);
   if (!z.string().uuid().safeParse(id).success) notFound();
   const workflow = await getWorkflow(session.organizationId, id);
   if (!workflow) notFound();
 
-  const m = workflowMessages(await getLocale());
+  const locale = await getLocale();
+  const m = workflowMessages(locale);
   const f = await getFormatters();
   const meta = {
     name: workflow.name,
@@ -48,7 +60,14 @@ export default async function WorkflowPage({
   const graph = validateGraph(workflow.graph);
   const editor = graph.ok ? graphToEditor(graph.graph, meta) : null;
   const asJson = mode === "json" || !editor;
-  const runs = await listRuns(workflow.id);
+  const trigger = graph.ok ? graph.graph.trigger : { objectTypes: [], verbs: [] as never[] };
+  const [runs, failures, workflows, recentEvents, catalog] = await Promise.all([
+    listRuns(workflow.id, 50, outcome),
+    listFailedRuns(workflow.id, session.organizationId),
+    listWorkflowNames(session.organizationId),
+    listRecentEvents(session.organizationId, trigger),
+    loadWorkflowCatalog(),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -71,7 +90,7 @@ export default async function WorkflowPage({
       ) : (
         <>
           <p className="text-sm"><Link href={`/workflows/${workflow.id}?mode=json`} className={linkClass}>{m.json.open}</Link></p>
-          <WorkflowEditor id={workflow.id} initial={editor} m={m} />
+          <WorkflowEditor id={workflow.id} initial={editor} m={m} catalog={catalog} locale={locale} workflows={workflows} />
         </>
       )}
       <StopSwitch
@@ -81,8 +100,17 @@ export default async function WorkflowPage({
         m={m}
       />
       {graph.ok && graph.graph.steps.some((step) => step.kind === "webhook") ? <SigningKeyPanel id={workflow.id} m={m} /> : null}
-      <TestRunPanel id={workflow.id} m={m} defaultObjectId="" />
-      <RunHistory runs={runs} m={m} f={f} timeZone={session.timeZone} workflowId={workflow.id} />
+      <TestRunPanel
+        id={workflow.id}
+        m={m}
+        defaultObjectId=""
+        objectType={trigger.objectTypes[0] ?? "task"}
+        changedProperty={graph.ok ? graph.graph.trigger.changedProperty ?? "" : ""}
+        recentEvents={recentEvents}
+        timeZone={session.timeZone}
+      />
+      <FailureHistory runs={failures} m={m} f={f} timeZone={session.timeZone} scope="workflow" />
+      <RunHistory runs={runs} m={m} f={f} timeZone={session.timeZone} workflowId={workflow.id} outcome={outcome} />
     </div>
   );
 }

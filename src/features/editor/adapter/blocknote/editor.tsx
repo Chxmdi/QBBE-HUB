@@ -8,20 +8,12 @@ import {
   BlockNoteEditor,
   BlockNoteSchema,
   defaultBlockSpecs,
-  filterSuggestionItems,
-  insertOrUpdateBlockForSlashMenu,
   type PartialBlock,
 } from "@blocknote/core";
 import { blocksToYDoc, withCollaboration } from "@blocknote/core/yjs";
 import { en, fr } from "@blocknote/core/locales";
-import {
-  getDefaultReactSlashMenuItems,
-  SuggestionMenuController,
-  useCreateBlockNote,
-  type DefaultReactSuggestionItem,
-} from "@blocknote/react";
+import { getDefaultReactSlashMenuItems, SuggestionMenuController, useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/ariakit";
-import { Activity, Bookmark, FileText, Gavel, Link2, ListChecks, ListTodo, MessageSquareWarning, PanelTop, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { useLocale } from "@/lib/i18n/client";
@@ -33,7 +25,7 @@ import { createWorkspaceBlocks } from "./blocks";
 import { createSemanticBlocks, HandlersBox } from "./semantic-blocks";
 import { SuggestionLayer, TurnIntoTasksDialog, turnIntoPage } from "./progressive";
 import type { Locale } from "@/lib/i18n/config";
-import { rankByTitle } from "@/features/editor/adapter/slash";
+import { rankSlashItems, slashItems, textTypes, turnIntoTargets } from "@/features/editor/registry";
 import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
 
 /**
@@ -48,7 +40,7 @@ import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
  *   F8           Quebec wording over BlockNote's France French
  */
 
-function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
+export function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
   const { callout, bookmark, embed } = createWorkspaceBlocks(t);
   const s = createSemanticBlocks(t, locale, semantic);
   return BlockNoteSchema.create({
@@ -256,79 +248,8 @@ function focusOutside(root: HTMLElement, direction: "before" | "after") {
   target?.focus();
 }
 
-function workspaceSlashItems(editor: Editor, t: EditorT): DefaultReactSuggestionItem[] {
-  const group = t("slash.group");
-  const item = (key: "callout" | "bookmark" | "embed", icon: React.JSX.Element): DefaultReactSuggestionItem => ({
-    title: t(`slash.${key}.title`),
-    subtext: t(`slash.${key}.subtext`),
-    aliases: t(`slash.${key}.aliases`).split(","),
-    group,
-    icon,
-    onItemClick: () => {
-      insertOrUpdateBlockForSlashMenu(editor, { type: key } as PartialBlock<Schema["blockSchema"]>);
-    },
-  });
-  return [
-    item("callout", <MessageSquareWarning size={18} aria-hidden />),
-    item("bookmark", <Bookmark size={18} aria-hidden />),
-    item("embed", <PanelTop size={18} aria-hidden />),
-  ];
-}
-
-type SemanticItem = "task" | "decision" | "person" | "status" | "query" | "libraryFile" | "pageLink";
-
-function semanticSlashItems(editor: Editor, t: EditorT): DefaultReactSuggestionItem[] {
-  const group = t("slash.group");
-  const icons: Record<SemanticItem, React.JSX.Element> = {
-    task: <ListChecks size={18} aria-hidden />,
-    decision: <Gavel size={18} aria-hidden />,
-    person: <UserRound size={18} aria-hidden />,
-    status: <Activity size={18} aria-hidden />,
-    query: <ListTodo size={18} aria-hidden />,
-    libraryFile: <FileText size={18} aria-hidden />,
-    pageLink: <Link2 size={18} aria-hidden />,
-  };
-  return (Object.keys(icons) as SemanticItem[]).map((key) => ({
-    title: t(`semantic.items.${key}.title`),
-    subtext: t(`semantic.items.${key}.subtext`),
-    aliases: t(`semantic.items.${key}.aliases`).split(","),
-    group,
-    icon: icons[key],
-    onItemClick: () => {
-      insertOrUpdateBlockForSlashMenu(editor, { type: key } as PartialBlock<Schema["blockSchema"]>);
-    },
-  }));
-}
-
-/** Turn-into targets offered by the block menu. */
-type TurnIntoKey =
-  | "paragraph"
-  | "heading1"
-  | "heading2"
-  | "heading3"
-  | "bulletListItem"
-  | "numberedListItem"
-  | "checkListItem"
-  | "toggleListItem"
-  | "quote"
-  | "callout"
-  | "codeBlock";
-
-const TURN_INTO: { key: TurnIntoKey; block: PartialBlock<Schema["blockSchema"]> }[] = [
-  { key: "paragraph", block: { type: "paragraph" } },
-  { key: "heading1", block: { type: "heading", props: { level: 1 } } },
-  { key: "heading2", block: { type: "heading", props: { level: 2 } } },
-  { key: "heading3", block: { type: "heading", props: { level: 3 } } },
-  { key: "bulletListItem", block: { type: "bulletListItem" } },
-  { key: "numberedListItem", block: { type: "numberedListItem" } },
-  { key: "checkListItem", block: { type: "checkListItem" } },
-  { key: "toggleListItem", block: { type: "toggleListItem" } },
-  { key: "quote", block: { type: "quote" } },
-  { key: "callout", block: { type: "callout" } },
-  { key: "codeBlock", block: { type: "codeBlock" } },
-];
-
-const TEXT_TYPES = new Set(["paragraph", "heading", "bulletListItem", "numberedListItem", "checkListItem", "toggleListItem", "quote", "callout", "codeBlock"]);
+/** Blocks the block menu offers "turn into" for, from the block registry (U2). */
+const TEXT_TYPES = textTypes();
 
 function BlockMenu({
   editor,
@@ -356,6 +277,7 @@ function BlockMenu({
     requestAnimationFrame(() => editor.focus());
   };
   const canTurn = TEXT_TYPES.has(current.type);
+  const turnInto = turnIntoTargets(current.type);
   return (
     <Dialog open onClose={() => done()} title={t("blockMenu.label")}>
       <div className="flex flex-col gap-1" role="group" aria-label={t("blockMenu.label")}>
@@ -398,17 +320,17 @@ function BlockMenu({
         ) : null}
         {canTurn ? (
           <div className="my-1 border-t border-line pt-1">
-            {TURN_INTO.map(({ key, block }) => (
+            {turnInto.map(({ key, labelKey, block }) => (
               <Button
                 key={key}
                 variant="ghost"
                 className="w-full justify-start"
                 onClick={() => {
-                  editor.updateBlock(current, block);
+                  editor.updateBlock(current, block as PartialBlock<Schema["blockSchema"]>);
                   done();
                 }}
               >
-                {t("blockMenu.turnInto", { type: t(`types.${key}`) })}
+                {t("blockMenu.turnInto", { type: t(labelKey) })}
               </Button>
             ))}
           </div>
@@ -499,15 +421,12 @@ export default function BlockNoteEditorImpl({
 
   const getItems = React.useCallback(
     async (query: string) =>
-      rankByTitle(
-        filterSuggestionItems(
-          [
-            ...getDefaultReactSlashMenuItems(editor).filter((item) => (item as { key?: string }).key !== "emoji"),
-            ...workspaceSlashItems(editor, t),
-            ...(semantic ? semanticSlashItems(editor, t) : []),
-          ],
-          query,
-        ),
+      rankSlashItems(
+        slashItems(t, editor, {
+          // F7: the emoji picker is left out.
+          defaults: getDefaultReactSlashMenuItems(editor).filter((item) => (item as { key?: string }).key !== "emoji"),
+          semantic: Boolean(semantic),
+        }),
         query,
       ),
     [editor, t, semantic],
