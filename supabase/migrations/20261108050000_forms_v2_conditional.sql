@@ -16,7 +16,8 @@
 --     properties are created from the form when the type does not exist yet.
 --     Native types other than task (project, meeting, document ...) are not
 --     created by forms: their rows live in their own tables and screens, so a
---     form cannot use one of their keys.
+--     new form cannot use one of their keys. A form already published with
+--     one keeps answering as before (the response is its own record).
 --   * form_v2_response records what was created (created_object_type and
 --     created_object_id) so the responses screen can link to it.
 --
@@ -136,7 +137,7 @@ begin
         if v_ref_kind = 'file' then
           return 'A file can only be checked for being present';
         end if;
-        if jsonb_typeof(s->'value') not in ('string', 'number', 'boolean')
+        if coalesce(jsonb_typeof(s->'value'), 'missing') not in ('string', 'number', 'boolean')
            or (jsonb_typeof(s->'value') = 'string'
                and char_length(btrim(s->>'value')) not between 1 and 200) then
           return 'A condition needs a value';
@@ -331,7 +332,13 @@ $$;
 -- not exist yet, with a custom property for every form property the type
 -- does not define. Refuses the native types (except task, handled apart):
 -- their records are made in their own screens.
-create or replace function app.form_v2_ensure_type(p_organization_id uuid, p_type_key text, p_properties jsonb)
+-- p_strict (when a form is opened) refuses a form whose question clashes with
+-- an existing property of the type: same key, another kind, or archived. At
+-- answer time the clash only means that answer is not copied to the record
+-- (it stays in the response).
+create or replace function app.form_v2_ensure_type(
+  p_organization_id uuid, p_type_key text, p_properties jsonb, p_strict boolean default false
+)
 returns uuid
 language plpgsql volatile security definer set search_path = '' as $$
 declare
@@ -339,6 +346,7 @@ declare
   v_kind text;
   v_position integer;
   p jsonb;
+  v_existing public.property_definition%rowtype;
 begin
   if p_type_key = 'task' then
     raise exception 'Tasks are created through the task table' using errcode = '23514';
@@ -351,18 +359,27 @@ begin
       using errcode = '23514';
   end if;
   if v_type_id is null then
+    -- Two first answers at once both get here; the second finds the first's.
     insert into public.object_type (organization_id, key, name_en, name_fr, kind, default_lens)
     values (p_organization_id, p_type_key,
       initcap(replace(p_type_key, '_', ' ')), initcap(replace(p_type_key, '_', ' ')),
       'custom', 'table')
-    returning id into v_type_id;
+    on conflict (organization_id, key) do nothing;
+    select t.id into v_type_id from public.object_type t
+    where t.organization_id = p_organization_id and t.key = p_type_key;
   end if;
   select coalesce(max(d.position), 0) into v_position
   from public.property_definition d where d.type_id = v_type_id;
   for p in select value from jsonb_array_elements(p_properties) loop
-    if not exists (
-      select 1 from public.property_definition d
-      where d.type_id = v_type_id and d.key = p->>'key') then
+    select * into v_existing from public.property_definition d
+    where d.type_id = v_type_id and d.key = p->>'key';
+    if found then
+      if p_strict and (v_existing.kind <> p->>'kind' or v_existing.archived_at is not null
+                       or v_existing.system_column is not null) then
+        raise exception 'The % type already has a % property that this question cannot fill',
+          p_type_key, p->>'key' using errcode = '23514';
+      end if;
+    else
       v_position := v_position + 1;
       insert into public.property_definition
         (organization_id, type_id, key, name_en, name_fr, kind, options, position)
@@ -372,13 +389,14 @@ begin
           select jsonb_agg(jsonb_build_object('key', o->>'key', 'label', o->'label', 'color', null))
           from jsonb_array_elements(p->'options') o))
         else '{}'::jsonb end,
-        v_position);
+        v_position)
+      on conflict (type_id, key) do nothing;
     end if;
   end loop;
   return v_type_id;
 end;
 $$;
-revoke all on function app.form_v2_ensure_type(uuid, text, jsonb) from public, anon, authenticated;
+revoke all on function app.form_v2_ensure_type(uuid, text, jsonb, boolean) from public, anon, authenticated;
 
 -- A form may not borrow a native type's key (task aside). Opening a form
 -- also makes sure its type exists, so the record type is there before the
@@ -432,7 +450,7 @@ begin
     where p.id = new.target_project_id and p.organization_id = new.organization_id) then
     raise exception 'The project belongs to another organization' using errcode = '42501';
   end if;
-  if new.type_key <> 'task' and exists (
+  if new.type_key <> 'task' and (tg_op = 'INSERT' or new.type_key is distinct from old.type_key) and exists (
     select 1 from public.object_type t
     where t.organization_id = new.organization_id and t.key = new.type_key and t.kind = 'native') then
     raise exception 'A form cannot create % records; they are made in their own screens', new.type_key
@@ -443,7 +461,7 @@ begin
     raise exception '%', v_problem using errcode = '23514';
   end if;
   if tg_op = 'UPDATE' and old.status = 'draft' and new.status = 'published' and new.type_key <> 'task' then
-    perform app.form_v2_ensure_type(new.organization_id, new.type_key, new.properties);
+    perform app.form_v2_ensure_type(new.organization_id, new.type_key, new.properties, true);
   end if;
   return new;
 end;
@@ -470,6 +488,9 @@ declare
   v_kind text;
   v_value jsonb;
   v_property_id uuid;
+  v_type_kind text;
+  v_created_type text;
+  v_created_id uuid;
 begin
   select * into v_form from public.form_v2 f where f.id = p_form_id;
   if not found or not app.can_answer_form_v2(v_form) then
@@ -487,7 +508,8 @@ begin
         and d.kind = 'file'
         and d.archived_at is null
         and d.created_by = v_uid) then
-      raise exception 'The file for % is not one you uploaded', p->'label'->>'en' using errcode = '42501';
+      raise exception 'The file for % is not one you uploaded', p->'label'->>'en'
+        using errcode = '42501', detail = v_key;
     end if;
   end loop;
 
@@ -506,7 +528,24 @@ begin
       (v_answers->>'estimate')::numeric, v_uid, v_uid
     ) returning id into v_object_id;
   else
-    v_type_id := app.form_v2_ensure_type(v_form.organization_id, v_form.type_key, v_form.properties);
+    select t.id, t.kind into v_type_id, v_type_kind from public.object_type t
+    where t.organization_id = v_form.organization_id and t.key = v_form.type_key;
+    -- Opening a form makes its type; one converted while already open is made
+    -- by its first answer.
+    if v_type_id is null then
+      v_type_id := app.form_v2_ensure_type(v_form.organization_id, v_form.type_key, v_form.properties);
+      v_type_kind := 'custom';
+    end if;
+  end if;
+
+  if v_form.type_key = 'task' then
+    v_created_type := 'task';
+    v_created_id := v_object_id;
+  elsif v_type_kind = 'native' then
+    -- A form published with a native type's key before this migration:
+    -- answered as before, the response is its own record.
+    v_object_id := v_response_id;
+  else
     -- The record's title: the first text answer, else the form's title.
     select btrim(v_answers->>(x.value->>'key')) into v_title
     from jsonb_array_elements(v_form.properties) x
@@ -537,6 +576,8 @@ begin
         case when v_kind = 'checkbox' then (v_value #>> '{}')::boolean end,
         case when v_kind = 'file' then array[(v_value #>> '{}')::uuid] end);
     end loop;
+    v_created_type := v_form.type_key;
+    v_created_id := v_object_id;
   end if;
 
   insert into public.form_v2_response (
@@ -544,8 +585,35 @@ begin
     created_object_type, created_object_id)
   values (
     v_response_id, v_form.organization_id, v_form.id, v_uid, v_answers, v_form.type_key, v_object_id,
-    v_form.type_key, v_object_id);
+    v_created_type, v_created_id);
 
   return query select v_response_id, v_form.type_key, v_object_id;
 end;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- A form's file is private to its uploader and the response's readers
+-- ---------------------------------------------------------------------------
+
+-- Members register library files as organization-wide (the only visibility
+-- the document insert policy lets them use); a form's file is then narrowed
+-- to staff visibility with nothing attached, which app.can_read_document
+-- opens only to its creator, owners, admins and leadership viewers: the
+-- people who read the response. Only the uploader may narrow their file.
+create or replace function public.form_v2_keep_file_private(p_document_id uuid) returns void
+language plpgsql volatile security definer set search_path = '' as $$
+begin
+  update public.document d
+  set visibility = 'staff'
+  where d.id = p_document_id
+    and d.created_by = (select auth.uid())
+    and d.kind = 'file'
+    and d.project_id is null and d.program_id is null and d.meeting_id is null
+    and d.event_id is null and d.crm_organization_id is null;
+  if not found then
+    raise exception 'Only the uploader can keep a form file private' using errcode = '42501';
+  end if;
+end;
+$$;
+revoke all on function public.form_v2_keep_file_private(uuid) from public, anon;
+grant execute on function public.form_v2_keep_file_private(uuid) to authenticated, service_role;

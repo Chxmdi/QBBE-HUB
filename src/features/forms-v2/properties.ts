@@ -144,6 +144,49 @@ function answerAsText(value: unknown): string {
 }
 
 /**
+ * Raw form values as the server will see them, without refusing anything:
+ * ticked boxes as true, numbers as numbers, amounts in whole cents, text
+ * trimmed. Conditions are judged on these, in the browser and on the server
+ * alike, so "100" typed as an amount compares as 10000 cents on both sides.
+ * A value that does not parse yet is kept as typed.
+ */
+export function typedAnswers(
+  properties: readonly FormV2Property[],
+  raw: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const p of properties) {
+    const value = raw[p.key];
+    if (p.kind === "checkbox") {
+      out[p.key] = value === true || value === "on" || value === "true";
+      continue;
+    }
+    if (typeof value !== "string") {
+      if (value !== undefined) out[p.key] = value;
+      continue;
+    }
+    const text = value.trim();
+    if (p.kind === "number") {
+      const n = Number(text.replace(",", "."));
+      out[p.key] = text && Number.isFinite(n) ? n : text;
+    } else if (p.kind === "currency") {
+      const cents = moneyToCents(text);
+      out[p.key] = cents ?? text;
+    } else {
+      out[p.key] = text;
+    }
+  }
+  return out;
+}
+
+/** "12,5" or "$12.50" in whole cents, or null when it is not an amount. */
+export function moneyToCents(text: string): number | null {
+  const match = /^\$?\s*(\d{1,9})(?:[.,](\d{1,2}))?\s*\$?$/.exec(text.trim());
+  if (!match) return null;
+  return Number(match[1]) * 100 + Number((match[2] ?? "0").padEnd(2, "0"));
+}
+
+/**
  * The properties shown for these answers, in order. A property with no
  * condition is shown; one with a condition is shown when the property it
  * depends on is itself shown and its answer meets the condition. Pure, and
@@ -239,7 +282,7 @@ export function parseFormAnswers(
   raw: Record<string, unknown>,
 ): ParsedAnswers {
   const answers: Record<string, string | number | boolean> = {};
-  for (const p of visibleFields(properties, raw)) {
+  for (const p of visibleFields(properties, typedAnswers(properties, raw))) {
     const value = raw[p.key];
     if (p.kind === "checkbox") {
       const ticked = value === true || value === "on";
@@ -263,9 +306,9 @@ export function parseFormAnswers(
         break;
       }
       case "currency": {
-        const match = /^\$?\s*(\d{1,9})(?:[.,](\d{1,2}))?\s*\$?$/.exec(text);
-        if (!match) return { ok: false, problem: "money", property: p };
-        answers[p.key] = Number(match[1]) * 100 + Number((match[2] ?? "0").padEnd(2, "0"));
+        const cents = moneyToCents(text);
+        if (cents === null) return { ok: false, problem: "money", property: p };
+        answers[p.key] = cents;
         break;
       }
       case "date":

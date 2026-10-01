@@ -17,8 +17,11 @@ declare
   v_type uuid;
   v_doc uuid;
   v_ok boolean;
+  v_native_form uuid;
+  v_clash_form uuid;
   v_n integer;
   res record;
+  r_who record;
   v_answers jsonb;
   v_props jsonb := jsonb_build_array(
     jsonb_build_object('key', 'name', 'kind', 'text', 'required', true,
@@ -105,7 +108,34 @@ begin
   end;
   perform tests.ok(v_ok, 'a form cannot borrow a native type (projects are made in their own screen)');
 
+  begin
+    insert into public.form_v2 (organization_id, type_key, title_en, title_fr, properties)
+    values (v_org, 'volunteer_offer', 'Bad', 'Mauvais', jsonb_build_array(
+      jsonb_build_object('key', 'a', 'kind', 'text', 'required', false,
+        'label', jsonb_build_object('en', 'A', 'fr', 'A')),
+      jsonb_build_object('key', 'b', 'kind', 'text', 'required', false,
+        'label', jsonb_build_object('en', 'B', 'fr', 'B'),
+        'showIf', jsonb_build_object('key', 'a', 'op', 'neq'))));
+    v_ok := false;
+  exception when check_violation then
+    v_ok := true;
+  end;
+  perform tests.ok(v_ok, 'an is / is not / contains condition needs a value');
+
   update public.form_v2 set status = 'published' where id = v_form;
+  -- Same type, a question whose key the type already uses with another kind.
+  insert into public.form_v2 (organization_id, type_key, title_en, title_fr, properties)
+  values (v_org, 'volunteer_offer', 'Clash', 'Conflit', jsonb_build_array(
+    jsonb_build_object('key', 'size', 'kind', 'number', 'required', false,
+      'label', jsonb_build_object('en', 'Size', 'fr', 'Taille'))))
+  returning id into v_clash_form;
+  begin
+    update public.form_v2 set status = 'published' where id = v_clash_form;
+    v_ok := false;
+  exception when check_violation then
+    v_ok := true;
+  end;
+  perform tests.ok(v_ok, 'a form cannot open when a question clashes with the type''s property of the same key');
   reset role;
   select t.id into v_type from public.object_type t where t.organization_id = v_org and t.key = 'volunteer_offer';
   perform tests.ok(v_type is not null and (select kind from public.object_type where id = v_type) = 'custom',
@@ -259,6 +289,60 @@ begin
     v_ok := true;
   end;
   perform tests.ok(v_ok, 'staff cannot answer with a volunteer''s document either');
+  reset role;
+
+  -- A form's file is private to its uploader and the response's readers.
+  perform tests.authenticate(v_guest);
+  begin
+    perform public.form_v2_keep_file_private(v_doc);
+    v_ok := false;
+  exception when insufficient_privilege then
+    v_ok := true;
+  end;
+  perform tests.ok(v_ok, 'only the uploader can narrow a form file');
+  reset role;
+  perform tests.authenticate(v_staff);
+  select count(*) into v_n from public.document where id = v_doc;
+  perform tests.ok(v_n = 1, 'before it is narrowed, an organization-wide upload is readable by staff');
+  reset role;
+  perform tests.authenticate(v_volunteer);
+  perform public.form_v2_keep_file_private(v_doc);
+  select count(*) into v_n from public.document where id = v_doc;
+  perform tests.ok(v_n = 1, 'the uploader still reads their narrowed file');
+  reset role;
+  for r_who in select * from (values (v_staff, 'staff'), (v_guest, 'a guest')) as t(uid, who) loop
+    perform tests.authenticate(r_who.uid);
+    select count(*) into v_n from public.document where id = v_doc;
+    reset role;
+    perform tests.ok(v_n = 0, format('%s cannot read someone else''s form file', r_who.who));
+  end loop;
+  perform tests.authenticate(v_admin);
+  select count(*) into v_n from public.document where id = v_doc;
+  perform tests.ok(v_n = 1, 'an admin reads the form file, as they read the response');
+  reset role;
+
+  -- A form published with a native type's key before this migration still
+  -- answers as before. (Made here as the conversion would, bypassing the
+  -- check on new forms.)
+  perform set_config('app.forms_v2_converting', 'on', true);
+  alter table public.form_v2 disable trigger form_v2_protect;
+  insert into public.form_v2 (organization_id, type_key, title_en, title_fr, status, properties, published_at)
+  values (v_org, 'meeting', 'Old meeting form', 'Ancien formulaire', 'published', jsonb_build_array(
+    jsonb_build_object('key', 'topic', 'kind', 'text', 'required', true,
+      'label', jsonb_build_object('en', 'Topic', 'fr', 'Sujet'))), now())
+  returning id into v_native_form;
+  alter table public.form_v2 enable trigger form_v2_protect;
+  perform set_config('app.forms_v2_converting', '', true);
+  perform tests.authenticate(v_volunteer);
+  select * into res from public.submit_form_v2(v_native_form, jsonb_build_object('topic', 'Budget'));
+  reset role;
+  perform tests.ok(res.object_id = res.response_id
+    and (select created_object_id is null from public.form_v2_response where id = res.response_id),
+    'an earlier form with a native type''s key is answered as before and creates nothing');
+  perform tests.authenticate(v_admin);
+  update public.form_v2 set status = 'closed' where id = v_native_form;
+  get diagnostics v_n = row_count;
+  perform tests.ok(v_n = 1, 'and it can still be closed');
   reset role;
 
   -- ---------------------------------------------------------- reading

@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox, FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input";
 import type { FormsV2Text } from "@/features/forms-v2/messages";
 import { fill } from "@/features/forms-v2/messages";
-import { localized, visibleFields, type FormV2Property } from "@/features/forms-v2/properties";
-import { MAX_FORM_FILE_BYTES, registerFormFile, type FormFileScan } from "@/features/forms-v2/services/form-file.commands";
+import { MAX_UPLOAD_BYTES, storagePathFor } from "@/features/editor/adapter/files";
+import { localized, typedAnswers, visibleFields, type FormV2Property } from "@/features/forms-v2/properties";
+import { registerFormFile, type FormFileScan } from "@/features/forms-v2/services/form-file.commands";
 import { submitFormV2 } from "@/features/forms-v2/services/forms-v2.commands";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -17,12 +18,6 @@ interface UploadedFile {
   documentId: string;
   title: string;
   scanStatus: FormFileScan;
-}
-
-/** A storage path that cannot collide and never carries the file name's odd characters. */
-function storagePathFor(fileName: string, random: string): string {
-  const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "file";
-  return `forms-v2/${random}/${safe}`;
 }
 
 /**
@@ -51,7 +46,7 @@ export function FormV2Fill({
   const [previewSent, setPreviewSent] = useState(false);
   const [created, setCreated] = useState<{ objectType: string; objectId: string } | null>(null);
 
-  const shown = visibleFields(properties, answers);
+  const shown = visibleFields(properties, typedAnswers(properties, answers));
   const setAnswer = (key: string, value: Answer) => setAnswers((a) => ({ ...a, [key]: value }));
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -227,7 +222,7 @@ function FileField({
     const file = e.target.files?.[0];
     if (!file) return;
     onError(null);
-    if (file.size > MAX_FORM_FILE_BYTES) {
+    if (file.size > MAX_UPLOAD_BYTES) {
       onError(text.errors.fileTooLarge);
       e.target.value = "";
       return;
@@ -239,7 +234,7 @@ function FileField({
     }
     setBusy(true);
     const supabase = createSupabaseBrowserClient();
-    const path = storagePathFor(file.name, crypto.randomUUID());
+    const path = storagePathFor(file.name, `forms-v2/${crypto.randomUUID()}`);
     const { error } = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined });
     if (error) {
       setBusy(false);

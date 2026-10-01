@@ -7,6 +7,7 @@ import {
   optionsFromLists,
   parseFormAnswers,
   propertiesProblem,
+  typedAnswers,
   visibleFields,
   type FormV2Property,
 } from "./properties";
@@ -151,6 +152,25 @@ describe("visibleFields", () => {
     expect(keys({ drive: false, licence: "A1", plate: "123 QC" })).toEqual(["drive", "size", "why"]);
     expect(keys({ size: "s" })).toEqual(["drive", "size"]);
     expect(keys({ size: "l" })).toEqual(["drive", "size", "why"]);
+  });
+
+  it("judges conditions on typed values, as the server does", () => {
+    const fee: FormV2Property = { key: "fee", kind: "currency", required: false, label: { en: "Fee", fr: "Frais" } };
+    const hours: FormV2Property = { key: "hours", kind: "number", required: false, label: { en: "Hours", fr: "Heures" } };
+    const receipt: FormV2Property = {
+      key: "receipt", kind: "text", required: false, label: { en: "Receipt", fr: "Reçu" },
+      showIf: { key: "fee", op: "eq", value: 10000 },
+    };
+    const why: FormV2Property = {
+      key: "why", kind: "text", required: false, label: { en: "Why", fr: "Pourquoi" },
+      showIf: { key: "hours", op: "eq", value: 5.5 },
+    };
+    const form = [fee, hours, receipt, why];
+    const shown = (raw: Record<string, unknown>) => visibleFields(form, typedAnswers(form, raw)).map((p) => p.key);
+    expect(shown({ fee: "100", hours: "5,5" })).toEqual(["fee", "hours", "receipt", "why"]);
+    expect(shown({ fee: "100.00 $", hours: "5.5" })).toEqual(["fee", "hours", "receipt", "why"]);
+    expect(shown({ fee: "99", hours: "6" })).toEqual(["fee", "hours"]);
+    expect(typedAnswers([drive], { drive: "on" })).toEqual({ drive: true });
   });
 
   it("treats blank text and an unticked box as empty", () => {

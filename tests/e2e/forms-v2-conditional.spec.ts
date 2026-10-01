@@ -112,7 +112,7 @@ test("a hidden field is skipped and the created record is linked [switches on]",
        from property_value v join property_definition d on d.id = v.property_id
        where v.object_id = '${objectId}'`,
     );
-    expect(values).toBe(`can_drive=false,your_name=${name}`);
+    expect(values).toBe(`can_you_drive=false,your_name=${name}`);
 
     // The record page opens for the person who made it.
     await recordLink.click();
@@ -156,7 +156,8 @@ test("a file answer is stored and shows its scan state [switches on]", async ({ 
     await expect(page.getByText("Your answer is now a record.")).toBeVisible({ timeout: 20_000 });
 
     const stored = sql(
-      `select d.kind || '|' || d.scan_status || '|' || (d.created_by = p.id)::text || '|' || (v.value_uuids = array[d.id])::text
+      `select d.kind || '|' || d.scan_status || '|' || d.visibility || '|' || (d.created_by = p.id)::text
+         || '|' || (v.value_uuids = array[d.id])::text
        from form_v2_response r
        join document d on d.id = (r.answers->>'proof')::uuid
        join user_profile p on p.email = 'qa-volunteer@example.com'
@@ -164,7 +165,8 @@ test("a file answer is stored and shows its scan state [switches on]", async ({ 
        join property_definition pd on pd.id = v.property_id and pd.key = 'proof'
        where d.title = '${fileName}'`,
     );
-    expect(stored).toBe("file|pending|true|true");
+    // "staff" with nothing attached: only the uploader, owners, admins and leadership viewers read it.
+    expect(stored).toBe("file|pending|staff|true|true");
 
     await signOut(page);
     await signIn(page, "owner");
@@ -174,7 +176,6 @@ test("a file answer is stored and shows its scan state [switches on]", async ({ 
     setSwitches(false);
     cleanUp(title, typeKey);
     sql(`delete from document where title = '${fileName}'`);
-    sql(`delete from storage.objects where bucket_id = 'documents' and name like 'forms-v2/%${fileName}'`);
   }
 });
 

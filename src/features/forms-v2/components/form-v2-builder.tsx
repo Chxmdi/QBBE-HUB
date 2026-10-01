@@ -19,6 +19,7 @@ import {
   type FormV2Property,
   type ShowIf,
   type ShowIfOp,
+  typedAnswers,
 } from "@/features/forms-v2/properties";
 import { createFormV2 } from "@/features/forms-v2/services/forms-v2.commands";
 
@@ -70,15 +71,29 @@ function needsValue(op: ShowIfOp): boolean {
   return op !== "is_empty" && op !== "is_not_empty";
 }
 
-/** The stored condition for a draft, or undefined when the question is always asked. */
+/**
+ * The stored condition for a draft, or undefined when the question is always
+ * asked. A condition whose question was removed is kept as a broken one
+ * (empty key), so saving refuses it instead of quietly asking everyone.
+ * Numbers are stored as numbers and amounts in whole cents, as answers are.
+ */
 function toShowIf(draft: ShowIfDraft, candidates: Candidate[], keyOf: (id: string) => string | undefined): ShowIf | undefined {
+  if (!draft.ref) return undefined;
   const ref = candidates.find((c) => c.id === draft.ref);
   const key = ref && keyOf(ref.id);
-  if (!ref || !key) return undefined;
+  if (!ref || !key) return { key: "", op: draft.op };
   const op = opsFor(ref.kind).includes(draft.op) ? draft.op : opsFor(ref.kind)[0];
   if (!needsValue(op)) return { key, op };
   if (ref.kind === "checkbox") return { key, op, value: draft.value !== "false" };
+  const typed = typedAnswers([{ key: "v", kind: ref.kind, required: false, label: { en: "v", fr: "v" } }], { v: draft.value });
+  const value = typed.v;
+  if (op !== "contains" && typeof value === "number") return { key, op, value };
   return { key, op, value: draft.value.trim() };
+}
+
+/** Whether a draft names a question that no longer comes before it. */
+function isBroken(draft: ShowIfDraft, candidates: Candidate[]): boolean {
+  return Boolean(draft.ref) && !candidates.some((c) => c.id === draft.ref);
 }
 
 function ShowIfEditor({
@@ -99,6 +114,11 @@ function ShowIfEditor({
   const op = ref && ops.includes(value.op) ? value.op : ops[0];
   return (
     <div className="grid gap-3 md:grid-cols-3">
+      {isBroken(value, candidates) ? (
+        <p role="alert" className="text-sm text-danger-fg md:col-span-3">
+          {text.errors.badCondition}
+        </p>
+      ) : null}
       <div>
         <Label htmlFor={`${idPrefix}-ref`}>{text.showIf}</Label>
         <Select

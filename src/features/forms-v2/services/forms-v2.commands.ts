@@ -168,7 +168,8 @@ export async function submitFormV2(
   const row = Array.isArray(data) ? data[0] : data;
   if (error || !row) {
     if (error?.code === "42501" && /not one you uploaded/.test(error.message)) {
-      const file = properties.find((p) => p.kind === "file" && parsed.answers[p.key] !== undefined);
+      // The database names the question's key in the error's detail.
+      const file = properties.find((p) => p.kind === "file" && p.key === error.details);
       return { ok: false, error: fill(m.errors.fileNotYours, { label: file ? localized(file.label, locale) : "" }) };
     }
     return { ok: false, error: error?.code === "42501" ? m.errors.notOpen : m.errors.generic };
