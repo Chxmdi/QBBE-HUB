@@ -1,13 +1,20 @@
 import type { ObjectContentAdapter } from "../content";
+import { meetingContentAdapter } from "./meeting-adapter";
+import { pageContentAdapter } from "./page-adapter";
 import { taskContentAdapter } from "./task-adapter";
 
 /**
- * Which adapter reads and writes each type's content. Integration adds the
- * block editor's adapter for pages (and every type with a document body) here.
+ * Which adapter reads and writes each type's content: the task description as
+ * one block, and the block editor's document for pages and meetings (U9).
  */
 const ADAPTERS: Record<string, ObjectContentAdapter> = {
   task: taskContentAdapter,
+  page: pageContentAdapter,
+  meeting: meetingContentAdapter,
 };
+
+/** Types whose content is a block-editor document rather than one text field. */
+export const editorDocumentTypes: readonly string[] = ["page", "meeting"];
 
 export function contentAdapterFor(type: string): ObjectContentAdapter | null {
   return ADAPTERS[type] ?? null;

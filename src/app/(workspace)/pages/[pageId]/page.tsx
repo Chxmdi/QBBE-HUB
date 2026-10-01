@@ -11,6 +11,8 @@ import { canEditPage } from "@/features/pages/access";
 import { isEnabled } from "@/lib/feature-flags";
 import { loadEditorDocument } from "@/features/editor/services/editor-document.queries";
 import { ObjectEditor } from "@/features/editor/components/object-editor";
+import { PageCollab } from "@/features/pages/components/page-collab";
+import { blockIdSchema } from "@/features/object-comments/schema";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -24,9 +26,16 @@ export async function generateMetadata({ params }: { params: Promise<{ pageId: s
 }
 export const dynamic = "force-dynamic";
 
-export default async function PageRoute({ params }: { params: Promise<{ pageId: string }> }) {
+export default async function PageRoute({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ pageId: string }>;
+  searchParams: Promise<{ block?: string }>;
+}) {
   const { pageId } = await params;
   if (!UUID.test(pageId)) notFound();
+  const block = blockIdSchema.safeParse((await searchParams).block);
   const session = await requireSession();
   const supabase = await createSupabasePageClient();
   const [page, sidebar, editorOn] = await Promise.all([
@@ -37,6 +46,7 @@ export default async function PageRoute({ params }: { params: Promise<{ pageId: 
   if (!page) notFound();
   if (!page.deletedAt) await recordPageVisit(page.id);
   const body = editorOn ? await loadEditorDocument(supabase, page.id) : null;
+  const canEdit = canEditPage({ userId: session.userId, role: session.role }, page);
 
   return (
     <PagesShell session={session} sidebar={sidebar} currentPageId={page.id}>
@@ -50,9 +60,17 @@ export default async function PageRoute({ params }: { params: Promise<{ pageId: 
             initialState={body.state}
             initialVersion={body.version}
             timeZone={session.timeZone}
-            editable={canEditPage({ userId: session.userId, role: session.role }, page)}
+            editable={canEdit}
           />
         ) : null}
+        {page.deletedAt ? null : (
+          <PageCollab
+            pageId={page.id}
+            canEdit={canEdit}
+            blockId={block.success ? block.data : null}
+            editorMounted={Boolean(body) && canEdit}
+          />
+        )}
       </PageView>
     </PagesShell>
   );

@@ -10,6 +10,8 @@ import { contentToPlainText, normalizeContent } from "@/features/editor/adapter/
 import { documentIdFromRef, documentRef } from "@/features/editor/adapter/files";
 import { base64ToByteaHex, MAX_STATE_BASE64 } from "@/features/editor/adapter/state";
 import { getDocumentDownloadUrl, registerUploadedDocument } from "@/features/documents/services/document.commands";
+import { editorContentToSnapshot } from "@/features/versions/adapters/editor-document-adapter";
+import { editorDocumentTypes } from "@/features/versions/adapters/registry";
 
 /**
  * Saving editor content and the files placed in it (M4b). Runs as the
@@ -23,7 +25,7 @@ export type SaveResult =
 
 const saveSchema = z.object({
   objectId: z.string().uuid(),
-  objectType: z.enum(["page", "task"]),
+  objectType: z.enum(["page", "task", "meeting"]),
   /** The version the client last saw; null for a first save. */
   baseVersion: z.number().int().positive().nullable(),
   content: z.unknown(),
@@ -40,9 +42,52 @@ export async function saveEditorDocument(input: unknown): Promise<SaveResult> {
   if (!parsed.success) return { ok: false, reason: "invalid" };
   const content = normalizeContent(parsed.data.content);
   if (JSON.stringify(content).length > MAX_CONTENT_BYTES) return { ok: false, reason: "invalid" };
+  const result = await writeDocument(session, content, parsed.data);
+  const { objectId, objectType, state } = parsed.data;
+  if (result.ok && objectType !== "task" && editorDocumentTypes.includes(objectType)) {
+    await recordAutomaticVersion(objectId, objectType, content, state ?? null);
+  }
+  return result;
+}
+
+/**
+ * Asks the database for an automatic snapshot of a page or meeting after a
+ * save (U9, plan A10). The database takes one at most every ten minutes and
+ * only when something changed. The content itself is already saved, so a
+ * refused or failed snapshot is logged and never fails the save.
+ */
+async function recordAutomaticVersion(
+  objectId: string,
+  objectType: "page" | "meeting",
+  content: ReturnType<typeof normalizeContent>,
+  state: string | null,
+): Promise<void> {
+  try {
+    const supabase = await createSupabaseServerClient();
+    const { data: owner } = await supabase.from(objectType).select("title").eq("id", objectId).maybeSingle();
+    const title = (owner as { title?: string } | null)?.title ?? "";
+    const { error } = await supabase.rpc("save_object_version", {
+      p_object: objectId,
+      p_type: objectType,
+      p_kind: "auto",
+      p_content: editorContentToSnapshot(content, state),
+      p_properties: { title },
+      p_label: null,
+    });
+    if (error) console.error("automatic snapshot failed", error.message);
+  } catch (error) {
+    console.error("automatic snapshot failed", (error as Error).message);
+  }
+}
+
+async function writeDocument(
+  session: { organizationId: string; userId: string },
+  content: ReturnType<typeof normalizeContent>,
+  input: z.infer<typeof saveSchema>,
+): Promise<SaveResult> {
   const text = contentToPlainText(content).slice(0, 500000);
   const supabase = await createSupabaseServerClient();
-  const { objectId, objectType, baseVersion, state } = parsed.data;
+  const { objectId, objectType, baseVersion, state } = input;
   const yjs = state ? { yjs_state: base64ToByteaHex(state) } : {};
 
   if (baseVersion === null) {

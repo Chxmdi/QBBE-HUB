@@ -51,6 +51,7 @@ export const versionsEn = {
     task: "Task",
     project: "Project",
     page: "Page",
+    meeting: "Meeting",
     object: "Object",
   },
   errors: {
@@ -103,6 +104,7 @@ export const versionsEn = {
     },
   },
   page: {
+    open: "Open it to edit the content.",
     title: "Versions",
     description: "Every version of this item, saved automatically and on demand.",
   },

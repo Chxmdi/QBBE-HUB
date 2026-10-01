@@ -85,5 +85,17 @@ export const pagesFrCA: PagesMessages = {
     cannotMoveInside: "Une page ne peut pas être déplacée dans elle-même ni dans ses propres pages.",
     failed: "Une erreur s’est produite. Réessayez.",
   },
+  collab: {
+    heading: "Discussion et historique",
+    tabs: {
+      comments: "Commentaires",
+      versions: "Versions",
+    },
+    commentOnBlock: "Commenter ce bloc",
+    noBlockSelected: "Placez le curseur dans un bloc de la page pour le commenter.",
+    blockThread: "Commentaires d’un seul bloc affichés.",
+    allComments: "Tous les commentaires",
+    openVersions: "Ouvrir l’historique complet des versions",
+  },
   copySuffix: "{title} (copie)",
 };

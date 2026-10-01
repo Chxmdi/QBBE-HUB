@@ -67,22 +67,30 @@ async function memberNames(db: Db): Promise<Map<string, string>> {
 }
 
 /**
- * Current titles of objects the reader can see. Until the object registry
- * (S1, M1a) lands, the only objects are tasks and projects; after it, this
- * reads `object.title`.
+ * Current titles of objects the reader can see: tasks, projects, pages and
+ * meetings (U9). Once the object registry is the one source, this reads
+ * `object.title`.
  */
 async function objectTitles(db: Db, ids: string[]): Promise<Map<string, { title: string; type: string }>> {
   const titles = new Map<string, { title: string; type: string }>();
   if (ids.length === 0) return titles;
-  const [{ data: tasks }, { data: projects }] = await Promise.all([
+  const [{ data: tasks }, { data: projects }, { data: pages }, { data: meetings }] = await Promise.all([
     db.from("task").select("id, title").in("id", ids),
     db.from("project").select("id, name").in("id", ids),
+    db.from("page").select("id, title").in("id", ids),
+    db.from("meeting").select("id, title").in("id", ids),
   ]);
   for (const row of (tasks ?? []) as { id: string; title: string }[]) {
     titles.set(row.id, { title: row.title, type: "task" });
   }
   for (const row of (projects ?? []) as { id: string; name: string }[]) {
     titles.set(row.id, { title: row.name, type: "project" });
+  }
+  for (const row of (pages ?? []) as { id: string; title: string }[]) {
+    titles.set(row.id, { title: row.title, type: "page" });
+  }
+  for (const row of (meetings ?? []) as { id: string; title: string }[]) {
+    titles.set(row.id, { title: row.title, type: "meeting" });
   }
   return titles;
 }

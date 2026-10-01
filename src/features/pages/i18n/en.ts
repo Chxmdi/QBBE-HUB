@@ -87,6 +87,18 @@ export const pagesEn = {
     cannotMoveInside: "A page can't be moved inside itself or its own pages.",
     failed: "Something went wrong. Try again.",
   },
+  collab: {
+    heading: "Discussion and history",
+    tabs: {
+      comments: "Comments",
+      versions: "Versions",
+    },
+    commentOnBlock: "Comment on this block",
+    noBlockSelected: "Place the cursor in a block of the page to comment on it.",
+    blockThread: "Showing the comments on one block.",
+    allComments: "All comments",
+    openVersions: "Open the full version history",
+  },
   copySuffix: "{title} (copy)",
 };
 

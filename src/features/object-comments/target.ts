@@ -5,8 +5,10 @@ import type { ObjectRef, ObjectTypeKey } from "@/lib/objects/contracts";
  *
  * Native records that already had comments keep their own parent type, so a
  * task has one thread whether it is opened from My work or as an object.
- * Everything else (pages, custom types, native types without comments of
- * their own) uses the `object` parent type, whose access is app.can.
+ * Pages have their own parent type too (U9), whose access is the page's rule
+ * (app.can_page). Everything else (custom types, native types without
+ * comments of their own) uses the `object` parent type, whose access is
+ * app.can.
  */
 const NATIVE_COMMENT_PARENTS: Partial<Record<ObjectTypeKey, string>> = {
   task: "task",
@@ -15,6 +17,7 @@ const NATIVE_COMMENT_PARENTS: Partial<Record<ObjectTypeKey, string>> = {
   meeting: "meeting",
   risk: "risk",
   contact: "contact",
+  page: "page",
 };
 
 export const commentParentTypes = [
@@ -31,6 +34,7 @@ export const commentParentTypes = [
   "contact",
   "opportunity",
   "object",
+  "page",
 ] as const;
 export type CommentParentType = (typeof commentParentTypes)[number];
 
