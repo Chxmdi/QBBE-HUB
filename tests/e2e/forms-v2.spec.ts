@@ -22,22 +22,25 @@ const setSwitch = (on: boolean) =>
  * volunteer's answer becomes a task they requested. The screens are hidden
  * while the wos_forms_v2 switch is off.
  */
-test("a task form turns an answer into a task, and is hidden while its switch is off", async ({ page, context }) => {
+test("the forms screens are hidden while the switch is off [switch off]", async ({ page }) => {
+  setSwitch(false);
+  await signIn(page, "owner");
+  // The workspace streams its pages, so a hidden module answers with the
+  // not-found screen rather than a 404 status.
+  await page.goto("/forms-v2");
+  await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Forms", level: 1 })).toHaveCount(0);
+});
+
+test("a task form turns an answer into a task", async ({ page, context }) => {
   test.setTimeout(180_000);
   const stamp = Date.now();
   const formTitle = `Help request ${stamp}`;
   const taskTitle = `Chairs for the gala ${stamp}`;
 
-  setSwitch(false);
+  setSwitch(true);
   try {
     await signIn(page, "owner");
-    // The workspace streams its pages, so a hidden module answers with the
-    // not-found screen rather than a 404 status.
-    await page.goto("/forms-v2");
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Forms", level: 1 })).toHaveCount(0);
-
-    setSwitch(true);
     await page.goto("/forms-v2/new");
     await expect(page.getByRole("heading", { name: "New form", level: 1 })).toBeVisible();
     expect(await axeProblems(page), "builder accessibility").toEqual([]);

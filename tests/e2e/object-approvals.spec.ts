@@ -29,10 +29,11 @@ function setSwitch(on: boolean) {
 
 test.afterAll(() => setSwitch(false));
 
-test("a project manager sends a task for approval and readers follow its status", async ({ page }) => {
-  test.setTimeout(240_000);
-  const stamp = Date.now();
-  const taskTitle = `Order the banners ${stamp}`;
+/**
+ * A project the staff member manages (the volunteer contributes) and one task
+ * in it. Returns the task id.
+ */
+function seedTask(stamp: number, taskTitle: string): string {
   const staff = `select u.id as user_id, m.organization_id
     from auth.users u join public.organization_membership m on m.user_id = u.id
     where u.email = 'qa-staff@example.com'`;
@@ -58,14 +59,27 @@ test("a project manager sends a task for approval and readers follow its status"
     select organization_id, '${projectId}', '${taskTitle}', user_id from who
     returning id;
   `);
-  const url = `/object-approvals/task/${taskId}`;
+  return taskId;
+}
 
+test("a record's approval page is hidden while the switch is off [switch off]", async ({ page }) => {
+  const stamp = Date.now();
+  const taskId = seedTask(stamp, `Hidden banners ${stamp}`);
   setSwitch(false);
   await signIn(page, "staff");
-  await page.goto(url);
+  await page.goto(`/object-approvals/task/${taskId}`);
   await expect(page.getByRole("heading", { name: NOT_FOUND })).toBeVisible();
+});
+
+test("a project manager sends a task for approval and readers follow its status", async ({ page }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const taskTitle = `Order the banners ${stamp}`;
+  const taskId = seedTask(stamp, taskTitle);
+  const url = `/object-approvals/task/${taskId}`;
 
   setSwitch(true);
+  await signIn(page, "staff");
   await page.goto(url);
   await expect(page.getByRole("heading", { level: 1, name: `Approval for ${taskTitle}` })).toBeVisible();
   await expect(page.getByText("No approval has been requested for this record.")).toBeVisible();

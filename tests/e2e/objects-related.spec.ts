@@ -15,6 +15,25 @@ function setObjectsSwitch(enabled: boolean): boolean {
   return before;
 }
 
+test("an object's page is hidden while the switch is off [switch off]", async ({ page }) => {
+  const ownerId = sql(`select id::text from user_profile where email = 'qa-owner@example.com'`);
+  const orgId = sql(`select organization_id::text from organization_membership where user_id = '${ownerId}' limit 1`);
+  const task = sql(
+    `insert into task (organization_id, title, created_by)
+     values ('${orgId}', 'Hidden object ${Date.now()}', '${ownerId}') returning id`,
+  );
+  const before = setObjectsSwitch(false);
+  try {
+    await signIn(page, "owner");
+    // Switch off: the route does not exist.
+    await page.goto(`/objects/${task}`);
+    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+  } finally {
+    setObjectsSwitch(before);
+    sql(`delete from task where id = '${task}'`);
+  }
+});
+
 test("the Related panel lists links both ways, is keyboard usable, accessible and bilingual", async ({ page }) => {
   test.setTimeout(150_000);
   const marker = `Related ${Date.now()}`;
@@ -34,15 +53,9 @@ test("the Related panel lists links both ways, is keyboard usable, accessible an
   );
   sql(`insert into task_dependency (blocking_task_id, blocked_task_id) values ('${venue}', '${invites}')`);
 
-  const before = setObjectsSwitch(false);
+  const before = setObjectsSwitch(true);
   try {
     await signIn(page, "owner");
-
-    // Switch off: the route does not exist.
-    await page.goto(`/objects/${venue}`);
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-
-    setObjectsSwitch(true);
     await page.goto(`/objects/${venue}`);
     await expect(page.getByRole("heading", { level: 1, name: `${marker} book venue` })).toBeVisible();
     const panel = page.getByRole("region", { name: "Related" });

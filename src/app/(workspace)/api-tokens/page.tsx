@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
-import { requireSession } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getFormatters, getLocale } from "@/lib/i18n/server";
 import { interpolate } from "@/lib/i18n/translate";
@@ -34,10 +34,13 @@ function status(row: TokenRow, m: ApiTokensMessages): { label: string; tone: "su
   return { label: m.list.active, tone: "success" };
 }
 
-/** API access tokens (V2-8), behind wos_workflows_v2. RLS decides which tokens show. */
+/**
+ * API access tokens (V2-8), behind wos_workflows_v2. RLS decides which tokens
+ * show; the page itself is for staff, as the menu says.
+ */
 export default async function ApiTokensPage() {
   if (!(await isEnabled("wos_workflows_v2"))) notFound();
-  const session = await requireSession();
+  const session = await requireStaff();
   const m = apiTokenMessages(await getLocale());
   const f = await getFormatters();
   const db = await createSupabasePageClient();

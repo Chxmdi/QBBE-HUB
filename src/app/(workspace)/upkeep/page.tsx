@@ -15,7 +15,7 @@ import {
   type IssueRow,
   type StaleRow,
 } from "@/features/upkeep/report";
-import { requireSession } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { getLocale } from "@/lib/i18n/server";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 
@@ -51,7 +51,8 @@ function IssueList({ rows, text }: { rows: IssueRow[]; text: UpkeepText }) {
 
 export default async function UpkeepPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   await requireUpkeep();
-  await requireSession();
+  // A staff screen, as the menu says; every report still runs as the viewer.
+  await requireStaff();
   const text = upkeepText(await getLocale());
   const days = staleThreshold((await searchParams).days);
   const supabase = await createSupabasePageClient();

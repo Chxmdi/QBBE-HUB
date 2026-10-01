@@ -4,8 +4,8 @@ import { scanFormFiles } from "@/features/jobs/services/handlers/scan-form-files
 import { scanDocumentBytes } from "@/features/documents/services/clamav";
 import { FakeSupabase, asClient } from "../support/fake-supabase";
 
-vi.mock("@/features/documents/services/clamav", () => ({
-  MAX_DOCUMENT_BYTES: 25 * 1024 * 1024,
+vi.mock("@/features/documents/services/clamav", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/features/documents/services/clamav")>()),
   scanDocumentBytes: vi.fn(),
 }));
 afterEach(() => { vi.unstubAllEnvs(); vi.clearAllMocks(); });

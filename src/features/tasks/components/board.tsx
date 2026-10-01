@@ -259,7 +259,7 @@ export function TaskBoard({
                     </button>
                   ) : null}
                   {columnTasks.length === 0 ? (
-                    <p className="rounded-(--radius-sm) border border-dashed border-line bg-surface/45 px-1.5 py-5 text-center text-[12px] text-muted/80">
+                    <p className="rounded-(--radius-sm) border border-dashed border-line bg-surface/45 px-1.5 py-5 text-center text-[12px] text-muted">
                       {t("board.noTasksColumn")}
                     </p>
                   ) : null}

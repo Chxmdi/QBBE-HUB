@@ -94,20 +94,27 @@ export default async function JournalEntryPage({
   const id = uuidParam(rawId);
   if (!id) notFound();
 
+  // The entry first, on its own: ledger_entry_trail and ledger_entry_approvals
+  // refuse an entry the caller cannot read, and an id that matches nothing
+  // reads as exactly that. Asked in parallel with the entry, that refusal
+  // reached the page as an error ("Something went wrong") where "Not found"
+  // was the right answer.
+  const { data: entryData } = await supabase
+    .from("journal_entry")
+    .select(
+      "id, entry_number, entry_date, memo, kind, status, reverses_entry_id, source_type, source_id, posted_at, poster:posted_by(full_name), creator:created_by(full_name)",
+    )
+    .eq("id", id)
+    .maybeSingle();
+  const entry = entryData as unknown as Entry | null;
+  if (!entry) notFound();
+
   const [
-    { data: entryData },
     { data: lineData },
     { data: reversals },
     { data: trailData },
     { data: approvalData },
   ] = await Promise.all([
-    supabase
-      .from("journal_entry")
-      .select(
-        "id, entry_number, entry_date, memo, kind, status, reverses_entry_id, source_type, source_id, posted_at, poster:posted_by(full_name), creator:created_by(full_name)",
-      )
-      .eq("id", id)
-      .maybeSingle(),
     supabase
       .from("journal_line")
       .select(
@@ -121,8 +128,6 @@ export default async function JournalEntryPage({
   ]);
   const approvals = groupApprovalChain((approvalData ?? []) as ApprovalChainRow[], t);
   const trail = (trailData ?? []) as { occurred_at: string; action: string; actor_name: string }[];
-  const entry = entryData as unknown as Entry | null;
-  if (!entry) notFound();
   const lines = (lineData ?? []) as unknown as Line[];
   const reversal = ((reversals ?? []) as { id: string; entry_number: number | null }[])[0];
   const debits = lines.reduce((s, l) => s + Number(l.debit_cents), 0);

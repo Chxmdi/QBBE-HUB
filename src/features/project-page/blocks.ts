@@ -2,11 +2,11 @@ import type { QuerySpec } from "@/lib/objects/contracts";
 
 /**
  * The living project page (M19b) is built from query blocks: each section is
- * a query spec in the agreed format (contracts.ts, plan A7), so when the query
- * engine (M8a) and query blocks in pages (M8e) land, these same specs run
- * there and a person can add, remove or edit blocks. Until then ./run-blocks.ts
- * runs them: tasks through the task query stand-in, the other types through a
- * reader that supports the same subset of the spec.
+ * a query spec in the agreed format (contracts.ts, plan A7). ./run-blocks.ts
+ * runs every one of them through the lens query engine (M8a), so the same
+ * specs work in query blocks in pages (M8e) and a person can later add,
+ * remove or edit blocks. The properties each spec selects are the ones the
+ * section shows plus the ones its link needs (project, meeting, source).
  */
 
 export const BLOCK_KEYS = ["openTasks", "decisions", "milestones", "files", "activity", "risks"] as const;
@@ -44,7 +44,7 @@ export function projectBlocks(projectId: string): ProjectBlock[] {
         types: ["decision"],
         filter: inProject,
         sorts: [{ property: "decided_time", direction: "desc" }],
-        properties: ["decided_time"],
+        properties: ["decided_time", "meeting", "project"],
         limit: 5,
       },
     },
@@ -56,7 +56,7 @@ export function projectBlocks(projectId: string): ProjectBlock[] {
         types: ["milestone"],
         filter: inProject,
         sorts: [{ property: "due", direction: "asc" }],
-        properties: ["due", "status", "completed_time"],
+        properties: ["due", "status", "completed_time", "project"],
         limit: 10,
       },
     },
@@ -66,7 +66,8 @@ export function projectBlocks(projectId: string): ProjectBlock[] {
       spec: {
         version: 1,
         types: ["document"],
-        filter: { and: [inProject, { property: "archived_time", op: "is_empty" }] },
+        // The engine never lists archived files, so no archived filter is needed.
+        filter: inProject,
         sorts: [{ property: "edited_time", direction: "desc" }],
         properties: ["edited_time", "kind"],
         limit: 8,
@@ -80,7 +81,7 @@ export function projectBlocks(projectId: string): ProjectBlock[] {
         types: ["activity"],
         filter: inProject,
         sorts: [{ property: "created_time", direction: "desc" }],
-        properties: ["created_time"],
+        properties: ["created_time", "source_type", "source_id", "project"],
         limit: 10,
       },
     },
@@ -92,7 +93,7 @@ export function projectBlocks(projectId: string): ProjectBlock[] {
         types: ["risk"],
         filter: { and: [inProject, { property: "status", op: "in", value: ["open", "mitigating"] }] },
         sorts: [{ property: "score", direction: "desc" }],
-        properties: ["status", "likelihood", "impact", "score"],
+        properties: ["status", "likelihood", "impact", "score", "project"],
         limit: 8,
       },
     },

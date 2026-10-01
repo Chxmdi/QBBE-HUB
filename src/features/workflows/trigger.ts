@@ -4,10 +4,11 @@ import { objectEventVerbs, type WorkflowTrigger } from "./graph";
 /**
  * Which events start a run (M14b), and the event source the runner reads.
  *
- * The runner reads `ObjectEvent`s. Until `object_event` exists (M9a) they come
- * from `activity_event`, which is where the event contract's stand-in
- * (`createEventWriterStub`) and today's feature code write. When `object_event`
- * lands, only `activityRowToEvent` and the query in the runner change.
+ * The runner reads `ObjectEvent`s. They still come from `activity_event`,
+ * which is where today's feature code and the feed writer
+ * (src/lib/objects/activity-feed.ts) write; `object_event` (M9a) is written
+ * by triggers and will replace it here. When the runner moves, only
+ * `activityRowToEvent` and the query in the runner change.
  */
 
 export function matchesTrigger(trigger: WorkflowTrigger, event: ObjectEvent): boolean {
