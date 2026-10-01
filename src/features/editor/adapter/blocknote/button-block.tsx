@@ -293,11 +293,15 @@ function ButtonSettings({
 
   const set = (key: string) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setDraftArgs((current) => ({ ...current, [key]: event.target.value }));
+  // The label sits beside its control, not around it, so the control's own
+  // text (a select's chosen option) is not read as part of its name.
   const field = (key: string, text: string, control: React.ReactNode) => (
-    <label htmlFor={`${id}-${key}`} className="flex flex-col gap-1 text-caption font-medium text-ink">
-      {text}
+    <div className="flex flex-col gap-1">
+      <label htmlFor={`${id}-${key}`} className="text-caption font-medium text-ink">
+        {text}
+      </label>
       {control}
-    </label>
+    </div>
   );
   const valid = Boolean(draftLabel.trim()) && complete(draftKey, draftArgs);
 
