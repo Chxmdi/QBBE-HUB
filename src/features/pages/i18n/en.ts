@@ -98,6 +98,9 @@ export const pagesEn = {
     blockThread: "Showing the comments on one block.",
     allComments: "All comments",
     openVersions: "Open the full version history",
+    blockThreads: "Comments on blocks",
+    blockThreadLink: "“{text}”: {count} open",
+    removedBlock: "a block no longer on the page",
   },
   copySuffix: "{title} (copy)",
 };

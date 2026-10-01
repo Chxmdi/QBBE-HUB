@@ -14,7 +14,12 @@ const ADAPTERS: Record<string, ObjectContentAdapter> = {
 };
 
 /** Types whose content is a block-editor document rather than one text field. */
-export const editorDocumentTypes: readonly string[] = ["page", "meeting"];
+export const editorDocumentTypes = ["page", "meeting"] as const;
+export type EditorDocumentType = (typeof editorDocumentTypes)[number];
+
+export function isEditorDocumentType(type: string): type is EditorDocumentType {
+  return (editorDocumentTypes as readonly string[]).includes(type);
+}
 
 export function contentAdapterFor(type: string): ObjectContentAdapter | null {
   return ADAPTERS[type] ?? null;

@@ -6,7 +6,7 @@ import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { contentAdapterFor, editorDocumentTypes } from "@/features/versions/adapters/registry";
+import { contentAdapterFor, isEditorDocumentType } from "@/features/versions/adapters/registry";
 import { objectContentPath } from "@/features/versions/paths";
 import { versionsText } from "@/features/versions/messages";
 import { objectTypeKeySchema } from "@/features/versions/schema";
@@ -62,7 +62,7 @@ export default async function ObjectVersionsPage({
   const block = snapshot.content.blocks[0];
   // Pages and meetings are edited in the block editor on their own screen;
   // the one-field editor here is for types whose content is one text field.
-  const editsElsewhere = editorDocumentTypes.includes(object.type);
+  const editsElsewhere = isEditorDocumentType(object.type);
   const objectPath = objectContentPath(object);
 
   return (

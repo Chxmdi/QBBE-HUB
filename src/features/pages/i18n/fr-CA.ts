@@ -96,6 +96,9 @@ export const pagesFrCA: PagesMessages = {
     blockThread: "Commentaires d’un seul bloc affichés.",
     allComments: "Tous les commentaires",
     openVersions: "Ouvrir l’historique complet des versions",
+    blockThreads: "Commentaires sur des blocs",
+    blockThreadLink: "« {text} » : {count} en cours",
+    removedBlock: "un bloc qui n’est plus dans la page",
   },
   copySuffix: "{title} (copie)",
 };

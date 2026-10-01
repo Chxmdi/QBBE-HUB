@@ -63,12 +63,12 @@ export default async function PageRoute({
             editable={canEdit}
           />
         ) : null}
-        {page.deletedAt ? null : (
+        {page.deletedAt || !editorOn ? null : (
           <PageCollab
             pageId={page.id}
             canEdit={canEdit}
             blockId={block.success ? block.data : null}
-            editorMounted={Boolean(body) && canEdit}
+            editorMounted={canEdit}
           />
         )}
       </PageView>

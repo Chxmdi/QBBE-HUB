@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { EditorContent } from "@/features/editor/adapter/content";
-import { editorContentToSnapshot, snapshotToEditorContent } from "../adapters/editor-document-adapter";
+import {
+  editorContentToSnapshot,
+  keepCurrentPlacement,
+  MAX_SNAPSHOT_STATE,
+  snapshotToEditorContent,
+} from "../adapters/editor-document-adapter";
 import { isContentSnapshot } from "../content";
 import { diffSnapshots, restoreBlockInto } from "../diff";
 
@@ -97,5 +102,45 @@ describe("editor documents as snapshots", () => {
     const restored = snapshotToEditorContent(restoreBlockInto(after, before, "h"));
     expect(restored.blocks[0].content).toEqual([{ type: "text", text: "Agenda" }]);
     expect(restored.blocks[1].children?.[0].id).toBe("sub");
+  });
+
+  it("restores one block's content but keeps it where it is now", () => {
+    const old = editorContentToSnapshot(document);
+    // Since then, "sub" was moved out of the list to the top level and edited.
+    const now = editorContentToSnapshot({
+      version: 1,
+      blocks: [
+        document.blocks[0],
+        { ...document.blocks[1], children: [] },
+        { id: "sub", type: "bulletListItem", props: {}, content: [{ type: "text", text: "Q4 figures" }] },
+      ],
+    });
+    const restored = snapshotToEditorContent(keepCurrentPlacement(restoreBlockInto(now, old, "sub"), now, "sub"));
+    expect(restored.blocks.map((block) => block.id)).toEqual(["h", "list", "sub"]);
+    expect(restored.blocks[1].children).toEqual([]);
+    expect(restored.blocks[2].content).toEqual([{ type: "text", text: "Q3 figures" }]);
+  });
+
+  it("leaves a very large live state out of the snapshot", () => {
+    expect(editorContentToSnapshot(document, "A".repeat(MAX_SNAPSHOT_STATE + 4)).yjsState).toBeUndefined();
+  });
+
+  it("compares a block the editor only filled defaults into as unchanged", () => {
+    const before = editorContentToSnapshot({ version: 1, blocks: [{ id: "b", type: "paragraph", props: {}, content: [{ type: "text", text: "Bring name tags." }] }] });
+    const after = editorContentToSnapshot({
+      version: 1,
+      blocks: [
+        {
+          id: "b",
+          type: "paragraph",
+          props: { textColor: "default", textAlignment: "left", backgroundColor: "default" },
+          content: [{ type: "text", text: "Bring name tags.", styles: {} }],
+        },
+      ],
+    });
+    expect(diffSnapshots({ content: before, properties: {} }, { content: after, properties: {} }).changedCount).toBe(0);
+    // A real setting is kept.
+    const centred = editorContentToSnapshot({ version: 1, blocks: [{ id: "c", type: "paragraph", props: { textAlignment: "center" }, content: [] }] });
+    expect(centred.blocks[0].props).toMatchObject({ props: { textAlignment: "center" } });
   });
 });

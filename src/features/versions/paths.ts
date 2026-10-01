@@ -6,7 +6,7 @@ export function objectContentPath(object: ObjectRef): string | null {
     case "page":
       return `/pages/${object.id}`;
     case "meeting":
-      return `/meetings/${object.id}`;
+      return `/meetings-v2/${object.id}`;
     default:
       return null;
   }

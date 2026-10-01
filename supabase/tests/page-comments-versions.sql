@@ -101,8 +101,7 @@ begin
      where (n.nspname, p.proname) in (
        ('app', 'can_object_content'), ('public', 'can_object_content'),
        ('public', 'can_read_comment_parent'), ('public', 'can_post_comment'),
-       ('public', 'save_object_version'), ('app', 'can_editor_object'),
-       ('app', 'editor_document_before_write')
+       ('public', 'save_object_version')
      )),
     'U9: every function is security definer with an empty search_path'
   );

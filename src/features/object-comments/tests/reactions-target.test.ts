@@ -60,6 +60,12 @@ describe("where an object's comments live", () => {
 
   it("links to the collaboration screen, anchored on the comment", () => {
     expect(objectCommentsPath({ id: "abc", type: "task" }, "c1")).toBe("/collab/objects/abc?type=task#comment-c1");
-    expect(objectCommentsPath({ id: "abc", type: "page" })).toBe("/collab/objects/abc?type=page");
+    expect(objectCommentsPath({ id: "abc", type: "decision" })).toBe("/collab/objects/abc?type=decision");
+  });
+
+  it("links a page's comments to the page itself, on the block's thread", () => {
+    expect(objectCommentsPath({ id: "abc", type: "page" })).toBe("/pages/abc#page-collab");
+    expect(objectCommentsPath({ id: "abc", type: "page" }, "c1")).toBe("/pages/abc#comment-c1");
+    expect(objectCommentsPath({ id: "abc", type: "page" }, "c1", "blk-1")).toBe("/pages/abc?block=blk-1#comment-c1");
   });
 });

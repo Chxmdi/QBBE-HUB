@@ -36,25 +36,58 @@ interface StoredBlockProps {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+/**
+ * Values the editor fills in on its first save that mean "nothing set". They
+ * are left out of a snapshot, so a block nobody touched compares as the same
+ * whether the version was taken before or after the editor opened it; the
+ * editor puts them back when it rebuilds the block.
+ */
+const DEFAULT_PROPS: Record<string, unknown> = {
+  textColor: "default",
+  backgroundColor: "default",
+  textAlignment: "left",
+};
+
+function canonicalProps(props: Record<string, unknown> | undefined): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(props ?? {}).filter(([key, value]) => DEFAULT_PROPS[key] !== value));
+}
+
+function canonicalContent(content: EditorBlock["content"]): EditorBlock["content"] {
+  if (!Array.isArray(content)) return content;
+  return content.map((item) => {
+    if (!isRecord(item)) return item;
+    const { styles, ...rest } = item as Record<string, unknown>;
+    if (Array.isArray(rest.content)) rest.content = canonicalContent(rest.content as EditorBlock["content"]);
+    return (isRecord(styles) && Object.keys(styles).length > 0 ? { ...rest, styles } : rest) as (typeof content)[number];
+  });
+}
+
 /** The block's own text, without its children (each child is its own snapshot block). */
 function ownText(block: EditorBlock): string {
   return blockText({ ...block, children: [] });
 }
+
+/**
+ * The largest Yjs state (base64 characters) kept beside the blocks. Restore
+ * rebuilds from the blocks, so the state is a record only; leaving a large
+ * one out keeps a big page's versions well under object_version's 2 MB.
+ */
+export const MAX_SNAPSHOT_STATE = 512 * 1024;
 
 export function editorContentToSnapshot(content: EditorContent, yjsState?: string | null): ContentSnapshot {
   const blocks: BlockSnapshot[] = [];
   const walk = (list: EditorBlock[], parent: string | null) => {
     list.forEach((block, index) => {
       const id = typeof block.id === "string" && block.id ? block.id : `${parent ?? "root"}-${index + 1}`;
-      const stored: StoredBlockProps = { props: block.props ?? {} };
-      if (block.content !== undefined) stored.content = block.content;
+      const stored: StoredBlockProps = { props: canonicalProps(block.props) };
+      if (block.content !== undefined) stored.content = canonicalContent(block.content);
       if (parent) stored.parent = parent;
       blocks.push({ id, type: block.type, text: ownText(block), props: stored as Record<string, unknown> });
       walk(block.children ?? [], id);
     });
   };
   walk(content.blocks, null);
-  return yjsState ? { version: 1, blocks, yjsState } : { version: 1, blocks };
+  return yjsState && yjsState.length <= MAX_SNAPSHOT_STATE ? { version: 1, blocks, yjsState } : { version: 1, blocks };
 }
 
 /**
@@ -84,6 +117,31 @@ export function snapshotToEditorContent(snapshot: ContentSnapshot): EditorConten
     else roots.push(candidate);
   }
   return normalizeContent({ version: 1, blocks: roots });
+}
+
+/**
+ * Restoring one block brings back its content, not its old place: when the
+ * block still exists, it keeps the parent it has now, so a block that was
+ * moved out of a list is not pulled back into it.
+ */
+export function keepCurrentPlacement(
+  restored: ContentSnapshot,
+  current: ContentSnapshot,
+  blockId: string,
+): ContentSnapshot {
+  const now = current.blocks.find((block) => block.id === blockId);
+  if (!now) return restored;
+  const parent = isRecord(now.props) ? (now.props as StoredBlockProps).parent : undefined;
+  return {
+    ...restored,
+    blocks: restored.blocks.map((block) => {
+      if (block.id !== blockId) return block;
+      const stored: StoredBlockProps = isRecord(block.props) ? { ...(block.props as StoredBlockProps) } : {};
+      if (parent) stored.parent = parent;
+      else delete stored.parent;
+      return { ...block, props: stored as Record<string, unknown> };
+    }),
+  };
 }
 
 type DocumentRow = { content: unknown; yjs_state: string | null; organization_id: string };

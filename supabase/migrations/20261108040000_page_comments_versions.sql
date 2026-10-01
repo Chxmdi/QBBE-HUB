@@ -13,8 +13,9 @@
 --     capability), that delegates to the page rule, the meeting rules or
 --     app.can, and makes save_object_version and the version read policy use
 --     it, so a page or a meeting can be snapshotted, compared and restored;
---   * lets editor_document hold a meeting's notes beside pages and tasks, so
---     the meeting adapter has a document to version.
+--
+-- Meeting notes are already an editor document (20261107030100, I5), with
+-- the same read and manage rules this file uses for meeting versions.
 --
 -- object_version.object_id has never had a foreign key to public.object
 -- (pages were expected to be registered later), so nothing has to be relaxed:
@@ -211,66 +212,6 @@ create policy object_version_read on public.object_version
     app.is_org_member(organization_id)
     and public.can_object_content(object_id, object_type, 'view')
   );
-
--- ---------------------------------------------------------------------------
--- Meeting notes as editor documents
--- ---------------------------------------------------------------------------
-
-alter table public.editor_document
-  drop constraint if exists editor_document_object_type_check;
-alter table public.editor_document
-  add constraint editor_document_object_type_check
-  check (object_type in ('page', 'task', 'meeting'));
-
-create or replace function app.can_editor_object(p_object_type text, p_object_id uuid, p_capability text)
-returns boolean
-language sql stable security definer
-set search_path = ''
-as $$
-  select case p_object_type
-    when 'page' then app.can_page(p_object_id, p_capability)
-    when 'task' then app.can(p_object_id, p_capability)
-    when 'meeting' then app.can_object_content('meeting', p_object_id, p_capability)
-    else false
-  end;
-$$;
-
--- Same body as 20261103010200 plus the meeting branch.
-create or replace function app.editor_document_before_write()
-returns trigger
-language plpgsql security definer
-set search_path = ''
-as $$
-declare
-  v_org uuid;
-begin
-  if tg_op = 'UPDATE' then
-    if new.object_id <> old.object_id or new.object_type <> old.object_type then
-      raise exception 'An editor document cannot move to another object' using errcode = '42501';
-    end if;
-    new.created_by := old.created_by;
-    new.created_at := old.created_at;
-    new.version := old.version + 1;
-  else
-    new.version := 1;
-  end if;
-
-  if new.object_type = 'page' then
-    select p.organization_id into v_org from public.page p where p.id = new.object_id;
-  elsif new.object_type = 'task' then
-    select t.organization_id into v_org from public.task t where t.id = new.object_id;
-  elsif new.object_type = 'meeting' then
-    select m.organization_id into v_org from public.meeting m where m.id = new.object_id;
-  end if;
-  if v_org is null then
-    raise exception 'No such object for this document' using errcode = '23503';
-  end if;
-  new.organization_id := v_org;
-  new.updated_at := now();
-  new.updated_by := coalesce((select auth.uid()), new.updated_by);
-  return new;
-end;
-$$;
 
 comment on table public.object_version is
   'Workspace OS M16a: snapshots of an object''s content and properties. Written by save_object_version only. '
