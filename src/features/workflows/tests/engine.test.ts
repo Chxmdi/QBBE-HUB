@@ -156,7 +156,7 @@ describe("runGraph", () => {
     s.event.changes.status.after = "completed";
     const result = await runGraph(graph, s, p);
     expect(result.outcome).toBe("skipped");
-    expect(result.steps.at(-1)?.output).toEqual({ matched: false });
+    expect(result.steps.at(-1)?.output).toEqual({ matched: false, values: { "event.changes.status.after": "completed" } });
     expect(p.runAction).not.toHaveBeenCalled();
   });
 

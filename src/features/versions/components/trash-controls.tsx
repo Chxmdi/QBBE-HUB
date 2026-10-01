@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { useFormatters, useLocale } from "@/lib/i18n/client";
 import type { ObjectRef } from "@/lib/objects/contracts";
 import { fill } from "@/features/collab/i18n";
@@ -48,6 +49,7 @@ export function TrashTable({ entries }: { entries: TrashEntry[] }) {
   const m = versionsText(useLocale());
   const format = useFormatters();
   const router = useRouter();
+  const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -98,8 +100,14 @@ export function TrashTable({ entries }: { entries: TrashEntry[] }) {
                         setMessage(null);
                         const result = await restoreObject(entry.objectId);
                         setBusy(null);
-                        setMessage(result.ok ? { ok: true, text: m.trash.restored } : { ok: false, text: result.error ?? m.errors.failed });
-                        if (result.ok) router.refresh();
+                        // The restored row (and with the last one, the table)
+                        // leaves on refresh, so success goes to the page-level toast.
+                        if (result.ok) {
+                          toast(m.trash.restored);
+                          router.refresh();
+                        } else {
+                          setMessage({ ok: false, text: result.error ?? m.errors.failed });
+                        }
                       }}
                     >
                       {m.trash.restore}
