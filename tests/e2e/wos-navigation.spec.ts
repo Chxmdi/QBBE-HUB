@@ -113,6 +113,16 @@ const sidebar = (page: Page, locale: Locale): Locator =>
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/**
+ * A sidebar link's accessible name. The My Work entry carries the person's
+ * open-item count as a badge ("My Work 3 open items") whenever the count is
+ * above zero, and which specs ran before this one on the same database
+ * decides that; the name therefore allows the badge rather than depend on it.
+ */
+const BADGE = { en: "open items", fr: "éléments ouverts" } as const;
+const linkName = (label: string, locale: Locale) =>
+  new RegExp(`^${escape(label)}(?:\\s+\\d+\\+?\\s+${escape(BADGE[locale])})?$`);
+
 /** Landed on `href` (or a page under it, "/m" opens "/m/today") with a real heading. */
 async function expectLanded(page: Page, href: string) {
   await page.waitForURL(
@@ -125,7 +135,7 @@ async function expectLanded(page: Page, href: string) {
 
 async function walkSidebar(page: Page, screens: { href: string; en: string; fr: string }[], locale: Locale) {
   for (const screen of screens) {
-    const link = sidebar(page, locale).getByRole("link", { name: screen[locale], exact: true });
+    const link = sidebar(page, locale).getByRole("link", { name: linkName(screen[locale], locale) });
     await expect(link, `${screen.href} in the sidebar (${locale})`).toBeVisible();
     await link.click();
     await expectLanded(page, screen.href);
@@ -177,7 +187,7 @@ test("with every switch on, staff reach every new screen from the sidebar and th
   await expect(nav.getByText(text.en.classic, { exact: true })).toBeVisible();
   // Each name once: a replacement and its classic twin never read the same.
   for (const screen of NEW_SCREENS) {
-    await expect(nav.getByRole("link", { name: screen.en, exact: true }), screen.href).toHaveCount(1);
+    await expect(nav.getByRole("link", { name: linkName(screen.en, "en") }), screen.href).toHaveCount(1);
   }
   // Setup holds the one staff-level entry; the admin-only rows stay out.
   await expect(nav.getByText("Setup", { exact: true })).toBeVisible();
@@ -194,7 +204,7 @@ test("with every switch on, staff reach every new screen from the sidebar and th
   await page.goto("/");
   const myWork = nav.getByRole("link", { name: /^My Work/ });
   await expect(myWork).toHaveCount(2);
-  await expect(nav.getByRole("link", { name: "My Work", exact: true })).toHaveAttribute("href", "/lenses/my-work");
+  await expect(nav.getByRole("link", { name: linkName("My Work", "en") })).toHaveAttribute("href", "/lenses/my-work");
   await expect(nav.getByRole("link", { name: "My Work (classic)", exact: true })).toHaveAttribute("href", "/my-work");
   await expect(nav.getByRole("link", { name: "My Work (classic)", exact: true }).getByText("open items")).toHaveCount(0);
 });
@@ -299,7 +309,7 @@ test("with every switch on, the sidebar, the palette and the drawer pass axe in 
   expect(problems, problems.join("\n")).toEqual([]);
 });
 
-test("with every switch off, nothing new appears in the sidebar, the tabs or the palette", async ({ page }) => {
+test("with every switch off, nothing new appears in the sidebar, the tabs or the palette [switch off]", async ({ page }) => {
   test.setTimeout(180_000);
   setSwitches(false);
   await signIn(page, "staff");
@@ -315,7 +325,7 @@ test("with every switch off, nothing new appears in the sidebar, the tabs or the
     await expect(nav.getByText(label, { exact: true }), label).toHaveCount(0);
   }
   await expect(nav.getByRole("link", { name: /classic/ })).toHaveCount(0);
-  await expect(nav.getByRole("link", { name: "My Work", exact: true })).toHaveAttribute("href", "/my-work");
+  await expect(nav.getByRole("link", { name: linkName("My Work", "en") })).toHaveAttribute("href", "/my-work");
   await expect(nav.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("href", "/");
 
   await page.keyboard.press("Control+k");

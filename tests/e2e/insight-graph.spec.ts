@@ -8,6 +8,19 @@ import { expectAccessible, qaIds, setLensesSwitch } from "./insight";
  * with a list view carrying the same content for keyboard and screen-reader
  * use. Hidden until the lenses switch is on.
  */
+test("the graph lens is hidden while the switch is off [switch off]", async ({ page }) => {
+  const before = setLensesSwitch(false);
+  try {
+    await signIn(page, "owner");
+    // Switch off: the route does not exist.
+    await page.goto("/insight/graph");
+    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Relationship graph" })).toHaveCount(0);
+  } finally {
+    setLensesSwitch(before);
+  }
+});
+
 test("the graph lens centres on a project, filters by depth and has a keyboard-usable list", async ({ page }) => {
   test.setTimeout(150_000);
   const marker = `Graph ${Date.now()}`;
@@ -27,16 +40,9 @@ test("the graph lens centres on a project, filters by depth and has a keyboard-u
   );
   sql(`insert into task_dependency (blocking_task_id, blocked_task_id) values ('${venue}', '${invites}')`);
 
-  const before = setLensesSwitch(false);
+  const before = setLensesSwitch(true);
   try {
     await signIn(page, "owner");
-
-    // Switch off: the route does not exist.
-    await page.goto("/insight/graph");
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Relationship graph" })).toHaveCount(0);
-
-    setLensesSwitch(true);
     await page.goto(`/insight/graph?root=${project}&depth=1`);
     await expect(page.getByRole("heading", { name: "Relationship graph" })).toBeVisible();
     const picture = page.getByRole("group", { name: /^Graph of \d+ objects/ });
