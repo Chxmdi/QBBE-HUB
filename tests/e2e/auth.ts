@@ -78,11 +78,6 @@ export function currentTotp(secret: string): string {
   return totpForCounter(secret, Math.floor(Date.now() / 30_000));
 }
 
-// The code each account last submitted: a TOTP code is single-use, and a
-// test that signs the owner in twice within one 30-second window would
-// otherwise resubmit it and sit on the MFA screen until the wait expires.
-const lastSubmittedTotp = new Map<string, string>();
-
 async function completeMfa(page: Page, account: "owner" | "admin") {
   const codeInput = page.getByLabel("Six-digit code", { exact: true });
   await expect(codeInput).toBeVisible({ timeout: 20_000 });
@@ -96,16 +91,10 @@ async function completeMfa(page: Page, account: "owner" | "admin") {
     throw new Error(`The QA ${account} already has an MFA factor whose test secret is unavailable`);
   }
 
-  // Avoid submitting a code at the edge of its 30-second validity window, and
-  // never the code this account already used.
-  let secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
-  if (secondsRemaining <= 2 || lastSubmittedTotp.get(account) === currentTotp(secret)) {
-    await page.waitForTimeout((secondsRemaining + 1) * 1000);
-    secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
-  }
-  const code = currentTotp(secret);
-  lastSubmittedTotp.set(account, code);
-  await codeInput.fill(code);
+  // Avoid submitting a code at the edge of its 30-second validity window.
+  const secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
+  if (secondsRemaining <= 2) await page.waitForTimeout((secondsRemaining + 1) * 1000);
+  await codeInput.fill(currentTotp(secret));
   await clickWhenInteractive(
     page.getByRole("button", { name: /^(Enable MFA|Verify and continue)$/ }),
   );
