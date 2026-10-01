@@ -23,6 +23,9 @@ const WRITABLE_NATIVE_TABLES = new Set([
   "task", "project", "meeting", "decision", "risk", "outcome_metric", "team", "event", "crm_contact", "document",
 ]);
 
+/** Native tables whose rows are archived, not deleted, when a creation is undone. */
+const ARCHIVABLE_NATIVE_TABLES = new Set(["task"]);
+
 const COLUMN = /^[a-z][a-z0-9_]*$/;
 
 export class ObjectWriteError extends Error {}
@@ -150,12 +153,36 @@ export function createSupabaseObjectWriter(client: Client): ObjectWriter {
     }
   }
 
+  /**
+   * A create or delete change on a record that archives rather than deletes:
+   * undoing a creation archives the row (the bytes and history stay), and
+   * undoing that undo restores it. Only tables with an `archived_at` column
+   * the screens already honour are reachable this way.
+   */
+  async function writeArchive(change: Change & { kind: "create" | "delete" }) {
+    const { data: object } = await client
+      .from("object")
+      .select("id, object_type!object_type_id_organization_id_fkey(native_table)")
+      .eq("id", change.object.id)
+      .maybeSingle();
+    if (!object) throw new ObjectWriteError("not_found");
+    const type = (object as { object_type: { native_table: string | null } | { native_table: string | null }[] | null }).object_type;
+    const table = (Array.isArray(type) ? type[0] : type)?.native_table ?? null;
+    if (!table || !ARCHIVABLE_NATIVE_TABLES.has(table)) throw new ObjectWriteError("create_delete_not_supported");
+    const { data, error } = await client
+      .from(table)
+      .update({ archived_at: change.kind === "delete" ? new Date().toISOString() : null })
+      .eq("id", change.object.id)
+      .select("id");
+    if (error || !data || data.length === 0) throw new ObjectWriteError(error?.message ?? "forbidden");
+  }
+
   return {
     async apply(changes) {
       for (const change of changes) {
         if (change.kind === "update") await writeUpdate(change);
         else if (change.kind === "link" || change.kind === "unlink") await writeLink(change);
-        else throw new ObjectWriteError("create_delete_not_supported");
+        else await writeArchive(change);
       }
     },
     async read(change) {

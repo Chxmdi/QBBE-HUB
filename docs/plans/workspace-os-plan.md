@@ -401,8 +401,8 @@ tables are still there.
 
 ## 12. Decisions for QBBE
 
-1. **Public pages (V1-18):** in scope because the brief includes them. Owner or admin only, with a review step. OK?
-2. **Section 6 defaults** (Google sign-in only, no Slack or GitHub, installable web app instead of store apps). OK?
-3. **Order:** MVP first as above, or bring Meetings and Decisions (V1-9, V1-10) into the MVP because QBBE uses them heavily?
+Decided by QBBE on 2026-09-30.
 
-Phase 0 doesn't depend on these answers and can start now.
+1. **Public pages (V1-18): yes, as planned.** Owner or admin only, with a review step; the switch can be turned off at any time.
+2. **Section 6 defaults: kept.** Google sign-in only (email and password stay for the QA accounts and as a fallback), no Slack or GitHub integration, an installable web app instead of store apps.
+3. **Order: Meetings and Decisions (V1-9, V1-10) join the MVP.** Meetings are where QBBE's tasks and decisions start, and the MVP exit test itself begins in meeting notes. Both are built behind `wos_meetings_v2` and `wos_decisions_v2`, so this adds acceptance scope (about 30 minutes in the session), not build time.

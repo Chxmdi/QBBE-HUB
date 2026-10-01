@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSharingT } from "../i18n";
@@ -40,6 +41,8 @@ export async function shareWith(_previous: ShareActionState, form: FormData): Pr
   const t = await getSharingT();
   if (!(await isEnabled("wos_spaces"))) return { ok: false, message: t("errors.failed") };
   const session = await requireSession();
+  const limited = await enforceRateLimit("share:write", session.userId);
+  if (limited) return { ok: false, message: limited.error };
   const principalKind = String(form.get("principalKind") ?? "");
   const parsed = shareSchema.safeParse({
     objectId: form.get("objectId"),
@@ -72,6 +75,9 @@ const changeSchema = z.object({ grantId: z.string().uuid(), roleId: z.string().u
 export async function changeGrant(_previous: ShareActionState, form: FormData): Promise<ShareActionState> {
   const t = await getSharingT();
   if (!(await isEnabled("wos_spaces"))) return { ok: false, message: t("errors.failed") };
+  const session = await requireSession();
+  const limited = await enforceRateLimit("share:write", session.userId);
+  if (limited) return { ok: false, message: limited.error };
   const parsed = changeSchema.safeParse({ grantId: form.get("grantId"), roleId: form.get("roleId") });
   if (!parsed.success) return { ok: false, message: t("errors.invalid") };
   const db = await createSupabaseServerClient();
@@ -89,6 +95,9 @@ export async function changeGrant(_previous: ShareActionState, form: FormData): 
 export async function removeGrant(_previous: ShareActionState, form: FormData): Promise<ShareActionState> {
   const t = await getSharingT();
   if (!(await isEnabled("wos_spaces"))) return { ok: false, message: t("errors.failed") };
+  const session = await requireSession();
+  const limited = await enforceRateLimit("share:write", session.userId);
+  if (limited) return { ok: false, message: limited.error };
   const grantId = z.string().uuid().safeParse(form.get("grantId"));
   if (!grantId.success) return { ok: false, message: t("errors.invalid") };
   const db = await createSupabaseServerClient();

@@ -10,19 +10,24 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isUnder, navHref, type NavSwitches } from "@/config/navigation";
 import { useT } from "@/lib/i18n/client";
 
 /**
  * Mobile bottom navigation (Part II §11.1): Home, My Work, Channels,
  * Calendar, More. Secondary modules stay reachable through More, which
  * opens the full sidebar drawer. Targets meet the 44px minimum (A11Y-005).
+ * Each tab follows the sidebar: while a Workspace OS switch is on, Home, My
+ * Work and Calendar open the new screen (epic #199, plan §9).
  */
 export function MobileNav({
+  switches,
   myWorkCount,
   onOpenMore,
 }: {
   isAdmin: boolean;
   isStaff: boolean;
+  switches?: NavSwitches;
   myWorkCount: number;
   onOpenMore: () => void;
 }) {
@@ -30,10 +35,10 @@ export function MobileNav({
   const t = useT();
 
   const tabs = [
-    { label: t("nav.items.home"), href: "/", icon: Home, badge: 0 },
-    { label: t("nav.items.myWork"), href: "/my-work", icon: ClipboardList, badge: myWorkCount },
+    { label: t("nav.items.home"), href: navHref("/", switches), icon: Home, badge: 0 },
+    { label: t("nav.items.myWork"), href: navHref("/my-work", switches), icon: ClipboardList, badge: myWorkCount },
     { label: t("nav.items.channels"), href: "/channels", icon: MessagesSquare, badge: 0 },
-    { label: t("nav.items.calendar"), href: "/calendar", icon: CalendarDays, badge: 0 },
+    { label: t("nav.items.calendar"), href: navHref("/calendar", switches), icon: CalendarDays, badge: 0 },
   ];
 
   return (
@@ -43,8 +48,7 @@ export function MobileNav({
     >
       <ul className="flex items-stretch">
         {tabs.map((tab) => {
-          const active =
-            tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
+          const active = isUnder(pathname, tab.href);
           return (
             <li key={tab.href} className="flex-1">
               <Link

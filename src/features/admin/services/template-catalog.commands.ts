@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requiredText } from "@/lib/schema";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
+import { calendarDateInZone } from "@/lib/time";
 import type { TranslateFn } from "@/lib/i18n/translate";
 
 const KINDS = ["task", "event", "update", "report"] as const;
@@ -302,7 +303,10 @@ export async function instantiateRecordTemplate(input: unknown): Promise<ActionR
     return { ok: true };
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // The workspace's calendar date, not the server's: a report started at
+  // 9 pm in Montreal is for today, not for tomorrow in UTC.
+  const today =
+    calendarDateInZone(new Date(), staff.session.timeZone) ?? new Date().toISOString().slice(0, 10);
   const { data, error } = await db
     .from("report_instance")
     .insert({

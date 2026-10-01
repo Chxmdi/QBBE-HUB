@@ -16,6 +16,7 @@ export const FIND_TYPES = [
   "decision",
   "event",
   "document",
+  "page",
   "risk",
   "issue",
   "contact",
