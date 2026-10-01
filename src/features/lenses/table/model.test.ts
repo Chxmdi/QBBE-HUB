@@ -17,6 +17,10 @@ import {
   setHidden,
   specFor,
   stateFromLens,
+  toggleSort,
+  setSortKey,
+  removeSortKey,
+  applyViewerSetting,
   virtualWindow,
   visibleColumns,
   ROW_HEIGHT,
@@ -87,7 +91,7 @@ describe("specFor", () => {
       "task",
       {
         columns: setHidden(defaultColumns(type), "assignee", true),
-        sort: { property: "estimate", direction: "desc" },
+        sort: [{ property: "estimate", direction: "desc" }],
         groupBy: "status",
         search: "  grant ",
       },
@@ -187,7 +191,7 @@ describe("saved lenses", () => {
       { version: 1, type: "task", where: { and: [condition] }, sort: [{ property: "estimate", direction: "desc" }], groupBy: { property: "status" } },
       { columns: [{ key: "estimate", width: 200, hidden: false }] },
     );
-    expect(state.sort).toEqual({ property: "estimate", direction: "desc" });
+    expect(state.sort).toEqual([{ property: "estimate", direction: "desc" }]);
     expect(state.groupBy).toBe("status");
     expect(state.columns[0]).toEqual({ key: "estimate", width: 200, hidden: false });
     const spec = specFor("task", { ...state, search: "x" });
@@ -196,8 +200,85 @@ describe("saved lenses", () => {
 
   it("drops what the table cannot show", () => {
     const state = stateFromLens(type, { sort: [{ property: "assignee" }], groupBy: { property: "title" } }, {});
-    expect(state.sort).toBeNull();
+    expect(state.sort).toEqual([]);
     expect(state.groupBy).toBeNull();
-    expect(state.filters).toEqual([]);
+    expect(state.where).toBeNull();
+  });
+
+  it("keeps up to three sort keys, sortable ones only, and an OR clause as it is", () => {
+    const where = { or: [{ property: "status", operator: "is", value: "ready" }, { property: "estimate", operator: "gt", value: 1 }] } as const;
+    const state = stateFromLens(
+      type,
+      { version: 1, type: "task", where, sort: [{ property: "estimate" }, { property: "assignee" }, { property: "status", direction: "desc" }, { property: "title" }, { property: "estimate" }] },
+      {},
+    );
+    expect(state.sort).toEqual([{ property: "estimate", direction: "asc" }, { property: "status", direction: "desc" }, { property: "title", direction: "asc" }]);
+    expect(state.where).toEqual(where);
+    // The search wraps an OR root rather than joining it.
+    expect(specFor("task", { ...state, search: "x" }).where).toEqual({ and: [where, { property: "title", operator: "contains", value: "x" }] });
+    expect(specFor("task", state).where).toEqual(where);
+    expect(lensSpecSchema.safeParse(specFor("task", { ...state, search: "x" })).success).toBe(true);
+  });
+
+  it("refuses a where clause the engine would not run", () => {
+    const state = stateFromLens(type, { where: { and: [{ property: "status", operator: "nope", value: "ready" }] } }, {});
+    expect(state.where).toBeNull();
+  });
+});
+
+describe("multi-sort", () => {
+  it("a plain header click cycles one column: ascending, descending, none", () => {
+    expect(toggleSort([], "title")).toEqual([{ property: "title", direction: "asc" }]);
+    expect(toggleSort([{ property: "title", direction: "asc" }], "title")).toEqual([{ property: "title", direction: "desc" }]);
+    expect(toggleSort([{ property: "title", direction: "desc" }], "title")).toEqual([]);
+    // Clicking another column replaces the whole sort.
+    expect(toggleSort([{ property: "title", direction: "desc" }, { property: "estimate", direction: "asc" }], "status")).toEqual([{ property: "status", direction: "asc" }]);
+  });
+
+  it("an additive click appends, reverses a key already there, and never passes three", () => {
+    let sort = toggleSort([], "title", true);
+    sort = toggleSort(sort, "estimate", true);
+    sort = toggleSort(sort, "status", true);
+    expect(sort.map((k) => k.property)).toEqual(["title", "estimate", "status"]);
+    expect(toggleSort(sort, "estimate", true)[1].direction).toBe("desc");
+    sort = toggleSort(sort, "assignee", true);
+    expect(sort.map((k) => k.property)).toEqual(["title", "estimate", "assignee"]);
+    expect(setSortKey(sort, { property: "status", direction: "desc" }, false)).toEqual([{ property: "status", direction: "desc" }]);
+    expect(setSortKey(sort, { property: "title", direction: "desc" }, true)).toEqual([
+      { property: "estimate", direction: "asc" },
+      { property: "assignee", direction: "asc" },
+      { property: "title", direction: "desc" },
+    ]);
+    expect(removeSortKey(sort, "estimate").map((k) => k.property)).toEqual(["title", "assignee"]);
+  });
+});
+
+describe("viewer settings", () => {
+  const lensState = stateFromLens(
+    type,
+    { version: 1, type: "task", where: { and: [{ property: "status", operator: "is", value: "ready" }] }, sort: [{ property: "title" }] },
+    { columns: [{ key: "estimate", width: 200, hidden: false }] },
+  );
+
+  it("lays the viewer's columns, sort and filters over the lens", () => {
+    const next = applyViewerSetting(type, lensState, {
+      layout: { columns: [{ key: "status", width: 100, hidden: true }] },
+      sort: [{ property: "estimate", direction: "desc" }, { property: "title", direction: "asc" }],
+      where: { or: [{ property: "estimate", operator: "gt", value: 2 }] },
+    });
+    expect(next.columns.find((c) => c.key === "status")).toEqual({ key: "status", width: 100, hidden: true });
+    expect(next.sort).toEqual([{ property: "estimate", direction: "desc" }, { property: "title", direction: "asc" }]);
+    expect(next.where).toEqual({ or: [{ property: "estimate", operator: "gt", value: 2 }] });
+  });
+
+  it("keeps the lens's part when the setting leaves it out or it is no longer valid", () => {
+    expect(applyViewerSetting(type, lensState, null)).toBe(lensState);
+    const partial = applyViewerSetting(type, lensState, { layout: {}, sort: [{ property: "assignee" }], where: undefined });
+    expect(partial.columns).toEqual(lensState.columns);
+    expect(partial.sort).toEqual([]);
+    expect(partial.where).toEqual(lensState.where);
+    const cleared = applyViewerSetting(type, lensState, { layout: {}, sort: [], where: null });
+    expect(cleared.where).toBeNull();
+    expect(applyViewerSetting(type, lensState, { layout: {}, sort: [], where: { and: [{ property: "x", operator: "is" }] } }).where).toBeNull();
   });
 });
