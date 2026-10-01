@@ -41,7 +41,9 @@ export function ConditionFields({
       {when.tests.map((test, index) => {
         const testPrefix = when.tests.length > 1 ? `${prefix}-t${index + 1}` : prefix;
         const option = findPropertyOption(groups, test.path);
-        const operators = operatorsForKind(option?.kind);
+        const offered = operatorsForKind(option?.kind);
+        // A saved operator the property's kind does not offer stays shown, so the list never misstates the test.
+        const operators = offered.includes(test.op) ? offered : [...offered, test.op];
         const listId = `${testPrefix}-choices`;
         const needsValue = test.op !== "is_empty" && test.op !== "is_not_empty";
         return (

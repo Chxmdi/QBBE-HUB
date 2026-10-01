@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Select } from "@/components/ui/input";
+import { useFormatters } from "@/lib/i18n/client";
 import { taskStatuses } from "../actions-catalog";
 import { fill, type WorkflowsMessages } from "../i18n";
 import { testRunWorkflow, type TestRunResult, type TestRunStep } from "../services/workflow.commands";
@@ -25,7 +26,7 @@ export function TestRunPanel({
   objectType,
   changedProperty,
   recentEvents,
-  dateTime,
+  timeZone,
 }: {
   id: string;
   m: WorkflowsMessages;
@@ -35,10 +36,12 @@ export function TestRunPanel({
   /** The trigger's changed property; the sample change is on it. */
   changedProperty: string;
   recentEvents: RecentEvent[];
-  /** Formats a timestamp for the reader. */
-  dateTime: (iso: string) => string;
+  /** The reader's time zone, for event times. */
+  timeZone: string;
 }) {
   const router = useRouter();
+  const f = useFormatters();
+  const dateTime = React.useCallback((iso: string) => f.dateTime(iso, timeZone), [f, timeZone]);
   const property = changedProperty || "status";
   const statusLike = property === "status";
   const [objectId, setObjectId] = React.useState(defaultObjectId);
@@ -169,7 +172,8 @@ export function TestRunPanel({
 
 function TestStepLine({ step, m }: { step: TestRunStep; m: WorkflowsMessages }) {
   const symbol = step.status === "failed" ? "✕" : step.status === "succeeded" ? "✓" : "–";
-  const heading = fill(m.test.stepHeading, {
+  // The trigger has no id of its own worth repeating ("Trigger trigger").
+  const heading = fill(step.kind === "trigger" ? m.test.triggerHeading : m.test.stepHeading, {
     kind: m.stepKinds[step.kind as keyof typeof m.stepKinds] ?? step.kind,
     id: step.stepId,
     status: m.stepStatus[step.status as keyof typeof m.stepStatus] ?? step.status,

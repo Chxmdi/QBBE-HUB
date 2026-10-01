@@ -12,6 +12,7 @@ import {
   editorStepKinds,
   editorToGraph,
   newStep,
+  removeStep,
   type EditorState,
   type EditorStep,
   type EditorStepKind,
@@ -236,7 +237,7 @@ export function WorkflowEditor({ id, initial, m, catalog, locale, workflows }: P
                 ctx={ctx}
                 onChange={(next) => setStep(index, next)}
                 onMove={(by) => moveStep(index, by)}
-                onRemove={() => update({ steps: state.steps.filter((_, position) => position !== index) })}
+                onRemove={() => update({ steps: removeStep(state.steps, index) })}
               />
             </li>
           ))}

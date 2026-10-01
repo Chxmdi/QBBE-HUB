@@ -60,7 +60,7 @@ export default async function WorkflowPage({
   const graph = validateGraph(workflow.graph);
   const editor = graph.ok ? graphToEditor(graph.graph, meta) : null;
   const asJson = mode === "json" || !editor;
-  const trigger = graph.ok ? graph.graph.trigger : { objectTypes: [], verbs: [] };
+  const trigger = graph.ok ? graph.graph.trigger : { objectTypes: [], verbs: [] as never[] };
   const [runs, failures, workflows, recentEvents, catalog] = await Promise.all([
     listRuns(workflow.id, 50, outcome),
     listFailedRuns(workflow.id, session.organizationId),
@@ -68,7 +68,6 @@ export default async function WorkflowPage({
     listRecentEvents(session.organizationId, trigger),
     loadWorkflowCatalog(),
   ]);
-  const dateTime = (iso: string) => f.dateTime(iso, session.timeZone);
 
   return (
     <div className="space-y-5">
@@ -108,7 +107,7 @@ export default async function WorkflowPage({
         objectType={trigger.objectTypes[0] ?? "task"}
         changedProperty={graph.ok ? graph.graph.trigger.changedProperty ?? "" : ""}
         recentEvents={recentEvents}
-        dateTime={dateTime}
+        timeZone={session.timeZone}
       />
       <FailureHistory runs={failures} m={m} f={f} timeZone={session.timeZone} scope="workflow" />
       <RunHistory runs={runs} m={m} f={f} timeZone={session.timeZone} workflowId={workflow.id} outcome={outcome} />

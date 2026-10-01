@@ -18,6 +18,17 @@ export type ConditionOperator = (typeof conditionOperators)[number];
 /** Workflow object types global_search can find by title. */
 export const searchableTypes = ["task", "project", "meeting", "event", "risk", "document", "contact"] as const;
 
+/** Where each searchable type keeps its title, to name a saved id (same tables as global_search). */
+export const recordTitleSource: Record<(typeof searchableTypes)[number], { table: string; title: string }> = {
+  task: { table: "task", title: "title" },
+  project: { table: "project", title: "name" },
+  meeting: { table: "meeting", title: "title" },
+  event: { table: "event", title: "name" },
+  risk: { table: "risk", title: "title" },
+  document: { table: "document", title: "title" },
+  contact: { table: "crm_contact", title: "full_name" },
+};
+
 export type PropertyGroupKind = LensPropertyKind | "event";
 
 export interface PropertyOption {

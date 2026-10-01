@@ -252,6 +252,7 @@ export const workflowsFrCA: WorkflowsMessages = {
     replaying: "Rejoue l’événement : {summary}",
     useSample: "Utiliser plutôt des données d’exemple",
     stepHeading: "{kind} {id} : {status}",
+    triggerHeading: "{kind} : {status}",
     triggerLine: "{verb} {type} {id}",
     changeLine: "{property} : de {before} à {after}",
     testLine: "{path} {op} {value}",

@@ -5,7 +5,9 @@ import { Input, Label } from "@/components/ui/input";
 import { fill, type WorkflowsMessages } from "../../i18n";
 import { searchableTypes } from "../../picker-options";
 import { THIS_ITEM } from "../../editor-model";
-import { searchRecords, type PickerOption } from "../../services/workflow.pickers";
+import { recordTitle, searchRecords, type PickerOption } from "../../services/workflow.pickers";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { Combobox, type ComboboxGroup } from "./combobox";
 
 /**
@@ -42,6 +44,18 @@ export function RecordPicker({
   const [chosen, setChosen] = React.useState<{ id: string; label: string } | null>(null);
   const latest = React.useRef(0);
 
+  // A saved workflow or a picked event holds only the id: name it once.
+  React.useEffect(() => {
+    if (!searchable || !UUID.test(value) || chosen?.id === value) return;
+    let cancelled = false;
+    recordTitle({ type, id: value }).then((title) => {
+      if (!cancelled && title) setChosen({ id: value, label: title });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchable, type, value, chosen]);
+
   const onQuery = React.useCallback(async (query: string) => {
     if (!searchable) return;
     const call = ++latest.current;
@@ -52,10 +66,13 @@ export function RecordPicker({
     setLoading(false);
   }, [searchable, type]);
 
-  const groups: ComboboxGroup[] = [
-    ...(allowThisItem ? [{ label: "", options: [{ id: THIS_ITEM, label: m.steps.thisItem, description: THIS_ITEM }] }] : []),
-    ...(options.length ? [{ label: "", options: options.map((option) => ({ id: option.id, label: option.label, description: option.description })) }] : []),
-  ];
+  const groups: ComboboxGroup[] = [{
+    label: "",
+    options: [
+      ...(allowThisItem ? [{ id: THIS_ITEM, label: m.steps.thisItem, description: THIS_ITEM }] : []),
+      ...options.map((option) => ({ id: option.id, label: option.label, description: option.description })),
+    ],
+  }];
   const selectedLabel = value === THIS_ITEM ? m.steps.thisItem : chosen && chosen.id === value ? chosen.label : value;
 
   return (

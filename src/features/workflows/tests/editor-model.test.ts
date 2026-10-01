@@ -12,7 +12,9 @@ import {
   graphToEditor,
   newStep,
   newStepId,
+  removeStep,
   THIS_ITEM,
+  typedScalar,
   type EditorState,
   type EditorStep,
 } from "../editor-model";
@@ -148,6 +150,51 @@ describe("editor model", () => {
     expect(newStepId([{ id: "step-1" }, { id: "step-3" }])).toBe("step-4");
     expect(newStepId([{ id: "step-2" }])).toBe("step-3");
     expect(newStepId([])).toBe("step-1");
+  });
+
+  it("saves numbers and yes-or-no as typed values, and keeps them typed", () => {
+    expect([typedScalar("5"), typedScalar("-2.5"), typedScalar("true"), typedScalar("false"), typedScalar(" blocked ")])
+      .toEqual([5, -2.5, true, false, "blocked"]);
+    const graph: WorkflowGraph = { ...everyKind, start: "c", steps: [
+      { id: "c", kind: "condition", when: { and: [
+        { path: "event.changes.estimate.after", op: "gt", value: 5 },
+        { path: "event.changes.done.after", op: "eq", value: true },
+        { path: "event.changes.n.after", op: "in", value: [1, "two"] },
+      ] }, next: null },
+    ] };
+    expect(editorToGraph(graphToEditor(graph, meta)!)).toEqual(graph);
+  });
+
+  it("keeps the end of a loop body as the end, so an added step does not join the loop", () => {
+    const graph: WorkflowGraph = { ...everyKind, start: "each", steps: [
+      { id: "each", kind: "loop", items: "event.changes.list.after", body: "raise", next: "pause" },
+      { id: "pause", kind: "wait", seconds: 60, next: null },
+      { id: "raise", kind: "action", action: "task.set_priority", input: { taskId: THIS_ITEM, priority: "high" }, next: null },
+    ] };
+    const editor = graphToEditor(graph, meta)!;
+    expect(editor.steps.find((step) => step.id === "raise")).toMatchObject({ next: END });
+    const added = { ...editor, steps: [...editor.steps, newStep("action", editor.steps)] };
+    const saved = editorToGraph(added);
+    expect(saved.steps.find((step) => step.id === "raise")).toMatchObject({ next: null });
+    expect(saved.steps.find((step) => step.id === "pause")).toMatchObject({ next: null });
+  });
+
+  it("keeps every trigger type a stored graph names", () => {
+    const graph: WorkflowGraph = { ...everyKind, trigger: { objectTypes: ["task", "project"], verbs: [] } };
+    expect(editorToGraph(graphToEditor(graph, meta)!).trigger.objectTypes).toEqual(["task", "project"]);
+  });
+
+  it("ends the links that went to a removed step and never reuses its id", () => {
+    const steps: EditorStep[] = [
+      { ...newStep("condition", []), id: "step-1", next: { to: "step", id: "step-3" } } as EditorStep,
+      { ...newStep("branch", []), id: "step-2", then: { to: "step", id: "step-3" } } as EditorStep,
+      { ...newStep("wait", []), id: "step-3" } as EditorStep,
+    ];
+    const left = removeStep(steps, 2);
+    expect(left.map((step) => step.id)).toEqual(["step-1", "step-2"]);
+    expect(left[0]).toMatchObject({ next: END });
+    expect(left[1]).toMatchObject({ then: END });
+    expect(newStepId([...left, { id: "step-7" }])).toBe("step-8");
   });
 
   it("offers defaults for every action field", () => {

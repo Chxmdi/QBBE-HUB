@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { Formatters } from "@/lib/i18n/format";
 import { fill, type WorkflowsMessages } from "../i18n";
-import type { RunOutcomeFilter, RunRow } from "../services/workflow.queries";
+import type { RunOutcomeFilter } from "../run-outcomes";
+import type { RunRow } from "../services/workflow.queries";
 import { OutcomeFilter } from "./outcome-filter";
 
 const TONE: Record<string, "success" | "danger" | "warning" | "neutral" | "info"> = {

@@ -195,8 +195,8 @@ export function Combobox({
       >
         {loading ? <li role="presentation" className="px-2 py-1.5 text-[13px] text-muted">{m.searching}</li> : null}
         {!loading && flat.length === 0 ? <li role="presentation" className="px-2 py-1.5 text-[13px] text-muted">{m.noResults}</li> : null}
-        {indexed.map((group) => (
-          <li key={group.label} role="presentation">
+        {indexed.map((group, groupIndex) => (
+          <li key={`${groupIndex}-${group.label}`} role="presentation">
             {indexed.length > 1 || group.label ? (
               <div role="presentation" className="px-2 pb-0.5 pt-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-muted">
                 {group.label}

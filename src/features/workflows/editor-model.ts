@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   approvalSubjectTypes,
   conditionOperators,
+  loopBodies,
   objectEventVerbs,
   type ConditionLeaf,
   type ConditionNode,
@@ -173,6 +174,8 @@ export interface EditorState {
   enabled: boolean;
   maxRunsPerHour: number;
   objectType: string;
+  /** Further trigger types a stored graph names; the screen picks one, these are kept. */
+  moreObjectTypes?: string[];
   verbs: string[];
   changedProperty: string;
   steps: EditorStep[];
@@ -212,12 +215,30 @@ export function emptyCondition(): EditorCondition {
   return { match: "all", tests: [{ ...DEFAULT_TEST }] };
 }
 
-/** The first `step-N` no step uses yet. */
+/** A `step-N` past every number in use, so an id is never handed out twice in a list. */
 export function newStepId(steps: readonly { id: string }[]): string {
-  const taken = new Set(steps.map((step) => step.id));
-  let number = steps.length + 1;
-  while (taken.has(`step-${number}`)) number += 1;
-  return `step-${number}`;
+  let highest = steps.length;
+  for (const step of steps) {
+    const match = step.id.match(/^step-(\d+)$/);
+    if (match) highest = Math.max(highest, Number(match[1]));
+  }
+  return `step-${highest + 1}`;
+}
+
+/** Removes a step; links that went to it now end the run, so none point at nothing. */
+export function removeStep(steps: readonly EditorStep[], index: number): EditorStep[] {
+  const removed = steps[index]?.id;
+  const fix = (link: EditorLink): EditorLink => (link.to === "step" && link.id === removed ? END : link);
+  return steps
+    .filter((_, position) => position !== index)
+    .map((step) => {
+      const next = { ...step } as EditorStep & Record<string, unknown>;
+      for (const key of ["next", "then", "else", "body"] as const) {
+        const link = next[key] as EditorLink | undefined;
+        if (link && typeof link === "object" && "to" in link) (next as Record<string, unknown>)[key] = fix(link);
+      }
+      return next as EditorStep;
+    });
 }
 
 /** A fresh step of a kind, with sensible defaults, placed after the current steps. */
@@ -247,12 +268,27 @@ export function newStep(kind: EditorStepKind, steps: readonly { id: string }[]):
   }
 }
 
+const NUMBER = /^-?\d+(\.\d+)?$/;
+
+/**
+ * A typed value as the engine compares it: "5" is the number 5 and "true" the
+ * boolean, so "greater than 5" and "is true" work on number and checkbox
+ * properties; anything else stays text. The engine treats "5" and 5 as equal.
+ */
+export function typedScalar(text: string): ConditionScalar {
+  const value = text.trim();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (NUMBER.test(value) && Number.isFinite(Number(value))) return Number(value);
+  return value;
+}
+
 function conditionValue(test: EditorTest): ConditionScalar | ConditionScalar[] | undefined {
   if (test.op === "is_empty" || test.op === "is_not_empty") return undefined;
   if (test.op === "in") {
-    return test.value.split(",").map((part) => part.trim()).filter(Boolean);
+    return test.value.split(",").map((part) => part.trim()).filter(Boolean).map(typedScalar);
   }
-  return test.value.trim();
+  return typedScalar(test.value);
 }
 
 function leafOf(test: EditorTest): ConditionLeaf {
@@ -317,7 +353,9 @@ export function editorToGraph(state: EditorState): WorkflowGraph {
   return {
     version: 1,
     trigger: {
-      objectTypes: state.objectType ? [state.objectType] : [],
+      objectTypes: state.objectType
+        ? [...new Set([state.objectType, ...(state.moreObjectTypes ?? [])])]
+        : [],
       verbs: state.verbs.filter((verb): verb is (typeof objectEventVerbs)[number] =>
         (objectEventVerbs as readonly string[]).includes(verb)),
       ...(state.changedProperty.trim() ? { changedProperty: state.changedProperty.trim() } : {}),
@@ -456,9 +494,14 @@ export function graphToEditor(
     ? [...graph.steps.filter((step) => step.id === graph.start), ...graph.steps.filter((step) => step.id !== graph.start)]
     : [...graph.steps];
   if (graph.start && ordered[0]?.id !== graph.start) return null;
-  const link = (target: string | null, index: number): EditorLink => {
-    // From the last step, "the step below" and "the end" are the same thing.
-    if (target === null) return index === ordered.length - 1 ? FOLLOWING : END;
+  const inLoopBody = new Set([...loopBodies(graph).values()].flatMap((body) => [...body]));
+  const link = (target: string | null, index: number, plainNext = false): EditorLink => {
+    // From the last step, "the step below" and "the end" are the same thing,
+    // and "the step below" lets a step added later follow on. A loop body's
+    // end is kept as the end, or an added step would join the body.
+    if (target === null) {
+      return plainNext && index === ordered.length - 1 && !inLoopBody.has(ordered[index].id) ? FOLLOWING : END;
+    }
     if (ordered[index + 1]?.id === target) return FOLLOWING;
     return { to: "step", id: target };
   };
@@ -469,7 +512,7 @@ export function graphToEditor(
       case "condition": {
         const when = editorCondition(step.when);
         if (!when) return null;
-        steps.push({ ...base, kind: "condition", when, next: link(step.next, index) });
+        steps.push({ ...base, kind: "condition", when, next: link(step.next, index, true) });
         break;
       }
       case "branch": {
@@ -487,15 +530,15 @@ export function graphToEditor(
           action,
           fields: Object.fromEntries(actionFields[action].map(({ key }) => [key, stringOf(step.input[key])])),
           retry: step.retry ? { ...step.retry } : null,
-          next: link(step.next, index),
+          next: link(step.next, index, true),
         });
         break;
       }
       case "loop":
-        steps.push({ ...base, kind: "loop", items: step.items, body: link(step.body, index), next: link(step.next, index) });
+        steps.push({ ...base, kind: "loop", items: step.items, body: link(step.body, index), next: link(step.next, index, true) });
         break;
       case "subworkflow":
-        steps.push({ ...base, kind: "subworkflow", workflowId: step.workflowId, next: link(step.next, index) });
+        steps.push({ ...base, kind: "subworkflow", workflowId: step.workflowId, next: link(step.next, index, true) });
         break;
       case "wait":
         steps.push({
@@ -504,7 +547,7 @@ export function graphToEditor(
           mode: step.until !== undefined ? "until" : "seconds",
           seconds: step.seconds !== undefined ? String(step.seconds) : "",
           until: step.until ?? "",
-          next: link(step.next, index),
+          next: link(step.next, index, true),
         });
         break;
       case "approval":
@@ -514,11 +557,11 @@ export function graphToEditor(
           subjectType: step.subjectType,
           title: step.title,
           description: step.description ?? "",
-          next: link(step.next, index),
+          next: link(step.next, index, true),
         });
         break;
       case "review":
-        steps.push({ ...base, kind: "review", reviewer: step.reviewer, instructions: step.instructions, next: link(step.next, index) });
+        steps.push({ ...base, kind: "review", reviewer: step.reviewer, instructions: step.instructions, next: link(step.next, index, true) });
         break;
       case "webhook":
         steps.push({
@@ -527,7 +570,7 @@ export function graphToEditor(
           url: step.url,
           body: JSON.stringify(step.body, null, 2),
           retry: step.retry ? { ...step.retry } : null,
-          next: link(step.next, index),
+          next: link(step.next, index, true),
         });
         break;
       case "email":
@@ -538,7 +581,7 @@ export function graphToEditor(
           subject: step.subject,
           body: step.body,
           retry: step.retry ? { ...step.retry } : null,
-          next: link(step.next, index),
+          next: link(step.next, index, true),
         });
         break;
       default:
@@ -551,6 +594,7 @@ export function graphToEditor(
     enabled: meta.enabled,
     maxRunsPerHour: meta.maxRunsPerHour ?? 60,
     objectType: graph.trigger.objectTypes[0] ?? "",
+    ...(graph.trigger.objectTypes.length > 1 ? { moreObjectTypes: graph.trigger.objectTypes.slice(1) } : {}),
     verbs: [...graph.trigger.verbs],
     changedProperty: graph.trigger.changedProperty ?? "",
     steps,

@@ -250,6 +250,7 @@ export const workflowsEn = {
     replaying: "Replaying event: {summary}",
     useSample: "Use sample data instead",
     stepHeading: "{kind} {id}: {status}",
+    triggerHeading: "{kind}: {status}",
     triggerLine: "{verb} {type} {id}",
     changeLine: "{property}: from {before} to {after}",
     testLine: "{path} {op} {value}",

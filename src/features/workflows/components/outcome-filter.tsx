@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Label, Select } from "@/components/ui/input";
 import type { WorkflowsMessages } from "../i18n";
-import { runOutcomes, type RunOutcomeFilter } from "../services/workflow.queries";
+import { runOutcomes, type RunOutcomeFilter } from "../run-outcomes";
 
 /** Narrows the run history to one outcome through the page's query string. */
 export function OutcomeFilter({ value, m }: { value: RunOutcomeFilter | null; m: WorkflowsMessages }) {

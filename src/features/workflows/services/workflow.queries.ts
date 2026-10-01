@@ -1,8 +1,10 @@
 import type { LensCatalog } from "@/lib/query/catalog";
+import type { WorkflowTrigger } from "../graph";
 import { loadCatalog } from "@/lib/query/run";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { activityRowToEvent, activityVerbsFor, type ActivityEventRow } from "../trigger";
+import type { RunOutcomeFilter } from "../run-outcomes";
+import { activityRowToEvent, activityVerbsFor, isAutomationEvent, matchesTrigger, type ActivityEventRow } from "../trigger";
 
 /**
  * Reads for the workflow screens, through the signed-in admin's own session so
@@ -102,12 +104,7 @@ export async function getWorkflow(organizationId: string, id: string): Promise<W
   return (data as WorkflowRow | null) ?? null;
 }
 
-export const runOutcomes = ["running", "waiting", "succeeded", "skipped", "failed", "stopped"] as const;
-export type RunOutcomeFilter = (typeof runOutcomes)[number];
-
-export function parseOutcomeFilter(raw: string | undefined): RunOutcomeFilter | null {
-  return (runOutcomes as readonly string[]).includes(raw ?? "") ? (raw as RunOutcomeFilter) : null;
-}
+export { parseOutcomeFilter, runOutcomes, type RunOutcomeFilter } from "../run-outcomes";
 
 /** The last runs of one workflow, newest first, narrowed to one outcome when asked. */
 export async function listRuns(ruleId: string, limit = 50, outcome: RunOutcomeFilter | null = null): Promise<RunRow[]> {
@@ -196,18 +193,22 @@ const RECENT_EVENT_COLUMNS =
  */
 export async function listRecentEvents(
   organizationId: string,
-  trigger: { objectTypes: readonly string[]; verbs: readonly string[] },
+  trigger: WorkflowTrigger,
   limit = 20,
 ): Promise<RecentEvent[]> {
   const db = await createSupabasePageClient();
   let query = db.from("activity_event").select(RECENT_EVENT_COLUMNS).eq("organization_id", organizationId);
   if (trigger.objectTypes.length > 0) query = query.in("source_type", [...trigger.objectTypes]);
   if (trigger.verbs.length > 0) query = query.in("verb", activityVerbsFor(trigger.verbs));
-  const { data } = await query.order("created_at", { ascending: false }).limit(limit);
+  // Read a wider window: rows the runner would not start a run for (an
+  // unconvertible verb, another property, a workflow's own change) are dropped
+  // here, the same way the runner drops them.
+  const { data } = await query.order("created_at", { ascending: false }).limit(limit * 5);
   const events: RecentEvent[] = [];
   for (const row of (data ?? []) as ActivityEventRow[]) {
+    if (events.length >= limit) break;
     const event = activityRowToEvent(row);
-    if (!event) continue;
+    if (!event || isAutomationEvent(event) || !matchesTrigger(trigger, event)) continue;
     events.push({
       id: event.id,
       verb: event.verb,

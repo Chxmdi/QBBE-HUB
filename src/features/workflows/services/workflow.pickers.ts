@@ -4,7 +4,7 @@ import { z } from "zod";
 import { authorizeAdminAction } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { searchableTypes } from "../picker-options";
+import { recordTitleSource, searchableTypes } from "../picker-options";
 
 /**
  * Searches for the workflow pickers (U10): records by title and active
@@ -25,6 +25,7 @@ const recordSearchSchema = z.object({
 });
 const personSearchSchema = z.object({ query: z.string().trim().max(200).default("") });
 const idsSchema = z.array(z.string().uuid()).max(50);
+const recordTitleSchema = z.object({ type: z.string().trim().min(1).max(64), id: z.string().uuid() });
 
 async function allowed(): Promise<boolean> {
   if (!(await isEnabled("wos_workflows_v2"))) return false;
@@ -36,7 +37,9 @@ export async function searchRecords(input: unknown): Promise<PickerOption[]> {
   if (!parsed.success || !(await allowed())) return [];
   if (!(searchableTypes as readonly string[]).includes(parsed.data.type)) return [];
   const db = await createSupabaseServerClient();
-  const { data, error } = await db.rpc("global_search", { p_query: parsed.data.query, p_limit: 20 });
+  // global_search takes rows from each type in turn up to p_limit, so ask for
+  // enough rows that one type can fill the picker.
+  const { data, error } = await db.rpc("global_search", { p_query: parsed.data.query, p_limit: 240 });
   if (error) return [];
   return ((data ?? []) as { result_type: string; id: string; title: string; snippet: string | null }[])
     .filter((row) => row.result_type === parsed.data.type)
@@ -81,4 +84,17 @@ export async function peopleByIds(input: unknown): Promise<PickerOption[]> {
   return ((data ?? []) as unknown as { user_profile: { id: string; full_name: string; email: string | null } | null }[])
     .filter((row) => row.user_profile)
     .map((row) => ({ id: row.user_profile!.id, label: row.user_profile!.full_name, description: row.user_profile!.email ?? "" }));
+}
+
+/** The title of one record a saved workflow names, read through RLS; null when hidden or gone. */
+export async function recordTitle(input: unknown): Promise<string | null> {
+  const parsed = recordTitleSchema.safeParse(input);
+  if (!parsed.success || !(await allowed())) return null;
+  const source = recordTitleSource[parsed.data.type as keyof typeof recordTitleSource];
+  if (!source) return null;
+  const db = await createSupabaseServerClient();
+  const { data, error } = await db.from(source.table).select(source.title).eq("id", parsed.data.id).maybeSingle();
+  if (error || !data) return null;
+  const title = (data as unknown as Record<string, unknown>)[source.title];
+  return typeof title === "string" && title ? title : null;
 }

@@ -106,6 +106,10 @@ test.describe("workflow pickers", () => {
       expect(graph.trigger).toEqual({ objectTypes: ["task"], verbs: ["updated"], changedProperty: "status" });
       expect(graph.steps[0].when).toEqual({ path: "event.changes.status.after", op: "eq", value: "blocked" });
       expect(graph.steps[2].input).toEqual({ taskId, assigneeId: staff[0] });
+      // After the reload the saved ids are shown by name again.
+      const saved = page.getByRole("group", { name: /^Step 3 · Take an action/ });
+      await expect(saved.getByRole("combobox", { name: "Task" })).toHaveValue(title);
+      await expect(saved.getByRole("combobox", { name: /^Person to assign/ })).toHaveValue(staff[1]);
 
       // Test run against the recent event, picked from the list.
       const example = page.getByRole("combobox", { name: "Recent event" });
@@ -120,6 +124,7 @@ test.describe("workflow pickers", () => {
 
       const steps = page.getByRole("list", { name: "Test run" });
       await expect(steps.getByRole("listitem")).toHaveCount(4);
+      await expect(steps.getByRole("listitem").first()).toContainText("Trigger: Done");
       await expect(steps).toContainText(`Changed task ${taskId}`);
       await expect(steps).toContainText("status: from in_progress to blocked");
       await expect(steps).toContainText("event.changes.status.after is blocked · it was blocked");
@@ -128,7 +133,7 @@ test.describe("workflow pickers", () => {
       await expect(steps).toContainText(`Would assign task ${taskId} to ${staff[0]}.`);
       await expect(steps).toContainText("The workflow's owner may do this.");
       await axe(page, "/workflows/[id] after a test run");
-      await page.screenshot({ path: "test-results/workflows-pickers-test-run.png", fullPage: true });
+      await page.getByRole("region", { name: "Test run" }).screenshot({ path: "test-results/workflows-pickers-test-run.png" });
 
       // A test run changes nothing.
       expect(sql(`select priority::text || ':' || coalesce(assignee_id::text, '') from task where id = '${taskId}'`)).toBe("low:");

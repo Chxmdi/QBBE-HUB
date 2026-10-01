@@ -215,7 +215,7 @@ test.describe("workflows v2", () => {
     try {
       await signIn(page, "admin");
       await page.goto(`/workflows/${rule}`);
-      await page.getByRole("link", { name: `Run #${number}` }).click();
+      await page.getByRole("table", { name: "Run history" }).getByRole("link", { name: `Run #${number}` }).click();
       await page.waitForURL(`**/workflows/${rule}/runs/${run}`);
       await expect(page.getByRole("heading", { name: `Run #${number}`, level: 1 })).toBeVisible();
       await expect(page.getByText(
