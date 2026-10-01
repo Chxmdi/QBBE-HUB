@@ -32,11 +32,15 @@ description: Run the QBBE Hub app locally against the local Supabase stack and d
 
 ## Known local limits
 
-- Background jobs (virus scans, notification email, Gmail sync) need
-  `app.configure_job_runner(url, secret)`; without it uploaded and generated
-  files stay "Security check pending" and cannot be opened.
-  `GET /api/health/jobs` reports the status. The database container cannot
-  reach 127.0.0.1:3000, so jobs still do not run locally even when it reads
-  "ready".
+- Background jobs (virus scans, notification email, Gmail sync) are fired by
+  the database's cron through `app.configure_job_runner(url, secret)`, and the
+  database container cannot reach 127.0.0.1:3000, so they never fire locally.
+  Run one by hand instead: start the site with `CRON_JOB_SECRET=<32+ chars>`
+  and `CRON_JOB_SECRET=<same> npm run jobs:run -- <job>`.
+- Uploads stay "Security check pending" until `scan-documents` (receipts:
+  `scan-receipts`; forms: `scan-form-files`) has a scanner. Locally run
+  `docker run --rm -p 3310:3310 clamav/clamav` (it needs to download
+  signatures once) and start the site with `CLAMAV_HOST=127.0.0.1`, then run
+  the job. Without a scanner the file stays pending, by design.
 - The seed has no fiscal year and an unapproved chart of accounts, so ledger
   posting, statements and fund releases need setup before they show data.

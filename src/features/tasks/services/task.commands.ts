@@ -32,6 +32,13 @@ import {
   type TaskFieldChange,
   type TaskFieldValues,
 } from "@/features/tasks/services/task.history";
+import {
+  TASK_CREATE_ACTION,
+  recordTaskChangeSet,
+  taskCreateChange,
+  taskUpdateChanges,
+} from "@/features/tasks/services/task.change-sets";
+import { SET_PROPERTY_ACTION } from "@/features/objects/actions/set-property";
 
 /**
  * Task commands — durable server mutations (WORK-002). Validation happens
@@ -193,6 +200,22 @@ export async function createTask(input: unknown): Promise<ActionResult> {
     return { ok: false, error: t("tasks.errors.saveTask") };
   }
 
+  // The creation as a change set (M13), so it can be undone like an action's.
+  await recordTaskChangeSet(supabase, TASK_CREATE_ACTION, [
+    taskCreateChange(created.id, {
+      title: parsed.data.title,
+      project_id: parsed.data.projectId ?? null,
+      milestone_id: parsed.data.milestoneId ?? null,
+      assignee_id: parsed.data.assigneeId ?? null,
+      due_at: parsed.data.dueAt || null,
+      priority: parsed.data.priority ?? null,
+      status: parsed.data.status ?? "not_started",
+      reviewer_id: parsed.data.reviewerId ?? null,
+      approver_id: parsed.data.approverId ?? null,
+      completion_criteria: parsed.data.completionCriteria || null,
+    }),
+  ]);
+
   revalidatePath("/", "layout");
   return { ok: true, id: created.id };
 }
@@ -241,6 +264,16 @@ export async function updateTaskStatus(
   if (error || !updated) {
     return { ok: false, error: t("tasks.errors.updateStatus") };
   }
+
+  await recordTaskChangeSet(
+    supabase,
+    SET_PROPERTY_ACTION,
+    taskUpdateChanges(
+      taskId,
+      { status: before?.status ?? null, blocked_reason: before?.blocked_reason ?? null },
+      { status, blocked_reason: updated.blocked_reason ?? null },
+    ),
+  );
 
   if (
     status === "in_review" &&
@@ -424,7 +457,7 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
   // value was, and after the update that information is gone (P0-TSK-05).
   const { data: before } = await supabase
     .from("task")
-    .select("assignee_id, due_at, status, priority, project_id, milestone_id, reviewer_id, approver_id, completion_criteria, blocked_reason")
+    .select("title, assignee_id, due_at, status, priority, project_id, milestone_id, reviewer_id, approver_id, completion_criteria, blocked_reason")
     .eq("id", taskId)
     .maybeSingle();
 
@@ -439,6 +472,26 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
     .maybeSingle();
 
   if (error || !updated) return { ok: false, error: t("tasks.errors.updateTask") };
+
+  // What the drawer changed, as a change set (M13): one update per registered
+  // property whose value moved, so the undo route can put each one back.
+  await recordTaskChangeSet(
+    supabase,
+    SET_PROPERTY_ACTION,
+    taskUpdateChanges(taskId, before ?? {}, {
+      title: updated.title,
+      assignee_id: updated.assignee_id,
+      due_at: updated.due_at,
+      status: updated.status,
+      priority: updated.priority,
+      project_id: updated.project_id,
+      milestone_id: updated.milestone_id,
+      reviewer_id: updated.reviewer_id,
+      approver_id: updated.approver_id,
+      completion_criteria: updated.completion_criteria,
+      blocked_reason: updated.blocked_reason,
+    }),
+  );
 
   const tFor = await recipientTranslators(
     supabase,

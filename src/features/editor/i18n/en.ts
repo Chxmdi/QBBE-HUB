@@ -97,6 +97,7 @@ export const editorEn = {
       owner: "Owner",
       noOwner: "No owner",
       due: "Due date",
+      ownerAndDueRequired: "Choose an owner and a due date: a task from meeting notes needs both for the review and the actions list.",
     },
     unavailable: "This item isn't available to you, or it was removed.",
     task: {
