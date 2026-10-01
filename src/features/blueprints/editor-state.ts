@@ -115,6 +115,14 @@ export function updateProperty(
               patch.kind === "relation"
                 ? bp.relations.find((r) => r.from === typeKey || r.to === typeKey)?.key
                 : undefined;
+            next.expression = patch.kind === "formula" ? p.expression ?? "" : undefined;
+            next.rollup =
+              patch.kind === "rollup"
+                ? p.rollup ?? {
+                    relation: t.properties.find((q) => q.kind === "relation" && q.relation)?.key ?? "",
+                    function: "count",
+                  }
+                : undefined;
           }
           return next;
         }),

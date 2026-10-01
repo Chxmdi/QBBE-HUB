@@ -6,11 +6,14 @@ import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { fill, type TemplatesV2Text } from "@/features/templates-v2/messages";
 import { applyTemplateV2 } from "@/features/templates-v2/services/templates-v2.commands";
-import { destinationFor, planTemplate, type TemplateRecord } from "@/features/templates-v2/template";
+import { destinationFor, planTemplate, type PageBody, type TemplateRecord } from "@/features/templates-v2/template";
+import { PageTemplateForm, type ParentOption } from "./page-template-form";
 
 /**
  * Preview and use a template. The preview recalculates as the start date or
  * language changes, so people see every real date before anything is made.
+ * A page template shows the page form instead (U8), which creates the page
+ * and opens it.
  */
 export function TemplateUse({
   template,
@@ -19,6 +22,10 @@ export function TemplateUse({
   today,
   programs,
   projects,
+  pagesEnabled = false,
+  parents = [],
+  canCreateWorkspace = false,
+  untitled = "",
 }: {
   template: TemplateRecord;
   text: TemplatesV2Text;
@@ -26,6 +33,12 @@ export function TemplateUse({
   today: string;
   programs: { id: string; name: string }[];
   projects: { id: string; name: string }[];
+  /** Whether the wos_pages switch is on; a page template is preview-only otherwise. */
+  pagesEnabled?: boolean;
+  /** Pages the person may put a new page inside. */
+  parents?: ParentOption[];
+  canCreateWorkspace?: boolean;
+  untitled?: string;
 }) {
   const id = useId();
   const [start, setStart] = useState(today);
@@ -40,6 +53,21 @@ export function TemplateUse({
     new Intl.DateTimeFormat(locale === "fr-CA" ? "fr-CA" : "en-CA", { dateStyle: "medium", timeZone: "UTC" }).format(
       new Date(`${value}T00:00:00Z`),
     );
+
+  if (template.scope === "page" && pagesEnabled) {
+    return (
+      <PageTemplateForm
+        template={{ id: template.id, body: template.body as PageBody }}
+        text={text}
+        locale={locale}
+        today={today}
+        parents={parents}
+        canCreateWorkspace={canCreateWorkspace}
+        submitLabel={text.pageForm.useTemplate}
+        untitled={untitled}
+      />
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -124,7 +152,7 @@ export function TemplateUse({
           </div>
         ) : null}
         {where === "none" ? (
-          <FieldHint>{text.pageNotYet}</FieldHint>
+          <FieldHint>{text.pagesOff}</FieldHint>
         ) : (
           <Button type="submit" loading={busy} disabled={created !== null}>
             {text.use}

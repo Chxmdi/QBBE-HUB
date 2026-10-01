@@ -9,9 +9,11 @@ import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireLensesEnabled } from "@/features/lenses/flag";
 import { getLensT } from "@/features/lenses/i18n/server";
 import { TableLens } from "@/features/lenses/table/table-lens";
-import { defaultColumns, specFor, stateFromLens, type TableState } from "@/features/lenses/table/model";
+import { applyViewerSetting, defaultColumns, specFor, stateFromLens, type TableState } from "@/features/lenses/table/model";
 import { getLens } from "@/features/lenses/services/lens-store.queries";
 import { ExportCsvButton } from "@/features/lenses/components/export-csv-button";
+import { loadViewerSetting } from "@/features/lenses/services/viewer-settings.actions";
+import { isEnabled } from "@/lib/feature-flags";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getLensT())("table.title") };
@@ -46,11 +48,16 @@ export default async function TableLensPage({
   const typeKey = catalog[requested] ? requested : "task";
   const type = catalog[typeKey];
 
-  const initialState: TableState | null = !type
+  const lensState: TableState | null = !type
     ? null
     : lens && lens.typeKey === typeKey
       ? stateFromLens(type, lens.spec, lens.layout)
-      : { columns: defaultColumns(type), sort: { property: "title", direction: "asc" }, groupBy: null, search: "" };
+      : { columns: defaultColumns(type), sort: [{ property: "title", direction: "asc" }], groupBy: null, search: "", where: null };
+  // On someone else's shared lens the viewer's own columns, sort and filters
+  // (lens_viewer_setting) sit on top; the lens itself is never changed.
+  const viewerSetting = lens && !lens.mine && type && lens.typeKey === typeKey ? await loadViewerSetting(lens.id) : null;
+  const initialState: TableState | null = type && lensState ? applyViewerSetting(type, lensState, viewerSetting) : null;
+  const bulkEditEnabled = await isEnabled("wos_objects", supabase);
 
   let initial: LensResult | null = null;
   if (initialState) {
@@ -83,9 +90,11 @@ export default async function TableLensPage({
           type={type}
           initial={initial}
           initialState={initialState}
+          lensState={lensState ?? initialState}
           people={people}
           timeZone={session.timeZone}
           savedLens={lens ? { id: lens.id, name: lens.name, mine: lens.mine } : null}
+          bulkEditEnabled={bulkEditEnabled}
         />
       ) : (
         <p role="alert" className="text-[13.5px] text-danger-fg">

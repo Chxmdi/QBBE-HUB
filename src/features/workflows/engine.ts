@@ -6,7 +6,7 @@ import {
   type WorkflowGraph,
   type WorkflowStep,
 } from "./graph";
-import { evaluateCondition, renderTemplate, resolvePath, type RunScope } from "./scope";
+import { conditionValues, evaluateCondition, renderTemplate, resolvePath, type RunScope } from "./scope";
 
 /**
  * Runs a workflow graph for one event and says what each step did (M14a,
@@ -228,7 +228,8 @@ export async function runGraph(
         case "condition": {
           const matched = evaluateCondition(step.when, scope);
           state.steps[step.id] = { matched };
-          record({ ...base, status: "succeeded", input: step.when, output: { matched }, error: null, attempt: 1, finishedAt: stamp() });
+          const values = conditionValues(step.when, scope);
+          record({ ...base, status: "succeeded", input: step.when, output: { matched, values }, error: null, attempt: 1, finishedAt: stamp() });
           if (!matched) return inLoop ? { kind: "end" } : { kind: "stop", outcome: "skipped", error: null };
           current = step.next;
           break;
@@ -237,7 +238,8 @@ export async function runGraph(
           const matched = evaluateCondition(step.when, scope);
           const next = matched ? step.then : step.else;
           state.steps[step.id] = { matched, next };
-          record({ ...base, status: "succeeded", input: step.when, output: { matched, next }, error: null, attempt: 1, finishedAt: stamp() });
+          const values = conditionValues(step.when, scope);
+          record({ ...base, status: "succeeded", input: step.when, output: { matched, next, values }, error: null, attempt: 1, finishedAt: stamp() });
           current = next;
           break;
         }

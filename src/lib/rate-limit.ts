@@ -79,6 +79,8 @@ export const RATE_LIMITS = {
   "blueprint:write": { limit: 240, windowSeconds: 3600 },
   "blueprint:build": { limit: 30, windowSeconds: 3600 },
   "template:write": { limit: 60, windowSeconds: 3600 },
+  // One property on one object from its record page, and undoing it (U14).
+  "property:write": { limit: 240, windowSeconds: 60 },
   // Autosave is debounced on the device; this only catches a loop.
   "editor:save": { limit: 600, windowSeconds: 60 },
 } as const;
