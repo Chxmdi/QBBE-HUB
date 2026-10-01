@@ -25,6 +25,7 @@ export const editorEn = {
   },
   types: {
     paragraph: "Text",
+    heading: "Heading",
     heading1: "Heading 1",
     heading2: "Heading 2",
     heading3: "Heading 3",
@@ -35,6 +36,12 @@ export const editorEn = {
     quote: "Quote",
     callout: "Callout",
     codeBlock: "Code",
+    table: "Table",
+    divider: "Divider",
+    image: "Image",
+    file: "File",
+    video: "Video",
+    audio: "Audio",
   },
   slash: {
     group: "Workspace",
