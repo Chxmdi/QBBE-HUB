@@ -68,3 +68,6 @@ supabase/signing_keys.json
 # Scratch scripts the lead session runs from the repo root (never committed)
 /.scratch/
 /.*.mjs
+
+# Demo video renders (scripts/demo); delivered as files, never committed
+/.demo-out/
