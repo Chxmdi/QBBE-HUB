@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { usePagesT } from "@/features/pages/i18n/client";
 import { createPage } from "@/features/pages/services/page.commands";
 import { buildTree, type PageNode, type PageRow } from "@/features/pages/tree";
+import { NewPageFromTemplate } from "./new-page-from-template";
 import { PageActions } from "./page-actions";
 
 export interface PagesSidebarProps {
@@ -96,7 +97,7 @@ export function PagesSidebar({
 
       <Section
         title={t("sidebar.workspace")}
-        action={canCreateWorkspace ? <NewPageButton visibility="workspace" label={t("sidebar.newPage")} /> : null}
+        action={canCreateWorkspace ? <span className="flex items-center"><NewPageFromTemplate pages={pages} editableIds={editableIds} canCreateWorkspace /><NewPageButton visibility="workspace" label={t("sidebar.newPage")} /></span> : null}
       >
         <Tree nodes={workspace} {...row} />
       </Section>
