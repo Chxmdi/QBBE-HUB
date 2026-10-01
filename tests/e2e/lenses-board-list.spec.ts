@@ -28,12 +28,15 @@ const U = {
 test.beforeAll(() => {
   previous = sql("select coalesce((select enabled from public.feature_flag where key = 'wos_lenses'), false)");
   sql("update public.feature_flag set enabled = true where key = 'wos_lenses'");
-  // Tasks inside every seeded project (so scoped grants decide visibility),
+  // Tasks inside the seeded projects (so scoped grants decide visibility),
   // plus tasks with no project, across assignees, reviewers, approvers, task
-  // roles and statuses (completed ones are outside the default view).
+  // roles and statuses (completed ones are outside the default view). The
+  // oldest eight projects: the seed's two come first, and specs that run
+  // earlier on the same database leave projects behind, which would grow this
+  // fixture past the 300 tasks the old board and My Work load.
   sql(`
     with org as (select organization_id as id from public.organization_membership where user_id = '${U.owner}'),
-    projects as (select id, program_id, row_number() over (order by name) as n from public.project where archived_at is null),
+    projects as (select id, program_id, row_number() over (order by created_at, name) as n from public.project where archived_at is null),
     people(n, person) as (values (1, '${U.owner}'::uuid), (2, '${U.staff}'::uuid), (3, '${U.volunteer}'::uuid),
       (4, '${U.lead}'::uuid), (5, '${U.pm}'::uuid), (6, '${U.contributor}'::uuid), (7, null::uuid))
     insert into public.task (organization_id, project_id, program_id, title, created_by, assignee_id, reviewer_id, approver_id, status, blocked_reason, priority, due_at)
@@ -46,7 +49,7 @@ test.beforeAll(() => {
       case when s.status = 'blocked' then 'Waiting on a signature' end,
       'medium', current_date + pe.n
     from org
-    cross join (select id, program_id, n from projects union all select null, null, null) p
+    cross join (select id, program_id, n from projects where n <= 8 union all select null, null, null) p
     cross join people pe
     cross join (values ('ready'), ('blocked'), ('completed')) s(status);
     insert into public.task_assignment (task_id, user_id, role)
