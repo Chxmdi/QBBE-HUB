@@ -67,7 +67,8 @@ export function MobileNav({
                 )}
               >
                 <Icon className="size-5" aria-hidden />
-                <span className="max-w-full truncate">{label}</span>
+                {/* Hyphenate rather than cut: "Communication" is wider than a tab at 320px. */}
+                <span className="max-w-full text-center leading-tight hyphens-auto [overflow-wrap:anywhere]">{label}</span>
                 {badge > 0 ? (
                   <span className="absolute top-1 right-[22%] min-w-4 rounded-full bg-brand px-1 text-[9.5px] leading-4 font-semibold text-white">
                     {badge > 9 ? "9+" : badge}

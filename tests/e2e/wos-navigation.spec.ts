@@ -274,8 +274,9 @@ test("with every switch on, every entry has its French name in the sidebar and t
 
   const nav = sidebar(page, "fr");
   await expect(nav.getByText(text.fr.classic, { exact: true })).toBeVisible();
+  // Group headings; "Programmes" is also a link and the shortcuts heading, so match the heading itself.
   for (const label of ["Données", "Programmes", "Configuration"]) {
-    await expect(nav.getByText(label, { exact: true }), label).toBeVisible();
+    await expect(nav.locator("p").filter({ hasText: new RegExp(`^${label}$`) }).first(), label).toBeVisible();
   }
   await walkSidebar(page, NEW_SCREENS, "fr");
   await walkSidebar(page, CLASSIC_SCREENS, "fr");
