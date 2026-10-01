@@ -45,7 +45,15 @@ test("upkeep lists a stale page for review and possible duplicates", async ({ pa
     await expect(page.getByRole("heading", { name: "Workspace upkeep", level: 1 })).toBeVisible();
     const stale = page.getByRole("listitem").filter({ hasText: docTitle });
     await expect(stale.getByText(/Idle 4\d\d days · Owner: /)).toBeVisible();
-    await expect(page.getByRole("listitem").filter({ hasText: `2 with the same name: “${taskTitle}”` })).toBeVisible();
+    // Both tasks were inserted in one statement, so they share a created_at
+    // and either may be listed first.
+    await expect(
+      page
+        .getByRole("listitem")
+        .filter({ hasText: "2 with the same name:" })
+        .filter({ hasText: `“${taskTitle}”` })
+        .filter({ hasText: `“${taskTitle.toLowerCase()}!”` }),
+    ).toBeVisible();
     expect(await axeProblems(page), "upkeep accessibility").toEqual([]);
 
     await page.getByRole("button", { name: `Still current: ${docTitle}` }).click();

@@ -178,6 +178,120 @@ test("staff write a page with the block editor, from the keyboard", async ({ pag
   expect(await page.evaluate(() => Boolean(document.activeElement?.closest(".bn-editor")))).toBe(true);
 });
 
+test("the W0-5 conditions hold with each editor menu open, in both themes", async ({ page }) => {
+  // F3 (names), F4 (focus ring, contrast, target size) and F5 (a way below a
+  // final table) from docs/design/spikes/W0-5-editor-accessibility.md. The
+  // test above scans the editor at rest in the light theme only.
+  test.setTimeout(240_000);
+  await signIn(page, "staff");
+  await newPage(page, `Conditions ${Date.now()}`);
+  const editor = page.getByRole("textbox", { name: "Document content" });
+  await expect(editor).toBeVisible({ timeout: 30_000 });
+  await editor.click();
+  await page.keyboard.type("[] Send the minutes");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  // Two lines between the check box and the text the toolbar is opened on:
+  // the floating toolbar covers the line above the selection while it is open.
+  await page.keyboard.type("Spacer one");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Spacer two");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Plain text");
+  await expect(page.getByTestId("editor-save-state")).toHaveText("Saved", { timeout: 30_000 });
+
+  // F3 and F4: the check box has a name and a 24 px target.
+  const box = editor.locator("[data-content-type='checkListItem'] input[type='checkbox']").first();
+  await expect(box).toHaveAttribute("aria-label", /.+/);
+  const size = await box.boundingBox();
+  expect(size?.width).toBeGreaterThanOrEqual(24);
+  expect(size?.height).toBeGreaterThanOrEqual(24);
+
+  for (const theme of ["light", "dark"] as const) {
+    await page.evaluate((t) => {
+      localStorage.setItem("qbbe-theme", t);
+      document.documentElement.classList.toggle("dark", t === "dark");
+    }, theme);
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    // F4: a visible focus ring on the editor itself.
+    await editor.locator("p", { hasText: "Plain text" }).click();
+    const outline = await editor.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { style: style.outlineStyle, width: parseFloat(style.outlineWidth) };
+    });
+    expect(outline.style, `${theme}: focus ring style`).not.toBe("none");
+    expect(outline.width, `${theme}: focus ring width`).toBeGreaterThanOrEqual(2);
+
+    // The slash menu open: named, and no serious axe finding.
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/");
+    const list = page.getByRole("listbox");
+    await expect(list).toBeVisible();
+    await expect(list).toHaveAttribute("aria-label", /.+/);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    // axe's scrollable-region-focusable asks for the list to be reachable
+    // with Tab. For this pattern (a combobox driving a listbox through
+    // aria-activedescendant) focus must stay in the editor: the arrow keys
+    // move through every option and scroll it into view. That one finding is
+    // set aside here only while the editor points at the list; every other
+    // rule still applies to the open menu.
+    await expect(editor).toHaveAttribute("aria-controls", "bn-suggestion-menu");
+    await expect(editor).toHaveAttribute("aria-activedescendant", /bn-suggestion-menu-item-/);
+    // With the pointer over another option too: hover has its own colours.
+    await list.getByRole("option").nth(2).hover();
+    const slashFindings = (await seriousAxe(page)).filter(
+      (finding) => !(finding.startsWith("scrollable-region-focusable:") && finding.includes('id="bn-suggestion-menu"')),
+    );
+    expect(slashFindings, `${theme}: slash menu open`).toEqual([]);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+
+    // The formatting toolbar open.
+    await editor.locator("p", { hasText: "Plain text" }).click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Shift+End");
+    await expect(page.locator(".bn-formatting-toolbar")).toBeVisible();
+    // Scanned from the top, as above: scrolled, the first line sits under the
+    // app's sticky header and axe reports its check box as obscured.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(page.locator(".bn-formatting-toolbar")).toBeVisible();
+    expect(await seriousAxe(page), `${theme}: formatting toolbar open`).toEqual([]);
+
+    // The block menu (Ctrl+/) open.
+    await page.keyboard.press("End");
+    await page.keyboard.press("Control+/");
+    await expect(page.getByRole("dialog", { name: "Block menu" })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    expect(await seriousAxe(page), `${theme}: block menu open`).toEqual([]);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Block menu" })).toHaveCount(0);
+  }
+
+  // F5: a table as the last block still leaves a line below it, reachable
+  // with the arrow keys.
+  await caretAtEnd(page, editor.locator("p", { hasText: "Plain text" }));
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("/table");
+  await expect(page.getByRole("option", { name: /^Table/, selected: true })).toBeVisible();
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("A1");
+  const lastType = () =>
+    editor.locator("[data-content-type]").evaluateAll((els) => els[els.length - 1]?.getAttribute("data-content-type"));
+  await expect.poll(lastType).toBe("paragraph");
+  for (let i = 0; i < 6; i++) await page.keyboard.press("ArrowDown");
+  await page.keyboard.type("After the table");
+  const order = await editor.locator("[data-content-type]").evaluateAll((els) =>
+    els.map((el) => `${el.getAttribute("data-content-type")}:${el.textContent?.trim() ?? ""}`),
+  );
+  const table = order.findIndex((entry) => entry.startsWith("table:"));
+  const after = order.findIndex((entry) => entry === "paragraph:After the table");
+  expect(table, JSON.stringify(order)).toBeGreaterThanOrEqual(0);
+  expect(after, JSON.stringify(order)).toBeGreaterThan(table);
+});
+
 test("the editor speaks Quebec French", async ({ page, context }) => {
   test.setTimeout(120_000);
   await signIn(page, "staff");
