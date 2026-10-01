@@ -178,6 +178,12 @@ export function createSupabaseObjectWriter(client: Client): ObjectWriter {
   }
 
   return {
+    async changedSince(object, since) {
+      if (object.type !== "task" && object.type !== "project") return false;
+      const { data } = await client.from(object.type).select("updated_at").eq("id", object.id).maybeSingle();
+      const updated = (data as { updated_at: string } | null)?.updated_at;
+      return typeof updated === "string" && new Date(updated).getTime() > new Date(since).getTime();
+    },
     async apply(changes) {
       for (const change of changes) {
         if (change.kind === "update") await writeUpdate(change);

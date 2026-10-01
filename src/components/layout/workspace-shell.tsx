@@ -125,7 +125,7 @@ export function WorkspaceShell({
         isAdmin={isAdmin}
         isStaff={isStaff}
         switches={navSwitches}
-        myWorkCount={counts.myWork}
+        counts={counts}
         onOpenMore={() => setNavOpen(true)}
       />
     </div>

@@ -7,6 +7,8 @@ import {
   optionsFromLists,
   parseFormAnswers,
   propertiesProblem,
+  typedAnswers,
+  visibleFields,
   type FormV2Property,
 } from "./properties";
 
@@ -93,9 +95,104 @@ describe("parseFormAnswers", () => {
     expect(parseFormAnswers(props, { name: "a", priority: "urgent" })).toMatchObject({ ok: false, problem: "option" });
   });
 
-  it("refuses file answers, which this model cannot store yet", () => {
+  it("takes a file answer as the uploaded document's id", () => {
     const file: FormV2Property = { key: "photo", kind: "file", required: false, label: { en: "Photo", fr: "Photo" } };
-    expect(parseFormAnswers([file], { photo: "x" })).toMatchObject({ ok: false, problem: "unsupported" });
+    expect(parseFormAnswers([file], { photo: "x" })).toMatchObject({ ok: false, problem: "file" });
+    expect(parseFormAnswers([file], { photo: "2B6C7D8E-1111-4222-8333-444455556666" })).toEqual({
+      ok: true,
+      answers: { photo: "2b6c7d8e-1111-4222-8333-444455556666" },
+    });
+  });
+
+  it("leaves hidden questions out, even when an answer was sent for them", () => {
+    const drive: FormV2Property = { key: "drive", kind: "checkbox", required: false, label: { en: "Drives", fr: "Conduit" } };
+    const licence: FormV2Property = {
+      key: "licence", kind: "text", required: true, label: { en: "Licence", fr: "Permis" },
+      showIf: { key: "drive", op: "eq", value: true },
+    };
+    expect(parseFormAnswers([drive, licence], { drive: false, licence: "stale" })).toEqual({
+      ok: true,
+      answers: { drive: false },
+    });
+    expect(parseFormAnswers([drive, licence], { drive: true })).toMatchObject({ ok: false, problem: "required" });
+  });
+});
+
+describe("visibleFields", () => {
+  const drive: FormV2Property = { key: "drive", kind: "checkbox", required: false, label: { en: "Drives", fr: "Conduit" } };
+  const size: FormV2Property = {
+    key: "size", kind: "select", required: false, label: { en: "Size", fr: "Taille" },
+    options: [{ key: "s", label: { en: "Small", fr: "Petit" } }, { key: "l", label: { en: "Large", fr: "Grand" } }],
+  };
+  const licence: FormV2Property = {
+    key: "licence", kind: "text", required: true, label: { en: "Licence", fr: "Permis" },
+    showIf: { key: "drive", op: "eq", value: true },
+  };
+  const plate: FormV2Property = {
+    key: "plate", kind: "text", required: false, label: { en: "Plate", fr: "Plaque" },
+    showIf: { key: "licence", op: "is_not_empty" },
+  };
+  const why: FormV2Property = {
+    key: "why", kind: "text", required: false, label: { en: "Why large?", fr: "Pourquoi grand?" },
+    showIf: { key: "size", op: "neq", value: "s" },
+  };
+  const note: FormV2Property = {
+    key: "note", kind: "text", required: false, label: { en: "Note", fr: "Note" },
+    showIf: { key: "plate", op: "contains", value: "qc" },
+  };
+  const all = [drive, size, licence, plate, why, note];
+  const keys = (answers: Record<string, unknown>) => visibleFields(all, answers).map((p) => p.key);
+
+  it("shows a question only while the one it depends on is shown and matches", () => {
+    expect(keys({})).toEqual(["drive", "size", "why"]);
+    expect(keys({ drive: true })).toEqual(["drive", "size", "licence", "why"]);
+    expect(keys({ drive: true, licence: "A1" })).toEqual(["drive", "size", "licence", "plate", "why"]);
+    expect(keys({ drive: true, licence: "A1", plate: "123 QC" })).toEqual(["drive", "size", "licence", "plate", "why", "note"]);
+    // The chain breaks with its first link: a hidden licence hides the plate too.
+    expect(keys({ drive: false, licence: "A1", plate: "123 QC" })).toEqual(["drive", "size", "why"]);
+    expect(keys({ size: "s" })).toEqual(["drive", "size"]);
+    expect(keys({ size: "l" })).toEqual(["drive", "size", "why"]);
+  });
+
+  it("judges conditions on typed values, as the server does", () => {
+    const fee: FormV2Property = { key: "fee", kind: "currency", required: false, label: { en: "Fee", fr: "Frais" } };
+    const hours: FormV2Property = { key: "hours", kind: "number", required: false, label: { en: "Hours", fr: "Heures" } };
+    const receipt: FormV2Property = {
+      key: "receipt", kind: "text", required: false, label: { en: "Receipt", fr: "Reçu" },
+      showIf: { key: "fee", op: "eq", value: 10000 },
+    };
+    const why: FormV2Property = {
+      key: "why", kind: "text", required: false, label: { en: "Why", fr: "Pourquoi" },
+      showIf: { key: "hours", op: "eq", value: 5.5 },
+    };
+    const form = [fee, hours, receipt, why];
+    const shown = (raw: Record<string, unknown>) => visibleFields(form, typedAnswers(form, raw)).map((p) => p.key);
+    expect(shown({ fee: "100", hours: "5,5" })).toEqual(["fee", "hours", "receipt", "why"]);
+    expect(shown({ fee: "100.00 $", hours: "5.5" })).toEqual(["fee", "hours", "receipt", "why"]);
+    expect(shown({ fee: "99", hours: "6" })).toEqual(["fee", "hours"]);
+    expect(typedAnswers([drive], { drive: "on" })).toEqual({ drive: true });
+  });
+
+  it("treats blank text and an unticked box as empty", () => {
+    expect(keys({ drive: true, licence: "   " })).toEqual(["drive", "size", "licence", "why"]);
+  });
+});
+
+describe("propertiesProblem with conditions", () => {
+  const drive: FormV2Property = { key: "drive", kind: "checkbox", required: false, label: { en: "Drives", fr: "Conduit" } };
+  const licence: FormV2Property = { key: "licence", kind: "text", required: false, label: { en: "Licence", fr: "Permis" } };
+
+  it("accepts a condition on an earlier question and refuses the rest", () => {
+    expect(propertiesProblem("offer", [drive, { ...licence, showIf: { key: "drive", op: "eq", value: true } }])).toBeNull();
+    expect(propertiesProblem("offer", [{ ...licence, showIf: { key: "drive", op: "eq", value: true } }, drive])).toBe("badCondition");
+    expect(propertiesProblem("offer", [drive, { ...licence, showIf: { key: "drive", op: "eq", value: "yes" } }])).toBe("badCondition");
+    expect(propertiesProblem("offer", [drive, { ...licence, showIf: { key: "drive", op: "is_empty", value: true } }])).toBe("badCondition");
+    expect(propertiesProblem("offer", [licence, { ...drive, showIf: { key: "licence", op: "contains", value: "" } }])).toBe("badCondition");
+    expect(propertiesProblem("offer", [licence, { ...drive, showIf: { key: "licence", op: "is_not_empty" } }])).toBeNull();
+  });
+
+  it("never hides the task title", () => {
+    expect(propertiesProblem("task", [priority, { ...title, showIf: { key: "priority", op: "eq", value: "high" } }])).toBe("badCondition");
   });
 });
 

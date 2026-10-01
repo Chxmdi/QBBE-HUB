@@ -163,4 +163,151 @@
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
   border-radius: 2px;
+/* U4: the block handle, the selection and the bar of bulk actions. */
+.qbbe-editor .bn-side-menu {
+  color: var(--color-muted);
+}
+.qbbe-editor .bn-side-menu .bn-ak-button:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+.qbbe-handle-menu .bn-ak-menu-item.qbbe-handle-danger {
+  color: var(--color-danger-fg);
+}
+
+/* Selected rows and the rows a keyboard move landed on, drawn over the
+   document (pointer events pass through). Solid for the selection, dashed
+   for the landing place, so high contrast mode still tells them apart. */
+.qbbe-selected-row,
+.qbbe-drop-target {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  border-radius: 4px;
+}
+.qbbe-selected-row {
+  background-color: color-mix(in srgb, var(--color-brand) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-brand);
+}
+.qbbe-drop-target {
+  outline: 2px dashed var(--color-accent-fg);
+  outline-offset: -1px;
+  background-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.dark .qbbe-selected-row {
+  background-color: color-mix(in srgb, var(--color-brand-fg) 18%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-brand-fg);
+}
+@media (forced-colors: active) {
+  .qbbe-selected-row {
+    background-color: transparent;
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: -1px;
+  }
+  .qbbe-drop-target {
+    background-color: transparent;
+    outline: 3px dashed Highlight;
+  }
+}
+
+.qbbe-bulk-bar {
+  position: absolute;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+}
+.qbbe-bulk-count {
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.qbbe-bulk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  color: var(--color-ink);
+}
+.qbbe-bulk-button:hover,
+.qbbe-bulk-button:focus-visible {
+  background-color: var(--color-surface-soft);
+}
+.qbbe-bulk-button:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}
+.qbbe-bulk-text {
+  font-size: 12px;
+}
+.qbbe-color-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+}
+
+/* 2.5.8 Target Size: the side menu's add and grip buttons are 24 px. */
+.qbbe-editor .bn-side-menu .bn-ak-button {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* 1.4.3 Contrast: block colours chosen from the handle menu. BlockNote's own
+   text colours fall below 4.5:1 on our page (red is 4.0:1). Each text colour
+   here reads at 4.6:1 or more on the page, the surface and every block
+   background of its theme; dark backgrounds are deep enough for the ink. */
+.qbbe-editor .bn-container {
+  --bn-colors-highlights-gray-text: #656461;
+  --bn-colors-highlights-brown-text: #64473a;
+  --bn-colors-highlights-red-text: #c21f1f;
+  --bn-colors-highlights-orange-text: #9a5209;
+  --bn-colors-highlights-yellow-text: #795d01;
+  --bn-colors-highlights-green-text: #4d6461;
+  --bn-colors-highlights-blue-text: #0b6b94;
+  --bn-colors-highlights-purple-text: #6940a5;
+  --bn-colors-highlights-pink-text: #ad1a72;
+}
+.dark .qbbe-editor .bn-container {
+  --bn-colors-highlights-gray-text: #cdccc8;
+  --bn-colors-highlights-gray-background: #565552;
+  --bn-colors-highlights-brown-text: #dbcac1;
+  --bn-colors-highlights-brown-background: #64473a;
+  --bn-colors-highlights-red-text: #f8bdbd;
+  --bn-colors-highlights-red-background: #9a2a2a;
+  --bn-colors-highlights-orange-text: #f8c28c;
+  --bn-colors-highlights-orange-background: #824407;
+  --bn-colors-highlights-yellow-text: #fec406;
+  --bn-colors-highlights-yellow-background: #685000;
+  --bn-colors-highlights-green-text: #c0cfcd;
+  --bn-colors-highlights-green-background: #445856;
+  --bn-colors-highlights-blue-text: #8bd6f6;
+  --bn-colors-highlights-blue-background: #09597c;
+  --bn-colors-highlights-purple-text: #d7c6f2;
+  --bn-colors-highlights-purple-background: #673fa1;
+  --bn-colors-highlights-pink-text: #f5bcde;
+  --bn-colors-highlights-pink-background: #9b1766;
+}
+
+/* The handle menu's dividers: a thin rule, not an empty item-sized gap. */
+.qbbe-handle-menu hr,
+.qbbe-handle-menu [role="separator"] {
+  height: 0;
+  min-height: 0;
+  margin: 4px 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--color-line);
 }

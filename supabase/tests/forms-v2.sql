@@ -209,8 +209,8 @@ begin
 
   perform tests.authenticate(v_staff);
   select * into res from public.submit_form_v2(v_staff_form, jsonb_build_object('name', 'Better signage'));
-  perform tests.ok(res.object_type = 'idea' and res.object_id = res.response_id,
-    'an answer to a custom type is its own object until the registry lands');
+  perform tests.ok(res.object_type = 'idea' and res.object_id <> res.response_id,
+    'an answer to a custom type creates a record of that type (see forms-v2-conditional.sql)');
   select count(*) into v_n from public.form_v2_response where form_id = v_task_form;
   perform tests.ok(v_n = 0, 'staff cannot read other people''s responses');
   reset role;

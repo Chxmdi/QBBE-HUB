@@ -11,6 +11,8 @@ import { contentToPlainText, normalizeContent } from "@/features/editor/adapter/
 import { documentIdFromRef, documentRef } from "@/features/editor/adapter/files";
 import { base64ToByteaHex, MAX_STATE_BASE64 } from "@/features/editor/adapter/state";
 import { getDocumentDownloadUrl, registerUploadedDocument } from "@/features/documents/services/document.commands";
+import { isEditorDocumentType } from "@/features/versions/adapters/registry";
+import { recordAutomaticVersion } from "@/features/versions/services/auto-version";
 
 /**
  * Saving editor content and the files placed in it (M4b). Runs as the
@@ -45,9 +47,20 @@ export async function saveEditorDocument(input: unknown): Promise<SaveResult> {
   if (!parsed.success) return { ok: false, reason: "invalid" };
   const content = normalizeContent(parsed.data.content);
   if (JSON.stringify(content).length > MAX_CONTENT_BYTES) return { ok: false, reason: "invalid" };
+  const result = await writeDocument(session, content, parsed.data);
+  const { objectId, objectType } = parsed.data;
+  if (result.ok && isEditorDocumentType(objectType)) await recordAutomaticVersion(objectId, objectType);
+  return result;
+}
+
+async function writeDocument(
+  session: { organizationId: string; userId: string },
+  content: ReturnType<typeof normalizeContent>,
+  input: z.infer<typeof saveSchema>,
+): Promise<SaveResult> {
   const text = contentToPlainText(content).slice(0, 500000);
   const supabase = await createSupabaseServerClient();
-  const { objectId, objectType, baseVersion, state } = parsed.data;
+  const { objectId, objectType, baseVersion, state } = input;
   const yjs = state ? { yjs_state: base64ToByteaHex(state) } : {};
 
   if (baseVersion === null) {

@@ -28,6 +28,7 @@ export default async function LensesPage() {
             <Link href="/lenses/table" className="text-brand-fg hover:underline">{t("table.title")}</Link>
             <Link href="/lenses/board" className="text-brand-fg hover:underline">{t("board.title")}</Link>
             <Link href="/lenses/my-work" className="text-brand-fg hover:underline">{t("myWork.title")}</Link>
+            <Link href="/lenses/import" className="text-brand-fg hover:underline">{t("csv.importLink")}</Link>
           </div>
         }
       />

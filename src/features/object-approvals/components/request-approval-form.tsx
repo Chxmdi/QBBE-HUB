@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { FieldHint, Input, Label, Textarea } from "@/components/ui/input";
 import type { ApprovableType } from "../contract";
 import { requestObjectApproval } from "../services/object-approval.commands";
@@ -12,6 +13,7 @@ import { useObjectApprovalsT } from "./use-oa-t";
 export function RequestApprovalForm({ type, id }: { type: ApprovableType; id: string }) {
   const t = useObjectApprovalsT();
   const router = useRouter();
+  const { toast } = useToast();
   const fieldId = useId();
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
@@ -28,10 +30,15 @@ export function RequestApprovalForm({ type, id }: { type: ApprovableType; id: st
       note: String(form.get("note") ?? ""),
     });
     setSaving(false);
-    setStatus({ ok: result.ok, text: result.ok ? t("request.sent") : (result.error ?? t("request.error")) });
+    // Once a request is open the record shows it instead of this form, so
+    // success is confirmed in the page-level toast; an error stays here.
     if (result.ok) {
+      setStatus(null);
       formElement.reset();
+      toast(t("request.sent"));
       router.refresh();
+    } else {
+      setStatus({ ok: false, text: result.error ?? t("request.error") });
     }
   }
 
