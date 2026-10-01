@@ -104,8 +104,8 @@ describe("translator", () => {
       }
       for (const item of group.items) {
         const label = navItemLabel(t, item);
-        // "Budgets", "Documents", "Messages" and "Signatures" are the same word in both languages.
-        if (!["Budgets", "Documents", "Messages", "Signatures"].includes(item.label)) {
+        // "Budgets", "Documents", "Messages", "Signatures" and "Pages" are the same word in both languages.
+        if (!["Budgets", "Documents", "Messages", "Signatures", "Pages"].includes(item.label)) {
           expect(label, item.href).not.toBe(item.label);
         }
       }
@@ -187,7 +187,7 @@ const SAME_OUTSIDE_FINANCE = new Set([
   "Date", "Description", "Direct", "Discussion", "Document", "Documents",
   "English", "Français", "Gmail", "Google", "Google Drive", "Impact",
   "Information", "Instructions", "Invitations", "Mentions", "Message", "Messages",
-  "Navigation", "Note", "Notes", "Notifications", "Occurrences", "Options",
+  "Navigation", "Note", "Notes", "Notifications", "Occurrences", "Options", "Pages",
   "PDF", "QBBE Hub", "Question {n}", "Questions", "Rose", "Sections",
   "Signature", "Signatures", "Type", "URL", "VMS", "Version {number}",
   "Versions", "accent", "active", "association", "communications",
