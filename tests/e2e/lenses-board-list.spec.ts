@@ -84,6 +84,13 @@ async function newBoardTitles(page: Page) {
 async function oldMyWork(page: Page) {
   await page.goto(`/my-work?q=${encodeURIComponent(RUN)}`);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 30_000 });
+  // The old list folds rows past TASK_LIST_ROW_LIMIT per bucket behind "Show
+  // more", as the old board does per column; the fixture holds two tasks per
+  // project for a person, so a workspace with more than twelve projects
+  // (every spec that leaves one behind adds to the seed) crosses it. Expand
+  // every bucket, as the board helpers do, so the comparison reads everything.
+  const more = page.getByRole("button", { name: /^Show \d+ more$/ });
+  while ((await more.count()) > 0) await more.first().click();
   const labels = (loc: ReturnType<Page["locator"]>) =>
     loc.evaluateAll((els) => els.map((e) => (e.getAttribute("aria-label") ?? "").replace(/^Select /, "")));
   const review = sorted(await labels(page.locator('section[aria-labelledby="review-queue"] input[type="checkbox"]')));
