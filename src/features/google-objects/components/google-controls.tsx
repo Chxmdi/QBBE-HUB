@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/toast";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
@@ -132,6 +133,7 @@ export function DriveLinkForm({ projects, text }: { projects: { id: string; name
 
 export function ForwardToCapture({ messageId, name, text }: { messageId: string; name: string; text: GoogleObjectsText }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message>(null);
   return (
@@ -144,8 +146,15 @@ export function ForwardToCapture({ messageId, name, text }: { messageId: string;
           setBusy(true);
           const result = await forwardToCapture(messageId);
           setBusy(false);
-          setMessage(result.ok ? { ok: true, text: text.sentToCapture } : { ok: false, text: result.error });
-          if (result.ok) router.refresh();
+          // The forwarded mail leaves the list on refresh, so success is
+          // confirmed in the page-level toast; an error stays here.
+          if (result.ok) {
+            setMessage(null);
+            toast(text.sentToCapture);
+            router.refresh();
+          } else {
+            setMessage({ ok: false, text: result.error });
+          }
         }}
       >
         {fill(text.toCapture, { name })}
