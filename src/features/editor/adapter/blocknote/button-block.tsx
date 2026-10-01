@@ -3,9 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { createReactBlockSpec, type DefaultReactSuggestionItem } from "@blocknote/react";
-import { insertOrUpdateBlockForSlashMenu, type BlockNoteEditor } from "@blocknote/core";
-import { MousePointerClick } from "lucide-react";
+import { createReactBlockSpec } from "@blocknote/react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Select } from "@/components/ui/input";
@@ -77,20 +75,6 @@ export function createButtonBlockSpec(t: EditorT, handlers: HandlersBox) {
       ),
     },
   );
-}
-
-/** The slash-menu item that inserts a button to set up. */
-export function buttonSlashItem(editor: BlockNoteEditor<never, never, never>, t: EditorT): DefaultReactSuggestionItem {
-  return {
-    title: t("button.slash.title"),
-    subtext: t("button.slash.subtext"),
-    aliases: t("button.slash.aliases").split(","),
-    group: t("slash.group"),
-    icon: <MousePointerClick size={18} aria-hidden />,
-    onItemClick: () => {
-      insertOrUpdateBlockForSlashMenu(editor, { type: "button" } as never);
-    },
-  };
 }
 
 type Outcome =

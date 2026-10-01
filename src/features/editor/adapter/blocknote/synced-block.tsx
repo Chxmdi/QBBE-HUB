@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { createReactBlockSpec, type DefaultReactSuggestionItem } from "@blocknote/react";
-import { insertOrUpdateBlockForSlashMenu, type BlockNoteEditor } from "@blocknote/core";
+import { createReactBlockSpec } from "@blocknote/react";
+import type { BlockNoteEditor } from "@blocknote/core";
 import { Plus, Repeat2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,20 +51,6 @@ export function createSyncedBlockSpec(t: EditorT, handlers: HandlersBox) {
       ),
     },
   );
-}
-
-/** The slash-menu item that inserts an empty synced block. */
-export function syncedBlockSlashItem(editor: BlockNoteEditor<never, never, never>, t: EditorT): DefaultReactSuggestionItem {
-  return {
-    title: t("syncedBlock.slash.title"),
-    subtext: t("syncedBlock.slash.subtext"),
-    aliases: t("syncedBlock.slash.aliases").split(","),
-    group: t("slash.group"),
-    icon: <Repeat2 size={18} aria-hidden />,
-    onItemClick: () => {
-      insertOrUpdateBlockForSlashMenu(editor, { type: "syncedBlock" } as never);
-    },
-  };
 }
 
 /**
