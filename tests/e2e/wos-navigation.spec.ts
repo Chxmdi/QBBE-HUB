@@ -187,7 +187,7 @@ test("with every switch on, staff reach every new screen from the sidebar and th
   await expect(nav.getByText(text.en.classic, { exact: true })).toBeVisible();
   // Each name once: a replacement and its classic twin never read the same.
   for (const screen of NEW_SCREENS) {
-    await expect(nav.getByRole("link", { name: screen.en, exact: true }), screen.href).toHaveCount(1);
+    await expect(nav.getByRole("link", { name: linkName(screen.en, "en") }), screen.href).toHaveCount(1);
   }
   // Setup holds the one staff-level entry; the admin-only rows stay out.
   await expect(nav.getByText("Setup", { exact: true })).toBeVisible();
