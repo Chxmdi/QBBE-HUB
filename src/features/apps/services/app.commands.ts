@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
-import { createCanStub, createActionRegistryStub } from "@/lib/objects/stubs";
+import { createCan } from "@/lib/objects/can";
+import { createActionRegistry } from "@/features/objects/actions/registry";
+import { createSupabaseChangeSetStore } from "@/features/objects/actions/supabase-store";
+import { createSupabaseObjectWriter } from "@/features/objects/actions/supabase-writer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { appsMessages } from "../i18n";
 import {
@@ -153,8 +156,9 @@ export async function deleteApp(appId: string): Promise<AppResult> {
 /**
  * Runs one of the app's actions on the given records. Two gates: the person
  * needs the action's capability on this app, and the action registry checks
- * it again on every target (plan A8). The registry is S1's; until it lands the
- * stand-in has no actions registered, so this answers "not yet" honestly.
+ * it again on every target (plan A8). The registry is the persisted one
+ * (M13); no app-level action is registered on it yet, so a run answers "not
+ * yet" honestly until the app screens wire their actions in.
  */
 export async function runAppAction(slug: string, actionKey: string, targets: string[]): Promise<AppResult> {
   const { session, supabase, messages, enabled } = await context();
@@ -168,14 +172,13 @@ export async function runAppAction(slug: string, actionKey: string, targets: str
     return { ok: false, error: t.forbidden };
   }
 
-  const registry = createActionRegistryStub({
-    apply: async () => {
-      throw new Error("The action registry arrives with M13.");
-    },
+  const registry = createActionRegistry({
+    store: createSupabaseChangeSetStore(supabase),
+    writer: createSupabaseObjectWriter(supabase),
   });
   const result = await registry.run(action.actionKey, { targets }, {
     actor: { kind: "person", id: session.userId },
-    can: createCanStub(supabase),
+    can: createCan(supabase),
   });
   if (result.ok) return { ok: true, value: null };
   if (result.reason === "unknown_action") return { ok: false, error: t.notYet };

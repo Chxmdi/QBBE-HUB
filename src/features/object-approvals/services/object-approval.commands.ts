@@ -6,7 +6,9 @@ import { requireSession } from "@/lib/auth";
 import { getLocale } from "@/lib/i18n/server";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createActionRegistryStub, createCanStub } from "@/lib/objects/stubs";
+import { createCan } from "@/lib/objects/can";
+import { createActionRegistry } from "@/features/objects/actions/registry";
+import { createSupabaseChangeSetStore } from "@/features/objects/actions/supabase-store";
 import { objectApprovalsEnabled } from "../flag";
 import { objectApprovalsT } from "../i18n";
 import { approvableTypes, REQUEST_APPROVAL_ACTION_KEY, requestApprovalAction } from "../contract";
@@ -36,17 +38,25 @@ export async function requestObjectApproval(input: unknown): Promise<CommandResu
   const { type, id, title, note } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
-  const registry = createActionRegistryStub({
-    // Withdrawing is the engine's own "withdraw", not an undo.
-    apply: async () => {
-      throw new Error("Withdraw the approval from Approvals instead.");
+  // The change set names the new approval item (not an object of the
+  // registry) and its link to the record, which anchors the organization.
+  const registry = createActionRegistry({
+    store: createSupabaseChangeSetStore(supabase),
+    writer: {
+      // Withdrawing is the engine's own "withdraw", not an undo.
+      apply: async () => {
+        throw new Error("Withdraw the approval from Approvals instead.");
+      },
+      read: async () => {
+        throw new Error("Withdraw the approval from Approvals instead.");
+      },
     },
   });
   registry.register(requestApprovalAction((fn, args) => supabase.rpc(fn, args)));
   const result = await registry.run(
     REQUEST_APPROVAL_ACTION_KEY,
     { object: { type, id }, title, note },
-    { actor: { kind: "person", id: session.userId }, can: createCanStub(supabase) },
+    { actor: { kind: "person", id: session.userId }, can: createCan(supabase) },
   );
   if (!result.ok) {
     const waiting = result.message?.includes("already has an approval waiting");

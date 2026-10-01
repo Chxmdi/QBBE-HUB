@@ -1,11 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { z } from "zod";
 import type {
+  ActionContext,
   ActionDefinition,
   ActionRegistry,
   Change,
+  Identity,
 } from "@/lib/objects/contracts";
-import { createActionRegistryStub } from "@/lib/objects/stubs";
+import { createActionRegistry, type ObjectWriter } from "@/features/objects/actions/registry";
+import { createSupabaseChangeSetStore } from "@/features/objects/actions/supabase-store";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import { actionInputSchemas, workflowActionLabels, type WorkflowActionKey } from "./actions-catalog";
 
@@ -13,15 +16,19 @@ export { actionInputSchemas, taskPriorities, taskStatuses, workflowActionKeys, w
 export type { WorkflowActionKey } from "./actions-catalog";
 
 /**
- * The actions a workflow can run, until S1's persisted registry lands (M13).
+ * The actions a workflow (or an API token) can run, on the persisted action
+ * registry (M13).
  *
- * Each one is an `ActionDefinition` from the contract, registered on the
- * contract's in-memory stand-in, so swapping in the real registry changes
- * `createWorkflowActionRegistry` and nothing else. The registry checks the
- * declared capability on every target (as the workflow's owner) before `run`.
+ * Each one is an `ActionDefinition` from the contract. The registry checks the
+ * declared capability on every target, as the person the run acts for, before
+ * `run`; afterwards it records a change set through
+ * public.record_change_set_as, labelled with the automation or integration
+ * and checked again for that person (`runAs`).
  *
- * Writes use the service client because the permission check has already been
- * made for the owner; the change is labelled as the automation.
+ * Writes go through the service client because the permission check has
+ * already been made for the owner. A task change goes through
+ * public.apply_task_update_as, which sets app.actor for the write so the
+ * object_event the task trigger records names the automation, not 'system'.
  */
 
 export interface WorkflowActionEnvironment {
@@ -30,6 +37,8 @@ export interface WorkflowActionEnvironment {
   workflowId: string;
   /** The run, so a retried step does not notify the same person twice. */
   runId: string;
+  /** Whose permissions the run acts with, and the sign-in level to ask at. */
+  runAs: { userId: string | null; assurance: "aal1" | "aal2" };
 }
 
 class ActionInputError extends Error {}
@@ -52,13 +61,14 @@ function targetsOf(key: WorkflowActionKey) {
   };
 }
 
-async function updateTaskColumn(
-  env: WorkflowActionEnvironment,
-  taskId: string,
-  column: "status" | "priority" | "assignee_id",
-  property: string,
-  value: string | null,
-): Promise<Change[]> {
+type TaskColumn = "status" | "priority" | "assignee_id";
+
+/** The actor as app.actor spells it: automation:<workflow id>, integration:<name>. */
+export function actorSetting(actor: Identity): string {
+  return `${actor.kind}:${actor.id}`;
+}
+
+async function readTaskColumn(env: WorkflowActionEnvironment, taskId: string, column: TaskColumn): Promise<unknown> {
   const { data: before, error: readError } = await env.db
     .from("task")
     .select(`id, organization_id, ${column}`)
@@ -67,12 +77,29 @@ async function updateTaskColumn(
   if (readError) throw new Error(readError.message);
   const row = before as Record<string, unknown> | null;
   if (!row || row.organization_id !== env.organizationId) throw new Error("The task does not exist.");
-  const previous = row[column] ?? null;
+  return row[column] ?? null;
+}
+
+async function updateTaskColumn(
+  env: WorkflowActionEnvironment,
+  actor: Identity,
+  taskId: string,
+  column: TaskColumn,
+  property: string,
+  value: string | null,
+): Promise<Change[]> {
+  const previous = await readTaskColumn(env, taskId, column);
   if (previous === value) return [];
   const patch: Record<string, unknown> = { [column]: value };
   if (column === "status") patch.completed_at = value === "completed" ? new Date().toISOString() : null;
-  const { error } = await env.db.from("task").update(patch).eq("id", taskId);
+  const { data, error } = await env.db.rpc("apply_task_update_as", {
+    p_actor: actorSetting(actor),
+    p_organization: env.organizationId,
+    p_task: taskId,
+    p_patch: patch,
+  });
   if (error) throw new Error(error.message);
+  if (!data) throw new Error("The task does not exist.");
   return [{ kind: "update", object: { id: taskId, type: "task" }, property, before: previous, after: value }];
 }
 
@@ -83,9 +110,9 @@ function definitions(env: WorkflowActionEnvironment): ActionDefinition[] {
       label: workflowActionLabels["task.set_status"],
       capability: "edit_content",
       targets: targetsOf("task.set_status"),
-      run: async (_context, input) => {
+      run: async (context, input) => {
         const { taskId, status } = parse("task.set_status", input);
-        return updateTaskColumn(env, taskId, "status", "status", status);
+        return updateTaskColumn(env, context.actor, taskId, "status", "status", status);
       },
     },
     {
@@ -93,9 +120,9 @@ function definitions(env: WorkflowActionEnvironment): ActionDefinition[] {
       label: workflowActionLabels["task.set_priority"],
       capability: "edit_content",
       targets: targetsOf("task.set_priority"),
-      run: async (_context, input) => {
+      run: async (context, input) => {
         const { taskId, priority } = parse("task.set_priority", input);
-        return updateTaskColumn(env, taskId, "priority", "priority", priority);
+        return updateTaskColumn(env, context.actor, taskId, "priority", "priority", priority);
       },
     },
     {
@@ -103,10 +130,10 @@ function definitions(env: WorkflowActionEnvironment): ActionDefinition[] {
       label: workflowActionLabels["task.assign"],
       capability: "edit_content",
       targets: targetsOf("task.assign"),
-      run: async (_context, input) => {
+      run: async (context, input) => {
         const { taskId, assigneeId } = parse("task.assign", input);
         if (assigneeId) await requireActiveMember(env, assigneeId);
-        return updateTaskColumn(env, taskId, "assignee_id", "assignee", assigneeId);
+        return updateTaskColumn(env, context.actor, taskId, "assignee_id", "assignee", assigneeId);
       },
     },
     {
@@ -148,24 +175,43 @@ async function requireActiveMember(env: WorkflowActionEnvironment, userId: strin
   if (!data) throw new Error("That person is not an active member of the organization.");
 }
 
-/** Reverses changes for undo. Only the task columns these actions write. */
-async function applyChanges(env: WorkflowActionEnvironment, changes: Change[]) {
-  const columns: Record<string, "status" | "priority" | "assignee_id"> = {
-    status: "status",
-    priority: "priority",
-    assignee: "assignee_id",
-  };
-  for (const change of changes) {
-    if (change.kind !== "update" || change.object.type !== "task" || !columns[change.property]) {
-      throw new Error("This change cannot be undone by a workflow.");
-    }
-    await updateTaskColumn(env, change.object.id, columns[change.property], change.property, change.after as string | null);
+const TASK_COLUMNS: Record<string, TaskColumn> = {
+  status: "status",
+  priority: "priority",
+  assignee: "assignee_id",
+};
+
+function taskColumn(change: Change): { id: string; column: TaskColumn } {
+  if (change.kind !== "update" || change.object.type !== "task" || !TASK_COLUMNS[change.property]) {
+    throw new Error("This change cannot be undone by a workflow.");
   }
+  return { id: change.object.id, column: TASK_COLUMNS[change.property] };
+}
+
+/** Undo for the registry: only the task columns these actions write. */
+function workflowWriter(env: WorkflowActionEnvironment): ObjectWriter {
+  return {
+    async apply(changes: Change[], context: ActionContext) {
+      for (const change of changes) {
+        const { id, column } = taskColumn(change);
+        if (change.kind !== "update") continue;
+        await updateTaskColumn(env, context.actor, id, column, change.property, change.after as string | null);
+      }
+    },
+    async read(change) {
+      const { id, column } = taskColumn(change);
+      return readTaskColumn(env, id, column);
+    },
+  };
 }
 
 export function createWorkflowActionRegistry(env: WorkflowActionEnvironment): ActionRegistry {
-  const registry = createActionRegistryStub({
-    apply: (changes: Change[]) => applyChanges(env, changes),
+  const registry = createActionRegistry({
+    store: createSupabaseChangeSetStore(env.db, { runAs: env.runAs }),
+    writer: workflowWriter(env),
+    // A step that changes nothing (the status is already set, a notification
+    // was sent) succeeds, as it always did; there is no change set to record.
+    onEmpty: "ok",
   });
   for (const definition of definitions(env)) registry.register(definition);
   return registry;
