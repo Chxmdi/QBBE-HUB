@@ -92,4 +92,11 @@ export interface BlockEditorProps {
   hintId?: string;
   /** Accessible name; defaults to "Document content". */
   label?: string;
+  /**
+   * The object's address, such as `/pages/<id>`. "Copy link" in the block
+   * handle menu copies `<objectPath>#block-<blockId>`; without it, the block id.
+   */
+  objectPath?: string;
+  /** "Comment" in the block handle menu; the item is left out when absent. */
+  onCommentBlock?: (blockId: string) => void;
 }
