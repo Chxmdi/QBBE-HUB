@@ -6,8 +6,9 @@ import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { blueprintsMessages, fill } from "../i18n";
-import { findConflicts, planBlueprint } from "../plan";
-import { validateBlueprint, type BlueprintIssue } from "../schema";
+import { findConflicts } from "../plan";
+import { validateBlueprint, type Blueprint, type BlueprintIssue } from "../schema";
+import { applyBlueprintBuild, undoBlueprintChanges, type BuildFailure } from "./blueprint.build";
 import { existingKeys, getBlueprint } from "./blueprint.queries";
 
 /**
@@ -45,7 +46,16 @@ function databaseError(messages: Messages, error: { code?: string; message?: str
   if (/already undone/.test(text)) return messages.errors.alreadyUndone;
   if (/30 days/.test(text)) return messages.errors.tooOld;
   if (/built blueprint|Undo the build/.test(text)) return messages.errors.locked;
-  return messages.errors.failed;
+  if (/Only owners and admins|Only an owner or admin/.test(text)) return messages.errors.forbidden;
+  return text ? fill(messages.errors.failedBecause, { reason: text }) : messages.errors.failed;
+}
+
+function buildError(messages: Messages, failure: BuildFailure): string {
+  if (failure.code === "propertyKindClash") return fill(messages.errors.propertyKindClash, { key: failure.key });
+  if (failure.code === "typeNotCustom") {
+    return fill(messages.errors.conflict, { kind: messages.errors.conflictKinds.type, key: failure.key });
+  }
+  return databaseError(messages, failure.error);
 }
 
 function refresh(id?: string) {
@@ -120,31 +130,39 @@ export async function buildBlueprint(id: string): Promise<BlueprintResult<{ chan
     };
   }
 
-  return applyPlan(supabase, messages, blueprint.id, validation.blueprint);
+  return applyPlan(supabase, messages, blueprint.id, session.organizationId, validation.blueprint);
 }
 
+/**
+ * Creates the blueprint's types, relations and properties for real (formulas
+ * and rollups included) and records the change set. A failure part-way is
+ * rolled back before it is reported; see blueprint.build.ts.
+ */
 async function applyPlan(
   supabase: Supabase,
   messages: Messages,
   id: string,
-  blueprint: Parameters<typeof planBlueprint>[0],
+  organizationId: string,
+  blueprint: Blueprint,
 ): Promise<BlueprintResult<{ changeSetId: string; count: number }>> {
-  const plan = planBlueprint(blueprint);
-  const { data, error } = await supabase.rpc("blueprint_build", {
-    p_blueprint: id,
-    p_changes: plan.changes,
-    p_counts: plan.counts,
-  });
-  if (error || typeof data !== "string") return { ok: false, error: databaseError(messages, error ?? {}) };
+  const result = await applyBlueprintBuild(supabase, { blueprintId: id, organizationId, blueprint });
+  if (!result.ok) {
+    const reason = buildError(messages, result.failure);
+    return { ok: false, error: result.rolledBack ? reason : fill(messages.errors.buildRolledBack, { reason }) };
+  }
   refresh(id);
-  return { ok: true, value: { changeSetId: data, count: plan.changes.length } };
+  return { ok: true, value: { changeSetId: result.changeSetId, count: result.count } };
 }
 
+/** Removes (archives) everything the build created, newest first, then marks it undone. */
 export async function undoBlueprintBuild(blueprintId: string, changeSetId: string): Promise<BlueprintResult> {
   const { supabase, messages, enabled } = await context();
   if (!enabled) return { ok: false, error: messages.errors.disabled };
-  const { error } = await supabase.rpc("blueprint_undo_build", { p_change_set: changeSetId });
-  if (error) return { ok: false, error: databaseError(messages, error) };
+  const result = await undoBlueprintChanges(supabase, changeSetId);
+  if (!result.ok) {
+    const reason = databaseError(messages, result.error);
+    return { ok: false, error: result.restored ? reason : fill(messages.errors.undoIncomplete, { reason }) };
+  }
   refresh(blueprintId);
   return { ok: true, value: null };
 }

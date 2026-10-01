@@ -9,12 +9,19 @@ import { sql } from "./db";
  * starters read in French. Behind the `wos_objects` switch, on for this file.
  */
 
-/** Removes this file's blueprints, builds first (a built blueprint cannot be deleted). */
+/**
+ * Removes this file's blueprints, builds first (a built blueprint cannot be
+ * deleted), and the Grant starter's types, properties and relations that
+ * building created (relations first; deleting a type removes its properties).
+ */
 function cleanUp() {
+  const keys = "'funder', 'grant_application', 'grant_report'";
   sql(`
     delete from public.blueprint_build where blueprint_id in (select id from public.blueprint where key like 'grant%');
     update public.blueprint set status = 'draft', approved_hash = null, approved_by = null, approved_at = null where key like 'grant%';
     delete from public.blueprint where key like 'grant%';
+    delete from public.relation_type where not is_native and (from_type_id in (select id from public.object_type where kind = 'custom' and key in (${keys})) or to_type_id in (select id from public.object_type where kind = 'custom' and key in (${keys})));
+    delete from public.object_type where kind = 'custom' and key in (${keys});
   `);
 }
 
@@ -63,6 +70,9 @@ test("owner builds the Grant starter", async ({ page }) => {
   expect(
     sql("select b.counts->>'object_type' from public.blueprint_build b join public.blueprint p on p.id = b.blueprint_id where p.key = 'grant' and b.undone_at is null;"),
   ).toBe("3");
+  // The starter's types and every property kind were created for real.
+  expect(sql("select count(*) from public.object_type where kind = 'custom' and key in ('funder', 'grant_application', 'grant_report') and archived_at is null;")).toBe("3");
+  expect(sql("select count(*) from public.property_definition p join public.object_type t on t.id = p.type_id where t.key = 'grant_application' and p.archived_at is null;")).toBe("6");
 });
 
 test("staff see the starters but cannot use them", async ({ page }) => {

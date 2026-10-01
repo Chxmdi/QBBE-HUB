@@ -4,8 +4,9 @@ import {
   type QuerySpec,
   type Uuid,
 } from "@/lib/objects/contracts";
+import { formulaDependencies, parseFormula } from "@/features/objects/formula";
 import { previewBlueprint } from "./preview";
-import type { Blueprint } from "./schema";
+import type { Blueprint, BlueprintProperty, BlueprintType } from "./schema";
 
 /**
  * Turns an approved blueprint into the ordered list of changes that building
@@ -104,26 +105,40 @@ export function planBlueprint(
     );
   }
 
-  for (const type of blueprint.types) {
-    type.properties.forEach((property, position) => {
-      create("property_definition", {
-        type_id: typeIds.get(type.key),
-        key: property.key,
-        name_en: property.name.en,
-        name_fr: property.name.fr,
-        kind: property.kind,
-        options: {
-          ...(property.choices ? { choices: property.choices.map((c) => ({ ...c, color: null })) } : {}),
-          ...(property.currency ? { currency: property.currency } : {}),
-          ...(property.relation
-            ? { relationTypeKey: property.relation, relationTypeId: relationIds.get(property.relation) }
-            : {}),
-          ...(property.required ? { required: true } : {}),
-        },
-        system_column: null,
-        visible_to_roles: null,
-        position,
-      });
+  for (const { type, property, position } of orderProperties(blueprint)) {
+    const relation = property.relation ? blueprint.relations.find((r) => r.key === property.relation) : undefined;
+    create("property_definition", {
+      type_id: typeIds.get(type.key),
+      type_key: type.key,
+      key: property.key,
+      name_en: property.name.en,
+      name_fr: property.name.fr,
+      kind: property.kind,
+      options: {
+        ...(property.choices ? { choices: property.choices.map((c) => ({ ...c, color: null })) } : {}),
+        ...(property.currency ? { currency: property.currency } : {}),
+        ...(relation
+          ? {
+              relationTypeKey: relation.key,
+              relationTypeId: relationIds.get(relation.key),
+              // What the database's relation and rollup functions read (V1-7).
+              direction: relation.from === type.key ? "outgoing" : "incoming",
+              targetTypeKey: relation.from === type.key ? relation.to : relation.from,
+            }
+          : {}),
+        ...(property.kind === "formula" && property.expression ? { expression: property.expression } : {}),
+        ...(property.kind === "rollup" && property.rollup
+          ? {
+              relationProperty: property.rollup.relation,
+              targetProperty: property.rollup.function === "count" ? null : (property.rollup.target ?? null),
+              function: property.rollup.function,
+            }
+          : {}),
+        ...(property.required ? { required: true } : {}),
+      },
+      system_column: null,
+      visible_to_roles: null,
+      position,
     });
   }
 
@@ -168,4 +183,72 @@ export function planBlueprint(
   }
 
   return { changes, counts };
+}
+
+export interface PlannedProperty {
+  type: BlueprintType;
+  property: BlueprintProperty;
+  /** Where the property sits on its type, as drawn. */
+  position: number;
+}
+
+/**
+ * Every property of every type, ordered so that a formula or rollup comes
+ * after the properties it reads: a rollup after its relation property and
+ * the number it summarises on the related type, a formula after the
+ * properties (other formulas included) its expression names. Plain
+ * properties keep their drawn order. Building applies rows in this order, so
+ * the database's rollup function always finds what a rollup refers to.
+ */
+export function orderProperties(blueprint: Blueprint): PlannedProperty[] {
+  const relations = new Map(blueprint.relations.map((r) => [r.key, r]));
+  const all: PlannedProperty[] = blueprint.types.flatMap((type) =>
+    type.properties.map((property, position) => ({ type, property, position })),
+  );
+  const id = (typeKey: string, propertyKey: string) => `${typeKey}.${propertyKey}`;
+  const resolveName = (type: BlueprintType, name: string) => {
+    const lower = name.toLowerCase();
+    return type.properties.find(
+      (p) => p.key.toLowerCase() === lower || p.name.en.toLowerCase() === lower || p.name.fr.toLowerCase() === lower,
+    )?.key;
+  };
+
+  const dependencies = new Map<string, string[]>();
+  for (const { type, property } of all) {
+    const needs: string[] = [];
+    if (property.kind === "rollup" && property.rollup) {
+      needs.push(id(type.key, property.rollup.relation));
+      const relationProperty = type.properties.find((p) => p.key === property.rollup!.relation);
+      const relation = relationProperty?.relation ? relations.get(relationProperty.relation) : undefined;
+      if (relation && property.rollup.target) {
+        needs.push(id(relation.from === type.key ? relation.to : relation.from, property.rollup.target));
+      }
+    } else if (property.kind === "formula" && property.expression) {
+      try {
+        for (const name of formulaDependencies(parseFormula(property.expression))) {
+          const key = resolveName(type, name);
+          if (key && key !== property.key) needs.push(id(type.key, key));
+        }
+      } catch {
+        // An unparsable formula is refused by validation; it has no dependencies to order.
+      }
+    }
+    dependencies.set(id(type.key, property.key), needs);
+  }
+
+  const known = new Set(all.map(({ type, property }) => id(type.key, property.key)));
+  const placed = new Set<string>();
+  const ordered: PlannedProperty[] = [];
+  let remaining = all;
+  while (remaining.length) {
+    const ready = remaining.filter(({ type, property }) =>
+      (dependencies.get(id(type.key, property.key)) ?? []).every((need) => !known.has(need) || placed.has(need)),
+    );
+    // A loop (refused by validation) still has to end: place what is left as drawn.
+    const batch = ready.length ? ready : remaining;
+    for (const item of batch) placed.add(id(item.type.key, item.property.key));
+    ordered.push(...batch);
+    remaining = remaining.filter((item) => !placed.has(id(item.type.key, item.property.key)));
+  }
+  return ordered;
 }

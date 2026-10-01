@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
-import { propertyKinds, type LensKind, type PropertyKind } from "@/lib/objects/contracts";
+import { formulaDependencies, parseFormula, validateFormula } from "@/features/objects/formula";
+import { MAX_FORMULA_LENGTH } from "@/features/objects/formula/parser";
+import { rollupFunctions } from "@/features/objects/services/rollups";
+import { propertyKinds, type LensKind, type LocalizedText, type PropertyKind } from "@/lib/objects/contracts";
 
 /**
  * What a blueprint is (V2-2, epic #199): the types, properties and relations
@@ -29,19 +32,21 @@ export const localizedTextSchema = z.object({
 
 /**
  * Kinds a person can add. The automatic ones (created by, edited time and so
- * on) exist on every type already, and formulas and rollups need definitions
- * that arrive with V1-7, so a blueprint cannot declare them yet.
+ * on) exist on every type already, so a blueprint cannot declare them. A
+ * formula carries its expression (V1-8) and a rollup names the relation
+ * property it counts or sums over (V1-7); both are checked below.
  */
 export const blueprintPropertyKinds = propertyKinds.filter(
-  (kind) =>
-    !["created_by", "created_time", "edited_by", "edited_time", "formula", "rollup"].includes(kind),
-) as Exclude<
-  PropertyKind,
-  "created_by" | "created_time" | "edited_by" | "edited_time" | "formula" | "rollup"
->[];
+  (kind) => !["created_by", "created_time", "edited_by", "edited_time"].includes(kind),
+) as Exclude<PropertyKind, "created_by" | "created_time" | "edited_by" | "edited_time">[];
 
 /** Kinds whose values are picked from a list of choices. */
 export const choiceKinds: readonly PropertyKind[] = ["status", "select", "multi_select"];
+
+/** Kinds a rollup can sum, average or take the minimum or maximum of (as the database allows). */
+export const numericKinds: readonly PropertyKind[] = ["number", "currency", "duration", "progress", "rating", "rollup"];
+
+export const blueprintRollupFunctions = rollupFunctions;
 
 export const blueprintLensKinds = [
   "table",
@@ -67,6 +72,18 @@ export const blueprintPropertySchema = z.object({
   currency: z.string().regex(/^[A-Z]{3}$/, "invalidCurrency").optional(),
   /** For `relation`: the key of a relation in this blueprint. */
   relation: key.optional(),
+  /** For `formula`: the expression, in the formula language of src/features/objects/formula. */
+  expression: z.string().max(MAX_FORMULA_LENGTH, "formulaTooLong").optional(),
+  /** For `rollup`: what to summarise, over which relation property of the same type. */
+  rollup: z
+    .object({
+      /** A relation property key on the same type. */
+      relation: key,
+      /** A numeric property key on the related type; not needed for `count`. */
+      target: key.optional(),
+      function: z.enum(blueprintRollupFunctions),
+    })
+    .optional(),
 });
 
 export const blueprintTypeSchema = z.object({
@@ -155,6 +172,93 @@ export const blueprintSchema = baseBlueprintSchema.superRefine((bp, ctx) => {
   const types = new Map(bp.types.map((type) => [type.key, type]));
   const relations = new Map(bp.relations.map((relation) => [relation.key, relation]));
 
+  /** The property a formula or rollup on `type` can name: every property of the type, plus the title. */
+  const namesOn = (type: z.infer<typeof blueprintTypeSchema>) => [
+    "title",
+    ...type.properties.flatMap((p) => [p.key, p.name.en, p.name.fr]),
+  ];
+
+  /** The type at the other end of a relation property, as the database resolves it. */
+  const relatedType = (type: z.infer<typeof blueprintTypeSchema>, relationKey: string) => {
+    const relation = relations.get(relationKey);
+    if (!relation) return undefined;
+    return types.get(relation.from === type.key ? relation.to : relation.from);
+  };
+
+  function checkFormula(
+    type: z.infer<typeof blueprintTypeSchema>,
+    property: z.infer<typeof blueprintPropertySchema>,
+    path: (string | number)[],
+  ) {
+    if (!property.expression?.trim()) return issue("needsFormula", path);
+    const known = namesOn(type);
+    const en = validateFormula(property.expression, known, "en");
+    if (en.ok) return;
+    const fr = validateFormula(property.expression, known, "fr-CA");
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "formulaInvalid",
+      path,
+      params: { message: { en: en.message, fr: fr.ok ? en.message : fr.message } satisfies LocalizedText },
+    });
+  }
+
+  /** A formula that depends on itself through other formulas of the type is refused here, not at build time. */
+  function checkFormulaLoops(type: z.infer<typeof blueprintTypeSchema>, t: number) {
+    const formulas = type.properties.filter((p) => p.kind === "formula" && p.expression?.trim());
+    if (!formulas.length) return;
+    const byKey = new Map(formulas.map((p) => [p.key, p]));
+    const resolve = (name: string) => {
+      const lower = name.toLowerCase();
+      return type.properties.find(
+        (p) => p.key.toLowerCase() === lower || p.name.en.toLowerCase() === lower || p.name.fr.toLowerCase() === lower,
+      )?.key;
+    };
+    const dependencies = new Map<string, string[]>();
+    for (const formula of formulas) {
+      try {
+        dependencies.set(
+          formula.key,
+          formulaDependencies(parseFormula(formula.expression!))
+            .map(resolve)
+            .filter((k): k is string => !!k && byKey.has(k)),
+        );
+      } catch {
+        dependencies.set(formula.key, []);
+      }
+    }
+    const inLoop = new Set<string>();
+    const visit = (start: string, current: string, seen: Set<string>) => {
+      for (const next of dependencies.get(current) ?? []) {
+        if (next === start) inLoop.add(start);
+        else if (!seen.has(next)) visit(start, next, new Set(seen).add(next));
+      }
+    };
+    for (const formula of formulas) visit(formula.key, formula.key, new Set([formula.key]));
+    for (const key of inLoop) {
+      issue("formulaCircular", ["types", t, "properties", type.properties.findIndex((p) => p.key === key)]);
+    }
+  }
+
+  function checkRollup(
+    type: z.infer<typeof blueprintTypeSchema>,
+    property: z.infer<typeof blueprintPropertySchema>,
+    path: (string | number)[],
+  ) {
+    if (!property.rollup) return issue("needsRollup", path);
+    const relationProperty = type.properties.find((p) => p.key === property.rollup!.relation);
+    if (!relationProperty || relationProperty.kind !== "relation" || !relationProperty.relation) {
+      return issue("rollupNeedsRelation", [...path, "rollup", "relation"]);
+    }
+    if (property.rollup.function === "count") return;
+    const target = property.rollup.target
+      ? relatedType(type, relationProperty.relation)?.properties.find((p) => p.key === property.rollup!.target)
+      : undefined;
+    if (!target || !numericKinds.includes(target.kind as PropertyKind)) {
+      issue("rollupNeedsNumber", [...path, "rollup", "target"]);
+    }
+  }
+
   for (const k of duplicates(bp.types.map((t) => t.key))) issue("duplicateKey", ["types", k]);
   for (const k of duplicates(bp.relations.map((r) => r.key))) issue("duplicateKey", ["relations", k]);
   for (const k of duplicates(bp.lenses.map((l) => l.key))) issue("duplicateKey", ["lenses", k]);
@@ -181,7 +285,18 @@ export const blueprintSchema = baseBlueprintSchema.superRefine((bp, ctx) => {
       } else if (property.relation) {
         issue("relationNotAllowed", path);
       }
+      if (property.kind === "formula") {
+        checkFormula(type, property, path);
+      } else if (property.expression !== undefined) {
+        issue("formulaNotAllowed", path);
+      }
+      if (property.kind === "rollup") {
+        checkRollup(type, property, path);
+      } else if (property.rollup) {
+        issue("rollupNotAllowed", path);
+      }
     });
+    checkFormulaLoops(type, t);
   });
 
   bp.relations.forEach((relation, r) => {
@@ -239,6 +354,8 @@ export interface BlueprintIssue {
   /** Key into the dictionary's `errors` group. */
   code: string;
   path: (string | number)[];
+  /** A ready sentence in each language when the code alone is not enough (formula errors name positions and names). */
+  message?: LocalizedText;
 }
 
 export type ValidationResult =
@@ -253,6 +370,7 @@ export function validateBlueprint(input: unknown): ValidationResult {
     issues: parsed.error.issues.map((issue) => ({
       code: issue.code === "custom" || issue.message in knownCodes ? issue.message : "invalid",
       path: issue.path,
+      ...(issue.code === "custom" && isLocalizedText(issue.params?.message) ? { message: issue.params.message } : {}),
     })),
   };
 }
@@ -267,8 +385,18 @@ const knownCodes: Record<string, true> = Object.fromEntries(
     "formNeedsFields",
     "workflowNeedsSteps",
     "needsAType",
+    "formulaTooLong",
   ].map((code) => [code, true]),
 );
+
+function isLocalizedText(value: unknown): value is LocalizedText {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as LocalizedText).en === "string" &&
+    typeof (value as LocalizedText).fr === "string"
+  );
+}
 
 /** A fresh, valid-shaped blueprint for the designer's "New" button. */
 export function emptyBlueprint(): Blueprint {
