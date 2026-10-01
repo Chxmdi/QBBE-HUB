@@ -23,6 +23,7 @@ const typeIcons: Record<string, React.ReactNode> = {
   meeting: <CalendarDays className="size-4" aria-hidden />,
   event: <CalendarRange className="size-4" aria-hidden />,
   document: <Paperclip className="size-4" aria-hidden />,
+  page: <FileText className="size-4" aria-hidden />,
   risk: <ShieldAlert className="size-4" aria-hidden />,
   issue: <AlertTriangle className="size-4" aria-hidden />,
   opportunity: <Banknote className="size-4" aria-hidden />,

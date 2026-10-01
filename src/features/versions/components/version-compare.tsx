@@ -88,7 +88,7 @@ export function VersionCompare({
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <p className="meta" role="status">
-          {diff.changedCount === 0 ? m.noChanges : fill(m.changes, { count: diff.changedCount })}
+          {diff.changedCount === 0 ? m.noChanges : diff.changedCount === 1 ? m.oneChange : fill(m.changes, { count: diff.changedCount })}
         </p>
         {restoring ? (
           <Button
