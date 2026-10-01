@@ -40,6 +40,11 @@ test.beforeAll(() => {
   sql(`insert into decision (organization_id, project_id, title, decided_by) values ('${org}', '${projectId}', 'Use the east hall ${suffix}', '${OWNER_ID}')`);
   sql(`insert into risk (organization_id, project_id, title, likelihood, impact, status, created_by)
        values ('${org}', '${projectId}', 'Speaker cancels ${suffix}', 'high', 'high', 'open', '${OWNER_ID}')`);
+  // Files: one live link and one archived one; only the live one may show.
+  sql(`insert into document (organization_id, project_id, title, kind, url, visibility, created_by)
+       values ('${org}', '${projectId}', 'Hall contract ${suffix}', 'link', 'https://drive.google.com/file/d/${suffix}/view', 'organization', '${OWNER_ID}')`);
+  sql(`insert into document (organization_id, project_id, title, kind, url, visibility, created_by, archived_at)
+       values ('${org}', '${projectId}', 'Old contract ${suffix}', 'link', 'https://drive.google.com/file/d/${suffix}-old/view', 'organization', '${OWNER_ID}', now())`);
 });
 test.afterAll(() => {
   sql(`update feature_flag set enabled = false where key = 'wos_home' and organization_id is null`);
@@ -70,7 +75,15 @@ test("the living project page calculates health and progress, and shows each blo
   await expect(page.getByRole("region", { name: "Recent decisions" }).getByText(`Use the east hall ${suffix}`)).toBeVisible();
   await expect(page.getByRole("region", { name: "Milestones" }).getByText(`Venue confirmed ${suffix}`)).toBeVisible();
   await expect(page.getByRole("region", { name: "Risks" }).getByText("Likelihood: high")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Files" }).getByText("No files.")).toBeVisible();
+  // Non-task types come through the query engine: decisions, milestones, risks above, and files here.
+  const files = page.getByRole("region", { name: "Files" });
+  await expect(files.getByRole("link", { name: `Hall contract ${suffix}` })).toBeVisible();
+  await expect(files.getByText(`Old contract ${suffix}`)).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Recent decisions" }).getByRole("link", { name: `Use the east hall ${suffix}` })).toHaveAttribute(
+    "href",
+    `/projects/${projectId}`,
+  );
+  await expect(page.getByRole("region", { name: "Milestones" }).getByText("Planned")).toBeVisible();
   await expect(page.getByRole("region", { name: "Activity" })).toBeVisible();
   expect(await axeProblems(page), "living project page accessibility").toEqual([]);
 

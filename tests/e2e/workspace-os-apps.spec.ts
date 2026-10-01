@@ -18,11 +18,27 @@ async function noSeriousViolations(page: Page, label: string) {
   expect(violations, `${label}: ${JSON.stringify(violations)}`).toEqual([]);
 }
 
+const OWNER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1";
+const STAFF = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2";
+
 test.beforeAll(() => {
   sql("update public.feature_flag set enabled = true where key = 'wos_objects' and organization_id is null;");
+  // A decision in a project staff can read, so a decisions screen shows it to them through the engine.
+  sql(`
+    with m as (select organization_id from public.organization_membership where user_id = '${OWNER}'),
+    p as (insert into public.program (organization_id, name, slug, created_by)
+      select organization_id, 'Desk ${SLUG}', '${SLUG}', '${OWNER}' from m returning id, organization_id),
+    j as (insert into public.project (organization_id, program_id, name, owner_id, created_by)
+      select p.organization_id, p.id, 'Desk ${SLUG}', '${STAFF}', '${OWNER}' from p returning id, organization_id)
+    insert into public.decision (organization_id, project_id, title, decided_by)
+    select j.organization_id, j.id, 'Desk decision ${SLUG}', '${OWNER}' from j;
+  `);
 });
 
 test.afterAll(() => {
+  sql(`delete from public.decision where title = 'Desk decision ${SLUG}';`);
+  sql(`delete from public.project where name = 'Desk ${SLUG}';`);
+  sql(`delete from public.program where name = 'Desk ${SLUG}';`);
   sql("delete from public.workspace_app where slug like 'e2e-desk-%';");
   sql("update public.feature_flag set enabled = false where key = 'wos_objects' and organization_id is null;");
 });
@@ -51,6 +67,10 @@ test("owner builds and publishes an app that staff can open", async ({ page }) =
   await page.getByRole("button", { name: "Publish", exact: true }).click();
   await expect(page.getByText("Published. People with permission can open it.")).toBeVisible();
   expect(sql(`select count(*) from public.workspace_app_grant g join public.workspace_app a on a.id = g.app_id where a.slug = '${SLUG}' and g.org_role = 'staff';`)).toBe("1");
+  // A third screen, a table of decisions: a type the task stand-in could not answer.
+  sql(`update public.workspace_app set definition = jsonb_set(definition, '{screens}', definition -> 'screens'
+       || '{"key":"decisions","title":{"en":"Decisions","fr":"Décisions"},"kind":"lens","lens":"table","type":"decision","inNavigation":true}'::jsonb)
+       where slug = '${SLUG}';`);
   await signOut(page);
 
   await signIn(page, "staff");
@@ -69,6 +89,14 @@ test("owner builds and publishes an app that staff can open", async ({ page }) =
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
   await expect(page.getByTestId("tile-in_progress")).toHaveText(/^\d+\+?$/);
   await noSeriousViolations(page, "dashboard");
+
+  // The decisions screen lists decisions, with the columns the engine's catalog gives that type.
+  await menu.getByRole("link", { name: "Decisions" }).click();
+  await expect(page.getByRole("heading", { name: "Decisions", level: 1 })).toBeVisible();
+  const decisions = page.getByRole("table", { name: "Decisions" });
+  await expect(decisions.getByRole("columnheader", { name: "Decided" })).toBeVisible();
+  await expect(decisions.getByRole("cell", { name: `Desk decision ${SLUG}` })).toBeVisible();
+  await noSeriousViolations(page, "decisions table");
   await signOut(page);
 
   await signIn(page, "volunteer");

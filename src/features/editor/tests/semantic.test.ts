@@ -1,20 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { parseStoredSpec, presetSpec, queryPresets } from "@/features/editor/semantic/queries";
+import { parseStoredSpec, presetSpec, queryPresets, toQueryBlockRow } from "@/features/editor/semantic/queries";
+import { fromContractSpec } from "@/lib/query/contract-adapter";
+import { migrationCatalog } from "@/lib/query/testing/migration-catalog";
 import { removedTaskIds, taskBlockIds } from "@/features/editor/semantic/removed";
 import type { EditorContent } from "@/features/editor/adapter/content";
 
 const doc = (...blocks: EditorContent["blocks"]): EditorContent => ({ version: 1, blocks });
 const task = (objectId: string) => ({ type: "task", props: { objectId } });
 
+const catalog = migrationCatalog();
+
 describe("query block presets", () => {
-  it("are task queries the stand-in accepts", () => {
+  it("are specs the query engine's catalog accepts, for tasks, decisions and meetings", () => {
+    const types = new Set<string>();
     for (const preset of queryPresets) {
       const spec = presetSpec(preset);
       expect(spec.version).toBe(1);
-      expect(spec.types).toEqual(["task"]);
-      expect(JSON.stringify(spec.filter)).toContain('"status","op":"neq","value":"completed"');
+      expect(() => fromContractSpec(spec, catalog), preset).not.toThrow();
+      types.add(spec.types[0]);
+      if (spec.types[0] === "task") expect(JSON.stringify(spec.filter)).toContain('"status","op":"neq","value":"completed"');
     }
+    expect([...types].sort()).toEqual(["decision", "meeting", "task"]);
     expect(JSON.stringify(presetSpec("my_open").filter)).toContain('{"relative":"me"}');
+    expect(fromContractSpec(presetSpec("upcoming_meetings"), catalog).where).toEqual({
+      and: [
+        { property: "starts", operator: "on_or_after", value: { relative: "today" } },
+        { property: "status", operator: "is_not", value: "cancelled" },
+      ],
+    });
   });
 
   it("round-trip through block props and refuse malformed specs", () => {
@@ -23,6 +36,18 @@ describe("query block presets", () => {
     expect(parseStoredSpec({ version: 2, types: ["task"] })).toBeNull();
     expect(parseStoredSpec({ version: 1, types: [] })).toBeNull();
     expect(parseStoredSpec({ version: 1, types: ["task"], limit: 5000 })?.limit).toBe(50);
+  });
+
+  it("shows each type with its own link, status label and date", () => {
+    const project = { kind: "relation" as const, value: [{ id: "p1", type: "project" }] };
+    const task = toQueryBlockRow({ ref: { id: "t1", type: "task" }, title: "T", values: { status: { kind: "status", value: "in_progress" }, due: { kind: "date", value: "2026-10-09" } } }, catalog, "en");
+    expect(task).toEqual({ id: "t1", type: "task", title: "T", href: "/my-work?task=t1", status: "in_progress", statusLabel: null, date: "2026-10-09", dateLabel: "due" });
+    const decision = toQueryBlockRow({ ref: { id: "d1", type: "decision" }, title: "D", values: { decided_time: { kind: "date", value: "2026-10-01T15:00:00Z" }, meeting: null, project } }, catalog, "fr-CA");
+    expect(decision).toMatchObject({ href: "/projects/p1", status: null, statusLabel: null, date: "2026-10-01T15:00:00Z", dateLabel: "decided" });
+    const meeting = toQueryBlockRow({ ref: { id: "m1", type: "meeting" }, title: "M", values: { status: { kind: "status", value: "scheduled" }, starts: { kind: "date", value: "2026-10-12T14:00:00Z" } } }, catalog, "fr-CA");
+    expect(meeting).toMatchObject({ href: "/meetings/m1", status: null, statusLabel: "Planifiée", dateLabel: "starts" });
+    const bare = toQueryBlockRow({ ref: { id: "r1", type: "risk" }, title: "R", values: {} }, catalog, "en");
+    expect(bare).toMatchObject({ href: "/projects", statusLabel: null, date: null, dateLabel: null });
   });
 });
 
