@@ -7,7 +7,7 @@ import { ChevronRight, Plus, X } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { QbbeLogo } from "@/components/layout/qbbe-logo";
 import { cn } from "@/lib/utils";
-import { activeNavHref, visibleNav, type NavSwitches } from "@/config/navigation";
+import { activeNavHref, navBadge, visibleNav, type NavSwitches } from "@/config/navigation";
 import { useT } from "@/lib/i18n/client";
 import { navGroupLabel, navItemLabel } from "@/lib/i18n/navigation";
 
@@ -81,9 +81,6 @@ export function Sidebar({
   // not Board and Saved lenses together.
   const activeHref = activeNavHref(groups, pathname);
 
-  const badgeFor = (item: { badge?: "myWork" | "inbox" }): number =>
-    item.badge === "myWork" ? counts.myWork : item.badge === "inbox" ? counts.inbox : 0;
-
   const nav = (
     <nav aria-label={t("nav.main")} className="relative flex h-full flex-col overflow-hidden">
       <div className="relative px-4 pt-4 pb-3">
@@ -124,7 +121,7 @@ export function Sidebar({
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const active = item.href === activeHref;
-                const badge = badgeFor(item);
+                const badge = navBadge(item, counts);
                 return (
                   <li key={item.href}>
                     <Link

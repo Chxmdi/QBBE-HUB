@@ -2,44 +2,44 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  CalendarDays,
-  ClipboardList,
-  Home,
-  MessagesSquare,
-  MoreHorizontal,
-} from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isUnder, navHref, type NavSwitches } from "@/config/navigation";
+import { activeNavHref, isUnder, mobileTabs, navBadge, visibleNav, type NavSwitches } from "@/config/navigation";
+import type { SidebarCounts } from "@/components/layout/sidebar";
 import { useT } from "@/lib/i18n/client";
+import { navGroupLabel, navItemLabel } from "@/lib/i18n/navigation";
 
 /**
  * Mobile bottom navigation (Part II §11.1): Home, My Work, Channels,
  * Calendar, More. Secondary modules stay reachable through More, which
  * opens the full sidebar drawer. Targets meet the 44px minimum (A11Y-005).
- * Each tab follows the sidebar: while a Workspace OS switch is on, Home, My
- * Work and Calendar open the new screen (epic #199, plan §9).
+ *
+ * The tabs are drawn from the same `visibleNav` output as the sidebar, so a
+ * tab follows the sidebar: while a Workspace OS switch is on, Home, My Work
+ * and Calendar open the new screen (epic #199, plan §9), and with the
+ * consolidated menu (`wos_home`) the tabs are Home, My Work, Pages and
+ * Communication, each opening its group's first screen.
  */
 export function MobileNav({
+  isAdmin,
+  isStaff,
   switches,
-  myWorkCount,
+  counts,
   onOpenMore,
 }: {
   isAdmin: boolean;
   isStaff: boolean;
   switches?: NavSwitches;
-  myWorkCount: number;
+  counts: SidebarCounts;
   onOpenMore: () => void;
 }) {
   const pathname = usePathname();
   const t = useT();
-
-  const tabs = [
-    { label: t("nav.items.home"), href: navHref("/", switches), icon: Home, badge: 0 },
-    { label: t("nav.items.myWork"), href: navHref("/my-work", switches), icon: ClipboardList, badge: myWorkCount },
-    { label: t("nav.items.channels"), href: "/channels", icon: MessagesSquare, badge: 0 },
-    { label: t("nav.items.calendar"), href: navHref("/calendar", switches), icon: CalendarDays, badge: 0 },
-  ];
+  const groups = visibleNav({ isAdmin, isStaff }, switches);
+  const tabs = mobileTabs(groups, switches);
+  // The sidebar's own rule (the most specific entry), so "/spaces/admin"
+  // lights Setup's entry and not the Pages tab through "/spaces".
+  const activeHref = activeNavHref(groups, pathname);
 
   return (
     <nav
@@ -48,11 +48,17 @@ export function MobileNav({
     >
       <ul className="flex items-stretch">
         {tabs.map((tab) => {
-          const active = isUnder(pathname, tab.href);
+          // A group tab is current on the screen of its group the sidebar marks; a screen tab only on its own.
+          const active = tab.group
+            ? tab.group.items.some((item) => item.href === activeHref)
+            : isUnder(pathname, tab.item.href);
+          const label = tab.group ? navGroupLabel(t, tab.group) : navItemLabel(t, tab.item);
+          const badge = navBadge(tab.item, counts);
+          const Icon = tab.item.icon;
           return (
-            <li key={tab.href} className="flex-1">
+            <li key={tab.item.href} className="min-w-0 flex-1">
               <Link
-                href={tab.href}
+                href={tab.item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 px-1 py-1.5",
@@ -60,11 +66,11 @@ export function MobileNav({
                   active ? "text-brand-fg" : "text-muted",
                 )}
               >
-                <tab.icon className="size-5" aria-hidden />
-                {tab.label}
-                {tab.badge > 0 ? (
+                <Icon className="size-5" aria-hidden />
+                <span className="max-w-full truncate">{label}</span>
+                {badge > 0 ? (
                   <span className="absolute top-1 right-[22%] min-w-4 rounded-full bg-brand px-1 text-[9.5px] leading-4 font-semibold text-white">
-                    {tab.badge > 9 ? "9+" : tab.badge}
+                    {badge > 9 ? "9+" : badge}
                     {/* aria-label is ignored on a bare span; a bare number
                         also reads as part of the tab label. */}
                     <span className="sr-only">{t("common.openItems")}</span>
@@ -74,7 +80,7 @@ export function MobileNav({
             </li>
           );
         })}
-        <li className="flex-1">
+        <li className="min-w-0 flex-1">
           <button
             type="button"
             onClick={onOpenMore}

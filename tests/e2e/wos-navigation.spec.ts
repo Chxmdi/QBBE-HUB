@@ -15,7 +15,9 @@ import { sql } from "./db";
  * server under test therefore runs without the WORKSPACE_OS_FLAGS override:
  * that override can only turn switches on, and the last test needs them off.
  * With every row on, the menu is exactly the one `WORKSPACE_OS_FLAGS=all`
- * produces (src/lib/navigation-switches.ts reads both the same way).
+ * produces (src/lib/navigation-switches.ts reads both the same way). Since
+ * `wos_home` is among them, that is the consolidated menu (U12): its groups
+ * and phone tabs are checked in depth in navigation-v2.spec.ts.
  */
 
 const SWITCHES = [
@@ -209,7 +211,7 @@ test("with every switch on, staff reach every new screen from the sidebar and th
   await expect(nav.getByRole("link", { name: "My Work (classic)", exact: true }).getByText("open items")).toHaveCount(0);
 });
 
-test("with every switch on, the mobile tabs follow the sidebar and the drawer lists the new screens", async ({ page }) => {
+test("with every switch on, the mobile tabs are the consolidated groups and the drawer lists the new screens", async ({ page }) => {
   test.setTimeout(180_000);
   setSwitches(true);
   await signIn(page, "staff");
@@ -219,7 +221,9 @@ test("with every switch on, the mobile tabs follow the sidebar and the drawer li
   const tabs = page.getByRole("navigation", { name: text.en.primary });
   await expect(tabs.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("href", "/home");
   await expect(tabs.getByRole("link", { name: /^My Work/ })).toHaveAttribute("href", "/lenses/my-work");
-  await expect(tabs.getByRole("link", { name: "Calendar", exact: true })).toHaveAttribute("href", "/lenses/calendar");
+  await expect(tabs.getByRole("link", { name: "Pages", exact: true })).toHaveAttribute("href", "/pages");
+  await expect(tabs.getByRole("link", { name: /^Communication/ })).toHaveAttribute("href", "/inbox");
+  await expect(tabs.getByRole("link", { name: "Calendar", exact: true })).toHaveCount(0);
   await tabs.getByRole("link", { name: /^My Work/ }).click();
   await expectLanded(page, "/lenses/my-work");
   await expect(tabs.getByRole("link", { name: /^My Work/ })).toHaveAttribute("aria-current", "page");
@@ -270,7 +274,7 @@ test("with every switch on, every entry has its French name in the sidebar and t
 
   const nav = sidebar(page, "fr");
   await expect(nav.getByText(text.fr.classic, { exact: true })).toBeVisible();
-  for (const label of ["Vues", "Analyse", "Espace de travail"]) {
+  for (const label of ["Données", "Programmes", "Configuration"]) {
     await expect(nav.getByText(label, { exact: true }), label).toBeVisible();
   }
   await walkSidebar(page, NEW_SCREENS, "fr");

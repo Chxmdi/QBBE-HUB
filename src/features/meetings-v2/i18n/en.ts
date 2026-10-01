@@ -101,6 +101,16 @@ export const meetingsV2En = {
       question: "Stays on the meeting",
     },
   },
+  index: {
+    title: "Meeting notes",
+    description: "Every meeting as an object: its agenda, notes, what was captured and the end-of-meeting review.",
+    classicList: "Classic meetings list",
+    upcoming: "Coming up",
+    upcomingEmpty: "No meeting is scheduled.",
+    recent: "Recent",
+    recentEmpty: "No meeting has taken place yet.",
+    review: "Review {count} item(s)",
+  },
   errors: {
     invalidInput: "Check the form and try again.",
     notFound: "That meeting is not available.",

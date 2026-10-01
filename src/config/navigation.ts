@@ -38,6 +38,7 @@ import {
   Megaphone,
   MessageSquare,
   NotebookPen,
+  NotebookText,
   Orbit,
   PanelsTopLeft,
   Percent,
@@ -66,10 +67,9 @@ import {
 
 /**
  * The Workspace OS switches the menus read (epic #199, plan §9). The keys
- * mirror `feature_flag.key`: the first eleven are `workspaceOsFlagKeys` in
- * src/lib/feature-flags.ts, the rest were added by the S5b modules
- * (migration 20261105110000) and read through their own helpers until
- * integration folds them into the shared list.
+ * mirror `feature_flag.key` and `workspaceOsFlagKeys` in
+ * src/lib/feature-flags.ts; the last five were added by the S5b modules
+ * (migration 20261105110000).
  */
 export const NAV_SWITCH_KEYS = [
   "wos_objects",
@@ -85,6 +85,9 @@ export const NAV_SWITCH_KEYS = [
   "wos_offline",
   "wos_goals",
   "wos_mobile",
+  "wos_meetings_v2",
+  "wos_decisions_v2",
+  "wos_object_approvals",
 ] as const;
 
 export type NavSwitchKey = (typeof NAV_SWITCH_KEYS)[number];
@@ -202,6 +205,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Calendar", href: "/lenses/calendar", icon: CalendarDays, access: "member", switch: "wos_lenses", replaces: "/calendar" },
       { label: "Master Schedule", href: "/schedule", icon: CalendarRange, access: "member" },
       { label: "Meetings", href: "/meetings", icon: Presentation, access: "member" },
+      // Meetings as objects (V1-9) sit beside the classic list rather than
+      // replacing it: the classic screen still owns scheduling.
+      { label: "Meeting notes", href: "/meetings-v2", icon: NotebookText, access: "member", switch: "wos_meetings_v2" },
       { label: "Events", href: "/events", icon: Building2, access: "member" },
       { label: "Signatures", href: "/signatures", icon: FileSignature, access: "member" },
       { label: "Relationships", href: "/crm", icon: Handshake, access: "staff" },
@@ -276,6 +282,111 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+
+// A record rather than a Map: the `Map` icon import above shadows the global.
+const ITEM_BY_HREF: Record<string, NavItem> = Object.fromEntries(
+  NAV_GROUPS.flatMap((group) => group.items).map((item) => [item.href, item]),
+);
+
+/** The same entry objects as NAV_GROUPS, so the two groupings can never drift apart. */
+function pick(...hrefs: string[]): NavItem[] {
+  return hrefs.map((href) => {
+    const item = ITEM_BY_HREF[href];
+    if (!item) throw new Error(`NAV_GROUPS_V2 names a screen NAV_GROUPS does not have: ${href}`);
+    return item;
+  });
+}
+
+/**
+ * The consolidated menu (U12), chosen while `wos_home` is on: the same
+ * screens as NAV_GROUPS, every one of them, regrouped by what people do
+ * rather than by which module built them. No route moves, and each
+ * replacement still sits right after the screen it stands in for, so the
+ * "Classic screens" rule applies unchanged. Builders and administration
+ * tools gather under Setup.
+ */
+export const NAV_GROUPS_V2: NavGroup[] = [
+  { label: "Home", items: pick("/", "/home", "/home/world", "/capture", "/home/commands") },
+  { label: "My Work", items: pick("/my-work", "/lenses/my-work", "/board", "/lenses/board", "/approvals") },
+  { label: "Pages", items: pick("/pages", "/spaces", "/templates-v2", "/apps", "/collab/trash") },
+  {
+    label: "Data",
+    items: pick(
+      "/lenses",
+      "/lenses/table",
+      "/lenses/timeline",
+      "/lenses/gallery",
+      "/lenses/feed",
+      "/lenses/dashboard",
+      "/lenses/find",
+      "/insight/dashboards",
+      "/insight/operations",
+      "/insight/graph",
+      "/insight/map",
+      "/insight/process",
+      "/insight/what-if",
+    ),
+  },
+  {
+    label: "Communication",
+    items: pick(
+      "/inbox",
+      "/channels",
+      "/messages",
+      "/saved",
+      "/announcements",
+      "/following",
+      "/meetings",
+      "/meetings-v2",
+      "/calendar",
+      "/lenses/calendar",
+      "/schedule",
+      "/events",
+    ),
+  },
+  { label: "Programs", items: pick("/programs", "/projects", "/goals", "/people", "/crm") },
+  {
+    label: "More",
+    items: pick(
+      "/documents",
+      "/forms",
+      "/forms-v2",
+      "/requests",
+      "/signatures",
+      "/finance/ledger",
+      "/finance/budgets",
+      "/finance/sales-tax",
+      "/finance/bank",
+      "/finance/receipts",
+      "/finance/gifts",
+      "/finance/payables",
+      "/finance/payroll",
+      "/reports",
+      "/offline",
+      "/m",
+      "/admin",
+    ),
+  },
+  {
+    label: "Setup",
+    items: pick(
+      "/builder",
+      "/collab/layouts",
+      "/workflows",
+      "/api-tokens",
+      "/upkeep",
+      "/spaces/admin",
+      "/spaces/roles",
+      "/spaces/publish",
+    ),
+  },
+];
+
+/** The grouping this request's switches select: consolidated while `wos_home` is on. */
+export function navGroupsFor(switches: NavSwitches = NO_SWITCHES): NavGroup[] {
+  return switches.wos_home === true ? NAV_GROUPS_V2 : NAV_GROUPS;
+}
+
 function allowed(item: NavItem, role: { isAdmin: boolean; isStaff: boolean }): boolean {
   return item.access === "admin" ? role.isAdmin : item.access === "staff" ? role.isStaff : true;
 }
@@ -285,21 +396,23 @@ function allowed(item: NavItem, role: { isAdmin: boolean; isStaff: boolean }): b
  * is the menu from before Workspace OS, entry for entry. With a switch on,
  * that module's entries appear, each old screen a new one replaces moves to
  * the "Classic screens" group at the end, and the replacement takes its
- * place. Every screen appears once.
+ * place. Every screen appears once. With `wos_home` on the entries are the
+ * consolidated groups (NAV_GROUPS_V2) instead; the same rules apply.
  */
 export function visibleNav(
   role: { isAdmin: boolean; isStaff: boolean },
   switches: NavSwitches = NO_SWITCHES,
 ): VisibleNavGroup[] {
   const on = (item: NavItem) => !item.switch || switches[item.switch] === true;
+  const source = navGroupsFor(switches);
   const replaced = new Set(
-    NAV_GROUPS.flatMap((group) => group.items)
+    source.flatMap((group) => group.items)
       .filter((item) => item.replaces && on(item) && allowed(item, role))
       .map((item) => item.replaces as string),
   );
   const classic: VisibleNavItem[] = [];
 
-  const groups: VisibleNavGroup[] = NAV_GROUPS.map((group) => ({
+  const groups: VisibleNavGroup[] = source.map((group) => ({
     label: group.label,
     items: group.items.filter((item) => {
       if (!allowed(item, role) || !on(item)) return false;
@@ -323,7 +436,7 @@ export function visibleNav(
  * Work and Calendar follow the sidebar.
  */
 export function navHref(href: string, switches: NavSwitches = NO_SWITCHES): string {
-  const replacement = NAV_GROUPS.flatMap((group) => group.items).find(
+  const replacement = navGroupsFor(switches).flatMap((group) => group.items).find(
     (item) => item.replaces === href && item.switch && switches[item.switch] === true,
   );
   return replacement?.href ?? href;
@@ -350,4 +463,57 @@ export function activeNavHref(groups: { items: { href: string }[] }[], pathname:
     }
   }
   return best;
+}
+
+/** The live count an entry carries, from the counts the layout read once. */
+export function navBadge(item: { badge?: NavItem["badge"] }, counts: { myWork: number; inbox: number }): number {
+  return item.badge === "myWork" ? counts.myWork : item.badge === "inbox" ? counts.inbox : 0;
+}
+
+/** One tab of the phone bar (Part II §11.1). */
+export interface MobileTab {
+  /** The screen the tab opens; carries the icon and the live count. */
+  item: VisibleNavItem;
+  /**
+   * Set while the consolidated menu is on: the tab is named after this group
+   * and is the current one on whichever screen of the group the sidebar marks.
+   */
+  group?: VisibleNavGroup;
+}
+
+/** Before Workspace OS: Home, My Work, Channels, Calendar, each following its replacement. */
+export const MOBILE_TAB_HREFS = ["/", "/my-work", "/channels", "/calendar"] as const;
+
+/**
+ * With the consolidated menu: Home, My Work, Pages, Communication, then More.
+ * Each tab opens its group's own screen (following its replacement), never
+ * whichever entry happens to come first, so "Pages" never opens Spaces.
+ */
+export const MOBILE_TAB_GROUPS_V2 = [
+  { group: "Home", href: "/" },
+  { group: "My Work", href: "/my-work" },
+  { group: "Pages", href: "/pages" },
+  { group: "Communication", href: "/inbox" },
+] as const;
+
+/**
+ * The phone tabs for one menu, drawn from the same `visibleNav` output the
+ * sidebar renders, so a tab can never point at a screen the sidebar hides.
+ * A tab whose screen is not shown (its switch off, or not for this role) is
+ * left out; More always follows and opens the full menu.
+ */
+export function mobileTabs(groups: VisibleNavGroup[], switches: NavSwitches = NO_SWITCHES): MobileTab[] {
+  const items = groups.flatMap((group) => group.items);
+  const shown = (href: string) => items.find((i) => i.href === navHref(href, switches) && !i.classic);
+  if (switches.wos_home === true) {
+    return MOBILE_TAB_GROUPS_V2.flatMap(({ group: label, href }) => {
+      const group = groups.find((g) => g.label === label);
+      const item = shown(href);
+      return group && item && group.items.includes(item) ? [{ item, group }] : [];
+    });
+  }
+  return MOBILE_TAB_HREFS.flatMap((href) => {
+    const item = shown(href);
+    return item ? [{ item }] : [];
+  });
 }
