@@ -8,6 +8,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { WorkflowEditor } from "@/features/workflows/components/workflow-editor";
 import { emptyEditorState } from "@/features/workflows/editor-model";
 import { workflowMessages } from "@/features/workflows/i18n";
+import { listWorkflowNames, loadWorkflowCatalog } from "@/features/workflows/services/workflow.queries";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: workflowMessages(await getLocale()).newTitle };
@@ -16,13 +17,18 @@ export const dynamic = "force-dynamic";
 
 export default async function NewWorkflowPage() {
   if (!(await isEnabled("wos_workflows_v2"))) notFound();
-  await requireAdminAal2();
-  const m = workflowMessages(await getLocale());
+  const session = await requireAdminAal2();
+  const locale = await getLocale();
+  const m = workflowMessages(locale);
+  const [workflows, catalog] = await Promise.all([
+    listWorkflowNames(session.organizationId),
+    loadWorkflowCatalog(),
+  ]);
   return (
     <div>
       <p className="mb-2 text-sm"><Link href="/workflows" className="text-brand-fg underline-offset-2 hover:underline">{m.backToList}</Link></p>
       <PageHeader eyebrow={m.eyebrow} title={m.newTitle} />
-      <WorkflowEditor id={null} initial={emptyEditorState()} m={m} />
+      <WorkflowEditor id={null} initial={emptyEditorState()} m={m} catalog={catalog} locale={locale} workflows={workflows} />
     </div>
   );
 }

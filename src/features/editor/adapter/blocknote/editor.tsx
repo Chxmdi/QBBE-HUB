@@ -8,20 +8,19 @@ import {
   BlockNoteEditor,
   BlockNoteSchema,
   defaultBlockSpecs,
-  filterSuggestionItems,
-  insertOrUpdateBlockForSlashMenu,
   type PartialBlock,
 } from "@blocknote/core";
 import { blocksToYDoc, withCollaboration } from "@blocknote/core/yjs";
 import { en, fr } from "@blocknote/core/locales";
 import {
+  FormattingToolbarController,
   getDefaultReactSlashMenuItems,
   SuggestionMenuController,
   useCreateBlockNote,
-  type DefaultReactSuggestionItem,
+  type FloatingUIOptions,
 } from "@blocknote/react";
+import { flip, offset, shift } from "@floating-ui/react";
 import { BlockNoteView } from "@blocknote/ariakit";
-import { Activity, Bookmark, FileText, Gavel, Link2, ListChecks, ListTodo, MessageSquareWarning, PanelTop, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { useLocale } from "@/lib/i18n/client";
@@ -36,8 +35,6 @@ import { BlockHandle } from "./block-handle";
 import {
   COLORS,
   MultiSelect,
-  TEXT_TYPES,
-  TURN_INTO,
   announce,
   colorBlocks,
   copyBlockLink,
@@ -51,7 +48,7 @@ import {
 } from "./multi-select";
 import { Label, Select } from "@/components/ui/input";
 import type { Locale } from "@/lib/i18n/config";
-import { rankByTitle } from "@/features/editor/adapter/slash";
+import { rankSlashItems, slashItems, textTypes, turnIntoTargets } from "@/features/editor/registry";
 import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
 
 /**
@@ -68,7 +65,7 @@ import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
  *   F8           Quebec wording over BlockNote's France French
  */
 
-function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
+export function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
   const { callout, bookmark, embed } = createWorkspaceBlocks(t);
   const s = createSemanticBlocks(t, locale, semantic);
   return BlockNoteSchema.create({
@@ -276,49 +273,25 @@ function focusOutside(root: HTMLElement, direction: "before" | "after") {
   target?.focus();
 }
 
-function workspaceSlashItems(editor: Editor, t: EditorT): DefaultReactSuggestionItem[] {
-  const group = t("slash.group");
-  const item = (key: "callout" | "bookmark" | "embed", icon: React.JSX.Element): DefaultReactSuggestionItem => ({
-    title: t(`slash.${key}.title`),
-    subtext: t(`slash.${key}.subtext`),
-    aliases: t(`slash.${key}.aliases`).split(","),
-    group,
-    icon,
-    onItemClick: () => {
-      insertOrUpdateBlockForSlashMenu(editor, { type: key } as PartialBlock<Schema["blockSchema"]>);
-    },
-  });
-  return [
-    item("callout", <MessageSquareWarning size={18} aria-hidden />),
-    item("bookmark", <Bookmark size={18} aria-hidden />),
-    item("embed", <PanelTop size={18} aria-hidden />),
-  ];
-}
+/**
+ * Where the formatting toolbar opens while the selection bar is showing:
+ * below the selection and clear of the bar, rather than above the selection,
+ * where it would cover the controls above the editor (such as the task
+ * suggestions switch) when the first blocks are selected. It also closes at
+ * once rather than fading: Alt+F10 moves focus into the bar, which closes the
+ * toolbar, and a half-faded toolbar is unreadable while it lingers.
+ */
+const BELOW_SELECTION_BAR: FloatingUIOptions = {
+  useFloatingOptions: {
+    placement: "bottom-start",
+    // The bar sits 6 px below the selection and is about 36 px tall.
+    middleware: [offset(({ placement }) => (placement.startsWith("bottom") ? 52 : 10)), shift(), flip()],
+  },
+  useTransitionStylesProps: { duration: 0 },
+};
 
-type SemanticItem = "task" | "decision" | "person" | "status" | "query" | "libraryFile" | "pageLink";
-
-function semanticSlashItems(editor: Editor, t: EditorT): DefaultReactSuggestionItem[] {
-  const group = t("slash.group");
-  const icons: Record<SemanticItem, React.JSX.Element> = {
-    task: <ListChecks size={18} aria-hidden />,
-    decision: <Gavel size={18} aria-hidden />,
-    person: <UserRound size={18} aria-hidden />,
-    status: <Activity size={18} aria-hidden />,
-    query: <ListTodo size={18} aria-hidden />,
-    libraryFile: <FileText size={18} aria-hidden />,
-    pageLink: <Link2 size={18} aria-hidden />,
-  };
-  return (Object.keys(icons) as SemanticItem[]).map((key) => ({
-    title: t(`semantic.items.${key}.title`),
-    subtext: t(`semantic.items.${key}.subtext`),
-    aliases: t(`semantic.items.${key}.aliases`).split(","),
-    group,
-    icon: icons[key],
-    onItemClick: () => {
-      insertOrUpdateBlockForSlashMenu(editor, { type: key } as PartialBlock<Schema["blockSchema"]>);
-    },
-  }));
-}
+/** Blocks the block menu offers "turn into" for, from the block registry (U2). */
+const TEXT_TYPES = textTypes();
 
 function BlockMenu({
   editor,
@@ -357,6 +330,7 @@ function BlockMenu({
     const value = (current.props as Record<string, unknown>)[prop];
     return typeof value === "string" ? value : "default";
   };
+  const turnInto = turnIntoTargets(current.type);
   return (
     <Dialog open onClose={() => done()} title={t("blockMenu.label")}>
       <div className="flex flex-col gap-1" role="group" aria-label={t("blockMenu.label")}>
@@ -418,9 +392,9 @@ function BlockMenu({
         ) : null}
         {canTurn ? (
           <div className="my-1 border-t border-line pt-1">
-            {TURN_INTO.map(({ key, block }) => (
+            {turnInto.map(({ key, labelKey, block }) => (
               <Button key={key} variant="ghost" className="w-full justify-start" onClick={() => { turnBlocksInto(editor, ids, block); done(); }}>
-                {t("blockMenu.turnInto", { type: t(`types.${key}`) })}
+                {t("blockMenu.turnInto", { type: t(labelKey) })}
               </Button>
             ))}
           </div>
@@ -460,6 +434,7 @@ export default function BlockNoteEditorImpl({
   const [selection, setSelection] = React.useState<EditorBlock[]>([]);
   const [turningIntoTasks, setTurningIntoTasks] = React.useState(false);
   const [version, setVersion] = React.useState(0);
+  const [barShowing, setBarShowing] = React.useState(false);
   // Blocks read the latest handlers through a ref, so new handler objects do
   // not rebuild the schema (which would remount the editor).
   const [semanticBox] = React.useState(() => new HandlersBox(semantic ?? null));
@@ -514,15 +489,12 @@ export default function BlockNoteEditorImpl({
 
   const getItems = React.useCallback(
     async (query: string) =>
-      rankByTitle(
-        filterSuggestionItems(
-          [
-            ...getDefaultReactSlashMenuItems(editor).filter((item) => (item as { key?: string }).key !== "emoji"),
-            ...workspaceSlashItems(editor, t),
-            ...(semantic ? semanticSlashItems(editor, t) : []),
-          ],
-          query,
-        ),
+      rankSlashItems(
+        slashItems(t, editor, {
+          // F7: the emoji picker is left out.
+          defaults: getDefaultReactSlashMenuItems(editor).filter((item) => (item as { key?: string }).key !== "emoji"),
+          semantic: Boolean(semantic),
+        }),
         query,
       ),
     [editor, t, semantic],
@@ -536,13 +508,15 @@ export default function BlockNoteEditorImpl({
         editable={editable}
         slashMenu={false}
         sideMenu={false}
+        formattingToolbar={false}
         emojiPicker={false}
         onChange={handleChange}
       >
         <SuggestionMenuController triggerCharacter="/" getItems={getItems} />
+        <FormattingToolbarController floatingUIOptions={barShowing ? BELOW_SELECTION_BAR : undefined} />
         {editable ? <BlockHandle t={t} objectPath={objectPath} onCommentBlock={onCommentBlock} /> : null}
       </BlockNoteView>
-      <MultiSelect editor={editor} containerRef={containerRef} t={t} enabled={editable} />
+      <MultiSelect editor={editor} containerRef={containerRef} t={t} enabled={editable} onBarChange={setBarShowing} />
       <p id="qbbe-editor-live" className="sr-only" aria-live="polite" />
       {menuOpen ? (
         <BlockMenu

@@ -4,33 +4,49 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox, FieldHint, Input, Label, Select, Switch, Textarea } from "@/components/ui/input";
-import { taskPriorities, taskStatuses, workflowActionKeys, type WorkflowActionKey } from "../actions-catalog";
+import { Checkbox, Input, Label, Select, Switch, Textarea } from "@/components/ui/input";
+import type { LensCatalog } from "@/lib/query/catalog";
 import {
-  actionFields,
-  defaultActionFields,
+  editorIssues,
   editorObjectTypes,
+  editorStepKinds,
   editorToGraph,
+  newStep,
+  removeStep,
   type EditorState,
   type EditorStep,
+  type EditorStepKind,
 } from "../editor-model";
-import { conditionOperators, objectEventVerbs } from "../graph";
+import { objectEventVerbs } from "../graph";
 import { fill, type WorkflowsMessages } from "../i18n";
-import { saveWorkflow, testRunWorkflow, type TestRunResult } from "../services/workflow.commands";
+import { changedPropertyOptions } from "../picker-options";
+import { saveWorkflow } from "../services/workflow.commands";
+import { Combobox } from "./pickers/combobox";
+import { StepFields, type StepEditorContext } from "./step-editors";
+
+export { TestRunPanel } from "./test-run-panel";
 
 interface Props {
   id: string | null;
   initial: EditorState;
   m: WorkflowsMessages;
+  /** The lens catalog, for the property pickers; empty when it could not load. */
+  catalog: LensCatalog;
+  locale: string;
+  /** Other workflows, for sub-workflow steps. */
+  workflows: { id: string; name: string }[];
 }
 
 const sectionClass = "rounded-(--radius-md) border border-line bg-surface p-4 sm:p-5";
+const OTHER_KINDS = editorStepKinds.filter((kind) => kind !== "condition" && kind !== "action");
 
-export function WorkflowEditor({ id, initial, m }: Props) {
+export function WorkflowEditor({ id, initial, m, catalog, locale, workflows }: Props) {
   const router = useRouter();
   const [state, setState] = React.useState<EditorState>(initial);
+  const [otherKind, setOtherKind] = React.useState<EditorStepKind>("branch");
   const [saving, startSaving] = React.useTransition();
   const [message, setMessage] = React.useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [showPropertyKey, setShowPropertyKey] = React.useState(false);
 
   const update = (patch: Partial<EditorState>) => setState((current) => ({ ...current, ...patch }));
   const setStep = (index: number, step: EditorStep) =>
@@ -41,10 +57,30 @@ export function WorkflowEditor({ id, initial, m }: Props) {
     steps.splice(index + by, 0, step);
     update({ steps });
   };
+  const addStep = (kind: EditorStepKind) => update({ steps: [...state.steps, newStep(kind, state.steps)] });
+
+  const objectTypes = React.useMemo(() => (state.objectType ? [state.objectType] : []), [state.objectType]);
+  const propertyKeys = React.useMemo(
+    () => changedPropertyOptions(catalog, objectTypes, locale),
+    [catalog, objectTypes, locale],
+  );
+  const ctx: StepEditorContext = {
+    catalog,
+    locale,
+    objectTypes,
+    steps: state.steps.map((step) => ({ id: step.id, kind: step.kind })),
+    workflows: workflows.filter((workflow) => workflow.id !== id),
+    m,
+  };
 
   const onSave = (event: React.FormEvent) => {
     event.preventDefault();
     setMessage(null);
+    const issues = editorIssues(state);
+    if (issues.length > 0) {
+      setMessage({ tone: "error", text: fill(m.steps.issues[issues[0].code], { id: issues[0].stepId }) });
+      return;
+    }
     startSaving(async () => {
       const result = await saveWorkflow({
         id: id ?? undefined,
@@ -63,6 +99,8 @@ export function WorkflowEditor({ id, initial, m }: Props) {
       else router.refresh();
     });
   };
+
+  const currentProperty = propertyKeys.find((option) => option.key === state.changedProperty);
 
   return (
     <form onSubmit={onSave} className="space-y-5" aria-describedby="workflow-save-message">
@@ -133,15 +171,35 @@ export function WorkflowEditor({ id, initial, m }: Props) {
             </Select>
           </div>
           <div>
-            <Label htmlFor="workflow-property">{m.trigger.changedProperty}</Label>
-            <Input
+            <Combobox
               id="workflow-property"
-              maxLength={64}
-              value={state.changedProperty}
-              aria-describedby="workflow-property-hint"
-              onChange={(event) => update({ changedProperty: event.target.value })}
+              label={m.trigger.changedProperty}
+              hint={m.trigger.changedPropertyHint}
+              selectedLabel={currentProperty ? currentProperty.name : state.changedProperty}
+              groups={[{ label: "", options: propertyKeys.map((option) => ({ id: option.key, label: option.name, description: option.key })) }]}
+              m={m.picker}
+              fill={fill}
+              onSelect={(option) => update({ changedProperty: option.id })}
+              onClear={() => update({ changedProperty: "" })}
             />
-            <p id="workflow-property-hint" className="mt-1 text-[12.5px] text-muted">{m.trigger.changedPropertyHint}</p>
+            <button
+              type="button"
+              className="mt-1 text-[12.5px] text-brand-fg underline-offset-2 hover:underline"
+              aria-expanded={showPropertyKey}
+              aria-controls="workflow-property-advanced"
+              onClick={() => setShowPropertyKey((shown) => !shown)}
+            >
+              {m.picker.advanced}
+            </button>
+            <div id="workflow-property-advanced" hidden={!showPropertyKey} className="mt-1">
+              <Label htmlFor="workflow-property-key">{m.trigger.propertyKey}</Label>
+              <Input
+                id="workflow-property-key"
+                maxLength={64}
+                value={state.changedProperty}
+                onChange={(event) => update({ changedProperty: event.target.value })}
+              />
+            </div>
           </div>
           <fieldset className="sm:col-span-2">
             <legend className="mb-1.5 text-[13px] font-medium text-ink">{m.trigger.verbs}</legend>
@@ -171,42 +229,38 @@ export function WorkflowEditor({ id, initial, m }: Props) {
         {state.steps.length === 0 ? <p className="mb-3 text-sm text-muted">{m.steps.empty}</p> : null}
         <ol className="space-y-4" aria-label={m.steps.heading}>
           {state.steps.map((step, index) => (
-            <li key={index} className="rounded-(--radius-sm) border border-line bg-surface-soft p-3">
+            <li key={step.id} className="rounded-(--radius-sm) border border-line bg-surface-soft p-3">
               <StepEditor
                 step={step}
                 index={index}
                 count={state.steps.length}
-                m={m}
+                ctx={ctx}
                 onChange={(next) => setStep(index, next)}
                 onMove={(by) => moveStep(index, by)}
-                onRemove={() => update({ steps: state.steps.filter((_, position) => position !== index) })}
+                onRemove={() => update({ steps: removeStep(state.steps, index) })}
               />
             </li>
           ))}
         </ol>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() =>
-              update({
-                steps: [...state.steps, { kind: "condition", path: "event.changes.status.after", op: "eq", value: "" }],
-              })}
-          >
+        <div className="mt-4 flex flex-wrap items-end gap-2">
+          <Button type="button" variant="secondary" size="sm" onClick={() => addStep("condition")}>
             {m.steps.addCondition}
           </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() =>
-              update({
-                steps: [...state.steps, { kind: "action", action: "task.set_priority", fields: defaultActionFields("task.set_priority") }],
-              })}
-          >
+          <Button type="button" variant="secondary" size="sm" onClick={() => addStep("action")}>
             {m.steps.addAction}
           </Button>
+          <div className="flex items-end gap-2">
+            <div>
+              <Label htmlFor="workflow-other-kind">{m.steps.otherKind}</Label>
+              <Select id="workflow-other-kind" value={otherKind} className="w-56"
+                onChange={(event) => setOtherKind(event.target.value as EditorStepKind)}>
+                {OTHER_KINDS.map((kind) => <option key={kind} value={kind}>{m.steps.kinds[kind]}</option>)}
+              </Select>
+            </div>
+            <Button type="button" variant="secondary" size="sm" onClick={() => addStep(otherKind)}>
+              {m.steps.addStep}
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -228,7 +282,7 @@ function StepEditor({
   step,
   index,
   count,
-  m,
+  ctx,
   onChange,
   onMove,
   onRemove,
@@ -236,11 +290,12 @@ function StepEditor({
   step: EditorStep;
   index: number;
   count: number;
-  m: WorkflowsMessages;
+  ctx: StepEditorContext;
   onChange: (step: EditorStep) => void;
   onMove: (by: -1 | 1) => void;
   onRemove: () => void;
 }) {
+  const { m } = ctx;
   const number = index + 1;
   const prefix = `step-${number}`;
   return (
@@ -248,6 +303,7 @@ function StepEditor({
       <legend className="flex w-full flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-semibold text-ink">
           {fill(m.steps.stepLabel, { number })} · {m.steps.kinds[step.kind]}
+          <span className="ml-2 font-mono text-[12px] font-normal text-muted">{step.id}</span>
         </span>
       </legend>
       <div className="mb-3 flex justify-end gap-1">
@@ -263,161 +319,12 @@ function StepEditor({
           <Trash2 className="size-4" aria-hidden />
         </Button>
       </div>
-
-      {step.kind === "condition" ? (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <Label htmlFor={`${prefix}-path`}>{m.steps.path}</Label>
-            <Input id={`${prefix}-path`} required value={step.path} aria-describedby={`${prefix}-path-hint`}
-              onChange={(event) => onChange({ ...step, path: event.target.value })} />
-            <p id={`${prefix}-path-hint`} className="mt-1 text-[12.5px] text-muted">{m.steps.pathHint}</p>
-          </div>
-          <div>
-            <Label htmlFor={`${prefix}-op`}>{m.steps.operator}</Label>
-            <Select id={`${prefix}-op`} value={step.op}
-              onChange={(event) => onChange({ ...step, op: event.target.value as typeof step.op })}>
-              {conditionOperators.map((op) => <option key={op} value={op}>{m.operators[op]}</option>)}
-            </Select>
-          </div>
-          {step.op === "is_empty" || step.op === "is_not_empty" ? null : (
-            <div>
-              <Label htmlFor={`${prefix}-value`}>{m.steps.value}</Label>
-              <Input id={`${prefix}-value`} value={step.value} aria-describedby={`${prefix}-value-hint`}
-                onChange={(event) => onChange({ ...step, value: event.target.value })} />
-              <p id={`${prefix}-value-hint`} className="mt-1 text-[12.5px] text-muted">{m.steps.valueHint}</p>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <Label htmlFor={`${prefix}-action`}>{m.steps.action}</Label>
-            <Select id={`${prefix}-action`} value={step.action}
-              onChange={(event) => {
-                const action = event.target.value as WorkflowActionKey;
-                onChange({ kind: "action", action, fields: defaultActionFields(action) });
-              }}>
-              {workflowActionKeys.map((key) => <option key={key} value={key}>{m.actions[key]}</option>)}
-            </Select>
-          </div>
-          {actionFields[step.action].map(({ key }) => (
-            <ActionField key={key} name={key} prefix={prefix} value={step.fields[key] ?? ""} m={m}
-              onChange={(value) => onChange({ ...step, fields: { ...step.fields, [key]: value } })} />
-          ))}
-        </div>
-      )}
+      <div className="mb-3 sm:w-80">
+        <Label htmlFor={`${prefix}-label`}>{m.steps.label}</Label>
+        <Input id={`${prefix}-label`} maxLength={120} value={step.label}
+          onChange={(event) => onChange({ ...step, label: event.target.value })} />
+      </div>
+      <StepFields step={step} prefix={prefix} ctx={ctx} onChange={onChange} />
     </fieldset>
-  );
-}
-
-function ActionField({
-  name,
-  prefix,
-  value,
-  m,
-  onChange,
-}: {
-  name: string;
-  prefix: string;
-  value: string;
-  m: WorkflowsMessages;
-  onChange: (value: string) => void;
-}) {
-  const id = `${prefix}-${name}`;
-  const label = m.steps[name as "taskId" | "status" | "priority" | "assigneeId" | "userId" | "title" | "link"];
-  if (name === "status" || name === "priority") {
-    const options = name === "status" ? taskStatuses : taskPriorities;
-    const labels = (name === "status" ? m.statuses : m.priorities) as Record<string, string>;
-    return (
-      <div>
-        <Label htmlFor={id}>{label}</Label>
-        <Select id={id} value={value} onChange={(event) => onChange(event.target.value)}>
-          {options.map((option) => <option key={option} value={option}>{labels[option]}</option>)}
-        </Select>
-      </div>
-    );
-  }
-  return (
-    <div>
-      <Label htmlFor={id}>{label}</Label>
-      <Input id={id} value={value} onChange={(event) => onChange(event.target.value)}
-        aria-describedby={name === "taskId" ? `${id}-hint` : undefined} />
-      {name === "taskId" ? <FieldHintWithId id={`${id}-hint`}>{m.steps.taskIdHint}</FieldHintWithId> : null}
-    </div>
-  );
-}
-
-function FieldHintWithId({ id, children }: { id: string; children: React.ReactNode }) {
-  return <p id={id} className="mt-1 text-[12.5px] text-muted">{children}</p>;
-}
-
-export function TestRunPanel({ id, m, defaultObjectId }: { id: string; m: WorkflowsMessages; defaultObjectId: string }) {
-  const router = useRouter();
-  const [objectId, setObjectId] = React.useState(defaultObjectId);
-  const [before, setBefore] = React.useState("in_progress");
-  const [after, setAfter] = React.useState("blocked");
-  const [result, setResult] = React.useState<TestRunResult | null>(null);
-  const [running, startRunning] = React.useTransition();
-
-  const onRun = (event: React.FormEvent) => {
-    event.preventDefault();
-    startRunning(async () => {
-      const outcome = await testRunWorkflow({ id, objectId: objectId.trim(), before, after });
-      setResult(outcome);
-      if (outcome.ok) router.refresh();
-    });
-  };
-
-  return (
-    <section className={sectionClass} aria-labelledby="workflow-test">
-      <h2 id="workflow-test" className="section-heading mb-1">{m.test.heading}</h2>
-      <p className="mb-3 text-sm text-muted">{m.test.description}</p>
-      <form onSubmit={onRun} className="grid gap-3 sm:grid-cols-3">
-        <div>
-          <Label htmlFor="test-object">{m.test.objectId}</Label>
-          <Input id="test-object" required value={objectId} aria-describedby="test-object-hint"
-            onChange={(event) => setObjectId(event.target.value)} />
-          <FieldHint><span id="test-object-hint">{m.test.objectIdHint}</span></FieldHint>
-        </div>
-        <div>
-          <Label htmlFor="test-before">{m.test.before}</Label>
-          <Select id="test-before" value={before} onChange={(event) => setBefore(event.target.value)}>
-            {taskStatuses.map((status) => <option key={status} value={status}>{m.statuses[status]}</option>)}
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="test-after">{m.test.after}</Label>
-          <Select id="test-after" value={after} onChange={(event) => setAfter(event.target.value)}>
-            {taskStatuses.map((status) => <option key={status} value={status}>{m.statuses[status]}</option>)}
-          </Select>
-        </div>
-        <div className="sm:col-span-3">
-          <Button type="submit" variant="secondary" loading={running}>{m.test.run}</Button>
-        </div>
-      </form>
-      <div role="status" aria-live="polite" className="mt-4">
-        {result && !result.ok ? <p role="alert" className="text-sm text-danger-fg">{result.error}</p> : null}
-        {result && result.ok ? (
-          <div>
-            <p className="text-sm font-semibold text-ink">
-              {fill(m.test.result, {
-                number: result.runNumber,
-                outcome: m.outcomes[result.outcome as keyof typeof m.outcomes] ?? result.outcome,
-              })}
-            </p>
-            <ol className="mt-2 space-y-1 text-sm" aria-label={m.test.heading}>
-              {result.steps.map((step) => (
-                <li key={step.position} className="text-ink">
-                  <span aria-hidden>{step.status === "failed" ? "✕" : step.status === "succeeded" ? "✓" : "–"}</span>{" "}
-                  {m.stepKinds[step.kind as keyof typeof m.stepKinds] ?? step.kind} {step.stepId}:{" "}
-                  {m.stepStatus[step.status as keyof typeof m.stepStatus] ?? step.status}
-                  {step.error ? <span className="text-danger-fg"> ({step.error})</span> : null}
-                </li>
-              ))}
-            </ol>
-          </div>
-        ) : null}
-      </div>
-    </section>
   );
 }

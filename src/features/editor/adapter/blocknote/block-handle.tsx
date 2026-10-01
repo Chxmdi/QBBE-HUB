@@ -25,12 +25,11 @@ import {
   hasColors,
   idsFor,
   moveAndAnnounce,
-  TEXT_TYPES,
-  TURN_INTO,
   turnBlocksInto,
   type AnyEditor,
   type ColorKey,
 } from "./multi-select";
+import { turnIntoTargets } from "@/features/editor/registry";
 
 /**
  * The block handle (U4): the grip beside a block opens a menu of everything
@@ -63,7 +62,8 @@ function HandleMenu({ t, objectPath, onCommentBlock }: BlockHandleProps) {
 
   const ids = () => idsFor(editor, block.id);
   const after = () => requestAnimationFrame(() => editor.focus());
-  const canTurn = TEXT_TYPES.has(block.type);
+  const turnInto = turnIntoTargets(block.type);
+  const canTurn = turnInto.length > 0;
   const canColor = hasColors(editor, block.type);
   const Item = Components.Generic.Menu.Item;
   const colorOf = (prop: "textColor" | "backgroundColor") => (typeof block.props[prop] === "string" ? (block.props[prop] as string) : "default");
@@ -100,9 +100,9 @@ function HandleMenu({ t, objectPath, onCommentBlock }: BlockHandleProps) {
                 <Item subTrigger>{t("handle.turnInto")}</Item>
               </Components.Generic.Menu.Trigger>
               <Components.Generic.Menu.Dropdown sub className="bn-menu-dropdown qbbe-handle-menu">
-                {TURN_INTO.map(({ key, block: target }) => (
+                {turnInto.map(({ key, labelKey, block: target }) => (
                   <Item key={key} onClick={() => { turnBlocksInto(editor, ids(), target); after(); }}>
-                    {t(`types.${key}`)}
+                    {t(labelKey)}
                   </Item>
                 ))}
               </Components.Generic.Menu.Dropdown>

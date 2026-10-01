@@ -7,8 +7,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { requireAdminAal2 } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getFormatters, getLocale } from "@/lib/i18n/server";
+import { FailureHistory } from "@/features/workflows/components/failure-history";
 import { fill, workflowMessages } from "@/features/workflows/i18n";
-import { listWorkflows } from "@/features/workflows/services/workflow.queries";
+import { listFailedRuns, listWorkflows } from "@/features/workflows/services/workflow.queries";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: workflowMessages(await getLocale()).title };
@@ -21,7 +22,10 @@ export default async function WorkflowsPage() {
   const session = await requireAdminAal2();
   const m = workflowMessages(await getLocale());
   const f = await getFormatters();
-  const workflows = await listWorkflows(session.organizationId);
+  const [workflows, failures] = await Promise.all([
+    listWorkflows(session.organizationId),
+    listFailedRuns(null, session.organizationId),
+  ]);
 
   return (
     <div>
@@ -68,6 +72,9 @@ export default async function WorkflowsPage() {
           ))}
         </ul>
       )}
+      <div className="mt-5">
+        <FailureHistory runs={failures} m={m} f={f} timeZone={session.timeZone} scope="all" />
+      </div>
     </div>
   );
 }

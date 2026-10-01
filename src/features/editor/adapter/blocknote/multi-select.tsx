@@ -14,6 +14,7 @@ import {
   type MoveDirection,
   type MovePlacement,
 } from "@/features/editor/adapter/selection";
+import { textTypes, turnIntoTargets } from "@/features/editor/registry";
 
 /**
  * Several blocks at once (U4): the selection model, the keys that drive it,
@@ -39,36 +40,8 @@ type AnyBlock = { id: string; type: string; props: Record<string, unknown> } & E
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyPartialBlock = PartialBlock<any, any, any>;
 
-/** Turn-into targets offered by every block menu. */
-export type TurnIntoKey =
-  | "paragraph"
-  | "heading1"
-  | "heading2"
-  | "heading3"
-  | "bulletListItem"
-  | "numberedListItem"
-  | "checkListItem"
-  | "toggleListItem"
-  | "quote"
-  | "callout"
-  | "codeBlock";
-
-export const TURN_INTO: { key: TurnIntoKey; block: AnyPartialBlock }[] = [
-  { key: "paragraph", block: { type: "paragraph" } },
-  { key: "heading1", block: { type: "heading", props: { level: 1 } } },
-  { key: "heading2", block: { type: "heading", props: { level: 2 } } },
-  { key: "heading3", block: { type: "heading", props: { level: 3 } } },
-  { key: "bulletListItem", block: { type: "bulletListItem" } },
-  { key: "numberedListItem", block: { type: "numberedListItem" } },
-  { key: "checkListItem", block: { type: "checkListItem" } },
-  { key: "toggleListItem", block: { type: "toggleListItem" } },
-  { key: "quote", block: { type: "quote" } },
-  { key: "callout", block: { type: "callout" } },
-  { key: "codeBlock", block: { type: "codeBlock" } },
-];
-
-/** Blocks that can be turned into one another. */
-export const TEXT_TYPES = new Set(["paragraph", "heading", "bulletListItem", "numberedListItem", "checkListItem", "toggleListItem", "quote", "callout", "codeBlock"]);
+/** Blocks that can be turned into one another, from the block registry (U2). */
+const TEXT_TYPES = textTypes();
 
 export const COLORS = ["default", "gray", "brown", "red", "orange", "yellow", "green", "blue", "purple", "pink"] as const;
 export type ColorKey = (typeof COLORS)[number];
@@ -444,13 +417,20 @@ export function MultiSelect({
   containerRef,
   t,
   enabled,
+  onBarChange,
 }: {
   editor: AnyEditor;
   containerRef: React.RefObject<HTMLDivElement | null>;
   t: EditorT;
   enabled: boolean;
+  /** Told whether the bulk bar is showing, so the formatting toolbar can make room for it. */
+  onBarChange?: (showing: boolean) => void;
 }) {
   const { ids, clear, version, lit, light } = useBlockSelection(editor, containerRef, t, enabled);
+  const showing = enabled && ids.length > 0;
+  React.useEffect(() => {
+    onBarChange?.(showing);
+  }, [onBarChange, showing]);
   useBlockHash(editor, containerRef, light);
   const [rows, setRows] = React.useState<Row[]>([]);
   const [litRows, setLitRows] = React.useState<Row[]>([]);
@@ -527,8 +507,8 @@ export function MultiSelect({
               label={t("handle.turnInto")}
               align="left"
               trigger={<Pilcrow className="size-4" aria-hidden />}
-              items={TURN_INTO.map(({ key, block }) => ({
-                label: t(`types.${key}`),
+              items={turnIntoTargets().map(({ labelKey, block }) => ({
+                label: t(labelKey),
                 onSelect: () => act(() => turnBlocksInto(editor, ids, block)),
               }))}
             />
