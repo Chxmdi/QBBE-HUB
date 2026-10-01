@@ -57,7 +57,9 @@ test("Home shows my urgent work, what I wait on, and My World gathers it; nobody
   expect(await axeProblems(page), "Home accessibility").toEqual([]);
 
   // Keyboard: the view tabs and the first item link are reachable by Tab.
-  await page.getByRole("link", { name: "My World" }).focus();
+  // The view tabs' link, not the sidebar's: since the menus (I3) carry My
+  // World while the switch is on, the page holds two links by that name.
+  await page.getByRole("navigation", { name: "Home views" }).getByRole("link", { name: "My World" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/home\/world$/);
   await expect(page.getByRole("region", { name: /^My tasks/ }).getByRole("link", { name: overdue })).toBeVisible();
