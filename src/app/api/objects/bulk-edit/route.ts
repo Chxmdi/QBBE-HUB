@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionContext } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
+import { crossSiteResponse, isSameOriginRequest } from "@/lib/same-origin";
 import { createRequestActionRegistry, statusForActionFailure } from "@/features/objects/actions/server";
 import { BULK_EDIT_LIMIT, SET_PROPERTY_ACTION } from "@/features/objects/actions/set-property";
 
@@ -17,10 +18,13 @@ const body = z.object({
 
 /**
  * Bulk edit (Workspace OS M13): set one property on many objects as one
- * change set that can be undone. Hidden unless `wos_objects` is on.
+ * change set that can be undone. Hidden unless `wos_objects` is on, and only
+ * for requests from the Hub's own pages: the session cookie must not be
+ * usable from somebody else's site.
  */
 export async function POST(request: Request) {
   if (!(await isEnabled("wos_objects"))) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!isSameOriginRequest(request)) return crossSiteResponse();
   const session = await getSessionContext();
   if (!session) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 

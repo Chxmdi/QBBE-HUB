@@ -46,6 +46,13 @@ test("the web app manifest and icons load without signing in", async ({ request 
   }
 });
 
+test("the phone screens are hidden while the switch is off [switch off]", async ({ page }) => {
+  setSwitch(false);
+  await signIn(page, "staff");
+  await page.goto("/m/today");
+  await expect(page.getByRole("heading", { name: NOT_FOUND })).toBeVisible();
+});
+
 test("a staff member works through the phone screens at 390px", async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -83,12 +90,8 @@ test("a staff member works through the phone screens at 390px", async ({ page })
     select item.id, item.organization_id, 1, 'Staff', 'person', who.user_id from item, who;
   `);
 
-  setSwitch(false);
-  await signIn(page, "staff");
-  await page.goto("/m/today");
-  await expect(page.getByRole("heading", { name: NOT_FOUND })).toBeVisible();
-
   setSwitch(true);
+  await signIn(page, "staff");
 
   // Capture.
   await page.goto("/m/capture");

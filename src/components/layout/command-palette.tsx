@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Banknote, BarChart3, Building2, CalendarDays, CalendarRange, FileText, FolderKanban, Hash, Layers, MessageSquare, Paperclip, Search, ShieldAlert, User, Plus } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { createActions } from "@/config/create-actions";
-import { visibleNav } from "@/config/navigation";
+import { visibleNav, type NavSwitches } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
 import { createActionLabel, navItemLabel } from "@/lib/i18n/navigation";
@@ -23,6 +23,7 @@ const typeIcons: Record<string, React.ReactNode> = {
   meeting: <CalendarDays className="size-4" aria-hidden />,
   event: <CalendarRange className="size-4" aria-hidden />,
   document: <Paperclip className="size-4" aria-hidden />,
+  page: <FileText className="size-4" aria-hidden />,
   risk: <ShieldAlert className="size-4" aria-hidden />,
   issue: <AlertTriangle className="size-4" aria-hidden />,
   opportunity: <Banknote className="size-4" aria-hidden />,
@@ -33,17 +34,22 @@ const typeIcons: Record<string, React.ReactNode> = {
 /**
  * ⌘K command palette (P0-CMD-01): keyboard-first search across authorized
  * records via the permission-safe app.global_search RPC, plus navigation.
+ * Navigation follows the sidebar: the same entries, the same Workspace OS
+ * switches read on the server (epic #199), so every screen in the menu is
+ * reachable here by its name in either language.
  */
 export function CommandPalette({
   open,
   onClose,
   isAdmin,
   isStaff,
+  switches,
 }: {
   open: boolean;
   onClose: () => void;
   isAdmin: boolean;
   isStaff: boolean;
+  switches?: NavSwitches;
 }) {
   const router = useRouter();
   const t = useT();
@@ -54,7 +60,7 @@ export function CommandPalette({
   const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const navItems = visibleNav({ isAdmin, isStaff })
+  const navItems = visibleNav({ isAdmin, isStaff }, switches)
     .flatMap((g) => g.items)
     .map((item) => ({ ...item, label: navItemLabel(t, item) }));
   const remoteResults = query.length >= 2 ? results : [];

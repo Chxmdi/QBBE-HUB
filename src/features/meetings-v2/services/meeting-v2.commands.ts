@@ -6,7 +6,10 @@ import { requireSession } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { getLocale } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createActionRegistryStub, createCanStub } from "@/lib/objects/stubs";
+import { createCan } from "@/lib/objects/can";
+import { createActionRegistry } from "@/features/objects/actions/registry";
+import { createSupabaseChangeSetStore } from "@/features/objects/actions/supabase-store";
+import { createSupabaseObjectWriter } from "@/features/objects/actions/supabase-writer";
 import { meetingsV2T } from "../i18n";
 import { extractSemanticBlocks, semanticBlockKinds } from "../editor-adapter";
 import { taskCreateAction } from "@/features/universal-tasks/task-create-action";
@@ -133,12 +136,15 @@ const reviewSchema = z.object({
   choices: z.record(uuid, z.enum(["approve", "dismiss"])),
 });
 
+/**
+ * The persisted registry (M13) with the shared task.create action: each task
+ * made from a capture is recorded as a change set. Undo of a creation is not
+ * offered here (the object writer applies property and link changes only).
+ */
 function registryFor(supabase: Client, actor: { userId: string; organizationId: string; displayName: string }) {
-  const registry = createActionRegistryStub({
-    // Undo of a created task waits for persisted change sets (M13).
-    apply: async () => {
-      throw new Error("Undo is not available until change sets are persisted.");
-    },
+  const registry = createActionRegistry({
+    store: createSupabaseChangeSetStore(supabase),
+    writer: createSupabaseObjectWriter(supabase),
   });
   registry.register(taskCreateAction(supabase, actor));
   return registry;
@@ -185,7 +191,7 @@ export async function applyMeetingReview(input: unknown): Promise<CommandResult>
     organizationId: session.organizationId,
     displayName: session.profile.full_name,
   });
-  const context = { actor: { kind: "person" as const, id: session.userId }, can: createCanStub(supabase) };
+  const context = { actor: { kind: "person" as const, id: session.userId }, can: createCan(supabase) };
 
   let failed = 0;
   for (const step of steps) {

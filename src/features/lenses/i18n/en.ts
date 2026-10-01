@@ -149,6 +149,7 @@ export const lensesEn = {
       decision: "Decision",
       event: "Event",
       document: "Document",
+      page: "Page",
       risk: "Risk",
       issue: "Issue",
       contact: "Contact",

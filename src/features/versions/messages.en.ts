@@ -80,6 +80,7 @@ export const versionsEn = {
     property: "Property",
     noChanges: "No differences between these two.",
     changes: "{count} differences",
+    oneChange: "1 difference",
     added: "Added",
     removed: "Removed",
     changed: "Changed",
