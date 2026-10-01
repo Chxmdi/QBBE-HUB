@@ -20,6 +20,14 @@ FF=$(python3 -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())")
 $FF -y -i .demo-out/00-welcome.webm -vf "fps=1/6,scale=960:-1" .demo-out/00-welcome-%02d.png
 ```
 
+## Assemble
+
+```bash
+# One MP4 per chapter, the combined video with chapter markers, subtitles and index.html, in .demo-out/final/.
+node scripts/demo/assemble.mjs --in .demo-out --out .demo-out/final            # captions only
+node scripts/demo/assemble.mjs --in .demo-out --out .demo-out/final --voice mb-us2   # with the synthetic voice (espeak-ng + mbrola)
+```
+
 Each run writes `<id>.webm` (1920 × 1080), `<id>.captions.json` (every caption with the millisecond it appeared), `<id>.srt` and `<id>.meta.json` (title, audience, duration, whether the run completed). A failed run also leaves `<id>.failure.png`.
 
 ## Writing a chapter
