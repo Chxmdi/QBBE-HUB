@@ -72,11 +72,12 @@ begin
 
   perform tests.ok(
     (select relrowsecurity from pg_class where oid = 'public.editor_operation'::regclass)
+      and not has_table_privilege('authenticated', 'public.editor_operation', 'insert')
       and not has_table_privilege('authenticated', 'public.editor_operation', 'update')
       and not has_table_privilege('authenticated', 'public.editor_operation', 'delete')
       and not has_table_privilege('anon', 'public.editor_operation', 'select')
       and not has_function_privilege('anon', 'public.append_editor_operations(uuid, text, integer, jsonb)', 'execute'),
-    'editor ops: RLS on; no update or delete; nothing for signed-out'
+    'editor ops: RLS on; no direct insert, update or delete; nothing for signed-out'
   );
   perform tests.ok(
     (select bool_and(p.proconfig @> array['search_path=""']) from pg_proc p
@@ -140,16 +141,16 @@ begin
     'editor ops: a denied append changes nothing'
   );
 
-  perform tests.authenticate(v_volunteer);
+  perform tests.authenticate(v_staff, 'aal2');
   begin
     insert into public.editor_operation (object_id, object_type, organization_id, seq, base_version, ops, actor_id)
-    values (p_shared, 'page', v_org, 99, 1, '[{"kind":"replace"}]'::jsonb, v_volunteer);
+    values (p_shared, 'page', v_org, 9223372036854775807, 1, '[{"kind":"replace"}]'::jsonb, v_staff);
     v_result := 1;
   exception when insufficient_privilege then
     v_result := -1;
   end;
   reset role;
-  perform tests.ok(v_result = -1, 'editor ops: a volunteer cannot write the log directly');
+  perform tests.ok(v_result = -1, 'editor ops: not even an editor writes the log directly, only through the function');
 
   perform tests.clear_auth();
   v_result := tests.editor_append(p_shared, 'page', v_before + 2, 'Anonymous text');
@@ -160,6 +161,37 @@ begin
   v_n := tests.editor_ops_visible(p_shared);
   reset role;
   perform tests.ok(v_n = 2, 'editor ops: staff read the log of a page they can read');
+
+  -- Malformed operations are refused, including missing keys ---------------------
+  perform tests.authenticate(v_staff, 'aal2');
+  begin
+    perform public.append_editor_operations(p_shared, 'page', v_before + 2, '[{"content":{"version":1,"blocks":[]}}]'::jsonb);
+    v_result := 1;
+  exception when invalid_parameter_value then
+    v_result := -3;
+  end;
+  begin
+    perform public.append_editor_operations(p_shared, 'page', v_before + 2, '[{"kind":"replace","content":{"x":1}}]'::jsonb);
+    v_n := 1;
+  exception when invalid_parameter_value then
+    v_n := -3;
+  end;
+  reset role;
+  perform tests.ok(v_result = -3 and v_n = -3, 'editor ops: an operation without a kind, or content without blocks, is refused');
+
+  -- The app's plain text is used when given ------------------------------------------
+  perform tests.authenticate(v_staff, 'aal2');
+  perform public.append_editor_operations(p_shared, 'page', v_before + 2, jsonb_build_array(jsonb_build_object(
+    'kind', 'replace', 'text', 'Text from the app',
+    'content', jsonb_build_object('version', 1, 'blocks', jsonb_build_array(
+      jsonb_build_object('id', 'n1', 'type', 'paragraph',
+        'content', jsonb_build_array(jsonb_build_object('type', 'text', 'text', 'Text from the app'))))))));
+  reset role;
+  perform tests.ok(
+    (select content_text from public.editor_document where object_id = p_shared) = 'Text from the app'
+      and (select version from public.editor_document where object_id = p_shared) = v_before + 3,
+    'editor ops: the plain text the app computed is stored'
+  );
 
   -- A first save creates the document ---------------------------------------------
   perform tests.authenticate(v_staff, 'aal2');

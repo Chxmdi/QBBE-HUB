@@ -161,7 +161,22 @@ export function ObjectEditor({
     [objectId, objectType],
   );
 
-  const queue = useSaveQueue({ objectId, initialVersion, initialContent, initialState, send, enabled: editable });
+  // Who is signed in, read from this browser's session, so a draft kept on
+  // the device is put back only for the person who wrote it.
+  const [ownerId, setOwnerId] = React.useState<string | null | undefined>(undefined);
+  React.useEffect(() => {
+    if (!editable) return;
+    let active = true;
+    createSupabaseBrowserClient()
+      .auth.getSession()
+      .then(({ data }) => active && setOwnerId(data.session?.user.id ?? null))
+      .catch(() => active && setOwnerId(null));
+    return () => {
+      active = false;
+    };
+  }, [editable]);
+
+  const queue = useSaveQueue({ objectId, initialVersion, initialContent, initialState, send, enabled: editable, ownerId });
   const { status, conflict, seed } = queue;
   const conflictOpen = conflict !== null && conflict.id !== dismissed;
   const theirsDoc = conflict && theirs?.id === conflict.id ? theirs.doc : undefined;

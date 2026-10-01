@@ -142,6 +142,21 @@ describe("save queue: edits and batching", () => {
   });
 });
 
+describe("save queue: too large never loops", () => {
+  it("does not schedule a retry of content refused as too large, locally or by the server", () => {
+    const big = enqueue(createQueue(1), op("x".repeat(MAX_SAVE_CHARS + 1), 1000, null));
+    const local = beginFlush(big, 1000 + SAVE_DELAY_MS).state;
+    expect(local.status).toBe("tooLarge");
+    expect(nextFlushAt(local)).toBeNull();
+
+    const sentSmall = sent(createQueue(1), "a", 1000);
+    const server = completeFlush(sentSmall.state, { ok: false, reason: "tooLarge" }, 2000);
+    expect(nextFlushAt(server)).toBeNull();
+    // The next edit tries again.
+    expect(nextFlushAt(enqueue(server, op("b", 3000)))).toBe(3000 + SAVE_DELAY_MS);
+  });
+});
+
 describe("save queue: failures and retries", () => {
   it("retries a failed send after a backoff that doubles up to a cap", () => {
     let state = sent(createQueue(1), "a", 1000).state;
@@ -216,7 +231,9 @@ describe("save queue: offline", () => {
   it("goes offline when a send fails for lack of a connection, keeping the batch", () => {
     const begun = sent(createQueue(1), "a", 1000);
     const state = completeFlush(begun.state, { ok: false, reason: "offline" }, 2000);
-    expect(state).toMatchObject({ status: "offline", online: false, inFlight: null, attempts: 0 });
+    // The browser's own events decide the flag; the send is tried again after a pause.
+    expect(state).toMatchObject({ status: "offline", online: true, inFlight: null, attempts: 0, notBefore: 2000 + RETRY_MS });
+    expect(nextFlushAt(state)).toBe(2000 + RETRY_MS);
     expect(state.pending.map((o) => o.content)).toEqual([content("a")]);
   });
 
@@ -287,6 +304,14 @@ describe("save queue: conflicts", () => {
     expect(beginFlush(next, 10_000 + SAVE_DELAY_MS).batch?.baseVersion).toBe(5);
   });
 
+  it("keep mine after the document disappeared creates it again", () => {
+    const begun = sent(createQueue(4), "a", 1000);
+    const gone = completeFlush(begun.state, { ok: false, reason: "conflict", version: 0 }, 2000);
+    const state = resolveConflict(gone, { kind: "keepMine" });
+    expect(state.version).toBeNull();
+    expect(beginFlush(state, 9000, true).batch?.baseVersion).toBeNull();
+  });
+
   it("resolving does nothing when there is no conflict", () => {
     const state = createQueue(1);
     expect(resolveConflict(state, { kind: "keepMine" })).toBe(state);
@@ -305,26 +330,26 @@ describe("save queue: persistence", () => {
   it("writes the unconfirmed operations and removes them once saved", () => {
     const storage = memoryStorage();
     const queued = enqueue(createQueue(3), op("a", 1000));
-    expect(persistQueue(storage, "obj", queued, 1000)).toBe(true);
-    const kept = readPersistedQueue(storage, "obj");
+    expect(persistQueue(storage, "obj", queued, "me", 1000)).toBe(true);
+    const kept = readPersistedQueue(storage, "obj", "me");
     expect(kept).toMatchObject({ v: 1, objectId: "obj", version: 3, savedAt: 1000 });
     expect(kept?.ops.map((o) => o.content)).toEqual([content("a")]);
 
     const begun = beginFlush(queued, 2000);
     const during = enqueue(begun.state, op("ab", 2500));
-    persistQueue(storage, "obj", during);
-    expect(readPersistedQueue(storage, "obj")?.ops.map((o) => o.content)).toEqual([content("a"), content("ab")]);
+    persistQueue(storage, "obj", during, "me");
+    expect(readPersistedQueue(storage, "obj", "me")?.ops.map((o) => o.content)).toEqual([content("a"), content("ab")]);
 
     const saved = completeFlush(beginFlush(completeFlush(during, { ok: true, version: 4 }, 3000), 9000).state, { ok: true, version: 5 }, 9500);
-    persistQueue(storage, "obj", saved);
+    persistQueue(storage, "obj", saved, "me");
     expect(storage.map.has(queueKey("obj"))).toBe(false);
-    expect(readPersistedQueue(storage, "obj")).toBeNull();
+    expect(readPersistedQueue(storage, "obj", "me")).toBeNull();
   });
 
   it("puts kept operations back in front, based on the version they were made on", () => {
     const storage = memoryStorage();
-    persistQueue(storage, "obj", enqueue(createQueue(3), op("kept", 1000)));
-    const kept = readPersistedQueue(storage, "obj")!;
+    persistQueue(storage, "obj", enqueue(createQueue(3), op("kept", 1000)), "me");
+    const kept = readPersistedQueue(storage, "obj", "me")!;
     const state = restore(createQueue(7), kept.version, kept.ops);
     expect(state.status).toBe("saving");
     expect(state.version).toBe(3);
@@ -335,24 +360,31 @@ describe("save queue: persistence", () => {
   it("survives a reload mid-send: the batch on the wire is kept too", () => {
     const storage = memoryStorage();
     const begun = sent(createQueue(3), "a", 1000);
-    persistQueue(storage, "obj", begun.state);
-    expect(readPersistedQueue(storage, "obj")?.ops.map((o) => o.content)).toEqual([content("a")]);
+    persistQueue(storage, "obj", begun.state, "me");
+    expect(readPersistedQueue(storage, "obj", "me")?.ops.map((o) => o.content)).toEqual([content("a")]);
+  });
+
+  it("never puts back another person's draft", () => {
+    const storage = memoryStorage();
+    persistQueue(storage, "obj", enqueue(createQueue(3), op("private draft", 1000)), "alice");
+    expect(readPersistedQueue(storage, "obj", "bob")).toBeNull();
+    expect(readPersistedQueue(storage, "obj", "alice")?.ops.map((o) => o.content)).toEqual([content("private draft")]);
   });
 
   it("ignores damaged, foreign or empty entries", () => {
     const storage = memoryStorage();
     storage.setItem(queueKey("obj"), "{not json");
-    expect(readPersistedQueue(storage, "obj")).toBeNull();
-    storage.setItem(queueKey("obj"), JSON.stringify({ v: 1, objectId: "other", version: 1, ops: [op("a", 1)] }));
-    expect(readPersistedQueue(storage, "obj")).toBeNull();
-    storage.setItem(queueKey("obj"), JSON.stringify({ v: 2, objectId: "obj", version: 1, ops: [op("a", 1)] }));
-    expect(readPersistedQueue(storage, "obj")).toBeNull();
-    storage.setItem(queueKey("obj"), JSON.stringify({ v: 1, objectId: "obj", version: 1, ops: [{ kind: "replace" }] }));
-    expect(readPersistedQueue(storage, "obj")).toBeNull();
-    storage.setItem(queueKey("obj"), JSON.stringify({ v: 1, objectId: "obj", version: "x", ops: [op("a", 1)] }));
-    expect(readPersistedQueue(storage, "obj")?.version).toBeNull();
+    expect(readPersistedQueue(storage, "obj", "me")).toBeNull();
+    storage.setItem(queueKey("obj"), JSON.stringify({ v: 1, objectId: "other", ownerId: "me", version: 1, ops: [op("a", 1)] }));
+    expect(readPersistedQueue(storage, "obj", "me")).toBeNull();
+    storage.setItem(queueKey("obj"), JSON.stringify({ v: 2, objectId: "obj", ownerId: "me", version: 1, ops: [op("a", 1)] }));
+    expect(readPersistedQueue(storage, "obj", "me")).toBeNull();
+    storage.setItem(queueKey("obj"), JSON.stringify({ v: 1, objectId: "obj", ownerId: "me", version: 1, ops: [{ kind: "replace" }] }));
+    expect(readPersistedQueue(storage, "obj", "me")).toBeNull();
+    storage.setItem(queueKey("obj"), JSON.stringify({ v: 1, objectId: "obj", ownerId: "me", version: "x", ops: [op("a", 1)] }));
+    expect(readPersistedQueue(storage, "obj", "me")?.version).toBeNull();
     clearPersistedQueue(storage, "obj");
-    expect(readPersistedQueue(storage, "obj")).toBeNull();
+    expect(readPersistedQueue(storage, "obj", "me")).toBeNull();
   });
 
   it("keeps working when storage refuses", () => {
@@ -367,8 +399,8 @@ describe("save queue: persistence", () => {
         throw new Error("blocked");
       },
     };
-    expect(persistQueue(refusing, "obj", enqueue(createQueue(1), op("a", 1)))).toBe(false);
-    expect(readPersistedQueue(refusing, "obj")).toBeNull();
+    expect(persistQueue(refusing, "obj", enqueue(createQueue(1), op("a", 1)), "me")).toBe(false);
+    expect(readPersistedQueue(refusing, "obj", "me")).toBeNull();
     expect(() => clearPersistedQueue(refusing, "obj")).not.toThrow();
   });
 });

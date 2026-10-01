@@ -5,7 +5,7 @@ import { requireSession } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { normalizeContent, type EditorContent } from "@/features/editor/adapter/content";
+import { contentToPlainText, normalizeContent, type EditorContent } from "@/features/editor/adapter/content";
 import { byteaHexToBase64, MAX_STATE_BASE64 } from "@/features/editor/adapter/state";
 
 /**
@@ -22,7 +22,7 @@ export type AppendResult =
   | {
       ok: false;
       reason: "conflict" | "forbidden" | "invalid" | "tooLarge" | "rateLimited" | "failed";
-      /** The server's current version, when a conflict reports it. */
+      /** The server's current version, when a conflict reports it; 0 when the document no longer exists. */
       version?: number;
     };
 
@@ -59,6 +59,8 @@ export async function appendEditorOperations(input: unknown): Promise<AppendResu
     content: normalizeContent(op.content),
     state: op.state ?? null,
   }));
+  // The stored plain text comes from the same function every other save uses.
+  const withText = ops.map((op) => ({ ...op, text: contentToPlainText(op.content).slice(0, 500000) }));
   if (ops.some((op) => JSON.stringify(op.content).length > MAX_CONTENT_BYTES)) {
     return { ok: false, reason: "tooLarge" };
   }
@@ -69,14 +71,18 @@ export async function appendEditorOperations(input: unknown): Promise<AppendResu
     p_object: objectId,
     p_type: objectType,
     p_base_version: baseVersion,
-    p_ops: ops,
+    p_ops: withText,
   });
   if (error) {
     if (error.code === "40001") {
+      // The function checked edit rights before raising, so this is a real
+      // conflict; 0 means the document no longer exists.
       const reported = Number.parseInt(error.details ?? "", 10);
-      if (Number.isInteger(reported) && reported > 0) return { ok: false, reason: "conflict", version: reported };
+      if (Number.isInteger(reported) && reported >= 0) return { ok: false, reason: "conflict", version: reported };
       return currentConflict(supabase, objectId);
     }
+    // Two first saves at once: the other one created the document.
+    if (error.code === "23505") return currentConflict(supabase, objectId);
     if (error.code === "42501") return { ok: false, reason: "forbidden" };
     if (error.code === "22023" || error.code === "23514" || error.code === "23503") {
       return { ok: false, reason: "invalid" };

@@ -20,6 +20,8 @@ export interface QueueStorage {
 export interface PersistedQueue {
   v: 1;
   objectId: string;
+  /** Who made the edits: put back only for them. */
+  ownerId: string;
   version: number | null;
   ops: QueueOperation[];
   savedAt: number;
@@ -35,14 +37,20 @@ export function unconfirmedOperations(state: QueueState): QueueOperation[] {
 }
 
 /** Writes the queue, or removes the entry when nothing is unconfirmed. Returns false when storage refused. */
-export function persistQueue(storage: QueueStorage, objectId: string, state: QueueState, now = Date.now()): boolean {
+export function persistQueue(
+  storage: QueueStorage,
+  objectId: string,
+  state: QueueState,
+  ownerId: string,
+  now = Date.now(),
+): boolean {
   try {
     const ops = unconfirmedOperations(state);
     if (ops.length === 0) {
       storage.removeItem(queueKey(objectId));
       return true;
     }
-    const record: PersistedQueue = { v: 1, objectId, version: state.version, ops, savedAt: now };
+    const record: PersistedQueue = { v: 1, objectId, ownerId, version: state.version, ops, savedAt: now };
     storage.setItem(queueKey(objectId), JSON.stringify(record));
     return true;
   } catch {
@@ -75,17 +83,22 @@ function isOperation(value: unknown): value is QueueOperation {
   );
 }
 
-/** What the device holds for this object, or null when nothing (or nothing readable). */
-export function readPersistedQueue(storage: QueueStorage, objectId: string): PersistedQueue | null {
+/**
+ * What the device holds for this object and person, or null when nothing
+ * (or nothing readable). Another person's draft is never returned.
+ */
+export function readPersistedQueue(storage: QueueStorage, objectId: string, ownerId: string): PersistedQueue | null {
   try {
     const raw = storage.getItem(queueKey(objectId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PersistedQueue>;
-    if (parsed.v !== 1 || parsed.objectId !== objectId || !Array.isArray(parsed.ops)) return null;
+    if (parsed.v !== 1 || parsed.objectId !== objectId || parsed.ownerId !== ownerId || !Array.isArray(parsed.ops)) {
+      return null;
+    }
     const ops = parsed.ops.filter(isOperation);
     if (ops.length === 0) return null;
     const version = typeof parsed.version === "number" && parsed.version > 0 ? parsed.version : null;
-    return { v: 1, objectId, version, ops, savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 0 };
+    return { v: 1, objectId, ownerId, version, ops, savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 0 };
   } catch {
     return null;
   }

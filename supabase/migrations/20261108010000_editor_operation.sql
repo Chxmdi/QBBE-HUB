@@ -119,6 +119,7 @@ declare
   v_state text;
   v_seq bigint;
   v_version integer;
+  v_text text;
 begin
   if v_actor is null then
     raise exception 'Sign in to save' using errcode = '42501';
@@ -144,17 +145,22 @@ begin
     raise exception 'conflict' using errcode = '40001', detail = coalesce(v_current::text, '0');
   end if;
 
+  -- Comparisons are written so a missing key (NULL) fails them too.
   for v_op in select value from jsonb_array_elements(p_ops) loop
-    if jsonb_typeof(v_op) <> 'object' or v_op ->> 'kind' <> 'replace' then
+    if jsonb_typeof(v_op) is distinct from 'object' or (v_op ->> 'kind') is distinct from 'replace' then
       raise exception 'Unknown operation' using errcode = '22023';
     end if;
     v_content := v_op -> 'content';
-    if v_content is null or jsonb_typeof(v_content) <> 'object' or jsonb_typeof(v_content -> 'blocks') <> 'array' then
+    if jsonb_typeof(v_content) is distinct from 'object'
+      or jsonb_typeof(v_content -> 'blocks') is distinct from 'array' then
       raise exception 'Invalid content' using errcode = '22023';
     end if;
     v_state := case when jsonb_typeof(v_op -> 'state') = 'string' then v_op ->> 'state' else null end;
     if v_state is not null and v_state !~ '^[A-Za-z0-9+/]*={0,2}$' then
       raise exception 'Invalid state' using errcode = '22023';
+    end if;
+    if (v_op -> 'text') is not null and jsonb_typeof(v_op -> 'text') is distinct from 'string' then
+      raise exception 'Invalid text' using errcode = '22023';
     end if;
   end loop;
 
@@ -166,10 +172,17 @@ begin
       then p_ops -> (jsonb_array_length(p_ops) - 1) ->> 'state'
     else null
   end;
+  -- The app sends the plain text it computes with contentToPlainText (the
+  -- one implementation every other save uses); a direct caller without one
+  -- gets the SQL approximation below.
+  v_text := left(coalesce(
+    p_ops -> (jsonb_array_length(p_ops) - 1) ->> 'text',
+    app.editor_content_text(v_content)
+  ), 500000);
 
   if v_current is null then
     insert into public.editor_document (object_id, object_type, organization_id, content, content_text, yjs_state, created_by)
-    select p_object, p_type, o.organization_id, v_content, app.editor_content_text(v_content),
+    select p_object, p_type, o.organization_id, v_content, v_text,
            case when v_state is null then null else decode(v_state, 'base64') end, v_actor
     from (
       select p.organization_id from public.page p where p.id = p_object and p_type = 'page'
@@ -185,7 +198,7 @@ begin
   else
     update public.editor_document d
     set content = v_content,
-        content_text = app.editor_content_text(v_content),
+        content_text = v_text,
         yjs_state = case when v_state is null then d.yjs_state else decode(v_state, 'base64') end
     where d.object_id = p_object
     returning d.version, d.organization_id into v_version, v_org;
@@ -210,20 +223,14 @@ grant execute on function public.append_editor_operations(uuid, text, integer, j
 
 alter table public.editor_operation enable row level security;
 
--- Reading the log follows reading the document; appending follows editing it,
--- as the signed-in person. Nothing is changed or removed through the API: the
--- function above is the only pruner.
+-- Reading the log follows reading the document. Nothing is written through
+-- the API: append_editor_operations (which checks edit_content as the
+-- signed-in person) is the only writer and the only pruner, so the log
+-- holds exactly what was applied, in sequence.
 create policy editor_operation_read on public.editor_operation
   for select to authenticated
   using (app.can_editor_object(object_type, object_id, 'view'));
 
-create policy editor_operation_insert on public.editor_operation
-  for insert to authenticated
-  with check (
-    actor_id = (select auth.uid())
-    and app.can_editor_object(object_type, object_id, 'edit_content')
-  );
-
 revoke all on public.editor_operation from anon, authenticated;
-grant select, insert on public.editor_operation to authenticated;
+grant select on public.editor_operation to authenticated;
 grant all on public.editor_operation to service_role;

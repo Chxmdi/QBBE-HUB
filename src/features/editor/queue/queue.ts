@@ -51,7 +51,7 @@ export interface QueueState {
   attempts: number;
   /** Earliest time the next send may start, after a failure. */
   notBefore: number | null;
-  /** The server's version when a conflict was reported. */
+  /** The server's version when a conflict was reported; 0 when it has no document. */
   conflictVersion: number | null;
   online: boolean;
 }
@@ -108,6 +108,8 @@ export function enqueue(state: QueueState, op: QueueOperation): QueueState {
 /** When the hook should next try to send, or null when there is nothing to send now. */
 export function nextFlushAt(state: QueueState): number | null {
   if (state.inFlight || isBlocked(state) || !state.online || state.pending.length === 0) return null;
+  // Too large waits for the next edit (enqueue clears it); retrying the same content cannot succeed.
+  if (state.status === "tooLarge") return null;
   const last = state.pending[state.pending.length - 1];
   return Math.max(last.at + SAVE_DELAY_MS, state.notBefore ?? 0);
 }
@@ -164,7 +166,10 @@ export function completeFlush(state: QueueState, outcome: SendOutcome, now: numb
     case "tooLarge":
       return { ...state, pending, inFlight: null, status: "tooLarge", attempts: 0, notBefore: null };
     case "offline":
-      return { ...state, pending, inFlight: null, status: "offline", online: false, attempts: 0, notBefore: null };
+      // The connection may already be back (its "online" event can arrive
+      // while the request is still failing), so the flag is left to those
+      // events and the send is simply tried again after a pause.
+      return { ...state, pending, inFlight: null, status: "offline", attempts: 0, notBefore: now + RETRY_MS };
     case "failed": {
       const attempts = state.attempts + 1;
       return { ...state, pending, inFlight: null, status: "failed", attempts, notBefore: now + backoff(attempts) };
@@ -197,7 +202,8 @@ export function resolveConflict(
   if (choice.kind === "takeTheirs") {
     return { ...state, version: choice.version, pending: [], inFlight: null, status: "saved", conflictVersion: null, attempts: 0, notBefore: null };
   }
-  const version = state.conflictVersion ?? state.version;
+  // 0 means the server has no document any more: keeping mine creates it again.
+  const version = state.conflictVersion === 0 ? null : (state.conflictVersion ?? state.version);
   return {
     ...state,
     version,

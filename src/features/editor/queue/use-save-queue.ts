@@ -33,6 +33,12 @@ export interface SaveQueueOptions {
   enabled: boolean;
   /** Defaults to window.localStorage; null keeps nothing on the device. */
   storage?: QueueStorage | null;
+  /**
+   * The signed-in person, once known (undefined while it is being read). The
+   * device copy is written and put back only for them, so on a shared
+   * browser one person's unsaved draft never reaches the next person.
+   */
+  ownerId?: string | null;
 }
 
 /** What the editor should be mounted with; a new key means mount it again. */
@@ -85,7 +91,7 @@ function newId(): string {
  * back, and the queue kept on the device between visits.
  */
 export function useSaveQueue(options: SaveQueueOptions): SaveQueue {
-  const { objectId, initialVersion, initialContent, initialState = null, send, enabled } = options;
+  const { objectId, initialVersion, initialContent, initialState = null, send, enabled, ownerId } = options;
   const storage = React.useMemo(
     () => (options.storage === undefined ? defaultStorage() : options.storage),
     [options.storage],
@@ -104,14 +110,35 @@ export function useSaveQueue(options: SaveQueueOptions): SaveQueue {
   }, [send]);
   // Lets the scheduled flush call the latest closure without naming itself.
   const flushRef = React.useRef<(force: boolean) => void>(() => {});
+  // False once the editor has gone: no more timers or sends from this queue.
+  const alive = React.useRef(true);
+  React.useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+    };
+  }, []);
+
+  const persist = React.useCallback(() => {
+    if (storage && typeof ownerId === "string") persistQueue(storage, objectId, state.current, ownerId);
+  }, [storage, objectId, ownerId]);
 
   const commit = React.useCallback(
-    (next: QueueState, seed?: { content: EditorContent; state: string | null; reason: EditorSeed["reason"] }) => {
+    (
+      next: QueueState,
+      seed?: { content: EditorContent; state: string | null; reason: EditorSeed["reason"] },
+      keep = true,
+    ) => {
       const newConflict = next.status === "conflict" && state.current.status !== "conflict";
       if (newConflict) conflicts.current += 1;
       const conflictId = conflicts.current;
       state.current = next;
-      if (storage) persistQueue(storage, objectId, next);
+      // Every key press would serialize the whole document; an edit that
+      // will be sent within the batch delay is written when the batch forms
+      // (or when the page is hidden) instead.
+      if (keep) persist();
       setView((current) => {
         const conflict: SaveConflict | null =
           next.status !== "conflict" ? null : newConflict || !current.conflict ? { id: conflictId, version: next.conflictVersion } : current.conflict;
@@ -126,14 +153,16 @@ export function useSaveQueue(options: SaveQueueOptions): SaveQueue {
       if (timer.current) clearTimeout(timer.current);
       timer.current = null;
       const at = nextFlushAt(next);
-      if (at !== null) timer.current = setTimeout(() => flushRef.current(false), Math.max(0, at - Date.now()));
+      if (at !== null && alive.current) {
+        timer.current = setTimeout(() => flushRef.current(false), Math.max(0, at - Date.now()));
+      }
     },
-    [objectId, storage],
+    [persist],
   );
 
   const flush = React.useCallback(
     (force: boolean) => {
-      if (!enabled) return;
+      if (!enabled || !alive.current) return;
       const begun = beginFlush(state.current, Date.now(), force);
       commit(begun.state);
       const batch = begun.batch;
@@ -155,8 +184,8 @@ export function useSaveQueue(options: SaveQueueOptions): SaveQueue {
 
   // What the device kept from an earlier visit.
   React.useEffect(() => {
-    if (!enabled || !storage) return;
-    const kept = readPersistedQueue(storage, objectId);
+    if (!enabled || !storage || typeof ownerId !== "string") return;
+    const kept = readPersistedQueue(storage, objectId, ownerId);
     if (!kept) return;
     const newest = kept.ops[kept.ops.length - 1];
     // The edit landed before the page closed: the server already shows it.
@@ -165,9 +194,9 @@ export function useSaveQueue(options: SaveQueueOptions): SaveQueue {
       return;
     }
     commit(restore(state.current, kept.version, kept.ops), { content: newest.content, state: newest.state, reason: "restored" });
-    // Once only, when the editor opens.
+    // Once only, when the editor opens and the person is known.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objectId, enabled, storage]);
+  }, [objectId, enabled, storage, ownerId]);
 
   React.useEffect(() => {
     if (!enabled) return;
@@ -178,28 +207,34 @@ export function useSaveQueue(options: SaveQueueOptions): SaveQueue {
     const offline = () => commit(setOnline(state.current, false));
     const visible = () => {
       if (document.visibilityState === "visible") flushRef.current(true);
+      else persist();
     };
     const beforeUnload = (event: BeforeUnloadEvent) => {
+      persist();
       if (hasUnsaved(state.current)) event.preventDefault();
     };
+    const pageHide = () => persist();
     if (typeof navigator !== "undefined" && navigator.onLine === false) commit(setOnline(state.current, false));
     window.addEventListener("online", online);
     window.addEventListener("offline", offline);
     document.addEventListener("visibilitychange", visible);
     window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("pagehide", pageHide);
     return () => {
+      window.removeEventListener("pagehide", pageHide);
       window.removeEventListener("online", online);
       window.removeEventListener("offline", offline);
       document.removeEventListener("visibilitychange", visible);
       window.removeEventListener("beforeunload", beforeUnload);
-      if (timer.current) clearTimeout(timer.current);
     };
-  }, [commit, enabled]);
+  }, [commit, enabled, persist]);
 
   const add = React.useCallback(
     (content: EditorContent, yjs: string | null) => {
       if (!enabled) return;
-      commit(enqueue(state.current, { id: newId(), kind: "replace", content, state: yjs, at: Date.now() }));
+      const next = enqueue(state.current, { id: newId(), kind: "replace", content, state: yjs, at: Date.now() });
+      // On its way within the batch delay: written when the batch forms. Otherwise (offline, failed, conflict) now.
+      commit(next, undefined, !(next.status === "saving" && next.online));
     },
     [commit, enabled],
   );
