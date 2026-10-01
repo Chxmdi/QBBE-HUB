@@ -181,6 +181,18 @@ function node(filter: FilterNode, type: string, catalog: LensCatalog, options: A
   };
 }
 
+/**
+ * The order a spec without sorts gets: newest first, as the stand-in this
+ * adapter replaced always gave (`createTaskQueryStub`). Without it the engine
+ * falls back to id order, so a screen built without sorts (an app's lens
+ * screen, a dashboard tile) showed an arbitrary page of records rather than
+ * the latest ones. Only when the type can sort by its creation time.
+ */
+function defaultSort(catalog: LensCatalog, type: string): LensSpec["sort"] {
+  const created = findProperty(catalog, type, "created_time");
+  return created?.sortable ? [{ property: "created_time", direction: "desc" }] : undefined;
+}
+
 export function fromContractSpec(spec: QuerySpec, catalog: LensCatalog, options: AdapterOptions = {}): LensSpec {
   if (spec.version !== 1) fail("Unknown query version.");
   if (spec.types.length !== 1) fail("A lens queries one type.");
@@ -195,13 +207,14 @@ export function fromContractSpec(spec: QuerySpec, catalog: LensCatalog, options:
   const offset = spec.cursor ? Number.parseInt(spec.cursor, 10) : 0;
   if (!Number.isInteger(offset) || offset < 0) fail("Unknown cursor.");
   const limit = Math.min(Math.max(spec.limit ?? DEFAULT_PAGE, 1), LIMITS.maxPageSize);
+  const sort = spec.sorts?.length
+    ? spec.sorts.map((s) => ({ property: plain(s.property), direction: s.direction }))
+    : defaultSort(catalog, type);
   return {
     version: 1,
     type,
     ...(where ? { where: "property" in where ? { and: [where] } : where } : {}),
-    ...(spec.sorts?.length
-      ? { sort: spec.sorts.map((s) => ({ property: plain(s.property), direction: s.direction })) }
-      : {}),
+    ...(sort ? { sort } : {}),
     ...(spec.groupBy ? { groupBy: { property: plain(spec.groupBy) } } : {}),
     ...(spec.properties?.length ? { select: [...new Set(spec.properties)] } : {}),
     limit,
