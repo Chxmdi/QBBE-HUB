@@ -89,12 +89,25 @@ test("semantic blocks: task, person, status, query, decision and library file", 
   await expect(page.getByRole("heading", { name: "Overdue tasks" })).toBeVisible();
   await expect(page.getByRole("link", { name: `Overdue report ${stamp}` })).toBeVisible({ timeout: 30_000 });
 
+  // Query again, this time decisions: the same block runs any type the query engine knows.
+  await page.keyboard.press("Escape");
+  await editor.locator("[data-content-type]").last().click();
+  await slash(page, "task list", /^Task list\b/);
+  await page.getByLabel("Show", { exact: true }).last().selectOption("recent_decisions");
+  await expect(page.getByRole("heading", { name: "Recent decisions" })).toBeVisible();
+  const decisionRow = page.getByRole("link", { name: `Hold the gala in May ${stamp}` });
+  await expect(decisionRow.first()).toBeVisible({ timeout: 30_000 });
+  await expect(decisionRow.first()).toHaveAttribute("href", `/projects/${project}`);
+  await expect(page.getByText(/^decided /).first()).toBeVisible();
+  await page.keyboard.press("Escape");
+
   // Decision.
   await editor.locator("[data-content-type]").last().click();
   await slash(page, "decision", /^Decision\b/);
   await page.getByLabel("Search decisions").fill(`gala in May ${stamp}`);
   await page.getByRole("button", { name: `Choose Hold the gala in May ${stamp}` }).click();
-  await expect(editor.getByText(`Hold the gala in May ${stamp}`)).toBeVisible();
+  // Shown twice now: in the decision block and in the decisions query block above it.
+  await expect(editor.getByText(`Hold the gala in May ${stamp}`)).toHaveCount(2);
 
   // Library file.
   await editor.locator("[data-content-type]").last().click();
@@ -124,6 +137,8 @@ test("semantic blocks: task, person, status, query, decision and library file", 
   await page.reload();
   await expect(page.getByRole("checkbox", { name: `Mark “Order chairs ${stamp}” done` })).toBeChecked({ timeout: 30_000 });
   await expect(page.getByRole("link", { name: `Overdue report ${stamp}` })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Recent decisions" })).toBeVisible();
+  await expect(page.getByRole("link", { name: `Hold the gala in May ${stamp}` }).first()).toBeVisible({ timeout: 30_000 });
 });
 
 test("deleting a task block asks whether to archive the task", async ({ page }) => {

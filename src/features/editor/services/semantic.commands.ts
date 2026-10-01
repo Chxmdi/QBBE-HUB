@@ -3,10 +3,12 @@
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
+import { getLocale } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createTaskQueryStub, QueryNotSupportedError } from "@/lib/objects/stubs";
+import { createLensRunQuery } from "@/lib/query/contract-adapter";
+import { loadCatalog } from "@/lib/query/run";
 import { bulkUpdateTasks, createTask, updateTaskStatus } from "@/features/tasks/services/task.commands";
-import { parseStoredSpec } from "@/features/editor/semantic/queries";
+import { parseStoredSpec, toQueryBlockRow, type QueryBlockRow } from "@/features/editor/semantic/queries";
 import { contentToPlainText, normalizeContent, type EditorBlock } from "@/features/editor/adapter/content";
 import { createPage } from "@/features/pages/services/page.commands";
 
@@ -201,35 +203,22 @@ export async function archiveTaskFromBlock(taskIdInput: unknown): Promise<{ ok: 
   return { ok: result.ok, error: result.error };
 }
 
-export interface QueryBlockRow {
-  id: string;
-  title: string;
-  status: string | null;
-  due: string | null;
-}
-
-/** Runs a query block's stored spec as the viewer, through the query contract. */
+/**
+ * Runs a query block's stored spec as the viewer through the lens query
+ * engine: the catalog says which types and properties exist, the database
+ * applies row-level security. A spec the engine refuses, or a failure running
+ * it, both read as "could not be loaded" in the block.
+ */
 export async function runQueryBlock(specInput: unknown): Promise<{ ok: true; rows: QueryBlockRow[] } | { ok: false }> {
   const context = await ready();
   const spec = parseStoredSpec(specInput);
   if (!context || !spec) return { ok: false };
-  const run = createTaskQueryStub(context.supabase, {
-    userId: context.session.userId,
-    timeZone: context.session.timeZone,
-  });
   try {
+    const [catalog, locale] = await Promise.all([loadCatalog(context.supabase), getLocale()]);
+    const run = createLensRunQuery(context.supabase, catalog, { timeZone: context.session.timeZone });
     const result = await run(spec);
-    return {
-      ok: true,
-      rows: result.rows.map((row) => ({
-        id: row.ref.id,
-        title: row.title,
-        status: (row.values.status?.value as string | undefined) ?? null,
-        due: (row.values.due?.value as string | undefined) ?? null,
-      })),
-    };
-  } catch (error) {
-    if (error instanceof QueryNotSupportedError) return { ok: false };
+    return { ok: true, rows: result.rows.map((row) => toQueryBlockRow(row, catalog, locale)) };
+  } catch {
     return { ok: false };
   }
 }

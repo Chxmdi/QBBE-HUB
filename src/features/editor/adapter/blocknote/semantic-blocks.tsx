@@ -550,11 +550,13 @@ function QueryList({
         <ul className="divide-y divide-line">
           {current.rows.map((row) => (
             <li key={row.id} className="flex flex-wrap items-center gap-2 py-1.5">
-              <Link href={`/my-work?task=${row.id}`} className="min-w-0 flex-1 truncate text-ink hover:underline">
+              <Link href={row.href} className="min-w-0 flex-1 truncate text-ink hover:underline">
                 {row.title}
               </Link>
-              {row.status ? <Badge>{taskStatusLabel(row.status as TaskStatus, app)}</Badge> : null}
-              {row.due ? <span className="text-caption text-muted">{t("semantic.query.due", { date: format.date(row.due) })}</span> : null}
+              {row.status ? <Badge>{taskStatusLabel(row.status as TaskStatus, app)}</Badge> : row.statusLabel ? <Badge>{row.statusLabel}</Badge> : null}
+              {row.date && row.dateLabel ? (
+                <span className="text-caption text-muted">{t(`semantic.query.${row.dateLabel}`, { date: format.date(row.date) })}</span>
+              ) : null}
             </li>
           ))}
         </ul>
