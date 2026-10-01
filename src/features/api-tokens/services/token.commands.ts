@@ -28,6 +28,9 @@ export async function createApiToken(input: unknown): Promise<CreateTokenResult>
   const m = apiTokenMessages(await getLocale());
   if (!(await isEnabled("wos_workflows_v2"))) return { ok: false, error: m.errors.notFound };
   const session = await requireSession();
+  // The page is staff's, as the menu says; the action must agree, since a
+  // Server Action answers whoever calls it.
+  if (!session.isStaff) return { ok: false, error: m.errors.staffOnly };
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: interpolate(m.errors.invalid, { detail: parsed.error.issues[0]?.message ?? "" }) };
@@ -55,7 +58,8 @@ export async function createApiToken(input: unknown): Promise<CreateTokenResult>
 export async function revokeApiToken(input: unknown): Promise<{ ok: true } | { ok: false; error: string }> {
   const m = apiTokenMessages(await getLocale());
   if (!(await isEnabled("wos_workflows_v2"))) return { ok: false, error: m.errors.notFound };
-  await requireSession();
+  const session = await requireSession();
+  if (!session.isStaff) return { ok: false, error: m.errors.staffOnly };
   const parsed = z.object({ id: z.string().uuid() }).safeParse(input);
   if (!parsed.success) return { ok: false, error: m.errors.revokeFailed };
   const db = await createSupabaseServerClient();

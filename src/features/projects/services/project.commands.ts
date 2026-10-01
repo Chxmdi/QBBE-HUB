@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
 import { authorizeAdminAction, requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { hasProgramCapability, hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { parseLabelledLinks } from "@/lib/links";
@@ -49,6 +50,8 @@ const createProjectSchema = z.object({
 export async function createProject(input: unknown): Promise<ActionResult> {
   const t = await getT();
   const session = await requireSession();
+  const limited = await enforceRateLimit("project:create", session.userId);
+  if (limited) return limited;
   const parsed = createProjectSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: localizeIssue(t, parsed.error.issues[0]?.message, "projects.errors.invalidInput") };
@@ -310,6 +313,7 @@ export interface UnresolvedWork {
 export async function getUnresolvedWork(
   projectId: string,
 ): Promise<UnresolvedWork> {
+  await requireSession();
   const supabase = await createSupabaseServerClient();
   const [tasks, blocked, milestones, risks, issues, updates] = await Promise.all([
     supabase
