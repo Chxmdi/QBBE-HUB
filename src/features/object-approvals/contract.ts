@@ -44,9 +44,11 @@ export function requestApprovalAction(rpc: Rpc): ActionDefinition<RequestApprova
     key: REQUEST_APPROVAL_ACTION_KEY,
     label: { en: "Request approval", fr: "Demander une approbation" },
     capability: "edit_content",
-    // The app.can stand-in knows tasks and projects only; meetings and
-    // decisions are checked by their own rule inside the SQL function, which
-    // checks tasks and projects too. So the registry has nothing to pre-check.
+    // Who may request is the SQL function's own rule (app.object_approval_access
+    // 'change': edit_content on a task or project, meeting management for a
+    // meeting or its decisions), not plain edit_content on every type. So the
+    // registry has nothing to pre-check; the function refuses, and the
+    // change set then names the item and its link to the record.
     targets: () => [],
     async run(_context, input): Promise<Change[]> {
       if (!isApprovableType(input.object.type)) throw new Error(`Approvals are not available for ${input.object.type}.`);
