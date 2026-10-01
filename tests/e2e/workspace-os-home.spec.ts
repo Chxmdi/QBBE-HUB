@@ -57,7 +57,9 @@ test("Home shows my urgent work, what I wait on, and My World gathers it; nobody
   expect(await axeProblems(page), "Home accessibility").toEqual([]);
 
   // Keyboard: the view tabs and the first item link are reachable by Tab.
-  await page.getByRole("link", { name: "My World" }).focus();
+  // The view tabs' link, not the sidebar's: since the menus (I3) carry My
+  // World while the switch is on, the page holds two links by that name.
+  await page.getByRole("navigation", { name: "Home views" }).getByRole("link", { name: "My World" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/home\/world$/);
   await expect(page.getByRole("region", { name: /^My tasks/ }).getByRole("link", { name: overdue })).toBeVisible();
@@ -144,7 +146,7 @@ test("Home speaks French", async ({ page, context }) => {
   await expect(page.getByRole("heading", { name: "Mon univers", level: 1 })).toBeVisible();
 });
 
-test("Home stays hidden while the switch is off", async ({ page }) => {
+test("Home stays hidden while the switch is off [switch off]", async ({ page }) => {
   sql(`update feature_flag set enabled = false where key = 'wos_home' and organization_id is null`);
   try {
     await signIn(page, "owner");

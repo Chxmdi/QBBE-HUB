@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { loadCatalog } from "@/lib/query/run";
 import { calendarDateInZone } from "@/lib/time";
 import { projectBlocks, type BlockKey } from "../blocks";
 import { calculateHealth, type ProjectHealth } from "../health";
@@ -22,10 +23,11 @@ export interface ProjectPageData {
 /**
  * Everything the living project page shows, through the viewer's own client.
  * Null when the viewer cannot read the project: the page is then not found,
- * the same answer as for a project that does not exist.
+ * the same answer as for a project that does not exist. The blocks run through
+ * the lens query engine; its catalog is read once per page.
  */
 export async function loadProjectPage(
-  db: Pick<SupabaseClient, "from">,
+  db: Pick<SupabaseClient, "from" | "rpc">,
   projectId: string,
   viewer: { userId: string; timeZone: string },
   now: Date = new Date(),
@@ -42,16 +44,21 @@ export async function loadProjectPage(
     db.from("task").select("status, due_at").eq("project_id", projectId).is("archived_at", null).limit(5000),
     db.from("milestone").select("due_date, completed_at, status").eq("project_id", projectId).limit(500),
     db.from("risk").select("likelihood, impact, status").eq("project_id", projectId).limit(500),
-    Promise.all(
-      projectBlocks(projectId).map(async (block) => {
-        try {
-          return { key: block.key, href: block.href, rows: await runBlockSpec(db, block.spec, { userId: viewer.userId, timeZone: viewer.timeZone, now: () => now }) };
-        } catch {
-          // One failing block shows its own error; the rest of the page stays.
-          return { key: block.key, href: block.href, rows: null };
-        }
-      }),
-    ),
+    loadCatalog(db)
+      .catch(() => null)
+      .then((catalog) =>
+        Promise.all(
+          projectBlocks(projectId).map(async (block) => {
+            try {
+              if (!catalog) throw new Error("The query catalog could not be loaded.");
+              return { key: block.key, href: block.href, rows: await runBlockSpec(db, catalog, block.spec, { timeZone: viewer.timeZone, now: () => now }) };
+            } catch {
+              // One failing block shows its own error; the rest of the page stays.
+              return { key: block.key, href: block.href, rows: null };
+            }
+          }),
+        ),
+      ),
   ]);
 
   const calculated = calculateHealth({

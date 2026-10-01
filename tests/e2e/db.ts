@@ -26,7 +26,10 @@ export function sql(statement: string): string {
   const result = spawnSync(
     needsSudo ? "sudo" : "docker",
     needsSudo ? ["docker", ...args] : args,
-    { input: statement, encoding: "utf8", shell: false },
+    // 64 MB rather than Node's 1 MB default: translated-workspace.spec.ts dumps
+    // up to 2,000 rows of every table as one JSON string, and object_event rows
+    // pile up over a run (I4 notes, R2). A cut-off answer failed as bad JSON.
+    { input: statement, encoding: "utf8", shell: false, maxBuffer: 64 * 1024 * 1024 },
   );
   if (result.status !== 0) {
     throw new Error(`psql failed: ${(result.stderr || result.stdout || "").trim()}`);

@@ -30,10 +30,11 @@ function setSwitch(on: boolean) {
 
 test.afterAll(() => setSwitch(false));
 
-test("a project manager records the full decision, and the revisit reminder goes out once", async ({ page, request }) => {
-  test.setTimeout(240_000);
-  const stamp = Date.now();
-  const title = `Move the workshop online ${stamp}`;
+/**
+ * A programme, a project the staff member manages (the volunteer reads it)
+ * and one decision in it. Returns the project id and the decision id.
+ */
+function seedDecision(stamp: number, title: string): [string, string] {
   const [projectId, decisionId] = sql(`
     with who as (
       select u.id as user_id, m.organization_id
@@ -60,13 +61,26 @@ test("a project manager records the full decision, and the revisit reminder goes
     )
     select project_id || '|' || id from dec;
   `).split("|");
+  return [projectId, decisionId];
+}
 
+test("a decision is hidden while the switch is off [switch off]", async ({ page }) => {
+  const stamp = Date.now();
+  const [, decisionId] = seedDecision(stamp, `Hidden decision ${stamp}`);
   setSwitch(false);
   await signIn(page, "staff");
   await page.goto(`/decisions/${decisionId}`);
   await expect(page.getByRole("heading", { name: NOT_FOUND })).toBeVisible();
+});
+
+test("a project manager records the full decision, and the revisit reminder goes out once", async ({ page, request }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const title = `Move the workshop online ${stamp}`;
+  const [projectId, decisionId] = seedDecision(stamp, title);
 
   setSwitch(true);
+  await signIn(page, "staff");
   await page.goto(`/decisions/${decisionId}`);
   await expect(page.getByRole("heading", { level: 1, name: title })).toBeVisible();
   expect(await axeProblems(page)).toEqual([]);
