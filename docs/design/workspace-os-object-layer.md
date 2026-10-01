@@ -281,7 +281,7 @@ same transaction as its work, so a crash re-reads rather than skips. Consumers:
 workflows (M14b), notifications, attention (M17c) and the change digest (M17d).
 
 **How the existing readers move over (M9b):**
-- **Activity feed** (`activity_event`, read by project and program pages): a view `activity_feed` unions `object_event` (rendered to the same `verb`/`summary` shape) with `activity_event` rows written before the cut-over. Code that inserts into `activity_event` today (for example `milestone.commands.ts`) stops once its table has a trigger. Until then the event stub (`createEventWriterStub`) writes to `activity_event`.
+- **Activity feed** (`activity_event`, read by project and program pages): a view `activity_feed` unions `object_event` (rendered to the same `verb`/`summary` shape) with `activity_event` rows written before the cut-over. Code that inserts into `activity_event` today (for example `milestone.commands.ts`) stops once its table has a trigger. Until then the feed writer (`createActivityFeedWriter`, `src/lib/objects/activity-feed.ts`) writes to `activity_event`.
 - **Audit log** (`audit_event`, admin only): stays the record for security events (sign-in, role and grant changes, exports). Record changes that `task_material_audited` and `project_health_audited` write today are compared against `object_event` in a test before those triggers are retired.
 - **Notifications** (`notification`): produced by the notifications consumer from the outbox instead of per-feature code, with the same `dedupe_key` rules.
 - **Retention (#146):** `object_event` is a record category; legal hold blocks its deletion as it does for `activity_event` today.
@@ -359,7 +359,7 @@ RLS on both: the actor reads their own; readers of every touched object read
 the rest. Only the server's action path writes (security definer function
 `app.record_change_set`).
 
-**Undo** (`invertChanges` in `stubs.ts` is the reference): read the change set,
+**Undo** (`invertChanges` in `src/lib/objects/changes.ts` is the reference): read the change set,
 check the action's capability on every touched object again, check each
 `update` still has its `after` value (if someone changed it since, stop and
 show what differs rather than overwrite), apply the inverse in reverse order

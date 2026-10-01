@@ -5,6 +5,7 @@ a task checklist. Tick items off in the PR that completes them.
 
 | Plan | Covers | State (2026-09-27) |
 |---|---|---|
+| [route-map.md](route-map.md) and [workspace-conventions.md](workspace-conventions.md) | Phase 0 (U1): every route classified (production, beta, migration, admin, deprecated) with one canonical destination per daily task; the shared domain model mapped to the real tables, bilingual fields, permission order, event naming and feature switches | Done (2026-10-01); `src/config/route-map.test.ts` keeps the map in step with `src/app` |
 | [workspace-os-execution.md](workspace-os-execution.md) | Fastest build order for Workspace OS: 6 parallel streams, waves, checklist, test-time cut, QBBE touchpoints | Ready to start (2026-09-30) |
 | [workspace-os-plan.md](workspace-os-plan.md) | Workspace OS without AI: universal objects, types, relations, block editor, lenses, spaces and permissions, workflows, Home and Attention, capture; MVP then V1–V3 | Planned (2026-09-30); Phase 0 next; 3 decisions owed |
 | [owner-checklist.md](owner-checklist.md) | Everything only QBBE can do: accounts, staging, services, accountant, sign-offs | Start here (2026-09-29) |

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -48,6 +49,8 @@ const captureSchema = z.discriminatedUnion("kind", [
 export async function captureItem(input: unknown): Promise<CaptureResult> {
   const { session, db, t, enabled } = await context();
   if (!enabled) return { ok: false, error: t("errors.unavailable") };
+  const limited = await enforceRateLimit("capture:create", session.userId);
+  if (limited) return limited;
   const parsed = captureSchema.safeParse(input);
   if (!parsed.success) {
     const kind = (input as { kind?: string } | null)?.kind;
@@ -95,6 +98,8 @@ const fileSchema = z.object({
 export async function captureFile(input: unknown): Promise<CaptureResult> {
   const { session, db, t, enabled } = await context();
   if (!enabled) return { ok: false, error: t("errors.unavailable") };
+  const limited = await enforceRateLimit("capture:create", session.userId);
+  if (limited) return limited;
   const parsed = fileSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: t("errors.fileRequired") };
   const data = parsed.data;

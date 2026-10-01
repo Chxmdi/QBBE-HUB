@@ -85,6 +85,7 @@ export const shellFrCA: typeof shellEn = {
         agenda: { singular: "Point à l’ordre du jour", plural: "Points à l’ordre du jour" },
         contact: { singular: "Contact", plural: "Contacts" },
         document: { singular: "Document", plural: "Documents" },
+        page: { singular: "Page", plural: "Pages" },
         risk: { singular: "Risque", plural: "Risques" },
         issue: { singular: "Problème", plural: "Problèmes" },
         opportunity: { singular: "Occasion", plural: "Occasions" },
