@@ -91,10 +91,13 @@ const result = run(
 const output = `${result.stdout || ""}${result.stderr || ""}`;
 process.stdout.write(output);
 
+// Set the exit code rather than calling process.exit(): when stdout is a
+// pipe (CI), exit() drops whatever has not been flushed yet, which cut the
+// log short of the failing assertion.
 if (result.status !== 0) {
   console.error(`\nDatabase suite failed (psql exit ${result.status}).`);
-  process.exit(result.status ?? 1);
+  process.exitCode = result.status ?? 1;
+} else {
+  const passed = (output.match(/PASS:/g) ?? []).length;
+  console.log(`\n${passed} assertions passed across ${FILES.length} files.`);
 }
-
-const passed = (output.match(/PASS:/g) ?? []).length;
-console.log(`\n${passed} assertions passed across ${FILES.length} files.`);

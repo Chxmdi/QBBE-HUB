@@ -49,6 +49,7 @@ export default async function PageRoute({ params }: { params: Promise<{ pageId: 
             initialContent={body.content}
             initialState={body.state}
             initialVersion={body.version}
+            timeZone={session.timeZone}
             editable={canEditPage({ userId: session.userId, role: session.role }, page)}
           />
         ) : null}

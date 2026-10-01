@@ -5,11 +5,13 @@ Written 2026-09-30 by the S3 Editor session. Epic #199. Same as P0-1 in
 
 ## Decision
 
-**GO for BlockNote 0.55.0 with its Ariakit interface**, on five conditions
-that S3 builds into M4b (the block editor). A plain-Tiptap fallback is **not
-needed**, so none was prototyped. The one check still outstanding is the
-screen-reader run in section 6. It needs a person, and it can still turn this
-into a no-go.
+**GO for BlockNote 0.55.0 with its Ariakit interface. Final.** The five
+conditions in section 4 are built into M4b (the block editor). A plain-Tiptap
+fallback is **not needed**, so none was prototyped.
+
+The screen-reader check in section 6, the last open item, was run by QBBE and
+**passed** (reported 2026-09-30).
+
 
 Why it is a go:
 
@@ -194,10 +196,19 @@ The fixes are in `src/features/editor/spike/editor-spike-inner.tsx` and
   - The shared bundle is unchanged.
   - The emoji data is a large part. If it is dropped (see F7), measure again.
 
-## 6. Screen-reader check — still to do by a person
+## 6. Screen-reader check — passed
 
-This could not run in the cloud container, so it is **the one outstanding
-check before the go is final**. A result of "Fail" on steps 3, 4, 5 or 8 in
+**Result: passed.** QBBE ran this script and reported on 2026-09-30 that the
+screen-reader test is good. The go in "Decision" is therefore final.
+
+The report did not include step-by-step notes: what VoiceOver and NVDA said
+at each step, and which browsers were used. If they are sent later, add them
+here. They are the baseline for the M4b screen-reader regression check.
+
+The script as it was run follows.
+
+This could not run in the cloud container, which is why it needed a person.
+It was **the one outstanding check before the go was final**. A result of "Fail" on steps 3, 4, 5 or 8 in
 either screen reader turns the go into a no-go. The fallback then is plain
 Tiptap with our own menus (section 9).
 

@@ -234,8 +234,11 @@ the quality bar in section 2.
 
 Spikes are short experiments that answer a risky question before real work starts.
 
-- [ ] **P0-1 Editor accessibility.** BlockNote with keyboard only, VoiceOver, NVDA, 200% zoom and French text. Go/no-go recorded here.
-- [ ] **P0-2 Co-editing.** Yjs over Supabase Realtime between two browsers. Target: 95% of edits arrive within 1 second; no lost edits after 1,000 random edits from both sides; recovers after the connection drops.
+- [x] **P0-1 Editor accessibility.** BlockNote with keyboard only, VoiceOver, NVDA, 200% zoom and French text. Go/no-go recorded here.
+  - **Result: go** for BlockNote 0.55.0 (Ariakit interface), with five conditions for M4b. The screen-reader check passed (QBBE, 2026-09-30). Details: `docs/design/spikes/W0-5-editor-accessibility.md`.
+- [x] **P0-2 Co-editing.** Yjs over Supabase Realtime between two browsers. Target: 95% of edits arrive within 1 second; no lost edits after 1,000 random edits from both sides; recovers after the connection drops.
+  - **Result: go.** No fallback server is needed. p95 is 44 ms. The sync layer is exact over 1,000 edits with a connection drop. Recovery works.
+  - Two editor-binding findings, F1 and F2, are to manage in M4c and V1-17. Details: `docs/design/spikes/W0-6-coediting.md`.
 - [ ] **P0-3 Access check.** `app.can` with cached results over the seeded data (like the #115 performance data). Must agree with every existing rule, and add less than 20 ms to a board load.
 - [ ] **P0-4 Query engine.** Query spec to SQL; a 5,000-object table opens in under 1 second; each type of filter is shown to be safe against SQL injection.
 - [ ] **P0-5 Design note.** Tables A1–A10 and the migration order (section 9). Reviewed before M1.
