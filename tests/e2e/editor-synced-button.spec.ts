@@ -84,7 +84,12 @@ test("a synced block updates its copy on another page [switches on]", async ({ p
   await expect(copy.getByRole("textbox", { name: "Synced content" })).toContainText(`Opening hours ${stamp}`, { timeout: 30_000 });
   await expect(copy).toContainText("Synced");
   await expect(copy.getByRole("button", { name: "Edit synced content" })).toHaveCount(0);
-  await expect(page.getByTestId("editor-save-state")).toHaveText("Saved", { timeout: 30_000 });
+  // Saved with the copy pointing at the block ("Saved" may still show from the insert).
+  await expect
+    .poll(() => sql(`select count(*) from public.block where object_id = '${copyPage}' and props->>'syncedBlockId' = '${syncedId}'`), {
+      timeout: 30_000,
+    })
+    .toBe("1");
 
   // Editing the source writes through; the copy shows it on its next load.
   await page.goto(`/pages/${sourcePage}`);
