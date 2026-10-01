@@ -66,7 +66,7 @@ test("a synced block updates its copy on another page [switches on]", async ({ p
   await openEditor(page);
   await slash(page, "synced", /^Synced block\b/);
   await page.getByRole("button", { name: "New synced block" }).click();
-  await expect(page.getByText("Empty synced block")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("[data-synced-role='source']").getByText("Empty synced block")).toBeVisible({ timeout: 30_000 });
   await editSynced(page, `Opening hours ${stamp}`);
   const source = page.locator("[data-synced-role='source']");
   await expect(source.getByRole("textbox", { name: "Synced content" })).toContainText(`Opening hours ${stamp}`, { timeout: 30_000 });
