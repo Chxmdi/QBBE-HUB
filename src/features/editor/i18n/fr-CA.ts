@@ -27,6 +27,7 @@ export const editorFrCA: EditorMessages = {
   },
   types: {
     paragraph: "Texte",
+    heading: "Titre",
     heading1: "Titre 1",
     heading2: "Titre 2",
     heading3: "Titre 3",
@@ -37,6 +38,12 @@ export const editorFrCA: EditorMessages = {
     quote: "Citation",
     callout: "Encadré",
     codeBlock: "Code informatique",
+    table: "Tableau",
+    divider: "Séparateur",
+    image: "Image",
+    file: "Fichier",
+    video: "Vidéo",
+    audio: "Audio",
   },
   slash: {
     group: "Espace de travail",
