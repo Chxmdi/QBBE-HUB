@@ -1,14 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { Identity } from "@/lib/objects/contracts";
-import { createEventWriterStub } from "@/lib/objects/stubs";
+import { createActivityFeedWriter } from "@/lib/objects/activity-feed";
 import { createWorkflowActionRegistry, workflowActionKeys, workflowActionLabels } from "@/features/workflows/actions";
 import { ApiError, canAs, type ApiIdentity } from "./api-handler";
 
 /**
- * Actions through /api/v1 (V2-8): the same registry the workflows use (a
- * stand-in until S1's M13), checked as the token's person on every target, and
- * labelled as the integration in the events they write.
+ * Actions through /api/v1 (V2-8): the same persisted registry the workflows
+ * use (M13), checked as the token's person on every target. The change set
+ * and the object_event each change writes are labelled as the integration
+ * (record_change_set_as, apply_task_update_as). The activity_event row is
+ * kept for the readers still on the old feed: the project and program
+ * activity pages, the follow fan-out (notifications) and the workflow trigger
+ * stream, so an API change can start a workflow as it does today.
  */
 
 export function listActions() {
@@ -34,6 +38,7 @@ export async function runAction(db: SupabaseClient, identity: ApiIdentity, key: 
     organizationId: identity.organizationId,
     workflowId: `api:${identity.tokenId}`,
     runId: crypto.randomUUID(),
+    runAs: { userId: identity.userId, assurance: "aal1" },
   });
   const result = await registry.run(key, parsed.data.input, {
     actor,
@@ -44,10 +49,10 @@ export async function runAction(db: SupabaseClient, identity: ApiIdentity, key: 
     if (result.reason === "unknown_action") throw new ApiError(404, "unknown_action", "No such action.");
     throw new ApiError(422, "action_failed", result.message ?? "The action failed.");
   }
-  const writeEvent = createEventWriterStub(db);
+  const writeFeed = createActivityFeedWriter(db);
   for (const change of result.changeSet.changes) {
     if (change.kind !== "update") continue;
-    await writeEvent({
+    await writeFeed({
       object: change.object,
       organizationId: identity.organizationId,
       actor,

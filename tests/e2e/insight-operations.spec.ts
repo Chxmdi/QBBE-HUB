@@ -8,12 +8,23 @@ import { expectAccessible, qaIds, setLensesSwitch } from "./insight";
  * goal trajectory tile on the Operations page and on the Programmes
  * dashboard. Hidden until the lenses switch is on.
  */
+test("operations is hidden while the switch is off [switch off]", async ({ page }) => {
+  const before = setLensesSwitch(false);
+  try {
+    await signIn(page, "owner");
+    await page.goto("/insight/operations");
+    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+  } finally {
+    setLensesSwitch(before);
+  }
+});
+
 test("operations shows workload, overdue patterns and goal trajectories", async ({ page }) => {
   test.setTimeout(150_000);
   const marker = `Ops ${Date.now()}`;
   const { ownerId, orgId } = qaIds();
   const staffId = sql(`select id::text from user_profile where email = 'qa-staff@example.com'`);
-  const before = setLensesSwitch(false);
+  const before = setLensesSwitch(true);
   let program = "";
   let project = "";
   try {
@@ -42,10 +53,6 @@ test("operations shows workload, overdue patterns and goal trajectories", async 
     );
 
     await signIn(page, "owner");
-    await page.goto("/insight/operations");
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-
-    setLensesSwitch(true);
     await page.goto("/insight/operations");
     await expect(page.getByRole("heading", { name: "Operations", exact: true })).toBeVisible();
 

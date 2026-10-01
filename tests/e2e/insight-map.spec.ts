@@ -14,6 +14,17 @@ const PNG = Buffer.from(
  * numbered markers matching a list of the same places, zoom and pan as
  * keyboard-usable links, attribution shown. Hidden until the lenses switch is on.
  */
+test("the map lens is hidden while the switch is off [switch off]", async ({ page }) => {
+  const before = setLensesSwitch(false);
+  try {
+    await signIn(page, "owner");
+    await page.goto("/insight/map");
+    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+  } finally {
+    setLensesSwitch(before);
+  }
+});
+
 test("the map lens places events, lists them, and zooms from the keyboard", async ({ page }) => {
   test.setTimeout(150_000);
   const marker = `Map ${Date.now()}`;
@@ -30,13 +41,9 @@ test("the map lens places events, lists them, and zooms from the keyboard", asyn
   await page.route("https://tile.openstreetmap.org/**", (route) =>
     route.fulfill({ status: 200, contentType: "image/png", body: PNG }),
   );
-  const before = setLensesSwitch(false);
+  const before = setLensesSwitch(true);
   try {
     await signIn(page, "owner");
-    await page.goto("/insight/map");
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-
-    setLensesSwitch(true);
     await page.goto("/insight/map");
     await expect(page.getByRole("heading", { name: "Map", exact: true })).toBeVisible();
     const map = page.getByRole("region", { name: /^Map with \d+ places/ });

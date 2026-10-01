@@ -1,10 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
-import { createCanStub, createActionRegistryStub } from "@/lib/objects/stubs";
+import { createCan } from "@/lib/objects/can";
+import { createActionRegistry } from "@/features/objects/actions/registry";
+import { createSupabaseChangeSetStore } from "@/features/objects/actions/supabase-store";
+import { createSupabaseObjectWriter } from "@/features/objects/actions/supabase-writer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { appsMessages } from "../i18n";
 import {
@@ -30,6 +35,28 @@ export type AppResult<T = null> =
 /** Slugs that are routes of their own under /apps. */
 const RESERVED_SLUGS = new Set(["manage", "new"]);
 
+// What the wire may carry. A Server Action is a public endpoint: the browser's
+// types say nothing about what actually arrives, so every shape is checked
+// here before it is read.
+const uuid = z.string().uuid();
+const text = z.string().max(5000);
+const createSchema = z.object({ nameEn: text, nameFr: text, slug: z.string().max(100) });
+const saveSchema = z.object({
+  nameEn: text,
+  nameFr: text,
+  descriptionEn: text,
+  descriptionFr: text,
+  definition: z.unknown(),
+});
+const grantsSchema = z
+  .array(z.object({ role: z.string().max(40), capabilities: z.array(z.string().max(40)).max(20) }))
+  .max(20);
+const runSchema = z.object({
+  slug: z.string().max(100),
+  actionKey: z.string().max(100),
+  targets: z.array(uuid).max(500),
+});
+
 const ROLES = ["owner", "admin", "leadership_viewer", "staff", "volunteer", "guest"] as const;
 
 async function context() {
@@ -49,11 +76,15 @@ function databaseError(messages: ReturnType<typeof appsMessages>, error: { code?
 export async function createApp(input: { nameEn: string; nameFr: string; slug: string }): Promise<AppResult<{ id: string }>> {
   const { session, supabase, messages, enabled } = await context();
   if (!enabled) return { ok: false, error: messages.errors.disabled };
-  const slug = input.slug.trim();
+  const limited = await enforceRateLimit("app:write", session.userId);
+  if (limited) return limited;
+  const parsed = createSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: messages.errors.invalid };
+  const slug = parsed.data.slug.trim();
   if (!appSlugPattern.test(slug)) return { ok: false, error: messages.errors.invalidSlug };
   if (RESERVED_SLUGS.has(slug)) return { ok: false, error: messages.errors.reservedSlug };
-  const nameEn = input.nameEn.trim().slice(0, 80);
-  const nameFr = input.nameFr.trim().slice(0, 80);
+  const nameEn = parsed.data.nameEn.trim().slice(0, 80);
+  const nameFr = parsed.data.nameFr.trim().slice(0, 80);
   if (!nameEn) return { ok: false, error: messages.errors.missingEnglish };
   if (!nameFr) return { ok: false, error: messages.errors.missingFrench };
 
@@ -71,20 +102,25 @@ export async function saveApp(
   id: string,
   input: { nameEn: string; nameFr: string; descriptionEn: string; descriptionFr: string; definition: unknown },
 ): Promise<AppResult> {
-  const { supabase, messages, enabled } = await context();
+  const { session, supabase, messages, enabled } = await context();
   if (!enabled) return { ok: false, error: messages.errors.disabled };
-  const validation = validateAppDefinition(input.definition);
+  const limited = await enforceRateLimit("app:write", session.userId);
+  if (limited) return limited;
+  const parsed = saveSchema.safeParse(input);
+  if (!parsed.success || !uuid.safeParse(id).success) return { ok: false, error: messages.errors.invalid };
+  const fields = parsed.data;
+  const validation = validateAppDefinition(fields.definition);
   if (!validation.ok) return { ok: false, error: messages.errors.invalid, issues: validation.issues };
-  if (!input.nameEn.trim()) return { ok: false, error: messages.errors.missingEnglish };
-  if (!input.nameFr.trim()) return { ok: false, error: messages.errors.missingFrench };
+  if (!fields.nameEn.trim()) return { ok: false, error: messages.errors.missingEnglish };
+  if (!fields.nameFr.trim()) return { ok: false, error: messages.errors.missingFrench };
 
   const { data, error } = await supabase
     .from("workspace_app")
     .update({
-      name_en: input.nameEn.trim().slice(0, 80),
-      name_fr: input.nameFr.trim().slice(0, 80),
-      description_en: input.descriptionEn.slice(0, 300),
-      description_fr: input.descriptionFr.slice(0, 300),
+      name_en: fields.nameEn.trim().slice(0, 80),
+      name_fr: fields.nameFr.trim().slice(0, 80),
+      description_en: fields.descriptionEn.slice(0, 300),
+      description_fr: fields.descriptionFr.slice(0, 300),
       definition: validation.app,
     })
     .eq("id", id)
@@ -102,7 +138,11 @@ export async function saveRoleGrants(
 ): Promise<AppResult> {
   const { session, supabase, messages, enabled } = await context();
   if (!enabled) return { ok: false, error: messages.errors.disabled };
-  const clean = grants
+  const limited = await enforceRateLimit("app:write", session.userId);
+  if (limited) return limited;
+  const parsedGrants = grantsSchema.safeParse(grants);
+  if (!parsedGrants.success || !uuid.safeParse(appId).success) return { ok: false, error: messages.errors.invalid };
+  const clean = parsedGrants.data
     .filter((g) => (ROLES as readonly string[]).includes(g.role))
     .map((g) => ({
       role: g.role,
@@ -132,17 +172,23 @@ export async function saveRoleGrants(
 }
 
 export async function setAppPublished(appId: string, published: boolean): Promise<AppResult> {
-  const { supabase, messages, enabled } = await context();
+  const { session, supabase, messages, enabled } = await context();
   if (!enabled) return { ok: false, error: messages.errors.disabled };
-  const { error } = await supabase.rpc("workspace_app_set_published", { p_app: appId, p_published: published });
+  const limited = await enforceRateLimit("app:write", session.userId);
+  if (limited) return limited;
+  if (!uuid.safeParse(appId).success) return { ok: false, error: messages.errors.notFound };
+  const { error } = await supabase.rpc("workspace_app_set_published", { p_app: appId, p_published: published === true });
   if (error) return { ok: false, error: databaseError(messages, error) };
   revalidatePath("/apps", "layout");
   return { ok: true, value: null };
 }
 
 export async function deleteApp(appId: string): Promise<AppResult> {
-  const { supabase, messages, enabled } = await context();
+  const { session, supabase, messages, enabled } = await context();
   if (!enabled) return { ok: false, error: messages.errors.disabled };
+  const limited = await enforceRateLimit("app:write", session.userId);
+  if (limited) return limited;
+  if (!uuid.safeParse(appId).success) return { ok: false, error: messages.errors.notFound };
   const { data, error } = await supabase.from("workspace_app").delete().eq("id", appId).select("id");
   if (error) return { ok: false, error: databaseError(messages, error) };
   if (!data?.length) return { ok: false, error: messages.errors.forbidden };
@@ -153,14 +199,17 @@ export async function deleteApp(appId: string): Promise<AppResult> {
 /**
  * Runs one of the app's actions on the given records. Two gates: the person
  * needs the action's capability on this app, and the action registry checks
- * it again on every target (plan A8). The registry is S1's; until it lands the
- * stand-in has no actions registered, so this answers "not yet" honestly.
+ * it again on every target (plan A8). The registry is the persisted one
+ * (M13); no app-level action is registered on it yet, so a run answers "not
+ * yet" honestly until the app screens wire their actions in.
  */
 export async function runAppAction(slug: string, actionKey: string, targets: string[]): Promise<AppResult> {
   const { session, supabase, messages, enabled } = await context();
   const t = messages.runAction;
   if (!enabled) return { ok: false, error: messages.errors.disabled };
-  const app = await getApp(supabase, session.organizationId, { slug });
+  const parsed = runSchema.safeParse({ slug, actionKey, targets });
+  if (!parsed.success) return { ok: false, error: messages.errors.invalid };
+  const app = await getApp(supabase, session.organizationId, { slug: parsed.data.slug });
   const validation = app ? validateAppDefinition(app.definition) : null;
   const action = validation?.ok ? validation.app.actions.find((a) => a.key === actionKey) : undefined;
   if (!app || !action) return { ok: false, error: messages.errors.notFound };
@@ -168,14 +217,13 @@ export async function runAppAction(slug: string, actionKey: string, targets: str
     return { ok: false, error: t.forbidden };
   }
 
-  const registry = createActionRegistryStub({
-    apply: async () => {
-      throw new Error("The action registry arrives with M13.");
-    },
+  const registry = createActionRegistry({
+    store: createSupabaseChangeSetStore(supabase),
+    writer: createSupabaseObjectWriter(supabase),
   });
   const result = await registry.run(action.actionKey, { targets }, {
     actor: { kind: "person", id: session.userId },
-    can: createCanStub(supabase),
+    can: createCan(supabase),
   });
   if (result.ok) return { ok: true, value: null };
   if (result.reason === "unknown_action") return { ok: false, error: t.notYet };

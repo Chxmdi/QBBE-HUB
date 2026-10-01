@@ -26,7 +26,7 @@ async function axe(page: Page, label: string) {
 test.describe("workflows v2", () => {
   test.afterAll(() => setSwitch(false));
 
-  test("the screens do not exist while the switch is off", async ({ page }) => {
+  test("the screens do not exist while the switch is off [switch off]", async ({ page }) => {
     setSwitch(false);
     await signIn(page, "admin");
     await page.goto("/workflows");

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { extractSemanticBlocks } from "../editor-adapter";
 import { planReview, summarizeSteps } from "../review";
 import { meetingTaskInput } from "../meeting-task";
+import { attachLiveTasks, tasksFromNotes, type LiveTask } from "../live-tasks";
 import { universalTaskInputSchema } from "@/features/universal-tasks/create-task";
 import { overrideTurnsOn } from "../flag";
 import { meetingsV2En } from "../i18n/en";
@@ -96,6 +97,36 @@ describe("meeting task input for the shared task.create action", () => {
     expect(input.projectId).toBeUndefined();
     expect(input.programId).toBe("44444444-4444-4444-8444-444444444444");
     expect(universalTaskInputSchema.safeParse(input).success).toBe(true);
+  });
+});
+
+describe("live tasks on the meeting (F3)", () => {
+  const task = (id: string, extra: Partial<LiveTask> = {}): LiveTask => ({
+    id,
+    title: `Task ${id}`,
+    status: "not_started",
+    dueOn: "2026-10-27",
+    assigneeName: "QA Staff",
+    archived: false,
+    ...extra,
+  });
+  const captures = [
+    { id: "c1", createdObjectType: "task" as const, createdObjectId: "t1" },
+    { id: "c2", createdObjectType: "task" as const, createdObjectId: "hidden" },
+    { id: "c3", createdObjectType: "decision" as const, createdObjectId: "d1" },
+    { id: "c4", createdObjectType: null, createdObjectId: null },
+  ];
+
+  it("attaches each approved task capture to its task as the reader sees it, or nothing", () => {
+    const rows = attachLiveTasks(captures, [task("t1", { status: "in_progress" }), task("t2")]);
+    expect(rows.map((row) => row.task?.id ?? null)).toEqual(["t1", null, null, null]);
+    expect(rows[0].task?.status).toBe("in_progress");
+    expect(rows[0].task?.dueOn).toBe("2026-10-27");
+  });
+
+  it("lists the tasks made straight from the notes, leaving out reviewed and archived ones", () => {
+    const fromNotes = tasksFromNotes([task("t1"), task("t2"), task("t3", { archived: true })], captures);
+    expect(fromNotes.map((row) => row.id)).toEqual(["t2"]);
   });
 });
 

@@ -8,6 +8,17 @@ import { expectAccessible, qaIds, setLensesSwitch } from "./insight";
  * status changes, turnaround per type, and approval wait times. Hidden until
  * the lenses switch is on.
  */
+test("process analytics is hidden while the switch is off [switch off]", async ({ page }) => {
+  const before = setLensesSwitch(false);
+  try {
+    await signIn(page, "owner");
+    await page.goto("/insight/process");
+    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+  } finally {
+    setLensesSwitch(before);
+  }
+});
+
 test("process analytics shows time in status, turnaround and approval waits", async ({ page }) => {
   test.setTimeout(150_000);
   const marker = `Flow ${Date.now()}`;
@@ -25,7 +36,7 @@ test("process analytics shows time in status, turnaround and approval waits", as
        values ('${orgId}', '${marker} ${title}', '${ownerId}', '${status}',
          ${status === "blocked" ? "'Waiting on the venue'" : "null"}, now() - interval '${createdDaysAgo} days') returning id`,
     );
-  const before = setLensesSwitch(false);
+  const before = setLensesSwitch(true);
   try {
     // Two tasks that each sat in Blocked for a long time: Blocked is the bottleneck.
     const first = task("first", "in_progress", 20);
@@ -46,10 +57,6 @@ test("process analytics shows time in status, turnaround and approval waits", as
     );
 
     await signIn(page, "owner");
-    await page.goto("/insight/process");
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-
-    setLensesSwitch(true);
     await page.goto("/insight/process");
     await expect(page.getByRole("heading", { name: "How work flows", exact: true })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Period" }).getByRole("link", { name: "Last 90 days" })).toHaveAttribute("aria-current", "page");

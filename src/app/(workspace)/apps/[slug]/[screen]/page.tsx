@@ -8,8 +8,9 @@ import { actionsFor, appCapabilityFor, navigation, validateAppDefinition } from 
 import { canUseApp, getApp } from "@/features/apps/services/app.queries";
 import { requireSession } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
-import { getLocale, getT } from "@/lib/i18n/server";
-import { createTaskQueryStub } from "@/lib/objects/stubs";
+import { getLocale } from "@/lib/i18n/server";
+import { createLensRunQuery } from "@/lib/query/contract-adapter";
+import { loadCatalog } from "@/lib/query/run";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn } from "@/lib/utils";
 
@@ -41,9 +42,10 @@ export default async function AppScreenPage({ params }: { params: Params }) {
   const { session, supabase, app, definition, screen } = await load(params);
   const locale = await getLocale();
   const messages = appsMessages(locale);
-  const t = await getT();
   const name = locale === "fr-CA" ? app.nameFr : app.nameEn;
-  const query = createTaskQueryStub(supabase, { userId: session.userId, timeZone: session.timeZone });
+  // Every screen reads through the lens query engine as this person, so RLS decides the rows.
+  const catalog = await loadCatalog(supabase);
+  const query = createLensRunQuery(supabase, catalog, { timeZone: session.timeZone });
 
   // Only offer the actions this person could run here; the registry re-checks every target.
   const actions = (
@@ -101,7 +103,7 @@ export default async function AppScreenPage({ params }: { params: Params }) {
             </section>
           ) : null}
         </div>
-        <AppScreenView screen={screen} query={query} messages={messages} locale={locale} t={t} />
+        <AppScreenView screen={screen} query={query} catalog={catalog} messages={messages} locale={locale} />
       </div>
     </div>
   );

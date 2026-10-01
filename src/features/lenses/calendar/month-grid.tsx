@@ -68,7 +68,7 @@ export function MonthGrid({
                           <Link
                             href={item.href}
                             title={item.owner ? `${item.label} · ${item.owner}` : item.label}
-                            className={cn("block truncate rounded px-1.5 py-0.5 text-[11.5px] font-medium", KIND_STYLES[item.kind], item.done && "line-through opacity-70")}
+                            className={cn("block truncate rounded px-1.5 py-0.5 text-[11.5px] font-medium", KIND_STYLES[item.kind], item.done && "line-through")}
                           >
                             {item.label}
                           </Link>

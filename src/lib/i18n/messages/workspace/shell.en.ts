@@ -85,6 +85,7 @@ export const shellEn = {
         agenda: { singular: "Agenda item", plural: "Agenda items" },
         contact: { singular: "Contact", plural: "Contacts" },
         document: { singular: "Document", plural: "Documents" },
+        page: { singular: "Page", plural: "Pages" },
         risk: { singular: "Risk", plural: "Risks" },
         issue: { singular: "Issue", plural: "Issues" },
         opportunity: { singular: "Opportunity", plural: "Opportunities" },

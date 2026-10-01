@@ -51,6 +51,7 @@ declare
   v_org uuid;
   p_shared uuid;
   p_fresh uuid;
+  v_meeting uuid;
   v_before integer;
   v_result integer;
   v_second integer;
@@ -178,6 +179,25 @@ begin
   v_result := tests.editor_append(gen_random_uuid(), 'page', null, 'Nowhere');
   reset role;
   perform tests.ok(v_result = -1, 'editor ops: an unknown object is refused');
+
+  -- Meeting notes follow the meeting: its organizer appends, an attendee cannot --
+  insert into public.meeting (organization_id, title, organizer_id, starts_at)
+  values (v_org, 'Queue meeting', v_staff, now()) returning id into v_meeting;
+  insert into public.meeting_attendee (meeting_id, user_id) values (v_meeting, v_volunteer);
+
+  perform tests.authenticate(v_staff, 'aal2');
+  v_result := tests.editor_append(v_meeting, 'meeting', null, 'Meeting notes');
+  reset role;
+  perform tests.ok(
+    v_result = 1 and (select notes from public.meeting where id = v_meeting) = 'Meeting notes',
+    'editor ops: the organizer appends meeting notes, and meeting.notes follows'
+  );
+
+  perform tests.authenticate(v_volunteer);
+  v_result := tests.editor_append(v_meeting, 'meeting', 1, 'Attendee notes');
+  v_n := tests.editor_ops_visible(v_meeting);
+  reset role;
+  perform tests.ok(v_result = -1 and v_n = 1, 'editor ops: an attendee reads the meeting log but cannot append');
 
   -- Retention: the last 200 operations per object -----------------------------------
   perform tests.authenticate(v_staff, 'aal2');

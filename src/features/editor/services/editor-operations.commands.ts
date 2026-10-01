@@ -35,7 +35,7 @@ const operationSchema = z.object({
 
 const appendSchema = z.object({
   objectId: z.string().uuid(),
-  objectType: z.enum(["page", "task"]),
+  objectType: z.enum(["page", "task", "meeting"]),
   /** The version the client last saw; null for a first save. */
   baseVersion: z.number().int().positive().nullable(),
   ops: z.array(operationSchema).min(1).max(100),

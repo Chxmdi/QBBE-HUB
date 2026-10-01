@@ -22,7 +22,7 @@
 create table public.editor_operation (
   id uuid primary key default gen_random_uuid(),
   object_id uuid not null references public.editor_document (object_id) on delete cascade,
-  object_type text not null check (object_type in ('page', 'task')),
+  object_type text not null check (object_type in ('page', 'task', 'meeting')),
   organization_id uuid not null references public.organization (id) on delete cascade,
   seq bigint not null check (seq > 0),
   base_version integer not null check (base_version >= 0),
@@ -123,7 +123,7 @@ begin
   if v_actor is null then
     raise exception 'Sign in to save' using errcode = '42501';
   end if;
-  if p_type is null or p_type not in ('page', 'task') then
+  if p_type is null or p_type not in ('page', 'task', 'meeting') then
     raise exception 'Unknown object type' using errcode = '22023';
   end if;
   if p_ops is null or jsonb_typeof(p_ops) <> 'array' or jsonb_array_length(p_ops) = 0 then
@@ -175,6 +175,8 @@ begin
       select p.organization_id from public.page p where p.id = p_object and p_type = 'page'
       union all
       select t.organization_id from public.task t where t.id = p_object and p_type = 'task'
+      union all
+      select m.organization_id from public.meeting m where m.id = p_object and p_type = 'meeting'
     ) o
     returning editor_document.version, editor_document.organization_id into v_version, v_org;
     if v_version is null then
