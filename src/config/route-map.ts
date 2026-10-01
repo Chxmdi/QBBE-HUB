@@ -155,6 +155,7 @@ export const ROUTE_MAP: ReadonlyArray<RouteMapEntry> = [
   { pattern: "/schedule", status: "production", task: "Master schedule (P0-GNT-01)" },
   { pattern: "/meetings", status: "production", task: "Meetings list" },
   { pattern: "/meetings/[id]", status: "migration", canonical: "/meetings-v2/[id]", task: "One meeting: replaced by meetings as objects (V1-9)" },
+  { pattern: "/meetings-v2", status: "beta", switch: "wos_meetings_v2", task: "Meetings v2 index (U12)" },
   { pattern: "/meetings-v2/[id]", status: "beta", switch: "wos_meetings_v2", task: "Meeting as an object with semantic notes (V1-9)" },
   { pattern: "/meetings-v2/[id]/review", status: "beta", switch: "wos_meetings_v2", task: "End-of-meeting review (V1-9)" },
   { pattern: "/events", status: "production", task: "Events" },

@@ -172,6 +172,7 @@ Not migration, on purpose:
 | `/schedule` | production |  |  | Master schedule (P0-GNT-01) |
 | `/meetings` | production |  |  | Meetings list |
 | `/meetings/[id]` | migration |  | `/meetings-v2/[id]` | One meeting: replaced by meetings as objects (V1-9) |
+| `/meetings-v2` | beta | `wos_meetings_v2` |  | Meetings v2 index (U12) |
 | `/meetings-v2/[id]` | beta | `wos_meetings_v2` |  | Meeting as an object with semantic notes (V1-9) |
 | `/meetings-v2/[id]/review` | beta | `wos_meetings_v2` |  | End-of-meeting review (V1-9) |
 | `/events` | production |  |  | Events |

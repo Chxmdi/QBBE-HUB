@@ -116,7 +116,14 @@ const NEW_SCREENS: Record<string, { on: NavSwitches[keyof NavSwitches] extends b
   "/m": { on: "wos_mobile", access: "member" },
   "/workflows": { on: "wos_workflows_v2", access: "admin" },
   "/api-tokens": { on: "wos_workflows_v2", access: "staff" },
+  "/meetings-v2": { on: "wos_meetings_v2", access: "member" },
 };
+
+/**
+ * Every switch but `wos_home`, which also selects the consolidated grouping
+ * (U12): the module groups from before, with every module on.
+ */
+const V1_SWITCHES: NavSwitches = { ...ALL_SWITCHES, wos_home: false };
 
 /** Old screen, and the new one that takes its place in the menu. */
 const REPLACEMENTS: [string, string][] = [
@@ -190,16 +197,15 @@ describe("visibleNav with every switch on", () => {
   });
 
   it("puts each replacement in its old screen's place and moves the old screen to Classic screens", () => {
-    const groups = visibleNav(ADMIN, ALL_SWITCHES);
+    const groups = visibleNav(ADMIN, V1_SWITCHES);
     const classic = groups[groups.length - 1];
     expect(classic.label).toBe(CLASSIC_GROUP_LABEL);
-    expect(classic.items.map((i) => i.href)).toEqual(REPLACEMENTS.map(([old]) => old));
+    expect(classic.items.map((i) => i.href)).toEqual(REPLACEMENTS.map(([old]) => old).filter((old) => old !== "/"));
     expect(classic.items.every((i) => i.classic === true)).toBe(true);
 
     const work = groups.find((g) => g.label === "Work")!;
     expect(work.items.map((i) => i.href)).toEqual([
-      "/home",
-      "/home/world",
+      "/",
       "/lenses/my-work",
       "/lenses/board",
       "/capture",
@@ -213,7 +219,18 @@ describe("visibleNav with every switch on", () => {
     const organization = groups.find((g) => g.label === "Organization")!;
     expect(organization.items[0].href).toBe("/lenses/calendar");
     expect(organization.items.map((i) => i.href)).not.toContain("/calendar");
+    expect(organization.items.map((i) => i.href)).toContain("/meetings-v2");
     for (const [old, replacement] of REPLACEMENTS) expect(navHref(old, ALL_SWITCHES)).toBe(replacement);
+    for (const [old, replacement] of REPLACEMENTS) {
+      expect(navHref(old, V1_SWITCHES)).toBe(old === "/" ? "/" : replacement);
+    }
+  });
+
+  it("with the consolidated menu, every replaced screen sits under Classic screens, Home first", () => {
+    const groups = visibleNav(ADMIN, ALL_SWITCHES);
+    const classic = groups[groups.length - 1];
+    expect(classic.label).toBe(CLASSIC_GROUP_LABEL);
+    expect(classic.items.map((i) => i.href)).toEqual(["/", "/my-work", "/board", "/calendar", "/forms"]);
   });
 
   it("moves the My Work count to the lens version and never shows a count twice", () => {
@@ -225,13 +242,27 @@ describe("visibleNav with every switch on", () => {
   });
 
   it("keeps the group order: the three groups from before, then the new ones, then Classic screens", () => {
-    expect(visibleNav(ADMIN, ALL_SWITCHES).map((g) => g.label)).toEqual([
+    expect(visibleNav(ADMIN, V1_SWITCHES).map((g) => g.label)).toEqual([
       "Work",
       "Communication",
       "Organization",
       "Lenses",
       "Insight",
       "Workspace",
+      "Setup",
+      CLASSIC_GROUP_LABEL,
+    ]);
+  });
+
+  it("with wos_home on, the groups are the consolidated ones, then Classic screens", () => {
+    expect(visibleNav(ADMIN, ALL_SWITCHES).map((g) => g.label)).toEqual([
+      "Home",
+      "My Work",
+      "Pages",
+      "Data",
+      "Communication",
+      "Programs",
+      "More",
       "Setup",
       CLASSIC_GROUP_LABEL,
     ]);

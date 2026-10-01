@@ -81,6 +81,7 @@ const ITEM_KEYS: Record<string, MessageKey> = {
   "/spaces/publish": "nav.items.publicPages",
   "/workflows": "nav.items.workflows",
   "/api-tokens": "nav.items.apiTokens",
+  "/meetings-v2": "nav.items.meetingNotes",
 };
 
 const GROUP_KEYS: Record<string, MessageKey> = {
@@ -92,6 +93,13 @@ const GROUP_KEYS: Record<string, MessageKey> = {
   Workspace: "nav.groups.workspace",
   Setup: "nav.groups.setup",
   "Classic screens": "nav.groups.classic",
+  // The consolidated menu (U12), while wos_home is on.
+  Home: "nav.groups.home",
+  "My Work": "nav.groups.myWork",
+  Pages: "nav.groups.pages",
+  Data: "nav.groups.data",
+  Programs: "nav.groups.programs",
+  More: "nav.groups.more",
 };
 
 /**
