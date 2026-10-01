@@ -331,6 +331,7 @@ export function ObjectEditor({
         taskSuggestions={taskSuggestions}
         hintId={editable ? hintId : undefined}
         label={label}
+        objectPath={objectType === "page" ? `/pages/${objectId}` : undefined}
       />
       {removal ? (
         <Dialog open onClose={() => setRemoval(null)} title={t("semantic.removed.title")}>
