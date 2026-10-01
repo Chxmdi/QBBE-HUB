@@ -203,7 +203,7 @@ test.afterAll(() => {
   if (stamp) sql(`delete from public.task where title like '%${stamp}%'`);
 });
 
-test("a task written in the meeting's notes shows in My tasks, the board, the calendar and the project page, and one edit moves all of them, the meeting included", async ({ page }) => {
+test("a task written in the meeting's notes shows in My tasks, the board, the calendar and the project page, and one edit moves all of them, the meeting included [switches on]", async ({ page }) => {
   test.setTimeout(300_000);
   await signIn(page, "staff");
   await page.goto(`/meetings-v2/${f.meetingId}`);
@@ -323,7 +323,7 @@ test("a task written in the meeting's notes shows in My tasks, the board, the ca
   expect(sql(`select due_at::text from public.meeting_action where task_id = '${meetingTaskId}'`)).toBe(movedDay);
 });
 
-test("a task made from a sentence in the block editor lands in the same places, and the block is the task", async ({ page }) => {
+test("a task made from a sentence in the block editor lands in the same places, and the block is the task [switches on]", async ({ page }) => {
   test.setTimeout(300_000);
   await signIn(page, "staff");
 
@@ -388,7 +388,7 @@ test("a task made from a sentence in the block editor lands in the same places, 
   await expect.poll(() => sql(`select status from public.task where id = '${pageTaskId}'`), { timeout: 15_000 }).toBe("completed");
 });
 
-test("every screen on the path passes axe in light and dark, and the main path reads in French", async ({ page }) => {
+test("every screen on the path passes axe in light and dark, and the main path reads in French [switches on]", async ({ page }) => {
   test.setTimeout(300_000);
   await signIn(page, "staff");
   const q = encodeURIComponent(meetingTask);
