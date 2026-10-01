@@ -20,7 +20,7 @@ function cleanUp() {
     delete from public.blueprint_build where blueprint_id in (select id from public.blueprint where key like 'grant%');
     update public.blueprint set status = 'draft', approved_hash = null, approved_by = null, approved_at = null where key like 'grant%';
     delete from public.blueprint where key like 'grant%';
-    delete from public.relation_type where not is_native and (from_type_id in (select id from public.object_type where kind = 'custom' and key in (${keys})) or to_type_id in (select id from public.object_type where kind = 'custom' and key in (${keys})));
+    delete from public.relation_type r where not r.is_native and (r.from_type_id in (select t.id from public.object_type t where t.kind = 'custom' and t.key in (${keys})) or r.to_type_id in (select t.id from public.object_type t where t.kind = 'custom' and t.key in (${keys})));
     delete from public.object_type where kind = 'custom' and key in (${keys});
   `);
 }

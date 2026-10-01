@@ -96,7 +96,9 @@ function defaultValue(property: BlueprintProperty, today: string): FormulaValue 
 
 /** The sample record for one type: starter values where they exist, plain ones elsewhere. */
 export function sampleRecord(blueprintKey: string, type: BlueprintType, today: string): Record<string, FormulaValue> {
-  const starter = starterSamples[blueprintKey]?.[type.key] ?? {};
+  // A starter copied into a workspace that already has one gets a numbered key (inventory_2).
+  const starterKey = blueprintKey in starterSamples ? blueprintKey : blueprintKey.replace(/_\d+$/, "");
+  const starter = starterSamples[starterKey]?.[type.key] ?? {};
   const record: Record<string, FormulaValue> = { title: starter.title ?? "Sample item" };
   for (const property of type.properties) {
     if (property.kind === "formula") continue;

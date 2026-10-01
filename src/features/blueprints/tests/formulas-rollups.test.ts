@@ -298,6 +298,7 @@ describe("formula examples", () => {
     expect(record.amount_requested).toBe(50000);
     expect(record.amount_awarded).toBe(35000);
     expect(record.stage).toBe("submitted");
+    expect(sampleRecord("grant_2", application, "2026-10-15").amount_requested).toBe(50000);
     const example = formulaExample({
       blueprintKey: "grant",
       type: { ...application, properties: [...application.properties, { key: "gap", name: { en: "Gap", fr: "Écart" }, kind: "formula", expression: 'prop("Amount requested") - prop("Amount awarded")' }] },
