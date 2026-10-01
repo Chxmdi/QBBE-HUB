@@ -28,6 +28,13 @@ function setSwitch(on: boolean) {
 
 test.afterAll(() => setSwitch(false));
 
+test("goals are hidden while the switch is off [switch off]", async ({ page }) => {
+  setSwitch(false);
+  await signIn(page, "staff");
+  await page.goto("/goals");
+  await expect(page.getByRole("heading", { name: NOT_FOUND })).toBeVisible();
+});
+
 test("a program lead links a project and a metric, and the goal's progress follows the work", async ({ page }) => {
   test.setTimeout(240_000);
   const stamp = Date.now();
@@ -76,12 +83,8 @@ test("a program lead links a project and a metric, and the goal's progress follo
     from who, (values ('Book rooms ${stamp}', 'completed'), ('Recruit tutors ${stamp}', 'in_progress')) as t(title, status);
   `);
 
-  setSwitch(false);
-  await signIn(page, "staff");
-  await page.goto("/goals");
-  await expect(page.getByRole("heading", { name: NOT_FOUND })).toBeVisible();
-
   setSwitch(true);
+  await signIn(page, "staff");
   await page.goto("/goals");
   await expect(page.getByRole("heading", { level: 1, name: "Goals" })).toBeVisible();
   expect(await axeProblems(page)).toEqual([]);

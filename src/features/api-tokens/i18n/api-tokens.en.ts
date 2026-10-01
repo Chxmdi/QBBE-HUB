@@ -49,6 +49,7 @@ export const apiTokensEn = {
     createFailed: "The token could not be made.",
     revokeFailed: "The token could not be revoked.",
     notFound: "Not found.",
+    staffOnly: "API tokens are for staff.",
   },
   docs: {
     title: "Private API",

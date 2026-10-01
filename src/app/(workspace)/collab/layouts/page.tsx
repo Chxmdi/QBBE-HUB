@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
-import { requireSession } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { fill } from "@/features/collab/i18n";
 import { layoutsText } from "@/features/object-layouts/messages";
@@ -18,7 +18,8 @@ export async function generateMetadata(): Promise<Metadata> {
 /** Every object type and whether its page layout is customized (V2-4). */
 export default async function LayoutsPage() {
   if (!(await isEnabled("wos_editor"))) notFound();
-  await requireSession();
+  // Staff shape the layouts everyone sees, as the menu says.
+  await requireStaff();
   const locale = await getLocale();
   const m = layoutsText(locale).list;
   const types = await listObjectTypes();

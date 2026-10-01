@@ -184,7 +184,7 @@ test("5,000 rows load in under a second", async ({ page }) => {
   await expect(grid.getByRole("row").last()).toContainText("5,000");
 });
 
-test("with the switch off the table lens does not exist", async ({ page }) => {
+test("with the switch off the table lens does not exist [switch off]", async ({ page }) => {
   sql("update public.feature_flag set enabled = false where key = 'wos_lenses'");
   try {
     await signIn(page, "staff");

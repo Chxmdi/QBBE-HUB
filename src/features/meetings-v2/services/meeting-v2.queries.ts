@@ -2,6 +2,8 @@ import { createSupabasePageClient } from "@/lib/supabase/page";
 // Page reads: the page client throws on a failed query, so an outage reaches
 // the error page instead of reading as "not found" or an empty list (P0-UX-05).
 import type { SemanticBlockKind } from "../editor-adapter";
+import { attachLiveTasks, tasksFromNotes, type LiveTask } from "../live-tasks";
+import type { TaskStatus } from "@/types/entities";
 
 export interface MeetingObject {
   id: string;
@@ -37,6 +39,8 @@ export interface CaptureRow {
   createdObjectId: string | null;
   authorName: string | null;
   createdAt: string;
+  /** The task this capture became, read live; null while open, dismissed or not visible. */
+  task: LiveTask | null;
 }
 
 export interface RecordingRow {
@@ -50,6 +54,8 @@ export interface MeetingObjectView {
   agenda: AgendaEntry[];
   captures: CaptureRow[];
   recordings: RecordingRow[];
+  /** Tasks made straight from the notes (a `/task` block, a suggestion), not through a capture. */
+  notesTasks: LiveTask[];
   people: { id: string; name: string }[];
   canManage: boolean;
 }
@@ -69,7 +75,7 @@ export async function getMeetingObject(meetingId: string): Promise<MeetingObject
   if (!row) return null;
   const organizer = row.organizer as unknown as Named;
 
-  const [agenda, captures, recordings, attendees, canManage] = await Promise.all([
+  const [agenda, captures, recordings, attendees, canManage, tasks] = await Promise.all([
     supabase
       .from("agenda_item")
       .select("id, title, kind, status, time_box_minutes, owner:owner_id(id, full_name)")
@@ -92,7 +98,29 @@ export async function getMeetingObject(meetingId: string): Promise<MeetingObject
       .order("created_at", { ascending: false }),
     supabase.from("meeting_attendee").select("user:user_id(id, full_name)").eq("meeting_id", meetingId),
     supabase.rpc("can_manage_meeting", { p_meeting: meetingId }),
+    // Every task this meeting produced (M7b source), as the reader may see them.
+    supabase
+      .from("task")
+      .select("id, title, status, due_at, archived_at, assignee:assignee_id(id, full_name)")
+      .eq("source_type", "meeting")
+      .eq("source_id", meetingId)
+      .order("created_at", { ascending: true }),
   ]);
+
+  const liveTasks: LiveTask[] = ((tasks.data ?? []) as unknown as {
+    id: string; title: string; status: TaskStatus; due_at: string | null; archived_at: string | null; assignee: Named;
+  }[]).map((t) => ({
+    id: t.id,
+    title: t.title,
+    status: t.status,
+    dueOn: t.due_at,
+    assigneeName: t.assignee?.full_name ?? null,
+    archived: t.archived_at !== null,
+  }));
+
+  const captureLinks = ((captures.data ?? []) as unknown as { created_object_type: "task" | "decision" | null; created_object_id: string | null }[]).map(
+    (c) => ({ createdObjectType: c.created_object_type, createdObjectId: c.created_object_id }),
+  );
 
   const people = new Map<string, string>();
   if (organizer) people.set(organizer.id, organizer.full_name ?? "");
@@ -121,7 +149,7 @@ export async function getMeetingObject(meetingId: string): Promise<MeetingObject
       timeBoxMinutes: a.time_box_minutes,
       owner: a.owner?.full_name ?? null,
     })),
-    captures: ((captures.data ?? []) as unknown as {
+    captures: attachLiveTasks(((captures.data ?? []) as unknown as {
       id: string; kind: SemanticBlockKind; body: string; detail: string | null;
       status: CaptureRow["status"]; owner_id: string | null; due_on: string | null;
       agenda_item_id: string | null; created_object_type: CaptureRow["createdObjectType"];
@@ -140,7 +168,8 @@ export async function getMeetingObject(meetingId: string): Promise<MeetingObject
       createdObjectId: c.created_object_id,
       authorName: c.author?.full_name ?? null,
       createdAt: c.created_at,
-    })),
+    })), liveTasks),
+    notesTasks: tasksFromNotes(liveTasks, captureLinks),
     recordings: ((recordings.data ?? []) as { id: string; title: string; created_at: string }[]).map((r) => ({
       id: r.id,
       title: r.title,

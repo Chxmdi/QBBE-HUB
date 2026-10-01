@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
@@ -134,6 +135,8 @@ async function syncMentions(
 
 export async function addObjectComment(input: unknown): Promise<CommentActionResult> {
   const session = await requireSession();
+  const limited = await enforceRateLimit("comment:create", session.userId);
+  if (limited) return limited;
   const m = await text();
   const parsed = addSchema(m).safeParse(input);
   if (!parsed.success) {

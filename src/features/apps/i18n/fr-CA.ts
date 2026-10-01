@@ -30,14 +30,12 @@ export const appsFrCA: AppsMessages = {
   },
   screens: {
     lensIntro: "{kind} : {type}",
-    notYet: "Cette vue affichera les fiches {type} dès que le registre de l’espace de travail sera activé. Elle utilisera la vue {kind}, selon vos propres accès.",
+    notYet: "Cette vue ({kind}) ne peut pas afficher les fiches « {type} » : le moteur de requêtes ne connaît pas encore ce type. Vérifiez le type de l’écran dans Gérer cette application.",
     pageLink: "Ouvrir la page",
     pageNotYet: "Les pages s’ouvriront ici dès que l’éditeur de pages sera activé.",
     formNotYet: "Le formulaire « {form} » s’ouvrira ici dès que les formulaires seront activés.",
     empty: "Rien à afficher pour l’instant.",
     title: "Titre",
-    status: "Statut",
-    due: "Échéance",
     more: "Affichage des {count} premiers.",
   },
   runAction: {

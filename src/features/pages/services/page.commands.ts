@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPagesT } from "@/features/pages/i18n/server";
@@ -104,6 +105,8 @@ export async function createPage(input: unknown): Promise<PageActionResult> {
   const ready = await prepare();
   if (ready.blocked) return ready.blocked;
   const { t, session, supabase } = ready;
+  const limited = await enforceRateLimit("page:create", session.userId);
+  if (limited) return limited;
   const parsed = createPageSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: t("errors.invalidInput") };
   const { parentPageId = null, title = "" } = parsed.data;
@@ -204,6 +207,8 @@ export async function duplicatePage(input: unknown): Promise<PageActionResult> {
   const ready = await prepare();
   if (ready.blocked) return ready.blocked;
   const { t, session, supabase } = ready;
+  const limited = await enforceRateLimit("page:create", session.userId);
+  if (limited) return limited;
   const parsed = pageIdSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: t("errors.invalidInput") };
   const { data } = await supabase

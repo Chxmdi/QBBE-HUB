@@ -26,7 +26,9 @@ import type {
  * Semantic blocks (M5): a block that *is* an object, or shows live data.
  * Each object block stores only `props.objectId`, which M4c's block rows
  * record as the referenced object; the title and state are read live, as the
- * viewer, so nobody sees what they could not open.
+ * viewer, so nobody sees what they could not open. A task block reads the
+ * task's status, due date and assignee that way, so an edit made anywhere
+ * else shows in the notes the next time they load.
  */
 
 export const statusStates = ["on_track", "at_risk", "off_track", "blocked", "done"] as const;
@@ -111,8 +113,13 @@ function Picker({
   const [error, setError] = React.useState<string | null>(null);
   const [projects, setProjects] = React.useState<{ id: string; name: string }[]>([]);
   const [projectId, setProjectId] = React.useState("");
+  const [people, setPeople] = React.useState<{ id: string; name: string }[]>([]);
+  const [ownerId, setOwnerId] = React.useState("");
+  const [dueAt, setDueAt] = React.useState("");
   const id = React.useId();
   const kindLabel = t(`semantic.kinds.${kind}`);
+  const requireOwnerAndDue = Boolean(handlers.current?.requireOwnerAndDue);
+  const missingOwnerOrDue = requireOwnerAndDue && (!ownerId || !dueAt);
 
   React.useEffect(() => {
     const api = handlers.current;
@@ -123,8 +130,14 @@ function Picker({
       .then((rows) => {
         if (!active) return;
         setProjects(rows);
-        setProjectId((current) => current || rows[0]?.id || "");
+        // The document's own project first (a meeting's), else the first one.
+        const preferred = api.defaultProjectId && rows.some((row) => row.id === api.defaultProjectId) ? api.defaultProjectId : "";
+        setProjectId((current) => current || preferred || rows[0]?.id || "");
       })
+      .catch(() => undefined);
+    void api
+      .people?.()
+      .then((rows) => active && setPeople(rows))
       .catch(() => undefined);
     return () => {
       active = false;
@@ -189,18 +202,52 @@ function Picker({
                 </option>
               ))}
             </Select>
+            <div className="grid gap-1.5 sm:grid-cols-2">
+              <Select
+                aria-label={t("semantic.picker.owner")}
+                value={ownerId}
+                className="h-8 text-caption"
+                onChange={(event) => setOwnerId(event.target.value)}
+              >
+                <option value="">{t("semantic.picker.noOwner")}</option>
+                {people.map((person) => (
+                  <option key={person.id} value={person.id}>
+                    {person.name}
+                  </option>
+                ))}
+              </Select>
+              <Input
+                type="date"
+                aria-label={t("semantic.picker.due")}
+                value={dueAt}
+                className="h-8 text-caption"
+                onChange={(event) => setDueAt(event.target.value)}
+              />
+            </div>
+            {missingOwnerOrDue ? (
+              <p id={`${id}-needs`} className="text-caption text-muted">
+                {t("semantic.picker.ownerAndDueRequired")}
+              </p>
+            ) : null}
             <Button
               type="button"
               variant="secondary"
               size="sm"
               className="w-full justify-start"
               loading={busy}
+              disabled={missingOwnerOrDue}
+              aria-describedby={missingOwnerOrDue ? `${id}-needs` : undefined}
               onClick={async () => {
                 const api = handlers.current;
-                if (!api) return;
+                if (!api || missingOwnerOrDue) return;
                 setBusy(true);
                 setError(null);
-                const created = await api.createTask(query.trim(), projectId || null).catch(() => null);
+                const created = await api
+                  .createTask(query.trim(), projectId || null, {
+                    ...(ownerId ? { assigneeId: ownerId } : {}),
+                    ...(dueAt ? { dueAt } : {}),
+                  })
+                  .catch(() => null);
                 setBusy(false);
                 if (created) onPick(created);
                 else setError(t("semantic.failed"));
@@ -399,6 +446,10 @@ function ObjectCard({
         />
         <ListChecks className="size-4 shrink-0 text-muted" aria-hidden />
         <span className={cn("min-w-0 flex-1 truncate text-ink", done && "text-muted line-through")}>{summary.title}</span>
+        {summary.assigneeName ? <span className="max-w-40 truncate text-caption text-muted">{summary.assigneeName}</span> : null}
+        {summary.dueAt ? (
+          <span className="whitespace-nowrap text-caption text-muted">{t("semantic.task.due", { date: format.date(summary.dueAt) })}</span>
+        ) : null}
         {summary.archived ? <Badge>{t("semantic.task.archived")}</Badge> : statusText ? <Badge>{statusText}</Badge> : null}
         {summary.href ? (
           <Link href={summary.href} className="inline-flex min-h-6 items-center text-caption text-muted underline hover:text-ink">
@@ -550,11 +601,13 @@ function QueryList({
         <ul className="divide-y divide-line">
           {current.rows.map((row) => (
             <li key={row.id} className="flex flex-wrap items-center gap-2 py-1.5">
-              <Link href={`/my-work?task=${row.id}`} className="min-w-0 flex-1 truncate text-ink hover:underline">
+              <Link href={row.href} className="min-w-0 flex-1 truncate text-ink hover:underline">
                 {row.title}
               </Link>
-              {row.status ? <Badge>{taskStatusLabel(row.status as TaskStatus, app)}</Badge> : null}
-              {row.due ? <span className="text-caption text-muted">{t("semantic.query.due", { date: format.date(row.due) })}</span> : null}
+              {row.status ? <Badge>{taskStatusLabel(row.status as TaskStatus, app)}</Badge> : row.statusLabel ? <Badge>{row.statusLabel}</Badge> : null}
+              {row.date && row.dateLabel ? (
+                <span className="text-caption text-muted">{t(`semantic.query.${row.dateLabel}`, { date: format.date(row.date) })}</span>
+              ) : null}
             </li>
           ))}
         </ul>
