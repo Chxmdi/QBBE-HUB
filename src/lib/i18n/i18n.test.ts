@@ -187,7 +187,7 @@ const SAME_OUTSIDE_FINANCE = new Set([
   "Date", "Description", "Direct", "Discussion", "Document", "Documents",
   "English", "Français", "Gmail", "Google", "Google Drive", "Impact",
   "Information", "Instructions", "Invitations", "Mentions", "Message", "Messages",
-  "Navigation", "Note", "Notes", "Notifications", "Occurrences", "Options", "Pages",
+  "Navigation", "Note", "Notes", "Notifications", "Occurrences", "Options", "Page", "Pages",
   "PDF", "QBBE Hub", "Question {n}", "Questions", "Rose", "Sections",
   "Signature", "Signatures", "Type", "URL", "VMS", "Version {number}",
   "Versions", "accent", "active", "association", "communications",
