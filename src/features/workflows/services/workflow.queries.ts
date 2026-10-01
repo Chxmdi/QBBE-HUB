@@ -1,4 +1,5 @@
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { activityRowToEvent, activityVerbsFor, type ActivityEventRow } from "../trigger";
 
 /**
  * Reads for the workflow screens, through the signed-in admin's own session so
@@ -98,16 +99,123 @@ export async function getWorkflow(organizationId: string, id: string): Promise<W
   return (data as WorkflowRow | null) ?? null;
 }
 
-export async function listRuns(ruleId: string, limit = 50): Promise<RunRow[]> {
+export const runOutcomes = ["running", "waiting", "succeeded", "skipped", "failed", "stopped"] as const;
+export type RunOutcomeFilter = (typeof runOutcomes)[number];
+
+export function parseOutcomeFilter(raw: string | undefined): RunOutcomeFilter | null {
+  return (runOutcomes as readonly string[]).includes(raw ?? "") ? (raw as RunOutcomeFilter) : null;
+}
+
+/** The last runs of one workflow, newest first, narrowed to one outcome when asked. */
+export async function listRuns(ruleId: string, limit = 50, outcome: RunOutcomeFilter | null = null): Promise<RunRow[]> {
   const db = await createSupabasePageClient();
-  const { data } = await db
+  let query = db
     .from("workflow_execution")
     .select(RUN_COLUMNS)
     .eq("rule_id", ruleId)
-    .eq("engine", "graph_v2")
-    .order("created_at", { ascending: false })
-    .limit(limit);
+    .eq("engine", "graph_v2");
+  if (outcome) query = query.eq("outcome", outcome);
+  const { data } = await query.order("created_at", { ascending: false }).limit(limit);
   return (data ?? []) as RunRow[];
+}
+
+export interface FailedRunRow extends RunRow {
+  rule_id: string;
+  rule_name: string;
+  /** The step that failed last, when its record exists. */
+  failedStep: { step_id: string; step_kind: string; error: string | null } | null;
+}
+
+/**
+ * Failed runs with the step that failed, newest first: one workflow's, or
+ * every workflow's in the organization when `ruleId` is null (U10).
+ */
+export async function listFailedRuns(
+  ruleId: string | null,
+  organizationId: string,
+  limit = 20,
+): Promise<FailedRunRow[]> {
+  const db = await createSupabasePageClient();
+  let query = db
+    .from("workflow_execution")
+    .select(`${RUN_COLUMNS}, rule_id, rule_name`)
+    .eq("organization_id", organizationId)
+    .eq("engine", "graph_v2")
+    .eq("outcome", "failed")
+    .not("rule_id", "is", null);
+  if (ruleId) query = query.eq("rule_id", ruleId);
+  const { data } = await query.order("created_at", { ascending: false }).limit(limit);
+  const runs = (data ?? []) as Omit<FailedRunRow, "failedStep">[];
+  if (runs.length === 0) return [];
+  const { data: steps } = await db
+    .from("workflow_execution_step")
+    .select("execution_id, position, step_id, step_kind, error")
+    .in("execution_id", runs.map((run) => run.id))
+    .eq("status", "failed")
+    .order("position", { ascending: false });
+  const failed = new Map<string, FailedRunRow["failedStep"]>();
+  for (const step of (steps ?? []) as { execution_id: string; step_id: string; step_kind: string; error: string | null }[]) {
+    if (!failed.has(step.execution_id)) {
+      failed.set(step.execution_id, { step_id: step.step_id, step_kind: step.step_kind, error: step.error });
+    }
+  }
+  return runs.map((run) => ({ ...run, failedStep: failed.get(run.id) ?? null }));
+}
+
+/** Other workflows an admin may pick as a sub-workflow. */
+export async function listWorkflowNames(organizationId: string): Promise<{ id: string; name: string }[]> {
+  const db = await createSupabasePageClient();
+  const { data } = await db
+    .from("workflow_rule")
+    .select("id, name")
+    .eq("organization_id", organizationId)
+    .eq("engine", "graph_v2")
+    .order("name", { ascending: true });
+  return (data ?? []) as { id: string; name: string }[];
+}
+
+export interface RecentEvent {
+  id: string;
+  verb: string;
+  objectType: string;
+  objectId: string;
+  summary: string;
+  occurredAt: string;
+  changes: { property: string; before: unknown; after: unknown }[];
+}
+
+const RECENT_EVENT_COLUMNS =
+  "id, organization_id, actor_id, verb, source_type, source_id, project_id, program_id, summary, metadata, created_at";
+
+/**
+ * The 20 most recent events a trigger would match, as examples for a test run
+ * (U10). Through the admin's session: activity_event is readable by members.
+ */
+export async function listRecentEvents(
+  organizationId: string,
+  trigger: { objectTypes: readonly string[]; verbs: readonly string[] },
+  limit = 20,
+): Promise<RecentEvent[]> {
+  const db = await createSupabasePageClient();
+  let query = db.from("activity_event").select(RECENT_EVENT_COLUMNS).eq("organization_id", organizationId);
+  if (trigger.objectTypes.length > 0) query = query.in("source_type", [...trigger.objectTypes]);
+  if (trigger.verbs.length > 0) query = query.in("verb", activityVerbsFor(trigger.verbs));
+  const { data } = await query.order("created_at", { ascending: false }).limit(limit);
+  const events: RecentEvent[] = [];
+  for (const row of (data ?? []) as ActivityEventRow[]) {
+    const event = activityRowToEvent(row);
+    if (!event) continue;
+    events.push({
+      id: event.id,
+      verb: event.verb,
+      objectType: event.object.type,
+      objectId: event.object.id,
+      summary: event.summary,
+      occurredAt: event.occurredAt,
+      changes: event.changes.map((change) => ({ property: change.property, before: change.before, after: change.after })),
+    });
+  }
+  return events;
 }
 
 export interface RunDetail extends RunRow {

@@ -3,30 +3,63 @@ import { workflowActionKeys } from "../actions-catalog";
 import {
   actionFields,
   defaultActionFields,
+  editorIssues,
+  editorStepKinds,
   editorToGraph,
   emptyEditorState,
+  END,
+  FOLLOWING,
   graphToEditor,
+  newStep,
+  newStepId,
   THIS_ITEM,
   type EditorState,
+  type EditorStep,
 } from "../editor-model";
-import { validateGraph } from "../graph";
+import { validateGraph, type WorkflowGraph } from "../graph";
 import { workflowsEn } from "../i18n/workflows.en";
 import { workflowsFrCA } from "../i18n/workflows.fr-CA";
+
+const meta = { name: "x", description: null, enabled: true };
+const known = new Set(workflowActionKeys);
 
 const state: EditorState = {
   ...emptyEditorState(),
   name: "Blocked tasks get attention",
   steps: [
-    { kind: "condition", path: "event.changes.status.after", op: "in", value: "blocked, waiting" },
-    { kind: "action", action: "task.set_priority", fields: { taskId: THIS_ITEM, priority: "high" } },
-    { kind: "action", action: "task.assign", fields: { taskId: THIS_ITEM, assigneeId: "" } },
+    { id: "step-1", label: "", kind: "condition", when: { match: "all", tests: [{ path: "event.changes.status.after", op: "in", value: "blocked, waiting" }] }, next: FOLLOWING },
+    { id: "step-2", label: "", kind: "action", action: "task.set_priority", fields: { taskId: THIS_ITEM, priority: "high" }, retry: null, next: FOLLOWING },
+    { id: "step-3", label: "", kind: "action", action: "task.assign", fields: { taskId: THIS_ITEM, assigneeId: "" }, retry: null, next: FOLLOWING },
+  ],
+};
+
+/** A graph that uses every step kind, as JSON mode alone could hold before. */
+const everyKind: WorkflowGraph = {
+  version: 1,
+  trigger: { objectTypes: ["task"], verbs: ["updated"], changedProperty: "status" },
+  start: "check",
+  steps: [
+    { id: "check", kind: "condition", label: "Only blocked", when: { or: [
+      { path: "event.changes.status.after", op: "eq", value: "blocked" },
+      { path: "event.changes.priority.after", op: "in", value: ["high", "critical"] },
+    ] }, next: "route" },
+    { id: "route", kind: "branch", when: { path: "event.changes.assignee.after", op: "is_empty" }, then: "each", else: "pause" },
+    { id: "each", kind: "loop", items: "event.changes.watchers.after", body: "raise", next: "pause" },
+    { id: "raise", kind: "action", action: "task.set_priority", input: { taskId: THIS_ITEM, priority: "high" }, retry: { attempts: 3, backoffSeconds: 30 }, next: null },
+    { id: "pause", kind: "wait", seconds: 600, next: "until" },
+    { id: "until", kind: "wait", until: "event.changes.due.after", next: "approve" },
+    { id: "approve", kind: "approval", subjectType: "contract", title: "Approve {{event.summary}}", description: "Please look", next: "review" },
+    { id: "review", kind: "review", reviewer: "{{event.actor.id}}", instructions: "Check the budget", next: "hook" },
+    { id: "hook", kind: "webhook", url: "https://example.com/hook", body: { id: "{{event.object.id}}", nested: { n: 1 } }, retry: { attempts: 2, backoffSeconds: 10 }, next: "mail" },
+    { id: "mail", kind: "email", to: "{{event.actor.email}}", subject: "Heads up", body: "Task {{event.object.id}} changed.", next: "sub" },
+    { id: "sub", kind: "subworkflow", workflowId: "11111111-2222-4333-8444-555555555555", next: null },
   ],
 };
 
 describe("editor model", () => {
   it("turns the list into a valid graph run top to bottom", () => {
     const graph = editorToGraph(state);
-    expect(validateGraph(graph, new Set(workflowActionKeys)).ok).toBe(true);
+    expect(validateGraph(graph, known).ok).toBe(true);
     expect(graph.start).toBe("step-1");
     expect(graph.steps.map((step) => [step.id, (step as { next?: string | null }).next])).toEqual([
       ["step-1", "step-2"],
@@ -40,24 +73,81 @@ describe("editor model", () => {
 
   it("round-trips through a stored graph", () => {
     const back = graphToEditor(editorToGraph(state), { name: state.name, description: null, enabled: true });
-    expect(back?.steps).toEqual([
-      { kind: "condition", path: "event.changes.status.after", op: "in", value: "blocked, waiting" },
-      { kind: "action", action: "task.set_priority", fields: { taskId: THIS_ITEM, priority: "high" } },
-      { kind: "action", action: "task.assign", fields: { taskId: THIS_ITEM, assigneeId: "" } },
-    ]);
+    expect(back?.steps).toEqual(state.steps);
   });
 
   it("drops the value for empty tests and accepts no steps", () => {
-    const graph = editorToGraph({ ...state, steps: [{ kind: "condition", path: "event.summary", op: "is_empty", value: "x" }] });
+    const graph = editorToGraph({ ...state, steps: [{ id: "a", label: "", kind: "condition", when: { match: "all", tests: [{ path: "event.summary", op: "is_empty", value: "x" }] }, next: FOLLOWING }] });
     expect(graph.steps[0]).toMatchObject({ when: { path: "event.summary", op: "is_empty" } });
     expect("value" in (graph.steps[0] as { when: object }).when).toBe(false);
     expect(editorToGraph(emptyEditorState())).toMatchObject({ start: null, steps: [] });
   });
 
-  it("refuses to show a graph the list editor cannot represent", () => {
+  it("shows every step kind in the list and round-trips it unchanged", () => {
+    expect(validateGraph(everyKind, known).ok).toBe(true);
+    const editor = graphToEditor(everyKind, meta);
+    expect(editor).not.toBeNull();
+    expect(new Set(editor!.steps.map((step) => step.kind))).toEqual(new Set(editorStepKinds));
+    const back = editorToGraph(editor!);
+    expect(validateGraph(back, known).ok).toBe(true);
+    expect(back).toEqual(everyKind);
+  });
+
+  it.each(editorStepKinds)("a new %s step saves as a valid graph and comes back the same", (kind) => {
+    const steps: EditorStep[] = [];
+    const step = newStep(kind, steps);
+    // Fill what a person must type before saving.
+    if (step.kind === "loop") {
+      steps.push({ ...step, items: "event.changes.watchers.after", body: FOLLOWING, next: END });
+      steps.push({ ...newStep("action", steps), next: END } as EditorStep);
+    } else {
+      if (step.kind === "subworkflow") step.workflowId = "11111111-2222-4333-8444-555555555555";
+      if (step.kind === "approval") step.title = "Approve";
+      if (step.kind === "review") Object.assign(step, { reviewer: THIS_ITEM, instructions: "Look" });
+      if (step.kind === "webhook") step.url = "https://example.com/x";
+      if (step.kind === "email") Object.assign(step, { to: "a@example.com", subject: "s", body: "b" });
+      steps.push(step);
+    }
+    const editor: EditorState = { ...emptyEditorState(), name: "n", steps };
+    expect(editorIssues(editor)).toEqual([]);
+    const graph = editorToGraph(editor);
+    const checked = validateGraph(graph, known);
+    expect(checked.ok, JSON.stringify(checked)).toBe(true);
+    const back = graphToEditor(graph, meta);
+    expect(back?.steps.map((item) => item.kind)).toEqual(steps.map((item) => item.kind));
+    expect(editorToGraph(back!)).toEqual(graph);
+  });
+
+  it("keeps jumps to named steps and the end", () => {
+    const editor = graphToEditor(everyKind, meta)!;
+    const route = editor.steps.find((step) => step.id === "route");
+    expect(route).toMatchObject({ kind: "branch", then: FOLLOWING, else: { to: "step", id: "pause" } });
+    const raise = editor.steps.find((step) => step.id === "raise");
+    expect(raise).toMatchObject({ next: END, retry: { attempts: 3, backoffSeconds: 30 } });
+  });
+
+  it("refuses to show a condition with a group inside a group", () => {
     const graph = editorToGraph(state);
-    const nested = { ...graph, steps: [{ ...graph.steps[0], when: { and: [{ path: "a", op: "eq" as const, value: 1 }] } }, ...graph.steps.slice(1)] };
-    expect(graphToEditor(nested, { name: "", description: null, enabled: true })).toBeNull();
+    const nested = { ...graph, steps: [{ ...graph.steps[0], when: { and: [{ or: [{ path: "a", op: "eq" as const, value: 1 }] }] } }, ...graph.steps.slice(1)] };
+    expect(graphToEditor(nested as WorkflowGraph, meta)).toBeNull();
+  });
+
+  it("names what the list can see is wrong before saving", () => {
+    const steps: EditorStep[] = [
+      { ...newStep("webhook", []), id: "w", body: "{ not json" } as EditorStep,
+      { ...newStep("loop", []), id: "l", body: END } as EditorStep,
+      { ...newStep("subworkflow", []), id: "s" } as EditorStep,
+      { ...newStep("condition", []), id: "c", when: { match: "all", tests: [] } } as EditorStep,
+    ];
+    expect(editorIssues({ ...emptyEditorState(), steps }).map((issue) => issue.code)).toEqual([
+      "webhook_body_json", "loop_body", "subworkflow_missing", "condition_empty",
+    ]);
+  });
+
+  it("gives new steps ids no step uses yet", () => {
+    expect(newStepId([{ id: "step-1" }, { id: "step-3" }])).toBe("step-4");
+    expect(newStepId([{ id: "step-2" }])).toBe("step-3");
+    expect(newStepId([])).toBe("step-1");
   });
 
   it("offers defaults for every action field", () => {
@@ -81,10 +171,16 @@ describe("dictionaries", () => {
     for (const text of values(workflowsFrCA)) expect(text.trim()).not.toBe("");
   });
 
-  it("labels every action in both languages", () => {
+  it("labels every action and step kind in both languages", () => {
     for (const key of workflowActionKeys) {
       expect(workflowsEn.actions[key]).toBeTruthy();
       expect(workflowsFrCA.actions[key]).toBeTruthy();
+      expect(workflowsEn.test.wouldHave[key]).toBeTruthy();
+      expect(workflowsFrCA.test.wouldHave[key]).toBeTruthy();
+    }
+    for (const kind of editorStepKinds) {
+      expect(workflowsEn.steps.kinds[kind]).toBeTruthy();
+      expect(workflowsFrCA.steps.kinds[kind]).toBeTruthy();
     }
   });
 });

@@ -2,7 +2,8 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { Formatters } from "@/lib/i18n/format";
 import { fill, type WorkflowsMessages } from "../i18n";
-import type { RunRow } from "../services/workflow.queries";
+import type { RunOutcomeFilter, RunRow } from "../services/workflow.queries";
+import { OutcomeFilter } from "./outcome-filter";
 
 const TONE: Record<string, "success" | "danger" | "warning" | "neutral" | "info"> = {
   succeeded: "success",
@@ -21,16 +22,22 @@ export function RunHistory({
   f,
   timeZone,
   workflowId,
+  outcome = null,
 }: {
   runs: RunRow[];
   m: WorkflowsMessages;
   f: Formatters;
   timeZone: string;
   workflowId: string;
+  /** The outcome the list is narrowed to, from the page's query string. */
+  outcome?: RunOutcomeFilter | null;
 }) {
   return (
     <section className="rounded-(--radius-md) border border-line bg-surface p-4 sm:p-5" aria-labelledby="workflow-history">
-      <h2 id="workflow-history" className="section-heading mb-3">{m.history.heading}</h2>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 id="workflow-history" className="section-heading">{m.history.heading}</h2>
+        <OutcomeFilter value={outcome} m={m} />
+      </div>
       {runs.length === 0 ? (
         <p className="text-sm text-muted">{m.history.empty}</p>
       ) : (
