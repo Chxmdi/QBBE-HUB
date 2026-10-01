@@ -104,6 +104,17 @@ the "later" bucket always holds the task.
   override read. `WORKSPACE_OS_FLAGS=all` still turns them on, but a named
   list (`WORKSPACE_OS_FLAGS=wos_meetings_v2`) is parsed in two places.
 
+- **F7. The qa-matrix sweep covers no Workspace OS route.** [lead / each
+  stream] `tests/e2e/qa-matrix.spec.ts` sweeps its own `ROUTES` list plus
+  `tests/e2e/routes/*.json`, and no file there names `/home`, `/lenses/*`,
+  `/pages`, `/spaces`, `/objects`, `/meetings-v2`, `/capture`, `/commands`,
+  `/apps`, `/forms-v2` or `/workflows-v2`. Its 25 green tests below therefore
+  say nothing about the new screens' overflow at six widths, 200% zoom or
+  themes; each Workspace OS spec runs its own axe pass instead. A
+  `tests/e2e/routes/workspace-os.json` with a `qa` list is the fix, but it
+  can only ship with the all-on CI job (section 4): under the off job those
+  routes answer "Not found".
+
 ## 3. Regression with every switch on
 
 One local Supabase, seeded once, the four signed-in parts run one after the
@@ -120,9 +131,9 @@ failure below, confirmed by a rerun with them set.
 | signed-in 2/4 (32 files) | 56 passed, 9 failed, 2 did not run | 10.2 min (611 s) |
 | signed-in 3/4 (26 files) | 38 passed, 14 failed | 7.3 min (439 s) |
 | signed-in 4/4 (27 files) | 63 passed, 11 failed | 9.6 min (576 s) |
-| qa-matrix 1/3 | QA1 |
-| qa-matrix 2/3 | QA2 |
-| qa-matrix 3/3 | QA3 |
+| qa-matrix 1/3 | 9 passed | 7.2 min (434 s) |
+| qa-matrix 2/3 | 8 passed | 6.4 min (387 s) |
+| qa-matrix 3/3 | 8 passed | 1.2 min (75 s) |
 
 ### 3a. Tests that assume the switch is off (fail by design under `all`)
 
