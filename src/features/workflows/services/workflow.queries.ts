@@ -1,4 +1,7 @@
+import type { LensCatalog } from "@/lib/query/catalog";
+import { loadCatalog } from "@/lib/query/run";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { activityRowToEvent, activityVerbsFor, type ActivityEventRow } from "../trigger";
 
 /**
@@ -255,4 +258,13 @@ export async function listRunSteps(executionId: string): Promise<StepRow[]> {
     .eq("execution_id", executionId)
     .order("position", { ascending: true });
   return (data ?? []) as StepRow[];
+}
+
+/**
+ * The lens catalog, for the property pickers (U10). It throws when the read
+ * fails, so an outage reaches the error boundary instead of showing pickers
+ * with nothing in them.
+ */
+export async function loadWorkflowCatalog(): Promise<LensCatalog> {
+  return loadCatalog(await createSupabaseServerClient());
 }

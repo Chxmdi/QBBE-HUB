@@ -172,7 +172,7 @@ export const workflowsEn = {
     backoff: "Wait before the second attempt (seconds)",
     findRecord: "Find a {type}",
     thisItem: "This item (the one that changed)",
-    recordId: "Item id (advanced)",
+    recordId: "Task id (advanced)",
     issues: {
       webhook_body_json: "Step {id}: the webhook body is not a JSON object.",
       loop_body: "Step {id}: choose the first step of the loop body.",

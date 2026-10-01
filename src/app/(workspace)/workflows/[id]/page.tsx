@@ -6,8 +6,6 @@ import { PageHeader } from "@/components/shared/page-header";
 import { requireAdminAal2 } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getFormatters, getLocale } from "@/lib/i18n/server";
-import { loadCatalog } from "@/lib/query/run";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { JsonWorkflowEditor, StopSwitch } from "@/features/workflows/components/advanced-controls";
 import { FailureHistory } from "@/features/workflows/components/failure-history";
 import { SigningKeyPanel } from "@/features/workflows/components/review-and-signing";
@@ -23,6 +21,7 @@ import {
   listRecentEvents,
   listRuns,
   listWorkflowNames,
+  loadWorkflowCatalog,
   parseOutcomeFilter,
 } from "@/features/workflows/services/workflow.queries";
 
@@ -67,7 +66,7 @@ export default async function WorkflowPage({
     listFailedRuns(workflow.id, session.organizationId),
     listWorkflowNames(session.organizationId),
     listRecentEvents(session.organizationId, trigger),
-    createSupabaseServerClient().then(loadCatalog).catch(() => ({})),
+    loadWorkflowCatalog(),
   ]);
   const dateTime = (iso: string) => f.dateTime(iso, session.timeZone);
 

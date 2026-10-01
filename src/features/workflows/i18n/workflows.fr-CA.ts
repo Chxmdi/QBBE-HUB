@@ -174,7 +174,7 @@ export const workflowsFrCA: WorkflowsMessages = {
     backoff: "Attente avant la deuxième tentative (secondes)",
     findRecord: "Trouver : {type}",
     thisItem: "Cet élément (celui qui a changé)",
-    recordId: "Identifiant de l’élément (avancé)",
+    recordId: "Identifiant de la tâche (avancé)",
     issues: {
       webhook_body_json: "Étape {id} : le corps du webhook n’est pas un objet JSON.",
       loop_body: "Étape {id} : choisissez la première étape du corps de la boucle.",

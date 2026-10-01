@@ -5,12 +5,10 @@ import { PageHeader } from "@/components/shared/page-header";
 import { requireAdminAal2 } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
-import { loadCatalog } from "@/lib/query/run";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { WorkflowEditor } from "@/features/workflows/components/workflow-editor";
 import { emptyEditorState } from "@/features/workflows/editor-model";
 import { workflowMessages } from "@/features/workflows/i18n";
-import { listWorkflowNames } from "@/features/workflows/services/workflow.queries";
+import { listWorkflowNames, loadWorkflowCatalog } from "@/features/workflows/services/workflow.queries";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: workflowMessages(await getLocale()).newTitle };
@@ -24,7 +22,7 @@ export default async function NewWorkflowPage() {
   const m = workflowMessages(locale);
   const [workflows, catalog] = await Promise.all([
     listWorkflowNames(session.organizationId),
-    createSupabaseServerClient().then(loadCatalog).catch(() => ({})),
+    loadWorkflowCatalog(),
   ]);
   return (
     <div>

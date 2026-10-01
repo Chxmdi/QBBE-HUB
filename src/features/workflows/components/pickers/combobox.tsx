@@ -88,6 +88,11 @@ export function Combobox({
       .filter((group) => group.options.length > 0);
   }, [groups, onQuery, query]);
   const flat = React.useMemo(() => shown.flatMap((group) => group.options), [shown]);
+  /** Each shown group's options with their place in the flat list. */
+  const indexed = React.useMemo(() => {
+    let position = 0;
+    return shown.map((group) => ({ ...group, options: group.options.map((option) => ({ option, index: position++ })) }));
+  }, [shown]);
 
   React.useEffect(() => {
     if (!onQuery || !open) return;
@@ -95,9 +100,8 @@ export function Combobox({
     return () => clearTimeout(timer);
   }, [onQuery, open, query]);
 
-  React.useEffect(() => {
-    if (highlight >= flat.length) setHighlight(0);
-  }, [flat.length, highlight]);
+  // The list can shrink under the highlight; it then falls back to the first option.
+  const current = highlight < flat.length ? highlight : 0;
 
   const choose = (option: ComboboxOption) => {
     onSelect(option);
@@ -110,15 +114,15 @@ export function Combobox({
     if (event.key === "ArrowDown") {
       event.preventDefault();
       if (!open) setOpen(true);
-      else setHighlight((current) => (flat.length ? (current + 1) % flat.length : 0));
+      else setHighlight(flat.length ? (current + 1) % flat.length : 0);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       if (!open) setOpen(true);
-      else setHighlight((current) => (flat.length ? (current - 1 + flat.length) % flat.length : 0));
+      else setHighlight(flat.length ? (current - 1 + flat.length) % flat.length : 0);
     } else if (event.key === "Enter") {
-      if (open && flat[highlight]) {
+      if (open && flat[current]) {
         event.preventDefault();
-        choose(flat[highlight]);
+        choose(flat[current]);
       } else if (open) {
         event.preventDefault();
       }
@@ -133,8 +137,7 @@ export function Combobox({
     }
   };
 
-  const activeId = open && flat[highlight] ? `${id}-option-${highlight}` : undefined;
-  let position = -1;
+  const activeId = open && flat[current] ? `${id}-option-${current}` : undefined;
 
   return (
     <div className={cn("relative", className)}>
@@ -188,30 +191,28 @@ export function Combobox({
         role="listbox"
         aria-label={label}
         hidden={!open}
-        className="absolute left-0 right-0 z-20 mt-1 max-h-72 overflow-auto rounded-(--radius-sm) border border-line bg-surface p-1 shadow-lg"
+        className="absolute left-0 right-0 z-(--z-overlay) mt-1 max-h-72 overflow-auto rounded-(--radius-sm) border border-line bg-surface p-1 shadow-(--shadow-pop)"
       >
         {loading ? <li role="presentation" className="px-2 py-1.5 text-[13px] text-muted">{m.searching}</li> : null}
         {!loading && flat.length === 0 ? <li role="presentation" className="px-2 py-1.5 text-[13px] text-muted">{m.noResults}</li> : null}
-        {shown.map((group) => (
+        {indexed.map((group) => (
           <li key={group.label} role="presentation">
-            {shown.length > 1 || group.label ? (
+            {indexed.length > 1 || group.label ? (
               <div role="presentation" className="px-2 pb-0.5 pt-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-muted">
                 {group.label}
               </div>
             ) : null}
             <ul role="group" aria-label={group.label || label}>
-              {group.options.map((option) => {
-                position += 1;
-                const index = position;
+              {group.options.map(({ option, index }) => {
                 return (
                   <li
                     key={option.id}
                     id={`${id}-option-${index}`}
                     role="option"
-                    aria-selected={index === highlight}
+                    aria-selected={index === current}
                     className={cn(
                       "cursor-pointer rounded-(--radius-xs) px-2 py-1.5 text-sm text-ink",
-                      index === highlight ? "bg-surface-soft" : "",
+                      index === current ? "bg-surface-soft" : "",
                     )}
                     onMouseDown={(event) => {
                       event.preventDefault();
