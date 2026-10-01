@@ -40,8 +40,11 @@ test("a space template previews real dates and creates its projects and tasks", 
     await page.goto("/templates-v2");
     await expect(page.getByRole("heading", { name: "Templates", level: 1 })).toBeVisible();
     expect(await axeProblems(page), "gallery accessibility").toEqual([]);
-    await page.getByRole("link", { name: "Spaces", exact: true }).click();
-    await expect(page.getByRole("link", { name: "Spaces", exact: true })).toHaveAttribute("aria-current", "page");
+    // The scope filter's link, not the sidebar's: with wos_spaces on, the menus
+    // (I3) list Spaces too, and both read "Spaces".
+    const scope = page.getByRole("navigation", { name: "Show" });
+    await scope.getByRole("link", { name: "Spaces", exact: true }).click();
+    await expect(scope.getByRole("link", { name: "Spaces", exact: true })).toHaveAttribute("aria-current", "page");
     await page.getByRole("link", { name: "Community event", exact: true }).click();
 
     await expect(page.getByRole("heading", { name: "Community event", level: 1 })).toBeVisible();
