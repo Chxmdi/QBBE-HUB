@@ -155,3 +155,45 @@ describe("undo", () => {
     expect(sameValue("1", 1)).toBe(false);
   });
 });
+
+describe("an action that changes nothing", () => {
+  const noop = {
+    key: "notification.send",
+    label: { en: "Send", fr: "Envoyer" },
+    capability: "edit_content" as const,
+    targets: () => [A],
+    run: async (): Promise<Change[]> => [],
+  };
+
+  it("runs an action with no targets and leaves the decision to the action itself", async () => {
+    const { registry } = setup({});
+    let ran = false;
+    registry.register({
+      ...noop,
+      key: "object.request_approval",
+      targets: () => [],
+      run: async (): Promise<Change[]> => {
+        ran = true;
+        return [{ kind: "create", object: { id: B, type: "approval_item" }, values: {} }];
+      },
+    });
+    expect(await registry.run("object.request_approval", {}, context([A, B]))).toMatchObject({ ok: true });
+    expect(ran).toBe(true);
+  });
+
+  it("fails by default, so a bulk edit never records an empty change set", async () => {
+    const { registry, store } = setup({});
+    registry.register(noop);
+    expect(await registry.run("notification.send", {}, context())).toMatchObject({ ok: false, reason: "failed", message: "Nothing changed." });
+    expect(store.sets.size).toBe(0);
+  });
+
+  it("succeeds with an empty, unstored change set when the runner asks for it", async () => {
+    const { store, writer } = setup({});
+    const registry = createActionRegistry({ store, writer, onEmpty: "ok" });
+    registry.register(noop);
+    const result = await registry.run("notification.send", {}, context());
+    expect(result).toMatchObject({ ok: true, changeSet: { actionKey: "notification.send", changes: [], undoOf: null } });
+    expect(store.sets.size).toBe(0);
+  });
+});

@@ -22,7 +22,7 @@ async function expectNoSeriousAxeViolations(page: import("@playwright/test").Pag
 test.describe("spaces", () => {
   test.afterEach(() => setSwitch(false));
 
-  test("the page stays hidden while the switch is off", async ({ page }) => {
+  test("the page stays hidden while the switch is off [switch off]", async ({ page }) => {
     setSwitch(false);
     await signIn(page, "staff");
     await page.goto("/spaces");

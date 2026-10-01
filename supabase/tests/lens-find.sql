@@ -38,6 +38,18 @@ begin
   update public.task set program_id = v_program_b where title = 'Zyxfind rapport annuel';
   insert into public.task (organization_id, title, created_by, archived_at)
   values (v_org, 'Zyxfind archived école', v_owner, now());
+
+  -- Pages (M4a): a workspace page found by a word in its blocks, a private
+  -- page of the owner's, and a page in the trash.
+  insert into public.page (id, organization_id, title, visibility, created_by)
+  values ('f1d00000-0000-4000-8000-000000000001', v_org, 'Zyxfind guide des bénévoles', 'workspace', v_owner),
+         ('f1d00000-0000-4000-8000-000000000002', v_org, 'Zyxfind notes privées', 'private', v_owner),
+         ('f1d00000-0000-4000-8000-000000000003', v_org, 'Zyxfind page supprimée', 'workspace', v_owner);
+  update public.page set deleted_at = now() where id = 'f1d00000-0000-4000-8000-000000000003';
+  insert into public.editor_document (object_id, object_type, organization_id, content, created_by)
+  values ('f1d00000-0000-4000-8000-000000000001', 'page', v_org,
+          '{"version":1,"blocks":[{"id":"b1","type":"paragraph","content":[{"type":"text","text":"Les RÉUNIONS d''accueil ont lieu le mardi zyxquartz."}]}]}'::jsonb,
+          v_owner);
 end;
 $$;
 
@@ -90,6 +102,19 @@ begin
 
   select array_agg(result_type order by result_type) into v_titles from public.find('zyxfind ecole');
   perform tests.ok(v_titles = array['project', 'task'], 'every type is searched by default');
+
+  -- Pages: by title, by a word in the blocks, by French stem; the trash is left out.
+  select array_agg(title order by title collate "C") into v_titles from public.find('zyxfind guide', array['page']);
+  perform tests.ok(v_titles = array['Zyxfind guide des bénévoles'], 'a page is found by its title');
+  select array_agg(title order by title collate "C") into v_titles from public.find('zyxquartz', array['page']);
+  perform tests.ok(v_titles = array['Zyxfind guide des bénévoles'], 'a page is found by a word in its blocks');
+  select array_agg(title order by title collate "C") into v_titles from public.find('réunion zyxfind', array['page']);
+  perform tests.ok(v_titles = array['Zyxfind guide des bénévoles'], 'page blocks match by French stem ("réunion" finds "RÉUNIONS")');
+  perform tests.ok((select href from public.find('zyxquartz', array['page'])) = '/pages/f1d00000-0000-4000-8000-000000000001', 'a page result links to the page');
+  perform tests.ok((select snippet from public.find('zyxquartz', array['page'])) like 'Les RÉUNIONS%', 'a page result shows its text as the snippet');
+  perform tests.ok(not exists (select 1 from public.find('supprimée zyxfind', array['page'])), 'a page in the trash is left out');
+  select array_agg(result_type order by result_type) into v_titles from public.find('zyxfind');
+  perform tests.ok('page' = any (v_titles), 'pages are searched by default');
   select array_agg(result_type) into v_titles from public.find('zyxfind ecole', array['project']);
   perform tests.ok(v_titles = array['project'], 'the type filter narrows the result');
 
@@ -103,7 +128,7 @@ begin
 
   perform tests.ok((select title from public.find('zyxfind') limit 1) = 'Zyxfind', 'an exact title ranks first');
   perform tests.ok((select count(*) from public.find('zyxfind', null, null, 2)) = 2
-      and (select max(total) from public.find('zyxfind', null, null, 2)) = 4,
+      and (select max(total) from public.find('zyxfind', null, null, 2)) = 6,
     'paging returns the page and the total');
   perform tests.ok((select count(*) from public.find('zyxfind', null, null, 2, 2)) = 2, 'offset pages');
   perform tests.ok((select count(*) from public.find('z')) = 0, 'a one-character query finds nothing');
@@ -132,6 +157,28 @@ begin
     perform tests.ok(v_find = v_direct, format('%s: Find returns exactly the projects they can select', v_person));
     reset role;
   end loop;
+end;
+$$;
+
+-- 4b. Pages follow page_read: the owner sees the private page, staff see the
+-- workspace page only, and a volunteer (no workspace pages) sees nothing.
+do $$
+declare
+  v_titles text[];
+begin
+  perform tests.authenticate('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'aal2');
+  select array_agg(title order by title collate "C") into v_titles from public.find('zyxfind', array['page'], null, 100);
+  perform tests.ok(v_titles = array['Zyxfind guide des bénévoles', 'Zyxfind notes privées'], 'the owner finds their private page and the workspace page');
+  reset role;
+  perform tests.authenticate('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2', 'aal1');
+  select array_agg(title order by title collate "C") into v_titles from public.find('zyxfind', array['page'], null, 100);
+  perform tests.ok(v_titles = array['Zyxfind guide des bénévoles'], 'staff find the workspace page and not the owner''s private page');
+  reset role;
+  perform tests.authenticate('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', 'aal1');
+  perform tests.ok(coalesce((select count(*) from public.find('zyxfind', array['page'], null, 100)), 0)
+      = (select count(*) from public.page where title like 'Zyxfind%' and deleted_at is null),
+    'a volunteer finds exactly the pages they can select');
+  reset role;
 end;
 $$;
 

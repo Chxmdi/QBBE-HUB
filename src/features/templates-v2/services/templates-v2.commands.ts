@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
-import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { TEMPLATES_FLAG } from "@/features/templates-v2/gate";
 import { templatesV2Text } from "@/features/templates-v2/messages";
@@ -20,6 +20,31 @@ import {
 } from "@/features/templates-v2/template";
 
 export type TemplatesV2Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
+
+// What the builder sends, checked before it is read: a Server Action is a
+// public endpoint and the browser's types do not travel with the request.
+const bilingual = z.object({ en: z.string().max(5000), fr: z.string().max(5000) });
+const createSchema = z.object({
+  typeKey: z.enum(["task", "project", "page"]),
+  name: bilingual,
+  description: bilingual,
+  title: bilingual,
+  duration: z.string().max(20),
+  tasks: z.array(z.object({ en: z.string().max(2000), fr: z.string().max(2000), due: z.string().max(20) })).max(200),
+  /** A page template's rows (U8). */
+  blocks: z
+    .array(
+      z.object({
+        kind: z.enum(["heading", "paragraph", "todo"]),
+        en: z.string().max(5000),
+        fr: z.string().max(5000),
+        due: z.string().max(20),
+      }),
+    )
+    .max(500)
+    .optional(),
+  publish: z.boolean(),
+});
 
 async function messages() {
   return templatesV2Text(await getLocale());
@@ -36,7 +61,9 @@ export async function applyTemplateV2(input: {
 }): Promise<TemplatesV2Result<{ created: { type: string; id: string }[] }>> {
   const m = await messages();
   if (!(await isEnabled(TEMPLATES_FLAG))) return { ok: false, error: m.errors.forbidden };
-  await requireSession();
+  const session = await requireSession();
+  const limited = await enforceRateLimit("template:write", session.userId);
+  if (limited) return limited;
   if (!uuid.safeParse(input.templateId).success) return { ok: false, error: m.errors.unavailable };
   if (!isCalendarDate(input.start)) return { ok: false, error: m.errors.startDate };
   for (const id of [input.programId, input.projectId]) {
@@ -160,32 +187,31 @@ export async function createTemplateV2(input: {
   if (!(await isEnabled(TEMPLATES_FLAG))) return { ok: false, error: m.errors.forbidden };
   const session = await requireSession();
   if (!session.isStaff) return { ok: false, error: m.errors.forbidden };
-  if (input.typeKey !== "task" && input.typeKey !== "project" && input.typeKey !== "page") {
-    return { ok: false, error: m.errors.generic };
-  }
-  const name = { en: input.name.en.trim().slice(0, 200), fr: input.name.fr.trim().slice(0, 200) };
+  const limited = await enforceRateLimit("template:write", session.userId);
+  if (limited) return limited;
+  const parsed = createSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: m.errors.generic };
+  const draft = parsed.data;
+  const name = { en: draft.name.en.trim().slice(0, 200), fr: draft.name.fr.trim().slice(0, 200) };
   if (!name.en || !name.fr) return { ok: false, error: m.errors.name };
   const built =
-    input.typeKey === "page"
-      ? buildPageBody(
-          input.title,
-          (input.blocks ?? []).slice(0, 500).filter((b) => ["heading", "paragraph", "todo"].includes(b.kind)),
-        )
-      : buildBody(input.typeKey, input.title, input.duration, input.tasks.slice(0, 200));
+    draft.typeKey === "page"
+      ? buildPageBody(draft.title, draft.blocks ?? [])
+      : buildBody(draft.typeKey, draft.title, draft.duration, draft.tasks.slice(0, 200));
   if (!built.ok) return { ok: false, error: m.errors[built.problem] };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase
     .from("template_v2")
     .insert({
       organization_id: session.organizationId,
-      scope: input.typeKey === "page" ? "page" : "object",
-      type_key: input.typeKey === "page" ? null : input.typeKey,
+      scope: draft.typeKey === "page" ? "page" : "object",
+      type_key: draft.typeKey === "page" ? null : draft.typeKey,
       name_en: name.en,
       name_fr: name.fr,
-      description_en: input.description.en.trim().slice(0, 2000) || null,
-      description_fr: input.description.fr.trim().slice(0, 2000) || null,
+      description_en: draft.description.en.trim().slice(0, 2000) || null,
+      description_fr: draft.description.fr.trim().slice(0, 2000) || null,
       body: built.body,
-      status: input.publish ? "published" : "draft",
+      status: draft.publish ? "published" : "draft",
     })
     .select("id")
     .single();

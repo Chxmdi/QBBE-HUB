@@ -82,6 +82,7 @@ export const versionsFr: Catalogue<typeof versionsEn> = {
     property: "Propriété",
     noChanges: "Aucune différence entre ces deux versions.",
     changes: "{count} différences",
+    oneChange: "1 différence",
     added: "Ajouté",
     removed: "Retiré",
     changed: "Modifié",

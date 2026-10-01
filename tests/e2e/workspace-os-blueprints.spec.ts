@@ -101,7 +101,7 @@ test("owner draws, previews, approves, builds and undoes a blueprint", async ({ 
   expect(sql(`select count(*) from public.blueprint_build b join public.blueprint p on p.id = b.blueprint_id where p.key = '${KEY}' and b.undone_at is null;`)).toBe("0");
 });
 
-test("staff can look but not change; volunteers and a switched-off module see nothing", async ({ page }) => {
+test("staff can look but not change; volunteers see nothing", async ({ page }) => {
   await signIn(page, "staff");
   await page.goto("/builder");
   await expect(page.getByText("Only owners and admins can change blueprints.")).toBeVisible();
@@ -112,8 +112,9 @@ test("staff can look but not change; volunteers and a switched-off module see no
   await page.goto("/builder");
   await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Blueprints" })).toHaveCount(0);
-  await signOut(page);
+});
 
+test("the designer is hidden while the switch is off [switch off]", async ({ page }) => {
   sql("update public.feature_flag set enabled = false where key = 'wos_objects' and organization_id is null;");
   try {
     await signIn(page, "staff");

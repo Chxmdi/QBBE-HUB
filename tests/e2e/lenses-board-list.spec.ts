@@ -28,12 +28,15 @@ const U = {
 test.beforeAll(() => {
   previous = sql("select coalesce((select enabled from public.feature_flag where key = 'wos_lenses'), false)");
   sql("update public.feature_flag set enabled = true where key = 'wos_lenses'");
-  // Tasks inside every seeded project (so scoped grants decide visibility),
+  // Tasks inside the seeded projects (so scoped grants decide visibility),
   // plus tasks with no project, across assignees, reviewers, approvers, task
-  // roles and statuses (completed ones are outside the default view).
+  // roles and statuses (completed ones are outside the default view). The
+  // oldest eight projects: the seed's two come first, and specs that run
+  // earlier on the same database leave projects behind, which would grow this
+  // fixture past the 300 tasks the old board and My Work load.
   sql(`
     with org as (select organization_id as id from public.organization_membership where user_id = '${U.owner}'),
-    projects as (select id, program_id, row_number() over (order by name) as n from public.project where archived_at is null),
+    projects as (select id, program_id, row_number() over (order by created_at, name) as n from public.project where archived_at is null),
     people(n, person) as (values (1, '${U.owner}'::uuid), (2, '${U.staff}'::uuid), (3, '${U.volunteer}'::uuid),
       (4, '${U.lead}'::uuid), (5, '${U.pm}'::uuid), (6, '${U.contributor}'::uuid), (7, null::uuid))
     insert into public.task (organization_id, project_id, program_id, title, created_by, assignee_id, reviewer_id, approver_id, status, blocked_reason, priority, due_at)
@@ -46,7 +49,7 @@ test.beforeAll(() => {
       case when s.status = 'blocked' then 'Waiting on a signature' end,
       'medium', current_date + pe.n
     from org
-    cross join (select id, program_id, n from projects union all select null, null, null) p
+    cross join (select id, program_id, n from projects where n <= 8 union all select null, null, null) p
     cross join people pe
     cross join (values ('ready'), ('blocked'), ('completed')) s(status);
     insert into public.task_assignment (task_id, user_id, role)
@@ -84,6 +87,13 @@ async function newBoardTitles(page: Page) {
 async function oldMyWork(page: Page) {
   await page.goto(`/my-work?q=${encodeURIComponent(RUN)}`);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 30_000 });
+  // The old list folds rows past TASK_LIST_ROW_LIMIT per bucket behind "Show
+  // more", as the old board does per column; the fixture holds two tasks per
+  // project for a person, so a workspace with more than twelve projects
+  // (every spec that leaves one behind adds to the seed) crosses it. Expand
+  // every bucket, as the board helpers do, so the comparison reads everything.
+  const more = page.getByRole("button", { name: /^Show \d+ more$/ });
+  while ((await more.count()) > 0) await more.first().click();
   const labels = (loc: ReturnType<Page["locator"]>) =>
     loc.evaluateAll((els) => els.map((e) => (e.getAttribute("aria-label") ?? "").replace(/^Select /, "")));
   const review = sorted(await labels(page.locator('section[aria-labelledby="review-queue"] input[type="checkbox"]')));

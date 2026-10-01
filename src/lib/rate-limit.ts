@@ -41,7 +41,6 @@ export interface RateLimitResult {
 export const RATE_LIMITS = {
   "message:create": { limit: 120, windowSeconds: 60 },
   "task:create": { limit: 120, windowSeconds: 60 },
-  "page:create": { limit: 60, windowSeconds: 60 },
   "invitation:create": { limit: 30, windowSeconds: 3600 },
   "access-grant:program": { limit: 120, windowSeconds: 3600 },
   "access-grant:project": { limit: 120, windowSeconds: 3600 },
@@ -62,6 +61,20 @@ export const RATE_LIMITS = {
   "payables:write": { limit: 240, windowSeconds: 60 },
   "bank:write": { limit: 240, windowSeconds: 60 },
   "payroll:write": { limit: 240, windowSeconds: 60 },
+  // Workspace OS writes (epic #199). Each creates rows or copies data; the
+  // ceilings are far above what a person does by hand and stop a runaway
+  // script or a stuck client from filling a table.
+  "page:create": { limit: 60, windowSeconds: 60 },
+  "comment:create": { limit: 60, windowSeconds: 60 },
+  "capture:create": { limit: 60, windowSeconds: 60 },
+  "project:create": { limit: 120, windowSeconds: 3600 },
+  "share:write": { limit: 120, windowSeconds: 3600 },
+  "app:write": { limit: 240, windowSeconds: 3600 },
+  "blueprint:write": { limit: 240, windowSeconds: 3600 },
+  "blueprint:build": { limit: 30, windowSeconds: 3600 },
+  "template:write": { limit: 60, windowSeconds: 3600 },
+  // Autosave is debounced on the device; this only catches a loop.
+  "editor:save": { limit: 600, windowSeconds: 60 },
 } as const;
 
 export type RateLimitedAction = keyof typeof RATE_LIMITS;

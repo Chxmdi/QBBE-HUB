@@ -28,6 +28,7 @@ export const meetingsV2FrCA: typeof meetingsV2En = {
     error: "Les notes n’ont pas pu être enregistrées.",
     readOnly: "Seul l’organisateur peut modifier les notes.",
     empty: "Aucune note pour l’instant.",
+    blockHint: "Tapez /tâche sur une ligne pour en faire une vraie tâche, avec son responsable et son échéance; elle est créée dans le projet de cette réunion et paraît dans Mon travail, le tableau et le calendrier.",
   },
   capture: {
     heading: "Noté pendant la réunion",
@@ -91,6 +92,10 @@ export const meetingsV2FrCA: typeof meetingsV2En = {
     createdTask: "Tâche créée",
     createdDecision: "Décision consignée",
     reviewed: "Déjà passé en revue",
+    fromNotes: "Créées à partir des notes",
+    fromNotesHint: "Les tâches créées dans les notes avec /tâche ou « Créer une tâche » sont déjà de vraies tâches. Elles sont listées ici, telles qu’elles sont maintenant, pour que le bilan montre tout ce que la réunion a produit.",
+    taskDue: "Échéance : {date}",
+    taskArchived: "Archivée",
     willBecome: {
       task: "Devient une tâche",
       follow_up: "Devient une tâche",
