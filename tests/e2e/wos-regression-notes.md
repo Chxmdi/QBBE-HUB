@@ -119,7 +119,7 @@ failure below, confirmed by a rerun with them set.
 | signed-in 1/4 (18 files) | 45 passed, 3 failed | 11.0 min (661 s) |
 | signed-in 2/4 (32 files) | 56 passed, 9 failed, 2 did not run | 10.2 min (611 s) |
 | signed-in 3/4 (26 files) | 38 passed, 14 failed | 7.3 min (439 s) |
-| signed-in 4/4 (27 files) | PART4 |
+| signed-in 4/4 (27 files) | 63 passed, 11 failed | 9.6 min (576 s) |
 | qa-matrix 1/3 | QA1 |
 | qa-matrix 2/3 | QA2 |
 | qa-matrix 3/3 | QA3 |
@@ -155,7 +155,19 @@ off check should be its own test so the functional path still runs.
 | workspace-os-apps "apps are hidden while the switch is off" | 95 | none |
 | workspace-os-commands "the command page stays hidden while the switch is off" | 108 | none |
 | wos-pages "the pages screens are hidden while the switch is off" | 175 | none |
-SWITCHOFF4
+| following "follow a project and a search, set a rule, and unfollow" ★ | 39 | following |
+| goals "a program lead links a project and a metric…" ★ | 82 | goals |
+| insight-dashboards "the dashboards show role templates…" ★ | 31 | dashboards |
+| insight-operations "operations shows workload…" ★ | 46 | operations |
+| mobile "a staff member works through the phone screens at 390px" ★ | 89 | the phone screens |
+| upkeep "upkeep lists a stale page for review and possible duplicates" ★ | 41 | upkeep |
+| workspace-os-blueprints "staff can look but not change; volunteers and a switched-off module see nothing" | 121 | only the last check |
+| workspace-os-project-page "the living project page stays hidden while the switch is off" | 106 | none |
+| wos-editor "with the editor switch off, a page shows no editor" | 318 | none |
+| wos-spaces "the page stays hidden while the switch is off" | 30 | none |
+
+Total: 30 tests in 29 files; 17 of them (★) also hide a functional path in
+the all-on run.
 
 Owner: each stream's spec author; the lead decides the convention (section
 4). Not fixed here: none of these specs is I4's.
@@ -204,7 +216,16 @@ Owner: each stream's spec author; the lead decides the convention (section
   the rest into "+N more", so the new chip was hidden. Fixed in the spec:
   it now deletes its tasks in `afterAll`. In CI (fresh database) it did not
   apply. RERUN_EXIT
-PART4OTHER
+- **R6. `lenses-board-list.spec.ts` "the new board and My Work show the same
+  tasks as the old ones, for every role" — data volume on the shared
+  database; the legacy board is the one that truncates.** The fixture inserts
+  one task per open project × 7 people × 3 statuses; after parts 1–3 the
+  database had 34 open projects, so 714 fixture tasks. The old `/board` reads
+  at most 300 tasks (`src/features/tasks/services/task.queries.ts:50`
+  `.limit(300)`) and showed 78 fewer blocked tasks for the owner; the lens
+  board showed them all. On CI's fresh database the fixture stays well under
+  300. Not a Workspace OS defect; worth knowing that the comparison test's
+  oracle has a cap the lens engine does not.
 
 ## 4. How CI should run the suite with the switches on
 
