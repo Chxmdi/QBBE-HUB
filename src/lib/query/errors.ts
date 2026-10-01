@@ -36,3 +36,14 @@ export function queryErrorFrom(error: { message?: string } | null | undefined): 
   }
   return new QueryError("failed", "The lens could not be loaded.");
 }
+
+/**
+ * True when the engine refused the query because of what it asked for (an
+ * unknown type or property, an operator the kind does not take, a shape the
+ * engine cannot express), as opposed to a failure running it. Screens turn a
+ * refusal into a plain "cannot show this" notice and let a failure reach the
+ * error boundary.
+ */
+export function isQueryRefusal(error: unknown): error is QueryError {
+  return error instanceof QueryError && error.code !== "failed" && error.code !== "signed_out";
+}

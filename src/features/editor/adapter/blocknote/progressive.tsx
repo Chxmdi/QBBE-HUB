@@ -48,6 +48,13 @@ function useProjects(handlers: EditorSemanticHandlers) {
   return projects;
 }
 
+/** The document's own project when it is offered (a meeting's), else the first one. */
+function firstProject(projects: { id: string; name: string }[] | null, handlers: EditorSemanticHandlers): string {
+  const preferred = handlers.defaultProjectId;
+  if (preferred && projects?.some((project) => project.id === preferred)) return preferred;
+  return projects?.[0]?.id ?? "";
+}
+
 function ProjectField({ t, projects, value, onChange }: { t: EditorT; projects: { id: string; name: string }[] | null; value: string; onChange: (value: string) => void }) {
   const id = React.useId();
   return (
@@ -88,7 +95,7 @@ export function TurnIntoTasksDialog({
   const [projectId, setProjectId] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const chosen = projectId || projects?.[0]?.id || "";
+  const chosen = projectId || firstProject(projects, handlers);
 
   return (
     <Dialog open onClose={onClose} title={t("progressive.turnTitle")}>
@@ -259,7 +266,7 @@ function SuggestDialog({
   const [error, setError] = React.useState<string | null>(null);
   const titleId = React.useId();
   const dueId = React.useId();
-  const chosen = projectId || projects?.[0]?.id || "";
+  const chosen = projectId || firstProject(projects, handlers);
 
   return (
     <Dialog open onClose={() => onClose(false)} title={t("progressive.suggestTitle")}>

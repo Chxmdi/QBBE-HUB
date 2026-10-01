@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { authorizeAdminAction, requireSession } from "@/lib/auth";
+import { authorizeAdminAction, requireAdmin, requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
 import { localizeIssue } from "@/features/projects/i18n";
@@ -92,6 +93,8 @@ export async function createProgramFromTemplate(
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
+  const limited = await enforceRateLimit("template:write", session.userId);
+  if (limited) return limited;
   if (!z.string().uuid().safeParse(templateId).success) {
     return { ok: false, error: t("programs.errors.invalidTemplate") };
   }
@@ -243,6 +246,7 @@ export async function removeProjectTemplateFromProgram(input: unknown): Promise<
 
 /** Every template, approved or not, for the administrator who maintains them. */
 export async function listProgramTemplatesForAdmin() {
+  await requireAdmin();
   const db = await createSupabaseServerClient();
   const { data } = await db
     .from("program_template")

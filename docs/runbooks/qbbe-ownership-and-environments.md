@@ -29,7 +29,7 @@ expects:
 | Netlify | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` | deployment |
 | Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`, `GOOGLE_GMAIL_PUBSUB_*` | #43, #44, #45 |
 | Email | `EMAIL_PROVIDER_API_KEY`, `EMAIL_FROM_ADDRESS`, `SMTP_HOST`, `SMTP_PORT` | #47 |
-| Malware scanning | `CLAMAV_SOCKET` | #35 P1-FIL-02 |
+| Malware scanning | `CLAMAV_SOCKET`, or `CLAMAV_HOST` and `CLAMAV_PORT` | #35 P1-FIL-02 |
 | VMS | `VMS_API_KEY`, `VMS_API_URL` | #46 |
 | Error monitoring | `ERROR_MONITORING_DSN` | #53 |
 | Scheduled jobs | `CRON_JOB_SECRET` | job endpoints |
@@ -240,5 +240,5 @@ does.
 
 #55 staging certification, which 28 of the 83 requirement rows in
 `docs/acceptance-matrix.md` name as their outstanding evidence. #35's
-`CLAMAV_SOCKET` and #47's email provider also stop being blocked once those
+`CLAMAV_HOST` (or `CLAMAV_SOCKET`) and #47's email provider also stop being blocked once those
 accounts exist under QBBE.

@@ -3,10 +3,11 @@ import type { ActionDefinition } from "@/lib/objects/contracts";
 import { createUniversalTask, type TaskActor, type UniversalTaskInput } from "./create-task";
 
 /**
- * `task.create` for the action registry (plan A8, M13). The stand-in registry
- * checks `capability` on every target before running, so a task in a project
- * needs `edit_content` on that project; a task with no project has no target
- * and relies on the task table's own RLS, as the task form does today.
+ * `task.create` for the action registry (plan A8, M13). The registry checks
+ * `capability` on every target before running, so a task in a project needs
+ * `edit_content` on that project; a task with no project has no target and
+ * relies on the task table's own RLS, as the task form does today. The
+ * creation is recorded as a change set naming the new task.
  */
 export function taskCreateAction(
   db: SupabaseClient,

@@ -1,11 +1,13 @@
 /**
  * Where a task came from (M7b). The list matches the `task_source_type_check`
- * constraint in 20261105010001_task_source.sql; a test keeps them in step.
+ * constraint, last defined in 20261107030100_meeting_notes_editor.sql; a test
+ * keeps them in step.
  */
 export const TASK_SOURCE_TYPES = [
   "manual",
   "meeting",
   "document",
+  "page",
   "comment",
   "project",
   "message",
@@ -44,13 +46,16 @@ export function sourceNeedsId(type: TaskSourceType): boolean {
  *
  * `comment` names record_comment; task comments are reached through their
  * task, which the link already opens. `capture` names the capture inbox item
- * (M18), which only its owner can read.
+ * (M18), which only its owner can read. `page` names the page whose block
+ * made the task (M5/M6); `meeting` covers both a meeting action and a block
+ * in the meeting's notes.
  */
 export const SOURCE_TABLES: Partial<
   Record<TaskSourceType, { table: string; title: string; extra?: string[] }>
 > = {
   meeting: { table: "meeting", title: "title" },
   document: { table: "document", title: "title" },
+  page: { table: "page", title: "title" },
   comment: { table: "record_comment", title: "body", extra: ["parent_type", "parent_id"] },
   project: { table: "project", title: "name" },
   message: { table: "message", title: "body", extra: ["channel_id"] },
@@ -85,6 +90,8 @@ export function sourceHref(
       return `/meetings/${id}`;
     case "document":
       return `/documents/${id}`;
+    case "page":
+      return `/pages/${id}`;
     case "project":
       return `/projects/${id}`;
     case "message":

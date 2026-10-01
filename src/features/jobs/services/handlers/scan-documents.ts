@@ -1,8 +1,8 @@
-import { MAX_DOCUMENT_BYTES, scanDocumentBytes } from "@/features/documents/services/clamav";
+import { MAX_DOCUMENT_BYTES, SCANNER_REQUIREMENT, isScannerConfigured, scanDocumentBytes } from "@/features/documents/services/clamav";
 import type { JobContext, JobResult } from "../runner";
 
 export async function scanDocuments({ db, definition, now }: JobContext): Promise<JobResult> {
-  if (!process.env.CLAMAV_SOCKET) throw new Error("Document scanning requires CLAMAV_SOCKET");
+  if (!isScannerConfigured()) throw new Error(`Document scanning requires ${SCANNER_REQUIREMENT}`);
   const { data: documents, error } = await db.from("document")
     .select("id, storage_path")
     .eq("kind", "file").eq("scan_status", "pending").is("archived_at", null)

@@ -30,9 +30,12 @@ function setSwitch(on: boolean) {
   sql(`update public.feature_flag set enabled = ${on} where key = any (array['wos_meetings_v2']);`);
 }
 
+// Proves the placeholder notes (wos_editor off) and the off state of
+// wos_meetings_v2, so it runs in the switches-off rows only; the block-editor
+// meeting path is wos-mvp-exit.spec.ts in the switches-on rows.
 test.afterAll(() => setSwitch(false));
 
-test("the organizer captures during a meeting and the review turns it into real work", async ({ page }) => {
+test("the organizer captures during a meeting and the review turns it into real work [switch off]", async ({ page }) => {
   test.setTimeout(240_000);
   const stamp = Date.now();
   const title = `Object meeting ${stamp}`;
