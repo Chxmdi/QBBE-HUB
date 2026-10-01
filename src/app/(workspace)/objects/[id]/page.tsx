@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { PageHeader } from "@/components/shared/page-header";
-import { Badge } from "@/components/ui/badge";
-import { RelatedPanel } from "@/features/objects/components/related-panel";
+import { RecordPage } from "@/features/objects/components/record-page";
 import { requireObjectsEnabled } from "@/features/objects/gate";
 import { getObjectsT } from "@/features/objects/i18n/translate";
-import { getObject, listObjectTypes } from "@/features/objects/services/registry.queries";
-import { loadRelatedPanel } from "@/features/objects/services/related";
+import { loadRecordPage } from "@/features/objects/services/record-page.queries";
+import { getObject } from "@/features/objects/services/registry.queries";
 import { requireSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -17,39 +15,24 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const { t } = await getObjectsT();
   const object = UUID.test(id) ? await getObject(id) : null;
-  return { title: object?.title || t("related.title") };
+  return { title: object?.title || t("common.eyebrow") };
 }
 
 /**
- * Any object, with its Related panel (Workspace OS M3b). Behind `wos_objects`;
- * integration links here from menus and records later.
+ * Any object as a page (Workspace OS U14): its type's layout, with editable
+ * properties, the Related panel, content, comments and version history.
+ * Behind `wos_objects`; off means the route does not exist. An object the
+ * viewer cannot read is not found, never described.
  */
 export default async function ObjectPage({ params }: { params: Promise<{ id: string }> }) {
   await requireObjectsEnabled();
-  await requireSession();
+  const session = await requireSession();
   const { id } = await params;
   if (!UUID.test(id)) notFound();
 
-  const [{ t, locale }, object] = await Promise.all([getObjectsT(), getObject(id)]);
-  if (!object) notFound();
+  const { locale } = await getObjectsT();
+  const data = await loadRecordPage(id, { locale, timeZone: session.timeZone });
+  if (!data) notFound();
 
-  const [types, related] = await Promise.all([
-    listObjectTypes(object.organizationId),
-    loadRelatedPanel(object.id, object.organizationId, locale, t("common.untitled")),
-  ]);
-  const typeLabel = (key: string) => {
-    const type = types.find((candidate) => candidate.key === key);
-    return type ? (locale === "fr-CA" ? type.name.fr : type.name.en) : key;
-  };
-
-  return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        eyebrow={typeLabel(object.type)}
-        title={object.title.trim() || t("common.untitled")}
-        actions={object.archivedAt ? <Badge tone="warning">{t("page.archived")}</Badge> : undefined}
-      />
-      <RelatedPanel data={related} typeLabel={typeLabel} typeName={typeLabel(object.type).toLowerCase()} t={t} />
-    </div>
-  );
+  return <RecordPage data={data} session={session} />;
 }
