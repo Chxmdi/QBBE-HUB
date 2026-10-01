@@ -15,6 +15,12 @@
 --   6. 5,000 tasks load (page, count and group counts) within one second.
 begin;
 
+-- The engine resolves "today" in the organization's time zone (default
+-- America/Toronto); the fixture dates must use the same day, or between
+-- midnight and 4 am UTC they land on the next day and "is today" finds nothing.
+create function pg_temp.today() returns date language sql stable
+  as $$ select (now() at time zone 'America/Toronto')::date $$;
+
 -- ---------------------------------------------------------------------------
 -- 1. Rights
 -- ---------------------------------------------------------------------------
@@ -92,10 +98,10 @@ begin
   values (v_org, 'Lens program', 'lens-' || substr(gen_random_uuid()::text, 1, 8), v_owner)
   returning id into v_program;
   insert into public.project (organization_id, program_id, name, owner_id, created_by, stage, outcome, target_date)
-  values (v_org, v_program, 'Lens open project', v_owner, v_owner, 'active', 'An outcome', current_date + 90)
+  values (v_org, v_program, 'Lens open project', v_owner, v_owner, 'active', 'An outcome', pg_temp.today() + 90)
   returning id into v_open_project;
   insert into public.project (organization_id, program_id, name, owner_id, created_by, stage, outcome, target_date)
-  values (v_org, v_program, 'Lens closed project', v_owner, v_owner, 'completed', 'An outcome', current_date)
+  values (v_org, v_program, 'Lens closed project', v_owner, v_owner, 'completed', 'An outcome', pg_temp.today())
   returning id into v_closed_project;
 
   insert into lens_fx values ('org', v_org), ('program', v_program),
@@ -103,10 +109,10 @@ begin
 
   insert into public.task (organization_id, project_id, title, created_by, assignee_id, status, priority, due_at, estimate_hours)
   values
-    (v_org, v_open_project, 'Lens 100% literal', v_owner, v_volunteer, 'ready', 'high', current_date, 2),
-    (v_org, v_open_project, 'Lens under_score', v_owner, v_staff, 'in_progress', 'low', current_date + 30, 8),
+    (v_org, v_open_project, 'Lens 100% literal', v_owner, v_volunteer, 'ready', 'high', pg_temp.today(), 2),
+    (v_org, v_open_project, 'Lens under_score', v_owner, v_staff, 'in_progress', 'low', pg_temp.today() + 30, 8),
     (v_org, v_closed_project, 'Lens closed work', v_owner, v_volunteer, 'completed', 'medium', null, null),
-    (v_org, null, 'Lens loose task', v_owner, null, 'not_started', 'critical', current_date - 3, 1);
+    (v_org, null, 'Lens loose task', v_owner, null, 'not_started', 'critical', pg_temp.today() - 3, 1);
   insert into public.task (organization_id, project_id, title, created_by, archived_at)
   values (v_org, v_open_project, 'Lens archived', v_owner, now());
 end;
@@ -490,7 +496,7 @@ begin
     case when g % 3 = 0 then v_owner end,
     (array['not_started','ready','in_progress','waiting','in_review','completed']::public.task_status[])[1 + g % 6],
     (array['low','medium','high','critical']::public.task_priority[])[1 + g % 4],
-    current_date + (g % 60) - 30, (g % 20)
+    pg_temp.today() + (g % 60) - 30, (g % 20)
   from generate_series(1, 5000) g;
   analyze public.task;
 
