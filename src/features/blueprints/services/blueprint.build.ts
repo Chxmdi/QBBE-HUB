@@ -41,7 +41,11 @@ type Archivable = (typeof archivable)[number];
 export type BuildFailure =
   | { code: "database"; error: { code?: string; message?: string } }
   | { code: "propertyKindClash"; key: string }
-  | { code: "typeNotCustom"; key: string };
+  /** A property with this key exists on the type but is set up differently (another relation, formula or rollup). */
+  | { code: "propertyClash"; key: string }
+  | { code: "typeNotCustom"; key: string }
+  /** A relation with this key exists but connects other types, or is native. */
+  | { code: "relationClash"; key: string };
 
 export type ApplyResult =
   | { ok: true; changeSetId: Uuid; changes: Change[]; count: number }
@@ -55,9 +59,25 @@ interface ExistingRow {
 interface ExistingType extends ExistingRow {
   kind: string;
 }
+interface ExistingRelation extends ExistingRow {
+  from_type_id: string | null;
+  to_type_id: string | null;
+  is_native: boolean;
+}
 interface ExistingProperty extends ExistingRow {
   type_id: string;
   kind: string;
+  options: Values | null;
+  visible_to_roles: string[] | null;
+}
+
+/** The settings that make two relation, formula or rollup properties the same property. */
+function identity(kind: unknown, options: Values | null | undefined): string {
+  const o = options ?? {};
+  if (kind === "relation") return JSON.stringify([o.relationTypeKey, o.direction, o.targetTypeKey]);
+  if (kind === "formula") return JSON.stringify([o.expression]);
+  if (kind === "rollup") return JSON.stringify([o.relationProperty, o.targetProperty ?? null, o.function]);
+  return "";
 }
 
 type Values = Record<string, unknown>;
@@ -118,14 +138,18 @@ export async function applyBlueprintBuild(
     .in("key", typeKeys);
   if (types.error) return { ok: false, failure: { code: "database", error: types.error }, rolledBack: true };
   const relations = relationKeys.length
-    ? await client.from("relation_type").select("id, key, archived_at").eq("organization_id", organizationId).in("key", relationKeys)
+    ? await client
+        .from("relation_type")
+        .select("id, key, archived_at, from_type_id, to_type_id, is_native")
+        .eq("organization_id", organizationId)
+        .in("key", relationKeys)
     : { data: [], error: null };
   if (relations.error) return { ok: false, failure: { code: "database", error: relations.error }, rolledBack: true };
   const existingTypes = new Map(((types.data ?? []) as ExistingType[]).map((row) => [row.key, row]));
-  const existingRelations = new Map(((relations.data ?? []) as ExistingRow[]).map((row) => [row.key, row]));
+  const existingRelations = new Map(((relations.data ?? []) as ExistingRelation[]).map((row) => [row.key, row]));
   const existingTypeIds = [...existingTypes.values()].map((row) => row.id);
   const properties = existingTypeIds.length
-    ? await client.from("property_definition").select("id, type_id, key, kind, archived_at").in("type_id", existingTypeIds)
+    ? await client.from("property_definition").select("id, type_id, key, kind, options, visible_to_roles, archived_at").in("type_id", existingTypeIds)
     : { data: [], error: null };
   if (properties.error) return { ok: false, failure: { code: "database", error: properties.error }, rolledBack: true };
   const existingProperties = new Map(
@@ -140,6 +164,7 @@ export async function applyBlueprintBuild(
   }
 
   const realIds = new Map<string, string>(); // plan id -> database id
+  const typeIdByKey = new Map<string, string>(); // type key -> database id
   const touched: { table: Archivable; id: string }[] = [];
   const changes: Change[] = [];
 
@@ -180,7 +205,10 @@ export async function applyBlueprintBuild(
       const patch = { name_en: v.name_en, name_fr: v.name_fr, icon: v.icon ?? null };
       const reused = await reuse("object_type", existingTypes.get(String(v.key)), patch, change);
       if (!reused.ok) return fail({ code: "database", error: reused.error });
-      if (reused.value) continue;
+      if (reused.value) {
+        typeIdByKey.set(String(v.key), realIds.get(change.object.id)!);
+        continue;
+      }
       const created = await selectId(
         client
           .from("object_type")
@@ -190,6 +218,7 @@ export async function applyBlueprintBuild(
       );
       if (!created.ok) return fail({ code: "database", error: created.error });
       realIds.set(change.object.id, created.value);
+      typeIdByKey.set(String(v.key), created.value);
       touched.push({ table: "object_type", id: created.value });
       record(change, created.value, "created");
       continue;
@@ -203,7 +232,16 @@ export async function applyBlueprintBuild(
         reverse_name_fr: v.reverse_name_fr,
         cardinality: v.cardinality,
       };
-      const reused = await reuse("relation_type", existingRelations.get(String(v.key)), patch, change);
+      const existingRelation = existingRelations.get(String(v.key));
+      if (
+        existingRelation &&
+        (existingRelation.is_native ||
+          existingRelation.from_type_id !== (realIds.get(String(v.from_type_id)) ?? null) ||
+          existingRelation.to_type_id !== (realIds.get(String(v.to_type_id)) ?? null))
+      ) {
+        return fail({ code: "relationClash", key: String(v.key) });
+      }
+      const reused = await reuse("relation_type", existingRelation, patch, change);
       if (!reused.ok) return fail({ code: "database", error: reused.error });
       if (reused.value) continue;
       const created = await selectId(
@@ -233,7 +271,29 @@ export async function applyBlueprintBuild(
       const existing = existingProperties.get(`${typeId}/${v.key}`);
       if (existing && existing.kind !== v.kind) return fail({ code: "propertyKindClash", key: String(v.key) });
       const options = (v.options ?? {}) as Values;
-      const patch = { name_en: v.name_en, name_fr: v.name_fr, options, position: v.position };
+      // A relation, formula or rollup is only reused when it is the same one;
+      // its stored settings are kept, since the definer functions wrote them.
+      const derived = v.kind === "relation" || v.kind === "formula" || v.kind === "rollup";
+      if (existing && derived && identity(existing.kind, existing.options) !== identity(v.kind, options)) {
+        return fail({ code: "propertyClash", key: String(v.key) });
+      }
+      if (existing?.archived_at && v.kind === "rollup" && typeof options.targetProperty === "string") {
+        // Restoring skips create_rollup_property's checks; repeat the one that can
+        // have changed while it was archived: the target must not be private.
+        const relationProperty = planned.find(
+          (c) => c.object.type === "property_definition" && c.values.type_id === v.type_id && c.values.key === options.relationProperty,
+        );
+        const targetTypeKey = (relationProperty?.values.options as Values | undefined)?.targetTypeKey;
+        const targetTypeId = typeof targetTypeKey === "string" ? typeIdByKey.get(targetTypeKey) : undefined;
+        const target = targetTypeId ? existingProperties.get(`${targetTypeId}/${options.targetProperty}`) : undefined;
+        if (target?.visible_to_roles) return fail({ code: "propertyClash", key: String(v.key) });
+      }
+      const patch = {
+        name_en: v.name_en,
+        name_fr: v.name_fr,
+        ...(derived ? {} : { options }),
+        position: v.position,
+      };
       const reused = await reuse("property_definition", existing, patch, { ...change, values: { ...v, type_id: typeId } });
       if (!reused.ok) return fail({ code: "database", error: reused.error });
       if (reused.value) continue;
@@ -269,6 +329,7 @@ export async function applyBlueprintBuild(
               type_id: typeId,
               key: v.key,
               ...patch,
+              options,
               kind: v.kind,
               system_column: null,
               visible_to_roles: null,
@@ -304,6 +365,9 @@ export async function applyBlueprintBuild(
   return { ok: true, changeSetId: data, changes, count: changes.length };
 }
 
+/** How long a build can be undone (plan A8), as public.blueprint_undo_build enforces. */
+const UNDO_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
 export type UndoResult = { ok: true } | { ok: false; error: DbError; restored: boolean };
 
 /**
@@ -314,36 +378,40 @@ export type UndoResult = { ok: true } | { ok: false; error: DbError; restored: b
 export async function undoBlueprintChanges(client: BuildClient, changeSetId: Uuid): Promise<UndoResult> {
   const { data, error } = await client
     .from("blueprint_build")
-    .select("changes, undone_at")
+    .select("changes, built_at, undone_at")
     .eq("change_set_id", changeSetId)
     .maybeSingle();
   if (error) return { ok: false, error, restored: true };
-  const build = data as { changes: unknown; undone_at: string | null } | null;
+  const build = data as { changes: unknown; built_at?: string; undone_at: string | null } | null;
   if (!build) return { ok: false, error: { code: "42501", message: "No such build." }, restored: true };
   if (build.undone_at) return { ok: false, error: { message: "This build was already undone." }, restored: true };
+  // The database checks this too; checking first means nothing is archived for an undo it will refuse.
+  if (build.built_at && Date.parse(build.built_at) < Date.now() - UNDO_WINDOW_MS) {
+    return { ok: false, error: { message: "Builds can be undone for 30 days." }, restored: true };
+  }
 
   const rows = rowsToUndo(build.changes);
   const archived: { table: Archivable; id: string }[] = [];
-  const restore = async () => {
+  /** Brings archived rows back; true only when every one came back. */
+  const restore = async (): Promise<boolean> => {
+    let all = true;
     for (const row of archived) {
-      await client.from(row.table).update({ archived_at: null }).eq("id", row.id).select("id").maybeSingle();
+      const result = await selectId(
+        client.from(row.table).update({ archived_at: null }).eq("id", row.id).select("id").maybeSingle(),
+      );
+      if (!result.ok) all = false;
     }
+    return all;
   };
   for (const row of [...rows].reverse()) {
     const result = await selectId(
       client.from(row.table).update({ archived_at: new Date().toISOString() }).eq("id", row.id).select("id").maybeSingle(),
     );
-    if (!result.ok) {
-      await restore();
-      return { ok: false, error: result.error, restored: true };
-    }
+    if (!result.ok) return { ok: false, error: result.error, restored: await restore() };
     archived.push(row);
   }
 
   const undone = await client.rpc("blueprint_undo_build", { p_change_set: changeSetId });
-  if (undone.error) {
-    await restore();
-    return { ok: false, error: undone.error, restored: true };
-  }
+  if (undone.error) return { ok: false, error: undone.error, restored: await restore() };
   return { ok: true };
 }

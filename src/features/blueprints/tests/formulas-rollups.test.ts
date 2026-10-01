@@ -164,7 +164,7 @@ describe("schema: formula and rollup kinds", () => {
     for (const code of [
       "needsFormula", "formulaInvalid", "formulaTooLong", "formulaNotAllowed", "formulaCircular",
       "needsRollup", "rollupNeedsRelation", "rollupNeedsNumber", "rollupNotAllowed", "propertyKindClash",
-      "buildRolledBack", "undoIncomplete", "failedBecause",
+      "buildRolledBack", "undoIncomplete", "propertyClash", "rollupLoop",
     ]) {
       expect(typeof (blueprintsEn.errors as Record<string, unknown>)[code]).toBe("string");
       expect(typeof (blueprintsFrCA.errors as Record<string, unknown>)[code]).toBe("string");
@@ -179,7 +179,62 @@ describe("schema: formula and rollup kinds", () => {
   });
 });
 
+describe("schema: rollup loops and long formula chains", () => {
+  it("refuses a rollup that sums itself through a self-relation", () => {
+    const bp = sample();
+    bp.relations.push({
+      key: "parent_of",
+      from: "grant_application",
+      to: "grant_application",
+      name: { en: "parent of", fr: "parent de" },
+      reverseName: { en: "child of", fr: "enfant de" },
+      cardinality: "one_to_many",
+    });
+    bp.types[0].properties.push(
+      { key: "children", name: { en: "Children", fr: "Enfants" }, kind: "relation", relation: "parent_of" },
+      { key: "tree_total", name: { en: "Tree total", fr: "Total de l’arbre" }, kind: "rollup", rollup: { relation: "children", target: "tree_total", function: "sum" } },
+    );
+    expect(issues(bp)).toEqual([{ code: "rollupLoop", path: ["types", 0, "properties", 8, "rollup", "target"] }]);
+  });
+
+  it("checks a long chain of formulas quickly", () => {
+    const bp = sample();
+    const chain = Array.from({ length: 33 }, (_, n) => ({
+      key: `f_${n}`,
+      name: { en: `F ${n}`, fr: `F ${n}` },
+      kind: "formula" as const,
+      expression: n < 2 ? "1" : `prop("f_${n - 1}") + prop("f_${n - 2}")`,
+    }));
+    bp.types[0].properties.push(...chain);
+    const started = performance.now();
+    expect(validateBlueprint(bp).ok).toBe(true);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
+
 describe("plan: formulas and rollups come after what they read", () => {
+  it("reads a relation from a type to itself forwards on one side and backwards on the other", () => {
+    const bp = sample();
+    bp.relations.push({
+      key: "manages",
+      from: "grant_report",
+      to: "grant_report",
+      name: { en: "manages", fr: "gère" },
+      reverseName: { en: "managed by", fr: "géré par" },
+      cardinality: "one_to_many",
+    });
+    bp.types[1].properties.push(
+      { key: "manages", name: { en: "Manages", fr: "Gère" }, kind: "relation", relation: "manages" },
+      { key: "managed_by", name: { en: "Managed by", fr: "Géré par" }, kind: "relation", relation: "manages" },
+    );
+    const plan = planBlueprint(valid(bp), () => "id");
+    const direction = (key: string) => {
+      const row = plan.changes.find((c) => c.kind === "create" && c.object.type === "property_definition" && c.values.key === key);
+      return row?.kind === "create" ? (row.values.options as { direction: string }).direction : null;
+    };
+    expect([direction("manages"), direction("managed_by")]).toEqual(["outgoing", "incoming"]);
+  });
+
   it("orders rollups after their relation and target, and formulas after their inputs", () => {
     const bp = valid(sample());
     // Draw the dependents first to prove the order comes from references, not drawing.

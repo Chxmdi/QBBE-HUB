@@ -48,11 +48,18 @@ function databaseError(messages: Messages, error: { code?: string; message?: str
   if (/30 days/.test(text)) return messages.errors.tooOld;
   if (/built blueprint|Undo the build/.test(text)) return messages.errors.locked;
   if (/Only owners and admins|Only an owner or admin/.test(text)) return messages.errors.forbidden;
-  return text ? fill(messages.errors.failedBecause, { reason: text }) : messages.errors.failed;
+  if (/rollup/i.test(text) && /number property|private property|relation property/.test(text)) {
+    return messages.errors.rollupNeedsNumber;
+  }
+  return messages.errors.failed;
 }
 
 function buildError(messages: Messages, failure: BuildFailure): string {
   if (failure.code === "propertyKindClash") return fill(messages.errors.propertyKindClash, { key: failure.key });
+  if (failure.code === "propertyClash") return fill(messages.errors.propertyClash, { key: failure.key });
+  if (failure.code === "relationClash") {
+    return fill(messages.errors.conflict, { kind: messages.errors.conflictKinds.relation, key: failure.key });
+  }
   if (failure.code === "typeNotCustom") {
     return fill(messages.errors.conflict, { kind: messages.errors.conflictKinds.type, key: failure.key });
   }
@@ -122,6 +129,11 @@ export async function buildBlueprint(id: string): Promise<BlueprintResult<{ chan
   if (!blueprint) return { ok: false, error: messages.errors.notFound };
   const validation = validateBlueprint(blueprint.definition);
   if (!validation.ok) return { ok: false, error: messages.approve.fixFirst, issues: validation.issues };
+
+  // Building writes real structure, so refuse before writing anything when the
+  // blueprint is not approved as it stands (an edit after approval sends it
+  // back to draft). public.blueprint_build checks the approved hash again.
+  if (blueprint.status !== "approved") return { ok: false, error: messages.errors.notApproved };
 
   const conflicts = findConflicts(
     validation.blueprint,

@@ -296,7 +296,63 @@ describe("applyBlueprintBuild", () => {
   });
 });
 
+describe("applyBlueprintBuild: reuse only what is the same", () => {
+  it("refuses a relation key that already connects other types", async () => {
+    const client = fakeClient({
+      rows: { relation_type: [{ id: "r-x", organization_id: org, key: "reports_on", from_type_id: "t-project", to_type_id: "t-person", is_native: false, archived_at: null }] },
+    });
+    const result = await build(client);
+    expect(result).toMatchObject({ ok: false, failure: { code: "relationClash", key: "reports_on" }, rolledBack: true });
+    expect(client.rows.object_type.every((t) => t.archived_at !== null)).toBe(true);
+  });
+
+  it("refuses a formula or rollup with the same key but other settings, and reuses an identical one", async () => {
+    const existingType = { id: "t-app", organization_id: org, key: "grant_application", kind: "custom", archived_at: null };
+    const other = fakeClient({
+      rows: {
+        object_type: [existingType],
+        property_definition: [{ id: "p-d", type_id: "t-app", key: "double", kind: "formula", options: { expression: "1" }, archived_at: null }],
+      },
+    });
+    expect(await build(other)).toMatchObject({ ok: false, failure: { code: "propertyClash", key: "double" } });
+
+    const same = fakeClient({
+      rows: {
+        object_type: [existingType],
+        property_definition: [{ id: "p-d", type_id: "t-app", key: "double", kind: "formula", options: { expression: 'prop("requested") * 2' }, archived_at: "then" }],
+      },
+    });
+    expect((await build(same)).ok).toBe(true);
+    const restored = same.rows.property_definition.find((p) => p.id === "p-d");
+    expect(restored).toMatchObject({ archived_at: null, options: { expression: 'prop("requested") * 2' } });
+  });
+});
+
 describe("undoBlueprintChanges", () => {
+  it("says so when a row it archived could not be brought back", async () => {
+    const client = fakeClient({ failRpc: { blueprint_undo_build: "Only an owner or admin can undo a build." } });
+    await build(client);
+    // Let the archive writes through, then fail the first restore write.
+    const writesSoFar = client.calls.filter((c) => c.op === "insert" || c.op === "update").length;
+    const failing = fakeClient({
+      rows: client.rows,
+      failRpc: { blueprint_undo_build: "Only an owner or admin can undo a build." },
+      failWrite: { at: 10, message: "network" },
+    });
+    expect(writesSoFar).toBeGreaterThan(0);
+    const result = await undoBlueprintChanges(failing as unknown as BuildClient, "cs-1");
+    expect(result).toMatchObject({ ok: false, restored: false });
+  });
+
+  it("archives nothing for a build older than 30 days", async () => {
+    const client = fakeClient({
+      rows: { blueprint_build: [{ change_set_id: "cs-old", built_at: "2026-01-01T00:00:00Z", undone_at: null, changes: [{ object: { id: "t-1", type: "object_type" }, values: { applied: "created" } }] }] },
+    });
+    const result = await undoBlueprintChanges(client as unknown as BuildClient, "cs-old");
+    expect(result).toMatchObject({ ok: false, error: { message: "Builds can be undone for 30 days." } });
+    expect(client.calls.filter((c) => c.op === "update")).toHaveLength(0);
+  });
+
   it("archives created rows newest first and then marks the build undone", async () => {
     const client = fakeClient();
     await build(client);

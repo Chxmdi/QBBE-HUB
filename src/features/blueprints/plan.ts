@@ -6,7 +6,7 @@ import {
 } from "@/lib/objects/contracts";
 import { formulaDependencies, parseFormula } from "@/features/objects/formula";
 import { previewBlueprint } from "./preview";
-import type { Blueprint, BlueprintProperty, BlueprintType } from "./schema";
+import { findPropertyByName, type Blueprint, type BlueprintProperty, type BlueprintType } from "./schema";
 
 /**
  * Turns an approved blueprint into the ordered list of changes that building
@@ -107,6 +107,7 @@ export function planBlueprint(
 
   for (const { type, property, position } of orderProperties(blueprint)) {
     const relation = property.relation ? blueprint.relations.find((r) => r.key === property.relation) : undefined;
+    const outgoing = relation ? relationDirection(type, property, relation) === "outgoing" : false;
     create("property_definition", {
       type_id: typeIds.get(type.key),
       type_key: type.key,
@@ -122,8 +123,8 @@ export function planBlueprint(
               relationTypeKey: relation.key,
               relationTypeId: relationIds.get(relation.key),
               // What the database's relation and rollup functions read (V1-7).
-              direction: relation.from === type.key ? "outgoing" : "incoming",
-              targetTypeKey: relation.from === type.key ? relation.to : relation.from,
+              direction: outgoing ? "outgoing" : "incoming",
+              targetTypeKey: outgoing ? relation.to : relation.from,
             }
           : {}),
         ...(property.kind === "formula" && property.expression ? { expression: property.expression } : {}),
@@ -185,6 +186,22 @@ export function planBlueprint(
   return { changes, counts };
 }
 
+/**
+ * Which way a relation property reads its relation. On a relation between two
+ * types that is fixed by the type. On a relation from a type to itself (a
+ * manager and their reports), the first property naming it reads forwards
+ * and the second backwards, so the two sides stay different.
+ */
+export function relationDirection(
+  type: BlueprintType,
+  property: BlueprintProperty,
+  relation: Blueprint["relations"][number],
+): "outgoing" | "incoming" {
+  if (relation.from !== relation.to) return relation.from === type.key ? "outgoing" : "incoming";
+  const sides = type.properties.filter((p) => p.kind === "relation" && p.relation === relation.key);
+  return sides.indexOf(property) <= 0 ? "outgoing" : "incoming";
+}
+
 export interface PlannedProperty {
   type: BlueprintType;
   property: BlueprintProperty;
@@ -206,12 +223,7 @@ export function orderProperties(blueprint: Blueprint): PlannedProperty[] {
     type.properties.map((property, position) => ({ type, property, position })),
   );
   const id = (typeKey: string, propertyKey: string) => `${typeKey}.${propertyKey}`;
-  const resolveName = (type: BlueprintType, name: string) => {
-    const lower = name.toLowerCase();
-    return type.properties.find(
-      (p) => p.key.toLowerCase() === lower || p.name.en.toLowerCase() === lower || p.name.fr.toLowerCase() === lower,
-    )?.key;
-  };
+  const resolveName = (type: BlueprintType, name: string) => findPropertyByName(type, name)?.key;
 
   const dependencies = new Map<string, string[]>();
   for (const { type, property } of all) {

@@ -2,7 +2,7 @@ import { computeFormulaProperties } from "@/features/objects/formula/properties"
 import { formulaDependencies, parseFormula, type FormulaValue } from "@/features/objects/formula";
 import type { Locale } from "@/lib/i18n/config";
 import type { PropertyKind } from "@/lib/objects/contracts";
-import type { BlueprintProperty, BlueprintType } from "./schema";
+import { findPropertyByName, type BlueprintProperty, type BlueprintType } from "./schema";
 
 /**
  * The worked example shown under a formula in the designer: "with Salary =
@@ -159,12 +159,7 @@ export function formulaExample(input: {
       lower(name) === "title"
         ? { key: "title", label: locale === "fr-CA" ? "Titre" : "Title" }
         : (() => {
-            const p = type.properties.find(
-              (candidate) =>
-                lower(candidate.key) === lower(name) ||
-                lower(candidate.name.en) === lower(name) ||
-                lower(candidate.name.fr) === lower(name),
-            );
+            const p = findPropertyByName(type, name);
             return p ? { key: p.key, label: locale === "fr-CA" ? p.name.fr : p.name.en } : null;
           })();
     if (!match || seen.has(match.key)) continue;

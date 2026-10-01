@@ -203,41 +203,32 @@ export const blueprintSchema = baseBlueprintSchema.superRefine((bp, ctx) => {
     });
   }
 
-  /** A formula that depends on itself through other formulas of the type is refused here, not at build time. */
+  /**
+   * A formula that depends on itself through other formulas of the type is
+   * refused here, not at build time. One depth-first walk over the formula
+   * graph (linear in its size), marking every formula that sits on a cycle.
+   */
   function checkFormulaLoops(type: z.infer<typeof blueprintTypeSchema>, t: number) {
     const formulas = type.properties.filter((p) => p.kind === "formula" && p.expression?.trim());
     if (!formulas.length) return;
-    const byKey = new Map(formulas.map((p) => [p.key, p]));
-    const resolve = (name: string) => {
-      const lower = name.toLowerCase();
-      return type.properties.find(
-        (p) => p.key.toLowerCase() === lower || p.name.en.toLowerCase() === lower || p.name.fr.toLowerCase() === lower,
-      )?.key;
-    };
-    const dependencies = new Map<string, string[]>();
+    const isFormula = new Set(formulas.map((p) => p.key));
+    const edges = new Map<string, string[]>();
     for (const formula of formulas) {
+      let names: string[] = [];
       try {
-        dependencies.set(
-          formula.key,
-          formulaDependencies(parseFormula(formula.expression!))
-            .map(resolve)
-            .filter((k): k is string => !!k && byKey.has(k)),
-        );
+        names = formulaDependencies(parseFormula(formula.expression!));
       } catch {
-        dependencies.set(formula.key, []);
+        names = [];
       }
+      edges.set(
+        formula.key,
+        names.map((name) => findPropertyByName(type, name)?.key).filter((k): k is string => !!k && isFormula.has(k)),
+      );
     }
-    const inLoop = new Set<string>();
-    const visit = (start: string, current: string, seen: Set<string>) => {
-      for (const next of dependencies.get(current) ?? []) {
-        if (next === start) inLoop.add(start);
-        else if (!seen.has(next)) visit(start, next, new Set(seen).add(next));
-      }
-    };
-    for (const formula of formulas) visit(formula.key, formula.key, new Set([formula.key]));
-    for (const key of inLoop) {
-      issue("formulaCircular", ["types", t, "properties", type.properties.findIndex((p) => p.key === key)]);
-    }
+    const looping = nodesOnCycles(edges);
+    type.properties.forEach((property, p) => {
+      if (looping.has(property.key)) issue("formulaCircular", ["types", t, "properties", p]);
+    });
   }
 
   function checkRollup(
@@ -257,6 +248,30 @@ export const blueprintSchema = baseBlueprintSchema.superRefine((bp, ctx) => {
     if (!target || !numericKinds.includes(target.kind as PropertyKind)) {
       issue("rollupNeedsNumber", [...path, "rollup", "target"]);
     }
+  }
+
+  /**
+   * A rollup that sums another rollup which, through more rollups, comes back
+   * to it can never be built (each needs the other to exist first), so it is
+   * refused here.
+   */
+  function checkRollupLoops() {
+    const id = (typeKey: string, key: string) => `${typeKey}.${key}`;
+    const edges = new Map<string, string[]>();
+    const where = new Map<string, (string | number)[]>();
+    bp.types.forEach((type, t) =>
+      type.properties.forEach((property, p) => {
+        if (property.kind !== "rollup" || !property.rollup?.target || property.rollup.function === "count") return;
+        const relationProperty = type.properties.find((q) => q.key === property.rollup!.relation);
+        const related = relationProperty?.relation ? relatedType(type, relationProperty.relation) : undefined;
+        const target = related?.properties.find((q) => q.key === property.rollup!.target);
+        if (!related || target?.kind !== "rollup") return;
+        edges.set(id(type.key, property.key), [id(related.key, target.key)]);
+        where.set(id(type.key, property.key), ["types", t, "properties", p, "rollup", "target"]);
+      }),
+    );
+    const looping = nodesOnCycles(edges);
+    for (const [node, path] of where) if (looping.has(node)) issue("rollupLoop", path);
   }
 
   for (const k of duplicates(bp.types.map((t) => t.key))) issue("duplicateKey", ["types", k]);
@@ -298,6 +313,7 @@ export const blueprintSchema = baseBlueprintSchema.superRefine((bp, ctx) => {
     });
     checkFormulaLoops(type, t);
   });
+  checkRollupLoops();
 
   bp.relations.forEach((relation, r) => {
     if (!types.has(relation.from)) issue("unknownType", ["relations", r, "from"]);
@@ -388,6 +404,59 @@ const knownCodes: Record<string, true> = Object.fromEntries(
     "formulaTooLong",
   ].map((code) => [code, true]),
 );
+
+/**
+ * The property a formula's prop("…") names: by key, English name or French
+ * name, ignoring case, as the formula engine resolves it at runtime
+ * (computeFormulaProperties). Shared by validation, the build order and the
+ * designer's example so they always agree.
+ */
+export function findPropertyByName<P extends { key: string; name: LocalizedText }>(
+  type: { properties: P[] },
+  name: string,
+): P | undefined {
+  const lower = name.toLowerCase();
+  return type.properties.find(
+    (p) => p.key.toLowerCase() === lower || p.name.en.toLowerCase() === lower || p.name.fr.toLowerCase() === lower,
+  );
+}
+
+/** Every node that lies on a cycle of a directed graph, by Tarjan's strongly connected components (linear). */
+export function nodesOnCycles(edges: Map<string, string[]>): Set<string> {
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  const result = new Set<string>();
+  let counter = 0;
+  const visit = (node: string) => {
+    index.set(node, counter);
+    low.set(node, counter);
+    counter += 1;
+    stack.push(node);
+    onStack.add(node);
+    for (const next of edges.get(node) ?? []) {
+      if (!index.has(next)) {
+        visit(next);
+        low.set(node, Math.min(low.get(node)!, low.get(next)!));
+      } else if (onStack.has(next)) {
+        low.set(node, Math.min(low.get(node)!, index.get(next)!));
+      }
+    }
+    if (low.get(node) === index.get(node)) {
+      const component: string[] = [];
+      let member: string;
+      do {
+        member = stack.pop()!;
+        onStack.delete(member);
+        component.push(member);
+      } while (member !== node);
+      if (component.length > 1 || (edges.get(node) ?? []).includes(node)) component.forEach((m) => result.add(m));
+    }
+  };
+  for (const node of edges.keys()) if (!index.has(node)) visit(node);
+  return result;
+}
 
 function isLocalizedText(value: unknown): value is LocalizedText {
   return (
