@@ -27,8 +27,16 @@ import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import type { EditorContent } from "@/features/editor/adapter/content";
 import { documentIdFromRef, MAX_UPLOAD_BYTES, storagePathFor } from "@/features/editor/adapter/files";
-import { registerEditorUpload, resolveEditorFile, saveEditorDocument } from "@/features/editor/services/editor-document.commands";
+import { registerEditorUpload, resolveEditorFile } from "@/features/editor/services/editor-document.commands";
 import { blockTaskSource, type EditorObjectType } from "@/features/editor/semantic/source";
+import {
+  appendEditorOperations,
+  loadServerEditorDocument,
+  type ServerEditorDocument,
+} from "@/features/editor/services/editor-operations.commands";
+import { useSaveQueue } from "@/features/editor/queue/use-save-queue";
+import type { QueueBatch, QueueStatus, SendOutcome } from "@/features/editor/queue/queue";
+import { ConflictDialog } from "./conflict-dialog";
 import {
   createSyncedBlock,
   decideSyncedAccess,
@@ -39,9 +47,6 @@ import {
 } from "@/features/editor/services/synced-block.commands";
 import { describeButtonTarget, runButtonAction, undoButtonAction } from "@/features/editor/services/button-action.commands";
 
-type SaveState = "idle" | "saving" | "saved" | "failed" | "offline" | "conflict" | "forbidden" | "tooLarge";
-
-const SAVE_DELAY_MS = 800;
 /** A task block cut and pasted elsewhere reappears within this time; only then is it "removed". */
 const REMOVAL_GRACE_MS = 1500;
 /** Each person's choice to hide "Make a task" suggestions, kept in this browser. */
@@ -86,16 +91,15 @@ function useSuggestionsSetting(): boolean {
     () => true,
   );
 }
-const RETRY_MS = 5000;
-/** Next.js caps a server action's request at 1 MB; stay under it with room for the envelope. */
-const MAX_SAVE_CHARS = 950_000;
 
 /**
  * The body of a page (from M4d a task, and a meeting's notes): the block
- * editor with autosave.
- * Saves are debounced and strictly one at a time, each carrying the version
- * it was based on, so a save from another window is detected instead of
- * overwritten. Until live co-editing (V1-17) that is reported, not merged.
+ * editor with autosave through the operation queue (U3). Edits become
+ * operations, batched and sent one request at a time with the version they
+ * were based on, kept on the device until the server confirms them. A save
+ * from another window is a conflict the person resolves (keep mine, take
+ * theirs, review), not an overwrite. Until live co-editing (V1-17) nothing is
+ * merged.
  */
 export function ObjectEditor({
   objectId,
@@ -123,20 +127,15 @@ export function ObjectEditor({
 }) {
   const t = useEditorT();
   const hintId = React.useId();
-  const [state, setState] = React.useState<SaveState>("idle");
-  const version = React.useRef<number | null>(initialVersion);
-  const pending = React.useRef<{ content: EditorContent; state: string } | null>(null);
-  const saving = React.useRef(false);
-  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stopped = React.useRef(false);
-  // Lets a save schedule the next one without the callback naming itself.
-  const again = React.useRef<() => void>(() => {});
   const { toast } = useToast();
   const latest = React.useRef<EditorContent>(initialContent);
   const [removal, setRemoval] = React.useState<{ id: string; title: string } | null>(null);
   const suggestionsOn = useSuggestionsSetting();
   const [people, setPeople] = React.useState<{ id: string; name: string }[]>([]);
   const suggestionsId = React.useId();
+  // The conflict the person closed without choosing; the pill offers to reopen it.
+  const [dismissed, setDismissed] = React.useState(0);
+  const [theirs, setTheirs] = React.useState<{ id: number; doc: ServerEditorDocument | null } | null>(null);
 
   React.useEffect(() => {
     if (!editable || !suggestionsOn) return;
@@ -149,72 +148,82 @@ export function ObjectEditor({
     };
   }, [editable, suggestionsOn]);
 
-  const flush = React.useCallback(async () => {
-    if (saving.current || stopped.current || !pending.current) return;
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      setState("offline");
-      return;
-    }
-    const next = pending.current;
-    if (JSON.stringify(next.content).length + next.state.length > MAX_SAVE_CHARS) {
-      // Kept pending: a later, smaller version of the document can still save.
-      setState("tooLarge");
-      return;
-    }
-    pending.current = null;
-    saving.current = true;
-    setState("saving");
-    let result: Awaited<ReturnType<typeof saveEditorDocument>>;
-    try {
-      result = await saveEditorDocument({
-        objectId,
-        objectType,
-        baseVersion: version.current,
-        content: next.content,
-        state: next.state,
-      });
-    } catch {
-      result = { ok: false, reason: "failed" };
-    }
-    saving.current = false;
-    if (result.ok) {
-      version.current = result.version;
-      setState(pending.current ? "saving" : "saved");
-      if (pending.current) again.current();
-      return;
-    }
-    if (result.reason === "conflict" || result.reason === "forbidden") {
-      stopped.current = true;
-      setState(result.reason);
-      return;
-    }
-    // Keep the newest content and try again shortly.
-    pending.current = pending.current ?? next;
-    setState("failed");
-    timer.current = setTimeout(() => again.current(), RETRY_MS);
-  }, [objectId, objectType]);
+  const send = React.useCallback(
+    async (batch: QueueBatch): Promise<SendOutcome> => {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return { ok: false, reason: "offline" };
+      try {
+        const result = await appendEditorOperations({
+          objectId,
+          objectType,
+          baseVersion: batch.baseVersion,
+          ops: batch.ops.map((op) => ({ kind: "replace" as const, content: op.content, state: op.state })),
+        });
+        if (result.ok) return { ok: true, version: result.version };
+        if (result.reason === "conflict") return { ok: false, reason: "conflict", version: result.version ?? null };
+        if (result.reason === "forbidden" || result.reason === "tooLarge") return { ok: false, reason: result.reason };
+        return { ok: false, reason: "failed" };
+      } catch {
+        const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+        return { ok: false, reason: offline ? "offline" : "failed" };
+      }
+    },
+    [objectId, objectType],
+  );
 
+  // Who is signed in, read from this browser's session, so a draft kept on
+  // the device is put back only for the person who wrote it.
+  const [ownerId, setOwnerId] = React.useState<string | null | undefined>(undefined);
   React.useEffect(() => {
-    again.current = () => void flush();
-  }, [flush]);
-
-  React.useEffect(() => {
-    const online = () => void flush();
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (pending.current || saving.current) event.preventDefault();
-    };
-    window.addEventListener("online", online);
-    window.addEventListener("beforeunload", beforeUnload);
+    if (!editable) return;
+    let active = true;
+    createSupabaseBrowserClient()
+      .auth.getSession()
+      .then(({ data }) => active && setOwnerId(data.session?.user.id ?? null))
+      .catch(() => active && setOwnerId(null));
     return () => {
-      window.removeEventListener("online", online);
-      window.removeEventListener("beforeunload", beforeUnload);
-      if (timer.current) clearTimeout(timer.current);
+      active = false;
     };
-  }, [flush]);
+  }, [editable]);
+
+  const queue = useSaveQueue({ objectId, initialVersion, initialContent, initialState, send, enabled: editable, ownerId });
+  const { status, conflict, seed } = queue;
+  const conflictOpen = conflict !== null && conflict.id !== dismissed;
+  const theirsDoc = conflict && theirs?.id === conflict.id ? theirs.doc : undefined;
+
+  // The editor was mounted again on other content: an unsaved edit kept on
+  // this device, or the other person's version.
+  const toastedSeed = React.useRef(0);
+  React.useEffect(() => {
+    latest.current = seed.content;
+    if (seed.reason === "restored" && toastedSeed.current !== seed.key) {
+      toastedSeed.current = seed.key;
+      toast(t("save.restored"), { tone: "info" });
+    }
+  }, [seed, toast, t]);
+
+  // A conflict loads the other version, for "take theirs" and the review.
+  React.useEffect(() => {
+    if (!conflict) return;
+    let active = true;
+    const { id } = conflict;
+    loadServerEditorDocument(objectId)
+      .then((doc) => active && setTheirs({ id, doc }))
+      .catch(() => active && setTheirs({ id, doc: null }));
+    return () => {
+      active = false;
+    };
+  }, [conflict, objectId]);
+
+  const { takeTheirs: takeTheirsFromQueue, latest: latestQueued, enqueue } = queue;
+  const takeTheirs = React.useCallback(() => {
+    if (!theirsDoc) return;
+    takeTheirsFromQueue(theirsDoc);
+  }, [takeTheirsFromQueue, theirsDoc]);
+
+  const mine = React.useCallback(() => latestQueued()?.content ?? latest.current, [latestQueued]);
 
   const onChange = React.useCallback(
     (content: EditorContent, state: string) => {
-      if (stopped.current) return;
       const removed = removedTaskIds(latest.current, content);
       latest.current = content;
       if (removed.length > 0) {
@@ -229,11 +238,9 @@ export function ObjectEditor({
           });
         }, REMOVAL_GRACE_MS);
       }
-      pending.current = { content, state };
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => void flush(), SAVE_DELAY_MS);
+      enqueue(content, state);
     },
-    [flush],
+    [enqueue],
   );
 
   const files = React.useMemo<EditorFileHandlers>(
@@ -320,7 +327,7 @@ export function ObjectEditor({
     [suggestionsOn, people, timeZone],
   );
 
-  const message: Record<SaveState, string | null> = {
+  const message: Record<QueueStatus, string | null> = {
     idle: null,
     saving: t("save.saving"),
     saved: t("save.saved"),
@@ -330,7 +337,7 @@ export function ObjectEditor({
     forbidden: t("save.forbidden"),
     tooLarge: t("save.tooLarge"),
   };
-  const alert = state === "conflict" || state === "forbidden" || state === "tooLarge";
+  const alert = status === "conflict" || status === "forbidden" || status === "tooLarge";
 
   return (
     <div>
@@ -347,19 +354,28 @@ export function ObjectEditor({
             />
             {t("progressive.toggle")}
           </label>
-          <p
-            role={alert ? "alert" : "status"}
-            data-testid="editor-save-state"
-            className={cn("text-caption", alert ? "text-danger-fg" : "text-muted")}
-          >
-            {message[state]}
-          </p>
+          <div className="flex items-center gap-2">
+            <p
+              role={alert ? "alert" : "status"}
+              data-testid="editor-save-state"
+              data-save-status={status}
+              className={cn("text-caption", alert ? "text-danger-fg" : "text-muted")}
+            >
+              {message[status]}
+            </p>
+            {conflict && !conflictOpen ? (
+              <Button size="sm" variant="secondary" onClick={() => setDismissed(0)}>
+                {t("conflictDialog.open")}
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
       <BlockEditor
-        initialContent={initialContent}
-        initialState={initialState}
-        editable={editable && state !== "conflict" && state !== "forbidden"}
+        key={seed.key}
+        initialContent={seed.content}
+        initialState={seed.state}
+        editable={editable && status !== "forbidden"}
         onChange={editable ? onChange : undefined}
         files={files}
         semantic={semantic}
@@ -367,6 +383,17 @@ export function ObjectEditor({
         hintId={editable ? hintId : undefined}
         label={label}
       />
+      {conflict ? (
+        <ConflictDialog
+          key={conflict.id}
+          open={conflictOpen}
+          mine={mine}
+          theirs={theirsDoc === undefined ? undefined : (theirsDoc?.content ?? null)}
+          onKeepMine={queue.keepMine}
+          onTakeTheirs={takeTheirs}
+          onClose={() => setDismissed(conflict.id)}
+        />
+      ) : null}
       {removal ? (
         <Dialog open onClose={() => setRemoval(null)} title={t("semantic.removed.title")}>
           <p className="text-body-sm text-ink">{t("semantic.removed.body", { title: removal.title })}</p>
