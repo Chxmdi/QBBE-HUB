@@ -29,6 +29,12 @@ description: Run the QBBE Hub app locally against the local Supabase stack and d
   itself follows the browser language, so its labels change too).
 - Don't `pkill -f "next start"` from a command whose own text contains that
   phrase; it kills the shell running it.
+- Browser specs against the running build, the way CI runs them:
+  `NO_PROXY='*' npx playwright test <specs> --project=chromium --grep-invert "\[switch off\]"`
+  for a `WORKSPACE_OS_FLAGS=all` build (`--grep-invert "\[switches on\]"` for a
+  plain one). Without `--project` Playwright runs all five browser projects,
+  five times the work. After a `db reset`, delete `playwright/.auth/qa-owner-totp`
+  and `qa-admin-totp`: the stored secrets belong to factors the reset removed.
 
 ## Known local limits
 
