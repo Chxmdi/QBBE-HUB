@@ -6,7 +6,8 @@ import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { contentAdapterFor } from "@/features/versions/adapters/registry";
+import { contentAdapterFor, isEditorDocumentType } from "@/features/versions/adapters/registry";
+import { objectContentPath } from "@/features/versions/paths";
 import { versionsText } from "@/features/versions/messages";
 import { objectTypeKeySchema } from "@/features/versions/schema";
 import { isInTrash, listObjectVersions } from "@/features/versions/services/version.queries";
@@ -52,13 +53,17 @@ export default async function ObjectVersionsPage({
 
   const db = await createSupabasePageClient();
   const [{ data: canEdit }, { data: canManage }, versions, trashed] = await Promise.all([
-    db.rpc("can", { object_id: object.id, capability: "edit_content" }),
-    db.rpc("can", { object_id: object.id, capability: "manage" }),
+    db.rpc("can_object_content", { p_object: object.id, p_type: object.type, p_capability: "edit_content" }),
+    db.rpc("can_object_content", { p_object: object.id, p_type: object.type, p_capability: "manage" }),
     listObjectVersions(object),
     isInTrash(object.id),
   ]);
   const title = String(snapshot.properties.title ?? "");
   const block = snapshot.content.blocks[0];
+  // Pages and meetings are edited in the block editor on their own screen;
+  // the one-field editor here is for types whose content is one text field.
+  const editsElsewhere = isEditorDocumentType(object.type);
+  const objectPath = objectContentPath(object);
 
   return (
     <>
@@ -66,14 +71,24 @@ export default async function ObjectVersionsPage({
         eyebrow={(m.types as Record<string, string>)[object.type] ?? m.types.object}
         title={title}
         description={trashed ? m.errors.inTrash : m.page.description}
-        actions={canManage === true && !trashed ? <DeleteObjectButton object={object} title={title} /> : undefined}
+        actions={canManage === true && !editsElsewhere && !trashed ? <DeleteObjectButton object={object} title={title} /> : undefined}
       />
-      <ContentEditor
-        object={object}
-        blockId={block?.id ?? "description"}
-        initialText={block?.text ?? ""}
-        disabled={canEdit !== true || trashed}
-      />
+      {editsElsewhere ? (
+        objectPath ? (
+          <p className="mb-4">
+            <a href={objectPath} className="text-[13px] font-medium text-brand-fg hover:underline">
+              {m.page.open}
+            </a>
+          </p>
+        ) : null
+      ) : (
+        <ContentEditor
+          object={object}
+          blockId={block?.id ?? "description"}
+          initialText={block?.text ?? ""}
+          disabled={canEdit !== true || trashed}
+        />
+      )}
       <VersionHistory
         object={object}
         versions={versions}

@@ -171,7 +171,7 @@ export async function addObjectComment(input: unknown): Promise<CommentActionRes
       authorName: session.profile.full_name,
       parentType: target.parentType,
       parentId: target.parentId,
-      link: objectCommentsPath(data.object, commentId),
+      link: objectCommentsPath(data.object, commentId, target.blockId),
     });
   } catch (mentionError) {
     console.error("object comment mentions failed", mentionError);
@@ -200,9 +200,9 @@ export async function editObjectComment(input: unknown): Promise<CommentActionRe
     .from("record_comment")
     .update({ body: parsed.data.body })
     .eq("id", parsed.data.commentId)
-    .select("id, parent_type, parent_id");
+    .select("id, parent_type, parent_id, block_id");
   if (error) return { ok: false, error: translateError(error.message, m.errors.saveFailed, m) };
-  const row = data?.[0] as { id: string; parent_type: string; parent_id: string } | undefined;
+  const row = data?.[0] as { id: string; parent_type: string; parent_id: string; block_id: string | null } | undefined;
   if (!row) return { ok: false, error: m.errors.notFound };
   try {
     await syncMentions(db, {
@@ -212,7 +212,7 @@ export async function editObjectComment(input: unknown): Promise<CommentActionRe
       authorName: session.profile.full_name,
       parentType: row.parent_type,
       parentId: row.parent_id,
-      link: objectCommentsPath(parsed.data.object, row.id),
+      link: objectCommentsPath(parsed.data.object, row.id, row.block_id),
     });
   } catch (mentionError) {
     console.error("object comment mentions failed", mentionError);

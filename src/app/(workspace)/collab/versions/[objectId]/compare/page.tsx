@@ -81,7 +81,11 @@ export default async function CompareVersionsPage({
 
   const [from, to] = await Promise.all([load(query.from ?? versions[0]?.id), load(query.to ?? "current")]);
   const db = await createSupabasePageClient();
-  const { data: canEdit } = await db.rpc("can", { object_id: object.id, capability: "edit_content" });
+  const { data: canEdit } = await db.rpc("can_object_content", {
+    p_object: object.id,
+    p_type: object.type,
+    p_capability: "edit_content",
+  });
   const [older, newer] = from && to && from.at > to.at ? [to, from] : [from, to];
   const base = `/collab/versions/${object.id}`;
 
