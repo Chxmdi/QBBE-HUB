@@ -11,11 +11,14 @@ import { Topbar } from "@/components/layout/topbar";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { ToastProvider } from "@/components/ui/toast";
+import type { NavSwitches } from "@/config/navigation";
 import { useT } from "@/lib/i18n/client";
 
 /**
  * Persistent application shell (P0-UX-01): sidebar, topbar, command
- * palette, quick create, notifications, theme control.
+ * palette, quick create, notifications, theme control. `navSwitches` are
+ * the Workspace OS switches read once per request on the server (epic
+ * #199); the menus never fetch them in the browser.
  */
 export function WorkspaceShell({
   name,
@@ -23,6 +26,7 @@ export function WorkspaceShell({
   avatarUrl,
   isAdmin,
   isStaff,
+  navSwitches,
   unreadCount,
   channels,
   programs,
@@ -36,6 +40,7 @@ export function WorkspaceShell({
   avatarUrl: string | null;
   isAdmin: boolean;
   isStaff: boolean;
+  navSwitches?: NavSwitches;
   unreadCount: number;
   channels: SidebarChannel[];
   programs: SidebarProgram[];
@@ -79,6 +84,7 @@ export function WorkspaceShell({
       <Sidebar
         isAdmin={isAdmin}
         isStaff={isStaff}
+        switches={navSwitches}
         channels={channels}
         programs={programs}
         counts={counts}
@@ -113,10 +119,12 @@ export function WorkspaceShell({
         onClose={() => setPaletteOpen(false)}
         isAdmin={isAdmin}
         isStaff={isStaff}
+        switches={navSwitches}
       />
       <MobileNav
         isAdmin={isAdmin}
         isStaff={isStaff}
+        switches={navSwitches}
         myWorkCount={counts.myWork}
         onOpenMore={() => setNavOpen(true)}
       />

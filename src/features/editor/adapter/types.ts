@@ -18,14 +18,23 @@ export interface SemanticSummary {
   detail: string | null;
   done?: boolean;
   archived?: boolean;
+  /** A task's due day (YYYY-MM-DD) and assignee, read live with the title. */
+  dueAt?: string | null;
+  assigneeName?: string | null;
   href: string | null;
 }
 
 export interface QueryRowSummary {
   id: string;
+  /** The object's type key (task, decision, meeting…). */
+  type: string;
   title: string;
+  href: string;
+  /** A task's status key, labelled by the block; other types carry `statusLabel` instead. */
   status: string | null;
-  due: string | null;
+  statusLabel: string | null;
+  date: string | null;
+  dateLabel: "due" | "decided" | "starts" | null;
 }
 
 /** Data for semantic blocks (M5), supplied by the page that mounts the editor. */
@@ -34,6 +43,10 @@ export interface EditorSemanticHandlers {
   search: (kind: SemanticKind, query: string) => Promise<SemanticSummary[]>;
   /** Projects a new task can be created in. */
   projects: () => Promise<{ id: string; name: string }[]>;
+  /** The project offered first for a new task: the meeting's, say. */
+  defaultProjectId?: string | null;
+  /** People a new task can be assigned to. */
+  people?: () => Promise<{ id: string; name: string }[]>;
   createTask: (
     title: string,
     projectId: string | null,

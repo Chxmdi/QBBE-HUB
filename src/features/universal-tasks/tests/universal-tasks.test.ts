@@ -177,7 +177,8 @@ describe("task.create registry action", () => {
 
 describe("task sources", () => {
   it("match the database constraint", () => {
-    const migration = readFileSync("supabase/migrations/20261105010001_task_source.sql", "utf8");
+    // The constraint was last redefined when `page` joined the list.
+    const migration = readFileSync("supabase/migrations/20261107030100_meeting_notes_editor.sql", "utf8");
     const block = migration.slice(migration.indexOf("task_source_type_check check"));
     const listed = [...block.slice(0, block.indexOf("));")).matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
     expect(listed).toEqual([...TASK_SOURCE_TYPES]);
@@ -189,6 +190,7 @@ describe("task sources", () => {
 
   it("link back to where they came from", () => {
     expect(sourceHref("meeting", meeting)).toBe(`/meetings/${meeting}`);
+    expect(sourceHref("page", meeting)).toBe(`/pages/${meeting}`);
     expect(sourceHref("message", meeting, { channel_id: project })).toBe(
       `/channels/${project}?message=${meeting}`,
     );

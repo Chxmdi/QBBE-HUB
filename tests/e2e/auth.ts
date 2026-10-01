@@ -122,7 +122,23 @@ export async function signIn(page: Page, account: QaAccount) {
     if (await mfaHeading.isVisible()) await completeMfa(page, account);
   }
 
-  await page.waitForURL((url) => url.pathname === "/", { timeout: 60_000 });
+  try {
+    await page.waitForURL((url) => url.pathname === "/", { timeout: 60_000 });
+  } catch (error) {
+    // A sign-in that never lands on "/" has one of a few causes (a refused
+    // one-time code, a lost submit, a redirect loop), and each one shows on
+    // the page, not in the timeout. Say where the page is and what it says.
+    const alerts = await page
+      .getByRole("alert")
+      .allTextContents()
+      .catch(() => [] as string[]);
+    const said = alerts.filter(Boolean).join(" | ");
+    throw new Error(
+      `signIn(${account}) never reached "/": the page is at ${page.url()}` +
+        (said ? ` and says: ${said}` : " and shows no error"),
+      { cause: error },
+    );
+  }
 }
 
 /**

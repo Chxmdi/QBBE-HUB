@@ -7,6 +7,14 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * PostgREST answers at most `max_rows` rows per request (1,000 in
+ * supabase/config.toml and on the hosted projects) and says nothing when it
+ * cuts a larger ask short, so the export reads page by page of that size until
+ * a page comes back short. One request of `.limit(50_000)` returned the oldest
+ * 1,000 events and nothing else, and the CSV looked complete (I4 notes, R3).
+ */
+const PAGE_ROWS = 1_000;
 const MAX_ROWS = 50_000;
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -29,17 +37,26 @@ export async function GET(request: Request) {
 
   const db = await createSupabaseServerClient();
   const organizationId = authorization.session.organizationId;
-  const { data, error } = await db
-    .from("audit_event")
-    .select("created_at, actor_id, actor_type, event_type, action, result, object_type, object_id, metadata")
-    .eq("organization_id", organizationId)
-    .gte("created_at", `${from.data}T00:00:00Z`)
-    .lt("created_at", new Date(Date.parse(`${to.data}T00:00:00Z`) + 86_400_000).toISOString())
-    .order("created_at", { ascending: true })
-    .limit(MAX_ROWS);
-  if (error) return new NextResponse("The audit log could not be read.", { status: 500 });
+  const rangeEnd = new Date(Date.parse(`${to.data}T00:00:00Z`) + 86_400_000).toISOString();
+  const rows: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < MAX_ROWS; offset += PAGE_ROWS) {
+    const { data, error } = await db
+      .from("audit_event")
+      .select("created_at, actor_id, actor_type, event_type, action, result, object_type, object_id, metadata")
+      .eq("organization_id", organizationId)
+      .gte("created_at", `${from.data}T00:00:00Z`)
+      .lt("created_at", rangeEnd)
+      // The id breaks ties between events written in the same instant, so
+      // consecutive pages never overlap or skip a row.
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + PAGE_ROWS - 1);
+    if (error) return new NextResponse("The audit log could not be read.", { status: 500 });
+    const page = (data ?? []) as Record<string, unknown>[];
+    rows.push(...page);
+    if (page.length < PAGE_ROWS) break;
+  }
 
-  const rows = (data ?? []) as Record<string, unknown>[];
   await db.from("audit_event").insert({
     organization_id: organizationId,
     actor_id: authorization.session.userId,

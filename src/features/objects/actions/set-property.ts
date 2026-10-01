@@ -1,5 +1,5 @@
 import type { ActionDefinition, Change, Uuid } from "@/lib/objects/contracts";
-import { invertChanges } from "@/lib/objects/stubs";
+import { invertChanges } from "@/lib/objects/changes";
 import type { ObjectWriter } from "./registry";
 import { sameValue } from "./registry";
 

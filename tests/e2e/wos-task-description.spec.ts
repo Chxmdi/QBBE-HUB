@@ -70,7 +70,7 @@ test("a task description opens in the editor and stays in step with the task", a
   await expect(reloaded).not.toContainText("Send invitations");
 });
 
-test("with the editor switch off, the drawer keeps the plain description field", async ({ page }) => {
+test("with the editor switch off, the drawer keeps the plain description field [switch off]", async ({ page }) => {
   test.setTimeout(120_000);
   setEditor(false);
   await signIn(page, "owner");

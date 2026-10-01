@@ -26,6 +26,7 @@ export const meetingsV2En = {
     error: "The notes could not be saved.",
     readOnly: "Only the organizer can edit the notes.",
     empty: "No notes yet.",
+    blockHint: "Type /task on a line to make a real task from it, with its owner and due date; it lands in this meeting's project and shows in My work, the board and the calendar.",
   },
   capture: {
     heading: "Captured during the meeting",
@@ -89,6 +90,10 @@ export const meetingsV2En = {
     createdTask: "Task created",
     createdDecision: "Decision recorded",
     reviewed: "Already reviewed",
+    fromNotes: "Created from the notes",
+    fromNotesHint: "Tasks made in the notes with /task or Make a task are already real tasks. They are listed here, as they are now, so the review shows everything this meeting produced.",
+    taskDue: "Due {date}",
+    taskArchived: "Archived",
     willBecome: {
       task: "Becomes a task",
       follow_up: "Becomes a task",

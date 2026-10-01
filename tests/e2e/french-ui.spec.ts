@@ -69,7 +69,9 @@ test.describe("a signed-in person who chooses French", () => {
     const nav = page.getByRole("navigation", { name: "Navigation principale" });
     await expect(nav).toBeVisible({ timeout: 30_000 });
     await expect(page.locator("html")).toHaveAttribute("lang", "fr-CA");
-    await expect(nav.getByRole("link", { name: "Mon travail" })).toBeVisible();
+    // The name carries the open-item count ("Mon travail 2 éléments ouverts");
+    // "Mon travail (classique)" must not match.
+    await expect(nav.getByRole("link", { name: /^Mon travail(?! \(classique\))/ })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Accueil", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Paramètres", level: 1 })).toBeVisible();
     await expect(page).toHaveTitle("Paramètres du compte · QBBE Hub");
