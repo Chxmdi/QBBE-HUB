@@ -111,21 +111,36 @@ test("a token calls the API as its owner, with their permissions, until revoked"
   }
 });
 
-test("a token without the actions scope cannot run actions, and the API is off with the switch", async ({ page }) => {
-  setSwitch(true);
+/** A read-only token for the staff member; returns its bearer value and the hash to delete it by. */
+function readOnlyToken(): { token: string; hash: string } {
   const staff = sql(`select id::text from user_profile where email = 'qa-staff@example.com'`);
   const org = sql(`select organization_id::text from organization_membership where user_id = '${staff}' limit 1`);
   const token = `qbbe_${"r".repeat(43)}`;
   const hash = sql(`select encode(extensions.digest('${token}', 'sha256'), 'hex')`);
   sql(`insert into api_token (organization_id, user_id, name, token_hash, token_prefix, scopes, expires_at)
     values ('${org}', '${staff}', 'E2E read only', '${hash}', 'qbbe_rrrrrrr', array['objects:read'], now() + interval '1 day')`);
+  return { token, hash };
+}
+
+test("a token without the actions scope cannot run actions", async ({ page }) => {
+  setSwitch(true);
+  const { token, hash } = readOnlyToken();
   try {
     const auth = { authorization: `Bearer ${token}` };
     const refused = await page.request.post("/api/v1/actions/task.set_priority", { headers: auth, data: { input: {} } });
     expect(refused.status()).toBe(403);
     expect(await refused.json()).toMatchObject({ error: { code: "insufficient_scope" } });
     expect((await page.request.get("/api/v1/actions", { headers: auth })).status()).toBe(403);
-    setSwitch(false);
+  } finally {
+    sql(`delete from api_token where token_hash = '${hash}'`);
+  }
+});
+
+test("the API is off with the switch [switch off]", async ({ page }) => {
+  setSwitch(false);
+  const { token, hash } = readOnlyToken();
+  try {
+    const auth = { authorization: `Bearer ${token}` };
     expect((await page.request.get("/api/v1/me", { headers: auth })).status()).toBe(404);
   } finally {
     sql(`delete from api_token where token_hash = '${hash}'`);

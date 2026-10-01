@@ -13,6 +13,7 @@ const OWNER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1";
 const STAFF = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2";
 let previous = "f";
 let lensId = "";
+let decisionLensId = "";
 
 test.beforeAll(() => {
   previous = sql("select coalesce((select enabled from public.feature_flag where key = 'wos_lenses'), false)");
@@ -35,11 +36,34 @@ test.beforeAll(() => {
     from public.organization_membership where user_id = '${OWNER}'
     returning id;
   `);
+  // A decision in a project staff can read; the engine, not a task reader, answers it.
+  sql(`
+    with m as (select organization_id from public.organization_membership where user_id = '${OWNER}'),
+    p as (insert into public.program (organization_id, name, slug, created_by)
+      select organization_id, '${RUN} program', lower('${RUN}'), '${OWNER}' from m returning id, organization_id),
+    j as (insert into public.project (organization_id, program_id, name, owner_id, created_by)
+      select p.organization_id, p.id, '${RUN} project', '${STAFF}', '${OWNER}' from p returning id, organization_id)
+    insert into public.decision (organization_id, project_id, title, decided_by, decided_at)
+    select j.organization_id, j.id, '${RUN} decided', '${OWNER}', now() - interval '1 day' from j;
+  `);
+  decisionLensId = sql(`
+    insert into public.lens (organization_id, owner_id, name, kind, type_key, spec, visibility)
+    select organization_id, '${OWNER}', '${RUN} decisions', 'table', 'decision',
+      jsonb_build_object('version', 1, 'type', 'decision', 'select', jsonb_build_array('decided_time', 'decided_by'),
+        'sort', jsonb_build_array(jsonb_build_object('property', 'decided_time', 'direction', 'desc')),
+        'where', jsonb_build_object('and', jsonb_build_array(jsonb_build_object('property', 'title', 'operator', 'starts_with', 'value', '${RUN}')))),
+      'shared'
+    from public.organization_membership where user_id = '${OWNER}'
+    returning id;
+  `);
 });
 
 test.afterAll(() => {
   sql(`delete from public.lens where name like '${RUN}%'`);
+  sql(`delete from public.decision where title like '${RUN}%'`);
   sql(`delete from public.task where title like '${RUN}%'`);
+  sql(`delete from public.project where name like '${RUN}%'`);
+  sql(`delete from public.program where name like '${RUN}%'`);
   sql(`update public.feature_flag set enabled = ${previous === "t" ? "true" : "false"} where key = 'wos_lenses'`);
 });
 
@@ -68,6 +92,18 @@ test("a query block shows the reader's own rows, in each view", async ({ page })
   await page.goto(`/lenses/embed?lens=${lensId}`);
   await expect(block.getByRole("row")).toHaveCount(2, { timeout: 30_000 });
   await expect(block).toContainText(`${RUN} three`);
+});
+
+test("a query block shows a lens of decisions, not only tasks", async ({ page }) => {
+  await signIn(page, "staff");
+  await page.goto(`/lenses/embed?lens=${decisionLensId}`);
+  const block = page.getByRole("region", { name: `${RUN} decisions` });
+  await expect(block.getByRole("table")).toBeVisible({ timeout: 30_000 });
+  await expect(block.getByRole("row")).toHaveCount(2);
+  await expect(block).toContainText(`${RUN} decided`);
+  await expect(block).toContainText("QA Owner");
+  const result = await new AxeBuilder({ page }).analyze();
+  expect(result.violations.filter((v) => v.impact === "critical" || v.impact === "serious")).toEqual([]);
 });
 
 test("a block explains itself when it cannot show anything", async ({ page }) => {

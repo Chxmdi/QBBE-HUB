@@ -50,7 +50,17 @@ Set the matching value in the application environment:
 | `EMAIL_PROVIDER_API_KEY` | Resend API key. Absent means the log transport (see below). |
 | `EMAIL_FROM_ADDRESS` | A verified sender on a QBBE-controlled domain. |
 | `NEXT_PUBLIC_APP_URL` | The origin used to build absolute links inside email. |
-| `CLAMAV_SOCKET` | Private Unix socket used by the document-scanning job. Required on its QBBE-controlled job host. |
+| `CLAMAV_SOCKET`, or `CLAMAV_HOST` and `CLAMAV_PORT` | Where clamd listens for the three scanning jobs: a private Unix socket on the same host, or clamd over a private network (port 3310 by default). One of the two is required wherever the jobs run. |
+
+To run one job now instead of waiting for its schedule (a file awaiting its
+security check, say), run it the way pg_cron does:
+
+```
+CRON_JOB_SECRET=<the site's secret> NEXT_PUBLIC_APP_URL=<site> npm run jobs:run -- scan-documents
+```
+
+Locally this is the only way a job runs: the database container cannot reach
+a server on the developer's loopback address, so its cron never arrives.
 
 Until `configure_job_runner` has been run, every job records a `failed` run
 saying so — at most once an hour, so the message stays visible without burying

@@ -100,10 +100,21 @@ export function formatInZone(
   locale: Locale = DEFAULT_LOCALE,
 ): string {
   if (!iso) return "—";
-  const instant = new Date(iso);
+  // A bare YYYY-MM-DD (a `date` column such as `task.due_at`) is a calendar
+  // day with no zone. `new Date("2026-10-20")` reads it as UTC midnight,
+  // which in Toronto is the evening of the 19th, so every due date showed a
+  // day early on the board, Home, the project page and meeting captures. It
+  // is formatted as that day, in UTC, so it reads back as written. Only
+  // genuine instants are converted into `timeZone` (see calendarDateInZone).
+  const bareDay = /^\d{4}-\d{2}-\d{2}$/.test(iso.trim());
+  const instant = bareDay ? new Date(`${iso.trim()}T00:00:00Z`) : new Date(iso);
   if (Number.isNaN(instant.getTime())) return "—";
   try {
-    return new Intl.DateTimeFormat(intlLocale(locale), { timeZone, ...options }).format(instant);
+    return new Intl.DateTimeFormat(intlLocale(locale), {
+      timeZone,
+      ...options,
+      ...(bareDay ? { timeZone: "UTC" } : {}),
+    }).format(instant);
   } catch {
     return "—";
   }

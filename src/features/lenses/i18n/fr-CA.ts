@@ -147,6 +147,7 @@ export const lensesFrCA: LensMessages = {
       decision: "Décision",
       event: "Événement",
       document: "Document",
+      page: "Page",
       risk: "Risque",
       issue: "Enjeu",
       contact: "Contact",

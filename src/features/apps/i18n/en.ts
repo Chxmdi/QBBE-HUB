@@ -31,14 +31,12 @@ export const appsEn = {
   },
   screens: {
     lensIntro: "{kind} of {type}",
-    notYet: "This view shows {type} records once the workspace registry is switched on. It will use the {kind} view with your own access.",
+    notYet: "This {kind} cannot show \"{type}\" records: the query engine does not know that type yet. Check the screen's type in Manage this app.",
     pageLink: "Open the page",
     pageNotYet: "Pages open here once the page editor is switched on.",
     formNotYet: "The form \"{form}\" opens here once forms are switched on.",
     empty: "Nothing to show yet.",
     title: "Title",
-    status: "Status",
-    due: "Due",
     more: "Showing the first {count}.",
   },
   runAction: {

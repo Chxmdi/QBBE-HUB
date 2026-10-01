@@ -227,9 +227,16 @@ function visibleFields(catalog: LensCatalog, type: string, result: LensResult, p
     .slice(0, 8);
 }
 
+/** Where a row opens: the record's own screen where it has one, else the full lens. */
+function rowHref(type: string, row: LensRow): string {
+  if (type === "meeting") return `/meetings/${row.id}`;
+  if (type === "document") return `/documents/${row.id}`;
+  return recordHref(type, row.id);
+}
+
 function RecordLink({ type, row, className }: { type: string; row: LensRow; className?: string }) {
   return (
-    <Link href={recordHref(type, row.id)} className={cn("font-medium text-ink hover:text-brand-fg", className)}>
+    <Link href={rowHref(type, row)} className={cn("font-medium text-ink hover:text-brand-fg", className)}>
       {row.title}
     </Link>
   );

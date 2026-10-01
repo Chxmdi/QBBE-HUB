@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { MAX_DOCUMENT_BYTES, scanDocumentBytes } from "@/features/documents/services/clamav";
+import { MAX_DOCUMENT_BYTES, SCANNER_REQUIREMENT, isScannerConfigured, scanDocumentBytes } from "@/features/documents/services/clamav";
 import type { JobContext, JobResult } from "../runner";
 
 /**
@@ -17,7 +17,7 @@ const SOURCES = [
 ] as const;
 
 export async function scanFormFiles({ db, definition, now }: JobContext): Promise<JobResult> {
-  if (!process.env.CLAMAV_SOCKET) throw new Error("Form file scanning requires CLAMAV_SOCKET");
+  if (!isScannerConfigured()) throw new Error(`Form file scanning requires ${SCANNER_REQUIREMENT}`);
   let processed = 0;
   let failed = 0;
   for (const { table, bucket } of SOURCES) {

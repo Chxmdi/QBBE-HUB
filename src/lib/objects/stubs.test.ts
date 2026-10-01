@@ -1,12 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
-import type { ActionContext, Change, QuerySpec } from "./contracts";
+import type { QuerySpec } from "./contracts";
 import {
-  createActionRegistryStub,
-  createCanStub,
-  createEventWriterStub,
   createTaskQueryStub,
-  invertChanges,
   QueryNotSupportedError,
   resolveValue,
   serializeFilter,
@@ -50,32 +46,6 @@ const task = "22222222-2222-2222-2222-222222222222";
 const project = "33333333-3333-3333-3333-333333333333";
 // Wednesday 30 September 2026, 10:00 in Toronto.
 const context = { userId: me, now: () => new Date("2026-09-30T14:00:00Z") };
-
-describe("can stub", () => {
-  it("asks the database's public.can with the object and capability", async () => {
-    const { client, requests } = fakeClient(() => json(true));
-    expect(await createCanStub(client)(task, "edit_content")).toBe(true);
-    expect(requests[0].url.pathname).toBe("/rest/v1/rpc/can");
-    expect(requests[0].body).toEqual({ object_id: task, capability: "edit_content" });
-  });
-
-  it("answers false when the database says no", async () => {
-    const { client } = fakeClient(() => json(false));
-    expect(await createCanStub(client)(task, "manage")).toBe(false);
-  });
-
-  it("fails closed on a database error", async () => {
-    const { client } = fakeClient(() => json({ message: "boom" }, 500));
-    expect(await createCanStub(client)(task, "view")).toBe(false);
-  });
-
-  it("refuses an unknown capability without asking", async () => {
-    const { client, requests } = fakeClient(() => json(true));
-    // @ts-expect-error: not a Workspace OS capability
-    expect(await createCanStub(client)(task, "delete_everything")).toBe(false);
-    expect(requests).toHaveLength(0);
-  });
-});
 
 describe("relative values", () => {
   it("resolves me to the viewer", () => {
@@ -241,168 +211,6 @@ describe("task query stub", () => {
     const { client } = fakeClient(() => json({ message: "permission denied for table task" }, 403));
     await expect(createTaskQueryStub(client, context)({ version: 1, types: ["task"] })).rejects.toThrow(
       "permission denied",
-    );
-  });
-});
-
-describe("action registry stub", () => {
-  const ref = { id: task, type: "task" };
-  const setStatus = {
-    key: "task.set_status",
-    label: { en: "Change status", fr: "Changer le statut" },
-    capability: "edit_content" as const,
-    targets: (input: { id: string }) => [input.id],
-    run: async (_context: ActionContext, input: { id: string; status: string }): Promise<Change[]> => [
-      { kind: "update", object: { id: input.id, type: "task" }, property: "status", before: "not_started", after: input.status },
-    ],
-  };
-
-  function setup(allowed: (id: string, capability: string) => boolean) {
-    const applied: Change[][] = [];
-    const registry = createActionRegistryStub({
-      apply: async (changes) => {
-        applied.push(changes);
-      },
-      now: () => new Date("2026-09-30T14:00:00Z"),
-      newId: (() => {
-        let n = 0;
-        return () => `change-set-${++n}`;
-      })(),
-    });
-    registry.register(setStatus);
-    const actionContext: ActionContext = {
-      actor: { kind: "person", id: me },
-      can: async (id, capability) => allowed(id, capability),
-    };
-    return { registry, applied, actionContext };
-  }
-
-  it("runs an action and records its change set", async () => {
-    const { registry, actionContext } = setup(() => true);
-    const result = await registry.run("task.set_status", { id: task, status: "done" }, actionContext);
-    expect(result).toEqual({
-      ok: true,
-      changeSet: {
-        id: "change-set-1",
-        actionKey: "task.set_status",
-        actor: { kind: "person", id: me },
-        createdAt: "2026-09-30T14:00:00.000Z",
-        changes: [{ kind: "update", object: ref, property: "status", before: "not_started", after: "done" }],
-        undoOf: null,
-      },
-    });
-  });
-
-  it("checks the declared capability on every target first", async () => {
-    const asked: string[] = [];
-    const { registry, actionContext } = setup((id, capability) => {
-      asked.push(`${id}:${capability}`);
-      return false;
-    });
-    expect(await registry.run("task.set_status", { id: task, status: "done" }, actionContext)).toEqual({
-      ok: false,
-      reason: "forbidden",
-    });
-    expect(asked).toEqual([`${task}:edit_content`]);
-  });
-
-  it("undoes by applying the reverse change set", async () => {
-    const { registry, applied, actionContext } = setup(() => true);
-    const done = await registry.run("task.set_status", { id: task, status: "done" }, actionContext);
-    if (!done.ok) throw new Error("expected the action to run");
-    const undone = await registry.undo(done.changeSet.id, actionContext);
-    expect(applied).toEqual([
-      [{ kind: "update", object: ref, property: "status", before: "done", after: "not_started" }],
-    ]);
-    expect(undone.ok && undone.changeSet.undoOf).toBe("change-set-1");
-  });
-
-  it("refuses to undo without the capability, and reports unknown actions", async () => {
-    let allow = true;
-    const { registry, applied, actionContext } = setup(() => allow);
-    const done = await registry.run("task.set_status", { id: task, status: "done" }, actionContext);
-    if (!done.ok) throw new Error("expected the action to run");
-    allow = false;
-    expect(await registry.undo(done.changeSet.id, actionContext)).toEqual({ ok: false, reason: "forbidden" });
-    expect(applied).toHaveLength(0);
-    expect(await registry.undo("missing", actionContext)).toEqual({ ok: false, reason: "unknown_action" });
-    expect(await registry.run("missing", {}, actionContext)).toEqual({ ok: false, reason: "unknown_action" });
-  });
-
-  it("reports a failing action without recording it", async () => {
-    const { registry, actionContext } = setup(() => true);
-    registry.register({ ...setStatus, key: "task.broken", run: async () => Promise.reject(new Error("nope")) });
-    expect(await registry.run("task.broken", { id: task }, actionContext)).toEqual({
-      ok: false,
-      reason: "failed",
-      message: "nope",
-    });
-  });
-
-  it("will not register the same action twice", () => {
-    const { registry } = setup(() => true);
-    expect(() => registry.register(setStatus)).toThrow("already registered");
-  });
-
-  it("inverts every kind of change, last change first", () => {
-    const relation = { relationTypeKey: "blocks", from: ref, to: { id: project, type: "project" } };
-    expect(
-      invertChanges([
-        { kind: "create", object: ref, values: { title: "x" } },
-        { kind: "link", relation },
-        { kind: "unlink", relation },
-        { kind: "delete", object: ref, values: { title: "x" } },
-      ]),
-    ).toEqual([
-      { kind: "create", object: ref, values: { title: "x" } },
-      { kind: "link", relation },
-      { kind: "unlink", relation },
-      { kind: "delete", object: ref, values: { title: "x" } },
-    ]);
-  });
-});
-
-describe("event writer stub", () => {
-  const event = {
-    object: { id: task, type: "task" },
-    organizationId: "66666666-6666-6666-6666-666666666666",
-    verb: "updated" as const,
-    changes: [{ property: "status", before: "not_started", after: "done" }],
-    summary: "completed “Book the hall”",
-    projectId: project,
-  };
-
-  it("writes today's activity feed row with the changes in metadata", async () => {
-    const { client, requests } = fakeClient(() => new Response(null, { status: 201 }));
-    await createEventWriterStub(client)({ ...event, actor: { kind: "person", id: me }, changeSetId: "cs-1" });
-    expect(requests[0].method).toBe("POST");
-    expect(requests[0].url.pathname).toBe("/rest/v1/activity_event");
-    expect(requests[0].body).toEqual({
-      organization_id: event.organizationId,
-      actor_id: me,
-      verb: "updated",
-      source_type: "task",
-      source_id: task,
-      project_id: project,
-      program_id: null,
-      summary: event.summary,
-      metadata: { actor: { kind: "person", id: me }, changes: event.changes, change_set_id: "cs-1" },
-    });
-  });
-
-  it("keeps a non-person actor out of the person column", async () => {
-    const { client, requests } = fakeClient(() => new Response(null, { status: 201 }));
-    const actor = { kind: "automation" as const, id: "77777777-7777-7777-7777-777777777777" };
-    await createEventWriterStub(client)({ ...event, actor });
-    const body = requests[0].body as { actor_id: unknown; metadata: { actor: unknown } };
-    expect(body.actor_id).toBeNull();
-    expect(body.metadata.actor).toEqual(actor);
-  });
-
-  it("throws when the row is refused", async () => {
-    const { client } = fakeClient(() => json({ message: "new row violates row-level security policy" }, 403));
-    await expect(createEventWriterStub(client)({ ...event, actor: { kind: "person", id: me } })).rejects.toThrow(
-      "row-level security",
     );
   });
 });

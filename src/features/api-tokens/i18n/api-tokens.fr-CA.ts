@@ -51,6 +51,7 @@ export const apiTokensFrCA: ApiTokensMessages = {
     createFailed: "Le jeton n’a pas pu être créé.",
     revokeFailed: "Le jeton n’a pas pu être révoqué.",
     notFound: "Introuvable.",
+    staffOnly: "Les jetons d’API sont réservés au personnel.",
   },
   docs: {
     title: "API privée",

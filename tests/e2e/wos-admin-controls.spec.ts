@@ -79,6 +79,39 @@ test.describe("admin controls", () => {
     }
   });
 
+  test("the audit export carries every event past the first thousand", async ({ page }) => {
+    test.setTimeout(120_000);
+    setSwitch(true);
+    const stamp = Date.now();
+    const orgId = sql(
+      `select organization_id::text from organization_membership m join user_profile p on p.id = m.user_id where p.email = 'qa-admin@example.com'`,
+    );
+    // One more event than PostgREST hands back for a single request
+    // (max_rows = 1000 in supabase/config.toml), a millisecond apart so the
+    // order is fixed; the last one is the one a cut-off export would lose.
+    sql(`insert into audit_event (organization_id, event_type, action, object_type, metadata, created_at)
+         select '${orgId}', 'test', 'export_probe', 'audit_event', jsonb_build_object('probe', '${stamp}', 'n', n),
+                now() - interval '1 hour' + n * interval '1 millisecond'
+         from generate_series(1, 1001) as n`);
+    try {
+      await signIn(page, "admin");
+      const to = new Date().toISOString().slice(0, 10);
+      const from = new Date(Date.now() - 2 * 86_400_000).toISOString().slice(0, 10);
+      const response = await page.request.get(`/spaces/admin/audit-export?from=${from}&to=${to}`);
+      expect(response.status()).toBe(200);
+      const csv = await response.text();
+      const probeRows = csv.split("\r\n").filter((line) => line.includes(`""probe"":""${stamp}""`));
+      expect(probeRows).toHaveLength(1001);
+      expect(probeRows[probeRows.length - 1]).toContain(`""n"":1001`);
+      // The export's own audit row counts what it actually wrote.
+      expect(
+        Number(sql(`select max((metadata->>'rows')::int) from audit_event where organization_id = '${orgId}' and action = 'audit_log_exported'`)),
+      ).toBeGreaterThanOrEqual(1001);
+    } finally {
+      sql(`delete from audit_event where organization_id = '${orgId}' and metadata->>'probe' = '${stamp}'`);
+    }
+  });
+
   test("the screen reads in French", async ({ page }) => {
     setSwitch(true);
     await signIn(page, "admin");
