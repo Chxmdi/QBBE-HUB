@@ -3,6 +3,7 @@ import { createCan } from "@/lib/objects/can";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createActionRegistry } from "./registry";
 import { createSetPropertyAction } from "./set-property";
+import { createTaskCreateAction } from "./task-create";
 import { createSupabaseChangeSetStore } from "./supabase-store";
 import { createSupabaseObjectWriter } from "./supabase-writer";
 
@@ -19,6 +20,7 @@ export async function createRequestActionRegistry(userId: string): Promise<{
   const writer = createSupabaseObjectWriter(client);
   const registry = createActionRegistry({ store: createSupabaseChangeSetStore(client), writer });
   registry.register(createSetPropertyAction(writer));
+  registry.register(createTaskCreateAction());
   return { registry, context: { actor: { kind: "person", id: userId }, can: createCan(client) } };
 }
 

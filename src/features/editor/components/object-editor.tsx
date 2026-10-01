@@ -262,6 +262,7 @@ export function ObjectEditor({
       projects: () => listTaskProjects(),
       defaultProjectId,
       people: () => listPeople(),
+      requireOwnerAndDue: objectType === "meeting",
       createTask: async (title, projectId, extras) => {
         // The task records the page or meeting it was written in (M7b).
         const result = await createTaskFromBlock(title, projectId ?? undefined, extras, blockTaskSource(objectType, objectId));

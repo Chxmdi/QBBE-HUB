@@ -99,6 +99,7 @@ export const editorFrCA: EditorMessages = {
       owner: "Responsable",
       noOwner: "Aucun responsable",
       due: "Échéance",
+      ownerAndDueRequired: "Choisissez un responsable et une échéance : une tâche issue des notes de réunion a besoin des deux pour le bilan et la liste des actions.",
     },
     unavailable: "Cet élément ne vous est pas accessible ou a été retiré.",
     task: {

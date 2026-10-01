@@ -118,6 +118,8 @@ function Picker({
   const [dueAt, setDueAt] = React.useState("");
   const id = React.useId();
   const kindLabel = t(`semantic.kinds.${kind}`);
+  const requireOwnerAndDue = Boolean(handlers.current?.requireOwnerAndDue);
+  const missingOwnerOrDue = requireOwnerAndDue && (!ownerId || !dueAt);
 
   React.useEffect(() => {
     const api = handlers.current;
@@ -222,15 +224,22 @@ function Picker({
                 onChange={(event) => setDueAt(event.target.value)}
               />
             </div>
+            {missingOwnerOrDue ? (
+              <p id={`${id}-needs`} className="text-caption text-muted">
+                {t("semantic.picker.ownerAndDueRequired")}
+              </p>
+            ) : null}
             <Button
               type="button"
               variant="secondary"
               size="sm"
               className="w-full justify-start"
               loading={busy}
+              disabled={missingOwnerOrDue}
+              aria-describedby={missingOwnerOrDue ? `${id}-needs` : undefined}
               onClick={async () => {
                 const api = handlers.current;
-                if (!api) return;
+                if (!api || missingOwnerOrDue) return;
                 setBusy(true);
                 setError(null);
                 const created = await api

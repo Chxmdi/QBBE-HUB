@@ -47,6 +47,12 @@ export interface EditorSemanticHandlers {
   defaultProjectId?: string | null;
   /** People a new task can be assigned to. */
   people?: () => Promise<{ id: string; name: string }[]>;
+  /**
+   * Whether a task created from a block must name its owner and due date:
+   * true in meeting notes, where the end-of-meeting review and the actions
+   * list need both; a page's task may stay unowned and undated.
+   */
+  requireOwnerAndDue?: boolean;
   createTask: (
     title: string,
     projectId: string | null,
