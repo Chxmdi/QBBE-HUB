@@ -28,6 +28,7 @@ declare
   v_org uuid;
   p_shared uuid;
   p_private uuid;
+  p_layout uuid;
   v_target uuid := gen_random_uuid();
   v_file uuid := gen_random_uuid();
   v_person uuid;
@@ -94,6 +95,39 @@ begin
   perform tests.ok(
     exists (select 1 from public.block where object_id = p_shared and search_vector @@ to_tsquery('french', 'budget')),
     'blocks: block text is searchable');
+
+  -- Layout blocks (U5a): a column list keeps its columns and their blocks ----------
+  insert into public.page (organization_id, visibility, created_by, title)
+  values (v_org, 'workspace', v_owner, 'Layout') returning id into p_layout;
+  insert into public.editor_document (object_id, object_type, organization_id, created_by, content)
+  values (p_layout, 'page', v_org, v_owner, jsonb_build_object('version', 1, 'blocks', jsonb_build_array(
+    jsonb_build_object('id', 'toc', 'type', 'tableOfContents', 'props', '{}'::jsonb),
+    jsonb_build_object('id', 'cols', 'type', 'columnList', 'props', '{}'::jsonb, 'children', jsonb_build_array(
+      jsonb_build_object('id', 'left', 'type', 'column', 'props', jsonb_build_object('width', 1), 'children', jsonb_build_array(
+        jsonb_build_object('id', 'lh', 'type', 'heading', 'props', jsonb_build_object('level', 2),
+          'content', jsonb_build_array(jsonb_build_object('type', 'text', 'text', 'Left'))))),
+      jsonb_build_object('id', 'right', 'type', 'column', 'props', jsonb_build_object('width', 2), 'children', jsonb_build_array(
+        jsonb_build_object('id', 'rp', 'type', 'paragraph',
+          'content', jsonb_build_array(jsonb_build_object('type', 'text', 'text', 'Right text'))))))),
+    jsonb_build_object('id', 'after', 'type', 'paragraph',
+      'content', jsonb_build_array(jsonb_build_object('type', 'text', 'text', 'After the columns')))
+  )));
+  perform tests.ok(
+    (select array_agg(block_id order by position) from public.block where object_id = p_layout)
+      = array['toc', 'cols', 'left', 'lh', 'right', 'rp', 'after'],
+    'blocks: a column list, its columns and their blocks are rows in document order');
+  select * into v_row from public.block where object_id = p_layout and block_id = 'right';
+  perform tests.ok(v_row.parent_block_id = 'cols' and v_row.depth = 1 and v_row.type = 'column' and (v_row.props ->> 'width') = '2',
+    'blocks: a column records its column list as parent, depth 1 and its width');
+  select * into v_row from public.block where object_id = p_layout and block_id = 'lh';
+  perform tests.ok(v_row.parent_block_id = 'left' and v_row.depth = 2 and v_row.type = 'heading' and v_row.text = 'Left',
+    'blocks: a heading inside a column records its column as parent, at depth 2');
+  perform tests.ok(
+    (select parent_block_id is null and depth = 0 and text = '' from public.block where object_id = p_layout and block_id = 'toc'),
+    'blocks: a table of contents is a top-level row with no text of its own');
+  perform tests.ok(
+    (select parent_block_id is null and depth = 0 from public.block where object_id = p_layout and block_id = 'after'),
+    'blocks: the block after a column list is back at depth 0');
 
   -- Rebuilt on save --------------------------------------------------------------
   perform tests.authenticate(v_staff);

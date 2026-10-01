@@ -30,6 +30,7 @@ import type { EditorT } from "@/features/editor/i18n";
 import { CONTENT_VERSION, type EditorBlock, type EditorContent } from "@/features/editor/adapter/content";
 import type { BlockEditorProps, EditorSemanticHandlers } from "@/features/editor/adapter/types";
 import { createWorkspaceBlocks } from "./blocks";
+import { createLayoutBlocks, layoutSlashItems } from "./layout-blocks";
 import { createSemanticBlocks, HandlersBox } from "./semantic-blocks";
 import { SuggestionLayer, TurnIntoTasksDialog, turnIntoPage } from "./progressive";
 import type { Locale } from "@/lib/i18n/config";
@@ -51,12 +52,16 @@ import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
 function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
   const { callout, bookmark, embed } = createWorkspaceBlocks(t);
   const s = createSemanticBlocks(t, locale, semantic);
+  const layout = createLayoutBlocks(t);
   return BlockNoteSchema.create({
     blockSpecs: {
       ...defaultBlockSpecs,
       callout: callout(),
       bookmark: bookmark(),
       embed: embed(),
+      columnList: layout.columnList(),
+      column: layout.column(),
+      tableOfContents: layout.tableOfContents(),
       task: s.task(),
       decision: s.decision(),
       person: s.person(),
@@ -504,6 +509,7 @@ export default function BlockNoteEditorImpl({
           [
             ...getDefaultReactSlashMenuItems(editor).filter((item) => (item as { key?: string }).key !== "emoji"),
             ...workspaceSlashItems(editor, t),
+            ...layoutSlashItems(editor, t),
             ...(semantic ? semanticSlashItems(editor, t) : []),
           ],
           query,
