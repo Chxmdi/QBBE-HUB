@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/layout/workspace-shell";
 import { LocaleSync } from "@/features/preferences/components/locale-sync";
 import { requireSession } from "@/lib/auth";
+import { readNavigationSwitches } from "@/lib/navigation-switches";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
 
@@ -46,11 +47,14 @@ export default async function WorkspaceLayout({
   if (profile && !profile.onboarded_at) redirect("/welcome");
 
   // Live, permission-aware sidebar counts (Part IV §5.2).
+  // The Workspace OS switches the menus show entries for (epic #199), read
+  // once here and passed down; the sidebar, tabs and palette never fetch them.
   const [
     { count: unreadCount },
     { data: memberships },
     { data: myWorkCount },
     { data: programs },
+    navSwitches,
   ] = await Promise.all([
     supabase
       .from("notification")
@@ -71,6 +75,7 @@ export default async function WorkspaceLayout({
       .eq("status", "active")
       .order("name")
       .limit(8),
+    readNavigationSwitches(supabase),
   ]);
 
   type MembershipRow = {
@@ -112,6 +117,7 @@ export default async function WorkspaceLayout({
       avatarUrl={session.profile.avatar_url}
       isAdmin={session.isAdmin}
       isStaff={session.isStaff}
+      navSwitches={navSwitches}
       unreadCount={unreadCount ?? 0}
       channels={channels}
       programs={(programs ?? []).map((p) => ({ id: p.id, name: p.name }))}

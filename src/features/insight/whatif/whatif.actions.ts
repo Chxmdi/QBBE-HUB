@@ -4,7 +4,10 @@ import { redirect } from "next/navigation";
 import { isEnabled } from "@/lib/feature-flags";
 import { requireSession } from "@/lib/auth";
 import type { Change } from "@/lib/objects/contracts";
-import { createActionRegistryStub, createCanStub, createEventWriterStub } from "@/lib/objects/stubs";
+import { createActivityFeedWriter } from "@/lib/objects/activity-feed";
+import { createCan } from "@/lib/objects/can";
+import { createActionRegistry, type ObjectWriter } from "@/features/objects/actions/registry";
+import { createSupabaseChangeSetStore } from "@/features/objects/actions/supabase-store";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { planFingerprint, planShift, type ShiftPlan } from "./whatif";
 import { loadSchedule } from "./whatif.source";
@@ -16,6 +19,12 @@ import { loadSchedule } from "./whatif.source";
  * `can(…, "edit_structure")` and the change set is recorded for undo) and
  * then through public.insight_apply_schedule_shift, which writes every date
  * in one transaction under the caller's own row-level security.
+ *
+ * Milestones are not objects of the registry, so the change set is anchored
+ * to the organization (p_organization); the tasks it moves are objects and
+ * their object_event rows, written by the task trigger as the person, are
+ * labelled with the change set. The activity_event rows below are for the
+ * project activity page, which still reads the old feed.
  *
  * The outcome comes back in the address, so the page works without script.
  */
@@ -64,7 +73,7 @@ export async function applyMilestoneShift(formData: FormData): Promise<void> {
         ? [{ id: change.object.id, from: change.before, to: change.after }]
         : [],
     );
-  const registry = createActionRegistryStub({
+  const writer: ObjectWriter = {
     // Undo replays the change set reversed: every row back to its old date.
     apply: async (changes) => {
       const { error } = await client.rpc("insight_apply_schedule_shift", {
@@ -73,6 +82,18 @@ export async function applyMilestoneShift(formData: FormData): Promise<void> {
       });
       if (error) throw new Error(error.code ?? error.message);
     },
+    // The current due date, so undo stops when someone moved it since.
+    read: async (change) => {
+      const table = change.object.type === "milestone" ? "milestone" : "task";
+      const column = change.object.type === "milestone" ? "due_date" : "due_at";
+      const { data, error } = await client.from(table).select(column).eq("id", change.object.id).maybeSingle();
+      if (error || !data) throw new Error(error?.message ?? "not_found");
+      return (data as unknown as Record<string, unknown>)[column] ?? null;
+    },
+  };
+  const registry = createActionRegistry({
+    store: createSupabaseChangeSetStore(client, { organizationId: session.organizationId }),
+    writer,
   });
   registry.register<ShiftPlan>({
     key: ACTION_KEY,
@@ -100,7 +121,7 @@ export async function applyMilestoneShift(formData: FormData): Promise<void> {
 
   const result = await registry.run(ACTION_KEY, plan, {
     actor: { kind: "person", id: session.userId },
-    can: createCanStub(client),
+    can: createCan(client),
   });
   if (!result.ok) {
     if (result.reason === "forbidden" || result.message === "42501") back(milestoneId, days, "forbidden");
@@ -108,8 +129,8 @@ export async function applyMilestoneShift(formData: FormData): Promise<void> {
     back(milestoneId, days, "failed");
   }
 
-  // The activity feed hears about each move. Best effort: the dates are saved.
-  const writeEvent = createEventWriterStub(client);
+  // The project activity page hears about each move. Best effort: the dates are saved.
+  const writeEvent = createActivityFeedWriter(client);
   const projectOf = new Map(schedule.milestones.map((m) => [m.id, m.projectId]));
   await Promise.allSettled([
     ...plan.milestones.map((move) =>

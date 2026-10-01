@@ -1,48 +1,30 @@
 import { NextResponse } from "next/server";
-import { requestOrigin } from "./request-origin";
+import { requestOrigin } from "@/lib/request-origin";
 
 /**
- * Cross-site request forgery guard for route handlers that act on the
- * session cookie.
+ * Whether a cookie-authenticated request came from this application's own
+ * pages, so that a page somewhere else cannot make a signed-in browser act on
+ * its behalf (cross-site request forgery).
  *
- * A browser sends the cookie with any request it makes to the Hub, including
- * one a hostile page triggers with a form or `fetch`. For those requests the
- * browser also states where the request came from: the `Origin` header on
- * every cross-site POST, and `Referer` as a fallback for the few agents that
- * omit it. A request whose stated source is not this application is refused
- * before anything is read or written.
+ * Browsers say where a request came from in two ways. `Sec-Fetch-Site` is the
+ * newer one: every current browser sends it and no page can change it.
+ * `Origin` is the older one, sent with every POST. A request that carries
+ * neither did not come from a web page (a command-line tool, a server-side
+ * job), and such a client never carries the browser's session cookie, so it
+ * is let through: the cookie is what this check protects.
  *
- * Server actions carry their own check in Next.js; this is for the plain
- * `/api` POST routes, which do not.
+ * Server Actions get the same check from Next.js itself. Route handlers do
+ * not, which is why this exists for the ones that act on the session cookie.
  */
 export function isSameOriginRequest(request: Request): boolean {
-  const expected = requestOrigin(request);
-  const stated = request.headers.get("origin") ?? refererOrigin(request.headers.get("referer"));
-  // Neither header: not a browser form or fetch, so not a cross-site browser
-  // request either. A session cookie cannot be attached to such a request by
-  // a third party's page, which is the attack this guard exists for.
-  if (stated === null) return true;
-  return sameOrigin(stated, expected);
+  const site = request.headers.get("sec-fetch-site");
+  if (site) return site === "same-origin" || site === "none";
+  const origin = request.headers.get("origin");
+  if (origin === null) return true;
+  return origin.toLowerCase() === requestOrigin(request).toLowerCase();
 }
 
-function refererOrigin(referer: string | null): string | null {
-  if (!referer) return null;
-  try {
-    return new URL(referer).origin;
-  } catch {
-    return "null";
-  }
-}
-
-function sameOrigin(a: string, b: string): boolean {
-  try {
-    return new URL(a).origin === new URL(b).origin;
-  } catch {
-    return false;
-  }
-}
-
-/** The answer a refused cross-site request gets: 403, no detail about the session. */
+/** The refusal a route handler returns when the request is not from this site. */
 export function crossSiteResponse(): NextResponse {
-  return NextResponse.json({ error: "cross_site_request" }, { status: 403 });
+  return NextResponse.json({ error: "cross_site" }, { status: 403 });
 }

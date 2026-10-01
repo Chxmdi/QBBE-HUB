@@ -12,6 +12,7 @@ export const universalTasksFrCA: Translation<UniversalTasksMessages> = {
       manual: "formulaire de tâche",
       meeting: "réunion",
       document: "document",
+      page: "page",
       comment: "commentaire",
       project: "modèle de projet",
       message: "message",

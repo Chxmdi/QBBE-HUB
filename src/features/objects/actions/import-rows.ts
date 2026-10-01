@@ -4,9 +4,9 @@ import type { ActionDefinition, Change, Uuid } from "@/lib/objects/contracts";
  * `object.import` (Workspace OS U15): many records from one CSV as ONE change
  * set, so "Undo" takes the whole import back at once.
  *
- * Each row goes through the type's own create action (`task.create`,
- * `project.create`), so an imported record is exactly what the form would
- * have made. The registry checks the import's capability once; this action
+ * Each row goes through the type's shared create path (createUniversalTask
+ * for tasks, the createProject command for projects), so an imported record
+ * is exactly what the form would have made. The registry checks the import's capability once; this action
  * then checks the create action's capability on each row's targets itself,
  * so one row the person may not add (a project they cannot edit) is skipped
  * and reported rather than refusing the whole file.
@@ -33,10 +33,8 @@ export interface ImportInput {
   report?: (row: number, failure: ImportFailure, detail: string | null) => void;
 }
 
-const CREATE_ACTION: Record<ImportTypeKey, string> = { task: "task.create", project: "project.create" };
-
 export function importTargets(input: ImportInput): Uuid[] {
-  if (!(input.typeKey in CREATE_ACTION)) throw new Error("Unknown type.");
+  if (input.typeKey !== "task" && input.typeKey !== "project") throw new Error("Unknown type.");
   if (!Array.isArray(input.rows) || input.rows.length === 0) throw new Error("Nothing to import.");
   if (input.rows.length > IMPORT_ROW_LIMIT) throw new Error(`An import is limited to ${IMPORT_ROW_LIMIT} rows.`);
   return [];
@@ -47,14 +45,24 @@ function classify(error: unknown): { failure: ImportFailure; detail: string | nu
   return { failure: /invalid/i.test(text) ? "invalid" : "failed", detail: text || null };
 }
 
-export function createImportAction(lookup: (key: string) => ActionDefinition | undefined): ActionDefinition<ImportInput> {
+/**
+ * `runners` are the types' forward create actions (the shared task creation,
+ * project.create). They are handed in rather than looked up by key because
+ * the registered `task.create` only records creations made on the task's own
+ * screens and does not run forward.
+ */
+export function createImportAction(
+  // Each runner takes its own input type; rows carry already-built input.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  runners: Partial<Record<ImportTypeKey, ActionDefinition<any>>>,
+): ActionDefinition<ImportInput> {
   return {
     key: IMPORT_ACTION,
     label: { en: "Import records", fr: "Importer des éléments" },
     capability: "edit_content",
     targets: importTargets,
     async run(context, input) {
-      const action = lookup(CREATE_ACTION[input.typeKey]);
+      const action = runners[input.typeKey];
       if (!action) throw new Error(`No create action for ${input.typeKey}.`);
       const report = input.report ?? (() => {});
       const changes: Change[] = [];

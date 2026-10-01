@@ -7,7 +7,7 @@ import { ChevronRight, Plus, X } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { QbbeLogo } from "@/components/layout/qbbe-logo";
 import { cn } from "@/lib/utils";
-import { visibleNav } from "@/config/navigation";
+import { activeNavHref, visibleNav, type NavSwitches } from "@/config/navigation";
 import { useT } from "@/lib/i18n/client";
 import { navGroupLabel, navItemLabel } from "@/lib/i18n/navigation";
 
@@ -46,10 +46,13 @@ function programDot(name: string): string {
 /**
  * QBBE navigation shell using the approved blue/gold brand while preserving
  * permission-aware navigation, live counts, channels, and program shortcuts.
+ * `switches` are the Workspace OS switches read on the server for this
+ * request (epic #199); without them the menu is the one from before.
  */
 export function Sidebar({
   isAdmin,
   isStaff,
+  switches,
   channels,
   programs,
   counts,
@@ -61,6 +64,7 @@ export function Sidebar({
 }: {
   isAdmin: boolean;
   isStaff: boolean;
+  switches?: NavSwitches;
   channels: SidebarChannel[];
   programs: SidebarProgram[];
   counts: SidebarCounts;
@@ -72,10 +76,13 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const t = useT();
-  const groups = visibleNav({ isAdmin, isStaff });
+  const groups = visibleNav({ isAdmin, isStaff }, switches);
+  // One current entry, the most specific one: "/lenses/board" marks Board,
+  // not Board and Saved lenses together.
+  const activeHref = activeNavHref(groups, pathname);
 
-  const badgeFor = (href: string): number =>
-    href === "/my-work" ? counts.myWork : href === "/inbox" ? counts.inbox : 0;
+  const badgeFor = (item: { badge?: "myWork" | "inbox" }): number =>
+    item.badge === "myWork" ? counts.myWork : item.badge === "inbox" ? counts.inbox : 0;
 
   const nav = (
     <nav aria-label={t("nav.main")} className="relative flex h-full flex-col overflow-hidden">
@@ -116,11 +123,8 @@ export function Sidebar({
             </p>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
-                const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
-                const badge = badgeFor(item.href);
+                const active = item.href === activeHref;
+                const badge = badgeFor(item);
                 return (
                   <li key={item.href}>
                     <Link

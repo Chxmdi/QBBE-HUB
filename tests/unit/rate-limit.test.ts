@@ -129,3 +129,29 @@ describe("the configured ceilings", () => {
     expect(RATE_LIMITS["job:run"].limit).toBeGreaterThan(60);
   });
 });
+
+describe("RATE_LIMITS", () => {
+  it("every ceiling is a positive count over a positive window", () => {
+    for (const [action, rule] of Object.entries(RATE_LIMITS)) {
+      expect(rule.limit, action).toBeGreaterThan(0);
+      expect(rule.windowSeconds, action).toBeGreaterThan(0);
+    }
+  });
+
+  it("covers the Workspace OS write paths (epic #199 hardening)", () => {
+    expect(Object.keys(RATE_LIMITS)).toEqual(
+      expect.arrayContaining([
+        "page:create",
+        "comment:create",
+        "capture:create",
+        "project:create",
+        "share:write",
+        "app:write",
+        "blueprint:write",
+        "blueprint:build",
+        "template:write",
+        "editor:save",
+      ]),
+    );
+  });
+});

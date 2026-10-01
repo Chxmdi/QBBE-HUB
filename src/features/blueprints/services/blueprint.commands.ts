@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -60,6 +61,8 @@ export async function saveBlueprint(
 ): Promise<BlueprintResult<{ id: string; issues: BlueprintIssue[] }>> {
   const { session, supabase, messages, enabled } = await context();
   if (!enabled) return { ok: false, error: messages.errors.disabled };
+  const limited = await enforceRateLimit("blueprint:write", session.userId);
+  if (limited) return limited;
 
   const draft = definition as { key?: unknown; name?: { en?: unknown; fr?: unknown } };
   const key = typeof draft?.key === "string" ? draft.key : "";
@@ -103,6 +106,8 @@ export async function approveBlueprint(id: string): Promise<BlueprintResult> {
 export async function buildBlueprint(id: string): Promise<BlueprintResult<{ changeSetId: string; count: number }>> {
   const { session, supabase, messages, enabled } = await context();
   if (!enabled) return { ok: false, error: messages.errors.disabled };
+  const limited = await enforceRateLimit("blueprint:build", session.userId);
+  if (limited) return limited;
   const blueprint = await getBlueprint(supabase, id);
   if (!blueprint) return { ok: false, error: messages.errors.notFound };
   const validation = validateBlueprint(blueprint.definition);

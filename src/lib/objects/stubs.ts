@@ -1,61 +1,35 @@
 import { addCalendarDays, calendarDateInZone, DEFAULT_TIME_ZONE, startOfDayInstant } from "@/lib/time";
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
-import {
-  workspaceCapabilities,
-  type ActionContext,
-  type ActionDefinition,
-  type ActionRegistry,
-  type ActionResult,
-  type Can,
-  type Change,
-  type ChangeSet,
-  type FilterNode,
-  type FilterScalar,
-  type FilterValue,
-  type PropertyFilter,
-  type PropertyKind,
-  type PropertyPath,
-  type PropertyValue,
-  type QueryResult,
-  type QueryRow,
-  type QuerySpec,
-  type RunQuery,
-  type Uuid,
-  type WriteObjectEvent,
+import type {
+  FilterNode,
+  FilterScalar,
+  FilterValue,
+  PropertyFilter,
+  PropertyKind,
+  PropertyPath,
+  PropertyValue,
+  QueryResult,
+  QueryRow,
+  QuerySpec,
+  RunQuery,
+  Uuid,
 } from "./contracts";
 
 /**
- * Stand-ins for the contracts in ./contracts.ts (W0-3, epic #199).
+ * The last stand-in for the contracts in ./contracts.ts (W0-3, epic #199).
  *
- * Each returns today's behaviour through the new interface, so other streams
- * can build on the interface now. They are replaced, not extended:
- *   can             by the real app.can with cached grants (M10c)
- *   query           by the query engine over every type (M8a)
- *   actions / undo  by the persisted action registry (M13)
- *   events          by object_event written from triggers (M9a)
+ * `query` answers task queries over the existing task table until every call
+ * site uses the query engine (M8a, integration I2); `taskSystemProperties`
+ * is the task's column-to-property map it and the layouts share. The other
+ * stand-ins this file held are gone, replaced by the real modules:
+ *   can             src/lib/objects/can.ts (SQL app.can, M10c)
+ *   actions / undo  src/features/objects/actions/registry.ts (M13)
+ *   events          object_event written from triggers (M9a); the feed row
+ *                   by src/lib/objects/activity-feed.ts
+ *   invertChanges   src/lib/objects/changes.ts
  */
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
-
-// ---------------------------------------------------------------------------
-// can
-// ---------------------------------------------------------------------------
-
-/**
- * Asks SQL `public.can`, which for tasks and projects calls the existing
- * has_task_capability / has_project_capability. One source of truth: the
- * capability mapping lives in the migration, not here.
- */
-export function createCanStub(client: Pick<Client, "rpc">): Can {
-  return async (objectId, capability) => {
-    if (!(workspaceCapabilities as readonly string[]).includes(capability)) return false;
-    const { data, error } = await client.rpc("can", {
-      object_id: objectId,
-      capability,
-    });
-    return !error && data === true;
-  };
-}
 
 // ---------------------------------------------------------------------------
 // query: tasks only, over the existing task table and its RLS
@@ -303,132 +277,5 @@ export function createTaskQueryStub(client: Pick<Client, "from">, context: Query
       result.groups = [...groups].map(([key, rowIds]) => ({ key, rowIds }));
     }
     return result;
-  };
-}
-
-// ---------------------------------------------------------------------------
-// actions and undo, kept in memory until M13 persists change sets
-// ---------------------------------------------------------------------------
-
-/** The changes that reverse `changes`, in reverse order. */
-export function invertChanges(changes: Change[]): Change[] {
-  return [...changes].reverse().map((change): Change => {
-    switch (change.kind) {
-      case "create":
-        return { kind: "delete", object: change.object, values: change.values };
-      case "delete":
-        return { kind: "create", object: change.object, values: change.values };
-      case "update":
-        return { ...change, before: change.after, after: change.before };
-      case "link":
-        return { kind: "unlink", relation: change.relation };
-      case "unlink":
-        return { kind: "link", relation: change.relation };
-    }
-  });
-}
-
-function touchedObjects(changes: Change[]): Uuid[] {
-  return [
-    ...new Set(
-      changes.flatMap((change) =>
-        "object" in change ? [change.object.id] : [change.relation.from.id, change.relation.to.id],
-      ),
-    ),
-  ];
-}
-
-export interface ActionRegistryOptions {
-  /** Writes changes to storage; used by undo. */
-  apply: (changes: Change[], context: ActionContext) => Promise<void>;
-  now?: () => Date;
-  newId?: () => Uuid;
-}
-
-export function createActionRegistryStub(options: ActionRegistryOptions): ActionRegistry {
-  const actions = new Map<string, ActionDefinition>();
-  const changeSets = new Map<Uuid, ChangeSet>();
-  const now = options.now ?? (() => new Date());
-  const newId = options.newId ?? (() => crypto.randomUUID());
-
-  const allowed = async (ids: Uuid[], action: ActionDefinition, context: ActionContext) => {
-    for (const id of ids) {
-      if (!(await context.can(id, action.capability))) return false;
-    }
-    return true;
-  };
-
-  const record = (actionKey: string, changes: Change[], context: ActionContext, undoOf: Uuid | null) => {
-    const changeSet: ChangeSet = {
-      id: newId(),
-      actionKey,
-      actor: context.actor,
-      createdAt: now().toISOString(),
-      changes,
-      undoOf,
-    };
-    changeSets.set(changeSet.id, changeSet);
-    return changeSet;
-  };
-
-  return {
-    register(action) {
-      if (actions.has(action.key)) throw new Error(`Action "${action.key}" is already registered.`);
-      actions.set(action.key, action as ActionDefinition);
-    },
-    get: (key) => actions.get(key),
-    async run(key, input, context): Promise<ActionResult> {
-      const action = actions.get(key);
-      if (!action) return { ok: false, reason: "unknown_action" };
-      if (!(await allowed(action.targets(input), action, context))) return { ok: false, reason: "forbidden" };
-      try {
-        const changes = await action.run(context, input);
-        return { ok: true, changeSet: record(key, changes, context, null) };
-      } catch (error) {
-        return { ok: false, reason: "failed", message: error instanceof Error ? error.message : String(error) };
-      }
-    },
-    async undo(changeSetId, context): Promise<ActionResult> {
-      const original = changeSets.get(changeSetId);
-      const action = original && actions.get(original.actionKey);
-      if (!original || !action) return { ok: false, reason: "unknown_action" };
-      // Undo needs the same capability as the action, on everything it touched.
-      if (!(await allowed(touchedObjects(original.changes), action, context))) {
-        return { ok: false, reason: "forbidden" };
-      }
-      const inverse = invertChanges(original.changes);
-      try {
-        await options.apply(inverse, context);
-      } catch (error) {
-        return { ok: false, reason: "failed", message: error instanceof Error ? error.message : String(error) };
-      }
-      return { ok: true, changeSet: record(original.actionKey, inverse, context, original.id) };
-    },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// events: written to today's activity feed until object_event exists (M9a)
-// ---------------------------------------------------------------------------
-
-export function createEventWriterStub(client: Pick<Client, "from">): WriteObjectEvent {
-  return async (event) => {
-    const { error } = await client.from("activity_event").insert({
-      organization_id: event.organizationId,
-      // activity_event.actor_id references a person; other identities go in metadata.
-      actor_id: event.actor.kind === "person" ? event.actor.id : null,
-      verb: event.verb,
-      source_type: event.object.type,
-      source_id: event.object.id,
-      project_id: event.projectId ?? null,
-      program_id: event.programId ?? null,
-      summary: event.summary,
-      metadata: {
-        actor: event.actor,
-        changes: event.changes,
-        change_set_id: event.changeSetId ?? null,
-      },
-    });
-    if (error) throw new Error(error.message);
   };
 }
