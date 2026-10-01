@@ -299,7 +299,7 @@ test("with every switch on, the sidebar, the palette and the drawer pass axe in 
   expect(problems, problems.join("\n")).toEqual([]);
 });
 
-test("with every switch off, nothing new appears in the sidebar, the tabs or the palette", async ({ page }) => {
+test("with every switch off, nothing new appears in the sidebar, the tabs or the palette [switch off]", async ({ page }) => {
   test.setTimeout(180_000);
   setSwitches(false);
   await signIn(page, "staff");

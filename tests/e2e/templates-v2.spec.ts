@@ -23,17 +23,20 @@ const setSwitch = (on: boolean) =>
  * counted from a chosen start, in French, then uses it to create the projects
  * and tasks in a program. Staff write their own project template.
  */
+test("the templates screens are hidden while the switch is off [switch off]", async ({ page }) => {
+  setSwitch(false);
+  await signIn(page, "owner");
+  await page.goto("/templates-v2");
+  await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+});
+
 test("a space template previews real dates and creates its projects and tasks", async ({ page }) => {
   test.setTimeout(180_000);
   const stamp = Date.now();
   const staffTemplate = `Board retreat ${stamp}`;
-  setSwitch(false);
+  setSwitch(true);
   try {
     await signIn(page, "owner");
-    await page.goto("/templates-v2");
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-
-    setSwitch(true);
     await page.goto("/templates-v2");
     await expect(page.getByRole("heading", { name: "Templates", level: 1 })).toBeVisible();
     expect(await axeProblems(page), "gallery accessibility").toEqual([]);

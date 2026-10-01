@@ -111,7 +111,7 @@ test("the living project page speaks French", async ({ page, context }) => {
   expect(await axeProblems(page), "French living project page accessibility").toEqual([]);
 });
 
-test("the living project page stays hidden while the switch is off", async ({ page }) => {
+test("the living project page stays hidden while the switch is off [switch off]", async ({ page }) => {
   sql(`update feature_flag set enabled = false where key = 'wos_home' and organization_id is null`);
   try {
     await signIn(page, "owner");

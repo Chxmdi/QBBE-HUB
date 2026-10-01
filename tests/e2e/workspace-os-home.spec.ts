@@ -144,7 +144,7 @@ test("Home speaks French", async ({ page, context }) => {
   await expect(page.getByRole("heading", { name: "Mon univers", level: 1 })).toBeVisible();
 });
 
-test("Home stays hidden while the switch is off", async ({ page }) => {
+test("Home stays hidden while the switch is off [switch off]", async ({ page }) => {
   sql(`update feature_flag set enabled = false where key = 'wos_home' and organization_id is null`);
   try {
     await signIn(page, "owner");
