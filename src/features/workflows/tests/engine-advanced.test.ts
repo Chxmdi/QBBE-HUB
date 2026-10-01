@@ -50,7 +50,7 @@ describe("branches", () => {
     const result = await runGraph(graph, scope(), p);
     expect(result.outcome).toBe("succeeded");
     expect(result.steps.map((step) => step.stepId)).toEqual(["trigger", "is-blocked", "raise"]);
-    expect(result.steps[1].output).toEqual({ matched: true, next: "raise" });
+    expect(result.steps[1].output).toEqual({ matched: true, next: "raise", values: { "event.changes.status.after": "blocked" } });
 
     const s = scope();
     s.event.changes.status.after = "ready";

@@ -9,7 +9,7 @@ const leaves = (tree: Tree, prefix = ""): [string, string][] =>
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join();
 
 // Product names and words spelled the same in both languages.
-const SAME = new Set(["embed.placeholder"]);
+const SAME = new Set(["embed.placeholder", "types.image", "types.audio"]);
 
 describe("editor dictionaries", () => {
   const en = new Map(leaves(editorEn as unknown as Tree));

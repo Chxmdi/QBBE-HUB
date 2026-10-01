@@ -149,7 +149,8 @@ export function BlueprintDesigner({
           <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-[13px] text-ink">
             {issues.slice(0, 12).map((issue, i) => {
               const where = describePath(issue.path, blueprint, locale);
-              return <li key={i}>{where ? `${where}: ` : ""}{errorText(messages, issue.code)}</li>;
+              const text = issue.message ? pick(issue.message, locale) : errorText(messages, issue.code);
+              return <li key={i}>{where ? `${where}: ` : ""}{text}</li>;
             })}
           </ul>
         </section>
@@ -206,6 +207,7 @@ export function BlueprintDesigner({
 
           <TypeListEditor
             blueprint={blueprint}
+            issues={issues}
             messages={messages}
             locale={locale}
             readOnly={readOnly}

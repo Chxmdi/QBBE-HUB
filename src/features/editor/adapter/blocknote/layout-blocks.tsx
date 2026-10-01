@@ -2,11 +2,10 @@
 
 import * as React from "react";
 import { createExtension, insertOrUpdateBlockForSlashMenu, type Block, type BlockNoteEditor, type PartialBlock } from "@blocknote/core";
-import { createReactBlockSpec, useEditorChange, type DefaultReactSuggestionItem } from "@blocknote/react";
+import { createReactBlockSpec, useEditorChange } from "@blocknote/react";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import type { Node as PmNode } from "prosemirror-model";
-import { Columns2, RectangleVertical, TableOfContents as TocIcon } from "lucide-react";
 import { Select } from "@/components/ui/input";
 import type { EditorT } from "@/features/editor/i18n";
 import type { EditorBlock } from "@/features/editor/adapter/content";
@@ -354,25 +353,4 @@ export function createLayoutBlocks(t: EditorT) {
   );
 
   return { columnList, column, tableOfContents };
-}
-
-export function layoutSlashItems(editor: AnyEditor, t: EditorT): DefaultReactSuggestionItem[] {
-  const group = t("slash.layoutGroup");
-  const item = (
-    key: "columnList" | "column" | "tableOfContents",
-    icon: React.JSX.Element,
-    onItemClick: () => void,
-  ): DefaultReactSuggestionItem => ({
-    title: t(`slash.${key}.title`),
-    subtext: t(`slash.${key}.subtext`),
-    aliases: t(`slash.${key}.aliases`).split(","),
-    group,
-    icon,
-    onItemClick,
-  });
-  return [
-    item("columnList", <Columns2 size={18} aria-hidden />, () => insertColumnList(editor)),
-    item("column", <RectangleVertical size={18} aria-hidden />, () => insertColumn(editor)),
-    item("tableOfContents", <TocIcon size={18} aria-hidden />, () => insertTableOfContents(editor)),
-  ];
 }
