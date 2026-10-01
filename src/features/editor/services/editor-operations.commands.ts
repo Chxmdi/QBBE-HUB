@@ -7,6 +7,8 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { contentToPlainText, normalizeContent, type EditorContent } from "@/features/editor/adapter/content";
 import { byteaHexToBase64, MAX_STATE_BASE64 } from "@/features/editor/adapter/state";
+import { isEditorDocumentType } from "@/features/versions/adapters/registry";
+import { recordAutomaticVersion } from "@/features/versions/services/auto-version";
 
 /**
  * Operation-based saves (U3). The browser's save queue appends a batch of
@@ -92,6 +94,7 @@ export async function appendEditorOperations(input: unknown): Promise<AppendResu
   }
   const row = (Array.isArray(data) ? data[0] : data) as { version?: number; seq?: number | string } | null | undefined;
   if (!row || typeof row.version !== "number") return { ok: false, reason: "failed" };
+  if (isEditorDocumentType(objectType)) await recordAutomaticVersion(objectId, objectType);
   return { ok: true, version: row.version, seq: Number(row.seq) };
 }
 

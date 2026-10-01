@@ -52,25 +52,27 @@ export default async function PageRoute({
     <PagesShell session={session} sidebar={sidebar} currentPageId={page.id}>
       <PageView session={session} page={page} sidebar={sidebar}>
         {body ? (
-          <ObjectEditor
-            key={page.id}
-            objectId={page.id}
-            objectType="page"
-            initialContent={body.content}
-            initialState={body.state}
-            initialVersion={body.version}
-            timeZone={session.timeZone}
-            editable={canEdit}
-          />
-        ) : null}
-        {page.deletedAt || !editorOn ? null : (
-          <PageCollab
-            pageId={page.id}
-            canEdit={canEdit}
-            blockId={block.success ? block.data : null}
-            editorMounted={canEdit}
-          />
-        )}
+          <>
+            <ObjectEditor
+              key={page.id}
+              objectId={page.id}
+              objectType="page"
+              initialContent={body.content}
+              initialState={body.state}
+              initialVersion={body.version}
+              timeZone={session.timeZone}
+              editable={canEdit}
+            />
+            {page.deletedAt ? null : (
+              <PageCollab
+                pageId={page.id}
+                canEdit={canEdit}
+                blockId={block.success ? block.data : null}
+                editorMounted={canEdit}
+              />
+            )}
+          </>
+        ) : undefined}
       </PageView>
     </PagesShell>
   );

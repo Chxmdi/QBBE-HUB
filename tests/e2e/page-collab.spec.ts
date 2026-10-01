@@ -177,7 +177,7 @@ test("a block comment stays anchored after blocks move [switches on]", async ({ 
   await commentOnBlock.click();
   await expect(page).toHaveURL(new RegExp(`/pages/${pageId}\\?block=second`));
   await expect(collab.getByRole("heading", { name: /Comments on this block/ })).toBeVisible();
-  await collab.getByRole("combobox", { name: "Comment" }).fill("Check this figure.");
+  await collab.getByRole("textbox", { name: "Comment" }).fill("Check this figure.");
   await collab.getByRole("button", { name: "Post comment" }).click();
   await expect(collab.getByText("Check this figure.")).toBeVisible();
   expect(
@@ -224,13 +224,13 @@ test("a volunteer cannot comment on a workspace page they cannot see [switches o
   await signIn(page, "volunteer");
   await page.goto(`/pages/${pageId}`);
   await expect(page.getByText("Not found — or not yours to see")).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Comment" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Comment" })).toHaveCount(0);
   await expect(page.getByText("Staff discussion")).toHaveCount(0);
 
   // The generic collaboration screen refuses it too.
   await page.goto(`/collab/objects/${pageId}?type=page`);
   await expect(page.getByText("This object does not exist or you can't open it.")).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Comment" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Comment" })).toHaveCount(0);
 
   // So does the version history.
   await page.goto(`/collab/versions/${pageId}?type=page`);
