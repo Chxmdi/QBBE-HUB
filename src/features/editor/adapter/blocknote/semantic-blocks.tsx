@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { createReactBlockSpec } from "@blocknote/react";
-import { ExternalLink, FileText, Gavel, ListChecks, Plus, Search, UserRound } from "lucide-react";
+import { ExternalLink, FileText, Gavel, LayoutGrid, ListChecks, Plus, Search, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Input, Select } from "@/components/ui/input";
@@ -14,7 +14,9 @@ import type { Locale } from "@/lib/i18n/config";
 import { cn } from "@/lib/utils";
 import type { TaskStatus } from "@/types/entities";
 import type { EditorT } from "@/features/editor/i18n";
-import { presetSpec, queryPresets, type QueryPreset } from "@/features/editor/semantic/queries";
+import { presetSpec, presetViewBlock, queryPresets, type QueryPreset } from "@/features/editor/semantic/queries";
+import { readStoredViewBlock, ViewBlock } from "@/features/lenses/view-block";
+import { viewBlocksEnabled } from "@/features/lenses/view-block/view-block.actions";
 import type {
   EditorSemanticHandlers,
   QueryRowSummary,
@@ -298,6 +300,19 @@ export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: Handl
     },
     {
       render: ({ block, editor }) => {
+        // Version 2 props are a generic view block (U6); the M5 preset list
+        // keeps rendering everything else, and can be turned into a view.
+        const stored = readStoredViewBlock(block.props.spec);
+        if (stored.kind === "view") {
+          return (
+            <ViewBlock
+              blockId={block.id}
+              config={stored.raw}
+              editable={editor.isEditable}
+              onChange={(next) => editor.updateBlock(block, { props: { spec: JSON.stringify(next) } })}
+            />
+          );
+        }
         const preset = (queryPresets as readonly string[]).includes(block.props.preset) ? (block.props.preset as QueryPreset) : "my_open";
         return (
           <QueryList
@@ -305,6 +320,7 @@ export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: Handl
             preset={preset}
             editable={editor.isEditable}
             onPreset={(next) => editor.updateBlock(block, { props: { preset: next, spec: JSON.stringify(presetSpec(next)) } })}
+            onUpgrade={() => editor.updateBlock(block, { props: { spec: JSON.stringify(presetViewBlock(preset)) } })}
             t={t}
             app={app}
             format={format}
@@ -489,6 +505,7 @@ function QueryList({
   preset,
   editable,
   onPreset,
+  onUpgrade,
   t,
   app,
   format,
@@ -498,6 +515,8 @@ function QueryList({
   preset: QueryPreset;
   editable: boolean;
   onPreset: (preset: QueryPreset) => void;
+  /** Replaces the preset with a version 2 view block showing the same tasks. */
+  onUpgrade: () => void;
   t: EditorT;
   app: AppT;
   format: Format;
@@ -518,6 +537,18 @@ function QueryList({
     };
   }, [handlers, spec]);
   const current = result && result.spec === spec ? result : null;
+  // "Turn into a view" only where views run (wos_lenses), since it cannot be undone.
+  const [canUpgrade, setCanUpgrade] = React.useState(false);
+  React.useEffect(() => {
+    if (!editable) return;
+    let active = true;
+    void viewBlocksEnabled()
+      .then((on) => active && setCanUpgrade(on))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [editable]);
 
   return (
     <section className="w-full rounded-(--radius-sm) border border-line p-3" contentEditable={false} aria-labelledby={id} onKeyDown={isolateKeys}>
@@ -526,18 +557,26 @@ function QueryList({
           {t(`semantic.query.${preset}`)}
         </h3>
         {editable ? (
-          <Select
-            aria-label={t("semantic.query.preset")}
-            value={preset}
-            className="h-8 w-auto text-caption"
-            onChange={(event) => onPreset(event.target.value as QueryPreset)}
-          >
-            {queryPresets.map((value) => (
-              <option key={value} value={value}>
-                {t(`semantic.query.${value}`)}
-              </option>
-            ))}
-          </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              aria-label={t("semantic.query.preset")}
+              value={preset}
+              className="h-8 w-auto text-caption"
+              onChange={(event) => onPreset(event.target.value as QueryPreset)}
+            >
+              {queryPresets.map((value) => (
+                <option key={value} value={value}>
+                  {t(`semantic.query.${value}`)}
+                </option>
+              ))}
+            </Select>
+            {canUpgrade ? (
+              <Button type="button" size="sm" variant="secondary" title={t("semantic.query.upgradeHint")} onClick={onUpgrade}>
+                <LayoutGrid className="size-3.5" aria-hidden />
+                {t("semantic.query.upgrade")}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
       {current === null ? (
