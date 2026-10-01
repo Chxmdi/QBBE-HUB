@@ -73,6 +73,11 @@ describe("isEnabled", () => {
       "wos_forms_v2",
       "wos_public_pages",
       "wos_offline",
+      "wos_meetings_v2",
+      "wos_decisions_v2",
+      "wos_goals",
+      "wos_mobile",
+      "wos_object_approvals",
     ]);
   });
 
