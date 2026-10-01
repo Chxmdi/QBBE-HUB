@@ -129,6 +129,9 @@ test("a conflict offers keep mine or take theirs [switches on]", async ({ page }
 
   // A second conflict, resolved the other way: their content replaces mine in the editor.
   theirs("Their second change");
+  // The closed dialog returned focus to the page; type in the editor again.
+  await editor.locator("p", { hasText: "Mine second" }).click();
+  await page.keyboard.press("End");
   await page.keyboard.type(" and more");
   await expect(dialog).toBeVisible({ timeout: 30_000 });
   const take = dialog.getByRole("button", { name: "Take theirs" });
