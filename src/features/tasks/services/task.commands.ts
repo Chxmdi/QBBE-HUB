@@ -864,6 +864,8 @@ export async function addTaskComment(
 ): Promise<ActionResult> {
   const session = await requireSession();
   const t = await getT();
+  const limited = await enforceRateLimit("comment:create", session.userId);
+  if (limited) return limited;
   const trimmed = body.trim();
   if (!trimmed) return { ok: false, error: t("tasks.errors.commentEmpty") };
   if (trimmed.length > 5000) return { ok: false, error: t("tasks.errors.commentTooLong") };
