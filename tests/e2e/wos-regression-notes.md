@@ -106,7 +106,105 @@ the "later" bucket always holds the task.
 
 ## 3. Regression with every switch on
 
-(Filled in from the runs; see the PR for the per-part timings.)
+One local Supabase, seeded once, the four signed-in parts run one after the
+other on that same database (CI gives each part a fresh one; where that
+difference explains a failure it is said below), then the three qa-matrix
+shards. Chromium, one worker. `WORKSPACE_OS_FLAGS=all` at build and run
+time. `CRON_JOB_SECRET` set; `SMTP_HOST`/`SMTP_PORT` were **not** set for the
+main run (CI's `local-supabase` action sets them), which explains one
+failure below, confirmed by a rerun with them set.
+
+| Part | Result | Wall time |
+| --- | --- | --- |
+| signed-in 1/4 (18 files) | 45 passed, 3 failed | 11.0 min (661 s) |
+| signed-in 2/4 (32 files) | 56 passed, 9 failed, 2 did not run | 10.2 min (611 s) |
+| signed-in 3/4 (26 files) | 38 passed, 14 failed | 7.3 min (439 s) |
+| signed-in 4/4 (27 files) | PART4 |
+| qa-matrix 1/3 | QA1 |
+| qa-matrix 2/3 | QA2 |
+| qa-matrix 3/3 | QA3 |
+
+### 3a. Tests that assume the switch is off (fail by design under `all`)
+
+Each of these opens a Workspace OS screen with its switch off and expects
+"Not found — or not yours to see" (or a 404). The env override can only turn
+switches on, so they cannot pass in an all-on run, and they are correct as
+tests of the off state. Where the check sits at the **start** of a long
+functional test, the whole test is lost in the all-on run (marked ★): the
+off check should be its own test so the functional path still runs.
+
+| Spec and test | Line | Lost coverage |
+| --- | --- | --- |
+| meetings-v2 "the organizer captures during a meeting…" ★ | 68 | the whole V1-9 flow |
+| templates-v2 "a space template previews real dates…" ★ | 34 | the whole templates flow |
+| workspace-os-home "Home stays hidden while the switch is off" | 152 | none |
+| insight-graph "the graph lens centres on a project…" ★ | 36 | the graph lens |
+| insight-process "process analytics shows time in status…" ★ | 50 | process analytics |
+| lenses-table "with the switch off the table lens does not exist" | 187 | none |
+| objects-related "the Related panel lists links both ways…" ★ | 43 | the Related panel |
+| workflows-v2 "the screens do not exist while the switch is off" | 29 | none |
+| workspace-os-capture "the capture page stays hidden while the switch is off" | 137 | none |
+| wos-task-description "with the editor switch off, the drawer keeps the plain description field" | 73 | none |
+| api-v1 "a token without the actions scope cannot run actions, and the API is off with the switch" | 129 | none (the off check is last) |
+| decisions-v2 "a project manager records the full decision…" ★ | 67 | the decisions flow |
+| forms-v2 "a task form turns an answer into a task, and is hidden while its switch is off" ★ | 37 | the forms flow |
+| google-objects "a calendar event becomes a meeting…" ★ | 46 | the Google objects flow |
+| insight-map "the map lens places events…" ★ | 37 | the map lens |
+| insight-whatif "the what-if timeline previews a milestone shift…" ★ | 36 | what-if |
+| object-approvals "a project manager sends a task for approval…" ★ | 66 | object approvals |
+| workspace-os-apps "apps are hidden while the switch is off" | 95 | none |
+| workspace-os-commands "the command page stays hidden while the switch is off" | 108 | none |
+| wos-pages "the pages screens are hidden while the switch is off" | 175 | none |
+SWITCHOFF4
+
+Owner: each stream's spec author; the lead decides the convention (section
+4). Not fixed here: none of these specs is I4's.
+
+### 3b. Other failures, with root cause
+
+- **R1. `notifications.spec.ts` "inbox filters, weekly modes, mutes, and one
+  actionable email" — environment.** `email_delivery.status` was `sent` but
+  Mailpit held no message: without `SMTP_HOST` the provider is `log`
+  (`src/features/notifications/services/email-provider.ts:55`), which
+  reports success. CI's `local-supabase` action exports
+  `SMTP_HOST=127.0.0.1` and `SMTP_PORT=54325`; my main run did not.
+  RERUN_NOTIFICATIONS
+- **R2. `translated-workspace.spec.ts` both tests — test infrastructure
+  limit, reached because of data volume.** `recordedText()` dumps up to
+  2,000 rows of every public table as one JSON string through
+  `tests/e2e/db.ts` `sql()`, which uses `spawnSync` with Node's default
+  `maxBuffer` of 1,048,576 bytes. `object_event` held 10,257 rows (9.2 MB)
+  after parts 1–2 on the same database; 2,000 of them as JSON passed 1 MB,
+  so the output was cut ("Unterminated string in JSON at position
+  1114110") and the second call failed outright ("psql failed", exit by
+  signal). In CI each part starts empty, so it has not tripped yet, but
+  M9's event rows grow with every spec that creates records and the margin
+  is thin. Suggested one-line fix in `tests/e2e/db.ts` (not I4's file):
+  `spawnSync(…, { input, encoding: "utf8", shell: false, maxBuffer: 64 * 1024 * 1024 })`.
+  RERUN_TRANSLATED
+- **R3. `wos-admin-controls.spec.ts` "an admin sets a rule, reads the role
+  report and downloads the audit log" — real bug [admin controls, V2-9;
+  not I1/I2/I3].** The CSV had the right header but no
+  `sign_in_rule_changed` row although two exist in `audit_event`. The export
+  (`src/app/(workspace)/spaces/admin/audit-export/route.ts`) asks for
+  `MAX_ROWS = 50_000` oldest-first in one PostgREST request, and PostgREST
+  returns at most `max_rows = 1000` (`supabase/config.toml:18`; the hosted
+  default is the same). With 5,344 audit rows in the organization, the
+  newest 4,000+ events, the rule change among them, were silently dropped.
+  Any organization past 1,000 events in the chosen range gets a truncated
+  export that looks complete. Fix: page with `.range(from, to)` in steps of
+  1,000 until a short page (or stream), and add a test that writes 1,001
+  events and expects the last one in the CSV. In CI the part's fresh
+  database stays under 1,000 rows, which is why it passes there.
+- **R4. `lenses-timeline.spec.ts` "bars move by keyboard, dependents move
+  after confirming, and a drag reschedules" — RERUN_TIMELINE**
+- **R5. `wos-mvp-exit.spec.ts` test 1 (this PR's spec) — test data from my
+  own earlier local runs.** Eight tasks from previous runs of the spec sat
+  on the same due day; the month grid shows four chips per day and folds
+  the rest into "+N more", so the new chip was hidden. Fixed in the spec:
+  it now deletes its tasks in `afterAll`. In CI (fresh database) it did not
+  apply. RERUN_EXIT
+PART4OTHER
 
 ## 4. How CI should run the suite with the switches on
 
