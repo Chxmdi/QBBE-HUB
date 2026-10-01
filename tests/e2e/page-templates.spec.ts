@@ -69,9 +69,11 @@ test("Meeting notes creates an editable page in the chosen space with the variab
     await expect(preview.getByText("Follow up on the actions by 2031-03-17")).toBeVisible();
 
     await dialog.getByRole("button", { name: "Create page" }).click();
-    await expect(page).toHaveURL(/\/pages\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+    // The browser is already on the space's page, so wait for it to leave.
+    await page.waitForURL((url) => /^\/pages\/[0-9a-f-]{36}$/.test(url.pathname) && !url.pathname.endsWith(spaceId), {
+      timeout: 30_000,
+    });
     pageId = page.url().split("/").pop()!;
-    expect(pageId).not.toBe(spaceId);
 
     // Inside the chosen space, titled, and open in the editor with the rendered blocks.
     await expect(page.getByRole("textbox", { name: "Page title" })).toHaveValue(pageTitle, { timeout: 30_000 });
@@ -124,7 +126,7 @@ test("a volunteer cannot create a workspace page from a template [switches on]",
   await where.selectOption("workspace");
   await page.getByLabel("Page title").fill(attempted);
   await page.getByRole("button", { name: "Use template" }).click();
-  await expect(page.getByRole("alert")).toHaveText("You cannot create a page there. Choose another place or ask an owner.", { timeout: 30_000 });
+  await expect(page.getByTestId("page-template-form").getByRole("alert")).toHaveText("You cannot create a page there. Choose another place or ask an owner.", { timeout: 30_000 });
   await expect(page).toHaveURL(/\/templates-v2\//);
   expect(sql(`select count(*) from public.page where title = '${attempted}'`)).toBe("0");
 });
