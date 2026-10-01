@@ -152,6 +152,7 @@ export const editorFrCA: EditorMessages = {
     toggleHint: "Affiche une petite icône à côté des lignes qui mentionnent une personne et une date.",
   },
   a11y: {
+    blockType: "Type de bloc",
     checkbox: "Terminé",
     slashList: "Blocs",
     toolbarControl: "Option de mise en forme",

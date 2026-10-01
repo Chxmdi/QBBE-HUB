@@ -150,6 +150,7 @@ export const editorEn = {
     toggleHint: "Shows a small icon beside lines that name a person and a date.",
   },
   a11y: {
+    blockType: "Block type",
     checkbox: "Done",
     slashList: "Blocks",
     toolbarControl: "Formatting option",

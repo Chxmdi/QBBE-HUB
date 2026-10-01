@@ -19,16 +19,27 @@
   outline-color: var(--color-accent);
 }
 
-/* 1.4.3 Contrast: the highlighted slash option and the group labels. */
+/* 1.4.3 Contrast: every highlighted menu option (keyboard, pointer or
+   selected) uses the brand pair, which passes in both themes. Ariakit's own
+   white on #007acc is close to the 4.5:1 line and was flagged in dark mode. */
 .bn-suggestion-menu-item[aria-selected="true"],
 .bn-ak-menu-item[aria-selected="true"],
-.bn-suggestion-menu-item[aria-selected="true"] .bn-ak-suggestion-menu-item-subtitle {
+.bn-ak-menu-item[data-active-item],
+.bn-ak-menu-item:hover {
   background-color: var(--color-brand-soft);
   color: var(--color-brand-fg);
 }
+.bn-ak-menu-item[aria-selected="true"] *,
+.bn-ak-menu-item[data-active-item] *,
+.bn-ak-menu-item:hover * {
+  color: inherit;
+}
+/* Ariakit fades the group labels with opacity: .6 (4.26:1), which a colour
+   alone cannot undo. */
 .bn-suggestion-menu-label,
 .bn-ak-group-label {
-  color: var(--color-ink);
+  opacity: 1;
+  color: var(--color-muted);
 }
 
 /* 2.5.8 Target Size (Minimum): check-list boxes were 12 x 24 px. */

@@ -156,6 +156,11 @@ function useAccessibleNames(editor: Editor, t: EditorT) {
       document
         .querySelectorAll<HTMLElement>(".bn-suggestion-menu[role='listbox']:not([aria-label]), .bn-container [role='listbox']:not([aria-label])")
         .forEach((el) => el.setAttribute("aria-label", t("a11y.slashList")));
+      // The block-type select shows its value in text screen readers do not
+      // get, so it always needs its own name.
+      document
+        .querySelectorAll<HTMLElement>(".bn-formatting-toolbar [role='combobox']:not([aria-label])")
+        .forEach((el) => el.setAttribute("aria-label", t("a11y.blockType")));
       document
         .querySelectorAll<HTMLElement>(".bn-formatting-toolbar button, .bn-formatting-toolbar [role='combobox']")
         .forEach((el) => {
