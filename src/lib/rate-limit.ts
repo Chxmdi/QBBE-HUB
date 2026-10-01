@@ -61,6 +61,8 @@ export const RATE_LIMITS = {
   "payables:write": { limit: 240, windowSeconds: 60 },
   "bank:write": { limit: 240, windowSeconds: 60 },
   "payroll:write": { limit: 240, windowSeconds: 60 },
+  // Autosave sends at most about one batch a second per person.
+  "editor:save": { limit: 240, windowSeconds: 60 },
 } as const;
 
 export type RateLimitedAction = keyof typeof RATE_LIMITS;
