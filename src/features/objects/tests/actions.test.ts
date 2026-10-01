@@ -155,3 +155,133 @@ describe("undo", () => {
     expect(sameValue("1", 1)).toBe(false);
   });
 });
+
+describe("object.import", () => {
+  // Imported lazily so this block stands on its own.
+  const P1 = "44444444-4444-4444-4444-444444444444";
+  const P2 = "55555555-5555-5555-5555-555555555555";
+
+  async function importSetup() {
+    const { createImportAction, IMPORT_ACTION, IMPORT_ROW_LIMIT } = await import("@/features/objects/actions/import-rows");
+    const store = memoryStore(() => new Date("2026-10-01T12:00:00Z"));
+    const archived = new Set<string>();
+    const writer: ObjectWriter = {
+      async apply(changes) {
+        for (const c of changes) {
+          if (c.kind === "delete") archived.add(c.object.id);
+          else if (c.kind === "create") archived.delete(c.object.id);
+          else throw new Error("unsupported");
+        }
+      },
+      read: async () => null,
+    };
+    const registry = createActionRegistry({ store, writer });
+    let n = 0;
+    registry.register({
+      key: "task.create",
+      label: { en: "Create task", fr: "Créer une tâche" },
+      capability: "edit_content",
+      targets: (input: unknown) => ((input as { projectId?: string }).projectId ? [(input as { projectId: string }).projectId] : []),
+      async run(_context, input) {
+        const title = (input as { title: string }).title;
+        if (title === "boom") throw new Error("task.create failed: failed");
+        n += 1;
+        return [{ kind: "create", object: { id: `t${n}`, type: "task" }, values: { title } }];
+      },
+    });
+    registry.register(createImportAction((key) => registry.get(key)));
+    return { registry, store, archived, IMPORT_ACTION, IMPORT_ROW_LIMIT };
+  }
+
+  it("creates every allowed row as ONE change set and reports the rest by row", async () => {
+    const { registry, IMPORT_ACTION } = await importSetup();
+    const reported: [number, string][] = [];
+    const result = await registry.run(
+      IMPORT_ACTION,
+      {
+        typeKey: "task",
+        rows: [
+          { row: 1, input: { title: "a" } },
+          { row: 2, input: { title: "in a project I cannot edit", projectId: P2 } },
+          { row: 3, input: { title: "boom" } },
+          { row: 4, input: { title: "b", projectId: P1 } },
+        ],
+        report: (row: number, failure: string) => reported.push([row, failure]),
+      },
+      context([P2]),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.changeSet.actionKey).toBe(IMPORT_ACTION);
+    expect(result.changeSet.changes.map((c) => (c.kind === "create" ? c.values.title : null))).toEqual(["a", "b"]);
+    expect(reported).toEqual([[2, "forbidden"], [3, "failed"]]);
+  });
+
+  it("undoes the whole import at once", async () => {
+    const { registry, archived, IMPORT_ACTION } = await importSetup();
+    const run = await registry.run(IMPORT_ACTION, { typeKey: "task", rows: [{ row: 1, input: { title: "a" } }, { row: 2, input: { title: "b" } }] }, context());
+    expect(run.ok).toBe(true);
+    if (!run.ok) return;
+    const undo = await registry.undo(run.changeSet.id, context());
+    expect(undo.ok).toBe(true);
+    expect([...archived].sort()).toEqual(["t1", "t2"]);
+  });
+
+  it("refuses an empty file and one over the row limit before creating anything", async () => {
+    const { registry, IMPORT_ACTION, IMPORT_ROW_LIMIT } = await importSetup();
+    expect(await registry.run(IMPORT_ACTION, { typeKey: "task", rows: [] }, context())).toMatchObject({ ok: false, reason: "failed" });
+    const many = Array.from({ length: IMPORT_ROW_LIMIT + 1 }, (_, i) => ({ row: i + 1, input: { title: `r${i}` } }));
+    expect(await registry.run(IMPORT_ACTION, { typeKey: "task", rows: many }, context())).toMatchObject({ ok: false, reason: "failed" });
+  });
+});
+
+describe("registry safety around created records", () => {
+  it("puts created records back when the change set cannot be recorded", async () => {
+    const applied: Change[][] = [];
+    const writer: ObjectWriter = { apply: async (c) => void applied.push(c), read: async () => null };
+    const store: ChangeSetStore = {
+      begin: async () => null,
+      save: async () => {
+        throw new Error("record_change_set refused");
+      },
+      load: async () => null,
+    };
+    const registry = createActionRegistry({ store, writer });
+    registry.register({
+      key: "task.create",
+      label: { en: "Create task", fr: "Créer une tâche" },
+      capability: "edit_content",
+      targets: () => [],
+      run: async () => [{ kind: "create", object: { id: "t1", type: "task" }, values: {} }],
+    });
+    const result = await registry.run("task.create", {}, context());
+    expect(result).toMatchObject({ ok: false, reason: "failed", message: "record_change_set refused" });
+    expect(applied).toEqual([[{ kind: "delete", object: { id: "t1", type: "task" }, values: {} }]]);
+  });
+
+  it("refuses to undo a create when the record was edited since", async () => {
+    const store = memoryStore(() => new Date("2026-10-01T12:00:00Z"));
+    const archived: string[] = [];
+    const writer: ObjectWriter = {
+      apply: async (changes) => void changes.forEach((c) => c.kind === "delete" && archived.push(c.object.id)),
+      read: async () => null,
+      changedSince: async (object) => object.id === "t2",
+    };
+    const registry = createActionRegistry({ store, writer });
+    registry.register({
+      key: "task.create",
+      label: { en: "Create task", fr: "Créer une tâche" },
+      capability: "edit_content",
+      targets: () => [],
+      run: async () => [
+        { kind: "create", object: { id: "t1", type: "task" }, values: {} },
+        { kind: "create", object: { id: "t2", type: "task" }, values: {} },
+      ],
+    });
+    const run = await registry.run("task.create", {}, context());
+    if (!run.ok) throw new Error("run failed");
+    const undo = await registry.undo(run.changeSet.id, context());
+    expect(undo).toEqual({ ok: false, reason: "failed", message: "conflict:t2" });
+    expect(archived).toEqual([]);
+  });
+});

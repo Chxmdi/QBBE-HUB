@@ -150,11 +150,44 @@ export function createSupabaseObjectWriter(client: Client): ObjectWriter {
     }
   }
 
+  /**
+   * Undoing a create (a `delete` change) puts the native record in the
+   * archive rather than removing it: the lens engine hides archived rows,
+   * the row and its history stay, the change set can still name the object,
+   * and redoing (a `create` change for an existing id) takes it back out.
+   * Only tasks and projects are made through the registry today.
+   */
+  async function writeArchived(objectId: Uuid, archived: boolean) {
+    const { data: object } = await client
+      .from("object")
+      .select("id, object_type!object_type_id_organization_id_fkey(native_table)")
+      .eq("id", objectId)
+      .maybeSingle();
+    if (!object) throw new ObjectWriteError("not_found");
+    const type = (object as { object_type: { native_table: string | null } | { native_table: string | null }[] | null }).object_type;
+    const table = (Array.isArray(type) ? type[0] : type)?.native_table ?? null;
+    if (table !== "task" && table !== "project") throw new ObjectWriteError("create_delete_not_supported");
+    const { data, error } = await client
+      .from(table)
+      .update({ archived_at: archived ? new Date().toISOString() : null })
+      .eq("id", objectId)
+      .select("id");
+    if (error || !data || data.length === 0) throw new ObjectWriteError(error?.message ?? "forbidden");
+  }
+
   return {
+    async changedSince(object, since) {
+      if (object.type !== "task" && object.type !== "project") return false;
+      const { data } = await client.from(object.type).select("updated_at").eq("id", object.id).maybeSingle();
+      const updated = (data as { updated_at: string } | null)?.updated_at;
+      return typeof updated === "string" && new Date(updated).getTime() > new Date(since).getTime();
+    },
     async apply(changes) {
       for (const change of changes) {
         if (change.kind === "update") await writeUpdate(change);
         else if (change.kind === "link" || change.kind === "unlink") await writeLink(change);
+        else if (change.kind === "delete") await writeArchived(change.object.id, true);
+        else if (change.kind === "create") await writeArchived(change.object.id, false);
         else throw new ObjectWriteError("create_delete_not_supported");
       }
     },

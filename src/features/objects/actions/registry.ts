@@ -28,6 +28,12 @@ export interface ObjectWriter {
   apply: (changes: Change[], context: ActionContext) => Promise<void>;
   /** The current value of one property, in the same form a Change carries. */
   read: (object: Change & { kind: "update" }) => Promise<unknown>;
+  /**
+   * Whether a record was edited after `since` (an ISO time). Undo asks this of
+   * every record an action created, so it never archives someone's later work.
+   * Optional: a writer that cannot tell is trusted, as before.
+   */
+  changedSince?: (object: { id: Uuid; type: string }, since: string) => Promise<boolean>;
 }
 
 export const UNDO_WINDOW_DAYS = 30;
@@ -102,13 +108,27 @@ export function createActionRegistry(options: {
       } catch (error) {
         return failure(error);
       }
-      if (!(await allowed(targets, action.capability, context))) return { ok: false, reason: "forbidden" };
+      // An action with no targets (creating a record outside any project) has
+      // nothing to check here: the table's own row-level security decides the
+      // insert, as it does for the form, and record_change_set then requires
+      // edit_content on every object the change set names.
+      if (targets.length > 0 && !(await allowed(targets, action.capability, context))) {
+        return { ok: false, reason: "forbidden" };
+      }
       try {
         const marker = await options.store.begin();
         const changes = await action.run(context, input);
         if (changes.length === 0) return { ok: false, reason: "failed", message: "Nothing changed." };
-        const changeSet = await options.store.save({ actionKey: key, changes, context, marker, undoOf: null });
-        return { ok: true, changeSet };
+        try {
+          const changeSet = await options.store.save({ actionKey: key, changes, context, marker, undoOf: null });
+          return { ok: true, changeSet };
+        } catch (error) {
+          // Without its change set the work could never be undone: put it
+          // back rather than leave records nobody can take back. Best effort;
+          // the failure is reported either way.
+          await options.writer.apply(invertChanges(changes), context).catch(() => {});
+          throw error;
+        }
       } catch (error) {
         return failure(error);
       }
@@ -133,6 +153,12 @@ export function createActionRegistry(options: {
         if (change.kind !== "update") continue;
         const current = await options.writer.read(change);
         if (!sameValue(current, change.after)) conflicts.push(`${change.object.id}:${change.property}`);
+      }
+      if (options.writer.changedSince) {
+        for (const change of original.changes) {
+          if (change.kind !== "create") continue;
+          if (await options.writer.changedSince(change.object, original.createdAt)) conflicts.push(change.object.id);
+        }
       }
       if (conflicts.length > 0) {
         return { ok: false, reason: "failed", message: `conflict:${conflicts.join(",")}` };
