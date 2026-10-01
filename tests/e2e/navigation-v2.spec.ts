@@ -34,6 +34,30 @@ async function focusedText(page: Page): Promise<string> {
   return page.evaluate(() => (document.activeElement as HTMLElement | null)?.innerText?.trim() ?? "");
 }
 
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * A phone tab's accessible name. The My Work and Communication tabs carry the
+ * live count as a badge ("Communication 3 open items") whenever it is above
+ * zero, and the specs that ran before this one on the same database decide
+ * it, so the name allows the badge. `seedUnread` makes the Communication
+ * badge certain, and the tests check it is there.
+ */
+const BADGE = { en: "open items", fr: "éléments ouverts" } as const;
+const tabName = (label: string, badge: string = BADGE.en) =>
+  new RegExp(`^${escape(label)}(?:\\s+\\d+\\+?\\s+${escape(badge)})?$`);
+const withBadge = (label: string, badge: string = BADGE.en) =>
+  new RegExp(`^${escape(label)}\\s+\\d+\\+?\\s+${escape(badge)}$`);
+
+/** One unread notification for the staff member, so the inbox count is above zero. */
+const seedUnread = (stamp: number) =>
+  sql(`
+    insert into public.notification (user_id, organization_id, category, title, body, dedupe_key)
+    select u.id, m.organization_id, 'mention', 'Nav unread ${stamp}', 'Counts on the Communication tab', 'nav-v2-${stamp}'
+    from auth.users u join public.organization_membership m on m.user_id = u.id
+    where u.email = '${STAFF}';
+  `);
+
 const setStaffLocale = (locale: string | null) =>
   sql(`update public.user_profile set locale = ${locale ? `'${locale}'` : "null"} where email = '${STAFF}';`);
 
@@ -54,7 +78,10 @@ function seedMeetings(stamp: number): { upcoming: string; past: string } {
 }
 
 test.afterEach(() => setStaffLocale(null));
-test.afterAll(() => sql(`delete from public.meeting where title like 'Nav upcoming %' or title like 'Nav recent %';`));
+test.afterAll(() => {
+  sql(`delete from public.meeting where title like 'Nav upcoming %' or title like 'Nav recent %';`);
+  sql(`delete from public.notification where dedupe_key like 'nav-v2-%';`);
+});
 
 test("the sidebar shows the new groups and keeps classic screens [switches on]", async ({ page }) => {
   const stamp = Date.now();
@@ -103,6 +130,7 @@ test("the sidebar shows the new groups and keeps classic screens [switches on]",
 
 test("the menu works at 320 px from the keyboard [switches on]", async ({ page }) => {
   test.setTimeout(120_000);
+  seedUnread(Date.now());
   await page.setViewportSize({ width: 320, height: 640 });
   await signIn(page, "staff");
   await page.goto("/home");
@@ -110,18 +138,20 @@ test("the menu works at 320 px from the keyboard [switches on]", async ({ page }
 
   const primary = page.getByRole("navigation", { name: "Primary" });
   const tabs = ["Home", "My Work", "Pages", "Communication"];
-  for (const name of tabs) await expect(primary.getByRole("link", { name, exact: true })).toBeVisible();
+  for (const name of tabs) await expect(primary.getByRole("link", { name: tabName(name) })).toBeVisible();
+  // The unread count rides on the Communication tab.
+  await expect(primary.getByRole("link", { name: withBadge("Communication") })).toBeVisible();
   await expect(primary.getByRole("link")).toHaveCount(tabs.length);
   const more = primary.getByRole("button", { name: "More destinations" });
   await expect(more).toBeVisible();
-  await expect(primary.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(primary.getByRole("link", { name: "Communication", exact: true })).toHaveAttribute("href", "/inbox");
+  await expect(primary.getByRole("link", { name: tabName("Home") })).toHaveAttribute("aria-current", "page");
+  await expect(primary.getByRole("link", { name: tabName("Communication") })).toHaveAttribute("href", "/inbox");
 
   // Focus order across the bar: Home, My Work, Pages, Communication, More.
-  await primary.getByRole("link", { name: "Home", exact: true }).focus();
+  await primary.getByRole("link", { name: tabName("Home") }).focus();
   for (const name of tabs.slice(1)) {
     await page.keyboard.press("Tab");
-    await expect(primary.getByRole("link", { name, exact: true })).toBeFocused();
+    await expect(primary.getByRole("link", { name: tabName(name) })).toBeFocused();
   }
   await page.keyboard.press("Tab");
   await expect(more).toBeFocused();
@@ -151,19 +181,20 @@ test("the menu works at 320 px from the keyboard [switches on]", async ({ page }
   await expect(page.getByRole("heading", { level: 1, name: "Meeting notes" })).toBeVisible();
   expect(await fitsWidth(page)).toBe(true);
   // A group tab is current on any of its screens.
-  await expect(primary.getByRole("link", { name: "Communication", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(primary.getByRole("link", { name: "Home", exact: true })).not.toHaveAttribute("aria-current", "page");
+  await expect(primary.getByRole("link", { name: tabName("Communication") })).toHaveAttribute("aria-current", "page");
+  await expect(primary.getByRole("link", { name: tabName("Home") })).not.toHaveAttribute("aria-current", "page");
 
   // Enter on a tab navigates.
-  await primary.getByRole("link", { name: "My Work", exact: true }).focus();
+  await primary.getByRole("link", { name: tabName("My Work") }).focus();
   await page.keyboard.press("Enter");
   await page.waitForURL("**/lenses/my-work**");
-  await expect(primary.getByRole("link", { name: "My Work", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(primary.getByRole("link", { name: tabName("My Work") })).toHaveAttribute("aria-current", "page");
   expect(await fitsWidth(page)).toBe(true);
 });
 
 test("the menu reads in French [switches on]", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
+  seedUnread(Date.now());
   await signIn(page, "staff");
   // The profile is the record; the cookie is what the server reads first.
   setStaffLocale("fr-CA");
@@ -197,8 +228,9 @@ test("the menu reads in French [switches on]", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   const primary = page.getByRole("navigation", { name: "Principale" });
   for (const name of ["Accueil", "Mon travail", "Pages", "Communication"]) {
-    await expect(primary.getByRole("link", { name, exact: true })).toBeVisible();
+    await expect(primary.getByRole("link", { name: tabName(name, BADGE.fr) })).toBeVisible();
   }
+  await expect(primary.getByRole("link", { name: withBadge("Communication", BADGE.fr) })).toBeVisible();
   await expect(primary.getByRole("button", { name: "Autres destinations" })).toHaveText("Plus");
   expect(await fitsWidth(page)).toBe(true);
 });
