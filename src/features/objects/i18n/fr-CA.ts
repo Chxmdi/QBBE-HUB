@@ -69,6 +69,9 @@ export const objectsFr: ObjectsMessages = {
         edited_time: "Définie automatiquement à chaque modification de l’élément.",
         relation: "Les liens se modifient dans la section Liés.",
         file: "Les fichiers s’ajoutent depuis la bibliothèque de documents.",
+        location: "Les lieux se choisissent sur la carte; on ne peut pas encore les saisir ici.",
+        timestamp: "Cette date comporte une heure; modifiez-la sur la fiche d’origine.",
+        archived: "Cet élément est archivé. Restaurez-le pour modifier ses propriétés.",
         system: "Ce champ est conservé sur la fiche d’origine et ne peut pas être modifié ici.",
       },
     },
@@ -81,6 +84,7 @@ export const objectsFr: ObjectsMessages = {
       unsupported: "Les versions ne sont pas encore conservées pour ce genre d’élément.",
     },
     related: {
+      none: "Rien de lié ici pour l’instant.",
       loadFailed: "Les éléments liés n’ont pas pu être chargés.",
     },
     section: {

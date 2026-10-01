@@ -17,6 +17,7 @@ export function PropertiesSection({
   people,
   members,
   canEdit,
+  archived,
 }: {
   objectId: string;
   objectType: string;
@@ -25,6 +26,7 @@ export function PropertiesSection({
   people: Record<string, string>;
   members: RecordPerson[];
   canEdit: boolean;
+  archived: boolean;
 }) {
   const t = useObjectsT();
   const shown = keys.map((key) => properties[key]).filter((property): property is RecordProperty => Boolean(property));
@@ -33,8 +35,10 @@ export function PropertiesSection({
 
   return (
     <div className="flex flex-col gap-2">
-      {!canEdit ? <p className="meta">{t("record.properties.readOnly")}</p> : null}
-      <dl className="card divide-y divide-line">
+      {!canEdit ? (
+        <p className="meta">{t(archived ? "record.properties.derived.archived" : "record.properties.readOnly")}</p>
+      ) : null}
+      <div className="card divide-y divide-line">
         {shown.map((property) => (
           <PropertyField
             key={property.key}
@@ -45,7 +49,7 @@ export function PropertiesSection({
             members={members}
           />
         ))}
-      </dl>
+      </div>
     </div>
   );
 }

@@ -67,6 +67,9 @@ export const objectsEn = {
         edited_time: "Set automatically whenever the item changes.",
         relation: "Links are changed from the Related section.",
         file: "Files are attached from the document library.",
+        location: "Places are set on the map, so they cannot be typed in here yet.",
+        timestamp: "This date has a time of day, so change it on the original record.",
+        archived: "This item is archived. Restore it to change its properties.",
         system: "This field is kept on the original record and cannot be changed here.",
       },
     },
@@ -79,6 +82,7 @@ export const objectsEn = {
       unsupported: "Versions are not kept for this kind of item yet.",
     },
     related: {
+      none: "Nothing linked here yet.",
       loadFailed: "Related items could not be loaded.",
     },
     section: {

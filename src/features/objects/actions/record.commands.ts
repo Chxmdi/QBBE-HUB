@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getSessionContext } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { createObjectsTranslator, type ObjectsKey } from "../i18n/translate";
 import { createRequestActionRegistry } from "./server";
 import { SET_PROPERTY_ACTION } from "./set-property";
@@ -43,6 +44,8 @@ export async function setRecordProperty(input: unknown): Promise<RecordWriteResu
   if (!session) return { ok: false, error: t("record.properties.forbidden") };
   const parsed = setSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: t("record.properties.failed") };
+  const limited = await enforceRateLimit("property:write", session.userId);
+  if (limited) return limited;
 
   const { registry, context } = await createRequestActionRegistry(session.userId);
   const result = await registry.run(
@@ -67,19 +70,14 @@ export async function undoRecordChange(input: unknown): Promise<RecordWriteResul
   if (!session) return { ok: false, error: t("record.properties.undoFailed") };
   const parsed = undoSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: t("record.properties.undoFailed") };
+  const limited = await enforceRateLimit("property:write", session.userId);
+  if (limited) return limited;
 
   const { registry, context } = await createRequestActionRegistry(session.userId);
   const result = await registry.undo(parsed.data.changeSetId, context);
   if (!result.ok) {
-    const key: ObjectsKey =
-      result.reason === "forbidden"
-        ? "record.properties.forbidden"
-        : result.message?.startsWith("conflict:")
-          ? "record.properties.conflict"
-          : result.message?.includes("cannot be undone")
-            ? "record.properties.undoExpired"
-            : "record.properties.undoFailed";
-    return { ok: false, error: t(key) };
+    const key = reasonKey(result.reason, result.message);
+    return { ok: false, error: t(key === "record.properties.failed" ? "record.properties.undoFailed" : key) };
   }
   return { ok: true, changeSetId: result.changeSet.id };
 }

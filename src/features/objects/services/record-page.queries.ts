@@ -43,11 +43,32 @@ export interface RecordLink {
   href: string;
 }
 
+/**
+ * Why a field cannot be edited, when the viewer could otherwise edit the
+ * object: a derived kind, a link kind, or where the value is stored. Null
+ * when the reason is simply that the viewer may not edit (said once for the
+ * whole section) or the field is editable.
+ */
+export type ReadOnlyReason =
+  | "formula"
+  | "rollup"
+  | "created_by"
+  | "created_time"
+  | "edited_by"
+  | "edited_time"
+  | "relation"
+  | "file"
+  | "location"
+  | "timestamp"
+  | "system"
+  | "archived";
+
 export interface RecordProperty {
   key: string;
   definition: PropertyDefinition;
   value: PropertyValue | null;
   mode: RecordFieldMode;
+  reason: ReadOnlyReason | null;
   /** Set for formula properties: the calculation, or why it failed. */
   formula: FormulaResult | null;
   /** A task's native fields as the layout preview shows them (loadTaskPage). */
@@ -73,7 +94,10 @@ export interface RecordPageData {
   people: Record<Uuid, string>;
   /** Active members, for the person fields. */
   members: RecordPerson[];
+  /** The viewer may edit this object (app.can edit_content). */
   canEdit: boolean;
+  /** Fields can be changed: the viewer may edit and the object is not archived. */
+  canEditFields: boolean;
   /** Whether the block editor can show this type's content. */
   editorType: "page" | "task" | null;
   /** Native task fields and related lists, when the object is a task. */
@@ -94,6 +118,20 @@ const WRITABLE_NATIVE_TABLES = new Set([
   "task", "project", "meeting", "decision", "risk", "outcome_metric", "team", "event", "crm_contact", "document",
 ]);
 
+/**
+ * Native date properties stored as calendar dates. Every other native `date`
+ * property is a timestamp with a time of day, which a date field would wipe,
+ * so those stay read-only here.
+ */
+const DATE_ONLY_COLUMNS = new Set([
+  "task.start_at",
+  "task.due_at",
+  "project.start_date",
+  "project.target_date",
+  "risk.review_at",
+  "crm_contact.next_action_at",
+]);
+
 /** Types whose body the block editor can show (ObjectEditor's objectType). */
 const EDITOR_TYPES = new Set(["page", "task"]);
 
@@ -102,20 +140,18 @@ const COLUMN = /^[a-z][a-z0-9_]*$/;
 const PERSON_KINDS: readonly PropertyKind[] = ["person", "created_by", "edited_by"];
 
 /**
- * Which of a type's definitions the viewer may see. The database answers
- * (`hidden_property_keys`); when it cannot, every restricted property is
- * hidden, so a failure never shows more.
+ * Which of a type's definitions the viewer may see, from the database's
+ * answer to `hidden_property_keys`. When it could not answer, every
+ * restricted property is hidden, so a failure never shows more.
  */
-export async function visibleDefinitions(
+export function filterVisible(
   definitions: PropertyDefinition[],
-  typeKey: string,
-  client: Client,
-): Promise<PropertyDefinition[]> {
-  const { data, error } = await client.rpc("hidden_property_keys", { type_key: typeKey });
-  if (error || !Array.isArray(data)) {
+  answer: { data: unknown; error: unknown },
+): PropertyDefinition[] {
+  if (answer.error || !Array.isArray(answer.data)) {
     return definitions.filter((definition) => definition.visibleToRoles === null);
   }
-  const hidden = new Set((data as unknown[]).filter((key): key is string => typeof key === "string"));
+  const hidden = new Set((answer.data as unknown[]).filter((key): key is string => typeof key === "string"));
   return definitions.filter((definition) => !hidden.has(definition.key));
 }
 
@@ -187,12 +223,40 @@ export function fieldMode(
 ): RecordFieldMode {
   if (definition.kind === "relation" || definition.kind === "file") return "link";
   if (derivedPropertyKinds.includes(definition.kind)) return "derived";
-  if (!canEdit || !isWritableKind(definition.kind) || definition.kind === "location") return "readonly";
+  if (!canEdit || readOnlyReason(definition, type, true, false) !== null) return "readonly";
+  return "editable";
+}
+
+/** Why a field is read-only for someone who may edit the object; null when it is editable. */
+export function readOnlyReason(
+  definition: PropertyDefinition,
+  type: Pick<ObjectType, "kind" | "nativeTable">,
+  canEdit: boolean,
+  archived: boolean,
+): ReadOnlyReason | null {
+  switch (definition.kind) {
+    case "formula":
+    case "rollup":
+    case "created_by":
+    case "created_time":
+    case "edited_by":
+    case "edited_time":
+    case "relation":
+    case "file":
+      return definition.kind;
+    default:
+      break;
+  }
+  if (!canEdit) return null;
+  if (archived) return "archived";
+  if (definition.kind === "location") return "location";
+  if (!isWritableKind(definition.kind)) return "system";
   if (definition.systemColumn) {
     const table = type.nativeTable;
-    if (!table || !WRITABLE_NATIVE_TABLES.has(table) || !COLUMN.test(definition.systemColumn)) return "readonly";
+    if (!table || !WRITABLE_NATIVE_TABLES.has(table) || !COLUMN.test(definition.systemColumn)) return "system";
+    if (definition.kind === "date" && !DATE_ONLY_COLUMNS.has(`${table}.${definition.systemColumn}`)) return "timestamp";
   }
-  return "editable";
+  return null;
 }
 
 /**
@@ -215,28 +279,39 @@ export async function loadRecordPage(objectId: Uuid, deps: RecordPageDeps = {}):
   const type = types.find((candidate) => candidate.key === object.type);
   if (!type) return null;
 
-  const [allDefinitions, canEditAnswer, customValues, taskPage] = await Promise.all([
+  const [allDefinitions, hiddenAnswer, canEditAnswer, customValues, taskPage] = await Promise.all([
     listPropertyDefinitions(type.id, client),
+    client.rpc("hidden_property_keys", { type_key: type.key }),
     client.rpc("can", { object_id: object.id, capability: "edit_content" }),
     getCustomPropertyValues(object.id, client),
     type.key === "task" ? loadTaskPage(object.id) : Promise.resolve(null),
   ]);
   const canEdit = !canEditAnswer.error && canEditAnswer.data === true;
-  const definitions = await visibleDefinitions(allDefinitions, type.key, client);
+  const canEditFields = canEdit && !object.archivedAt;
+  const definitions = filterVisible(allDefinitions, hiddenAnswer);
+  const modes = new Map(definitions.map((definition) => [definition.key, fieldMode(definition, type, canEditFields)]));
+  const needsMembers = definitions.some(
+    (definition) => definition.kind === "person" && modes.get(definition.key) === "editable",
+  );
 
   // Native columns the viewer may see, read from the record's own table.
   const nativeColumns = definitions
     .filter((definition) => definition.systemColumn && COLUMN.test(definition.systemColumn))
     .map((definition) => definition.systemColumn as string);
-  let nativeRow: Record<string, unknown> = {};
-  if (type.nativeTable && nativeColumns.length > 0) {
-    const { data } = await client
-      .from(type.nativeTable)
-      .select([...new Set(nativeColumns)].join(", "))
-      .eq("id", object.id)
-      .maybeSingle();
-    nativeRow = (data as unknown as Record<string, unknown> | null) ?? {};
-  }
+  const [nativeAnswer, membersAnswer] = await Promise.all([
+    type.nativeTable && nativeColumns.length > 0
+      ? client.from(type.nativeTable).select([...new Set(nativeColumns)].join(", ")).eq("id", object.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    needsMembers
+      ? client
+          .from("organization_membership")
+          .select("user_id, user_profile!inner(full_name)")
+          .eq("organization_id", object.organizationId)
+          .eq("status", "active")
+          .limit(1000)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const nativeRow = (nativeAnswer.data as unknown as Record<string, unknown> | null) ?? {};
 
   const values: Record<string, PropertyValue | null> = {};
   for (const definition of definitions) {
@@ -257,13 +332,7 @@ export async function loadRecordPage(objectId: Uuid, deps: RecordPageDeps = {}):
     if (value?.kind === "relation") for (const ref of value.value) relationIds.add(ref.id);
   }
 
-  const [membersAnswer, filesAnswer, relatedAnswer] = await Promise.all([
-    client
-      .from("organization_membership")
-      .select("user_id, user_profile!inner(full_name)")
-      .eq("organization_id", object.organizationId)
-      .eq("status", "active")
-      .limit(1000),
+  const [filesAnswer, relatedAnswer] = await Promise.all([
     fileIds.size ? client.from("document").select("id, title").in("id", [...fileIds]) : Promise.resolve({ data: [] }),
     relationIds.size ? client.from("object").select("id, title").in("id", [...relationIds]) : Promise.resolve({ data: [] }),
   ]);
@@ -317,6 +386,7 @@ export async function loadRecordPage(objectId: Uuid, deps: RecordPageDeps = {}):
       },
       value: { kind: "text", value: object.title },
       mode: "readonly",
+      reason: canEditFields ? "system" : null,
       formula: null,
       display: null,
       links: null,
@@ -340,7 +410,8 @@ export async function loadRecordPage(objectId: Uuid, deps: RecordPageDeps = {}):
       key: definition.key,
       definition,
       value,
-      mode: fieldMode(definition, type, canEdit),
+      mode: modes.get(definition.key) ?? "readonly",
+      reason: readOnlyReason(definition, type, canEdit, Boolean(object.archivedAt)),
       formula,
       display: taskPage?.values[definition.key] ?? null,
       links,
@@ -362,6 +433,7 @@ export async function loadRecordPage(objectId: Uuid, deps: RecordPageDeps = {}):
     people,
     members,
     canEdit,
+    canEditFields,
     editorType: EDITOR_TYPES.has(type.key) ? (type.key as "page" | "task") : null,
     taskPage,
   };

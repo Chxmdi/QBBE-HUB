@@ -6,6 +6,7 @@ import { getObjectsT } from "@/features/objects/i18n/translate";
 import { loadRecordPage } from "@/features/objects/services/record-page.queries";
 import { getObject } from "@/features/objects/services/registry.queries";
 import { requireSession } from "@/lib/auth";
+import { isEnabled } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const { t } = await getObjectsT();
-  const object = UUID.test(id) ? await getObject(id) : null;
+  // Off means the route does not exist: not even its title may say otherwise.
+  const object = UUID.test(id) && (await isEnabled("wos_objects")) ? await getObject(id) : null;
   return { title: object?.title || t("common.eyebrow") };
 }
 

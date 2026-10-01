@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { createSupabasePageClient } from "@/lib/supabase/page";
 import { ObjectEditor } from "@/features/editor/components/object-editor";
 import { loadEditorDocument } from "@/features/editor/services/editor-document.queries";
 import type { LayoutSection } from "@/features/object-layouts/layout";
+import { labelFor, layoutsText } from "@/features/object-layouts/messages";
 import { ObjectComments } from "@/features/object-comments/components/object-comments";
 import { contentAdapterFor } from "@/features/versions/adapters/registry";
 import { VersionHistory } from "@/features/versions/components/version-history";
@@ -41,8 +43,7 @@ export async function RecordPage({ data, session }: { data: RecordPageData; sess
   const heading = (section: LayoutSection) =>
     section.title?.[lang]?.trim() || t(`record.sections.${section.kind}`);
 
-  const relatedAt = layout.sections.findIndex((section) => section.kind === "related");
-  const related = <RelatedSection data={data} locale={locale} t={t} typeLabel={typeLabel} />;
+  const layoutText = layoutsText(locale);
 
   return (
     <div className="flex flex-col gap-6">
@@ -51,8 +52,32 @@ export async function RecordPage({ data, session }: { data: RecordPageData; sess
         title={title}
         actions={object.archivedAt ? <Badge tone="warning">{t("page.archived")}</Badge> : undefined}
       />
-      {layout.sections.map((section, index) => {
-        if (section.kind === "related") return index === relatedAt ? <div key={section.id}>{related}</div> : null;
+      {layout.sections.map((section) => {
+        if (section.kind === "related") {
+          const label =
+            section.title?.[lang]?.trim() || labelFor(layoutText.relations as Record<string, string>, section.relation);
+          const items = (data.taskPage?.related[section.relation] ?? []).slice(0, section.limit);
+          return (
+            <section key={section.id} aria-labelledby={`record-${section.id}`} data-testid={`record-section-${section.id}`}>
+              <h2 id={`record-${section.id}`} className="section-heading mb-2">
+                {label}
+              </h2>
+              {items.length === 0 ? (
+                <p className="meta">{t("record.related.none")}</p>
+              ) : (
+                <ul className="card divide-y divide-line">
+                  {items.map((item) => (
+                    <li key={item.id} className="px-4 py-2 text-[13.5px]">
+                      <Link href={`/objects/${item.id}`} className="text-brand-fg underline-offset-2 hover:underline">
+                        {item.title.trim() || t("common.untitled")}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          );
+        }
         const label = heading(section);
         const fallback = <SectionLoading label={t("record.section.loading", { name: label })} />;
         const failed = (
@@ -74,7 +99,8 @@ export async function RecordPage({ data, session }: { data: RecordPageData; sess
                   properties={data.properties}
                   people={data.people}
                   members={data.members}
-                  canEdit={data.canEdit}
+                  canEdit={data.canEditFields}
+                  archived={Boolean(object.archivedAt)}
                 />
               </SectionBoundary>
             </section>
@@ -115,7 +141,7 @@ export async function RecordPage({ data, session }: { data: RecordPageData; sess
           </div>
         );
       })}
-      {relatedAt === -1 ? related : null}
+      <RelatedSection data={data} locale={locale} t={t} typeLabel={typeLabel} />
     </div>
   );
 }

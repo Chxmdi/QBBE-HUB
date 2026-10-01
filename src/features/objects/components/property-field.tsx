@@ -9,7 +9,6 @@ import { useFormatters, useLocale } from "@/lib/i18n/client";
 import type { PropertyValue, SelectOption } from "@/lib/objects/contracts";
 import { setRecordProperty, undoRecordChange } from "@/features/objects/actions/record.commands";
 import { useObjectsT } from "@/features/objects/i18n/client";
-import type { ObjectsKey } from "@/features/objects/i18n/catalog";
 import type { RecordPerson, RecordProperty } from "@/features/objects/services/record-page.queries";
 
 type SaveState =
@@ -37,7 +36,8 @@ function initialDraft(property: RecordProperty): Draft {
     case "date":
       return value?.kind === "date" ? value.value.slice(0, 10) : "";
     case "person":
-      return value?.kind === "person" ? (value.value[0] ?? "") : "";
+      if (property.definition.systemColumn) return value?.kind === "person" ? (value.value[0] ?? "") : "";
+      return value?.kind === "person" ? [...value.value] : [];
     default:
       return value && "value" in value && value.value !== null && typeof value.value !== "object"
         ? String(value.value)
@@ -72,6 +72,7 @@ export function draftToValue(property: RecordProperty, draft: Draft): unknown {
       return Number.isFinite(number) ? number : null;
     }
     case "person": {
+      if (Array.isArray(draft)) return draft.length > 0 ? draft : null;
       const id = String(draft);
       if (!id) return null;
       return systemColumn ? id : [id];
@@ -131,23 +132,35 @@ export function PropertyField({
 
   async function save(next: Draft = draft) {
     setState({ kind: "saving" });
-    const result = await setRecordProperty({
-      objectId,
-      objectType,
-      property: property.key,
-      value: draftToValue(property, next),
-    });
+    let result: Awaited<ReturnType<typeof setRecordProperty>>;
+    try {
+      result = await setRecordProperty({
+        objectId,
+        objectType,
+        property: property.key,
+        value: draftToValue(property, next),
+      });
+    } catch {
+      result = { ok: false, error: t("record.properties.failed") };
+    }
     if (result.ok) {
       setState({ kind: "saved", changeSetId: result.changeSetId });
       router.refresh();
     } else {
+      // A toggle saves at once: put it back to what is stored.
+      if (property.definition.kind === "checkbox") setDraft(initialDraft(property));
       setState({ kind: "error", message: result.error });
     }
   }
 
   async function undo(changeSetId: string) {
     setState({ kind: "undoing" });
-    const result = await undoRecordChange({ changeSetId });
+    let result: Awaited<ReturnType<typeof undoRecordChange>>;
+    try {
+      result = await undoRecordChange({ changeSetId });
+    } catch {
+      result = { ok: false, error: t("record.properties.undoFailed") };
+    }
     if (result.ok) {
       setState({ kind: "undone" });
       router.refresh();
@@ -182,22 +195,28 @@ export function PropertyField({
 
   if (property.mode !== "editable") {
     return (
-      <div className="flex flex-col gap-1 px-4 py-3 sm:grid sm:grid-cols-[minmax(10rem,max-content)_1fr] sm:gap-x-6">
+      <dl className="flex flex-col gap-1 px-4 py-3 sm:grid sm:grid-cols-[minmax(10rem,max-content)_1fr] sm:gap-x-6">
         <dt className="meta flex items-center gap-1.5">
           {name}
-          {property.mode === "derived" || property.mode === "link" || property.definition.systemColumn ? (
-            <WhyReadOnly id={`${id}-why`} reason={t(reasonKey(property))} label={t("record.properties.why")} />
+          {property.reason ? (
+            <WhyReadOnly
+              id={`${id}-why`}
+              reason={t(`record.properties.derived.${property.reason}`)}
+              label={t("record.properties.why")}
+            />
           ) : null}
         </dt>
         <dd className="text-[13.5px]" data-testid={`property-${property.key}`}>
           <ReadOnlyValue property={property} people={people} />
         </dd>
-      </div>
+      </dl>
     );
   }
 
   const { kind, options } = property.definition;
   const choices = options.choices ?? [];
+  const initial = initialDraft(property);
+  const stored = typeof initial === "string" ? initial : "";
   const inputType =
     kind === "url" ? "url" : kind === "email" ? "email" : kind === "phone" ? "tel" : kind === "date" ? "date" : "text";
 
@@ -209,7 +228,7 @@ export function PropertyField({
         if (dirty && !busy) void save();
       }}
     >
-      <dt className="meta pt-2">
+      <div className="meta pt-2">
         {kind === "multi_select" ? (
           <span id={`${id}-label`}>{name}</span>
         ) : kind === "date_range" ? (
@@ -217,8 +236,8 @@ export function PropertyField({
         ) : (
           <label htmlFor={id}>{name}</label>
         )}
-      </dt>
-      <dd className="flex flex-col gap-2" data-testid={`property-${property.key}`}>
+      </div>
+      <div className="flex flex-col gap-2" data-testid={`property-${property.key}`}>
         <div className="flex flex-wrap items-center gap-2">
           {kind === "checkbox" ? (
             <Checkbox
@@ -233,18 +252,34 @@ export function PropertyField({
           ) : kind === "status" || kind === "select" ? (
             <Select id={id} value={String(draft)} disabled={busy} onChange={(event) => setDraft(event.target.value)} className="max-w-xs">
               <option value="">{t("record.properties.noChoice")}</option>
+              {stored && !choices.some((choice) => choice.key === stored) ? <option value={stored}>{stored}</option> : null}
               {choices.map((choice) => (
                 <option key={choice.key} value={choice.key}>
                   {choiceLabel(choice, locale)}
                 </option>
               ))}
             </Select>
+          ) : kind === "person" && Array.isArray(draft) ? (
+            <Select
+              id={id}
+              multiple
+              value={draft}
+              disabled={busy}
+              onChange={(event) => setDraft([...event.target.selectedOptions].map((option) => option.value))}
+              className="h-auto min-h-24 max-w-xs py-1"
+            >
+              {personOptions(members, people, draft).map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
+                </option>
+              ))}
+            </Select>
           ) : kind === "person" ? (
             <Select id={id} value={String(draft)} disabled={busy} onChange={(event) => setDraft(event.target.value)} className="max-w-xs">
               <option value="">{t("record.properties.nobody")}</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name}
+              {personOptions(members, people, draft ? [String(draft)] : []).map((person) => (
+                <option key={person.id} value={person.id}>
+                  {person.name}
                 </option>
               ))}
             </Select>
@@ -319,26 +354,9 @@ export function PropertyField({
           ) : null}
         </div>
         {status}
-      </dd>
+      </div>
     </form>
   );
-}
-
-function reasonKey(property: RecordProperty): ObjectsKey {
-  const kind = property.definition.kind;
-  switch (kind) {
-    case "formula":
-    case "rollup":
-    case "created_by":
-    case "created_time":
-    case "edited_by":
-    case "edited_time":
-    case "relation":
-    case "file":
-      return `record.properties.derived.${kind}`;
-    default:
-      return "record.properties.derived.system";
-  }
 }
 
 /** A small "why" marker whose explanation shows on hover and on keyboard focus. */
@@ -356,7 +374,7 @@ function WhyReadOnly({ id, reason, label }: { id: string; reason: string; label:
       <span
         id={id}
         role="tooltip"
-        className="pointer-events-none absolute top-full left-0 z-10 mt-1 hidden w-56 rounded-(--radius-sm) border border-line bg-surface px-2 py-1 text-[12px] font-normal text-ink shadow-(--shadow-raise) group-focus-within:block group-hover:block"
+        className="pointer-events-none absolute top-full left-0 z-(--z-overlay) mt-1 hidden w-56 rounded-(--radius-sm) border border-line bg-surface px-2 py-1 text-[12px] font-normal text-ink shadow-(--shadow-raise) group-focus-within:block group-hover:block"
       >
         {reason}
       </span>
@@ -456,4 +474,12 @@ function formatValue(
     default:
       return String(value.value);
   }
+}
+
+/** The members to offer, plus anyone already chosen who is not among them (a former member). */
+function personOptions(members: RecordPerson[], people: Record<string, string>, chosen: string[]): RecordPerson[] {
+  const extra = chosen
+    .filter((id) => id && !members.some((member) => member.id === id))
+    .map((id) => ({ id, name: people[id] ?? id }));
+  return [...extra, ...members];
 }

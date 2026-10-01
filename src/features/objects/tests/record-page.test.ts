@@ -6,6 +6,7 @@ import type { ObjectPageData } from "@/features/object-layouts/services/layout.q
 import {
   fieldMode,
   loadRecordPage,
+  readOnlyReason,
   nativeValue,
   toFormulaValue,
   type RecordPageDeps,
@@ -184,6 +185,7 @@ describe("loadRecordPage", () => {
     expect(data.properties.steward.value).toEqual({ kind: "person", value: [STAFF] });
     expect(data.people[STAFF]).toBe("QA Staff");
     expect(data.members.map((member) => member.name)).toEqual(["QA Owner", "QA Staff"]);
+    expect(data.canEditFields).toBe(true);
     expect(data.canEdit).toBe(true);
     expect(data.editorType).toBeNull();
   });
@@ -218,10 +220,33 @@ describe("loadRecordPage", () => {
     expect(editable?.properties.created_time.mode).toBe("derived");
     expect(editable?.properties.title.mode).toBe("readonly");
 
+    expect(editable?.properties.doubled.reason).toBe("formula");
+    expect(editable?.properties.name.reason).toBeNull();
+
     const viewer = await loadRecordPage(DONOR, deps(fakeClient(donorTables, { canEdit: false })));
     expect(viewer?.canEdit).toBe(false);
     expect(viewer?.properties.name.mode).toBe("readonly");
+    // The section says once that the viewer may not edit; no per-field reason.
+    expect(viewer?.properties.name.reason).toBeNull();
     expect(viewer?.properties.doubled.mode).toBe("derived");
+  });
+
+  it("does not load the member list for someone who cannot edit a person field", async () => {
+    const client = fakeClient(donorTables, { canEdit: false });
+    const data = await loadRecordPage(DONOR, deps(client));
+    expect(data?.members).toEqual([]);
+    expect(client.calls.some((call) => call.table === "organization_membership")).toBe(false);
+    // Names of people already chosen are still shown.
+    expect(data?.people[STAFF]).toBe("QA Staff");
+  });
+
+  it("locks every field of an archived object, and says why", async () => {
+    const archived = { ...donorTables, object: [{ ...objectRow(DONOR, "donor", "Harvest Foundation"), archived_at: "2026-09-30T12:00:00Z" }] };
+    const data = await loadRecordPage(DONOR, deps(fakeClient(archived, { canEdit: true })));
+    expect(data?.canEdit).toBe(true);
+    expect(data?.canEditFields).toBe(false);
+    expect(data?.properties.name.mode).toBe("readonly");
+    expect(data?.properties.name.reason).toBe("archived");
   });
 
   it("is null for an object that does not exist or the viewer cannot see", async () => {
@@ -332,5 +357,11 @@ describe("record page helpers", () => {
     expect(fieldMode({ ...base, systemColumn: "status" }, native, true)).toBe("editable");
     expect(fieldMode({ ...base, systemColumn: "full_name" }, { kind: "native", nativeTable: "user_profile" }, true)).toBe("readonly");
     expect(fieldMode({ ...base, systemColumn: "drop table" }, native, true)).toBe("readonly");
+    // A calendar-date column is editable; a timestamp would lose its time of day.
+    expect(fieldMode({ ...base, kind: "date", systemColumn: "due_at" }, native, true)).toBe("editable");
+    expect(fieldMode({ ...base, kind: "date", systemColumn: "starts_at" }, { kind: "native", nativeTable: "meeting" }, true)).toBe("readonly");
+    expect(readOnlyReason({ ...base, kind: "date", systemColumn: "starts_at" }, { kind: "native", nativeTable: "meeting" }, true, false)).toBe("timestamp");
+    expect(readOnlyReason({ ...base, kind: "location" }, custom, true, false)).toBe("location");
+    expect(readOnlyReason(base, custom, false, false)).toBeNull();
   });
 });

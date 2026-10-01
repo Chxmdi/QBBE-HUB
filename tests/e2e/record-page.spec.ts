@@ -78,13 +78,13 @@ test("a custom property is edited on the record page and recorded in a change se
   await expect(page.getByRole("heading", { level: 1, name: grant.title })).toBeVisible();
   const properties = page.getByRole("region", { name: "Properties" });
   await expect(properties).toBeVisible();
-  await expect(properties.getByTestId("property-amount")).toContainText("1,250");
+  await expect(properties.getByRole("spinbutton", { name: "Amount" })).toHaveValue("1250");
 
   const scan = await new AxeBuilder({ page }).withTags(WCAG).analyze();
   expect(scan.violations, JSON.stringify(scan.violations, null, 1)).toEqual([]);
 
   // Edit by keyboard only: type into Notes and press Enter to save.
-  const notes = properties.getByRole("textbox", { name: "Notes" });
+  const notes = properties.getByRole("textbox", { name: "Notes", exact: true });
   await notes.focus();
   await page.keyboard.type("Call the foundation in May");
   await page.keyboard.press("Enter");
@@ -104,7 +104,7 @@ test("a custom property is edited on the record page and recorded in a change se
   // Undo from the saved line.
   await properties.getByTestId("property-notes").getByRole("button", { name: "Undo" }).click();
   await expect(properties.getByTestId("property-notes").getByRole("status")).toHaveText("Change undone.");
-  await expect(properties.getByRole("textbox", { name: "Notes" })).toHaveValue("");
+  await expect(properties.getByRole("textbox", { name: "Notes", exact: true })).toHaveValue("");
   expect(
     sql(`select count(*) from public.property_value v join public.property_definition d on d.id = v.property_id
          where v.object_id = '${grant.objectId}' and d.key = 'notes'`),
@@ -169,4 +169,17 @@ test("a volunteer sees the properties they may see and nothing hidden [switches 
 
   const scan = await new AxeBuilder({ page }).withTags(WCAG).analyze();
   expect(scan.violations, JSON.stringify(scan.violations, null, 1)).toEqual([]);
+});
+
+test("the record page is not found while the switch is off [switch off]", async ({ page }) => {
+  const grant = createGrant();
+  sql("update public.feature_flag set enabled = false where key = 'wos_objects' and organization_id is null;");
+  try {
+    await signIn(page, "owner");
+    await page.goto(`/objects/${grant.objectId}`);
+    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+    await expect(page.getByText(grant.title)).toHaveCount(0);
+  } finally {
+    sql("update public.feature_flag set enabled = true where key = 'wos_objects' and organization_id is null;");
+  }
 });
