@@ -96,12 +96,16 @@ export const editorFrCA: EditorMessages = {
       searching: "Recherche…",
       project: "Projet de la nouvelle tâche",
       noProject: "Aucun projet (administrateurs seulement)",
+      owner: "Responsable",
+      noOwner: "Aucun responsable",
+      due: "Échéance",
     },
     unavailable: "Cet élément ne vous est pas accessible ou a été retiré.",
     task: {
       markDone: "Marquer « {title} » comme terminée",
       open: "Ouvrir la tâche",
       archived: "Archivée",
+      due: "Échéance : {date}",
     },
     decision: { decidedOn: "Décidée le {date}", open: "Ouvrir la décision" },
     status: {

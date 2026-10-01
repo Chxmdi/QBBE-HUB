@@ -17,13 +17,18 @@ import { sql } from "./db";
  *
  * Two doors into the same object layer, both from the keyboard:
  *
- * 1. The meeting (S5 V1-9): the organizer's notes on /meetings-v2 take
- *    `/task` lines, the capture form takes an owner and a due date, and the
- *    end-of-meeting review turns them into real tasks in the meeting's
- *    project through the one `task.create` action (M7).
+ * 1. The meeting (S5 V1-9, integration I5): the organizer writes the notes on
+ *    /meetings-v2 in the block editor; a `/task` block there asks for the
+ *    title, project, owner and due date and creates the task at once, in the
+ *    meeting's project, with the meeting as its source (M7) and a meeting
+ *    action beside it. The capture form and the end-of-meeting review still
+ *    make a task from a capture, and the review lists the notes' tasks too.
+ *    After the one edit the meeting shows the new date everywhere it prints
+ *    one: the task block, the review, the classic actions list.
  * 2. The block editor (M4–M6): a sentence naming a person and a date on a
  *    page gets the "Make a task" suggestion, which creates the task with that
- *    assignee and due date, and the task block *is* the task.
+ *    assignee and due date, and the task block *is* the task, with the page
+ *    as the task's source.
  *
  * Live updates: none of the lenses, Home, the living project page or the
  * meeting page subscribe to Realtime (no channel in src/features/lenses,
@@ -174,7 +179,7 @@ let dueDay = "";
 let movedDay = "";
 let meetingTask = "";
 let meetingTaskId = "";
-let notesTask = "";
+let captureTask = "";
 let pageTask = "";
 let pageTaskId = "";
 let pageId = "";
@@ -185,7 +190,7 @@ test.beforeAll(() => {
   dueDay = quebecDay(20);
   movedDay = quebecDay(27);
   meetingTask = `Book the hall ${stamp}`;
-  notesTask = `Confirm the caterer ${stamp}`;
+  captureTask = `Confirm the caterer ${stamp}`;
   pageTask = `${STAFF_NAME} to order chairs ${stamp} tomorrow`;
 });
 
@@ -198,64 +203,98 @@ test.afterAll(() => {
   if (stamp) sql(`delete from public.task where title like '%${stamp}%'`);
 });
 
-test("a task captured in a meeting shows in My tasks, the board, the calendar and the project page, and one edit moves all of them", async ({ page }) => {
+test("a task written in the meeting's notes shows in My tasks, the board, the calendar and the project page, and one edit moves all of them, the meeting included", async ({ page }) => {
   test.setTimeout(300_000);
   await signIn(page, "staff");
   await page.goto(`/meetings-v2/${f.meetingId}`);
   await expect(page.getByRole("heading", { level: 1, name: f.meetingTitle })).toBeVisible({ timeout: 30_000 });
 
-  // Notes, typed: a `/task` line is captured for the review and rewritten.
-  const notes = page.getByLabel("Meeting notes");
-  await notes.focus();
+  // The notes are the block editor (F1), typed from the keyboard. A `/task`
+  // block asks for the title, the project (the meeting's own comes first),
+  // the owner and the due date (F2), and creates the task there and then.
+  const notes = page.getByRole("textbox", { name: "Meeting notes" });
+  await expect(notes).toBeVisible({ timeout: 30_000 });
+  await notes.click();
   await page.keyboard.type("Discussed the venue.");
   await page.keyboard.press("Enter");
-  await page.keyboard.type(`/task ${notesTask}`);
-  await page.getByRole("button", { name: "Save notes" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "1 item(s) captured" })).toBeVisible({ timeout: 30_000 });
-  await expect(notes).toHaveValue(`Discussed the venue.\nTask: ${notesTask}`);
-
-  // The capture form, typed: a task with an owner and a due date.
-  const captureForm = page.getByRole("form", { name: "Capture" });
-  await captureForm.getByLabel("Type", { exact: true }).selectOption("task");
-  const said = captureForm.getByLabel("What was said");
-  await said.focus();
-  await page.keyboard.type(meetingTask);
-  await captureForm.getByLabel("Owner (optional)").selectOption({ label: STAFF_NAME });
-  await captureForm.getByLabel("Due (optional)").fill(dueDay);
-  await said.focus();
+  await page.keyboard.type("/task");
+  // Scoped to the slash menu: the capture form's "Type" select has a "Task" option too.
+  await expect(page.getByRole("listbox", { name: "Blocks" }).getByRole("option", { name: /^Task\b/, selected: true })).toBeVisible();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("status").filter({ hasText: "Captured." })).toBeVisible({ timeout: 30_000 });
-  const captured = page.getByRole("listitem").filter({ hasText: meetingTask });
-  await expect(captured).toContainText("Waiting for review");
-  await expect(captured).toContainText(STAFF_NAME);
-  await expect(captured).toContainText(longDay(dueDay));
+  await page.getByLabel("Search tasks").fill(meetingTask);
+  await expect(page.getByLabel("Project for the new task")).toHaveValue(f.projectId);
+  await page.getByLabel("Owner", { exact: true }).selectOption({ label: STAFF_NAME });
+  await page.getByLabel("Due date", { exact: true }).fill(dueDay);
+  await page.getByRole("button", { name: `Create task “${meetingTask}”` }).click();
 
-  // The end-of-meeting review makes both captures real tasks in the project.
-  await page.getByRole("link", { name: /End-of-meeting review/ }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "End-of-meeting review" })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("group", { name: `Outcome for “${meetingTask}”` })).toBeVisible();
-  await expect(page.getByRole("group", { name: `Outcome for “${notesTask}”` })).toBeVisible();
-  await page.getByRole("button", { name: "Apply review" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Review applied: 2 created, 0 kept, 0 dismissed." })).toBeVisible({
-    timeout: 30_000,
-  });
-  await expect(page.getByRole("link", { name: "Task created" })).toHaveCount(2);
+  // The block is the task, and prints its owner and due date (F4).
+  const block = page.locator('[data-content-type="task"]').filter({ hasText: meetingTask });
+  await expect(block.getByRole("checkbox", { name: `Mark “${meetingTask}” done` })).toBeVisible({ timeout: 30_000 });
+  await expect(block).toContainText(STAFF_NAME);
+  await expect(block).toContainText(`Due ${longDay(dueDay)}`);
+  await expect(page.getByTestId("editor-save-state")).toHaveText("Saved", { timeout: 30_000 });
 
-  // One task row, in the meeting's project, assigned and dated as captured,
-  // with the meeting as its source.
+  // One task row, in the meeting's project, assigned and dated as typed, with
+  // the meeting as its source (M7) and a meeting action beside it; the notes
+  // are saved as a document whose block row names the task, and the plain
+  // text copy the classic page reads follows.
   meetingTaskId = sql(`select id from public.task where title = '${meetingTask}'`);
   expect(meetingTaskId).toMatch(/^[0-9a-f-]{36}$/);
   expect(
     sql(`select project_id || '|' || assignee_id || '|' || due_at::text || '|' || source_type || ':' || source_id
          from public.task where id = '${meetingTaskId}'`),
   ).toBe(`${f.projectId}|${STAFF}|${dueDay}|meeting:${f.meetingId}`);
-  expect(sql(`select project_id from public.task where title = '${notesTask}'`)).toBe(f.projectId);
+  expect(
+    sql(`select count(*) from public.meeting_action
+         where meeting_id = '${f.meetingId}' and task_id = '${meetingTaskId}' and owner_id = '${STAFF}' and due_at::text = '${dueDay}'`),
+  ).toBe("1");
+  await expect
+    .poll(() => sql(`select count(*) from public.block where object_id = '${f.meetingId}' and referenced_object_id = '${meetingTaskId}'`))
+    .toBe("1");
+  expect(sql(`select notes from public.meeting where id = '${f.meetingId}'`)).toContain("Discussed the venue.");
+
+  // The capture form, typed: a second task with an owner and a due date, for
+  // the end-of-meeting review to approve.
+  const captureForm = page.getByRole("form", { name: "Capture" });
+  await captureForm.getByLabel("Type", { exact: true }).selectOption("task");
+  const said = captureForm.getByLabel("What was said");
+  await said.focus();
+  await page.keyboard.type(captureTask);
+  await captureForm.getByLabel("Owner (optional)").selectOption({ label: STAFF_NAME });
+  await captureForm.getByLabel("Due (optional)").fill(dueDay);
+  await said.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("status").filter({ hasText: "Captured." })).toBeVisible({ timeout: 30_000 });
+  const captured = page.getByRole("listitem").filter({ hasText: captureTask });
+  await expect(captured).toContainText("Waiting for review");
+  await expect(captured).toContainText(STAFF_NAME);
+  await expect(captured).toContainText(longDay(dueDay));
+
+  // The review lists the task made in the notes, as it is now, and turns the
+  // capture into a second task.
+  await page.getByRole("link", { name: /End-of-meeting review/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "End-of-meeting review" })).toBeVisible({ timeout: 30_000 });
+  const fromNotes = page.getByRole("region", { name: "Created from the notes" });
+  await expect(fromNotes.getByRole("link", { name: meetingTask })).toBeVisible();
+  const fromNotesRow = fromNotes.getByRole("listitem").filter({ hasText: meetingTask });
+  await expect(fromNotesRow).toContainText("Not started");
+  await expect(fromNotesRow).toContainText(STAFF_NAME);
+  await expect(fromNotesRow).toContainText(`Due ${longDay(dueDay)}`);
+  await expect(page.getByRole("group", { name: `Outcome for “${captureTask}”` })).toBeVisible();
+  await page.getByRole("button", { name: "Apply review" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Review applied: 1 created, 0 kept, 0 dismissed." })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByRole("link", { name: "Task created" })).toHaveCount(1);
+  expect(
+    sql(`select project_id || '|' || assignee_id || '|' || due_at::text || '|' || source_type || ':' || source_id
+         from public.task where title = '${captureTask}'`),
+  ).toBe(`${f.projectId}|${STAFF}|${dueDay}|meeting:${f.meetingId}`);
 
   // The four places (and Home), each showing the title and the due date.
   await everywhere(page, f, meetingTask, dueDay);
-  // The task from the `/task` line is on the project page too (no date: the
-  // notes path carries none).
-  await expect(page.getByRole("region", { name: "Open tasks" }).getByRole("link", { name: notesTask })).toBeVisible();
+  // The review's task is on the project page too.
+  await expect(page.getByRole("region", { name: "Open tasks" }).getByRole("link", { name: captureTask })).toBeVisible();
 
   // One edit, from the task's own screen.
   await moveDueDate(page, meetingTaskId, meetingTask, movedDay);
@@ -264,15 +303,24 @@ test("a task captured in a meeting shows in My tasks, the board, the calendar an
   // reached by navigation (see the header: nothing here updates in place).
   await everywhere(page, f, meetingTask, movedDay, dueDay);
 
-  // The meeting still shows the capture as approved and created. The date it
-  // prints is the capture's own copy (meeting_capture.due_on, taken when the
-  // item was captured), not the task's: it does not follow the edit. That is
-  // reported as an integration finding rather than asserted either way here.
+  // The meeting too (F3, F4): the task block reads the task when the notes
+  // load again, the review's list reads it the same way, and the classic
+  // page's actions list holds the date the database keeps in step.
   await page.goto(`/meetings-v2/${f.meetingId}`);
-  const approved = page.getByRole("listitem").filter({ hasText: meetingTask });
+  const reloaded = page.locator('[data-content-type="task"]').filter({ hasText: meetingTask });
+  await expect(reloaded).toContainText(`Due ${longDay(movedDay)}`, { timeout: 30_000 });
+  await expect(reloaded).not.toContainText(longDay(dueDay));
+  const approved = page.getByRole("listitem").filter({ hasText: captureTask });
   await expect(approved).toContainText("Approved");
+  await expect(approved).toContainText("Not started");
   await expect(approved).toContainText(STAFF_NAME);
-  await expect(page.getByLabel("Meeting notes")).toHaveValue(`Discussed the venue.\nTask: ${notesTask}`);
+  await page.goto(`/meetings-v2/${f.meetingId}/review`);
+  await expect(fromNotes.getByRole("listitem").filter({ hasText: meetingTask })).toContainText(`Due ${longDay(movedDay)}`, { timeout: 30_000 });
+  await page.goto(`/meetings/${f.meetingId}`);
+  const action = page.getByRole("listitem").filter({ hasText: meetingTask });
+  await expect(action).toBeVisible({ timeout: 30_000 });
+  await expect(action).toContainText(longDay(movedDay));
+  expect(sql(`select due_at::text from public.meeting_action where task_id = '${meetingTaskId}'`)).toBe(movedDay);
 });
 
 test("a task made from a sentence in the block editor lands in the same places, and the block is the task", async ({ page }) => {
@@ -311,9 +359,14 @@ test("a task made from a sentence in the block editor lands in the same places, 
   await expect(done).toBeVisible({ timeout: 30_000 });
   pageTaskId = sql(`select id from public.task where title = '${pageTask}'`);
   expect(pageTaskId).toMatch(/^[0-9a-f-]{36}$/);
-  expect(sql(`select project_id || '|' || assignee_id || '|' || due_at::text from public.task where id = '${pageTaskId}'`)).toBe(
-    `${f.projectId}|${STAFF}|${dueDay}`,
-  );
+  // Assigned and dated as the dialog said, with the page as its source (F5).
+  expect(
+    sql(`select project_id || '|' || assignee_id || '|' || due_at::text || '|' || source_type || ':' || source_id
+         from public.task where id = '${pageTaskId}'`),
+  ).toBe(`${f.projectId}|${STAFF}|${dueDay}|page:${pageId}`);
+  const pageBlock = page.locator('[data-content-type="task"]').filter({ hasText: pageTask });
+  await expect(pageBlock).toContainText(STAFF_NAME);
+  await expect(pageBlock).toContainText(`Due ${longDay(dueDay)}`);
   await expect(page.getByTestId("editor-save-state")).toHaveText("Saved", { timeout: 30_000 });
   await expect
     .poll(() => sql(`select count(*) from public.block where object_id = '${pageId}' and referenced_object_id = '${pageTaskId}'`))
@@ -323,12 +376,12 @@ test("a task made from a sentence in the block editor lands in the same places, 
   await moveDueDate(page, pageTaskId, pageTask, movedDay);
   await everywhere(page, f, pageTask, movedDay, dueDay);
 
-  // Back on the page, the block still shows the task (title and status; the
-  // block prints no date, which is reported as a finding). Ticking it done
-  // there is the task's own status.
+  // Back on the page, the block shows the task as it is now: the moved date
+  // (F4). Ticking it done there is the task's own status.
   await page.goto(`/pages/${pageId}`);
   const block = page.getByRole("checkbox", { name: `Mark “${pageTask}” done` });
   await expect(block).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('[data-content-type="task"]').filter({ hasText: pageTask })).toContainText(`Due ${longDay(movedDay)}`);
   await expect(block).not.toBeChecked();
   await block.focus();
   await page.keyboard.press("Space");
@@ -341,7 +394,7 @@ test("every screen on the path passes axe in light and dark, and the main path r
   const q = encodeURIComponent(meetingTask);
   const screens: { name: string; path: string; content: (page: Page) => Locator }[] = [
     { name: "meeting", path: `/meetings-v2/${f.meetingId}`, content: (p) => p.getByRole("heading", { level: 1, name: f.meetingTitle }) },
-    { name: "review", path: `/meetings-v2/${f.meetingId}/review`, content: (p) => p.getByRole("link", { name: "Task created" }).first() },
+    { name: "review", path: `/meetings-v2/${f.meetingId}/review`, content: (p) => p.getByRole("region", { name: "Created from the notes" }).getByRole("link", { name: meetingTask }) },
     { name: "page", path: `/pages/${pageId}`, content: (p) => p.getByRole("checkbox", { name: `Mark “${pageTask}” done` }) },
     { name: "my-work", path: `/lenses/my-work?q=${q}`, content: (p) => p.getByRole("link", { name: meetingTask }) },
     { name: "my-world", path: "/home/world", content: (p) => p.getByRole("region", { name: /^My tasks/ }).getByRole("link", { name: meetingTask }) },
@@ -367,7 +420,11 @@ test("every screen on the path passes axe in light and dark, and the main path r
   await page.goto(`/meetings-v2/${f.meetingId}`);
   await expect(page.getByRole("heading", { level: 1, name: f.meetingTitle })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Noté pendant la réunion" })).toBeVisible();
-  await expect(page.getByRole("listitem").filter({ hasText: meetingTask })).toContainText("Approuvé");
+  await expect(page.getByRole("listitem").filter({ hasText: captureTask })).toContainText("Approuvé");
+  // The task block in the notes, in French with the Quebec date.
+  await expect(page.locator('[data-content-type="task"]').filter({ hasText: meetingTask })).toContainText(`Échéance : ${frDay}`, {
+    timeout: 30_000,
+  });
   await noSeriousAxe(page, "meeting fr");
 
   await page.goto(`/lenses/my-work?q=${q}`);

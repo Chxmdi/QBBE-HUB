@@ -13,8 +13,9 @@ import { getDocumentDownloadUrl, registerUploadedDocument } from "@/features/doc
 
 /**
  * Saving editor content and the files placed in it (M4b). Runs as the
- * signed-in person: editor_document's RLS follows the page or task, and files
- * are ordinary document-library records, scanned before they can be opened.
+ * signed-in person: editor_document's RLS follows the page, task or meeting,
+ * and files are ordinary document-library records, scanned before they can be
+ * opened.
  */
 
 export type SaveResult =
@@ -23,7 +24,7 @@ export type SaveResult =
 
 const saveSchema = z.object({
   objectId: z.string().uuid(),
-  objectType: z.enum(["page", "task"]),
+  objectType: z.enum(["page", "task", "meeting"]),
   /** The version the client last saw; null for a first save. */
   baseVersion: z.number().int().positive().nullable(),
   content: z.unknown(),

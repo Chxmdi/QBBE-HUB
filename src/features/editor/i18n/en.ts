@@ -94,12 +94,16 @@ export const editorEn = {
       searching: "Searching…",
       project: "Project for the new task",
       noProject: "No project (admins only)",
+      owner: "Owner",
+      noOwner: "No owner",
+      due: "Due date",
     },
     unavailable: "This item isn't available to you, or it was removed.",
     task: {
       markDone: "Mark “{title}” done",
       open: "Open task",
       archived: "Archived",
+      due: "Due {date}",
     },
     decision: { decidedOn: "Decided {date}", open: "Open decision" },
     status: {

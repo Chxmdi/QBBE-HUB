@@ -17,6 +17,11 @@ test.beforeAll(() => switches(true));
 test.afterAll(() => switches(false));
 
 const STAFF = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2";
+const OWNER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1";
+
+/** The app's long date for a `date` value, as the task block prints it. */
+const longDay = (day: string) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" }).format(new Date(`${day}T12:00:00Z`));
 
 async function newPage(page: Page, title: string): Promise<string> {
   await page.goto("/pages");
@@ -56,15 +61,33 @@ test("semantic blocks: task, person, status, query, decision and library file", 
   await expect(editor).toBeVisible({ timeout: 30_000 });
   await editor.click();
 
-  // Task: created from the block, and the block is that task.
+  // Task: created from the block with an owner and a due date, and the block
+  // is that task, printing both. The task records the page as its source.
+  const dueDay = sql(`select to_char(current_date + 20, 'YYYY-MM-DD')`);
   await slash(page, "task", /^Task\b/);
   await page.getByLabel("Search tasks").fill(`Order chairs ${stamp}`);
   await page.getByLabel("Project for the new task").selectOption({ label: `Semantic ${stamp}` });
+  // The open picker, with its owner and due date fields, is accessible too.
+  await page.mouse.move(0, 0);
+  const pickerScan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"]).analyze();
+  expect(
+    pickerScan.violations
+      .filter((v) => v.impact === "critical" || v.impact === "serious")
+      .flatMap((v) => v.nodes.map((n) => `${v.id}: ${n.html.slice(0, 120)} — ${n.failureSummary ?? ""}`)),
+  ).toEqual([]);
+  await page.getByLabel("Owner", { exact: true }).selectOption({ label: "QA Owner" });
+  await page.getByLabel("Due date", { exact: true }).fill(dueDay);
   await page.getByRole("button", { name: `Create task “Order chairs ${stamp}”` }).click();
   const done = page.getByRole("checkbox", { name: `Mark “Order chairs ${stamp}” done` });
   await expect(done).toBeVisible({ timeout: 30_000 });
+  const taskBlock = page.locator('[data-content-type="task"]').filter({ hasText: `Order chairs ${stamp}` });
+  await expect(taskBlock).toContainText("QA Owner");
+  await expect(taskBlock).toContainText(`Due ${longDay(dueDay)}`);
   const taskId = sql(`select id from public.task where title = 'Order chairs ${stamp}'`);
   expect(taskId).toMatch(/^[0-9a-f-]{36}$/);
+  expect(sql(`select assignee_id || '|' || due_at::text || '|' || source_type || ':' || source_id from public.task where id = '${taskId}'`)).toBe(
+    `${OWNER}|${dueDay}|page:${pageId}`,
+  );
   await done.check();
   await expect.poll(() => sql(`select status from public.task where id = '${taskId}'`)).toBe("completed");
 
