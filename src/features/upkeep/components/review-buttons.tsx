@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 import { fill, type UpkeepText } from "@/features/upkeep/messages";
 import { reviewStalePage } from "@/features/upkeep/services/upkeep.commands";
 
@@ -18,14 +19,22 @@ export function ReviewButtons({
   text: UpkeepText;
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   async function run(decision: "current" | "archive") {
     setBusy(true);
     const result = await reviewStalePage(objectType, objectId, decision);
     setBusy(false);
-    setMessage(result.ok ? { ok: true, text: decision === "current" ? text.reviewedCurrent : text.reviewedArchive } : { ok: false, text: result.error });
-    if (result.ok) router.refresh();
+    // The reviewed row leaves the list on refresh, so success is confirmed in
+    // the page-level toast, which outlives it; an error stays next to the row.
+    if (result.ok) {
+      setMessage(null);
+      toast(decision === "current" ? text.reviewedCurrent : text.reviewedArchive);
+      router.refresh();
+    } else {
+      setMessage({ ok: false, text: result.error });
+    }
   }
   return (
     <div className="space-y-1">
