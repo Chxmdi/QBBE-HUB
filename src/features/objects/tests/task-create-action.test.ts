@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ActionContext, ChangeSet, Uuid } from "@/lib/objects/contracts";
+import type { ActionContext, ChangeSet } from "@/lib/objects/contracts";
 import { createActionRegistry, type ChangeSetStore, type ObjectWriter } from "@/features/objects/actions/registry";
 import { createTaskCreateAction, TASK_CREATE_ACTION } from "@/features/objects/actions/task-create";
 
@@ -22,7 +22,7 @@ function setup(create?: Parameters<typeof createTaskCreateAction>[0]) {
   return { registry, saved };
 }
 
-const context: ActionContext = { actor: { kind: "person", id: "me" }, can: async (_id: Uuid) => false };
+const context: ActionContext = { actor: { kind: "person", id: "me" }, can: async () => false };
 
 describe("task.create action", () => {
   it("is refused forward when no creator is given, as for the undo route", async () => {
