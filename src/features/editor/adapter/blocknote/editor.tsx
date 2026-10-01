@@ -32,6 +32,8 @@ import type { BlockEditorProps, EditorSemanticHandlers } from "@/features/editor
 import { createWorkspaceBlocks } from "./blocks";
 import { createSemanticBlocks, HandlersBox } from "./semantic-blocks";
 import { SuggestionLayer, TurnIntoTasksDialog, turnIntoPage } from "./progressive";
+import { createSyncedBlockSpec, syncedBlockSlashItem, turnIntoSyncedBlock } from "./synced-block";
+import { buttonSlashItem, createButtonBlockSpec } from "./button-block";
 import type { Locale } from "@/lib/i18n/config";
 import { rankByTitle } from "@/features/editor/adapter/slash";
 import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
@@ -64,6 +66,8 @@ function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
       pageLink: s.pageLink(),
       status: s.status(),
       query: s.query(),
+      syncedBlock: createSyncedBlockSpec(t, semantic)(),
+      button: createButtonBlockSpec(t, semantic)(),
     },
   });
 }
@@ -394,6 +398,18 @@ function BlockMenu({
                 {t("progressive.turnIntoPage")}
               </Button>
             ) : null}
+            {semantic.synced ? (
+              <Button
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={async () => {
+                  const ok = await turnIntoSyncedBlock(editor as never, selection, semantic);
+                  done(ok ? undefined : t("semantic.failed"));
+                }}
+              >
+                {t("syncedBlock.turnInto")}
+              </Button>
+            ) : null}
           </div>
         ) : null}
         {canTurn ? (
@@ -505,6 +521,8 @@ export default function BlockNoteEditorImpl({
             ...getDefaultReactSlashMenuItems(editor).filter((item) => (item as { key?: string }).key !== "emoji"),
             ...workspaceSlashItems(editor, t),
             ...(semantic ? semanticSlashItems(editor, t) : []),
+            ...(semantic?.synced ? [syncedBlockSlashItem(editor as never, t)] : []),
+            ...(semantic?.actions ? [buttonSlashItem(editor as never, t)] : []),
           ],
           query,
         ),
