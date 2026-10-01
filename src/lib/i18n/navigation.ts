@@ -1,5 +1,5 @@
 import type { CreateAction } from "@/config/create-actions";
-import type { NavGroup, NavItem } from "@/config/navigation";
+import type { NavGroup, VisibleNavItem } from "@/config/navigation";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 
 /**
@@ -42,17 +42,70 @@ const ITEM_KEYS: Record<string, MessageKey> = {
   "/finance/payroll": "nav.items.payroll",
   "/people": "nav.items.people",
   "/admin": "nav.items.admin",
+  // Workspace OS (epic #199). A replacement shares its old screen's name.
+  "/home": "nav.items.home",
+  "/home/world": "nav.items.myWorld",
+  "/home/commands": "nav.items.commands",
+  "/lenses/my-work": "nav.items.myWork",
+  "/lenses/board": "nav.items.boardLens",
+  "/lenses/calendar": "nav.items.calendar",
+  "/forms-v2": "nav.items.forms",
+  "/capture": "nav.items.capture",
+  "/goals": "nav.items.goals",
+  "/following": "nav.items.following",
+  "/lenses": "nav.items.savedLenses",
+  "/lenses/table": "nav.items.table",
+  "/lenses/timeline": "nav.items.timeline",
+  "/lenses/gallery": "nav.items.gallery",
+  "/lenses/feed": "nav.items.feed",
+  "/lenses/dashboard": "nav.items.dashboards",
+  "/lenses/find": "nav.items.find",
+  "/insight/dashboards": "nav.items.insightDashboards",
+  "/insight/operations": "nav.items.operations",
+  "/insight/graph": "nav.items.relationshipGraph",
+  "/insight/map": "nav.items.map",
+  "/insight/process": "nav.items.howWorkFlows",
+  "/insight/what-if": "nav.items.whatIf",
+  "/pages": "nav.items.pages",
+  "/spaces": "nav.items.spaces",
+  "/apps": "nav.items.apps",
+  "/templates-v2": "nav.items.templates",
+  "/builder": "nav.items.blueprints",
+  "/collab/layouts": "nav.items.pageLayouts",
+  "/collab/trash": "nav.items.trash",
+  "/upkeep": "nav.items.upkeep",
+  "/offline": "nav.items.offline",
+  "/m": "nav.items.phone",
+  "/spaces/admin": "nav.items.accessAndSignIn",
+  "/spaces/roles": "nav.items.roles",
+  "/spaces/publish": "nav.items.publicPages",
+  "/workflows": "nav.items.workflows",
+  "/api-tokens": "nav.items.apiTokens",
 };
 
 const GROUP_KEYS: Record<string, MessageKey> = {
   Work: "nav.groups.work",
   Communication: "nav.groups.communication",
   Organization: "nav.groups.organization",
+  Lenses: "nav.groups.lenses",
+  Insight: "nav.groups.insight",
+  Workspace: "nav.groups.workspace",
+  Setup: "nav.groups.setup",
+  "Classic screens": "nav.groups.classic",
 };
 
-export function navItemLabel(t: TranslateFn, item: Pick<NavItem, "href" | "label">): string {
+/**
+ * An old screen kept beside its replacement (plan §9) is named apart from
+ * it, "Board (classic)", so the two never read the same in the sidebar, the
+ * palette or to a screen reader.
+ */
+export function navItemLabel(
+  t: TranslateFn,
+  item: Pick<VisibleNavItem, "href" | "label" | "classic">,
+): string {
   const key = ITEM_KEYS[item.href];
-  return key ? t(key) : item.label;
+  const label = key ? t(key) : item.label;
+  return item.classic ? t("nav.classicLabel", { label }) : label;
 }
 
 const CREATE_KEYS: Record<string, MessageKey> = {
