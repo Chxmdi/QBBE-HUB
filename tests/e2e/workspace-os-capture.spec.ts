@@ -134,7 +134,7 @@ test("the capture page speaks French", async ({ page, context }) => {
   expect(await axeProblems(page), "French capture accessibility").toEqual([]);
 });
 
-test("the capture page stays hidden while the switch is off", async ({ page }) => {
+test("the capture page stays hidden while the switch is off [switch off]", async ({ page }) => {
   sql(`update feature_flag set enabled = false where key = 'wos_capture' and organization_id is null`);
   try {
     await signIn(page, "owner");

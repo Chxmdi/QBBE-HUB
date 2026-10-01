@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Identity, ObjectEvent } from "@/lib/objects/contracts";
-import { createEventWriterStub } from "@/lib/objects/stubs";
+import { createActivityFeedWriter } from "@/lib/objects/activity-feed";
 import { createWorkflowActionRegistry } from "../actions";
 import { runGraph, type EnginePorts, type RunResult, type RunState, type StepRecord } from "../engine";
 import { validateGraph, type WorkflowGraph } from "../graph";
@@ -59,14 +59,17 @@ export function createRunPorts(
   runId: string,
   run: { event: ObjectEvent; test: boolean; now?: () => Date },
 ): EnginePorts {
+  const owner = runAsUser(rule);
+  const actor: Identity = { kind: "automation", id: rule.id };
   const registry = createWorkflowActionRegistry({
     db,
     organizationId: rule.organization_id,
     workflowId: rule.id,
     runId,
+    // Change sets are recorded as the automation and checked for the owner at
+    // the same level as `can` below.
+    runAs: { userId: owner, assurance: "aal2" },
   });
-  const owner = runAsUser(rule);
-  const actor: Identity = { kind: "automation", id: rule.id };
   const actionContext = {
     actor,
     can: async (objectId: string, capability: string) => {
@@ -82,17 +85,24 @@ export function createRunPorts(
       return !error && data === true;
     },
   };
-  const writeEvent = createEventWriterStub(db);
+  // The object_event for each change is written by the task trigger with the
+  // automation as actor (apply_task_update_as) and labelled with the change
+  // set by record_change_set_as. The activity_event row stays for the three
+  // readers that still take events from the old feed: the project and program
+  // activity pages, the follow fan-out (notifications) and this runner's own
+  // trigger stream (trigger.ts), which skips automation events so a workflow
+  // never starts itself.
+  const writeFeed = createActivityFeedWriter(db);
 
   return {
     async runAction(key, input) {
       const result = await registry.run(key, input, actionContext);
       if (result.ok) {
-        // One event per changed object, labelled as the automation, so the
+        // One feed row per changed object, labelled as the automation, so the
         // activity feed says a workflow did it and the runner skips it.
         for (const change of result.changeSet.changes) {
           if (change.kind !== "update") continue;
-          await writeEvent({
+          await writeFeed({
             object: change.object,
             organizationId: rule.organization_id,
             actor,

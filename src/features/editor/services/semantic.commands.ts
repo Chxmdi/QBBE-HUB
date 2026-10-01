@@ -3,10 +3,12 @@
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
+import { getLocale } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createTaskQueryStub, QueryNotSupportedError } from "@/lib/objects/stubs";
+import { createLensRunQuery } from "@/lib/query/contract-adapter";
+import { loadCatalog } from "@/lib/query/run";
 import { bulkUpdateTasks, createTask, updateTaskStatus } from "@/features/tasks/services/task.commands";
-import { parseStoredSpec } from "@/features/editor/semantic/queries";
+import { parseStoredSpec, toQueryBlockRow, type QueryBlockRow } from "@/features/editor/semantic/queries";
 import { contentToPlainText, normalizeContent, type EditorBlock } from "@/features/editor/adapter/content";
 import { createPage } from "@/features/pages/services/page.commands";
 
@@ -27,6 +29,9 @@ export interface ObjectSummary {
   detail: string | null;
   done?: boolean;
   archived?: boolean;
+  /** A task's due day and assignee, read live so an edit elsewhere shows here. */
+  dueAt?: string | null;
+  assigneeName?: string | null;
   href: string | null;
 }
 
@@ -45,7 +50,10 @@ type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 async function read(supabase: Client, kind: SemanticKind, ids: string[]): Promise<ObjectSummary[]> {
   if (ids.length === 0) return [];
   if (kind === "task") {
-    const { data } = await supabase.from("task").select("id, title, status, due_at, archived_at").in("id", ids);
+    const { data } = await supabase
+      .from("task")
+      .select("id, title, status, due_at, archived_at, assignee:assignee_id(full_name)")
+      .in("id", ids);
     return (data ?? []).map((row) => ({
       id: row.id as string,
       kind,
@@ -53,6 +61,8 @@ async function read(supabase: Client, kind: SemanticKind, ids: string[]): Promis
       detail: row.status as string,
       done: row.status === "completed",
       archived: row.archived_at !== null,
+      dueAt: (row.due_at as string | null) ?? null,
+      assigneeName: (row.assignee as unknown as { full_name: string | null } | null)?.full_name ?? null,
       href: `/my-work?task=${row.id}`,
     }));
   }
@@ -161,24 +171,45 @@ const taskExtrasSchema = z
   })
   .default({});
 
+/** The page or meeting the block sits in (M7b); `manual` when there is none. */
+const taskSourceSchema = z.object({ type: z.enum(["page", "meeting"]), id: idSchema }).optional();
+
 export async function createTaskFromBlock(
   titleInput: unknown,
   projectInput?: unknown,
   extrasInput?: unknown,
+  sourceInput?: unknown,
 ): Promise<{ ok: true; task: ObjectSummary } | { ok: false; error?: string }> {
   const context = await ready();
   const title = z.string().trim().min(1).max(300).safeParse(titleInput);
   const projectId = idSchema.optional().safeParse(projectInput ?? undefined);
   const extras = taskExtrasSchema.safeParse(extrasInput ?? undefined);
-  if (!context || !title.success || !projectId.success || !extras.success) return { ok: false };
+  const source = taskSourceSchema.safeParse(sourceInput ?? undefined);
+  if (!context || !title.success || !projectId.success || !extras.success || !source.success) return { ok: false };
+  // The shared action checks the caller can see the page or meeting named.
   const result = await createTask({
     title: title.data,
     ...(projectId.data ? { projectId: projectId.data } : {}),
     ...(extras.data.assigneeId ? { assigneeId: extras.data.assigneeId } : {}),
     ...(extras.data.dueAt ? { dueAt: extras.data.dueAt } : {}),
-    source: { type: "manual", id: null },
+    source: source.data ?? { type: "manual", id: null },
   });
   if (!result.ok || !result.id) return { ok: false, error: result.error };
+  if (source.data?.type === "meeting") {
+    // A task written in the notes is one of the meeting's actions, as a task
+    // approved in the review is: the classic meeting page lists it and the
+    // database keeps its due date and owner in step with the task
+    // (20261107030100). Editing the notes already needs meeting management,
+    // which is the rule for this row too; the task stands on its own if the
+    // link is refused, with the meeting still recorded as its source.
+    await context.supabase.from("meeting_action").insert({
+      meeting_id: source.data.id,
+      task_id: result.id,
+      title: title.data,
+      owner_id: extras.data.assigneeId ?? null,
+      due_at: extras.data.dueAt ?? null,
+    });
+  }
   const [task] = await read(context.supabase, "task", [result.id]);
   return task ? { ok: true, task } : { ok: false };
 }
@@ -201,35 +232,22 @@ export async function archiveTaskFromBlock(taskIdInput: unknown): Promise<{ ok: 
   return { ok: result.ok, error: result.error };
 }
 
-export interface QueryBlockRow {
-  id: string;
-  title: string;
-  status: string | null;
-  due: string | null;
-}
-
-/** Runs a query block's stored spec as the viewer, through the query contract. */
+/**
+ * Runs a query block's stored spec as the viewer through the lens query
+ * engine: the catalog says which types and properties exist, the database
+ * applies row-level security. A spec the engine refuses, or a failure running
+ * it, both read as "could not be loaded" in the block.
+ */
 export async function runQueryBlock(specInput: unknown): Promise<{ ok: true; rows: QueryBlockRow[] } | { ok: false }> {
   const context = await ready();
   const spec = parseStoredSpec(specInput);
   if (!context || !spec) return { ok: false };
-  const run = createTaskQueryStub(context.supabase, {
-    userId: context.session.userId,
-    timeZone: context.session.timeZone,
-  });
   try {
+    const [catalog, locale] = await Promise.all([loadCatalog(context.supabase), getLocale()]);
+    const run = createLensRunQuery(context.supabase, catalog, { timeZone: context.session.timeZone });
     const result = await run(spec);
-    return {
-      ok: true,
-      rows: result.rows.map((row) => ({
-        id: row.ref.id,
-        title: row.title,
-        status: (row.values.status?.value as string | undefined) ?? null,
-        due: (row.values.due?.value as string | undefined) ?? null,
-      })),
-    };
-  } catch (error) {
-    if (error instanceof QueryNotSupportedError) return { ok: false };
+    return { ok: true, rows: result.rows.map((row) => toQueryBlockRow(row, catalog, locale)) };
+  } catch {
     return { ok: false };
   }
 }

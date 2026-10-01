@@ -65,6 +65,10 @@ test("bars move by keyboard, dependents move after confirming, and a drag resche
   const launch = page.getByRole("button", { name: new RegExp(`^${RUN} launch,`) });
   await expect(launch).toBeVisible({ timeout: 30_000 });
   const [ls, le] = dates("launch").split(" ");
+  // The bar may sit below the fold once other specs' dated tasks fill the
+  // rows above it; a pointer press at an off-screen box lands on nothing.
+  await launch.scrollIntoViewIfNeeded();
+  await launch.hover();
   const box = (await launch.boundingBox())!;
   await page.mouse.move(box.x + 10, box.y + box.height / 2);
   await page.mouse.down();

@@ -1,4 +1,4 @@
-import { MAX_DOCUMENT_BYTES, scanDocumentBytes } from "@/features/documents/services/clamav";
+import { MAX_DOCUMENT_BYTES, SCANNER_REQUIREMENT, isScannerConfigured, scanDocumentBytes } from "@/features/documents/services/clamav";
 import type { JobContext, JobResult } from "../runner";
 
 /**
@@ -7,7 +7,7 @@ import type { JobContext, JobResult } from "../runner";
  * leaves it pending rather than waving it through.
  */
 export async function scanReceipts({ db, definition, now }: JobContext): Promise<JobResult> {
-  if (!process.env.CLAMAV_SOCKET) throw new Error("Receipt scanning requires CLAMAV_SOCKET");
+  if (!isScannerConfigured()) throw new Error(`Receipt scanning requires ${SCANNER_REQUIREMENT}`);
   const { data: receipts, error } = await db.from("finance_receipt")
     .select("id, storage_path")
     .eq("scan_status", "pending")

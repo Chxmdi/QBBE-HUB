@@ -166,7 +166,7 @@ test("French labels on the pages screen", async ({ page, context }) => {
   await expect(sidebar.getByRole("region", { name: "Privé" })).toBeVisible();
 });
 
-test("the pages screens are hidden while the switch is off", async ({ page }) => {
+test("the pages screens are hidden while the switch is off [switch off]", async ({ page }) => {
   setSwitch(false);
   await signIn(page, "staff");
   try {

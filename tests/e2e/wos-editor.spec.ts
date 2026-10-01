@@ -310,7 +310,7 @@ test("the editor speaks Quebec French", async ({ page, context }) => {
   await expect(page.getByTestId("editor-save-state")).toHaveText("Enregistré", { timeout: 30_000 });
 });
 
-test("with the editor switch off, a page shows no editor", async ({ page }) => {
+test("with the editor switch off, a page shows no editor [switch off]", async ({ page }) => {
   sql("update public.feature_flag set enabled = false where key = 'wos_editor' and organization_id is null;");
   try {
     await signIn(page, "staff");

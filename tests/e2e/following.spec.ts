@@ -23,6 +23,13 @@ const setSwitch = (on: boolean) =>
  * status changes reach them, and unfollows. The email choice lands where the
  * existing digest reads it.
  */
+test("following is hidden while the switch is off [switch off]", async ({ page }) => {
+  setSwitch(false);
+  await signIn(page, "owner");
+  await page.goto("/following");
+  await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
+});
+
 test("follow a project and a search, set a rule, and unfollow", async ({ page, context }) => {
   test.setTimeout(180_000);
   const stamp = Date.now();
@@ -32,13 +39,9 @@ test("follow a project and a search, set a rule, and unfollow", async ({ page, c
   const projectId = sql(
     `insert into project (organization_id, name, created_by) values ('${orgId}', '${projectName}', '${ownerId}') returning id`,
   );
-  setSwitch(false);
+  setSwitch(true);
   try {
     await signIn(page, "owner");
-    await page.goto("/following");
-    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
-
-    setSwitch(true);
     await page.goto(`/following?follow=${projectId}&type=project`);
     await expect(page.getByRole("heading", { name: `Follow ${projectName}?` })).toBeVisible();
     expect(await axeProblems(page), "following page accessibility").toEqual([]);
