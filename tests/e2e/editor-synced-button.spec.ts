@@ -156,7 +156,7 @@ test("a button creates a task after confirming and records a change set [switche
   await openEditor(page);
   await slash(page, "button", /^Button\b/);
   await page.getByLabel("Button label").fill(`Start intake ${stamp}`);
-  await page.getByLabel("Action to run").selectOption("task.create");
+  await page.getByLabel("Action", { exact: true }).selectOption("task.create");
   await page.getByLabel("Task title").fill(`Call the donor ${stamp}`);
   await page.getByLabel("Project", { exact: true }).selectOption({ label: `Button ${stamp}` });
   await page.getByRole("button", { name: "Save button" }).click();
