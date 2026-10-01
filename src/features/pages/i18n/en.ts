@@ -23,6 +23,7 @@ export const pagesEn = {
     noPages: "No pages here yet.",
     newPage: "New page",
     newPrivatePage: "New private page",
+    newPageFromTemplate: "New page from template",
     newSubpage: "Add a page inside {title}",
     expand: "Expand {title}",
     collapse: "Collapse {title}",

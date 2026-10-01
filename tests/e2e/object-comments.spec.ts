@@ -42,7 +42,7 @@ test("a comment thread on an object: mention, react, reply, resolve and reopen",
   await expect(page.getByText("No comments yet.")).toBeVisible();
 
   // Mention the volunteer from the @ picker, by keyboard only.
-  const box = page.getByRole("combobox", { name: "Comment" });
+  const box = page.getByRole("textbox", { name: "Comment" });
   await box.click();
   await box.pressSequentially("Please check this @QA Vol");
   const options = page.getByRole("listbox", { name: "Mention suggestions" });
@@ -73,7 +73,7 @@ test("a comment thread on an object: mention, react, reply, resolve and reopen",
 
   // Reply.
   await thread.getByRole("button", { name: "Reply to QA Owner" }).click();
-  await page.getByRole("combobox", { name: "Reply to QA Owner" }).fill("Done on my side.");
+  await page.getByRole("textbox", { name: "Reply to QA Owner" }).fill("Done on my side.");
   await page.getByRole("button", { name: "Post reply" }).click();
   const replies = page.getByRole("list", { name: "Replies" });
   await expect(replies.getByText("Done on my side.")).toBeVisible();
@@ -109,5 +109,5 @@ test("the object comments screen stays hidden from people who cannot open the ob
   await signIn(page, "volunteer");
   await page.goto(`/collab/objects/${taskId}?type=task`);
   await expect(page.getByText("This object does not exist or you can't open it.")).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Comment" })).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: "Comment" })).toHaveCount(0);
 });

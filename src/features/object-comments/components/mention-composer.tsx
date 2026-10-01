@@ -118,9 +118,10 @@ export function MentionComposer({
         autoFocus={autoFocus}
         maxLength={5000}
         rows={3}
-        role="combobox"
+        // A multi-line text box with suggestions: ARIA does not allow the
+        // combobox role on a textarea, so it stays a text box that names its
+        // suggestion list and the highlighted option.
         aria-autocomplete="list"
-        aria-expanded={open}
         aria-controls={listId}
         aria-activedescendant={open && options.length > 0 ? optionId(highlight) : undefined}
         aria-describedby={hintId}

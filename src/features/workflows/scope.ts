@@ -124,6 +124,22 @@ export function evaluateCondition(node: ConditionNode, scope: RunScope): boolean
   }
 }
 
+/**
+ * What each path in a condition came to, by path, so a run's history and a
+ * test run can say "event.changes.status.after was blocked" rather than only
+ * whether the test passed. A missing value is null, as JSON stores it.
+ */
+export function conditionValues(node: ConditionNode, scope: RunScope): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+  const visit = (current: ConditionNode) => {
+    if ("and" in current) current.and.forEach(visit);
+    else if ("or" in current) current.or.forEach(visit);
+    else values[current.path] = resolvePath(scope, current.path) ?? null;
+  };
+  visit(node);
+  return values;
+}
+
 const WHOLE = /^\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}$/;
 const EMBEDDED = /\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}/g;
 

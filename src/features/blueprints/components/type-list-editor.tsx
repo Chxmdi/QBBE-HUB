@@ -6,11 +6,16 @@ import { Button } from "@/components/ui/button";
 import { Checkbox, Input, Label, Select, Textarea } from "@/components/ui/input";
 import type { Locale } from "@/lib/i18n/config";
 import { formatChoices, parseChoices } from "../editor-state";
+import { formulaExample } from "../formula-examples";
 import { fill, pick, type BlueprintsMessages } from "../i18n";
 import {
   blueprintPropertyKinds,
+  blueprintRollupFunctions,
   choiceKinds,
+  numericKinds,
+  validateBlueprint,
   type Blueprint,
+  type BlueprintIssue,
   type BlueprintProperty,
   type BlueprintType,
 } from "../schema";
@@ -24,6 +29,7 @@ import type { PropertyKind } from "@/lib/objects/contracts";
  */
 export function TypeListEditor({
   blueprint,
+  issues,
   messages,
   locale,
   readOnly,
@@ -36,6 +42,8 @@ export function TypeListEditor({
   onMoveProperty,
 }: {
   blueprint: Blueprint;
+  /** The current validation problems, so a formula can show its own under the field. */
+  issues?: BlueprintIssue[];
   messages: BlueprintsMessages;
   locale: Locale;
   readOnly: boolean;
@@ -116,6 +124,9 @@ export function TypeListEditor({
                         id={`${id}-p${p}`}
                         blueprint={blueprint}
                         type={type}
+                        typeIndex={index}
+                        propertyIndex={p}
+                        issues={issues}
                         property={property}
                         first={p === 0}
                         last={p === type.properties.length - 1}
@@ -155,6 +166,9 @@ function PropertyRow({
   id,
   blueprint,
   type,
+  typeIndex,
+  propertyIndex,
+  issues,
   property,
   first,
   last,
@@ -167,6 +181,9 @@ function PropertyRow({
   id: string;
   blueprint: Blueprint;
   type: BlueprintType;
+  typeIndex: number;
+  propertyIndex: number;
+  issues?: BlueprintIssue[];
   property: BlueprintProperty;
   first: boolean;
   last: boolean;
@@ -179,6 +196,16 @@ function PropertyRow({
   const name = pick(property.name, locale) || property.key;
   const [choicesText, setChoicesText] = React.useState(() => formatChoices(property.choices));
   const relations = blueprint.relations.filter((r) => r.from === type.key || r.to === type.key);
+  const relationProperties = type.properties.filter((p) => p.kind === "relation" && p.relation);
+  const relatedType = (relationPropertyKey: string | undefined) => {
+    const relationProperty = relationProperties.find((p) => p.key === relationPropertyKey);
+    const relation = blueprint.relations.find((r) => r.key === relationProperty?.relation);
+    if (!relation) return undefined;
+    return blueprint.types.find((t) => t.key === (relation.from === type.key ? relation.to : relation.from));
+  };
+  const numericTargets = relatedType(property.rollup?.relation)?.properties.filter((p) =>
+    numericKinds.includes(p.kind as PropertyKind),
+  );
 
   return (
     <li className="rounded-(--radius-sm) border border-line/80 bg-surface-soft/50 p-3">
@@ -267,6 +294,89 @@ function PropertyRow({
         </div>
       ) : null}
 
+      {property.kind === "formula" ? (
+        <FormulaField
+          id={id}
+          blueprint={blueprint}
+          type={type}
+          typeIndex={typeIndex}
+          propertyIndex={propertyIndex}
+          issues={issues}
+          property={property}
+          messages={messages}
+          locale={locale}
+          onChange={(expression) => onUpdate({ expression })}
+        />
+      ) : null}
+      {property.kind === "rollup" ? (
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div>
+            <Label htmlFor={`${id}-rollup-relation`}>{messages.list.rollupRelation}</Label>
+            <Select
+              id={`${id}-rollup-relation`}
+              value={property.rollup?.relation ?? ""}
+              aria-describedby={relationProperties.length ? undefined : `${id}-rollup-none`}
+              onChange={(e) =>
+                onUpdate({
+                  rollup: { function: "count", ...property.rollup, relation: e.target.value, target: undefined },
+                })
+              }
+            >
+              <option value="">{messages.list.chooseRelationProperty}</option>
+              {relationProperties.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {pick(p.name, locale) || p.key}
+                </option>
+              ))}
+            </Select>
+            {relationProperties.length ? null : (
+              <p id={`${id}-rollup-none`} className="mt-1 text-[12.5px] text-muted">
+                {messages.list.noRelationProperties}
+              </p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor={`${id}-rollup-function`}>{messages.list.rollupFunction}</Label>
+            <Select
+              id={`${id}-rollup-function`}
+              value={property.rollup?.function ?? "count"}
+              onChange={(e) =>
+                onUpdate({
+                  rollup: {
+                    relation: property.rollup?.relation ?? "",
+                    target: property.rollup?.target,
+                    function: e.target.value as NonNullable<BlueprintProperty["rollup"]>["function"],
+                  },
+                })
+              }
+            >
+              {blueprintRollupFunctions.map((fn) => (
+                <option key={fn} value={fn}>
+                  {messages.rollupFunctions[fn]}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {property.rollup && property.rollup.function !== "count" ? (
+            <div>
+              <Label htmlFor={`${id}-rollup-target`}>{messages.list.rollupTarget}</Label>
+              <Select
+                id={`${id}-rollup-target`}
+                value={property.rollup.target ?? ""}
+                onChange={(e) => onUpdate({ rollup: { ...property.rollup!, target: e.target.value || undefined } })}
+              >
+                <option value="">{messages.list.chooseTarget}</option>
+                {(numericTargets ?? []).map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {pick(p.name, locale) || p.key}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <label className="mr-2 inline-flex items-center gap-2 text-[13px] text-ink">
           <Checkbox checked={property.required ?? false} onChange={(e) => onUpdate({ required: e.target.checked || undefined })} />
@@ -284,5 +394,102 @@ function PropertyRow({
         </Button>
       </div>
     </li>
+  );
+}
+
+/**
+ * The formula text, checked as it is typed. The message under the field is
+ * the engine's own (position and names included) in the interface language;
+ * when the formula is valid, a worked example over the sample record shows
+ * what it will calculate.
+ */
+function FormulaField({
+  id,
+  blueprint,
+  type,
+  typeIndex,
+  propertyIndex,
+  issues,
+  property,
+  messages,
+  locale,
+  onChange,
+}: {
+  id: string;
+  blueprint: Blueprint;
+  type: BlueprintType;
+  typeIndex: number;
+  propertyIndex: number;
+  issues?: BlueprintIssue[];
+  property: BlueprintProperty;
+  messages: BlueprintsMessages;
+  locale: Locale;
+  onChange: (expression: string) => void;
+}) {
+  // The problems for this property alone: validation is already done for the
+  // whole blueprint by the designer; when it is not passed in, run it here.
+  const own = React.useMemo(() => {
+    const all = issues ?? (() => {
+      const result = validateBlueprint(blueprint);
+      return result.ok ? [] : result.issues;
+    })();
+    return all.filter(
+      (issue) =>
+        issue.path[0] === "types" &&
+        issue.path[1] === typeIndex &&
+        issue.path[2] === "properties" &&
+        issue.path[3] === propertyIndex &&
+        (issue.code.startsWith("formula") || issue.code === "needsFormula"),
+    );
+  }, [issues, blueprint, typeIndex, propertyIndex]);
+  const problem = own[0];
+  const problemText = problem
+    ? problem.message
+      ? pick(problem.message, locale)
+      : ((messages.errors as Record<string, unknown>)[problem.code] as string | undefined) ?? messages.errors.invalid
+    : null;
+  const example = React.useMemo(
+    () => (problem ? null : formulaExample({ blueprintKey: blueprint.key, type, property, locale })),
+    [problem, blueprint.key, type, property, locale],
+  );
+  const describedBy = `${id}-expression-hint ${id}-expression-status`;
+
+  return (
+    <div className="mt-3">
+      <Label htmlFor={`${id}-expression`}>{messages.list.expression}</Label>
+      <Textarea
+        id={`${id}-expression`}
+        value={property.expression ?? ""}
+        spellCheck={false}
+        rows={2}
+        aria-invalid={problem ? true : undefined}
+        aria-describedby={describedBy}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <p id={`${id}-expression-hint`} className="mt-1 text-[12.5px] text-muted">
+        {messages.list.expressionHint}
+      </p>
+      <p
+        id={`${id}-expression-status`}
+        data-testid="formula-status"
+        aria-live="polite"
+        className={problemText ? "mt-1 text-[12.5px] text-danger-fg" : "mt-1 text-[12.5px] text-ink"}
+      >
+        {problemText
+          ? problemText
+          : example
+            ? example.ok
+              ? example.inputs.length
+                ? fill(messages.list.formulaExample, {
+                    sample: example.inputs.map((input) => `${input.name} = ${input.value}`).join(", "),
+                    result: example.result,
+                  })
+                : fill(messages.list.formulaExampleNoInputs, { result: example.result })
+              : example.message
+            : property.expression?.trim()
+              ? messages.list.formulaOk
+              : ""}
+      </p>
+    </div>
   );
 }

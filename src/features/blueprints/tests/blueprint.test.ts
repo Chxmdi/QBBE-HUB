@@ -167,6 +167,8 @@ describe("planBlueprint", () => {
     expect(property?.kind === "create" && property.values.options).toEqual({
       relationTypeKey: "applies_for",
       relationTypeId: "id-3",
+      direction: "outgoing",
+      targetTypeKey: "opening",
     });
     const workflow = plan.changes.find((c) => c.kind === "create" && c.object.type === "workflow");
     expect(workflow?.kind === "create" && workflow.values.enabled).toBe(false);

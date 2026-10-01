@@ -126,7 +126,7 @@ test.describe("workflows v2", () => {
       await page.getByRole("button", { name: "Save workflow" }).click();
       await expect(page.getByRole("alert").filter({ hasText: "That is not valid JSON" })).toBeVisible();
 
-      // A branch the step list cannot show.
+      // A branch with a retry, which the step list now shows too (U10).
       await definition.fill(JSON.stringify({
         version: 1, trigger: { objectTypes: ["task"], verbs: ["updated"] }, start: "check",
         steps: [
@@ -138,7 +138,11 @@ test.describe("workflows v2", () => {
       await page.getByRole("button", { name: "Save workflow" }).click();
       await expect(page.getByRole("status").filter({ hasText: "Workflow saved." })).toBeVisible();
       await page.goto(`/workflows/${id}`);
-      await expect(page.getByText("This workflow uses steps the step list cannot show")).toBeVisible();
+      await expect(page.getByText("This workflow uses steps the step list cannot show")).toHaveCount(0);
+      await expect(page.getByRole("group", { name: /^Step 1 · Branch/ })).toBeVisible();
+      await expect(page.getByLabel("Retry when it fails")).toBeChecked();
+      await page.goto(`/workflows/${id}?mode=json`);
+      await expect(page.getByLabel("Workflow definition (JSON)")).toBeVisible();
       await axe(page, "/workflows/[id]?mode=json");
 
       // The stop switch.
@@ -211,7 +215,7 @@ test.describe("workflows v2", () => {
     try {
       await signIn(page, "admin");
       await page.goto(`/workflows/${rule}`);
-      await page.getByRole("link", { name: `Run #${number}` }).click();
+      await page.getByRole("table", { name: "Run history" }).getByRole("link", { name: `Run #${number}` }).click();
       await page.waitForURL(`**/workflows/${rule}/runs/${run}`);
       await expect(page.getByRole("heading", { name: `Run #${number}`, level: 1 })).toBeVisible();
       await expect(page.getByText(
