@@ -3,6 +3,7 @@ import { parseStoredSpec, presetSpec, queryPresets, toQueryBlockRow } from "@/fe
 import { fromContractSpec } from "@/lib/query/contract-adapter";
 import { migrationCatalog } from "@/lib/query/testing/migration-catalog";
 import { removedTaskIds, taskBlockIds } from "@/features/editor/semantic/removed";
+import { blockTaskSource } from "@/features/editor/semantic/source";
 import type { EditorContent } from "@/features/editor/adapter/content";
 
 const doc = (...blocks: EditorContent["blocks"]): EditorContent => ({ version: 1, blocks });
@@ -62,5 +63,13 @@ describe("removed task blocks", () => {
     const after = doc(task("c"), { type: "paragraph", children: [task("a")] });
     expect(removedTaskIds(before, after)).toEqual(["b"]);
     expect(removedTaskIds(after, after)).toEqual([]);
+  });
+});
+
+describe("the source a block-made task records (M7b)", () => {
+  it("names the page or the meeting the block sits in, and nothing for a task description", () => {
+    expect(blockTaskSource("page", "p1")).toEqual({ type: "page", id: "p1" });
+    expect(blockTaskSource("meeting", "m1")).toEqual({ type: "meeting", id: "m1" });
+    expect(blockTaskSource("task", "t1")).toBeUndefined();
   });
 });

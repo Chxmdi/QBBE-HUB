@@ -18,6 +18,9 @@ export interface SemanticSummary {
   detail: string | null;
   done?: boolean;
   archived?: boolean;
+  /** A task's due day (YYYY-MM-DD) and assignee, read live with the title. */
+  dueAt?: string | null;
+  assigneeName?: string | null;
   href: string | null;
 }
 
@@ -40,6 +43,10 @@ export interface EditorSemanticHandlers {
   search: (kind: SemanticKind, query: string) => Promise<SemanticSummary[]>;
   /** Projects a new task can be created in. */
   projects: () => Promise<{ id: string; name: string }[]>;
+  /** The project offered first for a new task: the meeting's, say. */
+  defaultProjectId?: string | null;
+  /** People a new task can be assigned to. */
+  people?: () => Promise<{ id: string; name: string }[]>;
   createTask: (
     title: string,
     projectId: string | null,
