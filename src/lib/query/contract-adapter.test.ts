@@ -307,6 +307,22 @@ describe("the engine's real catalog", () => {
     }
   });
 
+  it("orders newest first when the spec has no sorts, as the stand-in did", () => {
+    // An app's lens screen and dashboard tiles send no sorts (apps/schema.ts
+    // has no field for one); without this the engine's id order showed an
+    // arbitrary page instead of the latest records.
+    for (const type of Object.keys(real)) {
+      expect(fromContractSpec({ version: 1, types: [type], limit: 5 }, real).sort, type).toEqual([
+        { property: "created_time", direction: "desc" },
+      ]);
+    }
+    expect(fromContractSpec({ version: 1, types: ["task"], sorts: [{ property: "due", direction: "asc" }] }, real).sort).toEqual([
+      { property: "due", direction: "asc" },
+    ]);
+    // A type that cannot sort by its creation time gets no default.
+    expect(fromContractSpec(task({ limit: 5 }), catalog).sort).toBeUndefined();
+  });
+
   it("accepts a filter, sort and select on each new type", () => {
     const now = () => new Date("2026-10-05T15:00:00Z");
     expect(fromContractSpec({ version: 1, types: ["decision"], filter: { property: "project", op: "eq", value: "p" }, sorts: [{ property: "decided_time", direction: "desc" }], properties: ["decided_time", "meeting"] }, real, { now })).toMatchObject({ type: "decision" });
