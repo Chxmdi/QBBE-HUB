@@ -18,7 +18,11 @@ create table public.lens_viewer_setting (
   lens_id uuid not null references public.lens (id) on delete cascade,
   user_id uuid not null references public.user_profile (id) on delete cascade,
   layout jsonb not null default '{}'::jsonb check (jsonb_typeof(layout) = 'object'),
-  sort jsonb not null default '[]'::jsonb check (jsonb_typeof(sort) = 'array' and jsonb_array_length(sort) <= 3),
+  -- null: the lens's own sort. An array: the viewer's keys (empty: unsorted).
+  sort jsonb check (sort is null or (jsonb_typeof(sort) = 'array' and jsonb_array_length(sort) <= 3)),
+  -- null: the lens's own filters. {}: the viewer cleared them. Otherwise
+  -- the viewer's where clause. So a viewer who only moves a column keeps
+  -- following the owner's filters when the owner changes them.
   "where" jsonb check ("where" is null or jsonb_typeof("where") = 'object'),
   updated_at timestamptz not null default now(),
   primary key (lens_id, user_id),
@@ -26,7 +30,7 @@ create table public.lens_viewer_setting (
   -- runaway client cannot fill the table.
   constraint lens_viewer_setting_size check (
     octet_length(layout::text) <= 16384
-    and octet_length(sort::text) <= 1024
+    and (sort is null or octet_length(sort::text) <= 1024)
     and ("where" is null or octet_length("where"::text) <= 32768)
   )
 );

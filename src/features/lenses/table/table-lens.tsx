@@ -39,6 +39,7 @@ import {
   setSortKey,
   specFor,
   toggleSort,
+  viewerOverrides,
   virtualWindow,
   visibleColumns,
   WIDTH_STEP,
@@ -182,17 +183,14 @@ export function TableLens({
     if (key === savedViewerKey.current) return;
     const timer = window.setTimeout(() => {
       savedViewerKey.current = key;
-      void saveViewerSetting({
-        lensId: savedLens.id,
-        layout: { columns: state.columns },
-        sort: state.sort,
-        where: state.where ?? null,
-      }).then((result) => {
+      // Only what differs from the lens, so the viewer keeps following the
+      // owner's later changes to the rest.
+      void saveViewerSetting({ lensId: savedLens.id, ...viewerOverrides(state, lensState ?? initialState) }).then((result) => {
         setViewerMessage(result.ok ? t("viewer.saved") : t("viewer.saveFailed", { reason: result.error ?? t("viewer.failed") }));
       });
     }, VIEWER_SAVE_DELAY);
     return () => window.clearTimeout(timer);
-  }, [perViewer, savedLens, state, t]);
+  }, [perViewer, savedLens, state, lensState, initialState, t]);
 
   // Load every page for the current query, discarding answers to stale ones.
   const load = React.useCallback(
@@ -737,17 +735,22 @@ export function TableLens({
                       className="relative flex shrink-0 cursor-pointer select-none items-center gap-1 px-3 font-semibold text-muted outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
                     >
                       {c.key === "title" ? (
-                        <Checkbox
-                          aria-label={t("bulk.selectAll")}
-                          checked={allSelected}
+                        <span
+                          className="mr-1 inline-flex"
                           ref={(el) => {
-                            if (el) el.indeterminate = !allSelected && selectedVisible.length > 0;
+                            // "Some selected" shows as the native mixed state.
+                            const box = el?.querySelector("input");
+                            if (box) box.indeterminate = !allSelected && selectedVisible.length > 0;
                           }}
-                          tabIndex={-1}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={toggleAll}
-                          className="mr-1"
-                        />
+                        >
+                          <Checkbox
+                            aria-label={t("bulk.selectAll")}
+                            checked={allSelected}
+                            tabIndex={-1}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={toggleAll}
+                          />
+                        </span>
                       ) : null}
                       <span className="truncate">{name}</span>
                       {sort !== "none" ? (
@@ -788,6 +791,14 @@ export function TableLens({
                               ? [
                                   { label: t("sort.thenAsc"), run: () => update((s) => ({ ...s, sort: setSortKey(s.sort, { property: c.key, direction: "asc" }, true) })) },
                                   { label: t("sort.thenDesc"), run: () => update((s) => ({ ...s, sort: setSortKey(s.sort, { property: c.key, direction: "desc" }, true) })) },
+                                ]
+                              : []),
+                            // Keyboard route to "select all": the header checkbox is not a tab stop.
+                            ...(c.key === "title" && recordIds.length > 0
+                              ? [
+                                  allSelected
+                                    ? { label: t("bulk.clear"), run: () => setSelected(new Set()) }
+                                    : { label: t("bulk.selectAll"), run: () => setSelected(new Set(recordIds)) },
                                 ]
                               : []),
                             ...(index >= 0 ? [{ label: t("table.clearSort"), run: () => update((s) => ({ ...s, sort: removeSortKey(s.sort, c.key) })) }] : []),

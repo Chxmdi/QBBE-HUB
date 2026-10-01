@@ -55,7 +55,12 @@ export type ValueShape =
 
 export type Issue = "property" | "operator" | "value";
 
-export const MAX_CONDITIONS = LIMITS.maxConditions;
+/**
+ * The builder's own conditions: the engine's 50 less one, kept for the
+ * table's title search, so typing a search never pushes a full filter past
+ * the engine's limit.
+ */
+export const MAX_CONDITIONS = LIMITS.maxConditions - 1;
 export const MAX_DEPTH = LIMITS.maxDepth;
 
 let counter = 0;
@@ -331,6 +336,21 @@ export function depthOfGroup(root: FilterGroup, groupId: string, depth = 1): num
  */
 export function maxDepthFor(root: FilterGroup): number {
   return root.join === "or" ? MAX_DEPTH - 1 : MAX_DEPTH;
+}
+
+/** How deep the tree is: the root alone is 1. */
+export function treeDepth(group: FilterGroup, depth = 1): number {
+  return group.items.reduce((max, item) => (item.kind === "group" ? Math.max(max, treeDepth(item, depth + 1)) : max), depth);
+}
+
+/**
+ * Whether a group may take a join. Only the root is limited: an OR root
+ * costs the search one more level, so it is refused once the groups already
+ * use every level.
+ */
+export function canSetJoin(root: FilterGroup, groupId: string, join: Join): boolean {
+  if (groupId !== root.id || join === "and") return true;
+  return treeDepth(root) <= MAX_DEPTH - 1;
 }
 
 export function canAddCondition(root: FilterGroup): boolean {

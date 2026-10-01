@@ -46,9 +46,10 @@ const saveSchema = z
   .object({
     lensId: UUID,
     layout: layoutSchema.default({}),
-    sort: z.array(z.object({ property: z.string().regex(/^[a-z][a-z0-9_]{0,62}$/), direction: z.enum(["asc", "desc"]) }).strict()).max(3).default([]),
-    /** The builder's where clause; null clears it; absent keeps the lens's own. */
-    where: z.unknown().optional(),
+    /** The viewer's sort keys; absent follows the lens's own. */
+    sort: z.array(z.object({ property: z.string().regex(/^[a-z][a-z0-9_]{0,62}$/), direction: z.enum(["asc", "desc"]) }).strict()).max(3).optional(),
+    /** The viewer's where clause; {} means they cleared the filters; absent follows the lens's own. */
+    where: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 
@@ -71,7 +72,7 @@ export async function loadViewerSetting(lensId: string): Promise<LoadedViewerSet
     .maybeSingle();
   if (error || !data) return null;
   const row = data as { layout: Record<string, unknown> | null; sort: unknown; where: unknown };
-  return { layout: row.layout ?? {}, sort: row.sort ?? [], where: row.where ?? null };
+  return { layout: row.layout ?? {}, sort: row.sort ?? null, where: row.where ?? null };
 }
 
 export async function saveViewerSetting(input: unknown): Promise<ViewerSettingResult> {
@@ -84,13 +85,14 @@ export async function saveViewerSetting(input: unknown): Promise<ViewerSettingRe
   // where clause and sort may name.
   const { data: lens } = await supabase.from("lens").select("type_key").eq("id", parsed.data.lensId).maybeSingle();
   if (!lens) return { ok: false, error: t("viewer.failed") };
-  const where = parsed.data.where ?? undefined;
+  const where = parsed.data.where;
+  const cleared = where !== undefined && Object.keys(where).length === 0;
   try {
     parseLensSpec({
       version: 1,
       type: (lens as { type_key: string | null }).type_key ?? "task",
-      ...(where === null ? {} : { where }),
-      sort: parsed.data.sort,
+      ...(where && !cleared ? { where } : {}),
+      ...(parsed.data.sort ? { sort: parsed.data.sort } : {}),
     });
   } catch {
     return { ok: false, error: t("viewer.invalid") };
@@ -101,7 +103,7 @@ export async function saveViewerSetting(input: unknown): Promise<ViewerSettingRe
       lens_id: parsed.data.lensId,
       user_id: session.userId,
       layout: parsed.data.layout,
-      sort: parsed.data.sort,
+      sort: parsed.data.sort ?? null,
       where: where ?? null,
     },
     { onConflict: "lens_id,user_id" },

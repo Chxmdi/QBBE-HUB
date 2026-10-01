@@ -118,6 +118,14 @@ begin
     reset role;
   end loop;
 
+  -- A setting that follows the lens's own sort and filters is two nulls.
+  perform tests.authenticate('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2', 'aal2');
+  update public.lens_viewer_setting set sort = null, "where" = null
+  where lens_id = v_shared and user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2';
+  get diagnostics v_rows = row_count;
+  perform tests.ok(v_rows = 1, 'a setting can follow the lens''s own sort and filters');
+  reset role;
+
   -- Caps: a document-sized setting is refused.
   perform tests.authenticate('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2', 'aal2');
   begin

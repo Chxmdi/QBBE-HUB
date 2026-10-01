@@ -13,6 +13,7 @@ import {
   appendTo,
   canAddCondition,
   canAddGroup,
+  canSetJoin,
   countConditions,
   defaultCondition,
   emptyGroup,
@@ -99,7 +100,9 @@ export function FilterBuilder({ type, value, onChange, people = [], locale, onDo
               className="h-8! w-auto! px-2! text-[13px]!"
             >
               <option value="and">{t("filters.all")}</option>
-              <option value="or">{t("filters.any")}</option>
+              <option value="or" disabled={!canSetJoin(value, group.id, "or")}>
+                {t("filters.any")}
+              </option>
             </Select>
           </label>
           {!isRoot ? (
@@ -461,11 +464,13 @@ function NumberInput({
 }) {
   // Keep what is typed, so "1." or "-" survive until the number is complete.
   const [draft, setDraft] = React.useState(value === null ? "" : String(value));
-  React.useEffect(() => {
+  // When the model's value changes from outside, show it (adjusted during
+  // render rather than in an effect, so there is no second pass).
+  const [seen, setSeen] = React.useState(value);
+  if (seen !== value) {
+    setSeen(value);
     if (value !== null && Number(draft) !== value) setDraft(String(value));
-    // Only when the model's value changes from outside.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+  }
   return (
     <Input
       {...aria}

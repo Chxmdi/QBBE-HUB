@@ -380,26 +380,61 @@ export function stateFromLens(
   };
 }
 
-/** What one viewer keeps for themselves on a shared lens (lens_viewer_setting). */
+/**
+ * What one viewer keeps for themselves on a shared lens (lens_viewer_setting).
+ * A null (or missing) sort or where follows the lens's own; a where of {}
+ * means the viewer cleared the filters.
+ */
 export interface ViewerSetting {
   layout: { columns?: ColumnState[] } | Record<string, unknown>;
   sort: unknown;
   where: unknown;
 }
 
+function isEmptyObject(value: unknown): boolean {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+
 /**
  * The lens's state with the viewer's own columns, sort and filters on top.
  * Each part is applied only when the setting has it, and only when it is
- * valid for the catalog, so a stale setting falls back to the lens.
+ * still valid for the catalog: a stale part falls back to the lens's own,
+ * so a removed property never opens a shared lens unfiltered.
  */
 export function applyViewerSetting(type: CatalogType, state: TableState, setting: ViewerSetting | null | undefined): TableState {
   if (!setting) return state;
   const columns = (setting.layout as { columns?: ColumnState[] })?.columns;
-  const hasWhere = setting.where !== undefined;
+  let sort = state.sort;
+  if (Array.isArray(setting.sort)) {
+    const kept = sanitiseSort(type, setting.sort);
+    // Every key gone stale: the lens's sort, not "unsorted".
+    sort = setting.sort.length > 0 && kept.length === 0 ? state.sort : kept;
+  }
+  let where = state.where;
+  if (isEmptyObject(setting.where)) where = null;
+  else if (setting.where !== null && setting.where !== undefined) where = sanitiseWhere(type, setting.where) ?? state.where;
   return {
     ...state,
     columns: Array.isArray(columns) ? reconcileColumns(type, columns) : state.columns,
-    sort: Array.isArray(setting.sort) ? sanitiseSort(type, setting.sort) : state.sort,
-    where: hasWhere ? sanitiseWhere(type, setting.where) : state.where,
+    sort,
+    where,
+  };
+}
+
+/**
+ * What a viewer's save sends: their columns always, and sort and filters
+ * only where they differ from the lens's own (so they keep following the
+ * owner's later changes). Cleared filters are sent as {}.
+ */
+export function viewerOverrides(state: TableState, lens: TableState): {
+  layout: { columns: ColumnState[] };
+  sort?: SortKey[];
+  where?: LensGroup | Record<string, never>;
+} {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  return {
+    layout: { columns: state.columns },
+    ...(same(state.sort, lens.sort) ? {} : { sort: state.sort }),
+    ...(same(state.where, lens.where) ? {} : { where: state.where ?? {} }),
   };
 }

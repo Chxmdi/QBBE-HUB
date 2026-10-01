@@ -5,6 +5,7 @@ import {
   appendTo,
   canAddCondition,
   canAddGroup,
+  canSetJoin,
   countConditions,
   defaultCondition,
   depthOfGroup,
@@ -204,12 +205,29 @@ describe("tree edits and limits", () => {
     expect(maxDepthFor(emptyGroup("or"))).toBe(3);
   });
 
-  it("stops at fifty conditions", () => {
+  it("stops at forty-nine conditions, keeping the fiftieth for the title search", () => {
     let root = emptyGroup();
-    for (let i = 0; i < 49; i += 1) root = appendTo(root, root.id, condition(`t${i}`, "contains", "x"));
+    for (let i = 0; i < 48; i += 1) root = appendTo(root, root.id, condition(`t${i}`, "contains", "x"));
     expect(canAddCondition(root)).toBe(true);
-    root = appendTo(root, root.id, condition("t49", "contains", "x"));
+    root = appendTo(root, root.id, condition("t48", "contains", "x"));
     expect(canAddCondition(root)).toBe(false);
+    // Forty-nine filters plus the title search is the engine's fifty.
+    const where: LensGroup = { and: [...root.items.map((item) => ({ property: (item as FilterCondition).property, operator: "contains" as const, value: "x" })), { property: "title", operator: "contains", value: "s" }] };
+    expect(measure(where).conditions).toBe(50);
+  });
+
+  it("refuses an OR root once the groups use every level, since the search would add one", () => {
+    let root = emptyGroup("and");
+    const g2 = emptyGroup("or");
+    const g3 = emptyGroup("and");
+    const g4 = emptyGroup("or");
+    root = appendTo(root, root.id, g2);
+    root = appendTo(root, g2.id, g3);
+    expect(canSetJoin(root, root.id, "or")).toBe(true);
+    root = appendTo(root, g3.id, g4);
+    expect(canSetJoin(root, root.id, "or")).toBe(false);
+    expect(canSetJoin(root, root.id, "and")).toBe(true);
+    expect(canSetJoin(root, g2.id, "and")).toBe(true);
   });
 });
 

@@ -61,19 +61,14 @@ export function BulkEditBar({ type, people, locale, enabled, selectedIds, onClea
   const t = useLensT();
   const properties = React.useMemo(() => bulkProperties(type), [type]);
   const editable = (EDITABLE as Record<string, Record<string, EditorKind>>)[type.key] ?? {};
+  const startDraft = (p: CatalogProperty | undefined) => (p && editable[p.key] === "select" ? p.choices?.[0]?.key ?? "" : "");
   const [propertyKey, setPropertyKey] = React.useState(properties[0]?.key ?? "");
-  const [draft, setDraft] = React.useState("");
+  const [draft, setDraft] = React.useState(() => startDraft(properties[0]));
   const [status, setStatus] = React.useState<Status>({ kind: "idle" });
   const property = properties.find((p) => p.key === propertyKey) ?? properties[0];
   const kind = property ? editable[property.key] : undefined;
   const count = selectedIds.length;
   const name = (p: CatalogProperty) => (locale.startsWith("fr") ? p.name.fr : p.name.en);
-
-  // A fresh property starts from its first choice, or from "not set".
-  React.useEffect(() => {
-    if (kind === "select") setDraft(property?.choices?.[0]?.key ?? "");
-    else setDraft("");
-  }, [kind, property]);
 
   if (!property || !kind) return null;
   if (count === 0 && status.kind !== "done") return null;
@@ -147,7 +142,16 @@ export function BulkEditBar({ type, people, locale, enabled, selectedIds, onClea
         <>
           <label className="flex items-center gap-1.5">
             {t("bulk.property")}
-            <Select value={property.key} onChange={(e) => setPropertyKey(e.target.value)} className={field}>
+            <Select
+              aria-label={t("bulk.property")}
+              value={property.key}
+              onChange={(e) => {
+                // A fresh property starts from its first choice, or from "not set".
+                setPropertyKey(e.target.value);
+                setDraft(startDraft(properties.find((p) => p.key === e.target.value)));
+              }}
+              className={field}
+            >
               {properties.map((p) => (
                 <option key={p.key} value={p.key}>
                   {name(p)}
@@ -158,7 +162,7 @@ export function BulkEditBar({ type, people, locale, enabled, selectedIds, onClea
           <label className="flex items-center gap-1.5">
             {valueLabel}
             {kind === "select" ? (
-              <Select value={draft} onChange={(e) => setDraft(e.target.value)} className={field}>
+              <Select aria-label={valueLabel} value={draft} onChange={(e) => setDraft(e.target.value)} className={field}>
                 {(property.choices ?? []).map((c) => (
                   <option key={c.key} value={c.key}>
                     {locale.startsWith("fr") ? c.label.fr : c.label.en}
@@ -166,7 +170,7 @@ export function BulkEditBar({ type, people, locale, enabled, selectedIds, onClea
                 ))}
               </Select>
             ) : kind === "person" ? (
-              <Select value={draft} onChange={(e) => setDraft(e.target.value)} className={field}>
+              <Select aria-label={valueLabel} value={draft} onChange={(e) => setDraft(e.target.value)} className={field}>
                 <option value="">{t("common.notSet")}</option>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -176,6 +180,7 @@ export function BulkEditBar({ type, people, locale, enabled, selectedIds, onClea
               </Select>
             ) : (
               <Input
+                aria-label={valueLabel}
                 type={kind === "date" ? "date" : "text"}
                 value={draft}
                 maxLength={kind === "text" ? 300 : undefined}

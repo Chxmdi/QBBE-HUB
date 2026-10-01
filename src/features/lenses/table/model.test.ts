@@ -21,6 +21,7 @@ import {
   setSortKey,
   removeSortKey,
   applyViewerSetting,
+  viewerOverrides,
   virtualWindow,
   visibleColumns,
   ROW_HEIGHT,
@@ -271,14 +272,26 @@ describe("viewer settings", () => {
     expect(next.where).toEqual({ or: [{ property: "estimate", operator: "gt", value: 2 }] });
   });
 
-  it("keeps the lens's part when the setting leaves it out or it is no longer valid", () => {
+  it("follows the lens where the setting leaves a part out, or where it has gone stale", () => {
     expect(applyViewerSetting(type, lensState, null)).toBe(lensState);
-    const partial = applyViewerSetting(type, lensState, { layout: {}, sort: [{ property: "assignee" }], where: undefined });
-    expect(partial.columns).toEqual(lensState.columns);
-    expect(partial.sort).toEqual([]);
-    expect(partial.where).toEqual(lensState.where);
-    const cleared = applyViewerSetting(type, lensState, { layout: {}, sort: [], where: null });
+    const follows = applyViewerSetting(type, lensState, { layout: {}, sort: null, where: null });
+    expect(follows.columns).toEqual(lensState.columns);
+    expect(follows.sort).toEqual(lensState.sort);
+    expect(follows.where).toEqual(lensState.where);
+    // Stale: a property the catalog no longer has falls back, never to "everything".
+    const stale = applyViewerSetting(type, lensState, { layout: {}, sort: [{ property: "assignee" }], where: { and: [{ property: "x", operator: "is", value: "y" }] } });
+    expect(stale.sort).toEqual(lensState.sort);
+    expect(stale.where).toEqual(lensState.where);
+    // Cleared on purpose: {} and [].
+    const cleared = applyViewerSetting(type, lensState, { layout: {}, sort: [], where: {} });
     expect(cleared.where).toBeNull();
-    expect(applyViewerSetting(type, lensState, { layout: {}, sort: [], where: { and: [{ property: "x", operator: "is" }] } }).where).toBeNull();
+    expect(cleared.sort).toEqual([]);
+  });
+
+  it("saves only what the viewer changed, so they keep following the owner", () => {
+    expect(viewerOverrides(lensState, lensState)).toEqual({ layout: { columns: lensState.columns } });
+    const resorted = { ...lensState, sort: [{ property: "estimate", direction: "desc" as const }] };
+    expect(viewerOverrides(resorted, lensState)).toEqual({ layout: { columns: lensState.columns }, sort: resorted.sort });
+    expect(viewerOverrides({ ...lensState, where: null }, lensState).where).toEqual({});
   });
 });
