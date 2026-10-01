@@ -21,6 +21,7 @@ export const pagesFrCA: PagesMessages = {
     noPages: "Aucune page ici pour l’instant.",
     newPage: "Nouvelle page",
     newPrivatePage: "Nouvelle page privée",
+    newPageFromTemplate: "Nouvelle page à partir d’un modèle",
     newSubpage: "Ajouter une page dans {title}",
     expand: "Déplier {title}",
     collapse: "Replier {title}",
