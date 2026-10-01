@@ -1,20 +1,26 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, ChevronRight, Columns3, Search } from "lucide-react";
+import { ArrowDownUp, ChevronDown, ChevronRight, Columns3, ListFilter, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox, Select } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { useFormatters, useLocale } from "@/lib/i18n/client";
 import { intlLocale } from "@/lib/i18n/config";
 import type { CatalogProperty, CatalogType } from "@/lib/query/catalog";
 import type { LensGroupCount, LensResult, LensRow, LensValue } from "@/lib/query/run";
 import { useLensT } from "@/features/lenses/i18n/client";
 import { updateLensCell } from "@/features/lenses/services/lens.actions";
+import { clearViewerSetting, saveViewerSetting } from "@/features/lenses/services/viewer-settings.actions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { runLensAll } from "@/lib/query/run";
 import { editorFor, type EditorKind } from "./editable";
 import { formatLensValue } from "@/features/lenses/format";
 import { SaveLensButton, type OpenLens } from "@/features/lenses/components/save-lens-button";
+import { WhereChips } from "@/features/lenses/components/lens-chips";
+import { FilterBuilder } from "@/features/lenses/filters/filter-builder";
+import { countConditions, fromWhere, toWhere, type FilterGroup } from "@/features/lenses/filters/filter-model";
+import { BulkEditBar, type AppliedChange } from "./bulk-edit-bar";
 import {
   buildDisplayRows,
   ensureInWindow,
@@ -26,16 +32,21 @@ import {
   numberTotals,
   rawText,
   reconcileColumns,
+  removeSortKey,
   resizeColumn,
   ROW_HEIGHT,
   setHidden,
+  setSortKey,
   specFor,
+  toggleSort,
+  viewerOverrides,
   virtualWindow,
   visibleColumns,
   WIDTH_STEP,
   type CellPosition,
   type ColumnState,
   type DisplayRow,
+  type SortKey,
   type TableState,
 } from "./model";
 
@@ -48,14 +59,22 @@ interface Props {
   type: CatalogType;
   initial: LensResult | null;
   initialState: TableState;
+  /**
+   * The state of the lens itself, without the viewer's own setting; what
+   * "Reset to the shared lens" goes back to. Defaults to initialState.
+   */
+  lensState?: TableState;
   people: PersonOption[];
   timeZone: string;
   /** The saved lens this table was opened from, if any. */
   savedLens?: OpenLens | null;
+  /** Whether the wos_objects switch (bulk edit's action layer) is on. */
+  bulkEditEnabled?: boolean;
 }
 
 const STORAGE_PREFIX = "qbbe-lens-table:";
 const VIEWPORT_ROWS = 16;
+const VIEWER_SAVE_DELAY = 600;
 
 function readLayout(typeKey: string): ColumnState[] | null {
   try {
@@ -81,17 +100,35 @@ function queryKey(state: TableState): string {
     state.groupBy,
     state.search.trim(),
     visibleColumns(state.columns).map((c) => c.key).sort(),
-    state.filters ?? [],
+    state.where ?? null,
   ]);
 }
 
-export function TableLens({ type, initial, initialState, people, timeZone, savedLens = null }: Props) {
+/** The part of the state a viewer keeps for themselves on a shared lens. */
+function viewerKey(state: TableState): string {
+  return JSON.stringify([state.columns, state.sort, state.where ?? null]);
+}
+
+export function TableLens({
+  type,
+  initial,
+  initialState,
+  lensState,
+  people,
+  timeZone,
+  savedLens = null,
+  bulkEditEnabled = false,
+}: Props) {
   const t = useLensT();
   const locale = useLocale();
   const format = useFormatters();
   const gridId = React.useId();
+  // Someone else's shared lens: changes are kept per viewer, never on the lens.
+  const perViewer = savedLens !== null && !savedLens.mine;
 
   const [state, setState] = React.useState<TableState>(initialState);
+  const [filterTree, setFilterTree] = React.useState<FilterGroup>(() => fromWhere(initialState.where));
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
   const [rows, setRows] = React.useState<LensRow[]>(initial?.rows ?? []);
   const [total, setTotal] = React.useState(initial?.total ?? 0);
   const [groups, setGroups] = React.useState<LensGroupCount[] | null>(initial?.groups ?? null);
@@ -103,6 +140,8 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
   const [menuFor, setMenuFor] = React.useState<string | null>(null);
   const [columnsOpen, setColumnsOpen] = React.useState(false);
   const [announcement, setAnnouncement] = React.useState("");
+  const [viewerMessage, setViewerMessage] = React.useState("");
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const [scrollTop, setScrollTop] = React.useState(0);
   const [viewport, setViewport] = React.useState(ROW_HEIGHT * VIEWPORT_ROWS);
 
@@ -110,15 +149,17 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
   const gridRef = React.useRef<HTMLDivElement>(null);
   const requestId = React.useRef(0);
   const loadedKey = React.useRef(queryKey(initialState));
+  const savedViewerKey = React.useRef(viewerKey(initialState));
   const layoutRestored = React.useRef(false);
 
   const properties = React.useMemo(() => new Map(type.properties.map((p) => [p.key, p])), [type]);
   const shown = visibleColumns(state.columns);
   const colCount = shown.length;
 
-  // Restore the viewer's saved column layout once, after hydration.
+  // Restore the viewer's saved column layout once, after hydration. On a
+  // shared lens the columns come from the viewer's setting instead.
   React.useEffect(() => {
-    if (layoutRestored.current) return;
+    if (layoutRestored.current || perViewer) return;
     // After hydration, so the server and first client render agree. Saving
     // starts only once the saved layout has been read, or it would be
     // overwritten by the defaults.
@@ -128,11 +169,28 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
       if (saved) setState((s) => ({ ...s, columns: reconcileColumns(type, saved) }));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [type]);
+  }, [type, perViewer]);
 
   React.useEffect(() => {
-    if (layoutRestored.current) writeLayout(type.key, state.columns);
-  }, [type.key, state.columns]);
+    if (!perViewer && layoutRestored.current) writeLayout(type.key, state.columns);
+  }, [type.key, state.columns, perViewer]);
+
+  // On someone else's shared lens: keep columns, sort and filters for this
+  // viewer only, a moment after they stop changing. The lens is untouched.
+  React.useEffect(() => {
+    if (!perViewer || !savedLens) return;
+    const key = viewerKey(state);
+    if (key === savedViewerKey.current) return;
+    const timer = window.setTimeout(() => {
+      savedViewerKey.current = key;
+      // Only what differs from the lens, so the viewer keeps following the
+      // owner's later changes to the rest.
+      void saveViewerSetting({ lensId: savedLens.id, ...viewerOverrides(state, lensState ?? initialState) }).then((result) => {
+        setViewerMessage(result.ok ? t("viewer.saved") : t("viewer.saveFailed", { reason: result.error ?? t("viewer.failed") }));
+      });
+    }, VIEWER_SAVE_DELAY);
+    return () => window.clearTimeout(timer);
+  }, [perViewer, savedLens, state, lensState, initialState, t]);
 
   // Load every page for the current query, discarding answers to stale ones.
   const load = React.useCallback(
@@ -180,7 +238,7 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-query when sort, grouping, search or the selected columns change.
+  // Re-query when sort, grouping, search, filters or the selected columns change.
   React.useEffect(() => {
     const key = queryKey(state);
     if (key === loadedKey.current) return;
@@ -266,6 +324,64 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
     return c ? properties.get(c.key) : undefined;
   };
 
+  // --- Filters -------------------------------------------------------------
+
+  const changeFilters = (next: FilterGroup) => {
+    setFilterTree(next);
+    const where = toWhere(next, type) ?? null;
+    update((s) => (JSON.stringify(s.where ?? null) === JSON.stringify(where) ? s : { ...s, where }));
+  };
+  const filterCount = countConditions(filterTree);
+
+  const resetToLens = () => {
+    if (!savedLens) return;
+    const base = lensState ?? initialState;
+    void clearViewerSetting(savedLens.id).then((result) => {
+      if (!result.ok) {
+        setViewerMessage(result.error ?? t("viewer.failed"));
+        return;
+      }
+      savedViewerKey.current = viewerKey(base);
+      setState(base);
+      setFilterTree(fromWhere(base.where));
+      setViewerMessage(t("viewer.resetDone"));
+    });
+  };
+
+  // --- Selection and bulk edit ----------------------------------------------
+
+  const recordIds = React.useMemo(() => display.filter((d) => d.kind === "record").map((d) => (d as { row: LensRow }).row.id), [display]);
+  const selectedVisible = recordIds.filter((id) => selected.has(id));
+  const allSelected = recordIds.length > 0 && selectedVisible.length === recordIds.length;
+
+  const toggleSelected = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(recordIds));
+
+  const applyBulk = (change: AppliedChange) => {
+    const ids = new Set(change.ids);
+    setRows((current) =>
+      current.map((r) =>
+        ids.has(r.id)
+          ? change.property === "title"
+            ? { ...r, title: String(change.value ?? "") }
+            : { ...r, values: { ...r.values, [change.property]: change.value } }
+          : r,
+      ),
+    );
+    setAnnouncement(change.changed === 1 ? t("bulk.appliedOne") : t("bulk.applied", { count: change.changed }));
+  };
+
+  const undoneBulk = () => {
+    setAnnouncement(t("bulk.undone"));
+    void load(state, null);
+  };
+
   // --- Editing -------------------------------------------------------------
 
   const valueOf = (row: LensRow, key: string): LensValue => (key === "title" ? row.title : row.values[key] ?? null);
@@ -322,6 +438,15 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
       update((s) => ({ ...s, columns: resizeColumn(s.columns, p.key, width) }));
       return;
     }
+    if (event.key === " " && !header) {
+      // Space selects or clears the focused row for a bulk edit.
+      const item = display[focus.row - 1];
+      if (item?.kind === "record") {
+        event.preventDefault();
+        toggleSelected(item.row.id);
+        return;
+      }
+    }
     if (event.key === "Enter" || event.key === "F2" || (event.key === " " && header)) {
       event.preventDefault();
       if (header && p) setMenuFor(p.key);
@@ -375,8 +500,14 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
 
   const tabIndexFor = (row: number, col: number) => (focus.row === row && focus.col === col ? 0 : -1);
 
-  const sortState = (key: string): "ascending" | "descending" | "none" =>
-    state.sort?.property === key ? (state.sort.direction === "asc" ? "ascending" : "descending") : "none";
+  const nameOf = (p: CatalogProperty) => (locale.startsWith("fr") ? p.name.fr : p.name.en);
+
+  const sortIndex = (key: string): number => state.sort.findIndex((k) => k.property === key);
+  const sortState = (key: string): "ascending" | "descending" | "none" => {
+    const k = state.sort.find((s) => s.property === key);
+    return k ? (k.direction === "asc" ? "ascending" : "descending") : "none";
+  };
+  const directionLabel = (k: SortKey) => (k.direction === "asc" ? t("sort.ascending") : t("sort.descending"));
 
   const groupable = type.properties.filter((p) => p.groupable);
 
@@ -406,11 +537,24 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
             <option value="">{t("table.noGrouping")}</option>
             {groupable.map((p) => (
               <option key={p.key} value={p.key}>
-                {locale.startsWith("fr") ? p.name.fr : p.name.en}
+                {nameOf(p)}
               </option>
             ))}
           </Select>
         </label>
+        <button
+          type="button"
+          aria-expanded={filtersOpen}
+          aria-controls={`${gridId}-filters`}
+          onClick={() => setFiltersOpen((o) => !o)}
+          className={cn(
+            "inline-flex h-9 items-center gap-1.5 rounded-(--radius-sm) border border-line bg-surface px-3 text-[13px] font-medium text-ink hover:bg-surface-soft",
+            filterCount > 0 && "border-brand/40 text-brand-fg",
+          )}
+        >
+          <ListFilter className="size-4" aria-hidden />
+          {filterCount > 0 ? t("filters.toggleCount", { count: filterCount }) : t("filters.toggle")}
+        </button>
         <div className="relative">
           <button
             type="button"
@@ -441,7 +585,7 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
                       disabled={c.key === "title"}
                       onChange={(e) => update((s) => ({ ...s, columns: setHidden(s.columns, c.key, !e.target.checked) }))}
                     />
-                    {locale.startsWith("fr") ? p.name.fr : p.name.en}
+                    {nameOf(p)}
                   </label>
                 );
               })}
@@ -454,6 +598,11 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
           basePath="/lenses/table"
           read={() => ({ spec: { ...specFor(type.key, { ...state, search: "" }), offset: 0 }, layout: { columns: state.columns } })}
         />
+        {perViewer ? (
+          <Button type="button" size="sm" variant="ghost" onClick={resetToLens}>
+            {t("viewer.reset")}
+          </Button>
+        ) : null}
         <p className="ml-auto text-[13px] text-muted" aria-live="polite">
           {loading && rows.length < Math.min(total, MAX_ROWS)
             ? t("common.loadingMore")
@@ -463,12 +612,71 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
         </p>
       </div>
 
+      {filtersOpen ? (
+        <div id={`${gridId}-filters`} className="mb-3">
+          <FilterBuilder type={type} value={filterTree} onChange={changeFilters} people={people} locale={locale} onDone={() => setFiltersOpen(false)} />
+        </div>
+      ) : (
+        <WhereChips where={state.where ?? null} type={type} locale={locale} people={people} className="mb-3" />
+      )}
+
+      {state.sort.length > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-[12.5px]">
+          <ArrowDownUp className="size-4 text-muted" aria-hidden />
+          <ul aria-label={t("sort.chips")} className="flex flex-wrap items-center gap-2">
+            {state.sort.map((k, index) => {
+              const p = properties.get(k.property);
+              const name = p ? nameOf(p) : k.property;
+              return (
+                <li key={k.property} className="inline-flex items-center overflow-hidden rounded-full border border-line bg-surface">
+                  <button
+                    type="button"
+                    aria-label={t("sort.toggle", { name })}
+                    onClick={() => update((s) => ({ ...s, sort: toggleSort(s.sort, k.property, true) }))}
+                    className="px-2.5 py-1 font-medium text-ink hover:bg-surface-soft"
+                  >
+                    {t("sort.chip", { index: index + 1, name, direction: directionLabel(k) })}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("sort.remove", { name })}
+                    onClick={() => update((s) => ({ ...s, sort: removeSortKey(s.sort, k.property) }))}
+                    className="inline-flex size-6 items-center justify-center text-muted hover:bg-surface-soft hover:text-ink"
+                  >
+                    <X className="size-3.5" aria-hidden />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <button type="button" onClick={() => update((s) => ({ ...s, sort: [] }))} className="text-muted hover:text-ink hover:underline">
+            {t("sort.clearAll")}
+          </button>
+        </div>
+      ) : null}
+
+      <BulkEditBar
+        type={type}
+        people={people}
+        locale={locale}
+        enabled={bulkEditEnabled}
+        selectedIds={selectedVisible}
+        onClear={() => setSelected(new Set())}
+        onApplied={applyBulk}
+        onUndone={undoneBulk}
+      />
+
       <p id={`${gridId}-hint`} className="sr-only">
-        {t("table.editHint")}
+        {t("table.editHint")} {t("bulk.hint")}
       </p>
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
+      {perViewer ? (
+        <p role="status" aria-live="polite" className={cn("text-[12.5px] text-muted", !viewerMessage && "sr-only")}>
+          {viewerMessage}
+        </p>
+      ) : null}
 
       {failed ? (
         <div role="alert" className="rounded-(--radius-md) border border-danger/25 bg-danger/10 px-4 py-3">
@@ -496,6 +704,7 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
             aria-describedby={`${gridId}-hint`}
             aria-rowcount={gridRows}
             aria-colcount={colCount}
+            aria-multiselectable
             onKeyDown={onGridKeyDown}
             style={{ width: totalWidth, minWidth: "100%" }}
             className="text-[13.5px] text-ink"
@@ -504,8 +713,9 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
               <div role="row" aria-rowindex={1} className="flex border-b border-line">
                 {shown.map((c, col) => {
                   const p = properties.get(c.key)!;
-                  const name = locale.startsWith("fr") ? p.name.fr : p.name.en;
+                  const name = nameOf(p);
                   const sort = sortState(c.key);
+                  const index = sortIndex(c.key);
                   return (
                     <div
                       key={c.key}
@@ -515,16 +725,51 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
                       tabIndex={tabIndexFor(0, col)}
                       data-cell={`0:${col}`}
                       onFocus={() => setFocus({ row: 0, col })}
-                      onClick={() => {
+                      onClick={(e) => {
                         setFocus({ row: 0, col });
-                        setMenuFor(menuFor === c.key ? null : c.key);
+                        // A click sorts by this column (Shift adds it as a later key); the chevron opens the menu.
+                        if (p.sortable) update((s) => ({ ...s, sort: toggleSort(s.sort, c.key, e.shiftKey) }));
+                        else setMenuFor(menuFor === c.key ? null : c.key);
                       }}
                       style={{ width: c.width, height: ROW_HEIGHT }}
                       className="relative flex shrink-0 cursor-pointer select-none items-center gap-1 px-3 font-semibold text-muted outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
                     >
+                      {c.key === "title" ? (
+                        <span
+                          className="mr-1 inline-flex"
+                          ref={(el) => {
+                            // "Some selected" shows as the native mixed state.
+                            const box = el?.querySelector("input");
+                            if (box) box.indeterminate = !allSelected && selectedVisible.length > 0;
+                          }}
+                        >
+                          <Checkbox
+                            aria-label={t("bulk.selectAll")}
+                            checked={allSelected}
+                            tabIndex={-1}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={toggleAll}
+                          />
+                        </span>
+                      ) : null}
                       <span className="truncate">{name}</span>
-                      {sort !== "none" ? <span aria-hidden>{sort === "ascending" ? "↑" : "↓"}</span> : null}
-                      <ChevronDown className="ml-auto size-3.5 shrink-0" aria-hidden />
+                      {sort !== "none" ? (
+                        <span aria-hidden className="shrink-0">
+                          {sort === "ascending" ? "↑" : "↓"}
+                          {state.sort.length > 1 ? <sup>{index + 1}</sup> : null}
+                        </span>
+                      ) : null}
+                      <span
+                        role="presentation"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFocus({ row: 0, col });
+                          setMenuFor(menuFor === c.key ? null : c.key);
+                        }}
+                        className="ml-auto inline-flex size-5 shrink-0 items-center justify-center rounded hover:bg-line/60"
+                      >
+                        <ChevronDown className="size-3.5" aria-hidden />
+                      </span>
                       <span
                         aria-hidden
                         onPointerDown={(e) => startResize(e, c.key, c.width)}
@@ -538,11 +783,25 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
                           items={[
                             ...(p.sortable
                               ? [
-                                  { label: t("table.sortAsc"), run: () => update((s) => ({ ...s, sort: { property: c.key, direction: "asc" } })) },
-                                  { label: t("table.sortDesc"), run: () => update((s) => ({ ...s, sort: { property: c.key, direction: "desc" } })) },
+                                  { label: t("table.sortAsc"), run: () => update((s) => ({ ...s, sort: setSortKey(s.sort, { property: c.key, direction: "asc" }, false) })) },
+                                  { label: t("table.sortDesc"), run: () => update((s) => ({ ...s, sort: setSortKey(s.sort, { property: c.key, direction: "desc" }, false) })) },
                                 ]
                               : []),
-                            ...(state.sort?.property === c.key ? [{ label: t("table.clearSort"), run: () => update((s) => ({ ...s, sort: null })) }] : []),
+                            ...(p.sortable && state.sort.length > 0 && !(state.sort.length === 1 && index === 0)
+                              ? [
+                                  { label: t("sort.thenAsc"), run: () => update((s) => ({ ...s, sort: setSortKey(s.sort, { property: c.key, direction: "asc" }, true) })) },
+                                  { label: t("sort.thenDesc"), run: () => update((s) => ({ ...s, sort: setSortKey(s.sort, { property: c.key, direction: "desc" }, true) })) },
+                                ]
+                              : []),
+                            // Keyboard route to "select all": the header checkbox is not a tab stop.
+                            ...(c.key === "title" && recordIds.length > 0
+                              ? [
+                                  allSelected
+                                    ? { label: t("bulk.clear"), run: () => setSelected(new Set()) }
+                                    : { label: t("bulk.selectAll"), run: () => setSelected(new Set(recordIds)) },
+                                ]
+                              : []),
+                            ...(index >= 0 ? [{ label: t("table.clearSort"), run: () => update((s) => ({ ...s, sort: removeSortKey(s.sort, c.key) })) }] : []),
                             ...(p.groupable ? [{ label: t("table.groupByThis"), run: () => update((s) => ({ ...s, groupBy: c.key })) }] : []),
                             ...(c.key !== "title"
                               ? [
@@ -603,8 +862,15 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
                   );
                 }
                 const row = item.row;
+                const isSelected = selected.has(row.id);
                 return (
-                  <div key={row.id} role="row" aria-rowindex={gridRow + 1} className="flex border-b border-line/70 hover:bg-surface-soft/60">
+                  <div
+                    key={row.id}
+                    role="row"
+                    aria-rowindex={gridRow + 1}
+                    aria-selected={isSelected}
+                    className={cn("flex border-b border-line/70 hover:bg-surface-soft/60", isSelected && "bg-brand/5")}
+                  >
                     {shown.map((c, col) => {
                       const p = properties.get(c.key)!;
                       const value = valueOf(row, c.key);
@@ -630,6 +896,17 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
                             c.key === "title" && "font-medium",
                           )}
                         >
+                          {c.key === "title" && !isEditing ? (
+                            <Checkbox
+                              aria-label={t("bulk.selectRow", { title: row.title })}
+                              checked={isSelected}
+                              tabIndex={-1}
+                              onClick={(e) => e.stopPropagation()}
+                              onDoubleClick={(e) => e.stopPropagation()}
+                              onChange={() => toggleSelected(row.id)}
+                              className="mr-2"
+                            />
+                          ) : null}
                           {isEditing && editor ? (
                             <CellEditor
                               kind={editor}
@@ -637,7 +914,7 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
                               value={value}
                               people={people}
                               locale={locale}
-                              label={t("table.edit", { name: locale.startsWith("fr") ? p.name.fr : p.name.en })}
+                              label={t("table.edit", { name: nameOf(p) })}
                               notSet={t("common.notSet")}
                               onCancel={() => {
                                 setEditing(null);
@@ -680,7 +957,7 @@ export function TableLens({ type, initial, initialState, people, timeZone, saved
                       >
                         {col === 0 ? t("table.sum") : isNumber ? (
                           <span>
-                            <span className="sr-only">{`${t("table.sum")} ${locale.startsWith("fr") ? p.name.fr : p.name.en}: `}</span>
+                            <span className="sr-only">{`${t("table.sum")} ${nameOf(p)}: `}</span>
                             {collator.format(totals[c.key] ?? 0)}
                           </span>
                         ) : null}

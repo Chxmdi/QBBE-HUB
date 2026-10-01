@@ -1,3 +1,4 @@
+import type { EditorBlock } from "@/features/editor/adapter/content";
 import type { LocalizedText } from "@/lib/objects/contracts";
 
 /**
@@ -35,9 +36,16 @@ export interface PageBlock {
   offsets?: Offsets;
 }
 
+/** The values a page template can ask for when it is used. */
+export const PAGE_VARIABLES = ["program", "owner", "period", "due"] as const;
+export type PageVariableName = (typeof PAGE_VARIABLES)[number];
+export type PageVariables = Partial<Record<PageVariableName, string>>;
+
 export interface PageBody {
   title: LocalizedText;
   blocks: PageBlock[];
+  /** The `{{name}}` placeholders the blocks use; the form asks for each. */
+  variables?: PageVariableName[];
 }
 
 export interface SpaceBody {
@@ -132,7 +140,116 @@ export interface DraftTask {
   due: string;
 }
 
-export type BuildProblem = "name" | "tasks" | "taskText" | "offset";
+export interface DraftBlock {
+  kind: PageBlock["kind"];
+  en: string;
+  fr: string;
+  due: string;
+}
+
+export type BuildProblem = "name" | "tasks" | "taskText" | "offset" | "blocks" | "blockText";
+
+/** Same shape as the document-template merge (src/features/documents/templates/merge.ts). */
+const PLACEHOLDER = /\{\{\s*([a-z_.]+)\s*\}\}/g;
+
+/** The page variables a text uses, in order of first use; unknown names are ignored. */
+export function findPageVariables(text: string): PageVariableName[] {
+  const names: PageVariableName[] = [];
+  for (const match of text.matchAll(PLACEHOLDER)) {
+    const name = match[1] as PageVariableName;
+    if ((PAGE_VARIABLES as readonly string[]).includes(name) && !names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+/** One line of plain text: control characters cannot restructure the page. */
+function cleanValue(value: string | undefined): string {
+  return (value ?? "")
+    .slice(0, 500)
+    .replace(/[\u0000-\u001F\u007F]+/g, " ")
+    .trim();
+}
+
+/** Fills {{program}}, {{owner}}, {{period}} and {{due}}; any other placeholder stays as written. */
+export function renderPageText(text: string, variables: PageVariables): string {
+  return text.replace(PLACEHOLDER, (whole, name: string) =>
+    (PAGE_VARIABLES as readonly string[]).includes(name) ? cleanValue(variables[name as PageVariableName]) : whole,
+  );
+}
+
+export interface RenderedPage {
+  title: string;
+  blocks: EditorBlock[];
+  /** The page as plain text, one block per line (editor_document.content_text). */
+  text: string;
+}
+
+/**
+ * What public.apply_page_template_v2 writes for a page template: the title
+ * and blocks in the chosen language, variables filled, every offset dated
+ * from `start` and written after the text. Pure, so the preview and the
+ * database agree, and the unit test can pin the exact output.
+ */
+export function renderPageBody(body: PageBody, variables: PageVariables, start: string, locale = "en"): RenderedPage {
+  const fr = locale === "fr-CA";
+  const lines: string[] = [];
+  const blocks = body.blocks.map((block): EditorBlock => {
+    let text = renderPageText(pick(block.text, locale), variables);
+    const dates: string[] = [];
+    if (isCalendarDate(start) && block.offsets?.start !== undefined) {
+      dates.push(`${fr ? "Débute le " : "Starts "}${addDays(start, block.offsets.start)}`);
+    }
+    if (isCalendarDate(start) && block.offsets?.due !== undefined) {
+      dates.push(`${fr ? "Échéance le " : "Due "}${addDays(start, block.offsets.due)}`);
+    }
+    if (dates.length > 0) text = `${text} · ${dates.join(" · ")}`;
+    lines.push(text);
+    const type = block.kind === "heading" ? "heading" : block.kind === "todo" ? "checkListItem" : "paragraph";
+    const props = block.kind === "heading" ? { level: 2 } : block.kind === "todo" ? { checked: false } : {};
+    return { type, props, content: [{ type: "text", text, styles: {} }], children: [] };
+  });
+  return {
+    title: renderPageText(pick(body.title, locale), variables).slice(0, 500),
+    blocks,
+    text: lines.join("\n"),
+  };
+}
+
+/**
+ * A page template from the builder's rows: a heading, paragraph or to-do per
+ * row, each in both languages, with an optional due offset. The variables
+ * list is whatever the rows mention.
+ */
+export function buildPageBody(
+  title: LocalizedText,
+  blocks: DraftBlock[],
+): { ok: true; body: PageBody } | { ok: false; problem: BuildProblem } {
+  if (!title.en.trim() || !title.fr.trim()) return { ok: false, problem: "name" };
+  const items: PageBlock[] = [];
+  for (const b of blocks) {
+    if (!b.en.trim() && !b.fr.trim() && !b.due.trim()) continue;
+    if (!b.en.trim() || !b.fr.trim()) return { ok: false, problem: "blockText" };
+    const due = b.due.trim();
+    if (due && !(/^\d{1,4}$/.test(due) && Number(due) <= MAX_OFFSET)) return { ok: false, problem: "offset" };
+    items.push({
+      kind: b.kind,
+      text: { en: b.en.trim(), fr: b.fr.trim() },
+      ...(due ? { offsets: { due: Number(due) } } : {}),
+    });
+  }
+  if (items.length === 0) return { ok: false, problem: "blocks" };
+  const used = findPageVariables(
+    [title.en, title.fr, ...items.flatMap((i) => [i.text.en, i.text.fr])].join("\n"),
+  );
+  return {
+    ok: true,
+    body: {
+      title: { en: title.en.trim(), fr: title.fr.trim() },
+      blocks: items,
+      ...(used.length > 0 ? { variables: used } : {}),
+    },
+  };
+}
 
 /**
  * A project template from the builder's rows, or a task template from one row.

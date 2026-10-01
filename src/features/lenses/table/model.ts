@@ -6,7 +6,7 @@
 
 import type { CatalogProperty, CatalogType } from "@/lib/query/catalog";
 import type { LensGroupCount, LensRow, LensValue } from "@/lib/query/run";
-import type { LensNode, LensSpec } from "@/lib/query/spec";
+import { LIMITS, lensSpecSchema, type LensGroup, type LensNode, type LensSpec } from "@/lib/query/spec";
 
 export const MIN_WIDTH = 80;
 export const MAX_WIDTH = 640;
@@ -23,13 +23,86 @@ export interface ColumnState {
   hidden: boolean;
 }
 
+export interface SortKey {
+  property: string;
+  direction: "asc" | "desc";
+}
+
+/** Sort keys a table asks for at most (the engine's limit). */
+export const MAX_SORTS = LIMITS.maxSorts;
+
 export interface TableState {
   columns: ColumnState[];
-  sort: { property: string; direction: "asc" | "desc" } | null;
+  /** Up to three keys, first one first. */
+  sort: SortKey[];
   groupBy: string | null;
   search: string;
-  /** Conditions a saved lens brings with it, kept under the search box. */
-  filters?: LensNode[];
+  /** The filter builder's where clause, combined with the title search. */
+  where?: LensGroup | null;
+}
+
+/**
+ * What a header click does to the sort. A plain click sorts by this column
+ * only: ascending, then descending on a second click, then not at all. An
+ * additive click (Shift, or "Then by" in the menu) appends the column as a
+ * later key, replacing the last one when three are already there.
+ */
+export function toggleSort(sort: SortKey[], property: string, additive = false): SortKey[] {
+  const index = sort.findIndex((k) => k.property === property);
+  if (!additive) {
+    if (index < 0 || sort.length > 1) return [{ property, direction: "asc" }];
+    return sort[0].direction === "asc" ? [{ property, direction: "desc" }] : [];
+  }
+  if (index >= 0) {
+    return sort.map((k, i) => (i === index ? { ...k, direction: k.direction === "asc" ? "desc" : "asc" } : k));
+  }
+  const kept = sort.length >= MAX_SORTS ? sort.slice(0, MAX_SORTS - 1) : sort;
+  return [...kept, { property, direction: "asc" }];
+}
+
+/** Sets or appends a key with a direction; appending past three replaces the last. */
+export function setSortKey(sort: SortKey[], key: SortKey, append: boolean): SortKey[] {
+  const without = sort.filter((k) => k.property !== key.property);
+  if (!append) return [key];
+  const kept = without.length >= MAX_SORTS ? without.slice(0, MAX_SORTS - 1) : without;
+  return [...kept, key];
+}
+
+export function removeSortKey(sort: SortKey[], property: string): SortKey[] {
+  return sort.filter((k) => k.property !== property);
+}
+
+/** Only sortable, known properties, each once, at most three. */
+export function sanitiseSort(type: CatalogType, sort: unknown): SortKey[] {
+  if (!Array.isArray(sort)) return [];
+  const out: SortKey[] = [];
+  for (const k of sort) {
+    if (!k || typeof k !== "object") continue;
+    const property = (k as { property?: unknown }).property;
+    const direction = (k as { direction?: unknown }).direction;
+    if (typeof property !== "string" || out.some((x) => x.property === property)) continue;
+    if (!type.properties.some((p) => p.key === property && p.sortable)) continue;
+    out.push({ property, direction: direction === "desc" ? "desc" : "asc" });
+    if (out.length >= MAX_SORTS) break;
+  }
+  return out;
+}
+
+/** A where clause the engine will accept for this type, or null: the schema's shape and the catalog's properties. */
+export function sanitiseWhere(type: CatalogType, where: unknown): LensGroup | null {
+  if (!where || typeof where !== "object") return null;
+  const parsed = lensSpecSchema.safeParse({ version: 1, type: type.key, where });
+  if (!parsed.success || !parsed.data.where) return null;
+  const known = new Set(type.properties.map((p) => p.key));
+  const valid = (node: LensNode): boolean => {
+    if ("property" in node) {
+      if (!known.has(node.property)) return false;
+      // A relation sub-query names another type's properties; the engine checks those.
+      return true;
+    }
+    return ("and" in node ? node.and : node.or).every(valid);
+  };
+  return valid(parsed.data.where) ? parsed.data.where : null;
 }
 
 /** Title first and wide; every other shown property after it in catalog order. */
@@ -99,20 +172,29 @@ export function specFor(typeKey: string, state: TableState, offset = 0): LensSpe
     .filter((k) => k !== "title")
     .slice(0, 30);
   const search = state.search.trim().slice(0, 500);
-  const conditions: LensNode[] = [
-    ...(state.filters ?? []),
-    ...(search ? [{ property: "title", operator: "contains" as const, value: search }] : []),
-  ];
+  const where = combineWhere(state.where ?? null, search ? { property: "title", operator: "contains", value: search } : null);
   return {
     version: 1,
     type: typeKey,
-    ...(conditions.length ? { where: { and: conditions } } : {}),
-    ...(state.sort ? { sort: [state.sort] } : {}),
+    ...(where ? { where } : {}),
+    ...(state.sort.length ? { sort: state.sort.slice(0, MAX_SORTS) } : {}),
     ...(state.groupBy ? { groupBy: { property: state.groupBy } } : {}),
     select,
     limit: PAGE_SIZE,
     offset,
   };
+}
+
+/**
+ * The builder's clause and the title search as one clause. An AND root takes
+ * the search as one more item; an OR root is wrapped, which is one level
+ * deeper (the builder leaves room for it).
+ */
+export function combineWhere(where: LensGroup | null, search: LensNode | null): LensGroup | undefined {
+  if (!where) return search ? { and: [search] } : undefined;
+  if (!search) return where;
+  if ("and" in where) return { and: [...where.and, search] };
+  return { and: [where, search] };
 }
 
 // ---------------------------------------------------------------------------
@@ -288,16 +370,71 @@ export function stateFromLens(
   layout: { columns?: ColumnState[] } | Record<string, unknown>,
 ): TableState {
   const s = spec as Partial<LensSpec>;
-  const where = s.where;
-  const filters: LensNode[] = where ? ("and" in where ? where.and : [where]) : [];
-  const first = s.sort?.[0];
-  const sortable = first && type.properties.some((p) => p.key === first.property && p.sortable);
   const groupable = s.groupBy && type.properties.some((p) => p.key === s.groupBy!.property && p.groupable);
   return {
     columns: reconcileColumns(type, (layout as { columns?: ColumnState[] }).columns ?? null),
-    sort: sortable ? { property: first!.property, direction: first!.direction ?? "asc" } : null,
+    sort: sanitiseSort(type, s.sort),
     groupBy: groupable ? s.groupBy!.property : null,
     search: "",
-    filters,
+    where: sanitiseWhere(type, s.where),
+  };
+}
+
+/**
+ * What one viewer keeps for themselves on a shared lens (lens_viewer_setting).
+ * A null (or missing) sort or where follows the lens's own; a where of {}
+ * means the viewer cleared the filters.
+ */
+export interface ViewerSetting {
+  layout: { columns?: ColumnState[] } | Record<string, unknown>;
+  sort: unknown;
+  where: unknown;
+}
+
+function isEmptyObject(value: unknown): boolean {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+
+/**
+ * The lens's state with the viewer's own columns, sort and filters on top.
+ * Each part is applied only when the setting has it, and only when it is
+ * still valid for the catalog: a stale part falls back to the lens's own,
+ * so a removed property never opens a shared lens unfiltered.
+ */
+export function applyViewerSetting(type: CatalogType, state: TableState, setting: ViewerSetting | null | undefined): TableState {
+  if (!setting) return state;
+  const columns = (setting.layout as { columns?: ColumnState[] })?.columns;
+  let sort = state.sort;
+  if (Array.isArray(setting.sort)) {
+    const kept = sanitiseSort(type, setting.sort);
+    // Every key gone stale: the lens's sort, not "unsorted".
+    sort = setting.sort.length > 0 && kept.length === 0 ? state.sort : kept;
+  }
+  let where = state.where;
+  if (isEmptyObject(setting.where)) where = null;
+  else if (setting.where !== null && setting.where !== undefined) where = sanitiseWhere(type, setting.where) ?? state.where;
+  return {
+    ...state,
+    columns: Array.isArray(columns) ? reconcileColumns(type, columns) : state.columns,
+    sort,
+    where,
+  };
+}
+
+/**
+ * What a viewer's save sends: their columns always, and sort and filters
+ * only where they differ from the lens's own (so they keep following the
+ * owner's later changes). Cleared filters are sent as {}.
+ */
+export function viewerOverrides(state: TableState, lens: TableState): {
+  layout: { columns: ColumnState[] };
+  sort?: SortKey[];
+  where?: LensGroup | Record<string, never>;
+} {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  return {
+    layout: { columns: state.columns },
+    ...(same(state.sort, lens.sort) ? {} : { sort: state.sort }),
+    ...(same(state.where, lens.where) ? {} : { where: state.where ?? {} }),
   };
 }

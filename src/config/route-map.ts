@@ -94,7 +94,7 @@ export const ROUTE_MAP: ReadonlyArray<RouteMapEntry> = [
   // --- Pages, editor, objects ---------------------------------------------
   { pattern: "/pages", status: "beta", switch: "wos_pages", task: "Pages: sidebar tree, favourites, recent (M4a)" },
   { pattern: "/pages/[pageId]", status: "beta", switch: "wos_pages", task: "One page in the block editor (M4b; editor also behind wos_editor)" },
-  { pattern: "/objects/[id]", status: "beta", switch: "wos_objects", task: "Any object with its Related panel (M3b)" },
+  { pattern: "/objects/[id]", status: "beta", switch: "wos_objects", task: "Any object as a page: its layout's properties, related items, content, comments and versions (M3b, U14)" },
   { pattern: "/collab/objects/[objectId]", status: "migration", switch: "wos_editor", canonical: "/objects/[id]", task: "Collaboration panels for one object (S3b); move onto the object page" },
   { pattern: "/collab/live/[objectId]", status: "migration", switch: "wos_editor", canonical: "/objects/[id]", task: "Presence, cursors and page lock (V1-17); move onto the object page" },
   { pattern: "/collab/versions/[objectId]", status: "migration", switch: "wos_editor", canonical: "/objects/[id]", task: "Autosave and version history (M16a); move onto the object page" },
