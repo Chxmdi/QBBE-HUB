@@ -69,7 +69,7 @@ test("two columns and a table of contents render and read from the keyboard [swi
   await page.keyboard.type("/columns");
   await expect(page.getByRole("option", { name: /^Columns/, selected: true })).toBeVisible();
   await page.keyboard.press("Enter");
-  const columns = editor.locator("[data-content-type='columnList'] + .bn-block-group > .bn-block-outer");
+  const columns = editor.locator(".node-columnList + .bn-block-group > .bn-block-outer");
   await expect(columns).toHaveCount(2);
   await page.keyboard.type("## Left");
   await page.keyboard.press("Enter");
@@ -84,13 +84,17 @@ test("two columns and a table of contents render and read from the keyboard [swi
   await page.keyboard.type("Right text");
   await expect(columns.nth(1).locator("h2", { hasText: "Right" })).toBeVisible();
   await expect(columns.nth(1).getByText("Right text")).toBeVisible();
+  // Shift+Tab does not pull a block out of its column.
+  await page.keyboard.press("Shift+Tab");
+  await expect(columns).toHaveCount(2);
+  await expect(columns.nth(1).getByText("Right text")).toBeVisible();
 
   // Side by side, as a grid.
   const left = await box(columns.nth(0));
   const right = await box(columns.nth(1));
   expect(Math.abs(left.y - right.y)).toBeLessThan(2);
   expect(right.x).toBeGreaterThanOrEqual(left.x + left.width - 1);
-  await expect(editor.locator("[data-content-type='columnList'] + .bn-block-group")).toHaveCSS("display", "grid");
+  await expect(editor.locator(".node-columnList + .bn-block-group")).toHaveCSS("display", "grid");
 
   // The table of contents follows the headings, nested by level, and each
   // link points at the heading block's own anchor.
@@ -161,7 +165,7 @@ test("two columns and a table of contents render and read from the keyboard [swi
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.reload();
   const again = page.getByRole("textbox", { name: "Document content" });
-  await expect(again.locator("[data-content-type='columnList'] + .bn-block-group > .bn-block-outer")).toHaveCount(2, { timeout: 30_000 });
+  await expect(again.locator(".node-columnList + .bn-block-group > .bn-block-outer")).toHaveCount(2, { timeout: 30_000 });
   await expect(again.getByRole("navigation", { name: "Table of contents" }).getByRole("link")).toHaveText([
     "Overview",
     "Left column",

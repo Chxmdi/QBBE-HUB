@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/input";
 import type { EditorT } from "@/features/editor/i18n";
 import type { EditorBlock } from "@/features/editor/adapter/content";
 import { headingAnchor, tocFromBlocks, type TocEntry } from "@/features/editor/adapter/toc";
+import { columnFixes } from "@/features/editor/adapter/columns";
 
 /**
  * Layout blocks (U5a): columns and a table of contents.
@@ -63,12 +64,20 @@ function moveCursorInto(editor: AnyEditor, block: AnyBlock | undefined) {
   if (target) editor.setTextCursorPosition(target, "start");
 }
 
+/**
+ * The slash menu's insert, except that a block with nested blocks under it is
+ * never turned into the new block: that would replace (and lose) the nested
+ * blocks. The new block goes after it instead.
+ */
+function insertFromSlash(editor: AnyEditor, block: AnyPartialBlock): AnyBlock {
+  const current = editor.getTextCursorPosition().block;
+  if ((current.children ?? []).length > 0) return editor.insertBlocks([block], current, "after")[0];
+  return insertOrUpdateBlockForSlashMenu(editor, block);
+}
+
 /** Inserts a two-column list at the cursor and puts the cursor in its first column. */
 export function insertColumnList(editor: AnyEditor) {
-  const inserted = insertOrUpdateBlockForSlashMenu(editor, {
-    type: "columnList",
-    children: [newColumn(), newColumn()],
-  } as AnyPartialBlock);
+  const inserted = insertFromSlash(editor, { type: "columnList", children: [newColumn(), newColumn()] } as AnyPartialBlock);
   moveCursorInto(editor, inserted);
 }
 
@@ -97,12 +106,63 @@ export function insertColumn(editor: AnyEditor) {
 
 /** Inserts a table of contents; writing continues in the text block below it. */
 export function insertTableOfContents(editor: AnyEditor) {
-  const inserted = insertOrUpdateBlockForSlashMenu(editor, { type: "tableOfContents" } as AnyPartialBlock);
+  const inserted = insertFromSlash(editor, { type: "tableOfContents" } as AnyPartialBlock);
   const next = editor.getNextBlock(inserted);
   const target =
     next && Array.isArray(next.content) ? next : editor.insertBlocks([{ type: "paragraph" }], inserted, "after")[0];
   editor.setTextCursorPosition(target, "start");
 }
+
+// ---------------------------------------------------------------------------
+// Column structure: kept by applying `columnFixes` after each local change,
+// and by refusing the two keys that would pull a column apart.
+// ---------------------------------------------------------------------------
+
+function applyColumnFixes(editor: AnyEditor) {
+  if (!editor.isEditable) return;
+  const fixes = columnFixes(editor.document as unknown as EditorBlock[]);
+  if (fixes.length === 0) return;
+  editor.transact(() => {
+    for (const fix of fixes) {
+      if (fix.kind === "rewrap") editor.updateBlock(fix.id, { children: fix.children as AnyPartialBlock[] });
+      else editor.replaceBlocks([fix.id], fix.blocks as AnyPartialBlock[]);
+    }
+  });
+}
+
+/** True when the cursor's block is a column, or sits directly in one. */
+function cursorAtColumn(editor: AnyEditor): boolean {
+  try {
+    const block = editor.getTextCursorPosition().block;
+    return block.type === "column" || editor.getParentBlock(block)?.type === "column";
+  } catch {
+    return false;
+  }
+}
+
+export const columnStructureExtension = createExtension(({ editor }: { editor: AnyEditor }) => ({
+  key: "qbbeColumnStructure",
+  mount: ({ signal }: { signal: AbortSignal }) => {
+    let scheduled = false;
+    // Remote changes are fixed by the person who made them.
+    const off = editor.onChange(() => {
+      if (scheduled) return;
+      scheduled = true;
+      setTimeout(() => {
+        scheduled = false;
+        if (!signal.aborted) applyColumnFixes(editor);
+      }, 0);
+    }, false);
+    signal.addEventListener("abort", () => off?.());
+  },
+  keyboardShortcuts: {
+    // Outdenting a column's own top-level block would drop it out of the column.
+    "Shift-Tab": () => cursorAtColumn(editor),
+    // A whole column cannot be moved as a block; its contents can.
+    "Mod-Shift-ArrowUp": () => editor.getTextCursorPosition().block.type === "column",
+    "Mod-Shift-ArrowDown": () => editor.getTextCursorPosition().block.type === "column",
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Heading anchors: every heading block's content element gets id="block-<id>".
@@ -181,12 +241,16 @@ function TableOfContentsBlock({ block, editor, t }: { block: AnyBlock; editor: A
     const onKeyDown = (event: KeyboardEvent) => {
       const nav = navRef.current;
       const view = editor.prosemirrorView;
-      if (!nav || !view || !view.hasFocus()) return;
+      if (!nav || !view) return;
+      // A focused link is not editor focus to ProseMirror, so this comes first.
       if (event.key === "Escape" && nav.contains(event.target as Node)) {
         event.preventDefault();
+        event.stopPropagation();
+        editor.setTextCursorPosition(block.id, "start");
         editor.focus();
         return;
       }
+      if (!view.hasFocus()) return;
       if (event.key !== "Enter" || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
       if (event.target !== view.dom) return;
       let current: AnyBlock | undefined;
@@ -278,6 +342,7 @@ export function createLayoutBlocks(t: EditorT) {
         );
       },
     },
+    [columnStructureExtension()],
   );
 
   const tableOfContents = createReactBlockSpec(
