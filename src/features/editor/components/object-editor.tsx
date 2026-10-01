@@ -27,8 +27,8 @@ import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import type { EditorContent } from "@/features/editor/adapter/content";
 import { documentIdFromRef, MAX_UPLOAD_BYTES, storagePathFor } from "@/features/editor/adapter/files";
-<<<<<<< HEAD
 import { registerEditorUpload, resolveEditorFile } from "@/features/editor/services/editor-document.commands";
+import { blockTaskSource, type EditorObjectType } from "@/features/editor/semantic/source";
 import {
   appendEditorOperations,
   loadServerEditorDocument,
@@ -37,10 +37,6 @@ import {
 import { useSaveQueue } from "@/features/editor/queue/use-save-queue";
 import type { QueueBatch, QueueStatus, SendOutcome } from "@/features/editor/queue/queue";
 import { ConflictDialog } from "./conflict-dialog";
-=======
-import { registerEditorUpload, resolveEditorFile, saveEditorDocument } from "@/features/editor/services/editor-document.commands";
-import { blockTaskSource, type EditorObjectType } from "@/features/editor/semantic/source";
->>>>>>> origin/main
 
 /** A task block cut and pasted elsewhere reappears within this time; only then is it "removed". */
 const REMOVAL_GRACE_MS = 1500;
@@ -88,20 +84,13 @@ function useSuggestionsSetting(): boolean {
 }
 
 /**
-<<<<<<< HEAD
- * The body of a page (or, from M4d, a task): the block editor with autosave
- * through the operation queue (U3). Edits become operations, batched and sent
- * one request at a time with the version they were based on, kept on the
- * device until the server confirms them. A save from another window is a
- * conflict the person resolves (keep mine, take theirs, review), not an
- * overwrite. Until live co-editing (V1-17) nothing is merged.
-=======
  * The body of a page (from M4d a task, and a meeting's notes): the block
- * editor with autosave.
- * Saves are debounced and strictly one at a time, each carrying the version
- * it was based on, so a save from another window is detected instead of
- * overwritten. Until live co-editing (V1-17) that is reported, not merged.
->>>>>>> origin/main
+ * editor with autosave through the operation queue (U3). Edits become
+ * operations, batched and sent one request at a time with the version they
+ * were based on, kept on the device until the server confirms them. A save
+ * from another window is a conflict the person resolves (keep mine, take
+ * theirs, review), not an overwrite. Until live co-editing (V1-17) nothing is
+ * merged.
  */
 export function ObjectEditor({
   objectId,
