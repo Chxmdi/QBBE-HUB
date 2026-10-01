@@ -11,6 +11,7 @@ import { fill, formsV2Text } from "@/features/forms-v2/messages";
 import {
   FORM_PROPERTY_KINDS,
   MAX_PROPERTIES,
+  SHOW_IF_OPS,
   TYPE_KEY_PATTERN,
   localized,
   parseFormAnswers,
@@ -22,12 +23,19 @@ export type FormsV2Result<T = undefined> = { ok: true; data?: T } | { ok: false;
 
 const text = z.object({ en: z.string().trim().max(200), fr: z.string().trim().max(200) });
 
+const showIfSchema = z.object({
+  key: z.string(),
+  op: z.enum(SHOW_IF_OPS),
+  value: z.union([z.string().max(200), z.number(), z.boolean()]).optional(),
+});
+
 const propertySchema = z.object({
   key: z.string(),
   kind: z.enum(FORM_PROPERTY_KINDS),
   label: text,
   required: z.boolean(),
   options: z.array(z.object({ key: z.string(), label: text })).max(50).optional(),
+  showIf: showIfSchema.optional(),
 });
 
 const formSchema = z.object({
@@ -66,6 +74,7 @@ export async function createFormV2(input: FormV2Input): Promise<FormsV2Result<{ 
   const properties: FormV2Property[] = form.properties.map((p) => ({
     ...p,
     ...(p.kind === "select" ? { options: p.options ?? [] } : { options: undefined }),
+    ...(p.showIf ? { showIf: p.showIf } : { showIf: undefined }),
   }));
   const problem = propertiesProblem(form.typeKey, properties);
   if (problem) return { ok: false, error: m.errors[problem] };
@@ -158,6 +167,10 @@ export async function submitFormV2(
   });
   const row = Array.isArray(data) ? data[0] : data;
   if (error || !row) {
+    if (error?.code === "42501" && /not one you uploaded/.test(error.message)) {
+      const file = properties.find((p) => p.kind === "file" && parsed.answers[p.key] !== undefined);
+      return { ok: false, error: fill(m.errors.fileNotYours, { label: file ? localized(file.label, locale) : "" }) };
+    }
     return { ok: false, error: error?.code === "42501" ? m.errors.notOpen : m.errors.generic };
   }
   revalidatePath(`/forms-v2/${formId}`);
