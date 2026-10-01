@@ -1,5 +1,5 @@
 -- Workspace OS integration I1 follow-up: an undo must reverse the change set
--- it names (20261107040100_change_set_undo_guard.sql). A member cannot mark
+-- it names (20261107040300_change_set_undo_guard.sql). A member cannot mark
 -- another person's change set undone by recording a change set of made-up
 -- records with undo_of; an undo names the original's records, which puts them
 -- under the capability check; a change set of records the registry cannot
