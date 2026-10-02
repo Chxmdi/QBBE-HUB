@@ -9,6 +9,12 @@ import { getLens } from "@/features/lenses/services/lens-store.queries";
 import { composeSpec, parseViewBlockProps } from "@/features/lenses/view-block/schema";
 import { findViewBlocks, type ExportedView } from "./transfer";
 
+/**
+ * Views one export runs at most. Each is a whole lens export, so a page
+ * cannot turn one export into dozens; later views are named, not exported.
+ */
+export const MAX_EXPORTED_VIEWS = 10;
+
 type ServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
 /**
@@ -18,8 +24,9 @@ type ServerClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
  * filters, sort and columns apply; its "rows shown" cap and a reader's
  * page-local filters do not, because a file is the whole view, not a screen
  * of it (the same rule as a lens's own CSV). A view the exporter cannot run
- * (its saved lens is not theirs to see, its settings are damaged, or lenses
- * are switched off) is named in the Markdown and has no file.
+ * (its saved lens is not theirs to see, its settings are damaged, lenses
+ * are switched off, or the page has more than MAX_EXPORTED_VIEWS) is named
+ * in the Markdown and has no file.
  */
 export async function exportViews(input: {
   supabase: ServerClient;
@@ -47,7 +54,7 @@ export async function exportViews(input: {
   for (const [index, { block, raw }] of found.entries()) {
     const props = parseViewBlockProps(raw);
     const named = (extra?: string | null) => props?.title || extra || input.fallbackName(index + 1);
-    if (!props || !catalog) {
+    if (!props || !catalog || index >= MAX_EXPORTED_VIEWS) {
       views.push({ block, name: named(), csv: null });
       continue;
     }

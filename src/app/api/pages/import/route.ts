@@ -10,6 +10,7 @@ import { contentToPlainText } from "@/features/editor/adapter/content";
 import { positionAtEnd } from "@/features/pages/tree";
 import { checkImportFile, IMPORT_MAX_BYTES, IMPORT_MAX_CONTENT_BYTES, importKind } from "@/features/pages/transfer/limits";
 import { importToContent } from "@/features/pages/transfer/transfer";
+import { readAtMost } from "@/features/pages/transfer/body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,13 +41,16 @@ export async function POST(request: Request) {
   const limited = await enforceRateLimit("page:import", session.userId);
   if (limited) return fail("rate_limited", 429, limited.error);
 
-  // Refuse an oversized upload before reading it.
-  const declared = Number(request.headers.get("content-length") ?? "0");
-  if (declared > IMPORT_MAX_BYTES + ENVELOPE_BYTES) return fail("tooLarge", 413);
+  // Refuse an oversized upload before reading it, and stop reading one that
+  // grows past the limit without saying its size (a chunked upload).
+  const ceiling = IMPORT_MAX_BYTES + ENVELOPE_BYTES;
+  if (Number(request.headers.get("content-length") ?? "0") > ceiling) return fail("tooLarge", 413);
+  const raw = await readAtMost(request, ceiling);
+  if (raw === "tooLarge") return fail("tooLarge", 413);
 
   let form: FormData;
   try {
-    form = await request.formData();
+    form = await new Response(raw, { headers: { "content-type": request.headers.get("content-type") ?? "" } }).formData();
   } catch {
     return fail("invalid_request", 400);
   }

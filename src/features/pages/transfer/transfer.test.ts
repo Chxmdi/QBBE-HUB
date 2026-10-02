@@ -6,6 +6,7 @@ import { checkImportFile, importKind, IMPORT_MAX_BYTES } from "./limits";
 import { contentToMarkdown, markdownToContent, parseInline } from "./markdown";
 import { buildPageExport, findViewBlocks, importToContent, slug, titleFromFileName } from "./transfer";
 import { createZip, crc32 } from "./zip";
+import { readAtMost } from "./body";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -407,5 +408,80 @@ describe("X1-4 import limits", () => {
     expect(checkImportFile({ name: "a.md", size: IMPORT_MAX_BYTES + 1 })).toBe("tooLarge");
     expect(checkImportFile({ name: "a.md", size: 0 })).toBe("empty");
     expect(checkImportFile({ name: "a.pdf", size: 10 })).toBe("unsupported");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Found in review: each would have broken a round trip or a limit.
+
+describe("X1 review fixes", () => {
+  it("keeps neighbouring styles apart and shares a style across runs", () => {
+    const content = doc(
+      p(t("a", { bold: true }), t("b", { italic: true })),
+      p(t("a", { bold: true }), t("b", { bold: true, italic: true })),
+      p(t("x", { italic: true }), t("y", { italic: true, strike: true }), t("z", { strike: true })),
+    );
+    const { back } = roundTrip(content);
+    expect(canonical(back.content.blocks)).toEqual(canonical(content.blocks));
+    expect(contentToMarkdown(content)).toBe("**a**<!-- -->*b*\n\n**a*b***\n\n*x~~y~~*~~z~~\n");
+  });
+
+  it("keeps a title or heading ending in # and drops a trailing line break", () => {
+    const content = doc({ type: "heading", props: { level: 2 }, content: [t("C #")] }, p(t("a\n")));
+    const { back } = roundTrip(content, "Plan #");
+    expect(back.title).toBe("Plan #");
+    expect(canonical(back.content.blocks)).toEqual(canonical(doc({ type: "heading", props: { level: 2 }, content: [t("C #")] }, p(t("a"))).blocks));
+  });
+
+  it("falls back to the file name when the leading heading is empty", () => {
+    expect(importToContent("markdown", "#\n\nhello", "notes.md").title).toBe("notes");
+  });
+
+  it("escapes how a view's line starts", () => {
+    const block = viewBlock("x");
+    const out = buildPageExport({ title: "", content: doc(block), views: [{ block, name: "- Q3 # numbers", csv: null }], date: new Date("2031-01-01") });
+    expect(out.body).toBe("\\- Q3 # numbers\n");
+    expect(markdownToContent(out.body as string).content.blocks[0].type).toBe("paragraph");
+  });
+
+  it("keeps a link whose unquoted address ends in a slash", () => {
+    const { content } = htmlToContent("<p><a href=https://example.com/>Example</a> after</p><svg/><p>still here</p>");
+    expect(canonical(content.blocks)).toEqual(
+      canonical([p({ type: "link", href: "https://example.com/", content: [t("Example")] }, t(" after")), p(t("still here"))]),
+    );
+  });
+
+  it("reads hostile link targets and checkbox lists in linear time", () => {
+    const started = Date.now();
+    markdownToContent("[](".repeat(300_000));
+    markdownToContent("[](<".repeat(200_000));
+    markdownToContent(`[a](${" ".repeat(400_000)}`);
+    htmlToContent(`<ul><li>x${"<input type=checkbox>".repeat(40_000)}</li></ul>`);
+    expect(Date.now() - started).toBeLessThan(3_000);
+  });
+});
+
+describe("X1-4 upload ceiling", () => {
+  const streamed = (chunks: number[]) =>
+    new Request("http://localhost/api/pages/import", {
+      method: "POST",
+      body: new ReadableStream({
+        start(controller) {
+          for (const size of chunks) controller.enqueue(new Uint8Array(size).fill(97));
+          controller.close();
+        },
+      }),
+      // A streamed body sends no Content-Length.
+      duplex: "half",
+    } as RequestInit);
+
+  it("reads a body that stays under the ceiling", async () => {
+    const body = await readAtMost(streamed([100, 200]), 1000);
+    expect(body).not.toBe("tooLarge");
+    expect((body as Uint8Array).length).toBe(300);
+  });
+
+  it("stops reading a body without a declared size as soon as it passes the ceiling", async () => {
+    expect(await readAtMost(streamed([600, 600, 600]), 1000)).toBe("tooLarge");
   });
 });

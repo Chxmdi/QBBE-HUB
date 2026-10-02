@@ -51,6 +51,7 @@ const BLOCK_STARTS_CLOSE_P = new Set([
   "h5", "h6", "header", "hr", "main", "nav", "ol", "p", "pre", "section", "table", "ul", "figure", "details",
 ]);
 
+const FOREIGN = new Set(["svg", "math"]);
 /** Open elements kept at once; a deeper file is read flatter, never slower. */
 const MAX_OPEN = 256;
 
@@ -156,8 +157,11 @@ export function parseHtml(source: string): Element {
 
     const element: Element = { tag: name, attrs: parseAttributes(inside), children: [] };
     top().children.push(element);
-    // Past this depth new elements still hold their text, but in their parent.
-    if (!VOID.has(name) && !inside.trimEnd().endsWith("/") && stack.length < MAX_OPEN) stack.push(element);
+    // A "/" before ">" closes only foreign elements (svg, math); on HTML ones browsers ignore it,
+    // so `<a href=https://example.org/>` stays open. Past MAX_OPEN, new elements still hold their
+    // text, but in their parent.
+    const selfClosing = FOREIGN.has(name) && /(^|\s|["'])\/$/.test(inside.trimEnd());
+    if (!VOID.has(name) && !selfClosing && stack.length < MAX_OPEN) stack.push(element);
   }
   return root;
 }
@@ -298,16 +302,22 @@ function listItem(li: Element, ordered: boolean, depth: number): EditorBlock {
   const own: Node[] = [];
   const rest: Node[] = [];
   let checkbox: Element | null = null;
+  /** Whether the item's own text so far shows anything (kept as it grows, so a long item is read once). */
+  let ownHasText = false;
+  const addOwn = (node: Node) => {
+    own.push(node);
+    if (!ownHasText) ownHasText = textContent(node).trim() !== "";
+  };
   for (const child of li.children) {
     if (rest.length === 0 && !isBlockElement(child)) {
-      if (isElement(child) && child.tag === "input" && (child.attrs.type ?? "").toLowerCase() === "checkbox" && !checkbox && !hasText(inline(own))) {
+      if (isElement(child) && child.tag === "input" && (child.attrs.type ?? "").toLowerCase() === "checkbox" && !checkbox && !ownHasText) {
         checkbox = child;
         continue;
       }
-      own.push(child);
-    } else if (rest.length === 0 && isElement(child) && child.tag === "p" && !hasText(inline(own))) {
+      addOwn(child);
+    } else if (rest.length === 0 && isElement(child) && child.tag === "p" && !ownHasText) {
       // <li><p>text</p></li> is the item's own text.
-      own.push(...child.children);
+      child.children.forEach(addOwn);
       rest.push("");
     } else {
       rest.push(child);

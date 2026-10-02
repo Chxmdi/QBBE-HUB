@@ -56,6 +56,11 @@ function escapeLineStart(full: string): string {
   return line;
 }
 
+/** A trailing run of "#" would be read as a heading's closing marks. */
+function headingText(markdown: string): string {
+  return markdown.replace(/(^|\s)(#+)$/, "$1\\$2");
+}
+
 function stylesOf(run: InlineText): Styles {
   const s = run.styles ?? {};
   return {
@@ -73,23 +78,85 @@ function codeSpan(value: string): string {
   return `${fence}${pad}${value}${pad}${fence}`;
 }
 
-/** One styled run, its markers kept off the spaces around it (`** a**` is not bold). */
-function renderRun(run: InlineText, inCell: boolean): string {
-  const styles = stylesOf(run);
-  const parts = run.text.split("\n");
-  const rendered = parts.map((part) => {
-    if (part === "") return "";
-    const lead = /^\s*/.exec(part)![0];
-    const trail = part.length > lead.length ? /\s*$/.exec(part)![0] : "";
-    const core = part.slice(lead.length, part.length - trail.length);
-    if (core === "") return part;
-    let out = styles.code ? codeSpan(core) : escapeInline(core);
-    if (styles.strike) out = `~~${out}~~`;
-    if (styles.italic) out = `*${out}*`;
-    if (styles.bold) out = `**${out}**`;
-    return `${lead}${out}${trail}`;
-  });
-  return rendered.join(inCell ? "<br>" : "\\\n");
+type Token =
+  | { kind: "text"; text: string; styles: Styles }
+  | { kind: "break" }
+  | { kind: "raw"; markdown: string };
+
+const EMPHASIS = [
+  ["bold", "**"],
+  ["italic", "*"],
+  ["strike", "~~"],
+] as const;
+
+/** Markers wrap the text, never the spaces at its edges (`** a**` is not bold). */
+function wrap(inner: string, marker: string): string {
+  const lead = /^\s*/.exec(inner)![0];
+  if (lead.length === inner.length) return inner;
+  const trail = /\s*$/.exec(inner)![0];
+  return `${lead}${marker}${inner.slice(lead.length, inner.length - trail.length)}${marker}${trail}`;
+}
+
+/**
+ * Appends, keeping a closing marker from running into the next opening one
+ * (`**a**` then `*b*` would read as `**a***b*`): an empty comment between
+ * them is invisible to every Markdown reader.
+ */
+function append(out: string, next: string): string {
+  const last = out[out.length - 1];
+  return (last === "*" || last === "~") && next[0] === last ? `${out}<!-- -->${next}` : out + next;
+}
+
+/** Styled runs as nested emphasis: a style shared by neighbouring runs opens once around all of them. */
+function emphasis(tokens: Extract<Token, { kind: "text" }>[], active: ReadonlySet<string>): string {
+  let out = "";
+  let i = 0;
+  while (i < tokens.length) {
+    const token = tokens[i];
+    const next = EMPHASIS.find(([style]) => token.styles[style] && !active.has(style));
+    if (!next) {
+      out = append(out, token.styles.code ? codeSpan(token.text) : escapeInline(token.text));
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < tokens.length && tokens[j].styles[next[0]]) j++;
+    out = append(out, wrap(emphasis(tokens.slice(i, j), new Set([...active, next[0]])), next[1]));
+    i = j;
+  }
+  return out;
+}
+
+function render(tokens: Token[], inCell: boolean): string {
+  // Line breaks at the very end have no Markdown form; leave them out.
+  while (tokens.length && tokens[tokens.length - 1].kind === "break") tokens.pop();
+  let out = "";
+  let i = 0;
+  while (i < tokens.length) {
+    const token = tokens[i];
+    if (token.kind === "break") {
+      out += inCell ? "<br>" : "\\\n";
+      i++;
+    } else if (token.kind === "raw") {
+      out = append(out, token.markdown);
+      i++;
+    } else {
+      let j = i;
+      while (j < tokens.length && tokens[j].kind === "text") j++;
+      out = append(out, emphasis(tokens.slice(i, j) as Extract<Token, { kind: "text" }>[], new Set()));
+      i = j;
+    }
+  }
+  return out;
+}
+
+function tokens(runs: InlineText[]): Token[] {
+  return runs.flatMap((run) =>
+    run.text.split("\n").flatMap((part, index): Token[] => [
+      ...(index > 0 ? [{ kind: "break" as const }] : []),
+      ...(part ? [{ kind: "text" as const, text: part, styles: stylesOf(run) }] : []),
+    ]),
+  );
 }
 
 function linkTarget(href: string): string {
@@ -98,19 +165,18 @@ function linkTarget(href: string): string {
 
 export function inlineToMarkdown(content: EditorBlock["content"], inCell = false): string {
   if (!Array.isArray(content)) return typeof content === "string" ? escapeInline(content) : "";
-  return content
-    .map((item) => {
-      if (item.type === "text") return renderRun(item as InlineText, inCell);
-      if (item.type === "link") {
-        const link = item as InlineLink;
-        const label = link.content.map((part) => renderRun(part, inCell)).join("");
-        const href = safeHref(link.href);
-        return href ? `[${label}](${linkTarget(href)})` : label;
-      }
-      const value = (item as { text?: unknown }).text;
-      return typeof value === "string" ? escapeInline(value) : "";
-    })
-    .join("");
+  const all: Token[] = content.flatMap((item): Token[] => {
+    if (item.type === "text") return tokens([item as InlineText]);
+    if (item.type === "link") {
+      const link = item as InlineLink;
+      const label = render(tokens(link.content), inCell);
+      const href = safeHref(link.href);
+      return [{ kind: "raw", markdown: href ? `[${label}](${linkTarget(href)})` : label }];
+    }
+    const value = (item as { text?: unknown }).text;
+    return typeof value === "string" ? tokens([{ type: "text", text: value }]) : [];
+  });
+  return render(all, inCell);
 }
 
 interface Chunk {
@@ -193,8 +259,7 @@ function renderBlock(block: EditorBlock, options: MarkdownExportOptions, number:
     }
     case "heading": {
       const level = Math.min(6, Math.max(1, Number(block.props?.level) || 1));
-      // A trailing run of "#" would be read as the heading's closing marks.
-      const body = inlineToMarkdown(block.content).replace(/\\\n/g, " ").trimStart().replace(/(\s)(#+)$/, "$1\\$2");
+      const body = headingText(inlineToMarkdown(block.content).replace(/\\\n/g, " ").trimStart());
       return [{ text: `${"#".repeat(level)} ${body}`.trimEnd(), list: false }, ...after()];
     }
     case "bulletListItem":
@@ -249,7 +314,7 @@ function renderBlock(block: EditorBlock, options: MarkdownExportOptions, number:
     }
     case "query": {
       const line = options.viewLine?.(block) ?? null;
-      return line ? [{ text: line, list: false }] : [];
+      return line ? [{ text: lines(line), list: false }] : [];
     }
     case "columnList":
     case "column":
@@ -266,7 +331,7 @@ function renderBlock(block: EditorBlock, options: MarkdownExportOptions, number:
 export function contentToMarkdown(content: EditorContent, options: MarkdownExportOptions = {}): string {
   const chunks = renderBlocks(content.blocks, options);
   if (options.title !== undefined && options.title.trim() !== "") {
-    chunks.unshift({ text: `# ${escapeInline(options.title.trim())}`, list: false });
+    chunks.unshift({ text: `# ${headingText(escapeInline(options.title.trim()))}`, list: false });
   }
   return `${join(chunks)}\n`;
 }
@@ -512,7 +577,7 @@ export function markdownToContent(source: string): { title: string | null; conte
   let title: string | null = null;
   const first = blocks[0];
   if (first?.type === "heading" && first.props?.level === 1 && !first.children) {
-    title = plain(first.content as InlineContent[]).replace(/\s+/g, " ").trim();
+    title = plain(first.content as InlineContent[]).replace(/\s+/g, " ").trim() || null;
     blocks.shift();
   }
   return { title, content: { version: CONTENT_VERSION, blocks } };
@@ -551,6 +616,8 @@ class Scanner {
   /** For each search (by key), a position from which it is known to fail. */
   private failed = new Map<string, number>();
   private brackets: Map<number, number> | null = null;
+  private parens: Map<number, number> | null = null;
+  private nextIndex = new Map<string, Int32Array>();
 
   constructor(readonly source: string) {}
 
@@ -651,38 +718,67 @@ class Scanner {
     const j = this.brackets.get(at);
     if (j === undefined || source[j + 1] !== "(") return null;
     const label = source.slice(at + 1, j);
-    let k = j + 2;
-    const limit = Math.min(source.length, k + MAX_TARGET);
-    while (source[k] === " ") k++;
-    let href = "";
+    const open = j + 1;
+    let k = open + 1;
+    for (let spaces = 0; source[k] === " " && spaces < 32; spaces++) k++;
+    let href: string;
     if (source[k] === "<") {
-      const close = source.indexOf(">", k);
-      if (close < 0 || close > limit) return null;
+      const close = this.next(">", k);
+      if (close < 0 || close - k > MAX_TARGET) return null;
       href = source.slice(k + 1, close);
       k = close + 1;
     } else {
-      let parens = 0;
-      for (; k < limit; k++) {
-        const c = source[k];
-        if (c === "\\" && k + 1 < source.length) {
-          href += source[k + 1];
-          k++;
-          continue;
-        }
-        if (/\s/.test(c)) break;
-        if (c === "(") parens++;
-        if (c === ")") {
-          if (parens === 0) break;
-          parens--;
-        }
-        href += c;
+      // With no title, the target runs to the ")" matching the opening "(".
+      this.parens ??= this.matchParens();
+      const close = this.parens.get(open);
+      if (close !== undefined && close >= k && close - k <= MAX_TARGET) {
+        return { label, href: unescape(source.slice(k, close)), end: close + 1 };
       }
+      const space = this.next(" ", k);
+      const stop = space < 0 ? source.length : space;
+      if (stop - k > MAX_TARGET) return null;
+      href = unescape(source.slice(k, stop));
+      k = stop;
     }
     // An optional "title" after the target is read and ignored.
     const title = /^\s*(?:"[^"]{0,500}"|'[^']{0,500}')?\s*\)/.exec(source.slice(k, k + 600));
     if (!title) return null;
     return { label, href, end: k + title[0].length };
   }
+
+  /** The ")" matching each "(" with no space between, found in one pass. */
+  private matchParens(): Map<number, number> {
+    const { source } = this;
+    const pairs = new Map<number, number>();
+    let open: number[] = [];
+    for (let j = 0; j < source.length; j++) {
+      const c = source[j];
+      if (c === "\\") j++;
+      else if (c === "(") open.push(j);
+      else if (c === ")" && open.length) pairs.set(open.pop()!, j);
+      else if (/\s/.test(c)) open = [];
+    }
+    return pairs;
+  }
+
+  /** The next index of `char` (" " meaning any whitespace) at or after `from`, from a table built once. */
+  next(char: ">" | " ", from: number): number {
+    let table = this.nextIndex.get(char);
+    if (!table) {
+      const { source } = this;
+      table = new Int32Array(source.length + 1);
+      table[source.length] = -1;
+      for (let j = source.length - 1; j >= 0; j--) {
+        table[j] = (char === " " ? /\s/.test(source[j]) : source[j] === char) ? j : table[j + 1];
+      }
+      this.nextIndex.set(char, table);
+    }
+    return from >= this.source.length ? -1 : table[from];
+  }
+}
+
+function unescape(value: string): string {
+  return value.replace(/\\([!-/:-@[-`{-~])/g, "$1");
 }
 
 function withStyle(styles: Styles, key: keyof Styles): Styles {
