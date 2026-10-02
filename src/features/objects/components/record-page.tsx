@@ -15,6 +15,9 @@ import { ObjectComments } from "@/features/object-comments/components/object-com
 import { contentAdapterFor } from "@/features/versions/adapters/registry";
 import { VersionHistory } from "@/features/versions/components/version-history";
 import { listObjectVersions } from "@/features/versions/services/version.queries";
+import { createPagesT } from "@/features/pages/i18n";
+import { ActivityFeed } from "@/features/pages/components/page-collab-activity-feed";
+import { ActivityLoading } from "@/features/pages/components/page-collab-activity";
 import { getObjectsT } from "../i18n/translate";
 import type { ObjectsT } from "../i18n/translate";
 import type { RecordPageData } from "../services/record-page.queries";
@@ -142,7 +145,35 @@ export async function RecordPage({ data, session }: { data: RecordPageData; sess
         );
       })}
       <RelatedSection data={data} locale={locale} t={t} typeLabel={typeLabel} />
+      <ActivitySection objectId={object.id} locale={locale} errorText={t("record.section.error")} />
     </div>
+  );
+}
+
+/**
+ * Wave 2 C2: who did what to this record and when, newest first. Shown when
+ * the activity switch (wos_pages, beside this page's wos_objects) is on.
+ */
+async function ActivitySection({ objectId, locale, errorText }: { objectId: string; locale: Locale; errorText: string }) {
+  if (!(await isEnabled("wos_pages"))) return null;
+  const t = createPagesT(locale);
+  return (
+    <section aria-labelledby="record-activity" data-testid="record-section-activity">
+      <h2 id="record-activity" className="section-heading mb-2">
+        {t("units.c2.heading")}
+      </h2>
+      <SectionBoundary
+        fallback={
+          <p role="alert" className="meta">
+            {errorText}
+          </p>
+        }
+      >
+        <Suspense fallback={<ActivityLoading label={t("units.c2.loading")} />}>
+          <ActivityFeed objectId={objectId} kind="record" />
+        </Suspense>
+      </SectionBoundary>
+    </section>
   );
 }
 
