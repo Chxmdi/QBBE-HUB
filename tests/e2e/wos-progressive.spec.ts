@@ -57,6 +57,11 @@ test("selected lines turn into tasks and into a page, keeping the text", async (
   // Select both list items and turn them into tasks.
   await page.keyboard.press("Shift+ArrowUp");
   await page.keyboard.press("Shift+Home");
+  // The editor reads selection changes a moment after the browser makes them:
+  // open the menu only once the selection holds both lines.
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.toString() ?? ""))
+    .toMatch(new RegExp(`Book the hall ${stamp}[\\s\\S]*Order chairs ${stamp}`));
   await page.keyboard.press("Control+/");
   await page.getByRole("dialog", { name: "Block menu" }).getByRole("button", { name: "Turn into tasks…" }).click();
   const turn = page.getByRole("dialog", { name: "Turn into tasks" });
