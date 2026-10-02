@@ -134,15 +134,20 @@ export function createWorkspaceBlocks(t: EditorT) {
       render: ({ block, editor }) => {
         const url = safeBookmarkUrl(block.props.url);
         if (!url) {
-          if (!editor.isEditable) return <span />;
+          // A stored address that is not a secure link says so (E3-4); an empty one says what to do (E3-5).
+          const refused = block.props.url.trim() ? <p role="note" className="w-full rounded-(--radius-sm) border border-line p-3 text-body-sm text-muted">{t("units.e3.links.bookmarkUnsupported")}</p> : null;
+          if (!editor.isEditable) return refused ?? <p className="w-full text-body-sm text-muted">{t("units.e3.links.bookmarkEmpty")}</p>;
           return (
-            <UrlForm
-              label={t("bookmark.inputLabel")}
-              placeholder={t("bookmark.placeholder")}
-              submitLabel={t("bookmark.add")}
-              validate={(value) => (safeBookmarkUrl(value) ? null : t("bookmark.invalid"))}
-              onSubmit={(value) => editor.updateBlock(block, { props: { url: safeBookmarkUrl(value)! } })}
-            />
+            <div className="flex w-full flex-col gap-2">
+              {refused}
+              <UrlForm
+                label={t("bookmark.inputLabel")}
+                placeholder={t("bookmark.placeholder")}
+                submitLabel={t("bookmark.add")}
+                validate={(value) => (safeBookmarkUrl(value) ? null : t("bookmark.invalid"))}
+                onSubmit={(value) => editor.updateBlock(block, { props: { url: safeBookmarkUrl(value)! } })}
+              />
+            </div>
           );
         }
         const parsed = new URL(url);
@@ -172,7 +177,7 @@ export function createWorkspaceBlocks(t: EditorT) {
       render: ({ block, editor }) => {
         const raw = block.props.url;
         if (!raw) {
-          if (!editor.isEditable) return <span />;
+          if (!editor.isEditable) return <p className="w-full text-body-sm text-muted">{t("units.e3.links.embedEmpty")}</p>;
           return (
             <UrlForm
               label={t("embed.inputLabel")}

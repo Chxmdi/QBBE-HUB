@@ -9,7 +9,9 @@ import { runLens, runLensAll, type RpcClient } from "@/lib/query/run";
 import type { LensNode, LensSpec } from "@/lib/query/spec";
 import { QueryBlock } from "@/features/lenses/query-block";
 import { useLensT } from "@/features/lenses/i18n/client";
-import { formatLensValue } from "@/features/lenses/format";
+import { runLensAggregate } from "@/lib/query/aggregate";
+import { chartData, chartIsEmpty, chartIsGrouped, chartMeasures, chartSpec, chartTotal } from "@/features/lenses/view-block/layouts/d3-chart";
+import { ChartFigure, chartGroupName, chartMeasureLabel } from "@/features/lenses/view-block/layouts/d3-chart-view";
 import { applyDashboardFilters } from "./filters";
 import type { DashboardFilters, Tile, TileSource } from "./schema";
 
@@ -153,46 +155,46 @@ function Bar({ percent, label, detail }: { percent: number; label: string; detai
   );
 }
 
+/**
+ * The same chart as a view block's chart layout (D3): totals from
+ * lens_aggregate, which runs as whoever is looking, drawn by ChartFigure.
+ */
 function ChartTile({ tile, filters, catalog, timeZone }: TileProps & { tile: Extract<Tile, { kind: "chart" }> }) {
   const t = useLensT();
   const locale = useLocale();
+  const settings = tile.chart;
   const state = useTileData(async (client) => {
     const spec = await resolveSpec(client, tile.source, filters, catalog);
     if (spec === "missing") return spec;
-    const result = await runLens(client, { ...spec, groupBy: { property: tile.groupBy }, sort: [], limit: 1, offset: 0 }, { timeZone });
-    return { groups: result.groups ?? [], type: result.type };
+    const type = catalog[spec.type];
+    const chart = type ? chartSpec({ ...spec, groupBy: { property: tile.groupBy } }, settings, type) : "invalid";
+    // Settings the chart cannot draw say so, rather than looking like a failed load.
+    if (chart === "invalid" || chart === "needsGroup") return { problem: chart };
+    return { result: await runLensAggregate(client, chart, chartMeasures(settings), { timeZone }), type: spec.type };
   }, [JSON.stringify(tile), JSON.stringify(filters)]);
   if (state.status !== "ready") return <TileState state={state} />;
-  const property = findProperty(catalog, state.value.type, tile.groupBy);
-  const max = Math.max(1, ...state.value.groups.map((g) => g.total));
-  if (!state.value.groups.length) return <p className="text-[13px] text-muted">{t("dashboard.noData")}</p>;
-  // A table with a bar in each row: readable by screen readers as is, no separate fallback needed.
+  if ("problem" in state.value) {
+    return (
+      <p role="alert" className="text-[13px] text-danger-fg">
+        {t(state.value.problem === "invalid" ? "units.d3.states.invalid" : "units.d3.states.needsGroup")}
+      </p>
+    );
+  }
+  const { result, type } = state.value;
+  const groupProperty = result.groupBy ? findProperty(catalog, type, result.groupBy) : undefined;
+  const data = chartData(result, (key, label) => chartGroupName(groupProperty, key, label, locale, timeZone, t));
+  if (chartIsGrouped(settings.kind) && chartIsEmpty(data)) return <p className="text-[13px] text-muted">{t("dashboard.noData")}</p>;
+  const measureProperty = settings.property ? findProperty(catalog, type, settings.property) : undefined;
   return (
-    <table className="w-full text-[13px]">
-      <caption className="sr-only">{tile.title || (property ? localized(property.name, locale) : tile.groupBy)}</caption>
-      <thead className="sr-only">
-        <tr>
-          <th scope="col">{property ? localized(property.name, locale) : tile.groupBy}</th>
-          <th scope="col">{t("dashboard.count")}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {state.value.groups.map((g) => {
-          const label = g.key === null ? t("common.notSet") : property ? formatLensValue(property, g.label ?? g.key, locale, timeZone) : g.key;
-          return (
-            <tr key={g.key ?? "none"}>
-              <th scope="row" className="w-2/5 truncate py-1 pr-2 text-left font-normal text-ink">{label}</th>
-              <td className="py-1">
-                <span className="flex items-center gap-2">
-                  <span className="h-3 rounded-sm bg-(--color-chart-primary)" style={{ width: `${Math.max(2, (g.total / max) * 100)}%` }} aria-hidden />
-                  <span className="tabular-nums text-muted">{g.total}</span>
-                </span>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <ChartFigure
+      kind={settings.kind}
+      data={data}
+      total={chartTotal(result)}
+      measureLabel={chartMeasureLabel(settings, measureProperty, locale, t)}
+      groupLabel={groupProperty ? localized(groupProperty.name, locale) : tile.groupBy}
+      locale={locale}
+      t={t}
+    />
   );
 }
 

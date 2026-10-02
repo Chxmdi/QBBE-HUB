@@ -1,12 +1,22 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { fill, type TemplatesV2Text } from "@/features/templates-v2/messages";
 import { applyPageTemplateV2 } from "@/features/templates-v2/services/templates-v2.commands";
-import { PAGE_VARIABLES, renderPageBody, type PageBody, type PageVariableName, type PageVariables } from "@/features/templates-v2/template";
+import { listHubProgramsV2, type HubPrograms } from "@/features/templates-v2/services/template-versions.commands";
+import {
+  PAGE_VARIABLES,
+  planHub,
+  renderPageBody,
+  renderTemplateDocument,
+  type PageBody,
+  type PageVariableName,
+  type PageVariables,
+} from "@/features/templates-v2/template";
+import { TemplatePreview } from "./template-preview";
 
 /** A page the person may put the new page inside. */
 export interface ParentOption {
@@ -57,13 +67,49 @@ export function PageTemplateForm({
     [template.body.variables],
   );
   const rendered = useMemo(() => renderPageBody(template.body, variables, start, language), [template.body, variables, start, language]);
-  const kindLabel = (type: string | undefined) =>
-    type === "heading" ? text.kindLabels.heading : type === "checkListItem" ? text.kindLabels.todo : text.kindLabels.paragraph;
+  const blocks = useMemo(
+    () => renderTemplateDocument(template.body, variables, start, language),
+    [template.body, variables, start, language],
+  );
+  const pageTitle = title.trim() || rendered.title;
+  const hub = template.body.hub;
+  const plan = useMemo(() => (hub ? planHub(hub, pageTitle, start, language) : []), [hub, pageTitle, start, language]);
+  // A hub's project goes in a program the person chooses (T1); the list is
+  // read when a hub template is shown, and can be read again after a failure.
+  const [programs, setPrograms] = useState<HubPrograms | null>(null);
+  const [programsFailed, setProgramsFailed] = useState(false);
+  const [programId, setProgramId] = useState("");
+  const [programsAttempt, setProgramsAttempt] = useState(0);
+  useEffect(() => {
+    if (!hub) return;
+    let cancelled = false;
+    listHubProgramsV2().then(
+      (result) => {
+        if (cancelled) return;
+        if (!result.ok) {
+          setProgramsFailed(true);
+          return;
+        }
+        setPrograms(result.data);
+        setProgramId((current) => current || (result.data.outsideProgram ? "none" : (result.data.programs[0]?.id ?? "")));
+      },
+      () => {
+        if (!cancelled) setProgramsFailed(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [hub, programsAttempt]);
+  const dateText = (value: string) =>
+    new Intl.DateTimeFormat(locale === "fr-CA" ? "fr-CA" : "en-CA", { dateStyle: "medium", timeZone: "UTC" }).format(
+      new Date(`${value}T00:00:00Z`),
+    );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!where) {
+    if (!where || (hub && !programId)) {
       setError(text.errors.destination);
       return;
     }
@@ -75,6 +121,7 @@ export function PageTemplateForm({
       start,
       locale: language,
       variables,
+      ...(hub ? { programId: programId === "none" ? null : programId } : {}),
     });
     if (!result.ok) {
       setBusy(false);
@@ -139,6 +186,49 @@ export function PageTemplateForm({
             {text.startHint}
           </p>
         </div>
+        {hub ? (
+          <div>
+            <Label htmlFor={`${id}-program`}>{text.hub.program}</Label>
+            {programsFailed ? (
+              <p role="alert" className="text-sm text-danger-fg">
+                {text.hub.programsFailed}{" "}
+                <button
+                  type="button"
+                  className="font-semibold text-brand-fg underline"
+                  onClick={() => {
+                    setProgramsFailed(false);
+                    setProgramsAttempt((n) => n + 1);
+                  }}
+                >
+                  {text.manage.retry}
+                </button>
+              </p>
+            ) : programs === null ? (
+              <p role="status" className="text-sm text-muted">
+                {text.hub.loadingPrograms}
+              </p>
+            ) : (
+              <Select
+                id={`${id}-program`}
+                value={programId}
+                onChange={(e) => setProgramId(e.target.value)}
+                aria-describedby={`${id}-program-hint`}
+                required
+              >
+                {!programs.outsideProgram && programs.programs.length === 0 ? <option value="">{text.hub.chooseProgram}</option> : null}
+                {programs.outsideProgram ? <option value="none">{text.hub.outsideProgram}</option> : null}
+                {programs.programs.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+            <p id={`${id}-program-hint`} className="mt-1 text-[12.5px] text-muted">
+              {text.hub.programHint}
+            </p>
+          </div>
+        ) : null}
         <fieldset>
           <legend className="mb-1.5 text-[13px] font-medium text-ink">{text.language}</legend>
           <div className="flex gap-6 text-sm">
@@ -189,18 +279,31 @@ export function PageTemplateForm({
         <h2 id={`${id}-preview`} className="mb-3 text-[15px] font-semibold">
           {text.preview}
         </h2>
-        <ul className="space-y-2" aria-live="polite">
-          <li>
-            <span className="meta mr-2">{text.kindLabels.page}</span>
-            <span className="font-medium">{title.trim() || rendered.title}</span>
-          </li>
-          {rendered.blocks.map((block, index) => (
-            <li key={index} className="ml-5 border-l border-line pl-3">
-              <span className="meta mr-2">{kindLabel(block.type)}</span>
-              <span>{Array.isArray(block.content) ? (block.content[0] as { text?: string })?.text ?? "" : ""}</span>
-            </li>
-          ))}
-        </ul>
+        <p className="mb-2">
+          <span className="meta mr-2">{text.kindLabels.page}</span>
+          <span className="font-medium">{pageTitle}</span>
+        </p>
+        <p className="mb-2 text-[12.5px] text-muted">{text.manage.previewHint}</p>
+        <div className="rounded-(--radius-sm) border border-line">
+          <TemplatePreview blocks={blocks} label={text.manage.previewLabel} />
+        </div>
+        {plan.length > 0 ? (
+          <ul className="mt-4 space-y-2" aria-live="polite" data-testid="hub-plan">
+            {plan.map((item, index) => (
+              <li key={index} className={item.depth > 0 ? "ml-5 border-l border-line pl-3" : ""}>
+                <span className="meta mr-2">{text.kindLabels[item.kind]}</span>
+                <span className={item.kind === "project" ? "font-medium" : ""}>{item.title}</span>
+                {item.start || item.due ? (
+                  <span className="meta block text-[12.5px]">
+                    {[item.start ? fill(text.starts, { date: dateText(item.start) }) : null, item.due ? fill(text.due, { date: dateText(item.due) }) : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
     </div>
   );

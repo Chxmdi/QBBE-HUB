@@ -19,10 +19,13 @@ runs:
       shell: bash
       run: npm ci
 
+    # 2.119.0 or later: older CLIs start PostgREST 16.1, whose stale clock
+    # after an idle spell refuses a fresh session token ("JWT issued at
+    # future", fixed in PostgREST 16.3), failing the first sign-in of a run.
     - name: Set up Supabase CLI
       uses: supabase/setup-cli@v3
       with:
-        version: 2.114.0
+        version: 2.119.0
 
     # supabase/config.toml points Auth at an ES256 signing key so sessions
     # are verified locally, as on the hosted projects (#138). The key is

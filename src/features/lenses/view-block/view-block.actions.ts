@@ -13,6 +13,7 @@ import { mergeLocalFilters } from "./local-filters";
 import { calendarDateInZone } from "@/lib/time";
 import { calendarRange, calendarSpec } from "@/features/lenses/calendar/model";
 import { calendarPath, composeSpec, parseViewBlockProps, viewConditionSchema } from "./schema";
+import { withD4Columns } from "./layouts/d4.ids";
 
 /**
  * Data for view blocks (U6). Each read runs as the signed-in reader through
@@ -97,7 +98,7 @@ export async function runViewBlock(propsInput: unknown, localInput: unknown, win
   try {
     // Only the reader's filters: composeSpec adds the block's own conditions.
     const extra = mergeLocalFilters([], local.data, props.pageFilters.enabled ? props.pageFilters.paths : []);
-    let spec = composeSpec({ type, base, props, extra });
+    let spec = withD4Columns(composeSpec({ type, base, props, extra }), props, type, catalogType.properties);
     let datePath: string | null = null;
     if (props.layout === "calendar") {
       const dateKeys = catalogType.properties.filter((p) => p.kind === "date" && !p.timestamp && !p.filterOnly).map((p) => p.key);
