@@ -1,1 +1,102 @@
-/* Wave 2 unit E4: mobile editing. Only E4 edits this file. */
+/* Wave 2 unit E4: mobile editing. Only E4 edits this file.
+ *
+ * Every rule is scoped to the touch toolbar's own classes or to
+ * html[data-qbbe-mobile-editing], which is only set at phone widths with the
+ * switches on, so desktop widths are unchanged (E4-4). */
+
+.qbbe-touch-toolbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 4px;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+}
+.qbbe-touch-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+/* 2.5.8 Target Size: 32 px, above the 24 px minimum; eight fit one row of a
+   320 px screen. */
+.qbbe-touch-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--radius-sm);
+  color: var(--color-ink);
+  touch-action: manipulation;
+}
+.qbbe-touch-button[aria-pressed="true"] {
+  background-color: var(--color-brand-soft);
+  color: var(--color-brand-fg);
+}
+.qbbe-touch-button:active {
+  background-color: var(--color-surface-soft);
+}
+.qbbe-touch-button:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}
+.dark .qbbe-touch-button:focus-visible {
+  outline-color: var(--color-accent);
+}
+@media (forced-colors: active) {
+  .qbbe-touch-button[aria-pressed="true"] {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* At phone widths the workspace's bottom navigation is fixed over the bottom
+   of the screen; e4-mobile.tsx measures it, and the toolbar sticks just
+   above it. */
+html[data-qbbe-mobile-editing] .qbbe-touch-toolbar {
+  bottom: var(--qbbe-mobile-bottom-inset, 0px);
+}
+
+/* The text uses the full width: the hover handle is not reachable by touch,
+   and the touch toolbar moves blocks and opens the block menu instead. */
+html[data-qbbe-mobile-editing] .qbbe-editor .bn-editor {
+  padding-inline: 4px;
+}
+html[data-qbbe-mobile-editing] .qbbe-editor .bn-side-menu {
+  display: none;
+}
+/* Long words and addresses wrap instead of widening the page. */
+html[data-qbbe-mobile-editing] .qbbe-editor .bn-inline-content {
+  overflow-wrap: anywhere;
+}
+/* Wide blocks scroll inside themselves, never the page. */
+html[data-qbbe-mobile-editing] .qbbe-editor .bn-block-content[data-content-type="table"],
+html[data-qbbe-mobile-editing] .qbbe-editor .bn-block-content[data-content-type="codeBlock"] {
+  max-width: 100%;
+  overflow-x: auto;
+}
+html[data-qbbe-mobile-editing] .qbbe-bulk-bar {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+/* Menus fit a 320 px screen with 8 px to spare on each side. The slash
+   menu is also kept short enough to stay clear of the bottom navigation:
+   BlockNote sizes it to the whole window, which the navigation covers. */
+html[data-qbbe-mobile-editing] .bn-suggestion-menu {
+  max-width: calc(100vw - 16px);
+  max-height: min(36vh, 300px) !important;
+  overflow-y: auto;
+}
+html[data-qbbe-mobile-editing] .bn-formatting-toolbar {
+  flex-wrap: wrap;
+  max-width: calc(100vw - 16px);
+  height: auto;
+}

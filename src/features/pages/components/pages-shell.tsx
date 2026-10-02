@@ -19,7 +19,7 @@ export function PagesShell({
   // One column below lg, never wider than the screen: an implicit grid track would grow to the widest content.
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <aside className="lg:border-r lg:border-line lg:pr-3">
+      <aside className="min-w-0 lg:border-r lg:border-line lg:pr-3">
         <PagesSidebar
           pages={sidebar.pages}
           favouriteIds={sidebar.favouriteIds}
