@@ -77,6 +77,17 @@ function commentAs(author: string, pageId: string, body: string, parent?: string
   `);
 }
 
+/**
+ * The id of a comment once it is saved. The comment box keeps its text until
+ * the save returns, and that text alone would already satisfy a getByText
+ * check, so the database is asked until the row is there.
+ */
+async function savedComment(where: string): Promise<string> {
+  let id = "";
+  await expect.poll(() => (id = sql(`select id from public.record_comment where ${where}`)), { timeout: 30_000 }).not.toBe("");
+  return id;
+}
+
 const noticesFor = (user: string, commentId: string) =>
   sql(`select coalesce(string_agg(category, ',' order by category), '') from public.notification
        where user_id = '${user}' and dedupe_key = 'page_comment:${commentId}:${user}'`);
@@ -149,7 +160,8 @@ test("watch a page, hear about comments and replies, and unwatch [switches on]",
   await collab.getByRole("textbox", { name: "Comment" }).fill("Can someone check the totals?");
   await collab.getByRole("button", { name: "Post comment" }).click();
   await expect(collab.getByText("Can someone check the totals?")).toBeVisible();
-  const question = sql(`select id from public.record_comment where parent_id = '${pageId}' and body = 'Can someone check the totals?'`);
+  await expect(collab.getByRole("textbox", { name: "Comment" })).toHaveValue("");
+  const question = await savedComment(`parent_id = '${pageId}' and body = 'Can someone check the totals?'`);
   expect(noticesFor(STAFF, question), "nobody is told about their own comment").toBe("");
 
   // A colleague comments and replies from their own session.
@@ -165,8 +177,8 @@ test("watch a page, hear about comments and replies, and unwatch [switches on]",
   await theirs.getByRole("textbox", { name: /^Reply to QA Staff/ }).fill("Totals checked.");
   await theirs.getByRole("button", { name: "Post reply" }).click();
   await expect(theirs.getByText("Totals checked.")).toBeVisible();
-  const comment = sql(`select id from public.record_comment where parent_id = '${pageId}' and body = 'The venue cost went up.'`);
-  const reply = sql(`select id from public.record_comment where parent_id = '${pageId}' and body = 'Totals checked.'`);
+  const comment = await savedComment(`parent_id = '${pageId}' and body = 'The venue cost went up.'`);
+  const reply = await savedComment(`parent_id = '${pageId}' and body = 'Totals checked.' and parent_comment_id = '${question}'`);
   expect(noticesFor(STAFF, comment)).toBe("watched_page");
   expect(noticesFor(STAFF, reply)).toBe("comment");
 
@@ -247,7 +259,7 @@ test("a mention in a page comment notifies the mentioned person once [switches o
   await page.getByRole("listbox", { name: "Mention suggestions" }).getByRole("option", { name: "Person: QA Volunteer" }).click();
   await collab.getByRole("button", { name: "Post comment" }).click();
   await expect(collab.getByText("@QA Volunteer")).toBeVisible();
-  const comment = sql(`select id from public.record_comment where parent_id = '${pageId}'`);
+  const comment = await savedComment(`parent_id = '${pageId}'`);
 
   // Exactly one notice for the mentioned watcher: the mention.
   await expect
@@ -349,6 +361,7 @@ test("a block comment stays on its block while blocks above it are added, moved 
   await expect(page).toHaveURL(new RegExp(`/pages/${pageId}\\?block=third`));
   await collab.getByRole("textbox", { name: "Comment" }).fill("Check this figure.");
   await collab.getByRole("button", { name: "Post comment" }).click();
+  await expect(collab.getByRole("textbox", { name: "Comment" })).toHaveValue("");
   await expect(collab.getByText("Check this figure.")).toBeVisible();
 
   // Added above: a new block after the first one.
