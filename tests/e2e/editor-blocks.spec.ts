@@ -173,6 +173,12 @@ test("alt-arrow moves a selection and the drop target is announced [switches on]
 
   // A single block moves with Alt+Arrow too.
   await editor.locator("[data-content-type='paragraph']", { hasText: lines[3] }).click();
+  // The editor reads a click's caret on the browser's next selection event, so
+  // a key pressed in the same instant would still act on the earlier block.
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection()?.anchorNode?.textContent ?? null))
+    .toBe(lines[3]);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.keyboard.press("Alt+ArrowUp");
   await expect.poll(() => order(editor)).toEqual([lines[0], lines[1], lines[3], lines[2]]);
   await expect(page.locator("#qbbe-editor-live")).toHaveText(`Moved above “${lines[2]}”.`);

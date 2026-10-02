@@ -59,7 +59,8 @@ export async function PageView({
             ))}
           </ol>
         </nav>
-        <div className="flex items-center gap-2">
+        {/* Wraps on narrow screens: the header's tools (presence, watch, export, actions) must never overflow at 320 px. */}
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           {page.visibility === "private" ? (
             <Badge>
               <Lock className="size-3" aria-hidden /> {t("page.private")}
