@@ -116,6 +116,24 @@ export function PagePresenceHeader({ pageId, me: given, canEdit }: { pageId: str
     };
   }, [open]);
 
+  // The open list stays on screen, wherever the header puts the button (other
+  // header buttons may sit to its right): shifted sideways when it would not fit.
+  React.useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!open || !panel) return;
+    const MARGIN = 8;
+    const place = () => {
+      panel.style.translate = "";
+      const box = panel.getBoundingClientRect();
+      const room = document.documentElement.clientWidth - MARGIN;
+      const shift = box.left < MARGIN ? MARGIN - box.left : box.right > room ? room - box.right : 0;
+      if (shift !== 0) panel.style.translate = `${Math.round(shift)}px 0`;
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
+
   if (state === "error") {
     return (
       <div className="flex items-center gap-1.5 text-caption text-muted" data-testid="page-presence-error">
