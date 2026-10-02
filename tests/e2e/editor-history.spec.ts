@@ -64,23 +64,35 @@ async function seriousAxe(page: Page) {
 }
 
 /**
- * Puts the caret at the end of a paragraph's text. The editor applies a
- * click's caret on the browser's next selection event, which can land after
- * a key pressed at once and move the caret back, so End is pressed until the
- * caret is seen at the end, then the editor is given time to read it.
+ * The text of the paragraph holding the editor's own caret, when that caret
+ * is collapsed at the paragraph's end; otherwise null. Read from the editor's
+ * state (Tiptap attaches the editor to its element), not from the browser's
+ * selection, which the editor may not have taken in yet.
+ */
+function editorCaretAtEnd(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    type Sel = { empty: boolean; $from: { parentOffset: number; parent: { textContent: string; content: { size: number } } } };
+    type WithEditor = Element & { editor?: { state: { selection: Sel } } };
+    const focused = document.activeElement?.closest(".ProseMirror") as WithEditor | null;
+    const dom = focused?.editor ? focused : ([...document.querySelectorAll(".ProseMirror")] as WithEditor[]).find((el) => el.editor);
+    const selection = dom?.editor?.state.selection;
+    if (!selection || !selection.empty) return null;
+    const { $from } = selection;
+    return $from.parentOffset === $from.parent.content.size ? $from.parent.textContent : null;
+  });
+}
+
+/**
+ * Puts the caret at the end of a paragraph's text and waits until the editor
+ * itself has it there: the editor takes a click's caret on the browser's next
+ * selection event, which can land after a key pressed at once.
  */
 async function caretAtEndOf(page: Page, paragraph: Locator, text: string) {
   await paragraph.click();
   await expect(async () => {
     await page.keyboard.press("End");
-    const caret = await page.evaluate(() => {
-      const selection = window.getSelection();
-      const node = selection?.anchorNode;
-      return node && selection.isCollapsed && selection.anchorOffset === (node.textContent ?? "").length ? node.textContent : null;
-    });
-    expect(caret).toBe(text);
+    expect(await editorCaretAtEnd(page)).toBe(text);
   }).toPass({ timeout: 10_000 });
-  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
 async function openEditor(page: Page) {
@@ -189,6 +201,8 @@ test("undo stops at the page as it was opened and says so [switches on]", async 
   await page.keyboard.press("Control+z");
   await expect(live(page)).toHaveText("Nothing more to undo");
   await expect(editor).toContainText("Saved before opening");
+  // An undo with nothing to undo leaves the caret where it was.
+  expect(await editorCaretAtEnd(page)).toBe("Saved before opening");
 
   await page.keyboard.type(" and after");
   await expect(editor).toContainText("Saved before opening and after");
