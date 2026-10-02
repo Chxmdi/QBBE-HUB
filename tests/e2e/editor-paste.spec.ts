@@ -161,6 +161,9 @@ test("a paste and the typing after it can each be undone [switches on]", async (
   const editor = await openPage(page, pageId);
 
   await newLineAfter(page, editor.locator("[data-content-type='paragraph']", { hasText: `Before ${stamp}` }));
+  // Paste only once the new empty line exists and holds the caret, as a person would.
+  await expect(editor.locator(".bn-block-content")).toHaveCount(2);
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.anchorNode?.textContent ?? null)).toBe("");
   await paste(editor, { "text/plain": `# Pasted ${stamp}` });
   await expect(editor.locator("[data-content-type='heading']", { hasText: `Pasted ${stamp}` })).toBeVisible();
   await page.keyboard.press("Enter");
