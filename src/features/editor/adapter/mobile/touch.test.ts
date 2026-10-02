@@ -4,6 +4,7 @@ import {
   FORMAT_ACTIONS,
   MOBILE_QUERY,
   MobileCounter,
+  bottomInset,
   isToggleActive,
   nextToolbarIndex,
   safeLinkHref,
@@ -43,7 +44,10 @@ describe("mobile editing rules (E4)", () => {
     expect(safeLinkHref(" https://example.org ")).toBe("https://example.org/");
     expect(safeLinkHref("http://example.org")).toBe("http://example.org/");
     expect(safeLinkHref("mailto:info@example.org")).toBe("mailto:info@example.org");
-    for (const bad of ["", "   ", "javascript:alert(1)", "JAVASCRIPT:alert(1)", "data:text/html,<b>x</b>", "mailto:nobody", "ftp://example.org", "not a link", "https://localhost", `https://example.org/${"a".repeat(2050)}`]) {
+    expect(safeLinkHref("info@example.org")).toBe("mailto:info@example.org");
+    expect(safeLinkHref("example.org:8080/docs")).toBe("https://example.org:8080/docs");
+    expect(safeLinkHref("intranet.example.org:3000")).toBe("https://intranet.example.org:3000/");
+    for (const bad of ["", "   ", "javascript:alert(1)", "JAVASCRIPT:alert(1)", " javascript:alert(1)", "data:text/html,<b>x</b>", "mailto:nobody", "ftp://example.org", "not a link", "https://localhost", "https://user:pw@example.org", `https://example.org/${"a".repeat(2050)}`]) {
       expect(safeLinkHref(bad), bad).toBeNull();
     }
   });
@@ -56,6 +60,17 @@ describe("mobile editing rules (E4)", () => {
     expect(nextToolbarIndex(4, "End", 11)).toBe(10);
     expect(nextToolbarIndex(4, "a", 11)).toBeNull();
     expect(nextToolbarIndex(0, "ArrowRight", 0)).toBeNull();
+  });
+
+  it("keeps the toolbar above the bottom navigation or the on-screen keyboard, whichever covers more", () => {
+    expect(bottomInset({ innerHeight: 640 })).toBe(0);
+    expect(bottomInset({ innerHeight: 640, navTop: 578.75 })).toBe(61);
+    // Keyboard open: the visible area ends 300 px above the layout bottom.
+    expect(bottomInset({ innerHeight: 640, navTop: 579, visibleBottom: 340 })).toBe(300);
+    // Keyboard closed: the visible area is the whole window.
+    expect(bottomInset({ innerHeight: 640, navTop: 579, visibleBottom: 640 })).toBe(61);
+    // A visible area taller than the window (pinch zoom rounding) is no inset.
+    expect(bottomInset({ innerHeight: 640, visibleBottom: 641 })).toBe(0);
   });
 
   it("keeps the page attribute while any editor is in mobile mode", () => {

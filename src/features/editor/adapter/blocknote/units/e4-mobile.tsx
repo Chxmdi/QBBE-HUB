@@ -26,6 +26,7 @@ import {
   BLOCK_ACTIONS,
   BOTTOM_INSET,
   FORMAT_ACTIONS,
+  bottomInset,
   MOBILE_ATTRIBUTE,
   MOBILE_QUERY,
   MobileCounter,
@@ -68,23 +69,25 @@ export const E4InView: (props: EditorUnitProps) => React.ReactNode = () => null;
 
 /** Rendered after the editor, inside its container (dialogs, panels, live regions). */
 export function E4Outside(props: EditorUnitProps) {
-  const on = useMobileEditing();
-  if (!on) return null;
+  const on = useMobileEditing(props.editable);
+  if (!on || !props.editable) return null;
   return <MobileEditing {...props} />;
 }
 
-// One request per page load, shared by every editor on the page. A failed
-// request answers "off" (the editor stays as on desktop) and is asked again by
-// the next editor that mounts.
+// One answer per page load, shared by every editor on the page. Only a failed
+// request (no answer, or an error status) is forgotten, so the next editor
+// that mounts asks again; until then the editor stays as on desktop.
 let switchRequest: Promise<boolean> | null = null;
 
 function mobileSwitchOn(): Promise<boolean> {
   switchRequest ??= fetch("/api/editor/mobile", { cache: "no-store", credentials: "same-origin" })
-    .then(async (response) => response.ok && ((await response.json()) as { enabled?: unknown }).enabled === true)
-    .catch(() => false)
-    .then((enabled) => {
-      if (!enabled) switchRequest = null;
-      return enabled;
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`mobile editing switch: ${response.status}`);
+      return ((await response.json()) as { enabled?: unknown }).enabled === true;
+    })
+    .catch(() => {
+      switchRequest = null;
+      return false;
     });
   return switchRequest;
 }
@@ -101,12 +104,15 @@ function useNarrow(): boolean {
   return narrow;
 }
 
-/** Both switches on (asked once the screen is narrow) and a phone-width screen. */
-function useMobileEditing(): boolean {
+/**
+ * Both switches on and a phone-width screen. The switches are asked about
+ * only once an editable editor is at phone width.
+ */
+function useMobileEditing(editable: boolean): boolean {
   const narrow = useNarrow();
   const [switchOn, setSwitchOn] = React.useState(false);
   React.useEffect(() => {
-    if (!narrow || switchOn) return;
+    if (!narrow || !editable || switchOn) return;
     let live = true;
     void mobileSwitchOn().then((enabled) => {
       if (live) setSwitchOn(enabled);
@@ -114,22 +120,31 @@ function useMobileEditing(): boolean {
     return () => {
       live = false;
     };
-  }, [narrow, switchOn]);
+  }, [narrow, editable, switchOn]);
   return narrow && switchOn;
 }
 
-const htmlAttribute = new MobileCounter((on) => {
-  if (on) document.documentElement.setAttribute(MOBILE_ATTRIBUTE, "");
-  else document.documentElement.removeAttribute(MOBILE_ATTRIBUTE);
+/**
+ * Page-wide state while at least one editor is in mobile mode: the <html>
+ * attribute the styles key off, and one watcher of the bottom inset.
+ */
+let stopInset: (() => void) | null = null;
+const pageMobileMode = new MobileCounter((on) => {
+  if (on) {
+    document.documentElement.setAttribute(MOBILE_ATTRIBUTE, "");
+    stopInset = watchBottomInset();
+  } else {
+    document.documentElement.removeAttribute(MOBILE_ATTRIBUTE);
+    stopInset?.();
+    stopInset = null;
+  }
 });
 
 function MobileEditing(props: EditorUnitProps) {
-  React.useEffect(() => htmlAttribute.enter(), []);
-  useBottomInset();
+  React.useEffect(() => pageMobileMode.enter(), []);
   const focused = useFocusWithin(props.containerRef);
   const [linkOpen, setLinkOpen] = React.useState(false);
   useToolbarShortcut(props.containerRef);
-  if (!props.editable) return null;
   return (
     <>
       {focused || linkOpen ? <TouchToolbar {...props} onLink={() => setLinkOpen(true)} /> : null}
@@ -139,36 +154,41 @@ function MobileEditing(props: EditorUnitProps) {
 }
 
 /**
- * The height of whatever is fixed over the bottom of the screen (the
- * workspace's phone navigation, whose labels can wrap to two lines), kept in
- * BOTTOM_INSET on <html> so the toolbar sticks just above it.
+ * Keeps BOTTOM_INSET on <html> at the height covering the bottom of the
+ * screen: the workspace's fixed phone navigation (whose labels can wrap to
+ * two lines) or the on-screen keyboard, whichever is taller, so the toolbar
+ * sticks just above it. Returns the function that stops watching.
  */
-function useBottomInset() {
-  React.useEffect(() => {
-    const root = document.documentElement;
-    let observed: Element[] = [];
-    const resize = new ResizeObserver(() => measure());
-    function measure() {
-      const fixed = [...document.querySelectorAll<HTMLElement>("body nav")].filter((el) => {
-        if (getComputedStyle(el).position !== "fixed" || el.getClientRects().length === 0) return false;
-        return el.getBoundingClientRect().bottom >= window.innerHeight - 1;
-      });
-      const inset = fixed.reduce((most, el) => Math.max(most, window.innerHeight - el.getBoundingClientRect().top), 0);
-      root.style.setProperty(BOTTOM_INSET, `${Math.max(0, Math.round(inset))}px`);
-      if (fixed.length !== observed.length || fixed.some((el, i) => el !== observed[i])) {
-        resize.disconnect();
-        fixed.forEach((el) => resize.observe(el));
-        observed = fixed;
-      }
-    }
-    measure();
-    window.addEventListener("resize", measure);
-    return () => {
-      window.removeEventListener("resize", measure);
+function watchBottomInset(): () => void {
+  const root = document.documentElement;
+  const viewport = window.visualViewport;
+  let observed: Element[] = [];
+  const resize = new ResizeObserver(() => measure());
+  function measure() {
+    const fixed = [...document.querySelectorAll<HTMLElement>("body nav")].filter((el) => {
+      if (getComputedStyle(el).position !== "fixed" || el.getClientRects().length === 0) return false;
+      return el.getBoundingClientRect().bottom >= window.innerHeight - 1;
+    });
+    const navTop = fixed.length ? Math.min(...fixed.map((el) => el.getBoundingClientRect().top)) : undefined;
+    const visibleBottom = viewport ? viewport.offsetTop + viewport.height : undefined;
+    root.style.setProperty(BOTTOM_INSET, `${bottomInset({ innerHeight: window.innerHeight, navTop, visibleBottom })}px`);
+    if (fixed.length !== observed.length || fixed.some((el, i) => el !== observed[i])) {
       resize.disconnect();
-      root.style.removeProperty(BOTTOM_INSET);
-    };
-  }, []);
+      fixed.forEach((el) => resize.observe(el));
+      observed = fixed;
+    }
+  }
+  measure();
+  window.addEventListener("resize", measure);
+  viewport?.addEventListener("resize", measure);
+  viewport?.addEventListener("scroll", measure);
+  return () => {
+    window.removeEventListener("resize", measure);
+    viewport?.removeEventListener("resize", measure);
+    viewport?.removeEventListener("scroll", measure);
+    resize.disconnect();
+    root.style.removeProperty(BOTTOM_INSET);
+  };
 }
 
 /**
@@ -415,6 +435,13 @@ function LinkDialog({ editor, t, onClose }: { editor: AnyBlockNoteEditor; t: Edi
   const textId = React.useId();
   const errorId = React.useId();
   const hasSelection = editor.getSelectedText().length > 0;
+  // The caret inside an existing link, nothing selected: that link is edited.
+  const [existing] = React.useState(() => {
+    if (hasSelection) return undefined;
+    const at = editor.prosemirrorState.selection.anchor;
+    const link = editor.getLinkMarkAtPos(at);
+    return link ? { text: link.text, at } : undefined;
+  });
 
   // The dialog is modal, so the text cannot take focus until it has closed:
   // back to the text on the next frame, then the change.
@@ -435,7 +462,8 @@ function LinkDialog({ editor, t, onClose }: { editor: AnyBlockNoteEditor; t: Edi
     }
     const label = text.trim();
     finish(() => {
-      if (label) editor.createLink(href, label);
+      if (existing) editor.editLink(href, label || existing.text, existing.at);
+      else if (label) editor.createLink(href, label);
       else if (hasSelection) editor.createLink(href);
       else editor.createLink(href, href);
       announce(t("units.e4.linkDialog.added"));
@@ -470,7 +498,7 @@ function LinkDialog({ editor, t, onClose }: { editor: AnyBlockNoteEditor; t: Edi
         {hasSelection ? null : (
           <div>
             <Label htmlFor={textId}>{t("units.e4.linkDialog.text")}</Label>
-            <Input id={textId} value={text} onChange={(event) => setText(event.target.value)} />
+            <Input id={textId} value={text} placeholder={existing?.text} onChange={(event) => setText(event.target.value)} />
           </div>
         )}
         <div className="flex flex-wrap justify-end gap-2">

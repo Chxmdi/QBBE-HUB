@@ -45,25 +45,48 @@ export function toggleTarget(action: ToggleAction, type: string): { type: string
   return isToggleActive(action, type) ? { type: "paragraph" } : TARGETS[action];
 }
 
+const EMAIL = /^[^\s@/:?#]+@[^\s@/:?#]+\.[^\s@/:?#]+$/;
+
 /**
  * A link address typed on a phone, made safe: web and mail addresses only.
- * A bare domain gets https://. Anything else (javascript:, data:, spaces in
- * the host) is refused with null.
+ * A bare domain (with or without a port) gets https://, and a bare email
+ * address gets mailto:. Anything else (javascript:, data:, spaces in the
+ * host) is refused with null.
  */
 export function safeLinkHref(raw: string): string | null {
   const text = raw.trim();
   if (!text || text.length > 2048) return null;
-  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(text) ? text : `https://${text}`;
+  let withScheme: string;
+  if (EMAIL.test(text)) withScheme = `mailto:${text}`;
+  // A scheme has no dots, so "example.org:8080" is a host and port.
+  else if (/^[a-z][a-z0-9+-]*:/i.test(text)) withScheme = text;
+  else withScheme = `https://${text}`;
   let url: URL;
   try {
     url = new URL(withScheme);
   } catch {
     return null;
   }
-  if (url.protocol === "mailto:") return url.pathname.includes("@") ? url.href : null;
+  if (url.protocol === "mailto:") return EMAIL.test(decodeURIComponent(url.pathname)) ? url.href : null;
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  // "info@example.org" is caught above; a user name in a web link is refused.
+  if (url.username || url.password) return null;
   if (!url.hostname.includes(".")) return null;
   return url.href;
+}
+
+/**
+ * Where the touch toolbar sticks, in pixels up from the bottom of the layout
+ * viewport: above whatever covers the bottom of the screen, the fixed bottom
+ * navigation (`navTop`, its top edge) or the on-screen keyboard (the visible
+ * area ending at `visibleBottom`, from window.visualViewport). Phones do not
+ * shrink the layout viewport when the keyboard opens, so without the second
+ * the toolbar would sit behind the keyboard.
+ */
+export function bottomInset({ innerHeight, navTop, visibleBottom }: { innerHeight: number; navTop?: number; visibleBottom?: number }): number {
+  const nav = navTop === undefined ? 0 : innerHeight - navTop;
+  const keyboard = visibleBottom === undefined ? 0 : innerHeight - visibleBottom;
+  return Math.max(0, Math.round(Math.max(nav, keyboard)));
 }
 
 /**

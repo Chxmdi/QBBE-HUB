@@ -157,6 +157,16 @@ test("at 390 and 320 px the editor fits and its touch toolbar formats text [swit
   await tap("Redo");
   await expect(editor.locator("a[href='https://example.org/guide']")).toBeVisible();
 
+  // With the caret inside that link, Link edits it rather than adding another.
+  await editor.locator("a", { hasText: "The guide" }).tap();
+  await tap("Link");
+  await expect(dialog.getByLabel("Link address")).toHaveValue("https://example.org/guide");
+  await dialog.getByLabel("Link address").fill("example.org/handbook");
+  await dialog.getByRole("button", { name: "Add link" }).tap();
+  await expect(dialog).toHaveCount(0);
+  await expect(editor.locator("a[href='https://example.org/handbook']")).toHaveText("The guide");
+  await expect(editor.locator("a")).toHaveCount(1);
+
   expect(await sidewaysOverflow(page), "390 px: no sideways scroll").toEqual([]);
   await page.setViewportSize(SMALL);
   await expect(toolbar).toBeVisible();
@@ -302,7 +312,7 @@ test("the touch toolbar speaks Quebec French, works from the keyboard and passes
     await expect(dialog).toBeVisible();
     await onScreen(page, dialog, { modal: true });
     expect(await seriousAxe(page), `${theme}: link dialog open`).toEqual([]);
-    await dialog.getByRole("button", { name: "Fermer", exact: true }).tap();
+    await dialog.getByRole("button", { name: "Annuler", exact: true }).tap();
     await expect(dialog).toHaveCount(0);
   }
   await page.evaluate(() => {

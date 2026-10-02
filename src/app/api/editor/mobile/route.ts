@@ -12,6 +12,6 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const session = await getSessionContext();
-  const enabled = Boolean(session) && (await isEnabled("wos_editor")) && (await mobileEnabled());
+  const enabled = Boolean(session) && (await Promise.all([isEnabled("wos_editor"), mobileEnabled()])).every(Boolean);
   return NextResponse.json({ enabled }, { headers: { "Cache-Control": "no-store" } });
 }

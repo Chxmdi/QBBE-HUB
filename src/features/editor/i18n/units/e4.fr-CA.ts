@@ -24,7 +24,7 @@ export const e4EditorFrCA: typeof e4EditorEn = {
     address: "Adresse du lien",
     text: "Texte du lien (facultatif)",
     add: "Ajouter le lien",
-    cancel: "Fermer",
+    cancel: "Annuler",
     invalid: "Entrez une adresse Web (https://…) ou une adresse courriel (mailto:…).",
     added: "Lien ajouté.",
   },
