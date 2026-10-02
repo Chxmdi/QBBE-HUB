@@ -17,7 +17,6 @@ const STAFF = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2";
 const VOLUNTEER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3";
 const SWITCHES = "('wos_pages', 'wos_editor', 'wos_lenses')";
 let previous = "";
-let lensId = "";
 
 const esc = (s: string) => s.replace(/'/g, "''");
 const ours = [{ path: "title", op: "starts_with", value: `${RUN} ` }];
@@ -109,14 +108,13 @@ test.beforeAll(() => {
     ) v(n, assignee, status, priority, estimate)
     where m.user_id = '${OWNER}';
   `);
-  lensId = sql(`
+  sql(`
     insert into public.lens (organization_id, owner_id, name, kind, type_key, spec, visibility)
     select organization_id, '${OWNER}', '${RUN} lens', 'table', 'task',
       jsonb_build_object('version', 1, 'type', 'task',
         'where', jsonb_build_object('and', jsonb_build_array(jsonb_build_object('property', 'title', 'operator', 'starts_with', 'value', '${RUN} ')))),
       'shared'
-    from public.organization_membership where user_id = '${OWNER}'
-    returning id;
+    from public.organization_membership where user_id = '${OWNER}';
   `);
 });
 
@@ -170,19 +168,26 @@ test("an editor turns a view into a bar, line, pie and single-number chart by co
   await expect(figure.getByRole("row", { name: /High/ })).toContainText("3");
   await noSeriousAxe(page, "[data-view-block]");
 
-  // Line chart of the sum of hours.
-  await configure("Line chart", "Sum of Estimate (hours)");
-  const line = block.getByRole("figure", { name: "Line chart: Sum of Estimate (hours) by Priority" });
+  // Line chart of the average hours.
+  await configure("Line chart", "Average of Estimate (hours)");
+  const line = block.getByRole("figure", { name: "Line chart: Average of Estimate (hours) by Priority" });
   await expect(line).toBeVisible({ timeout: 30_000 });
   await expect(line.locator("[data-chart-point]")).toHaveCount(3);
-  expect(await numbers(line)).toEqual(["Low=5", "Medium=1.5", "High=5.5"]);
+  expect(await numbers(line)).toEqual(["Low=5", "Medium=1.5", "High=2.75"]);
 
-  // Pie chart of the average.
-  await configure("Pie chart", "Average of Estimate (hours)");
-  const pie = block.getByRole("figure", { name: "Pie chart: Average of Estimate (hours) by Priority" });
+  // Pie chart of the sum of hours. A pie never offers an average (not a share of a whole).
+  await block.getByRole("button", { name: "Configure view" }).click();
+  const panel = block.getByRole("dialog", { name: "View settings" });
+  await panel.getByLabel("Chart type").selectOption({ label: "Pie chart" });
+  await expect(panel.getByLabel("Total").locator("option", { hasText: "Average of" })).toHaveCount(0);
+  await expect(panel.getByLabel("Total")).toHaveValue("count");
+  await panel.getByRole("button", { name: "Cancel" }).click();
+  await configure("Pie chart", "Sum of Estimate (hours)");
+  const pie = block.getByRole("figure", { name: "Pie chart: Sum of Estimate (hours) by Priority" });
   await expect(pie).toBeVisible({ timeout: 30_000 });
   await expect(pie.locator("[data-chart-slice]")).toHaveCount(3);
-  expect(await numbers(pie)).toEqual(["Low=5", "Medium=1.5", "High=2.75"]);
+  expect(await numbers(pie)).toEqual(["Low=5", "Medium=1.5", "High=5.5"]);
+  await expect(pie.locator("table tbody tr").first()).toContainText("42%");
   await noSeriousAxe(page, "[data-view-block]");
 
   // A single number: the count over every row.
@@ -277,6 +282,15 @@ test("a chart says when it is loading, failed (with a retry), empty or unusable,
   expect(fit.right).toBeLessThanOrEqual(320);
   expect(fit.scroll).toBeLessThanOrEqual(fit.client);
   expect(fit.figure).toBeLessThanOrEqual(0);
+  // The numbers' headings never break mid-word: each is one line of text.
+  const headingLines = await figure.locator("table thead th").evaluateAll((cells) =>
+    cells.map((cell) => {
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+    }),
+  );
+  expect(headingLines).toEqual([1, 1, 1]);
   await noSeriousAxe(page, "[data-view-block]");
   await page.goto(`/pages/${emptyId}`);
   await expect((await viewBlock(page, `${RUN} empty`)).getByText("Rien à afficher : aucun élément que vous pouvez voir ne correspond à cette vue.")).toBeVisible({ timeout: 30_000 });

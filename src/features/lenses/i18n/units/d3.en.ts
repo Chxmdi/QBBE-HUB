@@ -34,7 +34,7 @@ export const d3LensesEn = {
     empty: "Nothing to chart: no records you can see match this view.",
     failed: "This chart could not be loaded.",
     invalid: "This chart’s settings are not valid. A sum or an average needs a number property.",
-    needsGroup: "Choose a “Group by” property in the view settings to draw this chart.",
+    needsGroup: "This chart needs a “Group by” property its records have. Choose one in its settings.",
     missing: "The lens this chart shows no longer exists, or is not shared with you.",
     off: "Views are turned off for this workspace.",
     retry: "Try again",

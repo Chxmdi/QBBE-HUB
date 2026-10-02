@@ -168,10 +168,18 @@ function ChartTile({ tile, filters, catalog, timeZone }: TileProps & { tile: Ext
     if (spec === "missing") return spec;
     const type = catalog[spec.type];
     const chart = type ? chartSpec({ ...spec, groupBy: { property: tile.groupBy } }, settings, type) : "invalid";
-    if (chart === "invalid" || chart === "needsGroup") throw new Error(chart);
+    // Settings the chart cannot draw say so, rather than looking like a failed load.
+    if (chart === "invalid" || chart === "needsGroup") return { problem: chart };
     return { result: await runLensAggregate(client, chart, chartMeasures(settings), { timeZone }), type: spec.type };
   }, [JSON.stringify(tile), JSON.stringify(filters)]);
   if (state.status !== "ready") return <TileState state={state} />;
+  if ("problem" in state.value) {
+    return (
+      <p role="alert" className="text-[13px] text-danger-fg">
+        {t(state.value.problem === "invalid" ? "units.d3.states.invalid" : "units.d3.states.needsGroup")}
+      </p>
+    );
+  }
   const { result, type } = state.value;
   const groupProperty = result.groupBy ? findProperty(catalog, type, result.groupBy) : undefined;
   const data = chartData(result, (key, label) => chartGroupName(groupProperty, key, label, locale, timeZone, t));

@@ -14,7 +14,7 @@ import { useLensT } from "@/features/lenses/i18n/client";
 import { saveDashboardLayout } from "./actions";
 import { TILE_KINDS, type DashboardFilters, type DashboardLayout, type Tile, type TileKind, type TileSource } from "./schema";
 import { TileBody } from "./tiles";
-import { CHART_KINDS, chartIsGrouped, settingsFromTotalOption, type ChartKind } from "@/features/lenses/view-block/layouts/d3-chart";
+import { CHART_KINDS, chartIsGrouped, chartNumberProperties, chartTotalOption, settingsFromTotalOption, totalsFor, type ChartKind } from "@/features/lenses/view-block/layouts/d3-chart";
 
 export interface DashboardInfo {
   id: string;
@@ -229,7 +229,8 @@ function AddTileDialog({
   const typeOf = source === "type:project" ? "project" : "task";
   const props = catalog[typeOf]?.properties ?? [];
   const numbers = props.filter((p) => p.kind === "number");
-  const groupables = props.filter((p) => p.groupable);
+  const groupables = props.filter((p) => p.groupable && !p.filterOnly);
+  const chartNumbers = chartNumberProperties(catalog[typeOf]);
 
   const tileSource = (): TileSource => {
     if (source.startsWith("lens:")) return { lensId: source.slice(5) };
@@ -313,7 +314,15 @@ function AddTileDialog({
         ) : (
           <div>
             <Label htmlFor={`${ids}-source`}>{kind === "embed" ? t("dashboard.embedLens") : t("dashboard.source")}</Label>
-            <Select id={`${ids}-source`} value={source} onChange={(e) => setSource(e.target.value)}>
+            <Select
+              id={`${ids}-source`}
+              value={source}
+              onChange={(e) => {
+                setSource(e.target.value);
+                // Another source has other number properties: a chart's total starts over as a count.
+                setChartTotal("count");
+              }}
+            >
               {kind === "embed" ? null : (
                 <>
                   <option value="type:task">{t("dashboard.allTasks")}</option>
@@ -350,7 +359,15 @@ function AddTileDialog({
         {kind === "chart" ? (
           <div>
             <Label htmlFor={`${ids}-chart-kind`}>{t("units.d3.settings.kind")}</Label>
-            <Select id={`${ids}-chart-kind`} value={chartKind} onChange={(e) => setChartKind(e.target.value as ChartKind)}>
+            <Select
+              id={`${ids}-chart-kind`}
+              value={chartKind}
+              onChange={(e) => {
+                const next = e.target.value as ChartKind;
+                setChartKind(next);
+                setChartTotal(chartTotalOption(settingsFromTotalOption(next, chartTotal)));
+              }}
+            >
               {CHART_KINDS.map((k) => (
                 <option key={k} value={k}>
                   {t(`units.d3.kinds.${k}`)}
@@ -364,8 +381,8 @@ function AddTileDialog({
             <Label htmlFor={`${ids}-chart-total`}>{t("units.d3.settings.total")}</Label>
             <Select id={`${ids}-chart-total`} value={chartTotal} onChange={(e) => setChartTotal(e.target.value)}>
               <option value="count">{t("units.d3.settings.count")}</option>
-              {numbers.flatMap((p) =>
-                (["sum", "avg"] as const).map((fn) => (
+              {chartNumbers.flatMap((p) =>
+                totalsFor(chartKind).filter((fn) => fn !== "count").map((fn) => (
                   <option key={`${fn}:${p.key}`} value={`${fn}:${p.key}`}>
                     {t(`units.d3.settings.${fn}`, { property: localized(p.name, locale) })}
                   </option>

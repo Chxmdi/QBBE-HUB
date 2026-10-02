@@ -33,7 +33,7 @@ export const d3LensesFrCA: typeof d3LensesEn = {
     empty: "Rien à afficher : aucun élément que vous pouvez voir ne correspond à cette vue.",
     failed: "Impossible de charger ce graphique.",
     invalid: "Les paramètres de ce graphique ne sont pas valides. Une somme ou une moyenne exige une propriété numérique.",
-    needsGroup: "Choisissez une propriété « Regrouper par » dans les paramètres de la vue pour afficher ce graphique.",
+    needsGroup: "Ce graphique exige une propriété « Regrouper par » que ses éléments possèdent. Choisissez-en une dans ses paramètres.",
     missing: "La vue que présente ce graphique n’existe plus ou n’est pas partagée avec vous.",
     off: "Les vues sont désactivées pour cet espace de travail.",
     retry: "Réessayer",

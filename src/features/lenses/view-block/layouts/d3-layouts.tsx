@@ -5,7 +5,7 @@ import { Label, Select } from "@/components/ui/input";
 import { findProperty, localized } from "@/lib/query/catalog";
 import { readLocalFilters } from "../local-filters";
 import { runChartBlock, type ChartRun } from "./d3-chart.actions";
-import { chartData, chartIsEmpty, chartIsGrouped, chartNumberProperties, chartTotal, chartTotalOption, CHART_KINDS, readChartSettings, settingsFromTotalOption, type ChartKind } from "./d3-chart";
+import { chartData, chartIsEmpty, chartIsGrouped, chartNumberProperties, chartTotal, chartTotalOption, CHART_KINDS, readChartSettings, settingsFromTotalOption, totalsFor, type ChartKind } from "./d3-chart";
 import { ChartFigure, chartGroupName, chartMeasureLabel } from "./d3-chart-view";
 import type { LayoutRenderContext, LayoutSettingsProps } from "./types";
 
@@ -26,7 +26,7 @@ export const D3LayoutSettings: (props: LayoutSettingsProps) => React.ReactNode =
 export const d3LayoutLabel: (layout: string, t: LayoutSettingsProps["t"]) => string | null = (layout, t) =>
   layout === "chart" ? t("units.d3.layout") : null;
 
-type Loaded = { forData: object; attempt: number; run: ChartRun };
+type Loaded = { forData: object; propsKey: string; attempt: number; run: ChartRun };
 
 /**
  * The chart layout: the view's spec totalled by lens_aggregate (a server
@@ -41,6 +41,8 @@ function ChartLayout({ ctx, run = runChartBlock }: { ctx: LayoutRenderContext; r
   const [loaded, setLoaded] = React.useState<Loaded | null>(null);
   // The block's data is a new object whenever it reloads its rows (settings, filters, retry).
   const forData: object = data;
+  // And the totals are for these exact settings: never old numbers under new labels.
+  const propsKey = JSON.stringify(props);
 
   React.useEffect(() => {
     let live = true;
@@ -50,19 +52,19 @@ function ChartLayout({ ctx, run = runChartBlock }: { ctx: LayoutRenderContext; r
     const local = blockId ? readLocalFilters(window.sessionStorage, blockId) : [];
     run(props, local)
       .then((result) => {
-        if (live) setLoaded({ forData, attempt, run: result });
+        if (live) setLoaded({ forData, propsKey, attempt, run: result });
       })
       .catch(() => {
-        if (live) setLoaded({ forData, attempt, run: { ok: false, reason: "failed" } });
+        if (live) setLoaded({ forData, propsKey, attempt, run: { ok: false, reason: "failed" } });
       });
     return () => {
       live = false;
     };
-    // forData changes with every reload of the block's rows and props.
+    // forData and propsKey cover the block's rows and props.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forData, attempt, run]);
+  }, [forData, propsKey, attempt, run]);
 
-  const current = loaded && loaded.forData === forData && loaded.attempt === attempt ? loaded.run : null;
+  const current = loaded && loaded.forData === forData && loaded.propsKey === propsKey && loaded.attempt === attempt ? loaded.run : null;
   const settings = readChartSettings(props.chart);
   const body = (() => {
     if (!current) {
@@ -120,6 +122,11 @@ function ChartSettingsFields({ id, value, onChange, catalog, type, t, locale }: 
   const settings = readChartSettings(value.chart);
   const numbers = chartNumberProperties(catalog[type]);
   const total = chartTotalOption(settings);
+  // Another source can lack the property a sum or an average used: fall back to a count, as the picker shows.
+  const stale = settings.total !== "count" && !numbers.some((p) => p.key === settings.property);
+  React.useEffect(() => {
+    if (stale) onChange({ chart: { kind: settings.kind, total: "count" } });
+  }, [stale, settings.kind, onChange]);
   const hintId = `${id}-chart-hint`;
   return (
     <>
@@ -129,7 +136,7 @@ function ChartSettingsFields({ id, value, onChange, catalog, type, t, locale }: 
           id={`${id}-chart-kind`}
           value={settings.kind}
           aria-describedby={hintId}
-          onChange={(e) => onChange({ chart: { ...settings, kind: e.target.value as ChartKind } })}
+          onChange={(e) => onChange({ chart: settingsFromTotalOption(e.target.value as ChartKind, total) })}
         >
           {CHART_KINDS.map((kind) => (
             <option key={kind} value={kind}>{t(`units.d3.kinds.${kind}`)}</option>
@@ -146,7 +153,7 @@ function ChartSettingsFields({ id, value, onChange, catalog, type, t, locale }: 
         >
           <option value="count">{t("units.d3.settings.count")}</option>
           {numbers.flatMap((p) =>
-            (["sum", "avg"] as const).map((fn) => (
+            totalsFor(settings.kind).filter((fn) => fn !== "count").map((fn) => (
               <option key={`${fn}:${p.key}`} value={`${fn}:${p.key}`}>
                 {t(`units.d3.settings.${fn}`, { property: localized(p.name, locale) })}
               </option>

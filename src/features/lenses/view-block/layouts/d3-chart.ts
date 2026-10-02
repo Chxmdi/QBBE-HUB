@@ -40,6 +40,10 @@ export const chartSettingsSchema = z
     if (value.total === "count" && value.property) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "A count takes no property.", path: ["property"] });
     }
+    // A pie shows parts of a whole; averages are not parts of anything.
+    if (value.kind === "pie" && value.total === "avg") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "A pie chart shows a count or a sum.", path: ["total"] });
+    }
   });
 export type ChartSettings = z.output<typeof chartSettingsSchema>;
 export type ChartSettingsInput = z.input<typeof chartSettingsSchema>;
@@ -81,7 +85,8 @@ export function chartSpec(spec: LensSpec, settings: ChartSettings, type: Catalog
   if (!chartIsGrouped(settings.kind)) return rest;
   const groupBy = spec.groupBy;
   const groupable = (key: string | undefined) => Boolean(key && type.properties.some((p) => p.key === key && p.groupable && !p.filterOnly));
-  const key = groupBy?.property && groupable(groupBy.property) ? groupBy.property : groupable(fallbackGroup) ? fallbackGroup : undefined;
+  // The view's own grouping when it has one (and it must be usable); the type's default only when it has none.
+  const key = groupBy?.property ? (groupable(groupBy.property) ? groupBy.property : undefined) : groupable(fallbackGroup) ? fallbackGroup : undefined;
   if (!key) return "needsGroup";
   return { ...rest, groupBy: { property: key } };
 }
@@ -177,6 +182,12 @@ export function pieSlices(data: ChartDatum[], otherLabel: string, max = PIE_SLIC
   });
 }
 
+/** Each group's share of the positive whole (what a pie draws), 0–100; zero for empty or non-positive totals. */
+export function chartShares(data: ChartDatum[]): number[] {
+  const whole = data.reduce((sum, d) => sum + (d.value !== null && d.value > 0 ? d.value : 0), 0);
+  return data.map((d) => (whole > 0 && d.value !== null && d.value > 0 ? (d.value / whole) * 100 : 0));
+}
+
 /** The figure's overall number: the total over every row the viewer can open. */
 export function chartTotal(result: Pick<AggregateResult, "totals">): number | null {
   return chartNumber(result.totals.m0);
@@ -190,5 +201,9 @@ export function chartTotalOption(settings: ChartSettings): string {
 /** Settings from a chart kind and a "Total" choice (anything unknown is a count). */
 export function settingsFromTotalOption(kind: ChartKind, option: string): ChartSettings {
   const [fn, property] = option.split(":");
+  if (fn === "avg" && kind === "pie") return { kind, total: "count" };
   return (fn === "sum" || fn === "avg") && property ? { kind, total: fn, property } : { kind, total: "count" };
 }
+
+/** The totals a chart kind may use: a pie shows counts and sums only. */
+export const totalsFor = (kind: ChartKind): readonly ChartTotal[] => (kind === "pie" ? ["count", "sum"] : CHART_TOTALS);

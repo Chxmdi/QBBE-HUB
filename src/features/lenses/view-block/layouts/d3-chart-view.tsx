@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { localized, type CatalogProperty } from "@/lib/query/catalog";
 import { formatLensValue } from "@/features/lenses/format";
 import type { LensT } from "@/features/lenses/i18n";
-import { barLengths, chartIsGrouped, linePoints, MAX_DRAWN_GROUPS, pieSlices, type ChartDatum, type ChartKind, type ChartSettings } from "./d3-chart";
+import { barLengths, chartIsGrouped, chartShares, linePoints, MAX_DRAWN_GROUPS, pieSlices, type ChartDatum, type ChartKind, type ChartSettings } from "./d3-chart";
 
 /** What a chart's total is called: "Count", "Sum of Estimate", "Average of Estimate". */
 export function chartMeasureLabel(settings: ChartSettings, property: CatalogProperty | undefined, locale: Locale, t: LensT): string {
@@ -68,7 +68,7 @@ export function ChartFigure({ kind, data, total, measureLabel, groupLabel, local
   const drawn = data.slice(0, MAX_DRAWN_GROUPS);
   const lengths = barLengths(drawn);
   const hidden = grouped && kind !== "pie" ? data.length - drawn.length : 0;
-  const share = (key: string) => slices.find((s) => s.key === key)?.percent;
+  const shares = kind === "pie" ? chartShares(data) : [];
 
   return (
     <figure data-chart={kind} aria-labelledby={`${ids}-caption`} className="m-0 space-y-3">
@@ -149,31 +149,31 @@ export function ChartFigure({ kind, data, total, measureLabel, groupLabel, local
         {showTable ? t("units.d3.figure.hideTable") : t("units.d3.figure.showTable")}
       </button>
       <div id={`${ids}-table`} className={cn(showTable ? "overflow-x-auto" : "sr-only")}>
-        <table className="w-full text-[13px]" data-chart-table>
+        <table className="w-full text-[13px] [overflow-wrap:normal] [word-break:normal]" data-chart-table>
           <caption className="sr-only">{summary}</caption>
           <thead className="text-left text-muted">
             <tr>
               <th scope="col" className="py-1 pr-3 font-semibold">{grouped ? groupLabel : measureLabel}</th>
-              <th scope="col" className="py-1 pr-3 text-right font-semibold">{grouped ? measureLabel : t("units.d3.settings.total")}</th>
-              {kind === "pie" ? <th scope="col" className="py-1 text-right font-semibold">{t("units.d3.figure.share")}</th> : null}
+              <th scope="col" className="whitespace-nowrap py-1 pr-3 text-right font-semibold">{grouped ? measureLabel : t("units.d3.settings.total")}</th>
+              {kind === "pie" ? <th scope="col" className="whitespace-nowrap py-1 text-right font-semibold">{t("units.d3.figure.share")}</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
             {grouped ? (
               data.map((d, i) => {
-                const percent = share(d.key);
+                const percent = shares[i];
                 return (
                   <tr key={d.key || `none-${i}`}>
                     <th scope="row" className="py-1 pr-3 text-left font-normal text-ink">{d.label}</th>
-                    <td className="py-1 pr-3 text-right tabular-nums">{text(d.value)}</td>
-                    {kind === "pie" ? <td className="py-1 text-right tabular-nums">{percent === undefined ? "" : `${format.format(Math.round(percent))}%`}</td> : null}
+                    <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums">{text(d.value)}</td>
+                    {kind === "pie" ? <td className="whitespace-nowrap py-1 text-right tabular-nums">{`${format.format(Math.round(percent))}%`}</td> : null}
                   </tr>
                 );
               })
             ) : (
               <tr>
                 <th scope="row" className="py-1 pr-3 text-left font-normal text-ink">{measureLabel}</th>
-                <td className="py-1 pr-3 text-right tabular-nums">{text(total)}</td>
+                <td className="whitespace-nowrap py-1 pr-3 text-right tabular-nums">{text(total)}</td>
               </tr>
             )}
           </tbody>

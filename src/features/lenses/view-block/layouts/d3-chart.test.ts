@@ -13,6 +13,7 @@ import {
   chartData,
   chartIsEmpty,
   chartMeasures,
+  chartShares,
   chartSpec,
   chartTotal,
   chartTotalOption,
@@ -20,6 +21,7 @@ import {
   pieSlices,
   readChartSettings,
   settingsFromTotalOption,
+  totalsFor,
   type ChartDatum,
 } from "./d3-chart";
 import { ChartFigure, chartMeasureLabel } from "./d3-chart-view";
@@ -55,8 +57,10 @@ describe("D3-1: the chart layout and its settings", () => {
     for (const kind of ["bar", "line", "pie", "number"]) {
       expect(parseViewBlockProps(chartProps({ kind }))?.chart).toEqual({ kind, total: "count" });
       expect(parseViewBlockProps(chartProps({ kind, total: "sum", property: "estimate" }))?.chart).toEqual({ kind, total: "sum", property: "estimate" });
-      expect(parseViewBlockProps(chartProps({ kind, total: "avg", property: "estimate" }))?.chart).toEqual({ kind, total: "avg", property: "estimate" });
+      if (kind !== "pie") expect(parseViewBlockProps(chartProps({ kind, total: "avg", property: "estimate" }))?.chart).toEqual({ kind, total: "avg", property: "estimate" });
     }
+    // Averages are not parts of a whole, so a pie never shows one.
+    expect(parseViewBlockProps(chartProps({ kind: "pie", total: "avg", property: "estimate" }))).toBeNull();
     // No settings yet: a bar chart of counts.
     expect(parseViewBlockProps(chartProps())?.chart).toBeUndefined();
     expect(readChartSettings(undefined)).toEqual({ kind: "bar", total: "count" });
@@ -80,7 +84,12 @@ describe("D3-1: the chart layout and its settings", () => {
   });
 
   it("round-trips the settings pickers' Total choice", () => {
-    expect(settingsFromTotalOption("pie", "avg:estimate")).toEqual({ kind: "pie", total: "avg", property: "estimate" });
+    expect(settingsFromTotalOption("line", "avg:estimate")).toEqual({ kind: "line", total: "avg", property: "estimate" });
+    // A pie shows parts of a whole: an average becomes a count.
+    expect(settingsFromTotalOption("pie", "avg:estimate")).toEqual({ kind: "pie", total: "count" });
+    expect(settingsFromTotalOption("pie", "sum:estimate")).toEqual({ kind: "pie", total: "sum", property: "estimate" });
+    expect(totalsFor("pie")).toEqual(["count", "sum"]);
+    expect(totalsFor("bar")).toEqual(["count", "sum", "avg"]);
     expect(settingsFromTotalOption("bar", "sum:")).toEqual({ kind: "bar", total: "count" });
     expect(settingsFromTotalOption("bar", "nonsense")).toEqual({ kind: "bar", total: "count" });
     expect(chartTotalOption({ kind: "bar", total: "sum", property: "estimate" })).toBe("sum:estimate");
@@ -97,6 +106,8 @@ describe("D3-1: the chart layout and its settings", () => {
     expect(chartSpec({ version: 1, type: "task" }, { kind: "pie", total: "count" }, task, "status")).toEqual({ version: 1, type: "task", groupBy: { property: "status" } });
     expect(chartSpec({ version: 1, type: "note" }, { kind: "bar", total: "count" }, catalog.note)).toBe("needsGroup");
     expect(chartSpec({ version: 1, type: "task", groupBy: { property: "title" } }, { kind: "bar", total: "count" }, task)).toBe("needsGroup");
+    // A grouping the view chose but the chart cannot use is reported, never swapped for the default.
+    expect(chartSpec({ version: 1, type: "task", groupBy: { property: "title" } }, { kind: "bar", total: "count" }, task, "status")).toBe("needsGroup");
     // A sum of something that is not a number is never sent.
     expect(chartSpec(spec, { kind: "bar", total: "sum", property: "title" }, task)).toBe("invalid");
     expect(chartSpec(spec, { kind: "bar", total: "avg", property: "missing" }, task)).toBe("invalid");
@@ -178,6 +189,11 @@ describe("chart geometry", () => {
     expect(slices[1].offset).toBeCloseTo(slices[0].percent);
     expect(pieSlices(data, "Other").map((s) => s.key)).toEqual(["a", "b"]);
     expect(pieSlices([], "Other")).toEqual([]);
+    // The table's shares match the drawing, including groups folded into Other.
+    const shares = chartShares(many);
+    expect(shares.reduce((a, b) => a + b, 0)).toBeCloseTo(100);
+    expect(shares.slice(0, 4).reduce((a, b) => a + b, 0)).toBeCloseTo(slices[7].percent);
+    expect(chartShares(data)).toEqual([(4 / 6) * 100, (2 / 6) * 100, 0, 0]);
   });
 });
 
