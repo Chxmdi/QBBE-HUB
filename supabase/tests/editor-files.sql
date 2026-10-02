@@ -43,6 +43,14 @@ as $$
   select exists (select 1 from public.document where id = p_document);
 $$;
 
+-- What a download needs: the stored object, through Storage's own policies.
+create or replace function tests.editor_file_downloadable(p_path text)
+returns boolean
+language sql
+as $$
+  select exists (select 1 from storage.objects where bucket_id = 'documents' and name = p_path);
+$$;
+
 grant execute on all functions in schema tests to anon, authenticated;
 revoke execute on function tests.editor_file_upload(uuid) from anon, authenticated;
 
@@ -60,6 +68,8 @@ declare
   d_loose uuid;
   v_ok boolean;
   v_path text;
+  v_shared_path text;
+  v_private_path text;
 begin
   select organization_id into strict v_org
   from public.organization_membership where user_id = v_staff limit 1;
@@ -74,12 +84,14 @@ begin
 
   -- Adding a file -------------------------------------------------------------
   v_path := tests.editor_file_upload(v_staff);
+  v_shared_path := v_path;
   perform tests.authenticate(v_staff, 'aal1');
   d_shared := tests.editor_file_insert(v_org, p_shared, v_staff, v_path);
   reset role;
   perform tests.ok(d_shared is not null, 'editor files: staff add a file to a workspace page they can edit');
 
   v_path := tests.editor_file_upload(v_staff);
+  v_private_path := v_path;
   perform tests.authenticate(v_staff, 'aal1');
   d_private := tests.editor_file_insert(v_org, p_staff_private, v_staff, v_path);
   reset role;
@@ -98,23 +110,25 @@ begin
   perform tests.ok(d_loose is null, 'editor files: a staff-only file on no page is still refused to staff');
 
   -- Reading a file ------------------------------------------------------------
+  -- Storage serves only scanned-clean files; mark both as the scanner would.
+  update public.document set scan_status = 'clean' where id in (d_shared, d_private);
   perform tests.authenticate(v_other_staff, 'aal1');
-  v_ok := tests.editor_file_visible(d_shared) and app.can_read_document(d_shared);
+  v_ok := tests.editor_file_visible(d_shared) and tests.editor_file_downloadable(v_shared_path);
   reset role;
   perform tests.ok(v_ok, 'editor files: another staff member who can read the page reads its file');
 
   perform tests.authenticate(v_volunteer, 'aal1');
-  v_ok := tests.editor_file_visible(d_shared) or app.can_read_document(d_shared);
+  v_ok := tests.editor_file_visible(d_shared) or tests.editor_file_downloadable(v_shared_path);
   reset role;
   perform tests.ok(not v_ok, 'editor files: a volunteer who cannot read the page cannot read its file');
 
   perform tests.authenticate(v_other_staff, 'aal1');
-  v_ok := tests.editor_file_visible(d_private) or app.can_read_document(d_private);
+  v_ok := tests.editor_file_visible(d_private) or tests.editor_file_downloadable(v_private_path);
   reset role;
   perform tests.ok(not v_ok, 'editor files: a file on someone else''s private page stays private');
 
   perform tests.authenticate(v_staff, 'aal1');
-  v_ok := tests.editor_file_visible(d_private);
+  v_ok := tests.editor_file_visible(d_private) and tests.editor_file_downloadable(v_private_path);
   reset role;
   perform tests.ok(v_ok, 'editor files: the page''s author reads the file on their private page');
 
