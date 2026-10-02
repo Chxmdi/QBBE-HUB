@@ -84,7 +84,9 @@ function useResolvedAddress(editor: AnyMediaProps["editor"], url: string, attemp
     void (async () => {
       let result: Resolved;
       try {
-        const src = resolve ? await resolve(url) : kind === "link" ? url : "";
+        // Resolved as checked: without the spaces a pasted address may carry.
+        const address = url.trim();
+        const src = resolve ? await resolve(address) : kind === "link" ? address : "";
         result = src && servable(src) ? { state: "ready", src } : { state: "unavailable" };
       } catch {
         result = { state: "failed" };
@@ -191,13 +193,15 @@ function MediaBlockView(props: AnyMediaProps & { kind: MediaKind; t: EditorT }) 
   const dict = useDictionary();
   const uploading = useUploadLoading(block.id);
   const [attempt, setAttempt] = React.useState(0);
-  const [broken, setBroken] = React.useState(false);
+  // A load failure belongs to one address and attempt: a replaced file or a retry starts clean.
+  const loadKey = `${attempt}:${p.url}`;
+  const [brokenKey, setBrokenKey] = React.useState<string | null>(null);
+  const broken = brokenKey === loadKey;
   const address = mediaAddress(p.url);
   const resolved = useResolvedAddress(editor, p.url, attempt);
   const name = mediaName(kind, p, t);
   const altHintId = React.useId();
   const retry = () => {
-    setBroken(false);
     setAttempt((n) => n + 1);
   };
   const update = (next: Partial<MediaBlockProps>) => editor.updateBlock(block.id, { props: next } as never);
@@ -223,7 +227,7 @@ function MediaBlockView(props: AnyMediaProps & { kind: MediaKind; t: EditorT }) 
   } else if (resolved.state === "loading") {
     body = <p role="status" className="qbbe-media-note">{t("units.e3.media.loading")}</p>;
   } else if (resolved.state === "ready" && !broken) {
-    body = <MediaPreview kind={kind} src={resolved.src} props={props} name={name} t={t} onError={() => setBroken(true)} />;
+    body = <MediaPreview kind={kind} src={resolved.src} props={props} name={name} t={t} onError={() => setBrokenKey(loadKey)} />;
   } else {
     body = (
       <div role="note" className="qbbe-media-note qbbe-media-problem">

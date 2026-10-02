@@ -258,8 +258,10 @@ test("invalid or unsupported embeds and files show their own message and never b
     { type: "video", props: { url: "qbbe-document:00000000-0000-4000-8000-000000000000", name: "gone.mp4" } },
     { type: "embed", props: { url: "https://evil.example.org/frame" } },
     { type: "bookmark", props: { url: "javascript:alert(1)" } },
+    { type: "image", props: { url: "https://media.example.org/missing.png", name: "missing.png" } },
     { type: "paragraph", content: text(`Still here ${stamp}`) },
   ]);
+  await page.route("https://media.example.org/**", (route) => route.fulfill({ status: 404, contentType: "text/plain", body: "not found" }));
   page.on("dialog", (dialog) => {
     throw new Error(`a dialog opened: ${dialog.message()}`);
   });
@@ -277,6 +279,11 @@ test("invalid or unsupported embeds and files show their own message and never b
   await expect(editor.locator("[data-content-type='embed'] iframe")).toHaveCount(0);
   await expect(editor.locator("[data-content-type='bookmark']")).toContainText("This link cannot be opened here.");
   await expect(editor.locator("a[href^='javascript']")).toHaveCount(0);
+  // A secure link that does not load says so, with a way to try again.
+  const missing = editor.getByRole("figure", { name: "Image: missing.png" });
+  await expect(missing).toContainText("This image could not be loaded.");
+  await missing.getByRole("button", { name: "Try again" }).click();
+  await expect(missing).toContainText("This image could not be loaded.");
   await expect(editor.locator("[data-block-fallback]")).toHaveCount(0);
 
   await caretAtEnd(editor.locator("[data-content-type='paragraph']", { hasText: `Still here ${stamp}` }));
