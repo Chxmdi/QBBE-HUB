@@ -10,6 +10,7 @@ describe("view block layout slots", () => {
     expect([...VIEW_LAYOUTS]).toEqual([...BASE_VIEW_LAYOUTS, ...D3_LAYOUTS, ...D4_LAYOUTS]);
     expect(UNIT_PROP_KEYS).toEqual([...Object.keys(d3PropsShape), ...Object.keys(d4PropsShape)]);
     expect(pickUnitProps({ layout: "table", title: "Not a unit prop" })).toEqual({});
+    expect(pickUnitProps({ layout: "table", unknown: { kind: "bar" } })).toEqual({});
     expect(pickUnitProps(null)).toEqual({});
   });
 
@@ -17,6 +18,8 @@ describe("view block layout slots", () => {
     const t = createLensT("en");
     for (const layout of BASE_VIEW_LAYOUTS) {
       expect(unitLayoutLabel(layout, t)).toBeNull();
+      // D4 draws the gallery (with its cover); the other base layouts stay the block's.
+      if (layout === "gallery") continue;
       expect(renderUnitLayout({ layout } as never)).toBeUndefined();
     }
   });
