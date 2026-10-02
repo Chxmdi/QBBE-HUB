@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isEnabled } from "@/lib/feature-flags";
 import type { ObjectRef } from "@/lib/objects/contracts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPagesT } from "@/features/pages/i18n/server";
@@ -6,6 +7,7 @@ import { ObjectComments } from "@/features/object-comments/components/object-com
 import { VersionHistory } from "@/features/versions/components/version-history";
 import { listObjectVersions } from "@/features/versions/services/version.queries";
 import { PageCollabTabs } from "./page-collab-tabs";
+import { ActivityFeed } from "./page-collab-activity-feed";
 
 /**
  * Comments and version history under a page's body (U9, plan A10 and V1-17).
@@ -13,7 +15,9 @@ import { PageCollabTabs } from "./page-collab-tabs";
  * Comments reuse the object comments panel with the page's own parent type;
  * with a block id they show that block's thread. The version list reuses the
  * shared history, whose rows lead to the compare screen, where the whole
- * page, one block or the title can be restored.
+ * page, one block or the title can be restored. With the activity switch
+ * (wave 2 C2: wos_objects beside wos_pages) an Activity tab lists who did
+ * what and when.
  */
 export async function PageCollab({
   pageId,
@@ -30,7 +34,11 @@ export async function PageCollab({
 }) {
   const t = await getPagesT();
   const object: ObjectRef = { id: pageId, type: "page" };
-  const [versions, threads] = await Promise.all([listObjectVersions(object), blockThreads(pageId)]);
+  const [versions, threads, activityOn] = await Promise.all([
+    listObjectVersions(object),
+    blockThreads(pageId),
+    isEnabled("wos_objects"),
+  ]);
 
   return (
     <PageCollabTabs
@@ -46,7 +54,13 @@ export async function PageCollab({
         blockThread: t("collab.blockThread"),
         allComments: t("collab.allComments"),
         openVersions: t("collab.openVersions"),
+        activity: t("units.c2.tab"),
       }}
+      activity={
+        activityOn ? (
+          <ActivityFeed objectId={pageId} kind="page" />
+        ) : null
+      }
       comments={
         <>
           {!blockId && threads.length > 0 ? (
