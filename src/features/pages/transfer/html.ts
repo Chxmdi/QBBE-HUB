@@ -157,10 +157,12 @@ export function parseHtml(source: string): Element {
 
     const element: Element = { tag: name, attrs: parseAttributes(inside), children: [] };
     top().children.push(element);
-    // A "/" before ">" closes only foreign elements (svg, math); on HTML ones browsers ignore it,
-    // so `<a href=https://example.org/>` stays open. Past MAX_OPEN, new elements still hold their
-    // text, but in their parent.
-    const selfClosing = FOREIGN.has(name) && /(^|\s|["'])\/$/.test(inside.trimEnd());
+    // A "/" before ">" closes foreign elements (svg, math). Browsers ignore it on HTML elements, so
+    // `<a href=https://example.org/>` stays open; but an element dropped with its content is taken
+    // as closed, so `<form/>` cannot hide the rest of the file. Past MAX_OPEN, new elements still
+    // hold their text, but in their parent.
+    const tail = inside.trimEnd();
+    const selfClosing = DROPPED.has(name) ? tail.endsWith("/") : FOREIGN.has(name) && /(^|\s|["'])\/$/.test(tail);
     if (!VOID.has(name) && !selfClosing && stack.length < MAX_OPEN) stack.push(element);
   }
   return root;

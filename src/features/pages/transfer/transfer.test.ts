@@ -485,3 +485,26 @@ describe("X1-4 upload ceiling", () => {
     expect(await readAtMost(streamed([600, 600, 600]), 1000)).toBe("tooLarge");
   });
 });
+
+describe("X1 second review fixes", () => {
+  it("reads a link with spaces around its target", () => {
+    const { content } = markdownToContent("see [a]( http://x.org ) end, [b]( <https://y.org/b> ) and [c](https://z.org \"Title\")");
+    expect(canonical(content.blocks)).toEqual(
+      canonical([
+        p(
+          t("see "),
+          { type: "link", href: "http://x.org", content: [t("a")] },
+          t(" end, "),
+          { type: "link", href: "https://y.org/b", content: [t("b")] },
+          t(" and "),
+          { type: "link", href: "https://z.org", content: [t("c")] },
+        ),
+      ]),
+    );
+  });
+
+  it("does not let a self-closed dropped element hide the rest of the file", () => {
+    const { content } = htmlToContent("<p>one</p><form action=x/><p>two</p><button/><p>three</p><select/><p>four</p>");
+    expect(canonical(content.blocks)).toEqual(canonical([p(t("one")), p(t("two")), p(t("three")), p(t("four"))]));
+  });
+});

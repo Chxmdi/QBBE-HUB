@@ -732,7 +732,7 @@ class Scanner {
       this.parens ??= this.matchParens();
       const close = this.parens.get(open);
       if (close !== undefined && close >= k && close - k <= MAX_TARGET) {
-        return { label, href: unescape(source.slice(k, close)), end: close + 1 };
+        return { label, href: unescape(source.slice(k, close).trimEnd()), end: close + 1 };
       }
       const space = this.next(" ", k);
       const stop = space < 0 ? source.length : space;
@@ -746,17 +746,24 @@ class Scanner {
     return { label, href, end: k + title[0].length };
   }
 
-  /** The ")" matching each "(" with no space between, found in one pass. */
+  /**
+   * The ")" matching each "(", found in one pass. A space ends every open
+   * "(" (a link target has none), except spaces just after a "(", which a
+   * link may have before its target.
+   */
   private matchParens(): Map<number, number> {
     const { source } = this;
     const pairs = new Map<number, number>();
     let open: number[] = [];
+    let afterOpen = false;
     for (let j = 0; j < source.length; j++) {
       const c = source[j];
+      const space = /\s/.test(c);
       if (c === "\\") j++;
       else if (c === "(") open.push(j);
       else if (c === ")" && open.length) pairs.set(open.pop()!, j);
-      else if (/\s/.test(c)) open = [];
+      else if (space && !afterOpen) open = [];
+      afterOpen = c === "(" || (afterOpen && space);
     }
     return pairs;
   }
