@@ -31,6 +31,13 @@ describe("embed allow-list", () => {
     expect(embedFor(url)).toBeNull();
   });
 
+  it("lets video and audio blocks play https links and library files", () => {
+    const config = readFileSync("next.config.ts", "utf8");
+    const mediaSrc = config.match(/"media-src ([^"]+)"/)?.[1].split(" ") ?? [];
+    expect(mediaSrc).toEqual(expect.arrayContaining(["'self'", "blob:", "https:"]));
+    expect(config).toMatch(/"media-src[^\n]*supabaseOrigins\(\)/);
+  });
+
   it("only ever frames the origins the Content Security Policy allows", () => {
     const config = readFileSync("next.config.ts", "utf8");
     const frameSrc = config.match(/"frame-src ([^"]+)"/)?.[1].split(" ") ?? [];
