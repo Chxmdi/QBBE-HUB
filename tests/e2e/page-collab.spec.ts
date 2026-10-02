@@ -180,9 +180,12 @@ test("a block comment stays anchored after blocks move [switches on]", async ({ 
   await collab.getByRole("textbox", { name: "Comment" }).fill("Check this figure.");
   await collab.getByRole("button", { name: "Post comment" }).click();
   await expect(collab.getByText("Check this figure.")).toBeVisible();
-  expect(
-    sql(`select block_id || ':' || parent_type from public.record_comment where parent_id = '${pageId}'`),
-  ).toBe("second:page");
+  // The text is also in the comment box until the save returns, so wait for
+  // the box to clear and for the row before reading where it was anchored.
+  await expect(collab.getByRole("textbox", { name: "Comment" })).toHaveValue("");
+  await expect
+    .poll(() => sql(`select block_id || ':' || parent_type from public.record_comment where parent_id = '${pageId}'`))
+    .toBe("second:page");
 
   // Move the commented block to the top from the keyboard.
   await caretAtEnd(page, "second");
