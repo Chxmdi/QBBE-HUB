@@ -6,6 +6,8 @@ import { requireSession } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translate";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isEnabled } from "@/lib/feature-flags";
+import { HUB_CATEGORIES } from "@/features/notifications/categories";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 /**
@@ -56,8 +58,13 @@ const preferencesSchema = (t: TranslateFn) => z.object({
       mention: deliveryMode,
       announcement: deliveryMode,
       due_date: deliveryMode,
+      // Wave 2, C3 (wos_pages): comments, approvals and watched pages.
+      comment: deliveryMode.optional(),
+      approval: deliveryMode.optional(),
+      watched_page: deliveryMode.optional(),
     })
     .optional(),
+  hubMutedCategories: z.array(z.enum(HUB_CATEGORIES)).max(HUB_CATEGORIES.length).optional(),
   mutedProjectIds: z.array(z.string().uuid()).max(100).optional(),
   mutedThreadIds: z.array(z.string().uuid()).max(100).optional(),
 });
@@ -89,6 +96,15 @@ export async function saveNotificationPreferences(
     };
   }
 
+  const modes = parsed.data.categoryModes;
+  const pageChoices =
+    parsed.data.hubMutedCategories !== undefined ||
+    (modes !== undefined && (modes.comment ?? modes.approval ?? modes.watched_page) !== undefined);
+  if (pageChoices && !(await isEnabled("wos_pages"))) {
+    return { ok: false, error: t("notifications.errors.invalid") };
+  }
+
+  const supabase = await createSupabaseServerClient();
   const patch: Record<string, unknown> = {
     user_id: session.userId,
     updated_at: new Date().toISOString(),
@@ -98,9 +114,16 @@ export async function saveNotificationPreferences(
     if (value !== undefined) patch[column] = value;
   }
 
-  if (parsed.data.categoryModes) {
-    const modes = parsed.data.categoryModes;
-    patch.category_modes = modes;
+  if (modes) {
+    // Merged over what is stored, so modes this form does not show (followed
+    // changes, or the page categories while their switch is off) are kept.
+    const { data: stored } = await supabase
+      .from("notification_preference")
+      .select("category_modes")
+      .eq("user_id", session.userId)
+      .maybeSingle();
+    const current = (stored?.category_modes ?? {}) as Record<string, string>;
+    patch.category_modes = { ...current, ...modes };
     patch.email_assignments = modes.assignment !== "off";
     patch.email_mentions = modes.mention !== "off";
     patch.email_announcements = modes.announcement !== "off";
@@ -109,6 +132,7 @@ export async function saveNotificationPreferences(
       (mode) => mode === "daily" || mode === "weekly",
     );
   }
+  if (parsed.data.hubMutedCategories) patch.hub_muted_categories = [...new Set(parsed.data.hubMutedCategories)];
   if (parsed.data.mutedProjectIds) patch.muted_project_ids = parsed.data.mutedProjectIds;
   if (parsed.data.mutedThreadIds) patch.muted_thread_ids = parsed.data.mutedThreadIds;
 
@@ -126,7 +150,6 @@ export async function saveNotificationPreferences(
     }
   }
 
-  const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("notification_preference")
     .upsert(patch, { onConflict: "user_id" });

@@ -1,6 +1,6 @@
 import type * as React from "react";
 import type * as Y from "yjs";
-import type { BlockNoteEditor } from "@blocknote/core";
+import type { BlockNoteEditor, BlockNoteEditorOptions } from "@blocknote/core";
 import type { EditorT } from "@/features/editor/i18n";
 import type { Locale } from "@/lib/i18n/config";
 import type { EditorFileHandlers } from "@/features/editor/adapter/types";
@@ -16,6 +16,8 @@ import type { EditorFileHandlers } from "@/features/editor/adapter/types";
 // it through BlockNote's API, which is generic over that schema.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyBlockNoteEditor = BlockNoteEditor<any, any, any>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the units' extensions work with any schema, as the editor does.
+type UnitExtensions = NonNullable<BlockNoteEditorOptions<any, any, any>["extensions"]>;
 
 /** What a unit can read when the editor is created. */
 export interface EditorUnitCreateContext {
@@ -40,6 +42,8 @@ export interface EditorUnitCreateContext {
  */
 export interface EditorUnitOptions {
   collaboration?: Record<string, unknown>;
+  /** BlockNote extensions, given at creation; the units' lists are joined. */
+  extensions?: UnitExtensions;
   [key: string]: unknown;
 }
 

@@ -32,9 +32,12 @@ export function useEditorUnitOptions(ctx: EditorUnitCreateContext): EditorUnitOp
 export function mergeUnitOptions(parts: readonly EditorUnitOptions[]): EditorUnitOptions {
   const merged: EditorUnitOptions = {};
   for (const part of parts) {
-    const { collaboration, ...rest } = part;
+    const { collaboration, extensions, ...rest } = part;
     Object.assign(merged, rest);
     if (collaboration) merged.collaboration = { ...(merged.collaboration ?? {}), ...collaboration };
+    // Extensions add up: each unit gives its own, all at creation (never registerExtension later,
+    // which rebuilds the plugin views and stops the undo history).
+    if (extensions) merged.extensions = [...(merged.extensions ?? []), ...extensions];
   }
   return merged;
 }
