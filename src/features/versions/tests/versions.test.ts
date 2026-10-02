@@ -19,9 +19,11 @@ describe("content snapshots", () => {
     expect(isContentSnapshot("text")).toBe(false);
   });
 
-  it("has an adapter for tasks only until the editor lands", () => {
+  it("has an adapter for tasks, pages and meetings and none for other types", () => {
     expect(contentAdapterFor("task")).not.toBeNull();
-    expect(contentAdapterFor("page")).toBeNull();
+    expect(contentAdapterFor("page")).not.toBeNull();
+    expect(contentAdapterFor("meeting")).not.toBeNull();
+    expect(contentAdapterFor("decision")).toBeNull();
   });
 });
 

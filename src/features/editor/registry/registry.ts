@@ -4,6 +4,7 @@ import {
   Bookmark,
   ChevronRight,
   Code,
+  Columns2,
   File,
   FileText,
   Gavel,
@@ -16,9 +17,13 @@ import {
   ListTodo,
   MessageSquareWarning,
   Minus,
+  MousePointerClick,
   PanelTop,
+  Repeat2,
+  RectangleVertical,
   SquareCheck,
   Table,
+  TableOfContents,
   TextQuote,
   Type,
   UserRound,
@@ -52,7 +57,8 @@ const TEXT = { turnInto: TURN_INTO_TYPES, childSupport: true } as const;
 
 /** Dictionary keys a block's name may come from, by schema source. */
 type DefaultType = keyof typeof editorEn.types & keyof typeof editorFrCA.types;
-type WorkspaceType = Exclude<keyof typeof editorEn.slash, "group"> & keyof typeof editorFrCA.slash;
+type LayoutType = "columnList" | "column" | "tableOfContents";
+type WorkspaceType = Exclude<keyof typeof editorEn.slash, "group" | "layoutGroup" | LayoutType> & keyof typeof editorFrCA.slash;
 type SemanticType = keyof typeof editorEn.semantic.items & keyof typeof editorFrCA.semantic.items;
 
 type RequiredKeys = "icon" | "category";
@@ -82,12 +88,25 @@ const defaultBlock = (type: DefaultType, rest: Rest) =>
 const workspaceBlock = (type: WorkspaceType, rest: Rest) =>
   define(type, { en: editorEn.slash[type].title, fr: editorFrCA.slash[type].title }, "workspace", rest);
 
+/** A layout block (layout-blocks.tsx), named by its slash item. */
+const layoutBlock = (type: LayoutType, rest: Rest) =>
+  define(type, { en: editorEn.slash[type].title, fr: editorFrCA.slash[type].title }, "layout", rest);
+
 /** A semantic block (semantic-blocks.tsx), named by its slash item; it needs the page's handlers to render. */
 const semanticBlock = (type: SemanticType, rest: Rest) =>
   define(
     type,
     { en: editorEn.semantic.items[type].title, fr: editorFrCA.semantic.items[type].title },
     "semantic",
+    { offlineSupport: false, permission: "editor", ...rest },
+  );
+
+/** A block that needs its own handler group (synced blocks, buttons), named by its slash item. */
+const handledBlock = (type: "syncedBlock" | "button", schemaSource: "synced" | "action", rest: Rest) =>
+  define(
+    type,
+    { en: editorEn[type].slash.title, fr: editorFrCA[type].slash.title },
+    schemaSource,
     { offlineSupport: false, permission: "editor", ...rest },
   );
 
@@ -109,6 +128,10 @@ export const BLOCK_REGISTRY: readonly BlockDefinition[] = Object.freeze([
   defaultBlock("audio", { icon: AudioLines, category: "media" }),
   workspaceBlock("bookmark", { icon: Bookmark, category: "media" }),
   workspaceBlock("embed", { icon: PanelTop, category: "media" }),
+  // A column list holds only columns, and a column holds the blocks it shows.
+  layoutBlock("columnList", { icon: Columns2, category: "layout", childSupport: true, commentSupport: false }),
+  layoutBlock("column", { icon: RectangleVertical, category: "layout", childSupport: true, commentSupport: false }),
+  layoutBlock("tableOfContents", { icon: TableOfContents, category: "layout" }),
   semanticBlock("task", { icon: ListChecks, category: "semantic" }),
   semanticBlock("decision", { icon: Gavel, category: "semantic" }),
   semanticBlock("person", { icon: UserRound, category: "semantic" }),
@@ -117,6 +140,8 @@ export const BLOCK_REGISTRY: readonly BlockDefinition[] = Object.freeze([
   semanticBlock("query", { icon: ListTodo, category: "data" }),
   semanticBlock("libraryFile", { icon: FileText, category: "semantic" }),
   semanticBlock("pageLink", { icon: Link2, category: "semantic" }),
+  handledBlock("syncedBlock", "synced", { icon: Repeat2, category: "layout" }),
+  handledBlock("button", "action", { icon: MousePointerClick, category: "data" }),
 ]);
 
 const BY_TYPE: ReadonlyMap<string, BlockDefinition> = new Map(BLOCK_REGISTRY.map((entry) => [entry.type, entry]));

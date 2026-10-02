@@ -179,3 +179,78 @@ export async function getMeetingObject(meetingId: string): Promise<MeetingObject
     canManage: canManage.data === true,
   };
 }
+
+export interface MeetingListRow {
+  id: string;
+  title: string;
+  startsAt: string;
+  status: MeetingObject["status"];
+  organizer: string | null;
+  project: string | null;
+  /** How many captured items still wait for the end-of-meeting review. */
+  openCaptures: number;
+}
+
+export interface MeetingObjectIndex {
+  upcoming: MeetingListRow[];
+  recent: MeetingListRow[];
+}
+
+const INDEX_LIMIT = 20;
+
+type ListRow = {
+  id: string;
+  title: string;
+  starts_at: string;
+  status: MeetingObject["status"];
+  organizer: Named;
+  project: { id: string; name: string } | null;
+  open_captures: { count: number }[] | null;
+};
+
+function toListRow(row: ListRow): MeetingListRow {
+  return {
+    id: row.id,
+    title: row.title,
+    startsAt: row.starts_at,
+    status: row.status,
+    organizer: row.organizer?.full_name ?? null,
+    project: row.project?.name ?? null,
+    openCaptures: row.open_captures?.[0]?.count ?? 0,
+  };
+}
+
+/**
+ * The meetings the reader may see, split around now: the next ones first,
+ * then the most recent, each with how many captures still wait for review
+ * (counted in the same query). RLS decides what is listed and counted; a
+ * read error reaches the error page through the page client rather than
+ * reading as an empty index.
+ */
+export async function listMeetingObjects(now: Date = new Date()): Promise<MeetingObjectIndex> {
+  const supabase = await createSupabasePageClient();
+  const cutoff = now.toISOString();
+  const columns =
+    "id, title, starts_at, status, organizer:organizer_id(id, full_name), project:project_id(id, name), open_captures:meeting_capture(count)";
+  const [upcoming, recent] = await Promise.all([
+    supabase
+      .from("meeting")
+      .select(columns)
+      .eq("open_captures.status", "open")
+      .gte("starts_at", cutoff)
+      .neq("status", "cancelled")
+      .order("starts_at")
+      .limit(INDEX_LIMIT),
+    supabase
+      .from("meeting")
+      .select(columns)
+      .eq("open_captures.status", "open")
+      .lt("starts_at", cutoff)
+      .order("starts_at", { ascending: false })
+      .limit(INDEX_LIMIT),
+  ]);
+  return {
+    upcoming: ((upcoming.data ?? []) as unknown as ListRow[]).map(toListRow),
+    recent: ((recent.data ?? []) as unknown as ListRow[]).map(toListRow),
+  };
+}

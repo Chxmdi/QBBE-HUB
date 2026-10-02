@@ -53,3 +53,263 @@
   color: var(--color-ink);
   border-left-color: var(--color-line);
 }
+
+/*
+ * U5a layout blocks. A column list's children (its columns) are laid out as a
+ * CSS grid on the block group BlockNote renders after the list's node view
+ * (.node-columnList); a column's width prop (1 to 3) is a grid span. Under
+ * 640 px the columns stack.
+ */
+.qbbe-editor [data-content-type="columnList"],
+.qbbe-editor [data-content-type="column"] {
+  padding: 0;
+}
+.qbbe-editor .node-columnList + .bn-block-group {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 1rem;
+  margin-left: 0;
+}
+.qbbe-editor .node-columnList + .bn-block-group > .bn-block-outer {
+  min-width: 0;
+}
+.qbbe-editor .node-columnList + .bn-block-group > .bn-block-outer::before,
+.qbbe-editor .node-column + .bn-block-group > .bn-block-outer::before {
+  content: none;
+}
+.qbbe-editor .node-columnList + .bn-block-group > .bn-block-outer:has(> .bn-block > .node-column [data-width="2"]) {
+  grid-column: span 2;
+}
+.qbbe-editor .node-columnList + .bn-block-group > .bn-block-outer:has(> .bn-block > .node-column [data-width="3"]) {
+  grid-column: span 3;
+}
+/* A column's own blocks are not indented like nested blocks. */
+.qbbe-editor .node-column + .bn-block-group {
+  margin-left: 0;
+}
+/* While editing, a faint frame shows where each column starts and ends. */
+.qbbe-editor .bn-editor[contenteditable="true"] .bn-block:has(> .node-column) {
+  height: 100%;
+  border: 1px dashed var(--color-line);
+  border-radius: 4px;
+  padding: 0.25rem;
+}
+.qbbe-column-head {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+}
+/* BlockNote adds a 30 px "add a block" widget before any node named column
+   (meant for its own multi-column package); here the columns are plain
+   blocks and already end with a paragraph. */
+.qbbe-editor .bn-trailing-block:has(+ .node-column) {
+  display: none;
+}
+/* The selected column list shows its outline on the columns, since its own
+   content element is only a hidden label. */
+.qbbe-editor .node-columnList.ProseMirror-selectednode + .bn-block-group {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+@media (max-width: 639px) {
+  .qbbe-editor .node-columnList + .bn-block-group {
+    grid-auto-flow: row;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .qbbe-editor .node-columnList + .bn-block-group > .bn-block-outer {
+    grid-column: auto !important;
+  }
+}
+
+/* Table of contents. */
+.qbbe-toc {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface-soft);
+}
+.qbbe-toc-title {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.qbbe-toc-empty {
+  margin: 0;
+  color: var(--color-muted);
+}
+.qbbe-toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.qbbe-toc-list .qbbe-toc-list {
+  padding-left: 1.25rem;
+}
+.qbbe-toc-link {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  color: var(--color-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.qbbe-toc-link:hover {
+  color: var(--color-brand);
+}
+.qbbe-toc-link:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* U4: the block handle, the selection and the bar of bulk actions. */
+.qbbe-editor .bn-side-menu {
+  color: var(--color-muted);
+}
+.qbbe-editor .bn-side-menu .bn-ak-button:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+.qbbe-handle-menu .bn-ak-menu-item.qbbe-handle-danger {
+  color: var(--color-danger-fg);
+}
+
+/* Selected rows and the rows a keyboard move landed on, drawn over the
+   document (pointer events pass through). Solid for the selection, dashed
+   for the landing place, so high contrast mode still tells them apart. */
+.qbbe-selected-row,
+.qbbe-drop-target {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  border-radius: 4px;
+}
+.qbbe-selected-row {
+  background-color: color-mix(in srgb, var(--color-brand) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-brand);
+}
+.qbbe-drop-target {
+  outline: 2px dashed var(--color-accent-fg);
+  outline-offset: -1px;
+  background-color: color-mix(in srgb, var(--color-accent) 18%, transparent);
+}
+.dark .qbbe-selected-row {
+  background-color: color-mix(in srgb, var(--color-brand-fg) 18%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-brand-fg);
+}
+@media (forced-colors: active) {
+  .qbbe-selected-row {
+    background-color: transparent;
+    box-shadow: none;
+    outline: 2px solid Highlight;
+    outline-offset: -1px;
+  }
+  .qbbe-drop-target {
+    background-color: transparent;
+    outline: 3px dashed Highlight;
+  }
+}
+
+.qbbe-bulk-bar {
+  position: absolute;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-pop);
+}
+.qbbe-bulk-count {
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.qbbe-bulk-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  color: var(--color-ink);
+}
+.qbbe-bulk-button:hover,
+.qbbe-bulk-button:focus-visible {
+  background-color: var(--color-surface-soft);
+}
+.qbbe-bulk-button:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 1px;
+}
+.qbbe-bulk-text {
+  font-size: 12px;
+}
+.qbbe-color-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+}
+
+/* 2.5.8 Target Size: the side menu's add and grip buttons are 24 px. */
+.qbbe-editor .bn-side-menu .bn-ak-button {
+  min-width: 24px;
+  min-height: 24px;
+}
+
+/* 1.4.3 Contrast: block colours chosen from the handle menu. BlockNote's own
+   text colours fall below 4.5:1 on our page (red is 4.0:1). Each text colour
+   here reads at 4.6:1 or more on the page, the surface and every block
+   background of its theme; dark backgrounds are deep enough for the ink. */
+.qbbe-editor .bn-container {
+  --bn-colors-highlights-gray-text: #656461;
+  --bn-colors-highlights-brown-text: #64473a;
+  --bn-colors-highlights-red-text: #c21f1f;
+  --bn-colors-highlights-orange-text: #9a5209;
+  --bn-colors-highlights-yellow-text: #795d01;
+  --bn-colors-highlights-green-text: #4d6461;
+  --bn-colors-highlights-blue-text: #0b6b94;
+  --bn-colors-highlights-purple-text: #6940a5;
+  --bn-colors-highlights-pink-text: #ad1a72;
+}
+.dark .qbbe-editor .bn-container {
+  --bn-colors-highlights-gray-text: #cdccc8;
+  --bn-colors-highlights-gray-background: #565552;
+  --bn-colors-highlights-brown-text: #dbcac1;
+  --bn-colors-highlights-brown-background: #64473a;
+  --bn-colors-highlights-red-text: #f8bdbd;
+  --bn-colors-highlights-red-background: #9a2a2a;
+  --bn-colors-highlights-orange-text: #f8c28c;
+  --bn-colors-highlights-orange-background: #824407;
+  --bn-colors-highlights-yellow-text: #fec406;
+  --bn-colors-highlights-yellow-background: #685000;
+  --bn-colors-highlights-green-text: #c0cfcd;
+  --bn-colors-highlights-green-background: #445856;
+  --bn-colors-highlights-blue-text: #8bd6f6;
+  --bn-colors-highlights-blue-background: #09597c;
+  --bn-colors-highlights-purple-text: #d7c6f2;
+  --bn-colors-highlights-purple-background: #673fa1;
+  --bn-colors-highlights-pink-text: #f5bcde;
+  --bn-colors-highlights-pink-background: #9b1766;
+}
+
+/* The handle menu's dividers: a thin rule, not an empty item-sized gap. */
+.qbbe-handle-menu hr,
+.qbbe-handle-menu [role="separator"] {
+  height: 0;
+  min-height: 0;
+  margin: 4px 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}

@@ -99,8 +99,12 @@ test("a line naming a person and a date offers a quiet Make-a-task icon", async 
   await expect(icon).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
-  // Accessible with the icon showing.
+  // Accessible with the icon showing. Scanned from the top of the window: when
+  // the window has scrolled, the sticky top bar covers part of a sidebar link
+  // and target-size reports that overlap instead of anything on this screen.
   await page.mouse.move(0, 0);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(icon).toBeVisible();
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"]).analyze();
   expect(
     results.violations

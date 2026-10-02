@@ -54,6 +54,7 @@ export const versionsFr: Catalogue<typeof versionsEn> = {
     task: "Tâche",
     project: "Projet",
     page: "Page",
+    meeting: "Réunion",
     object: "Objet",
   },
   errors: {
@@ -107,6 +108,7 @@ export const versionsFr: Catalogue<typeof versionsEn> = {
     },
   },
   page: {
+    open: "Ouvrez-le pour modifier le contenu.",
     title: "Versions",
     description: "Toutes les versions de cet élément, enregistrées automatiquement et sur demande.",
   },

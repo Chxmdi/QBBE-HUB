@@ -12,7 +12,7 @@ function leaves(tree: Tree, prefix = ""): [string, string][] {
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
 // Words spelled the same in both languages.
-const SAME_IN_BOTH = new Set(["meta.title", "home.title", "sidebar.label", "covers.accent"]);
+const SAME_IN_BOTH = new Set(["meta.title", "home.title", "sidebar.label", "covers.accent", "collab.tabs.versions"]);
 
 describe("pages dictionaries", () => {
   const en = new Map(leaves(pagesEn as unknown as Tree));

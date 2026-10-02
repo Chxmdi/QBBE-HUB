@@ -5,7 +5,8 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
-import { contentAdapterFor } from "../adapters/registry";
+import { contentAdapterFor, isEditorDocumentType } from "../adapters/registry";
+import { keepCurrentPlacement } from "../adapters/editor-document-adapter";
 import { isContentSnapshot, type PropertySnapshot } from "../content";
 import { restoreBlockInto } from "../diff";
 import { versionsText } from "../messages";
@@ -72,7 +73,11 @@ export async function restoreFromVersion(input: unknown): Promise<RestoreResult>
       await adapter.writeContent(object, version.content);
       await adapter.writeProperties(object, restorable(version.properties));
     } else if (request.scope === "block") {
-      await adapter.writeContent(object, restoreBlockInto(current.content, version.content, request.key));
+      const next = restoreBlockInto(current.content, version.content, request.key);
+      await adapter.writeContent(
+        object,
+        isEditorDocumentType(object.type) ? keepCurrentPlacement(next, current.content, request.key) : next,
+      );
     } else {
       if (!adapter.restorableProperties.includes(request.key) || !(request.key in version.properties)) {
         return { ok: false, error: m.errors.failed };

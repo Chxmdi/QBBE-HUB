@@ -118,6 +118,7 @@ Not migration, on purpose:
 | `/lenses/feed` | beta | `wos_lenses` |  | Feed lens (V1-4) |
 | `/lenses/dashboard` | beta | `wos_lenses` |  | Dashboard lens (V1-5) |
 | `/lenses/find` | beta | `wos_lenses` |  | Find (M12) |
+| `/lenses/import` | beta | `wos_lenses` |  | CSV import (U15) |
 | `/lenses/embed` | beta | `wos_lenses` |  | Query block preview harness (M8e) |
 | `/pages` | beta | `wos_pages` |  | Pages: sidebar tree, favourites, recent (M4a) |
 | `/pages/[pageId]` | beta | `wos_pages` |  | One page in the block editor (M4b; editor also behind wos_editor) |
@@ -172,6 +173,7 @@ Not migration, on purpose:
 | `/schedule` | production |  |  | Master schedule (P0-GNT-01) |
 | `/meetings` | production |  |  | Meetings list |
 | `/meetings/[id]` | migration |  | `/meetings-v2/[id]` | One meeting: replaced by meetings as objects (V1-9) |
+| `/meetings-v2` | beta | `wos_meetings_v2` |  | Meetings v2 index (U12) |
 | `/meetings-v2/[id]` | beta | `wos_meetings_v2` |  | Meeting as an object with semantic notes (V1-9) |
 | `/meetings-v2/[id]/review` | beta | `wos_meetings_v2` |  | End-of-meeting review (V1-9) |
 | `/events` | production |  |  | Events |
