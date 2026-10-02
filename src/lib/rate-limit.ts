@@ -71,6 +71,9 @@ export const RATE_LIMITS = {
   // ceilings are far above what a person does by hand and stop a runaway
   // script or a stuck client from filling a table.
   "page:create": { limit: 60, windowSeconds: 60 },
+  // Page export and import (wave 2 unit X1): each copies a whole page out or in.
+  "page:export": { limit: 30, windowSeconds: 3600 },
+  "page:import": { limit: 20, windowSeconds: 3600 },
   "comment:create": { limit: 60, windowSeconds: 60 },
   "capture:create": { limit: 60, windowSeconds: 60 },
   "project:create": { limit: 120, windowSeconds: 3600 },
