@@ -257,6 +257,8 @@ export function ObjectEditor({
           fileName: file.name.slice(0, 200) || "file",
           mimeType: file.type || undefined,
           sizeBytes: file.size,
+          objectType,
+          objectId,
         });
         if (!result.ok) {
           await supabase.storage.from("documents").remove([path]);
@@ -269,7 +271,7 @@ export function ObjectEditor({
         return resolveEditorFile(ref);
       },
     }),
-    [t],
+    [t, objectType, objectId],
   );
 
   const semantic = React.useMemo<EditorSemanticHandlers>(

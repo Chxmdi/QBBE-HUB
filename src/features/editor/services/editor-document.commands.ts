@@ -108,6 +108,8 @@ const uploadSchema = z.object({
   fileName: z.string().trim().min(1).max(200),
   mimeType: z.string().trim().max(200).optional(),
   sizeBytes: z.number().int().min(0),
+  objectType: z.enum(["page", "task", "meeting"]),
+  objectId: z.string().uuid(),
 });
 
 /**
@@ -126,6 +128,8 @@ export async function registerEditorUpload(input: unknown): Promise<{ ok: true; 
     mimeType: parsed.data.mimeType,
     sizeBytes: parsed.data.sizeBytes,
     visibility: "staff",
+    // The file follows the page (or task, or meeting notes) it was added to.
+    editorObject: { type: parsed.data.objectType, id: parsed.data.objectId },
   });
   if (!result.ok || !result.id) return { ok: false, error: result.error ?? t("files.uploadFailed") };
   return { ok: true, ref: documentRef(result.id) };

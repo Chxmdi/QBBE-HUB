@@ -291,9 +291,9 @@ test("a pasted image uploads through the scanned upload and says while its scan 
   const stamp = Date.now();
   const name = `e1-paste-${stamp}.png`;
   const pageId = makePage(`Paste file ${stamp}`, [`Start ${stamp}`]);
-  // An admin: the library's insert policy refuses staff-only files from
-  // other staff (see the PR), which is the upload this paste goes through.
-  await signIn(page, "admin");
+  // A staff member: a file added in the editor follows its page, so anyone
+  // who can edit the page can add one (not only administrators).
+  await signIn(page, "staff");
   const editor = await openPage(page, pageId);
 
   // First attempt: the storage upload fails, the block says so and offers to try again.
@@ -322,6 +322,8 @@ test("a pasted image uploads through the scanned upload and says while its scan 
   const documentId = sql(`select id from public.document where title = '${name}'`);
   expect(documentId).toMatch(/^[0-9a-f-]{36}$/);
   expect(sql(`select scan_status || '|' || visibility from public.document where id = '${documentId}'`)).toBe("pending|staff");
+  // The file belongs to the page it was pasted into: the page's readers read it.
+  expect(sql(`select editor_object_type || ':' || editor_object_id from public.document where id = '${documentId}'`)).toBe(`page:${pageId}`);
   await expect(page.getByTestId("editor-save-state")).toHaveText("Saved", { timeout: 30_000 });
   expect(sql(`select props->>'url' from public.block where object_id = '${pageId}' and type = 'image'`)).toBe(`qbbe-document:${documentId}`);
 
