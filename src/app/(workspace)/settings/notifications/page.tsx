@@ -9,6 +9,8 @@ import { DEFAULT_PREFERENCES, PREFERENCE_COLUMNS } from "@/features/notification
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { getFormatters, getT } from "@/lib/i18n/server";
+import { isEnabled } from "@/lib/feature-flags";
+import { getPagesT } from "@/features/pages/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translate";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -70,7 +72,12 @@ export default async function NotificationSettingsPage() {
       <PageHeader
         eyebrow={t("notifications.page.eyebrow")}
         title={t("notifications.page.heading")}
-        description={t("notifications.page.description")}
+        description={
+          // With wos_pages on (C3) a kind of notice can also be kept out of the Hub.
+          (await isEnabled("wos_pages"))
+            ? (await getPagesT())("units.c3.preferences.description")
+            : t("notifications.page.description")
+        }
       />
 
       <NotificationPreferencesForm

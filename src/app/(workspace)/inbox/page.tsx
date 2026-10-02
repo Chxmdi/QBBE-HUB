@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { getFormatters, getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translate";
 import { inboxItemVisible } from "@/features/notifications/services/mute";
+import { NoticeCategory } from "@/features/notifications/components/notice-category";
 import type { Notification } from "@/types/entities";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -226,7 +227,7 @@ export default async function InboxPage({
                       <p className="meta truncate">{notification.body}</p>
                     ) : null}
                     <p className="meta mt-0.5 flex items-center gap-2">
-                      <Badge tone="neutral">{categoryLabel(notification.category, t)}</Badge>
+                      <Badge tone="neutral"><NoticeCategory category={notification.category} fallback={categoryLabel(notification.category, t)} /></Badge>
                       {format.relative(notification.created_at)}
                     </p>
                   </div>
