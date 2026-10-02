@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { lensSpecSchema, RELATIVE_DATES } from "@/lib/query/spec";
+import { chartSettingsSchema, DEFAULT_CHART } from "@/features/lenses/view-block/layouts/d3-chart";
 
 /**
  * A dashboard lens (V1-5): tiles in a grid plus dashboard-wide filters, kept
@@ -45,7 +46,8 @@ const base = {
 
 export const tileSchema = z.discriminatedUnion("kind", [
   z.object({ ...base, kind: z.literal("metric"), source: tileSourceSchema, measure: measureSchema.default({ kind: "count" }) }).strict(),
-  z.object({ ...base, kind: z.literal("chart"), source: tileSourceSchema, groupBy: key }).strict(),
+  // The same chart as a view block's chart layout (D3): kind and total, grouped by `groupBy`.
+  z.object({ ...base, kind: z.literal("chart"), source: tileSourceSchema, groupBy: key, chart: chartSettingsSchema.default(DEFAULT_CHART) }).strict(),
   z.object({ ...base, kind: z.literal("query"), source: tileSourceSchema, rows: z.number().int().min(1).max(50).default(10) }).strict(),
   z.object({ ...base, kind: z.literal("table"), source: tileSourceSchema, rows: z.number().int().min(1).max(50).default(10) }).strict(),
   z.object({ ...base, kind: z.literal("board"), source: tileSourceSchema }).strict(),

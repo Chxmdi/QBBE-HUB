@@ -11,6 +11,7 @@ import { createPage } from "@/features/pages/services/page.commands";
 import { buildTree, type PageNode, type PageRow } from "@/features/pages/tree";
 import { NewPageFromTemplate } from "./new-page-from-template";
 import { PageActions } from "./page-actions";
+import { X1PageImport } from "./units/x1-page-import";
 
 export interface PagesSidebarProps {
   pages: PageRow[];
@@ -97,14 +98,14 @@ export function PagesSidebar({
 
       <Section
         title={t("sidebar.workspace")}
-        action={canCreateWorkspace ? <span className="flex items-center"><NewPageFromTemplate pages={pages} editableIds={editableIds} canCreateWorkspace /><NewPageButton visibility="workspace" label={t("sidebar.newPage")} /></span> : null}
+        action={canCreateWorkspace ? <span className="flex items-center"><X1PageImport visibility="workspace" /><NewPageFromTemplate pages={pages} editableIds={editableIds} canCreateWorkspace /><NewPageButton visibility="workspace" label={t("sidebar.newPage")} /></span> : null}
       >
         <Tree nodes={workspace} {...row} />
       </Section>
 
       <Section
         title={t("sidebar.private")}
-        action={canCreatePrivate ? <NewPageButton visibility="private" label={t("sidebar.newPrivatePage")} /> : null}
+        action={canCreatePrivate ? <span className="flex items-center"><X1PageImport visibility="private" /><NewPageButton visibility="private" label={t("sidebar.newPrivatePage")} /></span> : null}
       >
         <Tree nodes={privateTree} {...row} />
       </Section>
