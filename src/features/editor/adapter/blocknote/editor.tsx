@@ -29,6 +29,7 @@ import type { EditorT } from "@/features/editor/i18n";
 import { CONTENT_VERSION, type EditorBlock, type EditorContent } from "@/features/editor/adapter/content";
 import type { BlockEditorProps, EditorSemanticHandlers } from "@/features/editor/adapter/types";
 import { createWorkspaceBlocks } from "./blocks";
+import { createLayoutBlocks } from "./layout-blocks";
 import { createSemanticBlocks, HandlersBox } from "./semantic-blocks";
 import { SuggestionLayer, TurnIntoTasksDialog, turnIntoPage } from "./progressive";
 import { BlockHandle } from "./block-handle";
@@ -68,12 +69,16 @@ import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
 export function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
   const { callout, bookmark, embed } = createWorkspaceBlocks(t);
   const s = createSemanticBlocks(t, locale, semantic);
+  const layout = createLayoutBlocks(t);
   return BlockNoteSchema.create({
     blockSpecs: {
       ...defaultBlockSpecs,
       callout: callout(),
       bookmark: bookmark(),
       embed: embed(),
+      columnList: layout.columnList(),
+      column: layout.column(),
+      tableOfContents: layout.tableOfContents(),
       task: s.task(),
       decision: s.decision(),
       person: s.person(),

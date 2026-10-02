@@ -10,7 +10,9 @@ export type BlockSchemaSource =
   /** `createWorkspaceBlocks` (callout, bookmark, embed). */
   | "workspace"
   /** `createSemanticBlocks` (blocks that point at a real object). */
-  | "semantic";
+  | "semantic"
+  /** `createLayoutBlocks` (columns and the table of contents). */
+  | "layout";
 
 /** The least role allowed to insert the block. */
 export type BlockPermission = "any" | "editor" | "admin";
@@ -43,5 +45,5 @@ export interface BlockDefinition {
 }
 
 export const BLOCK_CATEGORIES: readonly BlockCategory[] = ["text", "list", "media", "semantic", "layout", "data"];
-export const BLOCK_SCHEMA_SOURCES: readonly BlockSchemaSource[] = ["default", "workspace", "semantic"];
+export const BLOCK_SCHEMA_SOURCES: readonly BlockSchemaSource[] = ["default", "workspace", "semantic", "layout"];
 export const BLOCK_PERMISSIONS: readonly BlockPermission[] = ["any", "editor", "admin"];

@@ -118,6 +118,14 @@ export const editorEn = {
       subtext: "YouTube, Vimeo, Google Docs, Sheets, Slides, Forms, Drive or Loom",
       aliases: "embed,video,youtube,vimeo,google,loom,iframe",
     },
+    layoutGroup: "Layout",
+    columnList: { title: "Columns", subtext: "Two side-by-side columns; add up to four", aliases: "columns,layout,side by side,grid" },
+    column: { title: "Column", subtext: "Add a column beside this one", aliases: "column,col" },
+    tableOfContents: {
+      title: "Table of contents",
+      subtext: "Links to the page's headings, kept up to date",
+      aliases: "toc,contents,outline,headings,summary",
+    },
   },
   callout: {
     tone: "Callout tone",
@@ -230,6 +238,19 @@ export const editorEn = {
     cancel: "Cancel",
     toggle: "Task suggestions",
     toggleHint: "Shows a small icon beside lines that name a person and a date.",
+  },
+  layout: {
+    columns: "Columns",
+    column: "Column",
+    width: "Column width",
+    width1: "Standard width",
+    width2: "Double width",
+    width3: "Triple width",
+  },
+  toc: {
+    label: "Table of contents",
+    empty: "Add headings to see a table of contents",
+    hint: "Press Enter to move into the table of contents, then Tab between its links. Escape returns to the text.",
   },
   a11y: {
     blockType: "Block type",

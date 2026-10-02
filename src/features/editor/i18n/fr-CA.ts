@@ -120,6 +120,14 @@ export const editorFrCA: EditorMessages = {
       subtext: "YouTube, Vimeo, Google Docs, Sheets, Slides, Forms, Drive ou Loom",
       aliases: "intégrer,vidéo,youtube,vimeo,google,loom,iframe",
     },
+    layoutGroup: "Mise en page",
+    columnList: { title: "Colonnes", subtext: "Deux colonnes côte à côte; jusqu’à quatre", aliases: "colonnes,mise en page,côte à côte,grille,columns" },
+    column: { title: "Colonne", subtext: "Ajouter une colonne à côté de celle-ci", aliases: "colonne,col,column" },
+    tableOfContents: {
+      title: "Table des matières",
+      subtext: "Des liens vers les titres de la page, tenus à jour",
+      aliases: "table des matières,tdm,sommaire,plan,titres,toc",
+    },
   },
   callout: {
     tone: "Ton de l’encadré",
@@ -232,6 +240,19 @@ export const editorFrCA: EditorMessages = {
     cancel: "Annuler",
     toggle: "Suggestions de tâches",
     toggleHint: "Affiche une petite icône à côté des lignes qui mentionnent une personne et une date.",
+  },
+  layout: {
+    columns: "Colonnes",
+    column: "Colonne",
+    width: "Largeur de la colonne",
+    width1: "Largeur standard",
+    width2: "Largeur double",
+    width3: "Largeur triple",
+  },
+  toc: {
+    label: "Table des matières",
+    empty: "Ajoutez des titres pour afficher une table des matières",
+    hint: "Appuyez sur Entrée pour entrer dans la table des matières, puis sur Tab entre ses liens. Échap ramène au texte.",
   },
   a11y: {
     blockType: "Type de bloc",
