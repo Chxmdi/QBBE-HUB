@@ -106,7 +106,7 @@ function SyncedBlock({
     );
   }
   if (!id) {
-    return editable ? <SyncedPicker blockId={blockId} onChoose={onChoose} t={t} handlers={handlers} /> : <span />;
+    return editable ? <SyncedPicker blockId={blockId} onChoose={onChoose} t={t} handlers={handlers} /> : <p className="text-body-sm text-muted">{t("units.e3.objects.empty")}</p>;
   }
   return <SyncedContent key={id} id={id} role={role} editable={editable} t={t} handlers={handlers} />;
 }

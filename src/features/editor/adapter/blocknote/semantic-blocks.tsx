@@ -416,7 +416,7 @@ function ObjectBlockView({
 }) {
   const { loading, summary } = useSummary(cache, kind, objectId);
   if (!objectId) {
-    return editable ? <Picker kind={kind} t={t} handlers={handlers} onPick={onChoose} allowCreate={kind === "task"} /> : <span />;
+    return editable ? <Picker kind={kind} t={t} handlers={handlers} onPick={onChoose} allowCreate={kind === "task"} /> : <p className="text-body-sm text-muted">{t("units.e3.objects.empty")}</p>;
   }
   if (loading) return <p className="text-body-sm text-muted">{t("semantic.picker.searching")}</p>;
   if (!summary) return <Unavailable t={t} />;
