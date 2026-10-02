@@ -52,6 +52,9 @@ test("owner reviews live access and grant sources", async ({ page }) => {
 test("volunteer cannot access the administrator access inventory", async ({ page }) => {
   await signIn(page, "volunteer");
   const response = await page.goto("/admin/access");
+  // Read the denied response now: the browser drops a response's body once
+  // the page navigates again (the home page may refresh itself).
+  const body = (await response?.text()) ?? "";
   // Sent home with a reason, not silently: the notice says the page is not theirs.
   await expect(page).toHaveURL(/\/\?denied=1$/);
   await expect(
@@ -61,7 +64,7 @@ test("volunteer cannot access the administrator access inventory", async ({ page
   await expect(page.getByRole("region", { name: "Active members", exact: true })).toHaveCount(0);
   await expect(page.getByText("Proposed access and sources", { exact: true })).toHaveCount(0);
   // Also guard against inventory accidentally serialized into the denied response.
-  expect(await response?.text()).not.toContain("proposed readable records of");
+  expect(body).not.toContain("proposed readable records of");
 });
 
 /**
