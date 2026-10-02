@@ -309,6 +309,22 @@ test("typing at the end of a 500-block page is handled within 100 ms per key [sw
   expect(slowest).toBeLessThanOrEqual(KEY_BUDGET_MS);
 });
 
+test("on a long page the sidebar stays the height of the screen, with its account menu in view [switches on]", async ({ page }) => {
+  const id = longPage("sidebar", 100);
+  await signIn(page, "staff");
+  await openPage(page, id);
+  await waitForMark(page, "qbbe-editor:open");
+  const sidebar = page.locator("aside.qbbe-sidebar");
+  const viewport = page.viewportSize()!;
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(viewport.height * 3);
+  for (const where of ["top", "bottom"] as const) {
+    await page.evaluate((w) => window.scrollTo(0, w === "top" ? 0 : document.documentElement.scrollHeight), where);
+    await expect.poll(async () => (await sidebar.boundingBox())!.y, where).toBe(0);
+    expect((await sidebar.boundingBox())!.height, where).toBeLessThanOrEqual(viewport.height);
+    await expect(sidebar.locator("nav > div").last(), `${where}: account menu`).toBeInViewport();
+  }
+});
+
 test("waiting blocks are found by find in page and table of contents links still land on their heading [switches on]", async ({ page }) => {
   test.setTimeout(120_000);
   const id = longPage("find", 100);
