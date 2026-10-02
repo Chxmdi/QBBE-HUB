@@ -18,7 +18,7 @@ export function PagesShell({
   const viewer = { userId: session.userId, role: session.role };
   return (
     <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <aside className="lg:border-r lg:border-line lg:pr-3">
+      <aside className="min-w-0 lg:border-r lg:border-line lg:pr-3">
         <PagesSidebar
           pages={sidebar.pages}
           favouriteIds={sidebar.favouriteIds}
