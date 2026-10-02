@@ -103,6 +103,8 @@ type Editor = BlockNoteEditor<Schema["blockSchema"], Schema["inlineContentSchema
 
 /** The Yjs fragment that holds the document (the same name co-editing will sync). */
 const FRAGMENT = "document-store";
+/** The longest a change waits for an idle moment before it is reported. */
+const CHANGE_IDLE_MS = 150;
 
 /**
  * The document's Yjs state: the saved state when there is one, otherwise the
@@ -515,6 +517,21 @@ export default function BlockNoteEditorImpl({
   }, [editor]);
   useKeyboardConditions(containerRef, openBlockMenu);
 
+  // Serializing the whole document and its collaboration state is O(document):
+  // on a long page, doing it inside every key press made typing slow. The
+  // change is reported when the browser is next idle (within CHANGE_IDLE_MS),
+  // so a burst of keys costs one serialization; it is reported at once when
+  // the page is hidden or left, or the editor closes, so nothing is lost.
+  const onChangeRef = React.useRef(onChange);
+  React.useLayoutEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  const pendingChange = React.useRef<{ cancel: () => void } | null>(null);
+  const emitChange = React.useCallback(() => {
+    pendingChange.current?.cancel();
+    pendingChange.current = null;
+    onChangeRef.current?.(toContent(editor.document), bytesToBase64(Y.encodeStateAsUpdate(doc)));
+  }, [editor, doc]);
   const handleChange = React.useCallback(() => {
     const blocks = editor.document;
     // F5: keep a way out below a final table.
@@ -524,8 +541,34 @@ export default function BlockNoteEditorImpl({
       return;
     }
     setVersion((n) => n + 1);
-    onChange?.(toContent(blocks), bytesToBase64(Y.encodeStateAsUpdate(doc)));
-  }, [editor, editable, onChange, doc]);
+    if (!onChangeRef.current || pendingChange.current) return;
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(emitChange, { timeout: CHANGE_IDLE_MS });
+      pendingChange.current = { cancel: () => window.cancelIdleCallback(id) };
+    } else {
+      const id = setTimeout(emitChange, 0);
+      pendingChange.current = { cancel: () => clearTimeout(id) };
+    }
+  }, [editor, editable, emitChange]);
+  // Before the save queue's own listeners (capture runs first at the target),
+  // and on unmount before its passive-effect cleanup (layout cleanups run first).
+  React.useLayoutEffect(() => {
+    const flush = () => {
+      if (pendingChange.current) emitChange();
+    };
+    const hidden = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("beforeunload", flush, { capture: true });
+    window.addEventListener("pagehide", flush, { capture: true });
+    document.addEventListener("visibilitychange", hidden, { capture: true });
+    return () => {
+      window.removeEventListener("beforeunload", flush, { capture: true });
+      window.removeEventListener("pagehide", flush, { capture: true });
+      document.removeEventListener("visibilitychange", hidden, { capture: true });
+      flush();
+    };
+  }, [emitChange]);
 
   const getItems = React.useCallback(
     async (query: string) =>

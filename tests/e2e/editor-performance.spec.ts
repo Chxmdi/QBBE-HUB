@@ -351,6 +351,35 @@ test("waiting blocks are found by find in page and table of contents links still
   await expect(page).toHaveURL(/#block-/);
 });
 
+test("a find in page match stays on screen while the blocks above it grow, even without the browser's scroll anchoring [switches on]", async ({ page }) => {
+  test.setTimeout(120_000);
+  const id = longPage("hold", 100);
+  await signIn(page, "staff");
+  await openPage(page, id);
+  await waitForMark(page, "qbbe-editor:open");
+  await expect(page.locator(".qbbe-lazy-block").filter({ hasText: "hold view 82" })).toBeAttached();
+  // Chrome anchors scrolling to a visible node, but the waiting block it often
+  // picks is replaced when it renders; switch anchoring off to make that case
+  // certain rather than occasional.
+  await page.addStyleTag({ content: "* { overflow-anchor: none !important; }" });
+  const found = await page.evaluate(() =>
+    (window as unknown as { find(s: string, a: boolean, b: boolean, c: boolean): boolean }).find("hold view 82", false, false, true),
+  );
+  expect(found).toBe(true);
+  const block = page.locator(".bn-block-outer").filter({ has: page.locator("[data-view-block], .qbbe-lazy-block").filter({ hasText: "hold view 82" }) }).last();
+  await expect(block).toBeInViewport();
+  // The page above the match grows, as the blocks above do when they render.
+  // (Inserted just above the editor: the editor removes nodes it did not draw.)
+  await page.evaluate(() => {
+    const editor = document.querySelector(".bn-container");
+    const grown = document.createElement("div");
+    grown.style.height = "2500px";
+    editor?.parentElement?.insertBefore(grown, editor);
+  });
+  await page.waitForTimeout(500);
+  await expect(block).toBeInViewport({ timeout: 1_000 });
+});
+
 test("copying a page puts the real blocks on the clipboard, not the waiting ones [switches on]", async ({ page }) => {
   test.setTimeout(120_000);
   const id = longPage("copy", 100);
