@@ -171,30 +171,7 @@ test("pasted Markdown becomes the same blocks as typing it [switches on]", async
     "---",
     ">! A callout",
   ];
-  const slots = lines.map((_, index) => `Slot ${index} ${stamp}`);
-  const pageId = makePage(`Paste markdown ${stamp}`, [...slots, `Pasted below ${stamp}`]);
-  await signIn(page, "staff");
-  const editor = await openPage(page, pageId);
-
-  // Typed: each line into its own emptied paragraph.
-  for (const [index, line] of lines.entries()) {
-    const slot = editor.locator("[data-content-type='paragraph']", { hasText: slots[index] });
-    await slot.click();
-    await page.keyboard.press("End");
-    await page.keyboard.press("Shift+Home");
-    await page.keyboard.press("Backspace");
-    await page.keyboard.type(line);
-  }
-  // Pasted: the same lines at once.
-  await newLineAfter(page, editor.locator("[data-content-type='paragraph']", { hasText: `Pasted below ${stamp}` }));
-  await paste(editor, { "text/plain": lines.join("\n") });
-
-  // Typing "---" leaves an empty line after the divider; empty lines are not content.
-  const all = (await shape(editor)).filter((entry) => entry !== "paragraph");
-  const marker = all.indexOf(`paragraph|Pasted below ${stamp}`);
-  const typed = all.slice(0, marker);
-  const pasted = all.slice(marker + 1);
-  expect(typed).toEqual([
+  const expectedTyped = [
     "heading|H1|One",
     "heading|H2|Two",
     "heading|H3|Three",
@@ -208,7 +185,34 @@ test("pasted Markdown becomes the same blocks as typing it [switches on]", async
     "quote|A quote",
     "divider",
     "callout|A callout",
-  ]);
+  ];
+  const slots = lines.map((_, index) => `Slot ${index} ${stamp}`);
+  const pageId = makePage(`Paste markdown ${stamp}`, [...slots, `Pasted below ${stamp}`]);
+  await signIn(page, "staff");
+  const editor = await openPage(page, pageId);
+
+  // Typed: each line into its own emptied paragraph.
+  for (const [index, line] of lines.entries()) {
+    const slot = editor.locator("[data-content-type='paragraph']", { hasText: slots[index] });
+    await slot.click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Shift+Home");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type(line);
+    // The editor reads cursor moves a moment after the browser makes them, so
+    // wait until this line has become its block before clicking the next one.
+    await expect.poll(async () => (await shape(editor)).includes(expectedTyped[index])).toBe(true);
+  }
+  // Pasted: the same lines at once.
+  await newLineAfter(page, editor.locator("[data-content-type='paragraph']", { hasText: `Pasted below ${stamp}` }));
+  await paste(editor, { "text/plain": lines.join("\n") });
+
+  // Typing "---" leaves an empty line after the divider; empty lines are not content.
+  const all = (await shape(editor)).filter((entry) => entry !== "paragraph");
+  const marker = all.indexOf(`paragraph|Pasted below ${stamp}`);
+  const typed = all.slice(0, marker);
+  const pasted = all.slice(marker + 1);
+  expect(typed).toEqual(expectedTyped);
   expect(pasted).toEqual(typed);
   await expect(page.getByTestId("editor-save-state")).toHaveText("Saved", { timeout: 30_000 });
 });
