@@ -50,7 +50,23 @@ async function editSynced(page: Page, text: string) {
   const content = dialog.getByRole("textbox", { name: "Synced content" });
   await expect(content).toBeVisible({ timeout: 30_000 });
   await content.click();
-  await page.keyboard.press("Control+a");
+  // The editor takes the click's focus on the browser's next selection event;
+  // a select-all pressed before that misses the editor and the text would be
+  // added to the old one. Select all until the editor itself (Tiptap attaches
+  // it to its element) has every character selected.
+  await expect(async () => {
+    await page.keyboard.press("Control+a");
+    const all = await content.evaluate((el) => {
+      type Doc = { textContent: string; content: { size: number }; textBetween: (from: number, to: number, block: string) => string };
+      type WithEditor = Element & { editor?: { state: { doc: Doc; selection: { from: number; to: number } } } };
+      const dom = (el.matches(".ProseMirror") ? el : (el.querySelector(".ProseMirror") ?? el.closest(".ProseMirror"))) as WithEditor | null;
+      const state = dom?.editor?.state;
+      if (!state) return false;
+      const { from, to } = state.selection;
+      return state.doc.textBetween(from, to, "") === state.doc.textBetween(0, state.doc.content.size, "");
+    });
+    expect(all, "the synced content is all selected before typing").toBe(true);
+  }).toPass({ timeout: 10_000 });
   await page.keyboard.type(text);
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toHaveCount(0, { timeout: 15_000 });
