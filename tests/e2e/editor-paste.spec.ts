@@ -153,6 +153,33 @@ test("rich text keeps headings, bold, italic, links, lists and quotes, and saves
   );
 });
 
+test("a paste and the typing after it can each be undone [switches on]", async ({ page }) => {
+  test.setTimeout(120_000);
+  const stamp = Date.now();
+  const pageId = makePage(`Paste undo ${stamp}`, [`Before ${stamp}`]);
+  await signIn(page, "staff");
+  const editor = await openPage(page, pageId);
+
+  await newLineAfter(page, editor.locator("[data-content-type='paragraph']", { hasText: `Before ${stamp}` }));
+  await paste(editor, { "text/plain": `# Pasted ${stamp}` });
+  await expect(editor.locator("[data-content-type='heading']", { hasText: `Pasted ${stamp}` })).toBeVisible();
+  await page.keyboard.press("Enter");
+  await page.keyboard.type(`Typed ${stamp}`);
+  await expect(editor.getByText(`Typed ${stamp}`)).toBeVisible();
+
+  // The paste handling is part of the editor from the start, so the undo
+  // history keeps working: typing is undone first, then the paste.
+  const undo = process.platform === "darwin" ? "Meta+z" : "Control+z";
+  await page.keyboard.press(undo);
+  await expect(editor.getByText(`Typed ${stamp}`)).toHaveCount(0);
+  await expect(editor.locator("[data-content-type='heading']", { hasText: `Pasted ${stamp}` })).toBeVisible();
+  await expect.poll(async () => {
+    await page.keyboard.press(undo);
+    return editor.locator("[data-content-type='heading']", { hasText: `Pasted ${stamp}` }).count();
+  }).toBe(0);
+  await expect(editor.getByText(`Before ${stamp}`)).toBeVisible();
+});
+
 test("pasted Markdown becomes the same blocks as typing it [switches on]", async ({ page }) => {
   test.setTimeout(240_000);
   const stamp = Date.now();

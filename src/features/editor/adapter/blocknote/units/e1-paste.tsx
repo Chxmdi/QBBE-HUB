@@ -200,7 +200,7 @@ function createPasteHandler(doc: Y.Doc) {
 /** Options added to the editor when it is created: the paste handler. */
 export function useE1Options(ctx: EditorUnitCreateContext): EditorUnitOptions {
   const { doc } = ctx;
-  return React.useMemo(() => ({ pasteHandler: createPasteHandler(doc) }), [doc]);
+  return React.useMemo(() => ({ pasteHandler: createPasteHandler(doc), extensions: [e1Extension()] }), [doc]);
 }
 
 /** Block specs added or replaced by type key. */
@@ -239,8 +239,8 @@ function uploadNote(state: UploadState, blockId: string, t: EditorT, onRetry: (b
   return note;
 }
 
-function uploadDecorations(state: EditorState["doc"], states: Map<string, UploadState>, t: EditorT, onRetry: (blockId: string) => void): DecorationSet {
-  if (states.size === 0) return DecorationSet.empty;
+function uploadDecorations(state: EditorState["doc"], states: Map<string, UploadState>, t: EditorT | null, onRetry: (blockId: string) => void): DecorationSet {
+  if (states.size === 0 || !t) return DecorationSet.empty;
   const decorations: Decoration[] = [];
   state.descendants((node, pos) => {
     if (node.type.name === "blockContainer") {
@@ -278,14 +278,25 @@ function calloutShortcut(view: EditorView, from: number, to: number, text: strin
   return true;
 }
 
-function createE1Extension(editor: AnyBlockNoteEditor, t: EditorT, controller: PasteController) {
+/**
+ * The upload notes and the callout shortcut, given to the editor when it is
+ * created. Registering them later (registerExtension) rebuilds the editor's
+ * plugin views, and rebuilding the collaboration undo plugin's view destroys
+ * its undo manager while the state keeps it: from then on nothing could be
+ * undone. The translations are read from the controller when needed.
+ */
+const e1Extension = createExtension(({ editor }: { editor: AnyBlockNoteEditor }) =>
+  createE1Plugins(editor, controllerFor(editor)),
+);
+
+function createE1Plugins(editor: AnyBlockNoteEditor, controller: PasteController) {
   const onRetry = (blockId: string) => controller.retry(blockId);
   const plugin = new Plugin<{ states: Map<string, UploadState>; decorations: DecorationSet }>({
     key: uploadsKey,
     state: {
       init: (_config, state) => {
         const states = new Map([...controller.uploads].map(([id, entry]) => [id, entry.state]));
-        return { states, decorations: uploadDecorations(state.doc, states, t, onRetry) };
+        return { states, decorations: uploadDecorations(state.doc, states, controller.t, onRetry) };
       },
       apply: (tr, previous, _old, state) => {
         const change = tr.getMeta(uploadsKey) as { blockId: string; state: UploadState | null } | undefined;
@@ -295,7 +306,7 @@ function createE1Extension(editor: AnyBlockNoteEditor, t: EditorT, controller: P
           if (change.state) states.set(change.blockId, change.state);
           else states.delete(change.blockId);
         }
-        return { states, decorations: uploadDecorations(state.doc, states, t, onRetry) };
+        return { states, decorations: uploadDecorations(state.doc, states, controller.t, onRetry) };
       },
     },
     props: {
@@ -303,17 +314,15 @@ function createE1Extension(editor: AnyBlockNoteEditor, t: EditorT, controller: P
       handleTextInput: (view, from, to, text) => calloutShortcut(view, from, to, text, editor),
     },
   });
-  return createExtension({ key: "qbbePaste", prosemirrorPlugins: [plugin] });
+  return { key: "qbbePaste", prosemirrorPlugins: [plugin] } as const;
 }
 
-/** Registers the upload notes and the callout shortcut while the editor is shown. */
+/** Connects the upload notes (given to the editor at creation) to this view while it is editable. */
 export function E1InView({ editor, t, editable }: EditorUnitProps): React.ReactNode {
   React.useEffect(() => {
     if (!editable) return;
     const controller = controllerFor(editor);
     controller.t = t;
-    const extension = createE1Extension(editor, t, controller);
-    editor.registerExtension(extension);
     controller.view = {
       setStatus: (blockId, state) => {
         const view = editor.prosemirrorView;
@@ -322,7 +331,6 @@ export function E1InView({ editor, t, editable }: EditorUnitProps): React.ReactN
     };
     return () => {
       controller.view = null;
-      editor.unregisterExtension("qbbePaste");
     };
   }, [editor, t, editable]);
   React.useEffect(() => {
