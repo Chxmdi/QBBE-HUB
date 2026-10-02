@@ -20,8 +20,8 @@ describe("wave 2 editor unit slots", () => {
     expect(mergeUnitOptions([{}, {}])).toEqual({});
   });
 
-  it("adds no block specs until a unit does", () => {
-    expect(editorUnitBlockSpecs(createEditorT("en"), "en")).toEqual({});
+  it("adds only E3's block specs (code and media), under BlockNote's own type names", () => {
+    expect(Object.keys(editorUnitBlockSpecs(createEditorT("en"), "en")).sort()).toEqual(["audio", "codeBlock", "file", "image", "video"]);
   });
 });
 
