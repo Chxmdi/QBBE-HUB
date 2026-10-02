@@ -118,6 +118,8 @@ const fileSchema = (t: TranslateFn) => z.object({
   visibility: z.enum(["organization", "staff"]).default("organization"),
   folderId: z.string().uuid().optional(),
   tags: tagsSchemaFor(t),
+  /** The page, task or meeting whose editor the file was added in: its readers read the file. */
+  editorObject: z.object({ type: z.enum(["page", "task", "meeting"]), id: z.string().uuid() }).optional(),
 });
 
 /** Records an uploaded file after the client streams it into Storage. */
@@ -149,6 +151,8 @@ export async function registerUploadedDocument(
       program_id: data.programId ?? null,
       visibility: data.visibility,
       folder_id: data.folderId ?? null,
+      editor_object_type: data.editorObject?.type ?? null,
+      editor_object_id: data.editorObject?.id ?? null,
       tags: data.tags,
       owner_id: session.userId,
       created_by: session.userId,
