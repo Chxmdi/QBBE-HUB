@@ -32,6 +32,8 @@ import { createWorkspaceBlocks } from "./blocks";
 import { createLayoutBlocks } from "./layout-blocks";
 import { createSemanticBlocks, HandlersBox } from "./semantic-blocks";
 import { SuggestionLayer, TurnIntoTasksDialog, turnIntoPage } from "./progressive";
+import { createSyncedBlockSpec, turnIntoSyncedBlock } from "./synced-block";
+import { createButtonBlockSpec } from "./button-block";
 import { BlockHandle } from "./block-handle";
 import {
   COLORS,
@@ -86,6 +88,8 @@ export function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
       pageLink: s.pageLink(),
       status: s.status(),
       query: s.query(),
+      syncedBlock: createSyncedBlockSpec(t, semantic)(),
+      button: createButtonBlockSpec(t, semantic)(),
     },
   });
 }
@@ -373,6 +377,18 @@ function BlockMenu({
                 {t("progressive.turnIntoPage")}
               </Button>
             ) : null}
+            {semantic.synced ? (
+              <Button
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={async () => {
+                  const ok = await turnIntoSyncedBlock(editor as never, selection, semantic);
+                  done(ok ? undefined : t("semantic.failed"));
+                }}
+              >
+                {t("syncedBlock.turnInto")}
+              </Button>
+            ) : null}
           </div>
         ) : null}
         {canColor ? (
@@ -499,6 +515,8 @@ export default function BlockNoteEditorImpl({
           // F7: the emoji picker is left out.
           defaults: getDefaultReactSlashMenuItems(editor).filter((item) => (item as { key?: string }).key !== "emoji"),
           semantic: Boolean(semantic),
+          synced: Boolean(semantic?.synced),
+          actions: Boolean(semantic?.actions),
         }),
         query,
       ),

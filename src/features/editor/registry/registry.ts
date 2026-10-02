@@ -17,7 +17,9 @@ import {
   ListTodo,
   MessageSquareWarning,
   Minus,
+  MousePointerClick,
   PanelTop,
+  Repeat2,
   RectangleVertical,
   SquareCheck,
   Table,
@@ -99,6 +101,15 @@ const semanticBlock = (type: SemanticType, rest: Rest) =>
     { offlineSupport: false, permission: "editor", ...rest },
   );
 
+/** A block that needs its own handler group (synced blocks, buttons), named by its slash item. */
+const handledBlock = (type: "syncedBlock" | "button", schemaSource: "synced" | "action", rest: Rest) =>
+  define(
+    type,
+    { en: editorEn[type].slash.title, fr: editorFrCA[type].slash.title },
+    schemaSource,
+    { offlineSupport: false, permission: "editor", ...rest },
+  );
+
 export const BLOCK_REGISTRY: readonly BlockDefinition[] = Object.freeze([
   defaultBlock("paragraph", { ...TEXT, icon: Type, category: "text" }),
   defaultBlock("heading", { ...TEXT, icon: Heading, category: "text", shortcuts: ["#", "##", "###"] }),
@@ -129,6 +140,8 @@ export const BLOCK_REGISTRY: readonly BlockDefinition[] = Object.freeze([
   semanticBlock("query", { icon: ListTodo, category: "data" }),
   semanticBlock("libraryFile", { icon: FileText, category: "semantic" }),
   semanticBlock("pageLink", { icon: Link2, category: "semantic" }),
+  handledBlock("syncedBlock", "synced", { icon: Repeat2, category: "layout" }),
+  handledBlock("button", "action", { icon: MousePointerClick, category: "data" }),
 ]);
 
 const BY_TYPE: ReadonlyMap<string, BlockDefinition> = new Map(BLOCK_REGISTRY.map((entry) => [entry.type, entry]));

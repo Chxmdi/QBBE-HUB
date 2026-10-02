@@ -45,6 +45,11 @@ describe("block registry", () => {
       const expected =
         schemaSource === "default"
           ? { en: editorEn.types[type as keyof typeof editorEn.types], fr: editorFrCA.types[type as keyof typeof editorFrCA.types] }
+          : schemaSource === "synced" || schemaSource === "action"
+            ? {
+                en: editorEn[type as "syncedBlock" | "button"].slash.title,
+                fr: editorFrCA[type as "syncedBlock" | "button"].slash.title,
+              }
           : schemaSource === "workspace" || schemaSource === "layout"
             ? {
                 en: editorEn.slash[type as "callout" | "bookmark" | "embed" | "columnList" | "column" | "tableOfContents"].title,
@@ -189,6 +194,21 @@ describe("derived menus", () => {
 
     const withoutSemantic = slashItems(t, editor, { semantic: false });
     expect(withoutSemantic.map((item) => item.title)).toEqual(["Callout", "Bookmark", "Embed", "Columns", "Column", "Table of contents"]);
+  });
+
+  it("offers the synced block and the button only when the page has their handlers", () => {
+    const t = createEditorT("en");
+    const all = slashItems(t, {} as never, { semantic: true, synced: true, actions: true }).map((item) => item.title);
+    expect(all.slice(-2)).toEqual(["Synced block", "Button"]);
+    expect(new Set(all).size).toBe(all.length);
+    expect(slashItems(t, {} as never, { semantic: true, synced: true }).map((item) => item.title)).toContain("Synced block");
+    expect(slashItems(t, {} as never, { semantic: true, synced: true }).map((item) => item.title)).not.toContain("Button");
+    expect(slashItems(t, {} as never, { semantic: true, actions: true }).map((item) => item.title)).not.toContain("Synced block");
+    const fr = slashItems(createEditorT("fr-CA"), {} as never, { semantic: true, synced: true, actions: true });
+    expect(fr.slice(-2).map((item) => item.title)).toEqual(["Bloc synchronisé", "Bouton"]);
+    for (const item of fr.slice(-2)) expect(item.subtext, item.title).not.toMatch(/^(syncedBlock|button)\./);
+    expect(blockDefinition("syncedBlock")?.schemaSource).toBe("synced");
+    expect(blockDefinition("button")?.schemaSource).toBe("action");
   });
 
   it("speaks Quebec French in the slash menu", () => {

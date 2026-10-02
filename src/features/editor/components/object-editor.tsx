@@ -37,6 +37,15 @@ import {
 import { useSaveQueue } from "@/features/editor/queue/use-save-queue";
 import type { QueueBatch, QueueStatus, SendOutcome } from "@/features/editor/queue/queue";
 import { ConflictDialog } from "./conflict-dialog";
+import {
+  createSyncedBlock,
+  decideSyncedAccess,
+  listSyncedBlocks,
+  loadSyncedBlock,
+  requestSyncedAccess,
+  updateSyncedBlock,
+} from "@/features/editor/services/synced-block.commands";
+import { describeButtonTarget, runButtonAction, undoButtonAction } from "@/features/editor/services/button-action.commands";
 
 /** A task block cut and pasted elsewhere reappears within this time; only then is it "removed". */
 const REMOVAL_GRACE_MS = 1500;
@@ -288,6 +297,23 @@ export function ObjectEditor({
               return result.ok ? result.page : null;
             }
           : undefined,
+      synced: {
+        load: (id) => loadSyncedBlock(id),
+        list: (query) => listSyncedBlocks(query),
+        create: async (blockId, content) => {
+          const result = await createSyncedBlock({ sourceObjectId: objectId, sourceObjectType: objectType, sourceBlockId: blockId, content });
+          return result.ok ? result.id : null;
+        },
+        update: async (id, content) => (await updateSyncedBlock({ id, content })).ok,
+        requestAccess: async (id) => (await requestSyncedAccess(id)).ok,
+        decideAccess: async (id, requesterId, grant) => (await decideSyncedAccess({ id, requesterId, grant })).ok,
+      },
+      actions: {
+        run: (actionKey, args) => runButtonAction(actionKey, args, blockTaskSource(objectType, objectId)),
+        // The registry's own undo, as bulk edit's.
+        undo: async (changeSetId) => (await undoButtonAction(changeSetId)).ok,
+        describe: (objectId) => describeButtonTarget(objectId),
+      },
     }),
     [objectId, objectType, defaultProjectId],
   );

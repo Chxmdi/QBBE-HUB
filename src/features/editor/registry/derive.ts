@@ -69,6 +69,10 @@ type SlashKeys = { title: EditorKey; subtext: EditorKey; aliases: EditorKey };
 
 /** Where a workspace, layout or semantic block's slash item strings live; the registry test checks they resolve. */
 const dictionaryKeys = (entry: BlockDefinition): SlashKeys => {
+  if (entry.schemaSource === "synced" || entry.schemaSource === "action") {
+    const type = entry.type as "syncedBlock" | "button";
+    return { title: `${type}.slash.title`, subtext: `${type}.slash.subtext`, aliases: `${type}.slash.aliases` };
+  }
   if (entry.schemaSource === "workspace" || entry.schemaSource === "layout") {
     const type = entry.type as "callout" | "bookmark" | "embed" | "columnList" | "column" | "tableOfContents";
     return { title: `slash.${type}.title`, subtext: `slash.${type}.subtext`, aliases: `slash.${type}.aliases` };
@@ -82,6 +86,10 @@ export interface SlashItemOptions {
   defaults?: DefaultReactSuggestionItem[];
   /** Whether the page supplied semantic handlers; without them the semantic blocks are left out. */
   semantic: boolean;
+  /** Whether the page supplied synced-block handlers; without them the synced block is left out. */
+  synced?: boolean;
+  /** Whether the page supplied action handlers; without them the button is left out. */
+  actions?: boolean;
 }
 
 /**
@@ -98,8 +106,8 @@ const LAYOUT_INSERTS: Readonly<Record<string, (editor: SlashEditor) => void>> = 
 /**
  * The slash menu's items: BlockNote's default items first, then one item per
  * workspace block, per layout block and, when the page can show them, per
- * semantic block, in registry order with the registry's icon. Layout blocks sit
- * under the "Layout" group, the rest under "Workspace".
+ * semantic, synced and button block, in registry order with the registry's
+ * icon. Layout blocks sit under the "Layout" group, the rest under "Workspace".
  */
 export function slashItems(t: EditorT, editor: SlashEditor, options: SlashItemOptions): DefaultReactSuggestionItem[] {
   const group = t("slash.group");
@@ -107,6 +115,8 @@ export function slashItems(t: EditorT, editor: SlashEditor, options: SlashItemOp
   const own = BLOCK_REGISTRY.flatMap((entry): DefaultReactSuggestionItem[] => {
     if (entry.schemaSource === "default") return [];
     if (entry.schemaSource === "semantic" && !options.semantic) return [];
+    if (entry.schemaSource === "synced" && !options.synced) return [];
+    if (entry.schemaSource === "action" && !options.actions) return [];
     const keys = dictionaryKeys(entry);
     return [
       {

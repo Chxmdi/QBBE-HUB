@@ -11,6 +11,10 @@ export type BlockSchemaSource =
   | "workspace"
   /** `createSemanticBlocks` (blocks that point at a real object). */
   | "semantic"
+  /** `createSyncedBlockSpec` (content kept once, shown on several pages; needs the page's synced handlers). */
+  | "synced"
+  /** `createButtonBlockSpec` (runs a registered action; needs the page's action handlers). */
+  | "action"
   /** `createLayoutBlocks` (columns and the table of contents). */
   | "layout";
 
@@ -45,5 +49,5 @@ export interface BlockDefinition {
 }
 
 export const BLOCK_CATEGORIES: readonly BlockCategory[] = ["text", "list", "media", "semantic", "layout", "data"];
-export const BLOCK_SCHEMA_SOURCES: readonly BlockSchemaSource[] = ["default", "workspace", "semantic", "layout"];
+export const BLOCK_SCHEMA_SOURCES: readonly BlockSchemaSource[] = ["default", "workspace", "semantic", "synced", "action", "layout"];
 export const BLOCK_PERMISSIONS: readonly BlockPermission[] = ["any", "editor", "admin"];
