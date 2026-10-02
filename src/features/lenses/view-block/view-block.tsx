@@ -439,7 +439,7 @@ function LocalFilterBar({
   const properties = paths.map((p) => findProperty(catalog, type, p)).filter((p): p is CatalogProperty => Boolean(p));
   if (properties.length === 0) return null;
   return (
-    <fieldset className="flex flex-wrap items-end gap-3 border-b border-line px-4 py-2" data-view-filters>
+    <fieldset className="flex min-w-0 flex-wrap items-end gap-3 border-b border-line px-4 py-2 [&>div]:max-w-full" data-view-filters>
       <legend className="sr-only">{t("view.localFilters")}</legend>
       {properties.map((property) => (
         <LocalFilterControl key={`${property.key}:${generation}`} property={property} filter={filters.find((f) => f.path === property.key) ?? null} locale={locale} onChange={(next) => onChange(property.key, next)} />
