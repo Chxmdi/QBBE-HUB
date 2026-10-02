@@ -35,6 +35,7 @@ import {
   type ServerEditorDocument,
 } from "@/features/editor/services/editor-operations.commands";
 import { useSaveQueue } from "@/features/editor/queue/use-save-queue";
+import { useLiveSend } from "@/features/editor/live/use-live-send";
 import type { QueueBatch, QueueStatus, SendOutcome } from "@/features/editor/queue/queue";
 import { ConflictDialog } from "./conflict-dialog";
 import {
@@ -185,7 +186,7 @@ export function ObjectEditor({
     };
   }, [editable]);
 
-  const queue = useSaveQueue({ objectId, initialVersion, initialContent, initialState, send, enabled: editable, ownerId });
+  const queue = useSaveQueue({ objectId, initialVersion, initialContent, initialState, send: useLiveSend(objectId, send), enabled: editable, ownerId });
   const { status, conflict, seed } = queue;
   const conflictOpen = conflict !== null && conflict.id !== dismissed;
   const theirsDoc = conflict && theirs?.id === conflict.id ? theirs.doc : undefined;

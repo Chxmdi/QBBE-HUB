@@ -1,1 +1,58 @@
 /* Wave 2 unit E1: paste and Markdown shortcuts. Only E1 edits this file. */
+
+/* A pasted file's upload and security-check note, inside its block. */
+.qbbe-paste-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+  color: var(--color-ink);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  user-select: none;
+}
+
+.qbbe-paste-note-failed {
+  border-color: var(--color-danger);
+  color: var(--color-danger-fg);
+}
+
+.qbbe-paste-retry,
+.qbbe-paste-dismiss {
+  min-height: 1.75rem;
+  padding: 0.125rem 0.625rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: 0.8125rem;
+}
+
+.qbbe-paste-retry:focus-visible,
+.qbbe-paste-dismiss:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* A paste refused for its size: the editor's own "too large" words. */
+.qbbe-paste-too-large {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-danger-fg);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
