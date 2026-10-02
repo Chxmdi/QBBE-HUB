@@ -5,6 +5,8 @@ export const e2EditorFrCA: typeof e2EditorEn = {
   toolbar: {
     label: "Historique des modifications",
     undo: "Annuler",
+    // Distinct from the « Annuler » (cancel) buttons of the forms around the editor.
+    undoName: "Annuler la dernière modification",
     redo: "Rétablir",
     shortcuts: "Raccourcis clavier",
   },
