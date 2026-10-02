@@ -13,8 +13,15 @@ import { sql } from "./db";
 // On for this file and back to the default (off) after it, as wos-editor does.
 const switches = (on: boolean) =>
   sql(`update public.feature_flag set enabled = ${on} where key in ('wos_pages', 'wos_editor') and organization_id is null;`);
+// The pages this file makes go to the trash when it is done.
+const created: string[] = [];
 test.beforeAll(() => switches(true));
-test.afterAll(() => switches(false));
+test.afterAll(() => {
+  switches(false);
+  if (created.length > 0) {
+    sql(`update public.page set deleted_at = now() where deleted_at is null and id in (${created.map((id) => `'${id}'`).join(", ")})`);
+  }
+});
 
 // A script error in the page (such as one thrown while a key is handled) fails the test.
 const pageErrors: string[] = [];
@@ -33,7 +40,9 @@ async function newPage(page: Page, title: string, newPageName = "New page"): Pro
   const titleBox = page.getByRole("textbox", { name: /Page title|Titre de la page/ });
   await titleBox.fill(title);
   await titleBox.press("Enter");
-  return page.url().split("/").pop()!;
+  const id = page.url().split("/").pop()!;
+  created.push(id);
+  return id;
 }
 
 /** Each block as "type:colour:text", in order. */
@@ -333,6 +342,43 @@ test("the keyboard shortcuts dialog lists every shortcut, from ? or its button, 
   expect(dialogBox.x + dialogBox.width).toBeLessThanOrEqual(320);
   expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
   expect(await list.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+});
+
+test("in a task drawer, ? opens the shortcuts and undo is announced inside the drawer [switches on]", async ({ page }) => {
+  test.setTimeout(150_000);
+  await signIn(page, "owner");
+  const title = `History drawer ${Date.now()}`;
+  await page.goto("/my-work?create=task");
+  const create = page.getByRole("dialog", { name: "Create task" });
+  await expect(create).toBeVisible({ timeout: 30_000 });
+  await create.getByLabel("Title", { exact: true }).fill(title);
+  await create.getByRole("button", { name: "Create task", exact: true }).click();
+  await expect(create).not.toBeVisible({ timeout: 30_000 });
+  const taskId = sql(`select id::text from task where title = '${title}' limit 1`);
+  try {
+    await page.goto(`/my-work?task=${taskId}`);
+    const drawer = page.getByRole("dialog").first();
+    await expect(drawer.getByText(title, { exact: true })).toBeVisible({ timeout: 30_000 });
+    const editor = drawer.getByRole("textbox", { name: "Description" });
+    await expect(editor).toBeVisible({ timeout: 30_000 });
+    await editor.click();
+    await page.keyboard.type("Drawer words");
+    await page.keyboard.press("Control+z");
+    await expect(editor).not.toContainText("Drawer words");
+    await expect(drawer.locator("#qbbe-editor-live")).toHaveText("Undone.");
+
+    // "?" from the drawer's buttons (inside the drawer, a modal) opens the list.
+    await drawer.getByRole("button", { name: "Undo", exact: true }).focus();
+    await page.keyboard.press("Shift+?");
+    const shortcuts = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+    await expect(shortcuts).toBeVisible();
+    await expect(shortcuts).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(shortcuts).toHaveCount(0);
+    await expect(drawer).toBeVisible();
+  } finally {
+    sql(`update public.task set archived_at = now() where id = '${taskId}' and archived_at is null;`);
+  }
 });
 
 test("the shortcuts and the history speak Québec French [switches on]", async ({ page, context }) => {

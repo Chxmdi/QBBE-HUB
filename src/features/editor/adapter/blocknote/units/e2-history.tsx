@@ -23,7 +23,6 @@ import {
   isMacPlatform,
   type KeyNames,
 } from "@/features/editor/adapter/history/shortcuts";
-import { announce } from "../multi-select";
 import {
   NO_OPTIONS,
   NO_SPECS,
@@ -78,10 +77,37 @@ function isTextField(target: HTMLElement | null): boolean {
 }
 
 /**
- * The editors on the page that answer "?"; only the newest one does, so a
- * task drawer's editor opened over a page shows one dialog, not two.
+ * The editors on the page that answer "?", oldest first. One answers: the
+ * newest that is not behind an open modal, so a task drawer's editor opened
+ * over a page shows its own dialog, and only one.
  */
-const shortcutOwners: symbol[] = [];
+const shortcutOwners: { container: React.RefObject<HTMLDivElement | null> }[] = [];
+
+function shortcutOwner(): (typeof shortcutOwners)[number] | undefined {
+  const modals = [...document.querySelectorAll<HTMLDialogElement>("dialog[open]")].filter((dialog) => dialog.matches(":modal"));
+  const top = modals[modals.length - 1];
+  for (let i = shortcutOwners.length - 1; i >= 0; i -= 1) {
+    const container = shortcutOwners[i].container.current;
+    if (!container) continue;
+    // Behind a modal (or with one of its own menus open): not reachable.
+    if (top && !top.contains(container)) continue;
+    return shortcutOwners[i];
+  }
+  return undefined;
+}
+
+/**
+ * Says something to screen readers through this editor's own live region:
+ * with an editor in a drawer over a page, the page's region is behind the
+ * drawer, where nothing is read out.
+ */
+function announceIn(root: HTMLElement | null, text: string) {
+  const live = root?.querySelector<HTMLElement>("#qbbe-editor-live");
+  if (!live) return;
+  // The same text twice must still be read out.
+  live.textContent = "";
+  live.textContent = text;
+}
 
 /** Where the save queue reports its state, if this editor has one around it. */
 function findSaveStatus(root: HTMLElement): { scope: HTMLElement; read: () => string | null } | null {
@@ -133,9 +159,9 @@ function useEditorHistory(editor: AnyBlockNoteEditor, doc: Y.Doc, containerRef: 
   }, [editor, history, refresh]);
 
   const restart = React.useCallback(() => {
-    if (history.restart()) announce(t("units.e2.announce.restarted"));
+    if (history.restart()) announceIn(containerRef.current, t("units.e2.announce.restarted"));
     refresh();
-  }, [history, refresh, t]);
+  }, [history, refresh, t, containerRef]);
 
   // A change that arrives from someone else through the document.
   React.useEffect(() => {
@@ -166,11 +192,14 @@ function useEditorHistory(editor: AnyBlockNoteEditor, doc: Y.Doc, containerRef: 
     (which: "undo" | "redo") => {
       history.markOpened();
       const outcome = which === "undo" ? history.undo() : history.redo();
-      if (outcome === "done") announce(t(which === "undo" ? "units.e2.announce.undone" : "units.e2.announce.redone"));
-      else announce(t(which === "undo" ? "units.e2.announce.nothingToUndo" : "units.e2.announce.nothingToRedo"));
+      const said =
+        outcome === "done"
+          ? t(which === "undo" ? "units.e2.announce.undone" : "units.e2.announce.redone")
+          : t(which === "undo" ? "units.e2.announce.nothingToUndo" : "units.e2.announce.nothingToRedo");
+      announceIn(containerRef.current, said);
       refresh();
     },
-    [history, refresh, t],
+    [history, refresh, t, containerRef],
   );
 
   return { available, run };
@@ -203,13 +232,11 @@ function HistoryControls({ editor, doc, containerRef, t }: EditorUnitProps) {
 
   // "?" outside the text opens the shortcuts.
   React.useEffect(() => {
-    const me = Symbol("e2-shortcuts");
+    const me = { container: containerRef };
     shortcutOwners.push(me);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "?" || event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
-      if (shortcutOwners[shortcutOwners.length - 1] !== me) return;
-      const target = event.target as HTMLElement | null;
-      if (isTextField(target) || target?.closest?.("dialog[open]")) return;
+      if (isTextField(event.target as HTMLElement | null) || shortcutOwner() !== me) return;
       event.preventDefault();
       setOpen(true);
     };
@@ -218,7 +245,7 @@ function HistoryControls({ editor, doc, containerRef, t }: EditorUnitProps) {
       document.removeEventListener("keydown", onKeyDown);
       shortcutOwners.splice(shortcutOwners.indexOf(me), 1);
     };
-  }, []);
+  }, [containerRef]);
 
   const mac = typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
   const mod = mac ? "Meta" : "Control";
