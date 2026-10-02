@@ -336,6 +336,10 @@ test("a pasted image uploads through the scanned upload and says while its scan 
   sql(`update public.document set scan_status = 'clean' where id = '${documentId}'`);
   await expect(pending).toHaveCount(0, { timeout: 60_000 });
   await expect(image).toHaveCount(1);
+  // And the image itself shows, from Storage, without a retry or a reload.
+  await expect
+    .poll(() => image.locator("img").evaluate((el) => (el as HTMLImageElement).naturalWidth).catch(() => 0), { timeout: 60_000 })
+    .toBeGreaterThan(0);
 
   // A file that fails its scan says so, with nothing to retry.
   const second = `e1-paste-${stamp}-b.pdf`;

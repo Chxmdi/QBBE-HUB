@@ -216,6 +216,71 @@ test("media blocks have a caption and a name, and an image without alt text asks
   await expect(readOnly.getByRole("img", { name: "Three volunteers sorting food" })).toBeVisible();
 });
 
+/** Half a second of video and of audio (WebM), so a block has something real to load. */
+const CLIP = Buffer.from("GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAMMEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEcTbuMU6uEHFO7a1OsggL27AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjEuMS4xMDBXQYxMYXZmNjEuMS4xMDBEiYhAgEAAAAAAABZUrmvBrgEAAAAAAAA414EBc8WIq1iFzB0P0QmcgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4QCYloA4ImwgRC6gRCagQISVMNn+nNzn2PAgGfImUWjh0VOQ09ERVJEh4xMYXZmNjEuMS4xMDBzc9VjwItjxYirWIXMHQ/RCWfIoEWjh0VOQ09ERVJEh5NMYXZjNjEuMy4xMDAgbGlidnB4Z8ihRaOIRFVSQVRJT05Eh5MwMDowMDowMC41MjAwMDAwMDAAH0O2dUFV54EAo7yBAACAsAIAnQEqEAAQAABHCIWFiIWEiAICAnWqA/gCDP0oAP7/TRL//FhX8WFfxYV/8WFf/PzO7cX85gCjlYEAKACxAQABEBAAGAAYWC/0AAgAAKOVgQBQALEBAAEQEAAYABhYL/QACAAAo5WBAHgAsQEAARAQABgAGFgv9AAIAACjlYEAoACxAQABEBAAGAAYWC/0AAgAAKOVgQDIALEBAAEQEAAYABhYL/QACAAAo5WBAPAAsQEAARAQABgAGFgv9AAIAACjlYEBGACxAQABEBAUYABhYL/QACAAAKOVgQFAALEBAAEQEAAYABhYL/QACAAAo5WBAWgAsQEAARAQABgAGFgv9AAIAACjlYEBkACxAQABEBAAGAAYWC/0AAgAAKOVgQG4ALEBAAEQEAAYABhYL/QACAAAo5WBAeAAsQEAARAQABgAGFgv9AAIAAAcU7trkbuPs4EAt4r3gQHxggGb8IED", "base64");
+const TONE = Buffer.from("GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRChYECGFOAZwEAAAAAAANqEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggFATbuMU6uEHFO7a1OsggNU7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjEuMS4xMDBXQYxMYXZmNjEuMS4xMDBEiYhAc0AAAAAAABZUrmvlrgEAAAAAAABc14EBc8WIH/lQA2ptbZmcgQAitZyDdW5kiIEAhoZBX09QVVNWqoNjLqBWu4QExLQAg4EC4ZGfgQG1iEC/QAAAAAAAYmSBEGOik09wdXNIZWFkAQE4AUAfAAAAAAASVMNn+3Nzn2PAgGfImUWjh0VOQ09ERVJEh4xMYXZmNjEuMS4xMDBzc9ZjwItjxYgf+VADam1tmWfIoUWjh0VOQ09ERVJEh5RMYXZjNjEuMy4xMDAgbGlib3B1c2fIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDAuMzA4MDAwMDAwAB9DtnVBjueBAKOcgQAAgAiCiJArDx+XWFD3SN4bc9zf0yonWZQ5NaOagQAVgAijQOgDPDSiMmXbA23VrCwd97nPDYCjlIEAKYAInVXw5F373AbD3wcenDoQo5iBAD2ACJ1fsHcyqla9XLm3ClXeAnuqpRijlIEAUYAInV+wdzKqVpuYq+XgHa6oo5SBAGWACJ1fsHcvR45CodB1Q5eXtKOWgQB5gAidX7B3MqpcTnr6R+wYMC2IUKOWgQCNgAidB0Wj2/0/0RqvhNGrZ5HthKOVgQChgAickCvjTlp6JplPm9GjqDXAo5aBALWACJyQK+NLm1E4fmVGB3p2CD6Uo5aBAMmACJyQK+NNHRC1paCubRZQZ+jQo5eBAN2ACJyQK+NOWnoHfjj8IrT9YsT8LKOXgQDxgAicjJoEARkNuzgyZRJ2Fk2B62yjl4EBBYAInJAr405aeigYepsmp9SOY0mmo5aBARmACJyQK+NOWnr6inTo5g9IMvagoJmhkIEBLQAIgz6kgAm4rcjVFOh1ooQAzf5gHFO7a5G7j7OBALeK94EB8YIBwPCBAw==", "base64");
+
+/** Whether the block's player has loaded the media far enough to play it. */
+const playable = (block: Locator, tag: "video" | "audio") =>
+  block.locator(tag).evaluate((el) => (el as HTMLMediaElement).readyState >= 1).catch(() => false);
+
+/** Collects every resource the Content Security Policy refuses on this page. */
+function refusals(page: Page): string[] {
+  const refused: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && message.text().includes("Content Security Policy")) refused.push(message.text());
+  });
+  return refused;
+}
+
+test("video and audio actually play: https links, and a file added in the editor for another reader of the page [switches on]", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  const stamp = Date.now();
+  const refused = refusals(page);
+  await page.route("https://media.example.org/**", (route) => {
+    const audio = route.request().url().endsWith(".weba");
+    return route.fulfill({ status: 200, contentType: audio ? "audio/webm" : "video/webm", body: audio ? TONE : CLIP });
+  });
+  const pageId = makePage(`Playback ${stamp}`, [
+    { type: "video", props: { url: "https://media.example.org/clip.webm", name: "clip.webm" } },
+    { type: "audio", props: { url: "https://media.example.org/tone.weba", name: "tone.weba" } },
+    { type: "paragraph", content: text(`End ${stamp}`) },
+  ]);
+  const editor = await openPage(page, pageId);
+
+  // Links: the browser loads both, and the security policy refuses neither.
+  await expect.poll(() => playable(editor.getByRole("figure", { name: "Video: clip.webm" }), "video"), { timeout: 30_000 }).toBe(true);
+  await expect.poll(() => playable(editor.getByRole("figure", { name: "Audio: tone.weba" }), "audio"), { timeout: 30_000 }).toBe(true);
+
+  // A video added in the editor: uploaded, scanned, then played from Storage.
+  const name = `e3-play-${stamp}.webm`;
+  await editor.locator("[data-content-type='paragraph']", { hasText: `End ${stamp}` }).click();
+  await page.keyboard.press("End");
+  await editor.evaluate((el, { name, base64 }) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], name, { type: "video/webm" }));
+    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+  }, { name, base64: CLIP.toString("base64") });
+  await expect(editor.locator("[data-upload-state='pending']")).toContainText(name, { timeout: 30_000 });
+  const documentId = sql(`select id from public.document where title = '${name}'`);
+  expect(sql(`select editor_object_type || ':' || editor_object_id from public.document where id = '${documentId}'`)).toBe(`page:${pageId}`);
+  await saved(page);
+  sql(`update public.document set scan_status = 'clean' where id = '${documentId}'`);
+  const uploaded = editor.getByRole("figure", { name: `Video: ${name}` });
+  await expect.poll(() => playable(uploaded, "video"), { timeout: 60_000 }).toBe(true);
+  expect(refused).toEqual([]);
+
+  // Another staff member who can read the page plays the same file.
+  const other = await browser.newContext();
+  const reader = await other.newPage();
+  const readerRefused = refusals(reader);
+  await signIn(reader, "pm");
+  const readerEditor = await openPage(reader, pageId, false);
+  await expect.poll(() => playable(readerEditor.getByRole("figure", { name: `Video: ${name}` }), "video"), { timeout: 60_000 }).toBe(true);
+  expect(readerRefused).toEqual([]);
+  await other.close();
+});
+
 test("a block that fails to render shows the fallback with Try again; the rest of the page keeps working and saving [switches on]", async ({ page }) => {
   test.setTimeout(180_000);
   const stamp = Date.now();

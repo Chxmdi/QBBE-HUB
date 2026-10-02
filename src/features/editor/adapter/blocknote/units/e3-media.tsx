@@ -23,6 +23,7 @@ import {
 import { AudioLines, File as FileIcon, Image as ImageIcon, Video } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { EditorT } from "@/features/editor/i18n";
+import { MAX_SCAN_CHECKS, nextScanCheckMs } from "@/features/editor/adapter/paste/files";
 import { framed } from "../block-frame";
 import { mediaAddress, mediaName, needsAltText, type MediaKind } from "./e3-helpers";
 
@@ -74,7 +75,7 @@ function servable(src: string): boolean {
 }
 
 /** The address to show: a library file once its scan has passed, or the secure link itself. */
-function useResolvedAddress(editor: AnyMediaProps["editor"], url: string, attempt: number): Resolved {
+function useResolvedAddress(editor: AnyMediaProps["editor"], url: string, attempt: number, recheck: number): Resolved {
   const key = `${attempt}:${url}`;
   const [resolved, setResolved] = React.useState<{ key: string; result: Resolved } | null>(null);
   React.useEffect(() => {
@@ -97,7 +98,8 @@ function useResolvedAddress(editor: AnyMediaProps["editor"], url: string, attemp
     return () => {
       live = false;
     };
-  }, [editor, url, key]);
+    // A re-check asks again under the same key: the last answer stays on screen until the new one arrives.
+  }, [editor, url, key, recheck]);
   // A new address or a retry shows "loading" until its own answer arrives.
   return resolved?.key === key ? resolved.result : { state: "loading" };
 }
@@ -200,7 +202,18 @@ function MediaBlockView(props: AnyMediaProps & { kind: MediaKind; t: EditorT }) 
   const [brokenKey, setBrokenKey] = React.useState<string | null>(null);
   const broken = brokenKey === loadKey;
   const address = mediaAddress(p.url);
-  const resolved = useResolvedAddress(editor, p.url, attempt);
+  // A library file still in its virus scan answers "not available". Ask again
+  // on the scan schedule, so a file added moments ago (or opened by someone
+  // else mid-scan) appears once the scan passes, without a retry or a reload.
+  const [recheck, setRecheck] = React.useState({ key: loadKey, count: 0 });
+  const rechecks = recheck.key === loadKey ? recheck.count : 0;
+  const resolved = useResolvedAddress(editor, p.url, attempt, rechecks);
+  const waitingOnScan = address === "library" && resolved.state === "unavailable" && !uploading;
+  React.useEffect(() => {
+    if (!waitingOnScan || rechecks >= MAX_SCAN_CHECKS) return;
+    const timer = setTimeout(() => setRecheck({ key: loadKey, count: rechecks + 1 }), nextScanCheckMs(rechecks));
+    return () => clearTimeout(timer);
+  }, [waitingOnScan, rechecks, loadKey]);
   const name = mediaName(kind, p, t);
   const altHintId = React.useId();
   const retry = () => {

@@ -44,7 +44,9 @@ const securityHeaders = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
+      // Library images are signed Storage URLs on the Supabase origin, which is
+      // plain http on a local stack: name it, as media-src does below.
+      ["img-src 'self' data: blob: https:", ...supabaseOrigins().filter((o) => o.startsWith("http"))].join(" "),
       "font-src 'self' data:",
       // Video and audio blocks play https links and library files, which are
       // signed Storage URLs on the Supabase origin. Without this the rule
