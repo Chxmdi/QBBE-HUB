@@ -266,6 +266,8 @@ export const editorEn = {
       empty: "Nothing matches right now.",
       failed: "This list couldn't be loaded.",
       due: "due {date}",
+      upgrade: "Turn into a view",
+      upgradeHint: "A view can show any records as a table, board, list, calendar or gallery, with its own filters.",
       decided: "decided {date}",
       starts: "starts {date}",
     },

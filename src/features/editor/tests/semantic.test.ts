@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { parseStoredSpec, presetSpec, queryPresets, toQueryBlockRow } from "@/features/editor/semantic/queries";
+import { parseStoredSpec, presetSpec, presetViewBlock, queryPresets, toQueryBlockRow } from "@/features/editor/semantic/queries";
 import { fromContractSpec } from "@/lib/query/contract-adapter";
 import { migrationCatalog } from "@/lib/query/testing/migration-catalog";
+import { parseViewBlockProps, readStoredViewBlock } from "@/features/lenses/view-block/schema";
 import { removedTaskIds, taskBlockIds } from "@/features/editor/semantic/removed";
 import { blockTaskSource } from "@/features/editor/semantic/source";
 import type { EditorContent } from "@/features/editor/adapter/content";
@@ -49,6 +50,29 @@ describe("query block presets", () => {
     expect(meeting).toMatchObject({ href: "/meetings/m1", status: null, statusLabel: "Planifiée", dateLabel: "starts" });
     const bare = toQueryBlockRow({ ref: { id: "r1", type: "risk" }, title: "R", values: {} }, catalog, "en");
     expect(bare).toMatchObject({ href: "/projects", statusLabel: null, date: null, dateLabel: null });
+  });
+});
+
+describe("preset upgrade to a view block", () => {
+  it("maps every preset to a valid version 2 block that the legacy parser refuses", () => {
+    for (const preset of queryPresets) {
+      const view = presetViewBlock(preset);
+      const parsed = parseViewBlockProps(view);
+      expect(parsed, preset).not.toBeNull();
+      // The same type the preset lists, and every property is one the engine's catalog has.
+      expect(parsed?.source).toEqual({ type: presetSpec(preset).types[0] });
+      const props = catalog[presetSpec(preset).types[0]].properties.map((p) => p.key);
+      for (const key of [...parsed!.where.map((c) => c.path), ...parsed!.sort.map((s) => s.path), ...parsed!.fields]) {
+        expect(props, `${preset}: ${key}`).toContain(key);
+      }
+      expect(readStoredViewBlock(JSON.stringify(view))).toEqual({ kind: "view", raw: view });
+      expect(parseStoredSpec(JSON.stringify(view))).toBeNull();
+    }
+    expect(presetViewBlock("my_open").where?.[0]).toEqual({ path: "assignee", op: "contains", value: { relative: "me" } });
+    expect(presetViewBlock("overdue").where?.[0]).toEqual({ path: "due", op: "before", value: { relative: "today" } });
+    expect(presetViewBlock("due_this_week").where?.[0]).toEqual({ path: "due", op: "is", value: { relative: "this_week" } });
+    // A stored preset spec is never mistaken for a view block.
+    expect(readStoredViewBlock(JSON.stringify(presetSpec("overdue")))).toEqual({ kind: "legacy" });
   });
 });
 

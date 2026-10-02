@@ -268,6 +268,8 @@ export const editorFrCA: EditorMessages = {
       empty: "Rien ne correspond pour l’instant.",
       failed: "Cette liste n’a pas pu être chargée.",
       due: "échéance le {date}",
+      upgrade: "Transformer en vue",
+      upgradeHint: "Une vue peut afficher n’importe quels éléments en tableau, tableau Kanban, liste, calendrier ou galerie, avec ses propres filtres.",
       decided: "décidée le {date}",
       starts: "commence le {date}",
     },
