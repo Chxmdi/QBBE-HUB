@@ -129,6 +129,8 @@ test("the watch button and the new preferences are hidden while the switch is of
 
   await page.goto("/settings/notifications");
   await expect(page.getByLabel("Work assigned to me")).toBeVisible();
+  await expect(page.getByText("Everything still appears in the Hub either way.")).toBeVisible();
+  await expect(page.getByText("Tasks, reviews, and decisions. Approvals follow this choice.")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Watched pages", exact: true })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Replies to my comments", exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Show in the Hub" })).toHaveCount(0);
@@ -148,8 +150,20 @@ test("watch a page, hear about comments and replies, and unwatch [switches on]",
   await expect(page.getByRole("textbox", { name: "Document content" })).toBeVisible({ timeout: 30_000 });
   const watch = page.getByRole("button", { name: "Watch", exact: true });
   await expect(watch).toHaveAttribute("aria-pressed", "false");
+  // While the save is on its way the button says it is busy, and stays focusable.
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route(`**/pages/${pageId}`, async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.continue();
+  });
   await watch.click();
+  await expect(watch).toHaveAttribute("aria-busy", "true");
+  await expect(watch).toBeEnabled();
+  release();
   await expect(page.getByText("You're watching this page. New comments will reach you.")).toBeVisible();
+  await expect(watch).toHaveAttribute("aria-busy", "false");
+  await page.unroute(`**/pages/${pageId}`);
   await expect(watch).toHaveAttribute("aria-pressed", "true");
   expect(sql(`select count(*) from public.page_watch where page_id = '${pageId}' and user_id = '${STAFF}'`)).toBe("1");
   await page.reload();
@@ -287,6 +301,10 @@ test("each notification category can be kept out of the Hub, and that is honoure
 
   await signIn(page, "staff");
   await page.goto("/settings/notifications");
+  // The page no longer promises that everything reaches the Hub, nor that approvals follow assigned work.
+  await expect(page.getByText("Under “Show in the Hub”, choose what appears in the Hub.")).toBeVisible();
+  await expect(page.getByText("Everything still appears in the Hub either way.")).toHaveCount(0);
+  await expect(page.getByText("Approvals follow this choice.")).toHaveCount(0);
   // Email choices for each category, and each one can be kept out of the Hub.
   for (const label of ["Mentions and replies", "Work assigned to me", "Replies to my comments", "Approvals", "Watched pages"]) {
     await expect(page.getByRole("combobox", { name: label, exact: true })).toBeVisible();

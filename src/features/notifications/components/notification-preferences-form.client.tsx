@@ -163,7 +163,10 @@ export function NotificationPreferencesFormClient({
       ? pt(`units.c3.preferences.categories.${key}.label` as PagesKey)
       : t(`notifications.form.categories.${key}.label` as MessageKey);
   const hintOf = (key: CategoryKey) =>
-    (PAGE_EMAIL_CATEGORIES as readonly string[]).includes(key)
+    // With the switch on, approvals have their own choice, so assigned work no longer speaks for them.
+    pageCategories && key === "assignment"
+      ? pt("units.c3.preferences.assignmentHint" as PagesKey)
+      : (PAGE_EMAIL_CATEGORIES as readonly string[]).includes(key)
       ? pt(`units.c3.preferences.categories.${key}.hint` as PagesKey)
       : t(`notifications.form.categories.${key}.hint` as MessageKey);
   const locale = useLocale();

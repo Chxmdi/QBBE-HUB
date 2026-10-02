@@ -18,6 +18,8 @@ export const c3PagesFrCA: typeof c3PagesEn = {
   preferences: {
     intro: "Décochez un type de notification pour l’arrêter complètement : il n’apparaît plus dans le Hub et n’est pas envoyé par courriel. Les avis de sécurité et les annonces obligatoires arrivent toujours.",
     inHub: "Afficher dans le Hub",
+    description: "Choisissez ce qui arrive dans votre boîte de courriel, et quand. Sous « Afficher dans le Hub », choisissez ce qui apparaît dans le Hub.",
+    assignmentHint: "Tâches, révisions et décisions.",
     hub: {
       mention: "Mentions",
       assignment: "Travail assigné",

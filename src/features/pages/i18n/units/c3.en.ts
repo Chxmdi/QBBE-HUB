@@ -19,6 +19,8 @@ export const c3PagesEn = {
   preferences: {
     intro: "Untick a kind of notification to stop it altogether: it no longer appears in the Hub and is not emailed. Security notices and required announcements always arrive.",
     inHub: "Show in the Hub",
+    description: "Choose what reaches your inbox, and when. Under “Show in the Hub”, choose what appears in the Hub.",
+    assignmentHint: "Tasks, reviews, and decisions.",
     hub: {
       mention: "Mentions",
       assignment: "Assigned work",
