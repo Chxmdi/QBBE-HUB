@@ -378,7 +378,7 @@ test.describe("with the switches on", () => {
       await expect(edit).toBeFocused();
       await page.keyboard.press("Enter");
       await expect(page.getByRole("textbox", { name: "Contenu de la page (anglais)" })).toBeVisible({ timeout: 30_000 });
-      await page.getByRole("button", { name: "Annuler" }).click();
+      await page.getByRole("button", { name: "Annuler", exact: true }).click();
       await expect(manage.getByRole("button", { name: "Dupliquer" })).toBeVisible();
 
       for (const theme of ["light", "dark"] as const) {

@@ -63,6 +63,26 @@ async function seriousAxe(page: Page) {
     .flatMap((v) => v.nodes.map((n) => `${v.id}: ${n.html.slice(0, 160)} — ${n.failureSummary ?? ""}`));
 }
 
+/**
+ * Puts the caret at the end of a paragraph's text. The editor applies a
+ * click's caret on the browser's next selection event, which can land after
+ * a key pressed at once and move the caret back, so End is pressed until the
+ * caret is seen at the end, then the editor is given time to read it.
+ */
+async function caretAtEndOf(page: Page, paragraph: Locator, text: string) {
+  await paragraph.click();
+  await expect(async () => {
+    await page.keyboard.press("End");
+    const caret = await page.evaluate(() => {
+      const selection = window.getSelection();
+      const node = selection?.anchorNode;
+      return node && selection.isCollapsed && selection.anchorOffset === (node.textContent ?? "").length ? node.textContent : null;
+    });
+    expect(caret).toBe(text);
+  }).toPass({ timeout: 10_000 });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 async function openEditor(page: Page) {
   const editor = page.getByRole("textbox", { name: "Document content" });
   await expect(editor).toBeVisible({ timeout: 30_000 });
@@ -165,8 +185,7 @@ test("undo stops at the page as it was opened and says so [switches on]", async 
   await expect(editor).toContainText("Saved before opening");
   await expect(undo).toHaveAttribute("aria-disabled", "true");
   await expect(redo).toHaveAttribute("aria-disabled", "true");
-  await editor.locator("p", { hasText: "Saved before opening" }).click();
-  await page.keyboard.press("End");
+  await caretAtEndOf(page, editor.locator("p", { hasText: "Saved before opening" }), "Saved before opening");
   await page.keyboard.press("Control+z");
   await expect(live(page)).toHaveText("Nothing more to undo");
   await expect(editor).toContainText("Saved before opening");
@@ -215,8 +234,7 @@ test("undo stops at the last restore: an edit put back from the device is where 
 
   // The put-back edit is the starting point: undo does not take it away.
   await expect(page.getByRole("button", { name: "Undo", exact: true })).toHaveAttribute("aria-disabled", "true");
-  await restored.locator("p", { hasText: "Kept on the device" }).click();
-  await page.keyboard.press("End");
+  await caretAtEndOf(page, restored.locator("p", { hasText: "Kept on the device" }), "Kept on the device");
   await page.keyboard.press("Control+z");
   await expect(live(page)).toHaveText("Nothing more to undo");
   await expect(restored).toContainText("Saved first");
@@ -388,7 +406,9 @@ test("the shortcuts and the history speak Québec French [switches on]", async (
   await newPage(page, `Raccourcis ${Date.now()}`, "Nouvelle page");
   const editor = page.getByRole("textbox", { name: "Contenu du document" });
   await expect(editor).toBeVisible({ timeout: 30_000 });
-  const undo = page.getByRole("button", { name: "Annuler", exact: true });
+  const undo = page.getByRole("button", { name: "Annuler la dernière modification", exact: true });
+  // Never confused with a cancel button: no button in the editor is named just « Annuler ».
+  await expect(page.getByRole("button", { name: "Annuler", exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Historique des modifications" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Rétablir", exact: true })).toBeVisible();
   await editor.click();
@@ -436,8 +456,7 @@ test("after a save from elsewhere the history starts again [switches on]", async
   await conflict.getByRole("button", { name: "Keep mine" }).click();
   await expect(conflict).toBeHidden();
   await expect(status).toHaveText("Saved", { timeout: 30_000 });
-  await editor.locator("p", { hasText: "Mine second" }).click();
-  await page.keyboard.press("End");
+  await caretAtEndOf(page, editor.locator("p", { hasText: "Mine second" }), "Mine second");
   await page.keyboard.press("Control+z");
   await expect(live(page)).toHaveText("Nothing more to undo");
   await expect(editor).toContainText("Mine first");
