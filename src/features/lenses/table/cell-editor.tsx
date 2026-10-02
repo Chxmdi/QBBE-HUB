@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Select } from "@/components/ui/input";
+import { Checkbox, Select } from "@/components/ui/input";
 import type { CatalogProperty } from "@/lib/query/catalog";
 import type { LensValue } from "@/lib/query/run";
 import { useLensT } from "@/features/lenses/i18n/client";
@@ -163,7 +163,7 @@ export function CellEditor({
     const chosen = draft.split(",").map((k) => k.trim()).filter(Boolean);
     return (
       <>
-        <select
+        <Select
           {...common}
           multiple
           value={chosen}
@@ -175,7 +175,7 @@ export function CellEditor({
               {optionLabel(c)}
             </option>
           ))}
-        </select>
+        </Select>
         {message}
       </>
     );
@@ -183,13 +183,11 @@ export function CellEditor({
   if (kind === "checkbox") {
     return (
       <>
-        <input
+        <Checkbox
           {...common}
-         
-          type="checkbox"
           checked={draft === "true"}
           onChange={(e) => change(e.target.checked ? "true" : "false")}
-          className="size-4 accent-brand"
+          className="size-4"
         />
         <span className="ml-2">{draft === "true" ? t("units.d1.yes") : t("units.d1.no")}</span>
       </>
