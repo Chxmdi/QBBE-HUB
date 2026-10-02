@@ -36,6 +36,7 @@ describe("embed allow-list", () => {
     const mediaSrc = config.match(/"media-src ([^"]+)"/)?.[1].split(" ") ?? [];
     expect(mediaSrc).toEqual(expect.arrayContaining(["'self'", "blob:", "https:"]));
     expect(config).toMatch(/"media-src[^\n]*supabaseOrigins\(\)/);
+    expect(config).toMatch(/"img-src[^\n]*supabaseOrigins\(\)/);
   });
 
   it("only ever frames the origins the Content Security Policy allows", () => {
