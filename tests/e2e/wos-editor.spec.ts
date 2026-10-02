@@ -245,9 +245,13 @@ test("the W0-5 conditions hold with each editor menu open, in both themes", asyn
       (finding) => !(finding.startsWith("scrollable-region-focusable:") && finding.includes('id="bn-suggestion-menu"')),
     );
     expect(slashFindings, `${theme}: slash menu open`).toEqual([]);
+    // The menu closes after Escape on the editor's next update, not at once:
+    // wait for it, or the next scan finds the closing list.
     await page.keyboard.press("Escape");
+    await expect(list).toBeHidden();
     await page.keyboard.press("Backspace");
     await page.keyboard.press("Backspace");
+    await expect(page.getByRole("listbox")).toHaveCount(0);
 
     // The formatting toolbar open.
     await editor.locator("p", { hasText: "Plain text" }).click();
