@@ -110,7 +110,9 @@ begin
   perform tests.ok(d_loose is null, 'editor files: a staff-only file on no page is still refused to staff');
 
   -- Reading a file ------------------------------------------------------------
-  -- Storage serves only scanned-clean files; mark both as the scanner would.
+  -- Storage serves only scanned-clean files; mark both as the scanner would,
+  -- with no signed-in user (the scan trigger refuses one).
+  perform set_config('request.jwt.claims', '{}', true);
   update public.document set scan_status = 'clean' where id in (d_shared, d_private);
   perform tests.authenticate(v_other_staff, 'aal1');
   v_ok := tests.editor_file_visible(d_shared) and tests.editor_file_downloadable(v_shared_path);
@@ -133,6 +135,8 @@ begin
   perform tests.ok(v_ok, 'editor files: the page''s author reads the file on their private page');
 
   -- A file stays with its page --------------------------------------------------
+  -- As the server, so the scan trigger's caller rules are not what refuses.
+  perform set_config('request.jwt.claims', '{}', true);
   begin
     update public.document set editor_object_id = p_shared where id = d_private;
     raise exception 'FAIL: a file moved to another page';
