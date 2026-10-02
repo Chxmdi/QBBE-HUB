@@ -42,6 +42,7 @@ export function EventToMeeting({
 }) {
   const id = useId();
   const router = useRouter();
+  const { toast } = useToast();
   const [project, setProject] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message>(null);
@@ -54,7 +55,13 @@ export function EventToMeeting({
         const result = await addEventAsMeeting(linkId, project || null);
         setBusy(false);
         if (!result.ok) return setMessage({ ok: false, text: result.error });
-        setMessage({ ok: true, text: fill(text.meetingAdded, { name }), href: `/meetings/${result.data?.meetingId}`, hrefText: text.openMeeting });
+        // The event leaves this list on refresh (it is a Hub meeting now), taking
+        // this form with it, so success is confirmed in the page-level toast.
+        setMessage(null);
+        const meetingId = result.data?.meetingId;
+        toast(fill(text.meetingAdded, { name }), {
+          action: meetingId ? { label: text.openMeeting, onClick: () => router.push(`/meetings/${meetingId}`) } : undefined,
+        });
         router.refresh();
       }}
     >

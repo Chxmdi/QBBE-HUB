@@ -85,7 +85,28 @@ async function open(page: Page, pageId: string) {
 async function caretIn(page: Page, blockId: string, where: "end" | "start" = "end") {
   const block = page.locator(`.qbbe-editor [data-id="${blockId}"] [data-content-type] .bn-inline-content`).first();
   await block.click();
-  await page.keyboard.press(where === "end" ? "End" : "Home");
+  // The editor takes a click's caret on the browser's next selection event,
+  // which can land after a key pressed at once and put the caret back where
+  // the click was. Press the key until the editor itself (Tiptap attaches it
+  // to its element) holds the caret at that end of this block.
+  await expect(async () => {
+    await page.keyboard.press(where === "end" ? "End" : "Home");
+    const at = await page.evaluate(
+      ({ id, end }) => {
+        type Sel = { empty: boolean; $from: { parentOffset: number; parent: { content: { size: number } }; node: (depth: number) => { attrs: { id?: string } }; depth: number } };
+        type WithEditor = Element & { editor?: { state: { selection: Sel } } };
+        const dom = ([...document.querySelectorAll(".qbbe-editor .ProseMirror")] as WithEditor[]).find((el) => el.editor);
+        const selection = dom?.editor?.state.selection;
+        if (!selection || !selection.empty) return false;
+        const { $from } = selection;
+        let inBlock = false;
+        for (let depth = $from.depth; depth >= 0; depth -= 1) if ($from.node(depth).attrs.id === id) inBlock = true;
+        return inBlock && $from.parentOffset === (end ? $from.parent.content.size : 0);
+      },
+      { id: blockId, end: where === "end" },
+    );
+    expect(at, `the editor's caret is at the ${where} of block ${blockId}`).toBe(true);
+  }).toPass({ timeout: 10_000 });
 }
 
 /**

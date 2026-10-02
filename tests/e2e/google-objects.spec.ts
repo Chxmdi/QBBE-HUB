@@ -54,7 +54,10 @@ test("a calendar event becomes a meeting, mail goes to capture, a Drive file is 
     expect(await axeProblems(page), "Google page accessibility").toEqual([]);
 
     await page.getByRole("button", { name: `Add ${eventTitle} as a meeting` }).click();
-    await expect(page.getByRole("status").filter({ hasText: `${eventTitle} is now a Hub meeting.` })).toBeVisible({ timeout: 20_000 });
+    // Confirmed in the page toast, which outlives the refresh that drops the event from the list.
+    const added = page.getByRole("status").filter({ hasText: `${eventTitle} is now a Hub meeting.` });
+    await expect(added).toBeVisible({ timeout: 20_000 });
+    await expect(added.getByRole("button", { name: "Open the meeting" })).toBeVisible();
     expect(sql(`select count(*) from meeting m join calendar_event_link l on l.meeting_id = m.id where l.external_id = 'e2e-${stamp}'`)).toBe("1");
 
     await page.getByRole("button", { name: `Send ${subject} to capture` }).click();
