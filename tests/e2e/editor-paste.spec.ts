@@ -165,7 +165,8 @@ test("a paste and the typing after it can each be undone [switches on]", async (
   await expect(editor.locator(".bn-block-content")).toHaveCount(2);
   await expect.poll(() => page.evaluate(() => window.getSelection()?.anchorNode?.textContent ?? null)).toBe("");
   await paste(editor, { "text/plain": `# Pasted ${stamp}` });
-  await expect(editor.locator("[data-content-type='heading']", { hasText: `Pasted ${stamp}` })).toBeVisible();
+  // Polled over the whole document, so a failure reports every block as it is.
+  await expect.poll(async () => (await shape(editor)).join(" / ")).toContain(`heading|H1|Pasted ${stamp}`);
   await page.keyboard.press("Enter");
   await page.keyboard.type(`Typed ${stamp}`);
   await expect(editor.getByText(`Typed ${stamp}`)).toBeVisible();
