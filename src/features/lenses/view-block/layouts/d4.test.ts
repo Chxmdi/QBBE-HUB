@@ -127,6 +127,12 @@ describe("D4-1: timeline, gallery and feed in the view block", () => {
     expect(timeline).toContain("Automatic (Start)");
     expect(timeline).toContain("Automatic (Due)");
     expect(settings("timeline", "fr-CA")).toContain("Les barres commencent le");
+    // With Due chosen as the start, the end cannot be Due, and its default says so.
+    const dueStart = settings("timeline", "en", { timeline: { start: "due", end: "due" } });
+    const endSelect = dueStart.slice(dueStart.indexOf('id="v-d4-end"'));
+    expect(endSelect).not.toContain('value="due"');
+    expect(endSelect).toContain("No end date");
+    expect(endSelect).not.toContain("Automatic (Due)");
     expect(settings("gallery")).toContain("Card cover");
     expect(settings("gallery")).not.toContain("review_role");
     expect(settings("gallery", "en", { gallery: { cover: "status" } })).toMatch(/<option value="status" selected="">/);

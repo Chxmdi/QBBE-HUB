@@ -372,13 +372,18 @@ function D4Settings({ id, layout, value, onChange, catalog, type, t, locale }: L
     );
   }
 
-  const fallback = timelinePaths({}, type, properties);
+  const startFallback = timelinePaths({}, type, properties).start;
+  // The end is worked out from the start in use, and can never be the start itself.
+  const chosenStart = read("timeline", "start", dates);
+  const effectiveStart = chosenStart || startFallback;
+  const endFallback = timelinePaths({ timeline: chosenStart ? { start: chosenStart } : {} }, type, properties).end;
+  const endDates = dates.filter((p) => p.key !== effectiveStart);
   return (
     <>
       <div>
         <Label htmlFor={`${id}-d4-start`}>{t("units.d4.settings.timelineStart")}</Label>
-        <Select id={`${id}-d4-start`} value={read("timeline", "start", dates)} onChange={(e) => onChange({ timeline: patched(value.timeline, "start", e.target.value) })}>
-          <option value="">{automatic(fallback.start)}</option>
+        <Select id={`${id}-d4-start`} value={chosenStart} onChange={(e) => onChange({ timeline: patched(value.timeline, "start", e.target.value) })}>
+          <option value="">{automatic(startFallback)}</option>
           {dates.map((p) => (
             <option key={p.key} value={p.key}>{localized(p.name, locale)}</option>
           ))}
@@ -386,9 +391,9 @@ function D4Settings({ id, layout, value, onChange, catalog, type, t, locale }: L
       </div>
       <div>
         <Label htmlFor={`${id}-d4-end`}>{t("units.d4.settings.timelineEnd")}</Label>
-        <Select id={`${id}-d4-end`} value={read("timeline", "end", dates)} onChange={(e) => onChange({ timeline: patched(value.timeline, "end", e.target.value) })}>
-          <option value="">{fallback.end ? automatic(fallback.end) : t("units.d4.settings.noEnd")}</option>
-          {dates.map((p) => (
+        <Select id={`${id}-d4-end`} value={read("timeline", "end", endDates)} onChange={(e) => onChange({ timeline: patched(value.timeline, "end", e.target.value) })}>
+          <option value="">{endFallback ? automatic(endFallback) : t("units.d4.settings.noEnd")}</option>
+          {endDates.map((p) => (
             <option key={p.key} value={p.key}>{localized(p.name, locale)}</option>
           ))}
         </Select>
