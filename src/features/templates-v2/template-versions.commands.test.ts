@@ -40,6 +40,7 @@ const commands = await import("./services/templates-v2.commands");
 
 const edit = {
   id: TEMPLATE,
+  version: 1,
   name: { en: "Hub", fr: "Carrefour" },
   description: { en: "", fr: "" },
   title: { en: "Hub", fr: "Carrefour" },

@@ -412,19 +412,28 @@ export interface DraftMilestone {
   en: string;
   fr: string;
   due: string;
+  /** Kept as stored; the editor shows only the due day. */
+  start?: number;
 }
 
 export interface DraftHubTask {
   en: string;
   fr: string;
   due: string;
-  /** The milestone's row number (1-based) as typed, or "" for none. */
+  /** The milestone's row number (1-based) as shown, or "" for none. */
   milestone: string;
+  /** Kept as stored; the editor shows only titles, due day and milestone. */
+  start?: number;
+  priority?: Priority;
+  description?: LocalizedText;
 }
 
 export type HubProblem = "hubText" | "offset" | "hubMilestone";
 
-/** A hub from the editor's rows; blank rows are skipped, and no rows means no hub. */
+/**
+ * A hub from the editor's rows; blank rows are skipped, and no rows means no
+ * hub. A task's milestone is the row number on screen, blank rows counted.
+ */
 export function buildHub(
   milestones: DraftMilestone[],
   tasks: DraftHubTask[],
@@ -435,29 +444,40 @@ export function buildHub(
     if (!/^\d{1,4}$/.test(value) || Number(value) > MAX_OFFSET) return null;
     return Number(value);
   };
+  const offsets = (start: number | undefined, due: number | undefined): { offsets?: Offsets } | null => {
+    if (start !== undefined && (!Number.isInteger(start) || start < 0 || start > MAX_OFFSET)) return null;
+    if (start !== undefined && due !== undefined && start > due) return null;
+    if (start === undefined && due === undefined) return {};
+    return { offsets: { ...(start === undefined ? {} : { start }), ...(due === undefined ? {} : { due }) } };
+  };
   const blank = (row: { en: string; fr: string; due: string }) => !row.en.trim() && !row.fr.trim() && !row.due.trim();
-  const kept = milestones.filter((m) => !blank(m));
   const out: HubBody = { milestones: [], tasks: [] };
-  for (const m of kept) {
+  /** Screen row (1-based) to the kept milestone's index. */
+  const kept = new Map<number, number>();
+  for (const [index, m] of milestones.entries()) {
+    if (blank(m)) continue;
     if (!m.en.trim() || !m.fr.trim()) return { ok: false, problem: "hubText" };
-    const due = offset(m.due);
-    if (due === null) return { ok: false, problem: "offset" };
-    out.milestones!.push({ title: { en: m.en.trim(), fr: m.fr.trim() }, ...(due === undefined ? {} : { offsets: { due } }) });
+    const dates = offsets(m.start, offset(m.due) ?? undefined);
+    if (offset(m.due) === null || dates === null) return { ok: false, problem: "offset" };
+    kept.set(index + 1, out.milestones!.length);
+    out.milestones!.push({ title: { en: m.en.trim(), fr: m.fr.trim() }, ...dates });
   }
   for (const t of tasks) {
     if (blank(t) && !t.milestone.trim()) continue;
     if (!t.en.trim() || !t.fr.trim()) return { ok: false, problem: "hubText" };
-    const due = offset(t.due);
-    if (due === null) return { ok: false, problem: "offset" };
+    const dates = offsets(t.start, offset(t.due) ?? undefined);
+    if (offset(t.due) === null || dates === null) return { ok: false, problem: "offset" };
     let milestone: number | undefined;
     if (t.milestone.trim()) {
-      const n = Number(t.milestone.trim());
-      if (!Number.isInteger(n) || n < 1 || n > out.milestones!.length) return { ok: false, problem: "hubMilestone" };
-      milestone = n - 1;
+      const row = Number(t.milestone.trim());
+      if (!Number.isInteger(row) || !kept.has(row)) return { ok: false, problem: "hubMilestone" };
+      milestone = kept.get(row);
     }
     out.tasks!.push({
       title: { en: t.en.trim(), fr: t.fr.trim() },
-      ...(due === undefined ? {} : { offsets: { due } }),
+      ...(t.description ? { description: t.description } : {}),
+      ...(t.priority ? { priority: t.priority } : {}),
+      ...dates,
       ...(milestone === undefined ? {} : { milestone }),
     });
   }
@@ -465,19 +485,23 @@ export function buildHub(
   return { ok: true, hub: out };
 }
 
-/** A hub as the editor's rows, for editing. */
+/** A hub as the editor's rows, for editing; what the rows do not show is kept. */
 export function hubToDrafts(hub: HubBody | undefined): { milestones: DraftMilestone[]; tasks: DraftHubTask[] } {
   return {
     milestones: (hub?.milestones ?? []).map((m) => ({
       en: m.title.en,
       fr: m.title.fr,
       due: m.offsets?.due === undefined ? "" : String(m.offsets.due),
+      ...(m.offsets?.start === undefined ? {} : { start: m.offsets.start }),
     })),
     tasks: (hub?.tasks ?? []).map((t) => ({
       en: t.title.en,
       fr: t.title.fr,
       due: t.offsets?.due === undefined ? "" : String(t.offsets.due),
       milestone: t.milestone === undefined ? "" : String(t.milestone + 1),
+      ...(t.offsets?.start === undefined ? {} : { start: t.offsets.start }),
+      ...(t.priority ? { priority: t.priority } : {}),
+      ...(t.description ? { description: t.description } : {}),
     })),
   };
 }

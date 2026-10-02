@@ -161,6 +161,14 @@ begin
   end;
   reset role;
   perform tests.ok(v_ok, 'T1-2: staff without a program they manage cannot create a hub outside any program');
+  perform tests.authenticate(v_staff);
+  begin
+    perform public.apply_page_template_v2(v_hub, null, 'Staff hub', date '2031-05-01', '{}');
+  exception when insufficient_privilege then
+    get stacked diagnostics v_text = pg_exception_hint;
+  end;
+  reset role;
+  perform tests.ok(v_text = 'hub', 'T1-2: a hub refusal is told apart from a page refusal');
   perform tests.ok((select count(*) from public.page) = v_n and not exists (select 1 from public.project where name = 'Staff hub'),
     'T1-2: a refused hub leaves no page and no project');
 
@@ -235,6 +243,21 @@ begin
   end;
   reset role;
   perform tests.ok(v_ok, 'T1-4: an origin cannot be claimed for someone else''s page');
+  insert into public.page (organization_id, visibility, created_by, title)
+  values (v_org, 'workspace', v_admin, 'Made by hand') returning id into v_page;
+  perform tests.authenticate(v_admin);
+  begin
+    insert into public.page_template_origin (page_id, version_id)
+    values (v_page, (select id from public.template_v2_version where template_id = v_hub and version = 1));
+    v_ok := false;
+  exception when insufficient_privilege then
+    v_ok := true;
+  end;
+  select string_agg(version || ':' || pages, ',' order by version) into v_text
+  from public.template_v2_version_pages(v_hub);
+  reset role;
+  perform tests.ok(v_ok, 'T1-4: a page made by hand cannot claim to come from a template');
+  perform tests.ok(v_text = '1:3,2:1', 'T1-4: pages are counted per version');
 
   -- ======================================================== T1-6 no access
   perform tests.authenticate(v_staff);

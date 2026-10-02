@@ -140,7 +140,7 @@ export async function applyPageTemplateV2(input: unknown): Promise<TemplatesV2Re
   });
   if (error) {
     // A hub's project, milestones or tasks were refused (T1): say which part.
-    if (error.code === "42501" && /table "(project|milestone|task)"/i.test(error.message)) {
+    if (error.code === "42501" && error.hint === "hub") {
       return { ok: false, error: m.errors.hubNotAllowed };
     }
     if (error.code === "42501" && /row-level security|violates/i.test(error.message)) {

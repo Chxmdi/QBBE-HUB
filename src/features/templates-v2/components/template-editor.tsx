@@ -26,6 +26,7 @@ import { useTemplateEditorHandlers } from "./template-editor-handlers";
  */
 export function TemplateEditor({
   templateId,
+  version,
   body,
   name,
   description,
@@ -33,6 +34,8 @@ export function TemplateEditor({
   onDone,
 }: {
   templateId: string;
+  /** The version being edited; saving over a newer one is refused. */
+  version: number;
   body: PageBody;
   name: { en: string; fr: string };
   description: { en: string; fr: string };
@@ -62,6 +65,7 @@ export function TemplateEditor({
     setBusy(true);
     const result = await updatePageTemplateV2({
       id: templateId,
+      version,
       name: names,
       description,
       title: titles,

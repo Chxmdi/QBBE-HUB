@@ -111,6 +111,7 @@ export function TemplateManage({
     return (
       <TemplateEditor
         templateId={templateId}
+        version={details.version}
         body={body}
         name={details.name}
         description={details.description}

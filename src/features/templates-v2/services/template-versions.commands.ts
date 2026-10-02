@@ -9,7 +9,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { TEMPLATES_FLAG } from "@/features/templates-v2/gate";
 import { templatesV2Text } from "@/features/templates-v2/messages";
-import { buildHub, documentVariables, type PageBody, type PageDocument } from "@/features/templates-v2/template";
+import { buildHub, findPageVariables, type PageBody, type PageDocument } from "@/features/templates-v2/template";
 
 /**
  * Templates that build hubs, with versions (T1), behind the `wos_pages`
@@ -60,18 +60,19 @@ export async function templateDetailsV2(templateId: unknown): Promise<TemplateVe
     .maybeSingle();
   if (error) return { ok: false, error: m.errors.generic };
   if (!template) return { ok: false, error: m.errors.unavailable };
-  const [{ data: versions, error: versionsError }, { data: origins, error: originsError }] = await Promise.all([
+  const [{ data: versions, error: versionsError }, { data: pages, error: pagesError }] = await Promise.all([
     supabase
       .from("template_v2_version")
       .select("version, created_at")
       .eq("template_id", id.data)
       .order("version", { ascending: false })
       .limit(200),
-    supabase.from("page_template_origin").select("template_version").eq("template_id", id.data).limit(5000),
+    // Counted in the database, as the reader: pages they cannot open are not counted.
+    supabase.rpc("template_v2_version_pages", { p_template: id.data }),
   ]);
-  if (versionsError || originsError) return { ok: false, error: m.errors.generic };
+  if (versionsError || pagesError) return { ok: false, error: m.errors.generic };
   const counts = new Map<number, number>();
-  for (const row of origins ?? []) counts.set(row.template_version as number, (counts.get(row.template_version as number) ?? 0) + 1);
+  for (const row of (pages ?? []) as { version: number; pages: number }[]) counts.set(row.version, Number(row.pages));
   const sameOrganization = template.organization_id === session.organizationId;
   return {
     ok: true,
@@ -94,15 +95,26 @@ export async function templateDetailsV2(templateId: unknown): Promise<TemplateVe
 const bilingual = (max: number) => z.object({ en: z.string().max(max), fr: z.string().max(max) });
 /** Blocks are checked by the database against the editor's registry; here only their size. */
 const blocks = z.array(z.object({ type: z.string().max(60) }).passthrough()).max(500);
-const draftRow = z.object({ en: z.string().max(200), fr: z.string().max(200), due: z.string().max(20) });
+const start = z.number().int().min(0).max(3650).optional();
+const draftRow = z.object({ en: z.string().max(200), fr: z.string().max(200), due: z.string().max(20), start });
 const updateSchema = z.object({
   id: uuid,
+  /** The version the editor was opened on: a save over a newer one is refused, not merged. */
+  version: z.number().int().min(1),
   name: bilingual(200),
   description: bilingual(2000),
   title: bilingual(200),
   document: z.object({ en: blocks, fr: blocks }),
   milestones: z.array(draftRow).max(50),
-  tasks: z.array(draftRow.extend({ milestone: z.string().max(3) })).max(200),
+  tasks: z
+    .array(
+      draftRow.extend({
+        milestone: z.string().max(3),
+        priority: z.enum(["low", "medium", "high", "critical"]).optional(),
+        description: bilingual(5000).optional(),
+      }),
+    )
+    .max(200),
 });
 
 export type UpdatePageTemplateInput = z.infer<typeof updateSchema>;
@@ -125,10 +137,13 @@ export async function updatePageTemplateV2(input: unknown): Promise<TemplateVers
   if (!name.en || !name.fr) return { ok: false, error: m.errors.name };
   const document = draft.document as PageDocument;
   if (document.en.length + document.fr.length === 0) return { ok: false, error: m.errors.blocks };
-  if (JSON.stringify(document).length > MAX_DOCUMENT_BYTES) return { ok: false, error: m.errors.tooLarge };
+  // The database counts the bytes of its own JSON text, which has more spaces; leave room for them.
+  if (new TextEncoder().encode(JSON.stringify(document)).length > MAX_DOCUMENT_BYTES * 0.9) {
+    return { ok: false, error: m.errors.tooLarge };
+  }
   const hub = buildHub(draft.milestones, draft.tasks);
   if (!hub.ok) return { ok: false, error: m.errors[hub.problem] };
-  const variables = documentVariables(document);
+  const variables = findPageVariables(JSON.stringify([title, document]));
   const body: PageBody = {
     title,
     blocks: [],
@@ -148,10 +163,18 @@ export async function updatePageTemplateV2(input: unknown): Promise<TemplateVers
     })
     .eq("id", draft.id)
     .eq("scope", "page")
+    .eq("version", draft.version)
     .select("version")
     .maybeSingle();
-  if (error) return { ok: false, error: error.code === "23514" ? m.errors.document : m.errors.generic };
-  if (!data) return { ok: false, error: m.errors.forbidden };
+  if (error) {
+    if (error.code === "23514") return { ok: false, error: /1 MB/.test(error.message) ? m.errors.tooLarge : m.errors.document };
+    return { ok: false, error: m.errors.generic };
+  }
+  if (!data) {
+    // Someone saved a newer version since the editor opened, or the reader may not edit it.
+    const { data: current } = await supabase.from("template_v2").select("version").eq("id", draft.id).maybeSingle();
+    return { ok: false, error: current && current.version !== draft.version ? m.errors.conflict : m.errors.forbidden };
+  }
   revalidatePath(`/templates-v2/${draft.id}`);
   return { ok: true, data: { version: data.version as number } };
 }

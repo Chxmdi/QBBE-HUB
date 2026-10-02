@@ -121,6 +121,37 @@ describe("T1-2: rendering a template on a start date", () => {
     expect(buildHub([{ en: "M", fr: "J", due: "3651" }], [])).toEqual({ ok: false, problem: "offset" });
   });
 
+  it("numbers milestones as the screen does, blank rows included", () => {
+    const rows = [
+      { en: "Plan", fr: "Plan", due: "1" },
+      { en: "", fr: "", due: "" },
+      { en: "Launch", fr: "Lancement", due: "9" },
+    ];
+    const built = buildHub(rows, [{ en: "Go", fr: "Allez", due: "", milestone: "3" }]);
+    expect(built.ok && built.hub?.tasks?.[0].milestone).toBe(1);
+    expect(built.ok && built.hub?.milestones?.[1].title.en).toBe("Launch");
+    expect(buildHub(rows, [{ en: "Go", fr: "Allez", due: "", milestone: "2" }])).toEqual({ ok: false, problem: "hubMilestone" });
+  });
+
+  it("keeps what the rows do not show: a task's description, priority and start day", () => {
+    const hub = {
+      milestones: [{ title: { en: "M", fr: "J" }, offsets: { start: 1, due: 4 } }],
+      tasks: [
+        {
+          title: { en: "T", fr: "T" },
+          description: { en: "Why", fr: "Pourquoi" },
+          priority: "high" as const,
+          offsets: { start: 2, due: 5 },
+          milestone: 0,
+        },
+      ],
+    };
+    const drafts = hubToDrafts(hub);
+    expect(buildHub(drafts.milestones, drafts.tasks)).toEqual({ ok: true, hub });
+    // A start after the new due day is refused rather than saved.
+    expect(buildHub([], [{ ...drafts.tasks[0], milestone: "", due: "1" }])).toEqual({ ok: false, problem: "offset" });
+  });
+
   it("round-trips a hub through the editor's rows", () => {
     const drafts = hubToDrafts(hubBody.hub);
     const rebuilt = buildHub(drafts.milestones, drafts.tasks.map((t) => ({ ...t })));

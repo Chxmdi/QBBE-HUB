@@ -149,6 +149,7 @@ const en = {
     hubMilestone: "A task's milestone is the number of one of the milestones above.",
     document: "The page content could not be saved: a block is not one the editor knows.",
     tooLarge: "The page content is too large to save as a template.",
+    conflict: "Someone saved a newer version while you were editing. Reload the page to see it, then make your changes again.",
   },
 };
 
@@ -302,6 +303,7 @@ const frCA: TemplatesV2Text = {
     hubMilestone: "Le jalon d’une tâche est le numéro d’un des jalons ci-dessus.",
     document: "Le contenu de la page n’a pas pu être enregistré : un bloc n’est pas reconnu par l’éditeur.",
     tooLarge: "Le contenu de la page est trop volumineux pour être enregistré comme modèle.",
+    conflict: "Quelqu’un a enregistré une version plus récente pendant votre modification. Rechargez la page pour la voir, puis refaites vos changements.",
   },
 };
 

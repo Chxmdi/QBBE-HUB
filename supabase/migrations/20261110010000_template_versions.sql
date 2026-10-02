@@ -133,6 +133,9 @@ create table public.page_template_origin (
   created_at timestamptz not null default now()
 );
 
+create index page_template_origin_template_idx on public.page_template_origin (template_id, template_version);
+create index page_template_origin_project_idx on public.page_template_origin (project_id) where project_id is not null;
+
 comment on table public.page_template_origin is
   'The template and version a page was made from (T1). Written once, when the page is made.';
 
@@ -172,11 +175,15 @@ for select to authenticated using (
   exists (select 1 from public.page p where p.id = page_id)
 );
 
--- Written by the person who made the page, from a version they can see, and
--- naming only a project they created themselves.
+-- Written only while public.apply_page_template_v2 makes the page, by the
+-- person making it, from a version they can see, naming only a project they
+-- created themselves.
 create policy page_template_origin_insert on public.page_template_origin
 for insert to authenticated with check (
-  created_by = (select auth.uid())
+  -- Only public.apply_page_template_v2 marks the page it is making; a
+  -- request through the API cannot set this transaction-local value.
+  page_id::text = current_setting('app.page_template_apply', true)
+  and created_by = (select auth.uid())
   and exists (select 1 from public.page p where p.id = page_id and p.created_by = (select auth.uid()))
   and exists (select 1 from public.template_v2_version v where v.id = version_id)
   and (project_id is null
@@ -549,6 +556,7 @@ begin
   -- The hub: a project where the person chose (the project insert rule
   -- decides), its milestones, its tasks, and a view of exactly those tasks.
   if v_template.body ? 'hub' then
+   begin
     select max(o) into v_end from (
       select (x.value->'offsets'->>'due')::integer as o
       from jsonb_array_elements(coalesce(v_template.body->'hub'->'milestones', '[]')
@@ -598,6 +606,10 @@ begin
           'sort', jsonb_build_array(jsonb_build_object('path', 'due', 'direction', 'asc')),
           'fields', jsonb_build_array('status', 'due', 'milestone'))::text),
       'children', '[]'::jsonb);
+   exception when insufficient_privilege then
+    -- Told apart from a page refusal: the app asks for a program the person manages.
+    raise exception 'You cannot create the hub''s project there' using errcode = '42501', hint = 'hub';
+   end;
   end if;
 
   insert into public.page (organization_id, parent_page_id, visibility, title, position, created_by)
@@ -613,8 +625,10 @@ begin
   select tv.id into v_version_id from public.template_v2_version tv
   where tv.template_id = v_template.id and tv.version = v_template.version;
   if v_version_id is not null then
+    perform set_config('app.page_template_apply', v_page_id::text, true);
     insert into public.page_template_origin (page_id, version_id, project_id, template_version, template_name_en, template_name_fr)
     values (v_page_id, v_version_id, v_project_id, v_template.version, v_template.name_en, v_template.name_fr);
+    perform set_config('app.page_template_apply', '', true);
   end if;
 
   return v_page_id;
@@ -796,3 +810,18 @@ grant execute on function public.duplicate_template_v2(uuid, uuid) to authentica
 comment on function public.duplicate_template_v2(uuid, uuid) is
   'Copies a template the caller can see as their draft (T1), leaving out private pages, '
   'people outside the destination and anything the caller cannot open there. Runs as the caller.';
+
+-- ---------------------------------------------------------------------------
+-- Pages made from each version, as far as the caller can see them
+-- ---------------------------------------------------------------------------
+
+create or replace function public.template_v2_version_pages(p_template uuid)
+returns table (version integer, pages bigint)
+language sql stable security invoker set search_path = '' as $$
+  select o.template_version, count(*)
+  from public.page_template_origin o
+  where o.template_id = p_template
+  group by o.template_version;
+$$;
+revoke all on function public.template_v2_version_pages(uuid) from public, anon;
+grant execute on function public.template_v2_version_pages(uuid) to authenticated, service_role;
