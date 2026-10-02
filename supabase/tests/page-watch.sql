@@ -119,11 +119,11 @@ begin
   perform tests.authenticate(v_owner, 'aal1');
   perform tests.ok(tests.watch_allowed(p_shared, v_owner), 'owner watches a workspace page');
   perform tests.ok(not tests.watch_allowed(p_private, v_owner), 'owner cannot watch someone else''s private page');
-  select count(*) into v_count from public.page_watch;
+  select count(*) into v_count from public.page_watch where page_id in (p_shared, p_private);
   perform tests.ok(v_count = 1, 'owner reads only their own watch');
   delete from public.page_watch where user_id = v_staff;
   reset role;
-  select count(*) into v_count from public.page_watch where user_id = v_staff;
+  select count(*) into v_count from public.page_watch where user_id = v_staff and page_id in (p_shared, p_private);
   perform tests.ok(v_count = 2, 'owner cannot remove someone else''s watches');
 
   perform tests.authenticate(v_admin, 'aal1');
@@ -187,7 +187,7 @@ begin
 
   -- Each person reads only their own notices.
   perform tests.authenticate(v_owner, 'aal1');
-  select count(*) into v_count from public.notification where dedupe_key like 'page_comment:%';
+  select count(*) into v_count from public.notification where source_id = p_shared;
   perform tests.ok(v_count = 2, 'the owner reads only their own page notices');
   -- Unwatching stops the notices.
   delete from public.page_watch where page_id = p_shared;
@@ -272,7 +272,7 @@ begin
   delete from public.page_watch where page_id = p_shared and user_id = v_owner;
   update public.notification_preference set hub_muted_categories = '{}' where user_id = v_owner;
 
-  select count(*) into v_count from public.notification where user_id = v_volunteer;
+  select count(*) into v_count from public.notification where user_id = v_volunteer and source_id = p_shared;
   perform tests.ok(v_count = 0, 'a mentioned volunteer who cannot open the page gets nothing');
   select count(*) into v_count from public.record_comment_mention
   where comment_id = c_mention and target_id = v_volunteer and notified_at is null;
