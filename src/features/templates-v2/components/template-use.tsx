@@ -8,6 +8,7 @@ import { fill, type TemplatesV2Text } from "@/features/templates-v2/messages";
 import { applyTemplateV2 } from "@/features/templates-v2/services/templates-v2.commands";
 import { destinationFor, planTemplate, type PageBody, type TemplateRecord } from "@/features/templates-v2/template";
 import { PageTemplateForm, type ParentOption } from "./page-template-form";
+import { TemplateManage } from "./template-manage";
 
 /**
  * Preview and use a template. The preview recalculates as the start date or
@@ -56,16 +57,20 @@ export function TemplateUse({
 
   if (template.scope === "page" && pagesEnabled) {
     return (
-      <PageTemplateForm
-        template={{ id: template.id, body: template.body as PageBody }}
-        text={text}
-        locale={locale}
-        today={today}
-        parents={parents}
-        canCreateWorkspace={canCreateWorkspace}
-        submitLabel={text.pageForm.useTemplate}
-        untitled={untitled}
-      />
+      <div className="space-y-6">
+        <TemplateManage templateId={template.id} body={template.body as PageBody} text={text} locale={locale} />
+        <PageTemplateForm
+          key={JSON.stringify(template.body)}
+          template={{ id: template.id, body: template.body as PageBody }}
+          text={text}
+          locale={locale}
+          today={today}
+          parents={parents}
+          canCreateWorkspace={canCreateWorkspace}
+          submitLabel={text.pageForm.useTemplate}
+          untitled={untitled}
+        />
+      </div>
     );
   }
 

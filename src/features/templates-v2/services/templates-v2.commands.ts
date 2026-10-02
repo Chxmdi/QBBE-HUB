@@ -104,6 +104,8 @@ const applyPageSchema = z.object({
     period: z.string().trim().max(500).optional(),
     due: z.union([calendarDate, z.literal("")]).optional(),
   }),
+  /** Where a hub template's project goes (T1); null outside any program. */
+  programId: uuid.nullable().optional(),
 });
 
 export type ApplyPageTemplateInput = z.infer<typeof applyPageSchema>;
@@ -122,7 +124,7 @@ export async function applyPageTemplateV2(input: unknown): Promise<TemplatesV2Re
   if (!parsed.success) return { ok: false, error: m.errors.generic };
   const limited = await enforceRateLimit("page:create", session.userId);
   if (limited) return limited;
-  const { templateId, parentPageId, title, start, locale, variables } = parsed.data;
+  const { templateId, parentPageId, title, start, locale, variables, programId } = parsed.data;
   const supabase = await createSupabaseServerClient();
   // Someone in two organizations sees both galleries; a page is made only in
   // the organization they are working in, as createPage does.
@@ -134,8 +136,13 @@ export async function applyPageTemplateV2(input: unknown): Promise<TemplatesV2Re
     p_title: title,
     p_start: start,
     p_variables: { ...variables, locale },
+    p_program: programId ?? null,
   });
   if (error) {
+    // A hub's project, milestones or tasks were refused (T1): say which part.
+    if (error.code === "42501" && error.hint === "hub") {
+      return { ok: false, error: m.errors.hubNotAllowed };
+    }
     if (error.code === "42501" && /row-level security|violates/i.test(error.message)) {
       return { ok: false, error: m.errors.pageNotAllowed };
     }
