@@ -6,6 +6,8 @@ export const e2EditorEn = {
   toolbar: {
     label: "Undo history",
     undo: "Undo",
+    // The button's spoken name; it begins with the visible word.
+    undoName: "Undo",
     redo: "Redo",
     shortcuts: "Keyboard shortcuts",
   },

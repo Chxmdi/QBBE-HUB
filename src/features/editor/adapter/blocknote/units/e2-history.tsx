@@ -255,6 +255,7 @@ function HistoryControls({ editor, doc, containerRef, t }: EditorUnitProps) {
         <button
           type="button"
           className="qbbe-history-button"
+          aria-label={t("units.e2.toolbar.undoName")}
           aria-disabled={!available.undo}
           aria-keyshortcuts={`${mod}+Z`}
           title={`${t("units.e2.toolbar.undo")} (${keysText(bindingKeys("Mod-z", mac, keyNames(t)))})`}
