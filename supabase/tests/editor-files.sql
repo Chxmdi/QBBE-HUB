@@ -4,7 +4,21 @@
 -- rls.sql. Rolled back.
 begin;
 
-create or replace function tests.editor_file_insert(p_org uuid, p_page uuid, p_as uuid, p_visibility text default 'staff')
+-- The upload itself must already be in Storage, owned by the caller: the scan
+-- trigger refuses to register anyone else's object.
+create or replace function tests.editor_file_upload(p_as uuid)
+returns text
+language plpgsql
+as $$
+declare
+  v_path text := 'editor-files/' || gen_random_uuid() || '.png';
+begin
+  insert into storage.objects (bucket_id, name, owner_id) values ('documents', v_path, p_as::text);
+  return v_path;
+end;
+$$;
+
+create or replace function tests.editor_file_insert(p_org uuid, p_page uuid, p_as uuid, p_path text, p_visibility text default 'staff')
 returns uuid
 language plpgsql
 as $$
@@ -13,7 +27,7 @@ declare
 begin
   insert into public.document (organization_id, title, kind, storage_path, visibility,
                                editor_object_type, editor_object_id, owner_id, created_by)
-  values (p_org, 'pasted.png', 'file', 'editor-files/' || gen_random_uuid() || '.png', p_visibility,
+  values (p_org, 'pasted.png', 'file', p_path, p_visibility,
           case when p_page is null then null else 'page' end, p_page, p_as, p_as)
   returning id into v_id;
   return v_id;
@@ -30,6 +44,7 @@ as $$
 $$;
 
 grant execute on all functions in schema tests to anon, authenticated;
+revoke execute on function tests.editor_file_upload(uuid) from anon, authenticated;
 
 do $$
 declare
@@ -44,6 +59,7 @@ declare
   d_private uuid;
   d_loose uuid;
   v_ok boolean;
+  v_path text;
 begin
   select organization_id into strict v_org
   from public.organization_membership where user_id = v_staff limit 1;
@@ -57,23 +73,27 @@ begin
   values (v_org, 'private', v_staff, 'My drafts') returning id into p_staff_private;
 
   -- Adding a file -------------------------------------------------------------
+  v_path := tests.editor_file_upload(v_staff);
   perform tests.authenticate(v_staff, 'aal1');
-  d_shared := tests.editor_file_insert(v_org, p_shared, v_staff);
+  d_shared := tests.editor_file_insert(v_org, p_shared, v_staff, v_path);
   reset role;
   perform tests.ok(d_shared is not null, 'editor files: staff add a file to a workspace page they can edit');
 
+  v_path := tests.editor_file_upload(v_staff);
   perform tests.authenticate(v_staff, 'aal1');
-  d_private := tests.editor_file_insert(v_org, p_staff_private, v_staff);
+  d_private := tests.editor_file_insert(v_org, p_staff_private, v_staff, v_path);
   reset role;
   perform tests.ok(d_private is not null, 'editor files: staff add a file to their own private page');
 
+  v_path := tests.editor_file_upload(v_volunteer);
   perform tests.authenticate(v_volunteer, 'aal1');
-  v_ok := tests.editor_file_insert(v_org, p_shared, v_volunteer) is null;
+  v_ok := tests.editor_file_insert(v_org, p_shared, v_volunteer, v_path) is null;
   reset role;
   perform tests.ok(v_ok, 'editor files: a volunteer who cannot edit the page cannot add a file to it');
 
+  v_path := tests.editor_file_upload(v_staff);
   perform tests.authenticate(v_staff, 'aal1');
-  d_loose := tests.editor_file_insert(v_org, null, v_staff);
+  d_loose := tests.editor_file_insert(v_org, null, v_staff, v_path);
   reset role;
   perform tests.ok(d_loose is null, 'editor files: a staff-only file on no page is still refused to staff');
 
