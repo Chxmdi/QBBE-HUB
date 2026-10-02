@@ -14,6 +14,7 @@ import {
   VIEW_BLOCK_LIMITS,
   VIEW_BLOCK_VERSION,
   VIEW_LAYOUTS,
+  type BaseViewLayout,
   viewBlockPropsSchema,
   type ParsedViewBlockProps,
   type ViewBlockProps,
@@ -21,6 +22,7 @@ import {
   type ViewLayout,
 } from "./schema";
 import type { loadViewBlockOptions, ViewBlockLensOption } from "./view-block.actions";
+import { pickUnitProps, UnitLayoutSettings, unitLayoutLabel } from "./layouts";
 
 /**
  * The view block's settings (U6): an inline panel under the block's header,
@@ -39,6 +41,8 @@ interface Draft {
   fields: string[];
   pageFilters: { enabled: boolean; paths: string[] };
   maxRows: number;
+  /** Props owned by wave 2 layout units (layouts/), carried through unchanged. */
+  unitProps: Record<string, unknown>;
 }
 
 function toDraft(value: ParsedViewBlockProps | null): Draft {
@@ -52,6 +56,7 @@ function toDraft(value: ParsedViewBlockProps | null): Draft {
     fields: [...(value?.fields ?? [])],
     pageFilters: { enabled: value?.pageFilters.enabled ?? false, paths: [...(value?.pageFilters.paths ?? [])] },
     maxRows: value?.maxRows ?? VIEW_BLOCK_LIMITS.defaultRows,
+    unitProps: pickUnitProps(value),
   };
 }
 
@@ -67,7 +72,13 @@ function fromDraft(draft: Draft): ViewBlockProps {
     fields: draft.fields,
     pageFilters: draft.pageFilters,
     maxRows: draft.maxRows,
+    ...draft.unitProps,
   };
+}
+
+/** A layout's display name: the block's own, or a wave 2 unit's. */
+export function layoutName(layout: ViewLayout, t: LensT): string {
+  return unitLayoutLabel(layout, t) ?? t(`view.layouts.${layout as BaseViewLayout}`);
 }
 
 /** A value the engine accepts for this property and operator, to start from. */
@@ -213,10 +224,20 @@ export function ViewConfig({
             <Label htmlFor={`${id}-layout`}>{t("view.config.layout")}</Label>
             <Select id={`${id}-layout`} value={draft.layout} onChange={(e) => update({ layout: e.target.value as ViewLayout })}>
               {VIEW_LAYOUTS.map((layout) => (
-                <option key={layout} value={layout}>{t(`view.layouts.${layout}`)}</option>
+                <option key={layout} value={layout}>{layoutName(layout, t)}</option>
               ))}
             </Select>
           </div>
+          <UnitLayoutSettings
+            id={id}
+            layout={draft.layout}
+            value={draft.unitProps}
+            onChange={(patch) => setDraft((d) => ({ ...d, unitProps: { ...d.unitProps, ...patch } }))}
+            catalog={catalog}
+            type={type}
+            t={t}
+            locale={locale}
+          />
           <div>
             <Label htmlFor={`${id}-title`}>{t("view.config.title")}</Label>
             <Input id={`${id}-title`} value={draft.title} maxLength={120} onChange={(e) => update({ title: e.target.value })} />

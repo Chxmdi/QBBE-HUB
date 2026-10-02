@@ -53,6 +53,7 @@ import { Label, Select } from "@/components/ui/input";
 import type { Locale } from "@/lib/i18n/config";
 import { rankSlashItems, slashItems, textTypes, turnIntoTargets } from "@/features/editor/registry";
 import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
+import { EditorUnitsInView, EditorUnitsOutside, editorUnitBlockSpecs, useEditorUnitOptions, type EditorUnitProps } from "./units";
 
 /**
  * BlockNote behind the adapter (M4b). Carries the W0-5 spike's accessibility
@@ -75,6 +76,9 @@ export function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
   return BlockNoteSchema.create({
     blockSpecs: {
       ...defaultBlockSpecs,
+      // Wave 2 units may add or replace specs (e.g. the code block); their
+      // types are the registry's, so the schema's static type is unchanged.
+      ...(editorUnitBlockSpecs(t, locale) as object),
       callout: callout(),
       bookmark: bookmark(),
       embed: embed(),
@@ -466,8 +470,20 @@ export default function BlockNoteEditorImpl({
   // The first state only: the editor owns the document after it mounts.
   const [doc] = React.useState(() => createDocument(schema, initialState, initialContent.blocks));
 
+  // Wave 2 units' options (units/), read once when the editor is created.
+  const { collaboration: unitCollaboration, ...unitOptions } = useEditorUnitOptions({
+    t,
+    locale,
+    doc,
+    fragment: FRAGMENT,
+    files,
+    editable,
+    objectPath,
+  });
+
   const editor = useCreateBlockNote(
     withCollaboration({
+      ...unitOptions,
       schema,
       dictionary: locale === "fr-CA" ? quebecDictionary() : en,
       domAttributes: {
@@ -479,14 +495,17 @@ export default function BlockNoteEditorImpl({
       uploadFile: files ? (file: File) => files.upload(file) : undefined,
       resolveFileUrl: files ? async (url: string) => (await files.resolve(url)) ?? "" : undefined,
       collaboration: {
-        fragment: doc.getXmlFragment(FRAGMENT),
         user: { name: "", color: "var(--color-brand)" },
+        ...unitCollaboration,
+        // The fragment is the editor's own, whatever a unit sets.
+        fragment: doc.getXmlFragment(FRAGMENT),
       },
     }),
     [schema, locale, doc],
   ) as unknown as Editor;
 
   useAccessibleNames(editor, t);
+  const unitProps: EditorUnitProps = { editor: editor as EditorUnitProps["editor"], t, locale, editable, containerRef, doc, objectPath };
   const openBlockMenu = React.useCallback(() => {
     if (!editor.isEditable) return;
     const ids = currentSelection(editor);
@@ -538,9 +557,11 @@ export default function BlockNoteEditorImpl({
         <SuggestionMenuController triggerCharacter="/" getItems={getItems} />
         <FormattingToolbarController floatingUIOptions={barShowing ? BELOW_SELECTION_BAR : undefined} />
         {editable ? <BlockHandle t={t} objectPath={objectPath} onCommentBlock={onCommentBlock} /> : null}
+        <EditorUnitsInView {...unitProps} />
       </BlockNoteView>
       <MultiSelect editor={editor} containerRef={containerRef} t={t} enabled={editable} onBarChange={setBarShowing} />
       <p id="qbbe-editor-live" className="sr-only" aria-live="polite" />
+      <EditorUnitsOutside {...unitProps} />
       {menuOpen ? (
         <BlockMenu
           editor={editor}

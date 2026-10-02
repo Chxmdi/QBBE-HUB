@@ -1,3 +1,7 @@
+import { d1LensesFrCA } from "./units/d1.fr-CA";
+import { d2LensesFrCA } from "./units/d2.fr-CA";
+import { d3LensesFrCA } from "./units/d3.fr-CA";
+import { d4LensesFrCA } from "./units/d4.fr-CA";
 import type { LensMessages } from "./en";
 
 /** Quebec French for the lens screens. Typed against en.ts. */
@@ -574,5 +578,11 @@ export const lensesFrCA: LensMessages = {
   types: {
     task: "Tâches",
     project: "Projets",
+  },
+  units: {
+    d1: d1LensesFrCA,
+    d2: d2LensesFrCA,
+    d3: d3LensesFrCA,
+    d4: d4LensesFrCA,
   },
 };

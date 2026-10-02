@@ -1,3 +1,7 @@
+import { x1PagesFrCA } from "./units/x1.fr-CA";
+import { c1PagesFrCA } from "./units/c1.fr-CA";
+import { c2PagesFrCA } from "./units/c2.fr-CA";
+import { c3PagesFrCA } from "./units/c3.fr-CA";
 import type { PagesMessages } from "./en";
 
 /** Quebec French strings for Workspace OS pages (M4a). First draft; to be reviewed. */
@@ -102,4 +106,10 @@ export const pagesFrCA: PagesMessages = {
     removedBlock: "un bloc qui n’est plus dans la page",
   },
   copySuffix: "{title} (copie)",
+  units: {
+    x1: x1PagesFrCA,
+    c1: c1PagesFrCA,
+    c2: c2PagesFrCA,
+    c3: c3PagesFrCA,
+  },
 };

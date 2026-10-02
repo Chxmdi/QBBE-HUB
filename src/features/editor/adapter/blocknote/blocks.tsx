@@ -8,6 +8,7 @@ import { Input, Select } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { EditorT } from "@/features/editor/i18n";
 import { embedFor, safeBookmarkUrl } from "@/features/editor/adapter/embeds";
+import { framed } from "./block-frame";
 
 /**
  * Workspace blocks BlockNote does not ship: callout, bookmark and embed.
@@ -95,7 +96,7 @@ export function createWorkspaceBlocks(t: EditorT) {
       propSchema: { tone: { default: "info" as CalloutTone, values: calloutTones } },
       content: "inline",
     },
-    {
+    framed("callout", {
       render: ({ block, editor, contentRef }) => {
         const tone = (calloutTones as readonly string[]).includes(block.props.tone)
           ? (block.props.tone as CalloutTone)
@@ -124,12 +125,12 @@ export function createWorkspaceBlocks(t: EditorT) {
           </div>
         );
       },
-    },
+    }),
   );
 
   const bookmark = createReactBlockSpec(
     { type: "bookmark", propSchema: { url: { default: "" } }, content: "none" },
-    {
+    framed("bookmark", {
       render: ({ block, editor }) => {
         const url = safeBookmarkUrl(block.props.url);
         if (!url) {
@@ -162,12 +163,12 @@ export function createWorkspaceBlocks(t: EditorT) {
           </a>
         );
       },
-    },
+    }),
   );
 
   const embed = createReactBlockSpec(
     { type: "embed", propSchema: { url: { default: "" } }, content: "none" },
-    {
+    framed("embed", {
       render: ({ block, editor }) => {
         const raw = block.props.url;
         if (!raw) {
@@ -212,7 +213,7 @@ export function createWorkspaceBlocks(t: EditorT) {
           </figure>
         );
       },
-    },
+    }),
   );
 
   return { callout, bookmark, embed };

@@ -23,6 +23,7 @@ import { MonthGrid } from "@/features/lenses/calendar/month-grid";
 import { calendarRange, monthDays, rowsToItems, shiftAnchor } from "@/features/lenses/calendar/model";
 import { readLocalFilters, setLocalFilter, writeLocalFilters, type LocalFilter } from "./local-filters";
 import { parseViewBlockProps, type ParsedViewBlockProps, type ViewBlockProps, type ViewLayout } from "./schema";
+import { renderUnitLayout } from "./layouts";
 import { loadViewBlockOptions, runViewBlock, type ViewBlockFailure, type ViewBlockRun } from "./view-block.actions";
 import { ViewConfig } from "./view-config";
 
@@ -202,6 +203,7 @@ export function ViewBlock({ blockId, config, editable, onChange, run = runViewBl
         ) : null}
         {data && parsed ? (
           <ViewBody
+            props={parsed}
             layout={parsed.layout}
             data={data}
             fields={visibleFields(data.catalog, data.type, data.result, parsed)}
@@ -243,6 +245,7 @@ function RecordLink({ type, row, className }: { type: string; row: LensRow; clas
 }
 
 function ViewBody({
+  props,
   layout,
   data,
   fields,
@@ -252,6 +255,7 @@ function ViewBody({
   anchor,
   onAnchor,
 }: {
+  props: ParsedViewBlockProps;
   layout: ViewLayout;
   data: Ready;
   fields: CatalogProperty[];
@@ -269,6 +273,10 @@ function ViewBody({
   const facts = (row: LensRow) =>
     type === "task" ? <TaskMeta row={row} timeZone={timeZone} /> : <RecordFacts row={row} facts={fields.slice(0, 4)} locale={locale} timeZone={timeZone} />;
   const empty = <p className="px-4 py-4 text-[13px] text-muted">{t("view.empty")}</p>;
+
+  // Wave 2 units' layouts (layouts/): chart, timeline, feed and so on.
+  const unitBody = renderUnitLayout({ layout, props, data, fields, locale, t, heading, anchor, onAnchor });
+  if (unitBody !== undefined) return unitBody;
 
   if (layout === "calendar") {
     const today = calendarDateInZone(new Date(), timeZone) ?? anchor;

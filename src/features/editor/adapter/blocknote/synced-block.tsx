@@ -14,6 +14,7 @@ import { CONTENT_VERSION, type EditorBlock, type EditorContent } from "@/feature
 import type { EditorSemanticHandlers, SyncedAccessState, SyncedBlockView } from "@/features/editor/adapter/types";
 import { BlockEditor } from "@/features/editor/adapter/block-editor";
 import type { HandlersBox } from "./semantic-blocks";
+import { framed } from "./block-frame";
 
 /**
  * The synced block (U5b): content kept once and shown on several pages.
@@ -37,7 +38,7 @@ export function createSyncedBlockSpec(t: EditorT, handlers: HandlersBox) {
       propSchema: { syncedBlockId: { default: "" }, role: { default: "copy" as Role, values: roles } },
       content: "none",
     },
-    {
+    framed("syncedBlock", {
       render: ({ block, editor }) => (
         <SyncedBlock
           id={block.props.syncedBlockId}
@@ -49,7 +50,7 @@ export function createSyncedBlockSpec(t: EditorT, handlers: HandlersBox) {
           handlers={handlers}
         />
       ),
-    },
+    }),
   );
 }
 

@@ -1,3 +1,9 @@
+import { e1EditorFrCA } from "./units/e1.fr-CA";
+import { e2EditorFrCA } from "./units/e2.fr-CA";
+import { e3EditorFrCA } from "./units/e3.fr-CA";
+import { e4EditorFrCA } from "./units/e4.fr-CA";
+import { e5EditorFrCA } from "./units/e5.fr-CA";
+import { c1EditorFrCA } from "./units/c1.fr-CA";
 import type { EditorMessages } from "./en";
 
 /** Quebec French strings for the block editor (M4b). First draft; to be reviewed (#141). */
@@ -321,5 +327,13 @@ export const editorFrCA: EditorMessages = {
     checkbox: "Terminé",
     slashList: "Blocs",
     toolbarControl: "Option de mise en forme",
+  },
+  units: {
+    e1: e1EditorFrCA,
+    e2: e2EditorFrCA,
+    e3: e3EditorFrCA,
+    e4: e4EditorFrCA,
+    e5: e5EditorFrCA,
+    c1: c1EditorFrCA,
   },
 };

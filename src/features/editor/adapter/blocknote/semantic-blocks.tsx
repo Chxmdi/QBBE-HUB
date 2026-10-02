@@ -23,6 +23,7 @@ import type {
   SemanticKind,
   SemanticSummary,
 } from "@/features/editor/adapter/types";
+import { framed } from "./block-frame";
 
 /**
  * Semantic blocks (M5): a block that *is* an object, or shows live data.
@@ -282,7 +283,7 @@ export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: Handl
   const objectBlock = (type: "task" | "decision" | "person" | "libraryFile" | "pageLink", kind: SemanticKind) =>
     createReactBlockSpec(
       { type, propSchema: { objectId: { default: "" } }, content: "none" },
-      {
+      framed(`${type}`, {
         render: ({ block, editor }) => (
           <ObjectBlockView
             kind={kind}
@@ -299,12 +300,12 @@ export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: Handl
             cache={cache}
           />
         ),
-      },
+      }),
     );
 
   const status = createReactBlockSpec(
     { type: "status", propSchema: { state: { default: "on_track" as StatusState, values: statusStates } }, content: "inline" },
-    {
+    framed("status", {
       render: ({ block, editor, contentRef }) => {
         const state = (statusStates as readonly string[]).includes(block.props.state) ? (block.props.state as StatusState) : "on_track";
         return (
@@ -333,7 +334,7 @@ export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: Handl
           </div>
         );
       },
-    },
+    }),
   );
 
   const query = createReactBlockSpec(
@@ -345,7 +346,7 @@ export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: Handl
       },
       content: "none",
     },
-    {
+    framed("query", {
       render: ({ block, editor }) => {
         // Version 2 props are a generic view block (U6); the M5 preset list
         // keeps rendering everything else, and can be turned into a view.
@@ -375,7 +376,7 @@ export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: Handl
           />
         );
       },
-    },
+    }),
   );
 
   return {

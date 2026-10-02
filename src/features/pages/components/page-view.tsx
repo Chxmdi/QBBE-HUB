@@ -9,6 +9,7 @@ import { canEditPage } from "@/features/pages/access";
 import { coverClass } from "@/features/pages/covers";
 import { ancestors, buildTree, type PageRow } from "@/features/pages/tree";
 import { PageActions } from "./page-actions";
+import { PageHeaderUnits } from "./units";
 import { PageTitle } from "./page-title";
 import { RestorePageButton } from "./restore-page-button";
 
@@ -63,6 +64,7 @@ export async function PageView({
               <Lock className="size-3" aria-hidden /> {t("page.private")}
             </Badge>
           ) : null}
+          {page.deletedAt ? null : <PageHeaderUnits page={page} canEdit={canEdit} session={session} />}
           {page.deletedAt ? null : (
             <PageActions
               page={page}
