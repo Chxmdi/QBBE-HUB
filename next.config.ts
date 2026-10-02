@@ -46,6 +46,11 @@ const securityHeaders = [
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
+      // Video and audio blocks play https links and library files, which are
+      // signed Storage URLs on the Supabase origin. Without this the rule
+      // fell back to default-src 'self' and every one of them was refused.
+      // Media cannot run script, so any https source is allowed, as for images.
+      ["media-src 'self' blob: https:", ...supabaseOrigins().filter((o) => o.startsWith("http"))].join(" "),
       // Receipt reading (#142 v2) runs Tesseract.js in a web worker loaded
       // from /ocr on this origin. This was already the effective rule (it
       // falls back to script-src, which has no blob:); it is stated so a
