@@ -83,7 +83,7 @@ begin
      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
      where (n.nspname, p.proname) in (
        ('app', 'page_watch_before_insert'), ('app', 'notification_hub_filter'),
-       ('app', 'notify_page_comment')
+       ('app', 'notify_page_comment'), ('app', 'notification_supersede_page_comment')
      )),
     'C3: every trigger function is security definer with an empty search_path'
   );
@@ -236,9 +236,42 @@ begin
   select coalesce(array_agg(x), array[]::uuid[]) into v_people
   from public.set_comment_mentions(c_mention, array[v_admin, v_volunteer], null) as x;
   perform tests.ok(cardinality(v_people) = 0, 'saving the same mention again tells nobody a second time');
+  -- Until the mention notice is stored, the watcher keeps the watched-page one.
   reset role;
   select count(*) into v_count from public.notification where dedupe_key = 'page_comment:' || c_mention || ':' || v_admin;
-  perform tests.ok(v_count = 0, 'a mentioned watcher gets the mention notice, not a second watched-page notice');
+  perform tests.ok(v_count = 1, 'a mentioned watcher keeps the watched-page notice while no mention notice exists');
+  -- The comment action then writes the mention notice as the author, as
+  -- object-comment.commands.ts does (dedupe key per page and person).
+  perform tests.authenticate(v_staff, 'aal1');
+  insert into public.notification (user_id, organization_id, category, title, source_type, source_id, link, dedupe_key, reason)
+  values (v_admin, v_org, 'mention', 'Staff mentioned you', 'page', p_shared,
+    '/pages/' || p_shared || '#comment-' || c_mention, 'page:' || p_shared || ':' || v_admin, 'mentioned');
+  reset role;
+  select string_agg(category, ',') into v_text from public.notification
+  where user_id = v_admin and (dedupe_key = 'page_comment:' || c_mention || ':' || v_admin
+    or dedupe_key = 'page:' || p_shared || ':' || v_admin);
+  perform tests.ok(v_text = 'mention', 'a mentioned watcher ends with exactly one notice, the mention: ' || coalesce(v_text, 'none'));
+
+  -- A mention whose notice is kept out of the Hub leaves the reply notice in place.
+  update public.notification_preference set hub_muted_categories = array['mention'] where user_id = v_owner;
+  if not found then
+    insert into public.notification_preference (user_id, hub_muted_categories) values (v_owner, array['mention']);
+  end if;
+  insert into public.page_watch (page_id, user_id) values (p_shared, v_owner);
+  perform tests.authenticate(v_staff, 'aal1');
+  c_later := tests.page_comment(v_org, p_shared, v_staff, format('Thanks @[Owner](person:%s)', v_owner));
+  insert into public.notification (user_id, organization_id, category, title, source_type, source_id, link, dedupe_key)
+  values (v_owner, v_org, 'mention', 'Staff mentioned you', 'page', p_shared,
+    '/pages/' || p_shared || '#comment-' || c_later, 'page:' || p_shared || ':' || v_owner);
+  reset role;
+  select string_agg(category, ',') into v_text from public.notification
+  where user_id = v_owner and (dedupe_key = 'page_comment:' || c_later || ':' || v_owner
+    or dedupe_key = 'page:' || p_shared || ':' || v_owner);
+  perform tests.ok(v_text = 'watched_page',
+    'someone who muted mentions still hears about the comment as a watcher: ' || coalesce(v_text, 'none'));
+  delete from public.page_watch where page_id = p_shared and user_id = v_owner;
+  update public.notification_preference set hub_muted_categories = '{}' where user_id = v_owner;
+
   select count(*) into v_count from public.notification where user_id = v_volunteer;
   perform tests.ok(v_count = 0, 'a mentioned volunteer who cannot open the page gets nothing');
   select count(*) into v_count from public.record_comment_mention

@@ -8,9 +8,10 @@
 --     `watched_page`) and, for a reply, the author of the comment it answers
 --     (category `comment`). Nobody is told about a page they cannot open: each
 --     recipient is checked as themselves with
---     app.person_can_read_comment_parent, the same check mentions use. People
---     mentioned in the comment are left to the mention notice (written by
---     set_comment_mentions and the comment action), so a mention is one notice.
+--     app.person_can_read_comment_parent, the same check mentions use. When
+--     the mention notice for that same comment is then stored (by the comment
+--     action, after set_comment_mentions), it replaces this one, so a mention
+--     is one notice; if it is never stored, this notice still stands.
 --   * notification_preference.hub_muted_categories: the categories a person
 --     does not want in the Hub at all (mentions, assigned work, comments,
 --     approvals, watched pages). A notification in a muted category is never
@@ -149,7 +150,6 @@ declare
   v_page public.page%rowtype;
   v_author text;
   v_answered uuid;
-  v_mentioned uuid[];
   v_snippet text;
   v_link text;
   v_title text;
@@ -168,14 +168,6 @@ begin
     from public.record_comment c
     where c.id = new.parent_comment_id and c.deleted_at is null;
   end if;
-
-  -- People mentioned in the body get the mention notice instead.
-  select coalesce(array_agg(distinct lower(m[1])::uuid), array[]::uuid[]) into v_mentioned
-  from regexp_matches(
-    new.body,
-    '@\[[^\]\n]{1,120}\]\(person:([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\)',
-    'g'
-  ) as m;
 
   v_snippet := left(regexp_replace(
     new.body,
@@ -202,7 +194,6 @@ begin
     ) who
     join public.user_profile u on u.id = who.user_id
     where who.user_id <> new.author_id
-      and not (who.user_id = any (v_mentioned))
       and exists (
         select 1 from public.organization_membership om
         where om.user_id = who.user_id
@@ -255,3 +246,31 @@ after insert on public.record_comment
 for each row
 when (new.parent_type = 'page' and new.deleted_at is null)
 execute function app.notify_page_comment();
+
+-- A mention notice about a page comment replaces the watched-page or reply
+-- notice the same person got for that comment. It runs only once the mention
+-- row is really stored: a mention kept out of the Hub, or one that failed to
+-- write, leaves the other notice in place.
+create or replace function app.notification_supersede_page_comment()
+returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  v_comment text := substring(new.link from '#comment-([0-9a-fA-F-]{36})$');
+begin
+  if v_comment is not null then
+    delete from public.notification n
+    where n.user_id = new.user_id
+      and n.dedupe_key = 'page_comment:' || lower(v_comment) || ':' || new.user_id;
+  end if;
+  return null;
+end;
+$$;
+revoke all on function app.notification_supersede_page_comment() from public, anon, authenticated;
+
+create trigger notification_supersede_page_comment
+after insert or update of link on public.notification
+for each row
+when (new.category = 'mention' and new.source_type = 'page')
+execute function app.notification_supersede_page_comment();
