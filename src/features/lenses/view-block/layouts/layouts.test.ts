@@ -6,9 +6,10 @@ import { D3_LAYOUTS, d3PropsShape } from "./d3.ids";
 import { D4_LAYOUTS, d4PropsShape } from "./d4.ids";
 
 describe("view block layout slots", () => {
-  it("adds only the units' own layouts and props", () => {
+  it("adds exactly the units' layouts and props", () => {
     expect([...VIEW_LAYOUTS]).toEqual([...BASE_VIEW_LAYOUTS, ...D3_LAYOUTS, ...D4_LAYOUTS]);
     expect(UNIT_PROP_KEYS).toEqual([...Object.keys(d3PropsShape), ...Object.keys(d4PropsShape)]);
+    expect(pickUnitProps({ layout: "table", title: "Not a unit prop" })).toEqual({});
     expect(pickUnitProps({ layout: "table", unknown: { kind: "bar" } })).toEqual({});
     expect(pickUnitProps(null)).toEqual({});
   });
