@@ -14,6 +14,7 @@ import { getLens } from "@/features/lenses/services/lens-store.queries";
 import { ExportCsvButton } from "@/features/lenses/components/export-csv-button";
 import { loadViewerSetting } from "@/features/lenses/services/viewer-settings.actions";
 import { isEnabled } from "@/lib/feature-flags";
+import { withD2Columns } from "@/features/lenses/services/d2-columns.server";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getLensT())("table.title") };
@@ -46,7 +47,7 @@ export default async function TableLensPage({
   const lens = typeof params.lens === "string" ? await getLens(session.userId, params.lens) : null;
   const requested = lens?.typeKey ?? (typeof params.type === "string" ? params.type : "task");
   const typeKey = catalog[requested] ? requested : "task";
-  const type = catalog[typeKey];
+  const type = await withD2Columns(supabase, session, catalog[typeKey]); // wave 2 D2: column names, hidden columns, saved totals
 
   const lensState: TableState | null = !type
     ? null
