@@ -163,6 +163,8 @@
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
   border-radius: 2px;
+}
+
 /* U4: the block handle, the selection and the bar of bulk actions. */
 .qbbe-editor .bn-side-menu {
   color: var(--color-muted);
