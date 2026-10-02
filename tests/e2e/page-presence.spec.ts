@@ -370,6 +370,46 @@ test.describe("switches on", () => {
     }
   });
 
+  test("alone on a page with live editing on, undo and redo keep their history and undo stops at the page as opened [switches on]", async ({ browser }) => {
+    test.setTimeout(120_000);
+    // An empty page: the first undo step there holds the page's first block.
+    const pageId = seedPage(`Live undo ${randomUUID().slice(0, 8)}`, "workspace", []);
+    const a = await person(browser, "staff");
+    try {
+      await open(a.page, pageId);
+      // The live session is on once the page lists this person as editing.
+      await expect
+        .poll(() => sql(`select count(*) from public.page_presence where page_id = '${pageId}' and editing`), { timeout: 30_000 })
+        .not.toBe("0");
+      const editor = editorOf(a.page);
+      const blocks = editor.locator(".bn-block-content[data-content-type]");
+      await editor.click();
+      await expect(blocks).toHaveCount(1);
+      await a.page.keyboard.type("Typed alone");
+
+      // Undo, then Redo brings the text back.
+      await a.page.keyboard.press("Control+z");
+      await expect.poll(() => editorText(a.page)).toBe("");
+      await a.page.keyboard.press("Control+Shift+z");
+      await expect.poll(() => editorText(a.page)).toBe("Typed alone");
+
+      // Undo more often than there are steps: the page stays as it was
+      // opened, and nothing was added to the history on the way, so Redo
+      // still brings the text back.
+      for (let i = 0; i < 4; i += 1) await a.page.keyboard.press("Control+z");
+      await expect.poll(() => editorText(a.page)).toBe("");
+      await expect(blocks).toHaveCount(1);
+      await a.page.keyboard.press("Control+Shift+z");
+      await expect.poll(() => editorText(a.page)).toBe("Typed alone");
+      await expect(blocks).toHaveCount(1);
+      // And it is saved.
+      await expect(saveState(a.page)).toHaveAttribute("data-save-status", "saved", { timeout: 30_000 });
+      await expect.poll(() => savedText(pageId), { timeout: 15_000 }).toContain("Typed alone");
+    } finally {
+      await a.context.close();
+    }
+  });
+
   test("when presence cannot be read the header says so and Try again recovers [switches on]", async ({ browser }) => {
     test.setTimeout(120_000);
     const pageId = seedPage(`Presence error ${randomUUID().slice(0, 8)}`);

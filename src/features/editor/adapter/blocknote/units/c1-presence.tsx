@@ -11,6 +11,7 @@ import { bytesToBase64 } from "@/features/editor/adapter/state";
 import type { EditorT } from "@/features/editor/i18n";
 import { supabaseBroadcastTransport } from "@/features/editor/spike/supabase-transport";
 import { YjsBroadcastProvider } from "@/features/editor/spike/yjs-broadcast-provider";
+import { othersOnlyAwareness } from "@/features/editor/live/cursor-awareness";
 import { lineageOf, stampLineage } from "@/features/editor/live/lineage";
 import { lineageTransport } from "@/features/editor/live/lineage-transport";
 import { registerLiveCopy } from "@/features/editor/live/live-save";
@@ -99,7 +100,9 @@ export const useC1Options: (ctx: EditorUnitCreateContext) => EditorUnitOptions =
       setup
         ? {
             collaboration: {
-              provider: { awareness: setup.awareness },
+              // Only other people's changes redraw cursors: a redraw of this
+              // copy's own cursor would add steps to the undo history.
+              provider: { awareness: othersOnlyAwareness(setup.awareness) },
               user: { name: "", color: "var(--color-avatar-3)" },
               showCursorLabels: "always",
               renderCursor: renderLiveCursor,

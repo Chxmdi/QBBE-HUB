@@ -4,6 +4,8 @@ import type { QueueBatch, SendOutcome } from "@/features/editor/queue/queue";
 import type { ServerEditorDocument } from "@/features/editor/services/editor-operations.commands";
 import type { BroadcastTransport } from "@/features/editor/spike/yjs-broadcast-provider";
 import { hashBytes, lineageOf, mergeSavedState, readLineage, stampLineage } from "./lineage";
+import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from "y-protocols/awareness";
+import { othersOnlyAwareness } from "./cursor-awareness";
 import { lineageTransport } from "./lineage-transport";
 import { liveCopy, MAX_MERGE_ATTEMPTS, registerLiveCopy, sendMergingLive } from "./live-save";
 
@@ -208,5 +210,36 @@ describe("the lineage transport", () => {
     expect(received.mock.calls[0][1]).toMatchObject({ u: "1" });
     expect(apart).toHaveBeenCalledWith("lead");
     expect(apart).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the cursor plugin's awareness", () => {
+  it("passes on only changes that touch another copy, and is the awareness otherwise", () => {
+    const mine = new Awareness(new Y.Doc());
+    const theirs = new Awareness(new Y.Doc());
+    const view = othersOnlyAwareness(mine);
+    const heard = vi.fn();
+    view.on("change", heard);
+
+    // This copy's own cursor moving, or leaving the text: nothing to redraw.
+    view.setLocalStateField("cursor", { anchor: 1, head: 1 });
+    mine.setLocalStateField("cursor", null);
+    expect(heard).not.toHaveBeenCalled();
+    expect(view.getLocalState()).toMatchObject({ cursor: null });
+    expect(view.clientID).toBe(mine.clientID);
+
+    // Another person's cursor: redrawn.
+    theirs.setLocalStateField("cursor", { anchor: 2, head: 2 });
+    applyAwarenessUpdate(mine, encodeAwarenessUpdate(theirs, [theirs.clientID]), "peer");
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(heard.mock.calls[0][0]).toMatchObject({ added: [theirs.clientID] });
+
+    // Taken off again by the listener it was given.
+    view.off("change", heard);
+    theirs.setLocalStateField("cursor", { anchor: 3, head: 3 });
+    applyAwarenessUpdate(mine, encodeAwarenessUpdate(theirs, [theirs.clientID]), "peer");
+    expect(heard).toHaveBeenCalledTimes(1);
+    mine.destroy();
+    theirs.destroy();
   });
 });
