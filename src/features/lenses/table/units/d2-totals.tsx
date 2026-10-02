@@ -114,10 +114,14 @@ export function D2TotalsRow({ type, rows, state, shown, properties, gridRows, ta
   const specKey = JSON.stringify(spec);
   const measuresKey = JSON.stringify(measures);
 
-  // Re-total when the query, the chosen totals or the loaded rows (an edit,
-  // a reload) change, a moment after they settle; stale answers are dropped.
+  // Re-total when the chosen totals or the loaded rows (an edit, a reload)
+  // change, a moment after they settle; stale answers are dropped. A new
+  // query waits for its rows, so totals never compete with the table's load.
+  const seen = React.useRef({ specKey, rows });
   React.useEffect(() => {
-    if (measuresKey === "[]") return;
+    const waitForRows = seen.current.specKey !== specKey && seen.current.rows === rows;
+    seen.current = { specKey: waitForRows ? seen.current.specKey : specKey, rows };
+    if (waitForRows || measuresKey === "[]") return;
     const id = ++requestId.current;
     const timer = window.setTimeout(() => {
       setStatus("loading");
