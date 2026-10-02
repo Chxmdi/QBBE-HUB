@@ -12,6 +12,7 @@ import { PageActions } from "./page-actions";
 import { PageHeaderUnits } from "./units";
 import { PageTitle } from "./page-title";
 import { RestorePageButton } from "./restore-page-button";
+import { TemplateOrigin } from "@/features/templates-v2/components/template-origin";
 
 /** One page: cover, breadcrumbs, icon, title, and the pages inside it. */
 export async function PageView({
@@ -98,6 +99,7 @@ export async function PageView({
       <div className="qbbe-brand-rule mt-2 w-20" aria-hidden />
 
       {!canEdit && !page.deletedAt ? <p className="mt-3 text-caption text-muted">{t("page.readOnly")}</p> : null}
+      <TemplateOrigin pageId={page.id} />
 
       <div className="mt-6">
         {children ?? <p className="text-body-sm text-muted">{t("page.bodyComingSoon")}</p>}
