@@ -9,6 +9,8 @@ import {
 } from "@/lib/query/spec";
 import { QUERY_BLOCK_MAX_ROWS } from "@/features/lenses/query-block/schema";
 import { DEFAULT_FACTS } from "@/features/lenses/cards/cards";
+import { D3_LAYOUTS, d3PropsShape } from "./layouts/d3.ids";
+import { D4_LAYOUTS, d4PropsShape } from "./layouts/d4.ids";
 
 /**
  * The view block (U6): a generic, read-only lens inside a page. Version 2 of
@@ -22,8 +24,11 @@ import { DEFAULT_FACTS } from "@/features/lenses/cards/cards";
  */
 
 export const VIEW_BLOCK_VERSION = 2;
-export const VIEW_LAYOUTS = ["table", "board", "list", "calendar", "gallery"] as const;
+/** The block's own layouts; wave 2 units D3 and D4 add theirs in layouts/. */
+export const BASE_VIEW_LAYOUTS = ["table", "board", "list", "calendar", "gallery"] as const;
+export const VIEW_LAYOUTS = [...BASE_VIEW_LAYOUTS, ...D3_LAYOUTS, ...D4_LAYOUTS] as const;
 export type ViewLayout = (typeof VIEW_LAYOUTS)[number];
+export type BaseViewLayout = (typeof BASE_VIEW_LAYOUTS)[number];
 
 export const VIEW_BLOCK_LIMITS = {
   maxConditions: 20,
@@ -77,6 +82,9 @@ const baseSchema = z
       .strict()
       .default({ enabled: false, paths: [] }),
     maxRows: z.number().int().min(1).max(VIEW_BLOCK_LIMITS.maxRows).default(VIEW_BLOCK_LIMITS.defaultRows),
+    // Wave 2 units' own optional props (layouts/d3.ids.ts, layouts/d4.ids.ts).
+    ...d3PropsShape,
+    ...d4PropsShape,
   })
   .strict();
 

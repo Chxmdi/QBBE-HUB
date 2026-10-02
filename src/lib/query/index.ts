@@ -5,3 +5,4 @@ export * from "./catalog";
 export * from "./run";
 export * from "./contract-adapter";
 export * from "./links";
+export * from "./aggregate";

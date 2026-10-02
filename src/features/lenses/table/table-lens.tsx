@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils";
 import { Checkbox, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useFormatters, useLocale } from "@/lib/i18n/client";
-import { intlLocale } from "@/lib/i18n/config";
 import type { CatalogProperty, CatalogType } from "@/lib/query/catalog";
 import type { LensGroupCount, LensResult, LensRow, LensValue } from "@/lib/query/run";
 import { useLensT } from "@/features/lenses/i18n/client";
@@ -14,13 +13,17 @@ import { updateLensCell } from "@/features/lenses/services/lens.actions";
 import { clearViewerSetting, saveViewerSetting } from "@/features/lenses/services/viewer-settings.actions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { runLensAll } from "@/lib/query/run";
-import { editorFor, type EditorKind } from "./editable";
+import { editorFor } from "./editable";
 import { formatLensValue } from "@/features/lenses/format";
 import { SaveLensButton, type OpenLens } from "@/features/lenses/components/save-lens-button";
 import { WhereChips } from "@/features/lenses/components/lens-chips";
 import { FilterBuilder } from "@/features/lenses/filters/filter-builder";
 import { countConditions, fromWhere, toWhere, type FilterGroup } from "@/features/lenses/filters/filter-model";
 import { BulkEditBar, type AppliedChange } from "./bulk-edit-bar";
+import { ColumnMenu } from "./column-menu";
+import { CellEditor } from "./cell-editor";
+import { useD1Grid } from "./units/d1-grid";
+import { D2TotalsRow, d2ColumnItems, d2HasTotalsRow } from "./units/d2-totals";
 import {
   buildDisplayRows,
   ensureInWindow,
@@ -29,7 +32,6 @@ import {
   MAX_ROWS,
   moveColumn,
   moveFocus,
-  numberTotals,
   rawText,
   reconcileColumns,
   removeSortKey,
@@ -270,8 +272,7 @@ export function TableLens({
     () => buildDisplayRows(rows, state.groupBy ? groups : null, groupLabel, collapsed),
     [rows, groups, groupLabel, collapsed, state.groupBy],
   );
-  const totals = React.useMemo(() => numberTotals(rows, type.properties), [rows, type.properties]);
-  const hasTotals = shown.some((c) => properties.get(c.key)?.kind === "number");
+  const hasTotals = d2HasTotalsRow(shown, properties);
 
   // Grid rows: header (0), display rows (1..n), totals (n+1) when present.
   const gridRows = 1 + display.length + (hasTotals ? 1 : 0);
@@ -425,7 +426,22 @@ export function TableLens({
 
   // --- Keyboard ------------------------------------------------------------
 
+  // Wave 2 unit D1: grid-wide keys, copy and paste (units/d1-grid.ts).
+  const d1 = useD1Grid({
+    type,
+    display,
+    shown,
+    properties,
+    focus,
+    editing,
+    selected,
+    commitCell: commit,
+    announce: setAnnouncement,
+    t,
+  });
+
   const onGridKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (d1.onKeyDown?.(event)) return;
     if (editing) return;
     const target = event.target as HTMLElement;
     if (!target.dataset.cell) return;
@@ -494,7 +510,6 @@ export function TableLens({
 
   const totalWidth = shown.reduce((sum, c) => sum + c.width, 0);
   const typeName = t(`types.${type.key}` as "types.task") || type.name.en;
-  const collator = React.useMemo(() => new Intl.NumberFormat(intlLocale(locale), { maximumFractionDigits: 2 }), [locale]);
 
   const cellText = (p: CatalogProperty, value: LensValue): string => formatLensValue(p, value, locale, timeZone);
 
@@ -706,6 +721,8 @@ export function TableLens({
             aria-colcount={colCount}
             aria-multiselectable
             onKeyDown={onGridKeyDown}
+            onCopy={d1.onCopy}
+            onPaste={d1.onPaste}
             style={{ width: totalWidth, minWidth: "100%" }}
             className="text-[13.5px] text-ink"
           >
@@ -812,6 +829,7 @@ export function TableLens({
                             { label: t("table.wider"), run: () => update((s) => ({ ...s, columns: resizeColumn(s.columns, c.key, c.width + WIDTH_STEP) })) },
                             { label: t("table.narrower"), run: () => update((s) => ({ ...s, columns: resizeColumn(s.columns, c.key, c.width - WIDTH_STEP) })) },
                             ...(c.key !== "title" ? [{ label: t("table.hide"), run: () => update((s) => ({ ...s, columns: setHidden(s.columns, c.key, true) })) }] : []),
+                            ...d2ColumnItems({ type, property: p, state, update, t }),
                           ]}
                           onClose={() => {
                             setMenuFor(null);
@@ -935,37 +953,19 @@ export function TableLens({
             </div>
 
             {hasTotals ? (
-              <div role="rowgroup" className="sticky bottom-0 bg-surface-soft">
-                <div role="row" aria-rowindex={gridRows} className="flex border-t border-line font-semibold">
-                  {shown.map((c, col) => {
-                    const p = properties.get(c.key)!;
-                    const isNumber = p.kind === "number";
-                    return (
-                      <div
-                        key={c.key}
-                        role="gridcell"
-                        aria-colindex={col + 1}
-                        aria-readonly
-                        tabIndex={tabIndexFor(gridRows - 1, col)}
-                        data-cell={`${gridRows - 1}:${col}`}
-                        onFocus={() => setFocus({ row: gridRows - 1, col })}
-                        style={{ width: c.width, height: ROW_HEIGHT }}
-                        className={cn(
-                          "flex shrink-0 items-center px-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand",
-                          isNumber && "justify-end tabular-nums",
-                        )}
-                      >
-                        {col === 0 ? t("table.sum") : isNumber ? (
-                          <span>
-                            <span className="sr-only">{`${t("table.sum")} ${nameOf(p)}: `}</span>
-                            {collator.format(totals[c.key] ?? 0)}
-                          </span>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <D2TotalsRow
+                type={type}
+                rows={rows}
+                state={state}
+                shown={shown}
+                properties={properties}
+                gridRows={gridRows}
+                tabIndexFor={tabIndexFor}
+                onFocusCell={setFocus}
+                locale={locale}
+                timeZone={timeZone}
+                t={t}
+              />
             ) : null}
           </div>
         </div>
@@ -977,160 +977,3 @@ export function TableLens({
   );
 }
 
-// ---------------------------------------------------------------------------
-
-function ColumnMenu({
-  label,
-  items,
-  onClose,
-}: {
-  label: string;
-  items: { label: string; run: () => void }[];
-  onClose: () => void;
-}) {
-  const [active, setActive] = React.useState(0);
-  const refs = React.useRef<(HTMLButtonElement | null)[]>([]);
-  React.useEffect(() => {
-    refs.current[active]?.focus();
-  }, [active]);
-  return (
-    <div
-      role="menu"
-      aria-label={label}
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        e.stopPropagation();
-        if (e.key === "Escape" || e.key === "Tab") {
-          e.preventDefault();
-          onClose();
-        } else if (e.key === "ArrowDown") {
-          e.preventDefault();
-          setActive((a) => (a + 1) % items.length);
-        } else if (e.key === "ArrowUp") {
-          e.preventDefault();
-          setActive((a) => (a - 1 + items.length) % items.length);
-        } else if (e.key === "Home") {
-          e.preventDefault();
-          setActive(0);
-        } else if (e.key === "End") {
-          e.preventDefault();
-          setActive(items.length - 1);
-        }
-      }}
-      className="absolute left-0 top-full z-(--z-overlay) mt-1 min-w-48 rounded-(--radius-md) border border-line bg-surface py-1 font-normal text-ink shadow-lg"
-    >
-      {items.map((item, i) => (
-        <button
-          key={item.label}
-          ref={(el) => {
-            refs.current[i] = el;
-          }}
-          type="button"
-          role="menuitem"
-          tabIndex={i === active ? 0 : -1}
-          onClick={() => {
-            item.run();
-            onClose();
-          }}
-          className="block w-full px-3 py-1.5 text-left text-[13.5px] hover:bg-surface-soft focus:bg-surface-soft focus:outline-none"
-        >
-          {item.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function CellEditor({
-  kind,
-  property,
-  value,
-  people,
-  locale,
-  label,
-  notSet,
-  onCommit,
-  onCancel,
-}: {
-  kind: EditorKind;
-  property: CatalogProperty;
-  value: LensValue;
-  people: PersonOption[];
-  locale: string;
-  label: string;
-  notSet: string;
-  onCommit: (next: LensValue, raw: string | null) => void;
-  onCancel: () => void;
-}) {
-  const initial = isRef(value) ? value.id : value === null || value === undefined ? "" : String(value).slice(0, kind === "date" ? 10 : undefined);
-  const [draft, setDraft] = React.useState(initial);
-  const done = React.useRef(false);
-
-  const finish = () => {
-    if (done.current) return;
-    done.current = true;
-    const raw = draft.trim() === "" ? null : draft.trim();
-    if (kind === "text" && raw === null) return onCancel();
-    if (kind === "person") {
-      const person = people.find((p) => p.id === raw);
-      return onCommit(person ? { id: person.id, label: person.label } : null, raw);
-    }
-    if (kind === "select" && raw === null) return onCancel();
-    onCommit(raw, raw);
-  };
-  const cancel = () => {
-    if (done.current) return;
-    done.current = true;
-    onCancel();
-  };
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    e.stopPropagation();
-    if (e.key === "Enter") {
-      e.preventDefault();
-      finish();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      cancel();
-    }
-  };
-  const common = {
-    "aria-label": label,
-    autoFocus: true,
-    onKeyDown,
-    onBlur: finish,
-    className: "h-7! w-full rounded-(--radius-sm) border border-brand! bg-surface px-1.5! text-[13.5px]! text-ink",
-  };
-
-  if (kind === "select") {
-    return (
-      <Select {...common} value={draft} onChange={(e) => setDraft(e.target.value)}>
-        {(property.choices ?? []).map((c) => (
-          <option key={c.key} value={c.key}>
-            {locale.startsWith("fr") ? c.label.fr : c.label.en}
-          </option>
-        ))}
-      </Select>
-    );
-  }
-  if (kind === "person") {
-    return (
-      <Select {...common} value={draft} onChange={(e) => setDraft(e.target.value)}>
-        <option value="">{notSet}</option>
-        {people.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.label}
-          </option>
-        ))}
-      </Select>
-    );
-  }
-  return (
-    <input
-      {...common}
-      type={kind === "date" ? "date" : "text"}
-      maxLength={kind === "text" ? 300 : undefined}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-    />
-  );
-}

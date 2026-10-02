@@ -10,6 +10,7 @@ import { Input, Select } from "@/components/ui/input";
 import type { EditorT } from "@/features/editor/i18n";
 import type { ButtonActionKey } from "@/features/editor/adapter/types";
 import type { HandlersBox } from "./semantic-blocks";
+import { framed } from "./block-frame";
 
 /**
  * The button block (U5b): runs one action from the action registry (plan
@@ -61,7 +62,7 @@ export function createButtonBlockSpec(t: EditorT, handlers: HandlersBox) {
       },
       content: "none",
     },
-    {
+    framed("button", {
       render: ({ block, editor }) => (
         <ButtonBlock
           label={block.props.label}
@@ -73,7 +74,7 @@ export function createButtonBlockSpec(t: EditorT, handlers: HandlersBox) {
           handlers={handlers}
         />
       ),
-    },
+    }),
   );
 }
 

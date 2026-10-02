@@ -1,3 +1,7 @@
+import { x1PagesEn } from "./units/x1.en";
+import { c1PagesEn } from "./units/c1.en";
+import { c2PagesEn } from "./units/c2.en";
+import { c3PagesEn } from "./units/c3.en";
 /**
  * English strings for Workspace OS pages (M4a). Kept in the module rather than
  * the shared catalogue so parallel streams do not collide on one file;
@@ -104,6 +108,13 @@ export const pagesEn = {
     removedBlock: "a block no longer on the page",
   },
   copySuffix: "{title} (copy)",
+  // Wave 2 units: each unit adds its strings in its own file under units/.
+  units: {
+    x1: x1PagesEn,
+    c1: c1PagesEn,
+    c2: c2PagesEn,
+    c3: c3PagesEn,
+  },
 };
 
 export type PagesMessages = typeof pagesEn;

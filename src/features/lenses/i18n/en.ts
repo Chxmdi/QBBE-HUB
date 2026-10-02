@@ -1,3 +1,7 @@
+import { d1LensesEn } from "./units/d1.en";
+import { d2LensesEn } from "./units/d2.en";
+import { d3LensesEn } from "./units/d3.en";
+import { d4LensesEn } from "./units/d4.en";
 /**
  * English strings for the lens screens (Workspace OS S4). Kept in the module
  * until integration mounts them in the shared catalogue; fr-CA.ts is typed
@@ -576,6 +580,13 @@ export const lensesEn = {
   types: {
     task: "Tasks",
     project: "Projects",
+  },
+  // Wave 2 units: each unit adds its strings in its own file under units/.
+  units: {
+    d1: d1LensesEn,
+    d2: d2LensesEn,
+    d3: d3LensesEn,
+    d4: d4LensesEn,
   },
 };
 

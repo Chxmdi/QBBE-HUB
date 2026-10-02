@@ -50,6 +50,9 @@ test("selected lines turn into tasks and into a page, keeping the text", async (
   await page.keyboard.type(`- Book the hall ${stamp}`);
   await page.keyboard.press("Enter");
   await page.keyboard.type(`Order chairs ${stamp}`);
+  // Both lines are list items before the selection starts.
+  await expect(editor.locator("[data-content-type='bulletListItem']", { hasText: `Book the hall ${stamp}` })).toBeVisible();
+  await expect(editor.locator("[data-content-type='bulletListItem']", { hasText: `Order chairs ${stamp}` })).toBeVisible();
 
   // Select both list items and turn them into tasks.
   await page.keyboard.press("Shift+ArrowUp");

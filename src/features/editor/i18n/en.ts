@@ -1,3 +1,9 @@
+import { e1EditorEn } from "./units/e1.en";
+import { e2EditorEn } from "./units/e2.en";
+import { e3EditorEn } from "./units/e3.en";
+import { e4EditorEn } from "./units/e4.en";
+import { e5EditorEn } from "./units/e5.en";
+import { c1EditorEn } from "./units/c1.en";
 /** English strings for the Workspace OS block editor (M4b). */
 export const editorEn = {
   label: "Document content",
@@ -319,6 +325,15 @@ export const editorEn = {
     checkbox: "Done",
     slashList: "Blocks",
     toolbarControl: "Formatting option",
+  },
+  // Wave 2 units: each unit adds its strings in its own file under units/.
+  units: {
+    e1: e1EditorEn,
+    e2: e2EditorEn,
+    e3: e3EditorEn,
+    e4: e4EditorEn,
+    e5: e5EditorEn,
+    c1: c1EditorEn,
   },
 };
 

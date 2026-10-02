@@ -11,6 +11,7 @@ import type { EditorT } from "@/features/editor/i18n";
 import type { EditorBlock } from "@/features/editor/adapter/content";
 import { headingAnchor, tocFromBlocks, type TocEntry } from "@/features/editor/adapter/toc";
 import { columnFixes } from "@/features/editor/adapter/columns";
+import { framed } from "./block-frame";
 
 /**
  * Layout blocks (U5a): columns and a table of contents.
@@ -346,9 +347,9 @@ export function createLayoutBlocks(t: EditorT) {
 
   const tableOfContents = createReactBlockSpec(
     { type: "tableOfContents", propSchema: {}, content: "none" },
-    {
+    framed("tableOfContents", {
       render: ({ block, editor }) => <TableOfContentsBlock block={block as unknown as AnyBlock} editor={editor as unknown as AnyEditor} t={t} />,
-    },
+    }),
     [headingAnchorsExtension],
   );
 
