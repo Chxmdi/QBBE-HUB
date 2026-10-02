@@ -12,7 +12,7 @@ import type { MessageKey } from "@/lib/i18n/translate";
 import { usePagesT } from "@/features/pages/i18n/client";
 import type { PagesKey } from "@/features/pages/i18n";
 import {
-  isHubCategory,
+  HUB_CATEGORIES,
   hubMutedFromForm,
   PAGE_EMAIL_CATEGORIES,
   type HubCategory,
@@ -230,9 +230,6 @@ export function NotificationPreferencesFormClient({
           {t("notifications.form.whatToEmail")}
         </h2>
         <div className="divide-y divide-line">
-          {pageCategories ? (
-            <p className="py-3 text-[12.5px] text-muted">{pt("units.c3.preferences.intro")}</p>
-          ) : null}
           {categories.map((entry) => {
             const label = labelOf(entry.key);
             return (
@@ -248,18 +245,6 @@ export function NotificationPreferencesFormClient({
                   {hintOf(entry.key)}
                 </span>
               </span>
-              {pageCategories && isHubCategory(entry.key) ? (
-                <label className="flex cursor-pointer items-center gap-2 text-[13px]">
-                  <Checkbox
-                    name={`hub_${entry.key}`}
-                    defaultChecked={!pageCategories.hubMuted.includes(entry.key)}
-                  />
-                  <span>
-                    <span className="sr-only">{label}: </span>
-                    {pt("units.c3.preferences.inHub")}
-                  </span>
-                </label>
-              ) : null}
               <Select
                 name={`mode_${entry.key}`}
                 aria-label={label}
@@ -283,6 +268,26 @@ export function NotificationPreferencesFormClient({
           />
         </div>
       </section>
+
+      {pageCategories ? (
+        <section aria-labelledby="prefs-hub">
+          <h2 id="prefs-hub" className="section-heading mb-3">
+            {pt("units.c3.preferences.inHub")}
+          </h2>
+          <fieldset className="card px-4 py-3">
+            <legend className="sr-only">{pt("units.c3.preferences.inHub")}</legend>
+            <p className="pb-2 text-[12.5px] text-muted">{pt("units.c3.preferences.intro")}</p>
+            <div className="flex flex-wrap gap-x-6 gap-y-2">
+              {HUB_CATEGORIES.map((key) => (
+                <label key={key} className="flex cursor-pointer items-center gap-2 py-1 text-[13.5px]">
+                  <Checkbox name={`hub_${key}`} defaultChecked={!pageCategories.hubMuted.includes(key)} />
+                  {pt(`units.c3.preferences.hub.${key}` as PagesKey)}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </section>
+      ) : null}
 
       <section aria-labelledby="prefs-quiet">
         <h2 id="prefs-quiet" className="section-heading mb-3">

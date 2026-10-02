@@ -22,10 +22,21 @@ const switches = (on: boolean) =>
 const pmId = () => sql(`select id from public.user_profile where email = 'qa-pm@example.com'`);
 const pmName = () => sql(`select full_name from public.user_profile where email = 'qa-pm@example.com'`);
 
+/** Pages this file made, so their notices can be cleared afterwards. */
+const seeded: string[] = [];
+
 test.describe.configure({ mode: "serial" });
 test.afterAll(() => {
   switches(false);
   sql(`update public.notification_preference set hub_muted_categories = '{}' where user_id = '${STAFF}'`);
+  if (seeded.length === 0) return;
+  // Leave the email queue as it was found: other specs drain it in batches.
+  const ids = seeded.map((id) => `'${id}'`).join(", ");
+  sql(`
+    delete from pgmq.q_notifications q using public.notification n
+    where q.message ->> 'notification_id' = n.id::text and n.source_id in (${ids});
+    delete from public.notification where source_id in (${ids});
+  `);
 });
 
 const paragraph = (id: string, text: string) => ({
@@ -40,7 +51,7 @@ const paragraph = (id: string, text: string) => ({
 function seedPage(title: string, blocks: ReturnType<typeof paragraph>[]): string {
   const content = JSON.stringify({ version: 1, blocks }).replace(/'/g, "''");
   const text = blocks.map((block) => block.content[0].text).join("\n").replace(/'/g, "''");
-  return sql(`
+  const id = sql(`
     with org as (select organization_id from public.organization_membership where user_id = '${STAFF}'),
     p as (
       insert into public.page (organization_id, visibility, created_by, title)
@@ -52,6 +63,8 @@ function seedPage(title: string, blocks: ReturnType<typeof paragraph>[]): string
     )
     select object_id from d;
   `);
+  seeded.push(id);
+  return id;
 }
 
 /** A comment on the page by someone, written straight to the database (the trigger still runs). */
@@ -105,9 +118,10 @@ test("the watch button and the new preferences are hidden while the switch is of
 
   await page.goto("/settings/notifications");
   await expect(page.getByLabel("Work assigned to me")).toBeVisible();
-  await expect(page.getByLabel("Watched pages", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("Replies to my comments", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("checkbox", { name: /In the Hub$/ })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Watched pages", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Replies to my comments", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Show in the Hub" })).toHaveCount(0);
+  await expect(page.getByRole("checkbox", { name: "Watched pages", exact: true })).toHaveCount(0);
 });
 
 test("watch a page, hear about comments and replies, and unwatch [switches on]", async ({ page }) => {
@@ -199,8 +213,18 @@ test("watch a page, hear about comments and replies, and unwatch [switches on]",
   await page.context().clearCookies({ name: "qbbe-locale" });
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto(`/pages/${pageId}`);
-  await expect(page.getByRole("button", { name: "Watch", exact: true })).toBeVisible({ timeout: 30_000 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  const narrow = page.getByRole("button", { name: "Watch", exact: true });
+  await expect(narrow).toBeVisible({ timeout: 30_000 });
+  // The header row holding the button fits, and so does the button. (The
+  // page's discussion tab bar is checked by its own unit's spec.)
+  const box = await narrow.boundingBox();
+  expect(box && box.x >= 0 && box.x + box.width <= 320).toBe(true);
+  expect(
+    await narrow.evaluate((button) => {
+      const row = button.closest("article > div");
+      return row !== null && row.scrollWidth <= row.clientWidth && row.getBoundingClientRect().right <= 320;
+    }),
+  ).toBe(true);
 });
 
 test("a mention in a page comment notifies the mentioned person once [switches on]", async ({ page }) => {
@@ -236,8 +260,10 @@ test("a mention in a page comment notifies the mentioned person once [switches o
   await signOut(page);
   await signIn(page, "staff");
   await page.goto("/inbox");
-  const mention = page.getByText(new RegExp(`^${pmName()} mentioned you`));
-  await expect(mention).toHaveCount(1);
+  // One inbox item for this page: the mention.
+  const links = page.getByRole("region", { name: "Notifications" }).locator(`a[href^="/pages/${pageId}"]`);
+  await expect(links).toHaveCount(1);
+  await expect(links).toHaveText(new RegExp(`^${pmName()} mentioned you in a comment$`));
 });
 
 test("each notification category can be kept out of the Hub, and that is honoured [switches on]", async ({ page }) => {
@@ -249,9 +275,13 @@ test("each notification category can be kept out of the Hub, and that is honoure
 
   await signIn(page, "staff");
   await page.goto("/settings/notifications");
+  // Email choices for each category, and each one can be kept out of the Hub.
   for (const label of ["Mentions and replies", "Work assigned to me", "Replies to my comments", "Approvals", "Watched pages"]) {
-    await expect(page.getByRole("checkbox", { name: `${label}: In the Hub` })).toBeChecked();
-    await expect(page.getByLabel(label, { exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: label, exact: true })).toBeVisible();
+  }
+  const hub = page.getByRole("group", { name: "Show in the Hub" });
+  for (const label of ["Mentions", "Assigned work", "Comments", "Approvals", "Watched pages"]) {
+    await expect(hub.getByRole("checkbox", { name: label, exact: true })).toBeChecked();
   }
   for (const theme of ["light", "dark"] as const) {
     await setTheme(page, theme);
@@ -260,16 +290,16 @@ test("each notification category can be kept out of the Hub, and that is honoure
   await setTheme(page, "light");
 
   // Keep watched pages out of the Hub; send replies in the daily digest.
-  await page.getByRole("checkbox", { name: "Watched pages: In the Hub" }).uncheck();
-  await page.getByLabel("Replies to my comments", { exact: true }).selectOption({ label: "Daily digest" });
+  await hub.getByRole("checkbox", { name: "Watched pages", exact: true }).uncheck();
+  await page.getByRole("combobox", { name: "Replies to my comments", exact: true }).selectOption({ label: "Daily digest" });
   await page.getByRole("button", { name: "Save preferences" }).click();
   await expect(page.getByText("Preferences saved.")).toBeVisible();
   expect(sql(`select hub_muted_categories::text || ' ' || (category_modes ->> 'comment') from public.notification_preference where user_id = '${STAFF}'`)).toBe(
     "{watched_page} daily",
   );
   await page.reload();
-  await expect(page.getByRole("checkbox", { name: "Watched pages: In the Hub" })).not.toBeChecked();
-  await expect(page.getByLabel("Replies to my comments", { exact: true })).toHaveValue("daily");
+  await expect(hub.getByRole("checkbox", { name: "Watched pages", exact: true })).not.toBeChecked();
+  await expect(page.getByRole("combobox", { name: "Replies to my comments", exact: true })).toHaveValue("daily");
 
   // A comment on the watched page is not written for them; a reply to them still is.
   const question = commentAs(STAFF, pageId, "Is the plan final?");
@@ -279,11 +309,11 @@ test("each notification category can be kept out of the Hub, and that is honoure
   expect(noticesFor(STAFF, reply)).toBe("comment");
 
   // Keep replies out too, by keyboard; then turn watched pages back on.
-  const comments = page.getByRole("checkbox", { name: "Replies to my comments: In the Hub" });
+  const comments = hub.getByRole("checkbox", { name: "Comments", exact: true });
   await comments.focus();
   await page.keyboard.press("Space");
   await expect(comments).not.toBeChecked();
-  await page.getByRole("checkbox", { name: "Watched pages: In the Hub" }).check();
+  await hub.getByRole("checkbox", { name: "Watched pages", exact: true }).check();
   await page.getByRole("button", { name: "Save preferences" }).click();
   await expect(page.getByText("Preferences saved.")).toBeVisible();
   expect(sql(`select hub_muted_categories::text from public.notification_preference where user_id = '${STAFF}'`)).toBe("{comment}");
@@ -293,8 +323,10 @@ test("each notification category can be kept out of the Hub, and that is honoure
   // French.
   await page.context().addCookies([{ name: "qbbe-locale", value: "fr-CA", url: new URL(page.url()).origin }]);
   await page.reload();
-  await expect(page.getByRole("checkbox", { name: "Pages suivies: Dans le Hub" })).toBeChecked();
-  await expect(page.getByLabel("Réponses à mes commentaires", { exact: true })).toBeVisible();
+  const hubFr = page.getByRole("group", { name: "Afficher dans le Hub" });
+  await expect(hubFr.getByRole("checkbox", { name: "Pages suivies", exact: true })).toBeChecked();
+  await expect(hubFr.getByRole("checkbox", { name: "Commentaires", exact: true })).not.toBeChecked();
+  await expect(page.getByRole("combobox", { name: "Réponses à mes commentaires", exact: true })).toBeVisible();
   await page.context().clearCookies({ name: "qbbe-locale" });
   sql(`update public.notification_preference set hub_muted_categories = '{}' where user_id = '${STAFF}'`);
 });

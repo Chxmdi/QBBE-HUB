@@ -17,8 +17,15 @@ export const c3PagesEn = {
     watched_page: "watched page",
   },
   preferences: {
-    intro: "Choose what reaches you. Untick “In the Hub” to stop a kind of notification altogether, by email too.",
-    inHub: "In the Hub",
+    intro: "Untick a kind of notification to stop it altogether: it no longer appears in the Hub and is not emailed. Security notices and required announcements always arrive.",
+    inHub: "Show in the Hub",
+    hub: {
+      mention: "Mentions",
+      assignment: "Assigned work",
+      comment: "Comments",
+      approval: "Approvals",
+      watched_page: "Watched pages",
+    },
     categories: {
       comment: {
         label: "Replies to my comments",

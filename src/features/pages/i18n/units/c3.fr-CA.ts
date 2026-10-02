@@ -16,8 +16,15 @@ export const c3PagesFrCA: typeof c3PagesEn = {
     watched_page: "Page suivie",
   },
   preferences: {
-    intro: "Choisissez ce qui vous parvient. Décochez « Dans le Hub » pour ne plus recevoir un type de notification, ni par courriel.",
-    inHub: "Dans le Hub",
+    intro: "Décochez un type de notification pour l’arrêter complètement : il n’apparaît plus dans le Hub et n’est pas envoyé par courriel. Les avis de sécurité et les annonces obligatoires arrivent toujours.",
+    inHub: "Afficher dans le Hub",
+    hub: {
+      mention: "Mentions",
+      assignment: "Travail assigné",
+      comment: "Commentaires",
+      approval: "Approbations",
+      watched_page: "Pages suivies",
+    },
     categories: {
       comment: {
         label: "Réponses à mes commentaires",
