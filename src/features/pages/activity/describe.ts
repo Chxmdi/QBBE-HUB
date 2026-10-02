@@ -19,6 +19,8 @@ export interface ActivityRow {
   subject: string | null;
   details: Record<string, unknown>;
   occurred_at: string;
+  /** The page's or record's type key, which scopes its property names. */
+  object_type: string;
 }
 
 export interface Bilingual {
@@ -26,11 +28,17 @@ export interface Bilingual {
   fr: string;
 }
 
+export interface PropertyLabel extends Bilingual {
+  kind: string;
+  /** Labels of a select or status property's choices, by choice key. */
+  choices: Map<string, Bilingual>;
+}
+
 export interface ActivityNames {
   people: Map<string, string>;
   teams: Map<string, string>;
-  /** Property labels by key. */
-  properties: Map<string, Bilingual>;
+  /** Property labels by `<type key>:<property key>` (keys are unique per type only). */
+  properties: Map<string, PropertyLabel>;
   /** Relation type labels by key. */
   relations: Map<string, Bilingual>;
   /** Titles of records and pages by id. */
@@ -46,6 +54,18 @@ export const emptyNames = (): ActivityNames => ({
 });
 
 export type Lang = "en" | "fr";
+
+/** What a sentence needs besides the entry: words, language and date format. */
+export interface DescribeContext {
+  t: PagesT;
+  lang: Lang;
+  names: ActivityNames;
+  /** A date or date-time value in the reader's language and time zone. */
+  formatDate: (value: string) => string;
+}
+
+export const propertyNameKey = (objectType: string, key: string) => `${objectType}:${key}`;
+const DATE_VALUE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/;
 
 const BLOCK_TYPES = [
   "paragraph",
@@ -77,21 +97,30 @@ export function clip(text: string, max = 80): string {
 }
 
 /**
- * A property value as short text: plain values as they are, custom values
+ * A property value as short text: a choice by its label, a date in the
+ * reader's format, a person or record by name, custom values
  * ({ value_text: … }) by their one filled column, lists joined.
  */
-export function formatValue(value: unknown, t: PagesT, names: ActivityNames): string {
+export function formatValue(value: unknown, ctx: DescribeContext, property?: PropertyLabel): string {
+  const { t, lang, names } = ctx;
   if (value === null || value === undefined || value === "") return t("units.c2.values.empty");
   if (typeof value === "boolean") return t(value ? "units.c2.values.yes" : "units.c2.values.no");
   if (typeof value === "number") return String(value);
-  if (typeof value === "string") return clip(names.people.get(value) ?? names.titles.get(value) ?? value, 60);
+  if (typeof value === "string") {
+    const choice = property?.choices.get(value);
+    if (choice) return clip(lang === "fr" ? choice.fr : choice.en, 60);
+    if (DATE_VALUE.test(value)) return ctx.formatDate(value);
+    return clip(names.people.get(value) ?? names.titles.get(value) ?? value, 60);
+  }
   if (Array.isArray(value)) {
-    return value.length === 0 ? t("units.c2.values.empty") : clip(value.map((item) => formatValue(item, t, names)).join(", "), 60);
+    return value.length === 0
+      ? t("units.c2.values.empty")
+      : clip(value.map((item) => formatValue(item, ctx, property)).join(", "), 60);
   }
   if (isRecord(value)) {
     const filled = Object.entries(value).filter(([key, item]) => key.startsWith("value_") && item !== null && item !== undefined);
     if (filled.length === 0) return t("units.c2.values.empty");
-    return formatValue(filled[0][1], t, names);
+    return formatValue(filled[0][1], ctx, property);
   }
   return t("units.c2.values.empty");
 }
@@ -151,7 +180,8 @@ function blockSentence(row: ActivityRow, verb: "Added" | "Removed" | "Moved" | "
 }
 
 /** The sentence for one entry, starting with who acted. */
-export function describeActivity(row: ActivityRow, names: ActivityNames, t: PagesT, lang: Lang): string {
+export function describeActivity(row: ActivityRow, ctx: DescribeContext): string {
+  const { t, lang, names } = ctx;
   const actor = actorName(row, t, names);
   const details = isRecord(row.details) ? row.details : {};
   const entry = { ...row, details };
@@ -203,14 +233,14 @@ export function describeActivity(row: ActivityRow, names: ActivityNames, t: Page
     case "property.updated": {
       const change = Array.isArray(details.changes) && isRecord(details.changes[0]) ? details.changes[0] : {};
       const key = str(change.property) ?? row.subject ?? "";
-      const label = names.properties.get(key);
+      const label = names.properties.get(propertyNameKey(row.object_type, key));
       const property = label ? (lang === "fr" ? label.fr : label.en) : key;
       const empty = (value: unknown) =>
         value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
       if (empty(change.after)) return t("units.c2.events.propertyCleared", { actor, property });
-      const after = formatValue(change.after, t, names);
+      const after = formatValue(change.after, ctx, label);
       if (empty(change.before)) return t("units.c2.events.propertySet", { actor, property, after });
-      return t("units.c2.events.propertyChanged", { actor, property, before: formatValue(change.before, t, names), after });
+      return t("units.c2.events.propertyChanged", { actor, property, before: formatValue(change.before, ctx, label), after });
     }
     case "relation.linked":
     case "relation.unlinked": {
@@ -290,7 +320,7 @@ export function referencedIds(rows: ActivityRow[]) {
     }
     if (row.event === "property.updated" && Array.isArray(details.changes)) {
       for (const change of details.changes.filter(isRecord)) {
-        if (str(change.property)) properties.add(String(change.property));
+        if (str(change.property)) properties.add(propertyNameKey(row.object_type, String(change.property)));
         maybeId(change.before);
         maybeId(change.after);
       }

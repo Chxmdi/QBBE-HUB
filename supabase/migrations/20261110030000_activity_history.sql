@@ -273,8 +273,8 @@ end;
 $$;
 
 -- Block changes between two saved documents: added, removed, moved (to
--- another parent, or out of order with the blocks around it) and updated
--- (text, type or settings).
+-- another parent, or out of order with its siblings under the same parent)
+-- and updated (text, type or settings). Each document is walked once.
 create or replace function app.activity_block_changes(p_old jsonb, p_new jsonb)
 returns table (event text, block_id text, type text, body text)
 language plpgsql
@@ -282,50 +282,61 @@ stable
 set search_path = ''
 as $$
 declare
-  v_ids text[];
-  v_ranks integer[];
+  v_old jsonb;
+  v_new jsonb;
+  v_group record;
   v_keep boolean[];
 begin
-  return query
-    select 'block.added', n.block_id, n.type, n.body
-    from app.activity_blocks(p_new) n
-    where not exists (select 1 from app.activity_blocks(p_old) o where o.block_id = n.block_id)
-    order by n.ord;
+  select coalesce(jsonb_agg(to_jsonb(b)), '[]'::jsonb) into v_old from app.activity_blocks(p_old) b;
+  select coalesce(jsonb_agg(to_jsonb(b)), '[]'::jsonb) into v_new from app.activity_blocks(p_new) b;
 
   return query
-    select 'block.removed', o.block_id, o.type, o.body
-    from app.activity_blocks(p_old) o
-    where not exists (select 1 from app.activity_blocks(p_new) n where n.block_id = o.block_id)
-    order by o.ord;
+    with o as (select * from jsonb_to_recordset(v_old)
+                 as x(block_id text, parent_id text, ord integer, type text, body text, props jsonb)),
+         n as (select * from jsonb_to_recordset(v_new)
+                 as x(block_id text, parent_id text, ord integer, type text, body text, props jsonb)),
+         changes as (
+           select 'block.added' as event, n.block_id, n.type, n.body, 1 as kind, n.ord
+           from n left join o on o.block_id = n.block_id where o.block_id is null
+           union all
+           select 'block.removed', o.block_id, o.type, o.body, 2, o.ord
+           from o left join n on n.block_id = o.block_id where n.block_id is null
+           union all
+           select 'block.moved', n.block_id, n.type, n.body, 3, n.ord
+           from n join o on o.block_id = n.block_id where n.parent_id is distinct from o.parent_id
+         )
+    select c.event, c.block_id, c.type, c.body from changes c order by c.kind, c.ord;
 
-  -- Moved under another parent.
-  return query
-    select 'block.moved', n.block_id, n.type, n.body
-    from app.activity_blocks(p_new) n
-    join app.activity_blocks(p_old) o on o.block_id = n.block_id
-    where n.parent_id is distinct from o.parent_id
-    order by n.ord;
-
-  -- Moved within the same parent: off the longest run of kept order.
-  select array_agg(n.block_id order by n.ord), array_agg(o.ord order by n.ord)
-  into v_ids, v_ranks
-  from app.activity_blocks(p_new) n
-  join app.activity_blocks(p_old) o on o.block_id = n.block_id
-  where n.parent_id is not distinct from o.parent_id;
-  if v_ids is not null then
-    v_keep := app.activity_longest_run(v_ranks);
+  -- Moved among its siblings: per parent, the blocks off the longest run
+  -- that kept its order. Children that travel with a moved parent keep their
+  -- order under it, so they are not counted.
+  for v_group in
+    with o as (select * from jsonb_to_recordset(v_old) as x(block_id text, parent_id text, ord integer)),
+         n as (select * from jsonb_to_recordset(v_new)
+                 as x(block_id text, parent_id text, ord integer, type text, body text))
+    select array_agg(n.block_id order by n.ord) as ids,
+           array_agg(o.ord order by n.ord) as ranks,
+           array_agg(n.type order by n.ord) as types,
+           array_agg(n.body order by n.ord) as bodies
+    from n join o on o.block_id = n.block_id
+    where n.parent_id is not distinct from o.parent_id
+    group by n.parent_id
+  loop
+    v_keep := app.activity_longest_run(v_group.ranks);
     return query
-      select 'block.moved', n.block_id, n.type, n.body
-      from unnest(v_ids, v_keep) as k(id, kept)
-      join app.activity_blocks(p_new) n on n.block_id = k.id
+      select 'block.moved', k.id, k.type, k.body
+      from unnest(v_group.ids, v_keep, v_group.types, v_group.bodies) with ordinality as k(id, kept, type, body, i)
       where not k.kept
-      order by n.ord;
-  end if;
+      order by k.i;
+  end loop;
 
   return query
+    with o as (select * from jsonb_to_recordset(v_old)
+                 as x(block_id text, parent_id text, ord integer, type text, body text, props jsonb)),
+         n as (select * from jsonb_to_recordset(v_new)
+                 as x(block_id text, parent_id text, ord integer, type text, body text, props jsonb))
     select 'block.updated', n.block_id, n.type, n.body
-    from app.activity_blocks(p_new) n
-    join app.activity_blocks(p_old) o on o.block_id = n.block_id
+    from n join o on o.block_id = n.block_id
     where n.type is distinct from o.type or n.body is distinct from o.body or n.props is distinct from o.props
     order by n.ord;
 end;
@@ -348,12 +359,14 @@ declare
   v_existing uuid;
   v_limit constant integer := 20;
 begin
-  if new.content is not distinct from old.content then
+  -- The first save of a body (an insert) counts every block as added.
+  if tg_op = 'UPDATE' and new.content is not distinct from old.content then
     return null;
   end if;
 
   select coalesce(jsonb_agg(to_jsonb(c)), '[]'::jsonb) into v_changes
-  from app.activity_block_changes(old.content, new.content) c;
+  from app.activity_block_changes(
+    case when tg_op = 'INSERT' then '{}'::jsonb else old.content end, new.content) c;
   select coalesce(jsonb_object_agg(c.event, c.n), '{}'::jsonb) into v_counts
   from (select e ->> 'event' as event, count(*) as n from jsonb_array_elements(v_changes) e group by 1) c;
 
@@ -405,52 +418,68 @@ end;
 $$;
 
 create trigger editor_document_activity
-  after update of content on public.editor_document
+  after insert or update of content on public.editor_document
   for each row execute function app.activity_from_editor_document();
 
 -- Records: the object_event log, renamed and split so each property change
--- is its own entry (and keeps its property id for the privacy check).
-create or replace function app.activity_from_object_event()
-returns trigger
+-- is its own entry (and keeps its property id for the privacy check). Used
+-- by the trigger below and, once, for the history written before C2.
+create or replace function app.activity_copy_object_event(e public.object_event)
+returns void
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
   v_change jsonb;
-  v_actor uuid := case when new.actor_kind = 'person' and new.actor_id ~ '^[0-9a-fA-F-]{36}$'
-                       then new.actor_id::uuid end;
+  v_actor uuid := case when e.actor_kind = 'person' and e.actor_id ~ '^[0-9a-fA-F-]{36}$'
+                       then e.actor_id::uuid end;
 begin
-  if new.verb in ('created', 'archived', 'restored', 'deleted') then
+  if e.verb in ('created', 'archived', 'restored', 'deleted') then
     insert into public.activity_entry
       (organization_id, object_id, object_type, event, actor_kind, actor_id, details, source_event_id, occurred_at)
-    values (new.organization_id, new.object_id, new.object_type, 'record.' || new.verb, new.actor_kind, v_actor,
-            jsonb_build_object('changes', new.changes), new.id, new.occurred_at)
+    values (e.organization_id, e.object_id, e.object_type, 'record.' || e.verb, e.actor_kind, v_actor,
+            jsonb_build_object('changes', e.changes), e.id, e.occurred_at)
     on conflict (source_event_id) do nothing;
-  elsif new.verb = 'commented' then
+  elsif e.verb = 'commented' then
     insert into public.activity_entry
       (organization_id, object_id, object_type, event, actor_kind, actor_id, details, source_event_id, occurred_at)
-    values (new.organization_id, new.object_id, new.object_type, 'comment.added', new.actor_kind, v_actor,
-            '{}'::jsonb, new.id, new.occurred_at)
+    values (e.organization_id, e.object_id, e.object_type, 'comment.added', e.actor_kind, v_actor,
+            '{}'::jsonb, e.id, e.occurred_at)
     on conflict (source_event_id) do nothing;
-  elsif new.verb in ('linked', 'unlinked') then
-    v_change := new.changes -> 0;
+  elsif e.verb in ('linked', 'unlinked') then
+    v_change := e.changes -> 0;
     insert into public.activity_entry
       (organization_id, object_id, object_type, event, actor_kind, actor_id, subject, details, source_event_id, occurred_at)
-    values (new.organization_id, new.object_id, new.object_type, 'relation.' || new.verb, new.actor_kind, v_actor,
-            v_change ->> 'other', coalesce(v_change, '{}'::jsonb), new.id, new.occurred_at)
+    values (e.organization_id, e.object_id, e.object_type, 'relation.' || e.verb, e.actor_kind, v_actor,
+            v_change ->> 'other', coalesce(v_change, '{}'::jsonb), e.id, e.occurred_at)
     on conflict (source_event_id) do nothing;
-  elsif new.verb = 'updated' then
-    -- One entry per property; only the first carries the source id.
-    for v_change in select c from jsonb_array_elements(new.changes) c loop
+  elsif e.verb = 'updated' then
+    -- One entry per property; only the first carries the source id, so a
+    -- second copy of the same event stops at the first.
+    if exists (select 1 from public.activity_entry a where a.source_event_id = e.id) then
+      return;
+    end if;
+    for v_change in select c from jsonb_array_elements(e.changes) c loop
       insert into public.activity_entry
         (organization_id, object_id, object_type, event, actor_kind, actor_id, subject, details, source_event_id, occurred_at)
-      values (new.organization_id, new.object_id, new.object_type, 'property.updated', new.actor_kind, v_actor,
+      values (e.organization_id, e.object_id, e.object_type, 'property.updated', e.actor_kind, v_actor,
               v_change ->> 'property', jsonb_build_object('changes', jsonb_build_array(v_change)),
-              case when v_change = new.changes -> 0 then new.id end, new.occurred_at)
+              case when v_change = e.changes -> 0 then e.id end, e.occurred_at)
       on conflict (source_event_id) do nothing;
     end loop;
   end if;
+end;
+$$;
+
+create or replace function app.activity_from_object_event()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform app.activity_copy_object_event(new);
   return null;
 end;
 $$;
@@ -458,6 +487,17 @@ $$;
 create trigger object_event_activity
   after insert on public.object_event
   for each row execute function app.activity_from_object_event();
+
+-- Records keep the history they already have.
+do $$
+declare
+  v_event public.object_event;
+begin
+  for v_event in select * from public.object_event order by seq loop
+    perform app.activity_copy_object_event(v_event);
+  end loop;
+end;
+$$;
 
 -- Sharing: a grant added, its role changed, or removed.
 create or replace function app.activity_from_access_grant()
@@ -476,7 +516,8 @@ begin
   if v_type is null then
     return null;
   end if;
-  if tg_op = 'UPDATE' and new.role_id is not distinct from old.role_id and new.reach is not distinct from old.reach then
+  -- A change of reach alone is not a different role: not listed.
+  if tg_op = 'UPDATE' and new.role_id is not distinct from old.role_id then
     return null;
   end if;
   select jsonb_build_object('key', r.key, 'name_en', r.name_en, 'name_fr', r.name_fr) into v_role
@@ -537,6 +578,7 @@ revoke all on function app.activity_blocks(jsonb) from public, anon, authenticat
 revoke all on function app.activity_longest_run(integer[]) from public, anon, authenticated;
 revoke all on function app.activity_block_changes(jsonb, jsonb) from public, anon, authenticated;
 revoke all on function app.activity_from_editor_document() from public, anon, authenticated;
+revoke all on function app.activity_copy_object_event(public.object_event) from public, anon, authenticated;
 revoke all on function app.activity_from_object_event() from public, anon, authenticated;
 revoke all on function app.activity_from_access_grant() from public, anon, authenticated;
 revoke all on function app.activity_from_object_version() from public, anon, authenticated;

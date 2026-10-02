@@ -159,7 +159,7 @@ begin
   update public.page set parent_page_id = p_parent where id = p_shared;
   reset role;
 
-  v_events := tests.activity_events(p_shared);
+  v_events := array(select event from public.activity_entry where object_id = p_shared and event not like 'block.%' order by seq);
   perform tests.ok(v_events = array['page.created', 'page.updated', 'page.moved'],
     format('C2-1: a page records page.created, page.updated and page.moved (got %s)', v_events));
   perform tests.ok(
@@ -173,9 +173,13 @@ begin
     'C2-1: each entry names the signed-in person who acted'
   );
   perform tests.ok(
-    (select count(*) from public.activity_entry where object_id = p_shared and event like 'block.%') = 0,
-    'C2-1: the first save of a page body adds no block entries (the page is new)'
+    (select array_agg(subject order by seq) from public.activity_entry where object_id = p_shared and event = 'block.added')
+      = array['a', 'b', 'c', 'd'],
+    'C2-1: the first save of a page body records each of its blocks as added'
   );
+  -- Later edits are more than ten minutes after those, so they are entries of their own.
+  update public.activity_entry set occurred_at = occurred_at - interval '11 minutes' where object_id = p_shared;
+  select max(seq) into v_count from public.activity_entry where object_id = p_shared;
 
   -- Blocks: d moved to the top, b removed, e added, a edited (twice: one entry).
   perform tests.authenticate(v_staff, 'aal1');
@@ -191,15 +195,15 @@ begin
 
   perform tests.ok(
     (select array_agg(event || ':' || subject order by event, subject) from public.activity_entry
-     where object_id = p_shared and event like 'block.%')
+     where object_id = p_shared and event like 'block.%' and seq > v_count)
       = array['block.added:e', 'block.moved:d', 'block.removed:b', 'block.updated:a'],
     format('C2-1: one save records block.added, block.moved, block.removed and block.updated (got %s)',
       (select array_agg(event || ':' || subject order by seq) from public.activity_entry
-       where object_id = p_shared and event like 'block.%'))
+       where object_id = p_shared and event like 'block.%' and seq > v_count))
   );
   perform tests.ok(
-    (select details ->> 'text' from public.activity_entry where object_id = p_shared and event = 'block.updated')
-      = 'Welcome, everyone!',
+    (select array_agg(details ->> 'text') from public.activity_entry where object_id = p_shared and event = 'block.updated')
+      = array['Welcome, everyone!'],
     'C2-1: typing again in the same block within ten minutes updates its one entry'
   );
   perform tests.ok(
@@ -220,6 +224,32 @@ begin
      where object_id = p_shared and event like 'block.%' and seq > v_count)
       = array['block.added:z', 'block.moved:c'],
     'C2-1: a block nested under another is moved; blocks pushed down by an insert are not'
+  );
+
+  -- Moving a block that has children: the block moved, its children did not.
+  select max(seq) into v_count from public.activity_entry where object_id = p_shared;
+  update public.editor_document set content = tests.activity_doc(jsonb_build_array(
+    tests.activity_block('z', 'Intro'), tests.activity_block('a', 'Welcome, everyone!'),
+    tests.activity_block('d', 'Safety', jsonb_build_array(tests.activity_block('c', 'Kitchen'))),
+    tests.activity_block('e', 'First aid')))
+  where object_id = p_shared;
+  perform tests.ok(
+    (select array_agg(event || ':' || subject order by seq) from public.activity_entry
+     where object_id = p_shared and seq > v_count) = array['block.moved:a'],
+    format('C2-1: swapping a block with one that has children records one move, not its children (got %s)',
+      (select array_agg(event || ':' || subject order by seq) from public.activity_entry where object_id = p_shared and seq > v_count))
+  );
+
+  perform tests.ok(
+    (select array_agg(c.event || ':' || c.block_id) from app.activity_block_changes(
+       tests.activity_doc(jsonb_build_array(
+         tests.activity_block('A', 'A', jsonb_build_array(tests.activity_block('a1', 'a1'))),
+         tests.activity_block('B', 'B', jsonb_build_array(tests.activity_block('b1', 'b1'))))),
+       tests.activity_doc(jsonb_build_array(
+         tests.activity_block('B', 'B', jsonb_build_array(tests.activity_block('b1', 'b1'))),
+         tests.activity_block('A', 'A', jsonb_build_array(tests.activity_block('a1', 'a1')))))) c)
+      in (array['block.moved:A'], array['block.moved:B']),
+    'C2-1: two blocks with children swapped are one move; their children did not move'
   );
 
   -- A paste of many blocks becomes one entry with a count.
@@ -311,11 +341,33 @@ begin
         and details ->> 'user_id' = v_volunteer::text),
     'C2-4: sharing a record, changing the role and removing it are recorded, as is the assignee''s mirrored access'
   );
+  insert into public.access_grant (organization_id, object_id, principal_kind, user_id, role_id, created_by)
+  values (v_org, v_task, 'person', v_admin, v_follower, v_owner) returning id into v_grant;
+  update public.access_grant set reach = 'self' where id = v_grant;
+  perform tests.ok(
+    (select array_agg(event order by seq) from public.activity_entry where object_id = v_task and subject = v_grant::text)
+      = array['permission.granted'],
+    'C2-4: changing only a grant''s reach is not listed as a role change'
+  );
   perform tests.ok(
     exists (select 1 from public.activity_entry where object_id = v_task and event = 'permission.changed'
       and details -> 'before_role' ->> 'key' = 'task_follower' and details -> 'role' ->> 'key' = 'task_contributor'
       and details ->> 'user_id' = v_guest::text),
     'C2-4: a role change keeps the person, the old role and the new role'
+  );
+
+  -- Every record event, including those from before this unit, has its entry, once.
+  perform tests.ok(
+    not exists (select 1 from public.object_event e
+                where e.verb in ('created', 'updated', 'archived', 'restored', 'deleted', 'linked', 'unlinked', 'commented')
+                  and not exists (select 1 from public.activity_entry a where a.source_event_id = e.id)),
+    'C2-1: every object_event, old or new, is in the activity history'
+  );
+  select count(*) into v_count from public.activity_entry where object_id = v_task;
+  perform app.activity_copy_object_event(e) from public.object_event e where e.object_id = v_task;
+  perform tests.ok(
+    (select count(*) from public.activity_entry where object_id = v_task) = v_count,
+    'C2-1: copying an event again adds nothing'
   );
 
   -- -------------------------------------------------------------------------
