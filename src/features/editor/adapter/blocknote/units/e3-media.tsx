@@ -21,6 +21,7 @@ import {
   type ReactCustomBlockRenderProps,
 } from "@blocknote/react";
 import { AudioLines, File as FileIcon, Image as ImageIcon, Video } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import type { EditorT } from "@/features/editor/i18n";
 import { framed } from "../block-frame";
 import { mediaAddress, mediaName, needsAltText, type MediaKind } from "./e3-helpers";
@@ -123,9 +124,10 @@ function BlockField({
   return (
     <div className="qbbe-media-field">
       <label htmlFor={id}>{label}</label>
-      <input
+      <Input
         id={id}
         type="text"
+        className="h-7"
         value={draft}
         maxLength={500}
         placeholder={placeholder}

@@ -4,6 +4,7 @@ import * as React from "react";
 import { createCodeBlockConfig, defaultBlockSpecs, parsePreCode, parsePreCodeContent } from "@blocknote/core";
 import { createReactBlockSpec, type ReactCustomBlockRenderProps } from "@blocknote/react";
 import { Check, Copy } from "lucide-react";
+import { Select } from "@/components/ui/input";
 import type { EditorT } from "@/features/editor/i18n";
 import { framed } from "../block-frame";
 import { CODE_LANGUAGES, codeLanguage, codeLanguageName, codeText } from "./e3-helpers";
@@ -77,9 +78,9 @@ function CodeBlockView({ block, editor, contentRef, t }: CodeProps & { t: Editor
     <div className="qbbe-code-block" data-language={known ?? stored}>
       <div className="qbbe-code-bar" contentEditable={false} onKeyDown={isolateKeys}>
         {editor.isEditable ? (
-          <select
+          <Select
             aria-label={t("units.e3.code.language")}
-            className="qbbe-code-language"
+            className="qbbe-code-language h-7 w-auto"
             value={known ?? stored}
             onChange={(event) => editor.updateBlock(block, { props: { language: event.target.value } })}
           >
@@ -89,7 +90,7 @@ function CodeBlockView({ block, editor, contentRef, t }: CodeProps & { t: Editor
                 {codeLanguageName(id, t)}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           <span className="qbbe-code-language-name">{languageName}</span>
         )}
