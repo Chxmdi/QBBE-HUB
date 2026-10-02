@@ -41,11 +41,36 @@ export const PAGE_VARIABLES = ["program", "owner", "period", "due"] as const;
 export type PageVariableName = (typeof PAGE_VARIABLES)[number];
 export type PageVariables = Partial<Record<PageVariableName, string>>;
 
+/** A page as editor blocks in each language (T1): any block in the editor's registry. */
+export interface PageDocument {
+  en: EditorBlock[];
+  fr: EditorBlock[];
+}
+
+export interface HubMilestone {
+  title: LocalizedText;
+  offsets?: Offsets;
+}
+
+export interface HubTask extends TaskItem {
+  /** Index of the hub milestone the task belongs to. */
+  milestone?: number;
+}
+
+/** What using a hub template creates besides the page: a project, its milestones and tasks (T1). */
+export interface HubBody {
+  milestones?: HubMilestone[];
+  tasks?: HubTask[];
+}
+
 export interface PageBody {
   title: LocalizedText;
   blocks: PageBlock[];
   /** The `{{name}}` placeholders the blocks use; the form asks for each. */
   variables?: PageVariableName[];
+  /** The page in the real editor's blocks, rendered after `blocks` (T1). */
+  document?: PageDocument;
+  hub?: HubBody;
 }
 
 export interface SpaceBody {
@@ -64,7 +89,7 @@ export interface TemplateRecord {
 
 /** One line of the preview: what will be created, in the chosen language, with real dates. */
 export interface PlannedItem {
-  kind: "project" | "task" | "page" | "heading" | "paragraph" | "todo";
+  kind: "project" | "task" | "milestone" | "page" | "heading" | "paragraph" | "todo";
   title: string;
   depth: number;
   start: string | null;
@@ -286,5 +311,173 @@ export function buildBody(
   return {
     ok: true,
     body: { title: trimmed, offsets: { start: 0, ...(end === undefined ? {} : { due: end }) }, tasks: items },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Documents and hubs (T1, migration 20261110010000)
+// ---------------------------------------------------------------------------
+
+/**
+ * In a document, the four variables and date tokens: `{{start+N}}` is the
+ * start date plus N days. Same shape as the database's pattern.
+ */
+const DOCUMENT_PLACEHOLDER = /\{\{\s*(program|owner|period|due|start\s*\+\s*[0-9]{1,4})\s*\}\}/g;
+
+/** Fills one string of a document in one pass: a value is never scanned again. */
+export function renderDocumentText(text: string, variables: PageVariables, start: string): string {
+  return text.replace(DOCUMENT_PLACEHOLDER, (_whole, name: string) => {
+    if (name.startsWith("start")) return addDays(start, Number(name.replace(/[^0-9]/g, "")));
+    return cleanValue(variables[name as PageVariableName]);
+  });
+}
+
+function renderValue(value: unknown, variables: PageVariables, start: string): unknown {
+  if (typeof value === "string") return renderDocumentText(value, variables, start);
+  if (Array.isArray(value)) return value.map((item) => renderValue(item, variables, start));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, renderValue(item, variables, start)]));
+  }
+  return value;
+}
+
+/** A document's blocks in the chosen language, every string filled (public.apply_page_template_v2 does the same). */
+export function renderDocument(document: PageDocument, variables: PageVariables, start: string, locale: string): EditorBlock[] {
+  const blocks = locale === "fr-CA" ? document.fr : document.en;
+  if (!isCalendarDate(start)) return blocks;
+  return renderValue(blocks, variables, start) as EditorBlock[];
+}
+
+/** The page a template makes, as editor blocks: its rows, then its document. The hub's view is added on use. */
+export function renderTemplateDocument(body: PageBody, variables: PageVariables, start: string, locale = "en"): EditorBlock[] {
+  const rows = renderPageBody({ ...body, document: undefined }, variables, start, locale).blocks;
+  return body.document ? [...rows, ...renderDocument(body.document, variables, start, locale)] : rows;
+}
+
+/** The variables a document uses anywhere, in order of first use. */
+export function documentVariables(document: PageDocument): PageVariableName[] {
+  return findPageVariables(JSON.stringify(document));
+}
+
+/**
+ * The old rows as editor blocks in both languages, for editing a template in
+ * the real editor. A row's dates become date tokens after its text, so the
+ * page it makes says exactly what the row made it say.
+ */
+export function rowsToDocument(blocks: PageBlock[]): PageDocument {
+  const convert = (lang: "en" | "fr"): EditorBlock[] =>
+    blocks.map((block) => {
+      const dates: string[] = [];
+      if (block.offsets?.start !== undefined) dates.push(`${lang === "fr" ? "Débute le " : "Starts "}{{start+${block.offsets.start}}}`);
+      if (block.offsets?.due !== undefined) dates.push(`${lang === "fr" ? "Échéance le " : "Due "}{{start+${block.offsets.due}}}`);
+      const text = dates.length > 0 ? `${block.text[lang]} · ${dates.join(" · ")}` : block.text[lang];
+      const type = block.kind === "heading" ? "heading" : block.kind === "todo" ? "checkListItem" : "paragraph";
+      const props = block.kind === "heading" ? { level: 2 } : block.kind === "todo" ? { checked: false } : {};
+      return { type, props, content: [{ type: "text", text, styles: {} }], children: [] };
+    });
+  return { en: convert("en"), fr: convert("fr") };
+}
+
+/** The document a template is edited as: its document, after its rows converted. */
+export function editableDocument(body: PageBody): PageDocument {
+  const rows = rowsToDocument(body.blocks ?? []);
+  return {
+    en: [...rows.en, ...(body.document?.en ?? [])],
+    fr: [...rows.fr, ...(body.document?.fr ?? [])],
+  };
+}
+
+/** What a hub creates on `start`, in order: the project, then its milestones and tasks. */
+export function planHub(hub: HubBody, title: string, start: string, locale: string): PlannedItem[] {
+  if (!isCalendarDate(start)) return [];
+  const offsets = [...(hub.milestones ?? []), ...(hub.tasks ?? [])].flatMap((item) =>
+    item.offsets?.due === undefined ? [] : [item.offsets.due],
+  );
+  return [
+    {
+      kind: "project",
+      title,
+      depth: 0,
+      start,
+      due: offsets.length > 0 ? addDays(start, Math.max(...offsets)) : null,
+    },
+    ...(hub.milestones ?? []).map(
+      (m): PlannedItem => ({ kind: "milestone", title: pick(m.title, locale), depth: 1, ...dates(start, m.offsets) }),
+    ),
+    ...taskLines(hub.tasks, start, locale, 1),
+  ];
+}
+
+export interface DraftMilestone {
+  en: string;
+  fr: string;
+  due: string;
+}
+
+export interface DraftHubTask {
+  en: string;
+  fr: string;
+  due: string;
+  /** The milestone's row number (1-based) as typed, or "" for none. */
+  milestone: string;
+}
+
+export type HubProblem = "hubText" | "offset" | "hubMilestone";
+
+/** A hub from the editor's rows; blank rows are skipped, and no rows means no hub. */
+export function buildHub(
+  milestones: DraftMilestone[],
+  tasks: DraftHubTask[],
+): { ok: true; hub: HubBody | null } | { ok: false; problem: HubProblem } {
+  const offset = (raw: string): number | undefined | null => {
+    const value = raw.trim();
+    if (!value) return undefined;
+    if (!/^\d{1,4}$/.test(value) || Number(value) > MAX_OFFSET) return null;
+    return Number(value);
+  };
+  const blank = (row: { en: string; fr: string; due: string }) => !row.en.trim() && !row.fr.trim() && !row.due.trim();
+  const kept = milestones.filter((m) => !blank(m));
+  const out: HubBody = { milestones: [], tasks: [] };
+  for (const m of kept) {
+    if (!m.en.trim() || !m.fr.trim()) return { ok: false, problem: "hubText" };
+    const due = offset(m.due);
+    if (due === null) return { ok: false, problem: "offset" };
+    out.milestones!.push({ title: { en: m.en.trim(), fr: m.fr.trim() }, ...(due === undefined ? {} : { offsets: { due } }) });
+  }
+  for (const t of tasks) {
+    if (blank(t) && !t.milestone.trim()) continue;
+    if (!t.en.trim() || !t.fr.trim()) return { ok: false, problem: "hubText" };
+    const due = offset(t.due);
+    if (due === null) return { ok: false, problem: "offset" };
+    let milestone: number | undefined;
+    if (t.milestone.trim()) {
+      const n = Number(t.milestone.trim());
+      if (!Number.isInteger(n) || n < 1 || n > out.milestones!.length) return { ok: false, problem: "hubMilestone" };
+      milestone = n - 1;
+    }
+    out.tasks!.push({
+      title: { en: t.en.trim(), fr: t.fr.trim() },
+      ...(due === undefined ? {} : { offsets: { due } }),
+      ...(milestone === undefined ? {} : { milestone }),
+    });
+  }
+  if (out.milestones!.length + out.tasks!.length === 0) return { ok: true, hub: null };
+  return { ok: true, hub: out };
+}
+
+/** A hub as the editor's rows, for editing. */
+export function hubToDrafts(hub: HubBody | undefined): { milestones: DraftMilestone[]; tasks: DraftHubTask[] } {
+  return {
+    milestones: (hub?.milestones ?? []).map((m) => ({
+      en: m.title.en,
+      fr: m.title.fr,
+      due: m.offsets?.due === undefined ? "" : String(m.offsets.due),
+    })),
+    tasks: (hub?.tasks ?? []).map((t) => ({
+      en: t.title.en,
+      fr: t.title.fr,
+      due: t.offsets?.due === undefined ? "" : String(t.offsets.due),
+      milestone: t.milestone === undefined ? "" : String(t.milestone + 1),
+    })),
   };
 }
