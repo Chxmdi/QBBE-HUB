@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   othersOnPage,
@@ -38,8 +39,13 @@ describe("page presence rules", () => {
   });
 
   it("uses colours that carry white text at 4.5:1 or more", () => {
+    const css = readFileSync("src/design-system/styles/globals.css", "utf8");
     for (const colour of PRESENCE_COLOURS) {
-      expect((1.05) / (luminance(colour) + 0.05), colour).toBeGreaterThanOrEqual(4.5);
+      const name = /^var\((--color-avatar-\d+)\)$/.exec(colour)?.[1];
+      expect(name, colour).toBeTruthy();
+      const hex = new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`).exec(css)?.[1];
+      expect(hex, colour).toBeTruthy();
+      expect(1.05 / (luminance(hex!) + 0.05), colour).toBeGreaterThanOrEqual(4.5);
     }
   });
 

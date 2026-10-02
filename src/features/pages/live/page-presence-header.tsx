@@ -186,7 +186,7 @@ export function PagePresenceHeader({ pageId, me: given, canEdit }: { pageId: str
           id={listId}
           role="region"
           aria-label={t("units.c1.presence.label")}
-          className="absolute right-0 z-30 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-(--radius-md) border border-line bg-surface p-3 shadow-lg"
+          className="absolute right-0 z-(--z-overlay) mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-(--radius-md) border border-line bg-surface p-3 shadow-lg"
         >
           <p className="eyebrow mb-2">{t("units.c1.presence.listTitle")}</p>
           <ul className="space-y-1.5" data-testid="page-presence-list">

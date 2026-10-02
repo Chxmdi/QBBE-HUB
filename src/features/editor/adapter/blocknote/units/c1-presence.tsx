@@ -100,7 +100,7 @@ export const useC1Options: (ctx: EditorUnitCreateContext) => EditorUnitOptions =
         ? {
             collaboration: {
               provider: { awareness: setup.awareness },
-              user: { name: "", color: "#1d4ed8" },
+              user: { name: "", color: "var(--color-avatar-3)" },
               showCursorLabels: "always",
               renderCursor: renderLiveCursor,
             },

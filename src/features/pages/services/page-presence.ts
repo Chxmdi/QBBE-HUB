@@ -23,18 +23,16 @@ export interface PagePresencePerson {
 }
 
 /**
- * Colours for people on a page. Each carries white text at 4.5:1 or more,
- * in both themes (the chip has its own background).
+ * Colours for people on a page: the design system's avatar colours, each
+ * carrying white text at 4.5:1 or more in both themes (the chip has its own
+ * background).
  */
 export const PRESENCE_COLOURS = [
-  "#1d4ed8",
-  "#b91c1c",
-  "#047857",
-  "#7e22ce",
-  "#c2410c",
-  "#0e7490",
-  "#be185d",
-  "#4d7c0f",
+  "var(--color-avatar-1)",
+  "var(--color-avatar-2)",
+  "var(--color-avatar-3)",
+  "var(--color-avatar-4)",
+  "var(--color-avatar-5)",
 ] as const;
 
 /** The same person always gets the same colour, on every screen. */
