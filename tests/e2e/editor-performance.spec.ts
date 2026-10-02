@@ -148,7 +148,7 @@ test.afterAll(() => {
 
 test.beforeEach(async ({ page }) => {
   // Embeds point at YouTube; the tests never need the real frame.
-  await page.route(/youtube-nocookie\.com|youtube\.com/, (route) => route.abort());
+  await page.route(/^https:\/\/(?:www\.)?youtube(?:-nocookie)?\.com\//, (route) => route.abort());
 });
 
 test("a 100-block page opens without layout shift and is editable within the budget [switches on]", async ({ page }) => {
