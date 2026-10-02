@@ -45,6 +45,17 @@ function escapeInline(value: string): string {
   return value.replace(/[\\`*_~[\]<|]/g, "\\$&").replace(/&(?=#?[A-Za-z0-9]+;)/g, "\\&");
 }
 
+/**
+ * Text kept as it reads, line breaks included: every backslash and marker is
+ * escaped in the same pass that turns each line break into a hard break
+ * (`\` at the end of a line), so no backslash is ever left ambiguous.
+ */
+function escapeWithBreaks(value: string): string {
+  return value
+    .replace(/[\\`*_~[\]<|\n]/g, (c) => (c === "\n" ? "\\\n" : `\\${c}`))
+    .replace(/&(?=#?[A-Za-z0-9]+;)/g, "\\&");
+}
+
 /** A line that would start a block if it were read on its own. */
 function escapeLineStart(full: string): string {
   // Leading spaces are not kept by a reader, so the test is on what follows them.
@@ -322,7 +333,7 @@ function renderBlock(block: EditorBlock, options: MarkdownExportOptions, number:
     default: {
       // Blocks with no Markdown form keep their readable text.
       const value = blockText({ ...block, children: [] });
-      return [...(value.trim() ? [{ text: lines(escapeInline(value).replace(/\n/g, "\\\n")), list: false }] : []), ...after()];
+      return [...(value.trim() ? [{ text: lines(escapeWithBreaks(value)), list: false }] : []), ...after()];
     }
   }
 }

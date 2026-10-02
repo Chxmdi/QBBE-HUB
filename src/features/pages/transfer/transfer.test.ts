@@ -552,3 +552,13 @@ describe("import readers on crafted input", () => {
     expect(htmlToContent("<titles>not a title</titles><title>Real</title>").title).toBe("Real");
   });
 });
+
+describe("blocks with no Markdown form", () => {
+  it("keep backslashes, markers and line breaks exactly through export and import", () => {
+    const text = "C:\\temp\\ *not bold* `x`\nsecond line ends with \\\nthird";
+    const markdown = contentToMarkdown(doc({ type: "someFutureBlock", content: [t(text)] } as unknown as EditorBlock), { title: "T" });
+    const back = markdownToContent(markdown);
+    const body = back.content.blocks.find((block) => block.type === "paragraph");
+    expect((body?.content as InlineContent[]).map((item) => (item as { text: string }).text).join("")).toBe(text);
+  });
+});
