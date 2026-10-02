@@ -1,1 +1,41 @@
 /* Wave 2 unit E5: speed on long pages. Only E5 edits this file. */
+
+/* The text waits, laid out but unseen, until the blocks drawn by React
+   (table of contents, views, embeds) are there too, so they do not push it
+   down after it is painted. E5InView sets the attribute within a second. */
+.qbbe-editor:not([data-blocks-ready]) .bn-editor {
+  visibility: hidden;
+}
+
+/* While the editor's code loads, the space reserved for it (block-editor.tsx)
+   keeps what follows the editor below the screen; once it is here, the
+   editor's own height takes over. */
+.qbbe-editor-reserve:has(.qbbe-editor) {
+  min-height: 0 !important;
+}
+
+/* A view block or embed waiting until it is near the screen: the same space
+   the block will take, so nothing below it jumps when it renders. */
+.qbbe-editor .qbbe-lazy-block {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+  padding: 12px;
+  color: var(--color-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.qbbe-editor .qbbe-lazy-name {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--color-ink);
+  font-weight: 600;
+}

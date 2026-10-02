@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEditorT } from "@/features/editor/i18n/client";
 import type { BlockEditorProps } from "./types";
+import { editorReserve } from "./performance/reserve";
 
 /**
  * The block editor, loaded in the browser only: the editor library needs the
@@ -25,7 +26,8 @@ function EditorLoading() {
 }
 
 export function BlockEditor(props: BlockEditorProps) {
-  return <Implementation {...props} />;
+  // Space kept while the editor's code loads (wave 2 unit E5).
+  return <div className="qbbe-editor-reserve" style={{ minHeight: editorReserve(props.initialContent.blocks.length) }}><Implementation {...props} /></div>;
 }
 
 export type { BlockEditorProps, EditorFileHandlers } from "./types";
