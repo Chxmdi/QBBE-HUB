@@ -13,7 +13,6 @@ import { updateLensCell } from "@/features/lenses/services/lens.actions";
 import { clearViewerSetting, saveViewerSetting } from "@/features/lenses/services/viewer-settings.actions";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { runLensAll } from "@/lib/query/run";
-import { editorFor } from "./editable";
 import { formatLensValue } from "@/features/lenses/format";
 import { SaveLensButton, type OpenLens } from "@/features/lenses/components/save-lens-button";
 import { WhereChips } from "@/features/lenses/components/lens-chips";
@@ -391,7 +390,7 @@ export function TableLens({
     const item = display[pos.row - 1];
     const p = property(pos.col);
     if (!item || item.kind !== "record" || !p) return;
-    if (!editorFor(type.key, p.key)) {
+    if (!d1.editorFor(item.row, p.key)) {
       setAnnouncement(t("table.readOnly"));
       return;
     }
@@ -417,6 +416,7 @@ export function TableLens({
     apply(next);
     const result = await updateLensCell({ type: type.key, id: row.id, property: key, value: raw });
     if (result.ok) {
+      d1.onSaved?.(result);
       setAnnouncement(t("table.saved"));
     } else {
       apply(before);
@@ -438,6 +438,8 @@ export function TableLens({
     commitCell: commit,
     announce: setAnnouncement,
     t,
+    objectsEnabled: bulkEditEnabled,
+    reload: () => void load(state, null),
   });
 
   const onGridKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -681,6 +683,7 @@ export function TableLens({
         onUndone={undoneBulk}
       />
 
+      {d1.status}
       <p id={`${gridId}-hint`} className="sr-only">
         {t("table.editHint")} {t("bulk.hint")}
       </p>
@@ -892,7 +895,7 @@ export function TableLens({
                     {shown.map((c, col) => {
                       const p = properties.get(c.key)!;
                       const value = valueOf(row, c.key);
-                      const editor = editorFor(type.key, c.key);
+                      const editor = d1.editorFor(row, c.key);
                       const isEditing = editing?.row === gridRow && editing.col === col;
                       const text = cellText(p, value);
                       return (
