@@ -103,6 +103,16 @@ export const meetingsV2FrCA: typeof meetingsV2En = {
       question: "Reste dans la réunion",
     },
   },
+  index: {
+    title: "Notes de réunion",
+    description: "Chaque réunion comme objet : son ordre du jour, ses notes, ce qui a été capté et le bilan de fin de réunion.",
+    classicList: "Liste classique des réunions",
+    upcoming: "À venir",
+    upcomingEmpty: "Aucune réunion n’est prévue.",
+    recent: "Récentes",
+    recentEmpty: "Aucune réunion n’a encore eu lieu.",
+    review: "Réviser {count} élément(s)",
+  },
   errors: {
     invalidInput: "Vérifiez le formulaire et réessayez.",
     notFound: "Cette réunion n’est pas disponible.",

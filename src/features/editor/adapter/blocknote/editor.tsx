@@ -12,7 +12,14 @@ import {
 } from "@blocknote/core";
 import { blocksToYDoc, withCollaboration } from "@blocknote/core/yjs";
 import { en, fr } from "@blocknote/core/locales";
-import { getDefaultReactSlashMenuItems, SuggestionMenuController, useCreateBlockNote } from "@blocknote/react";
+import {
+  FormattingToolbarController,
+  getDefaultReactSlashMenuItems,
+  SuggestionMenuController,
+  useCreateBlockNote,
+  type FloatingUIOptions,
+} from "@blocknote/react";
+import { flip, offset, shift } from "@floating-ui/react";
 import { BlockNoteView } from "@blocknote/ariakit";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -22,10 +29,27 @@ import type { EditorT } from "@/features/editor/i18n";
 import { CONTENT_VERSION, type EditorBlock, type EditorContent } from "@/features/editor/adapter/content";
 import type { BlockEditorProps, EditorSemanticHandlers } from "@/features/editor/adapter/types";
 import { createWorkspaceBlocks } from "./blocks";
+import { createLayoutBlocks } from "./layout-blocks";
 import { createSemanticBlocks, HandlersBox } from "./semantic-blocks";
 import { SuggestionLayer, TurnIntoTasksDialog, turnIntoPage } from "./progressive";
 import { createSyncedBlockSpec, turnIntoSyncedBlock } from "./synced-block";
 import { createButtonBlockSpec } from "./button-block";
+import { BlockHandle } from "./block-handle";
+import {
+  COLORS,
+  MultiSelect,
+  announce,
+  colorBlocks,
+  copyBlockLink,
+  currentSelection,
+  deleteBlocks,
+  duplicateBlocks,
+  hasColors,
+  moveAndAnnounce,
+  turnBlocksInto,
+  type ColorKey,
+} from "./multi-select";
+import { Label, Select } from "@/components/ui/input";
 import type { Locale } from "@/lib/i18n/config";
 import { rankSlashItems, slashItems, textTypes, turnIntoTargets } from "@/features/editor/registry";
 import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
@@ -35,7 +59,9 @@ import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
  * conditions (docs/design/spikes/W0-5-editor-accessibility.md):
  *   fixes 1–6    name and key hint, focus ring, contrast, target size,
  *                Alt+F10 into the toolbar, Escape then Tab to leave
- *   F2           Ctrl+/ opens a block menu (move, duplicate, delete, turn into)
+ *   F2           Ctrl+/ opens a block menu (move, duplicate, delete, turn into,
+ *                colour, copy link); the block handle and the selection bar
+ *                (U4, block-handle.tsx and multi-select.tsx) share its actions
  *   F3, F6       missing names added and the invalid aria-expanded removed
  *   F5           an empty paragraph is kept after a final table
  *   F7           the emoji picker is left out
@@ -45,12 +71,16 @@ import { base64ToBytes, bytesToBase64 } from "@/features/editor/adapter/state";
 export function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
   const { callout, bookmark, embed } = createWorkspaceBlocks(t);
   const s = createSemanticBlocks(t, locale, semantic);
+  const layout = createLayoutBlocks(t);
   return BlockNoteSchema.create({
     blockSpecs: {
       ...defaultBlockSpecs,
       callout: callout(),
       bookmark: bookmark(),
       embed: embed(),
+      columnList: layout.columnList(),
+      column: layout.column(),
+      tableOfContents: layout.tableOfContents(),
       task: s.task(),
       decision: s.decision(),
       person: s.person(),
@@ -252,6 +282,23 @@ function focusOutside(root: HTMLElement, direction: "before" | "after") {
   target?.focus();
 }
 
+/**
+ * Where the formatting toolbar opens while the selection bar is showing:
+ * below the selection and clear of the bar, rather than above the selection,
+ * where it would cover the controls above the editor (such as the task
+ * suggestions switch) when the first blocks are selected. It also closes at
+ * once rather than fading: Alt+F10 moves focus into the bar, which closes the
+ * toolbar, and a half-faded toolbar is unreadable while it lingers.
+ */
+const BELOW_SELECTION_BAR: FloatingUIOptions = {
+  useFloatingOptions: {
+    placement: "bottom-start",
+    // The bar sits 6 px below the selection and is about 36 px tall.
+    middleware: [offset(({ placement }) => (placement.startsWith("bottom") ? 52 : 10)), shift(), flip()],
+  },
+  useTransitionStylesProps: { duration: 0 },
+};
+
 /** Blocks the block menu offers "turn into" for, from the block registry (U2). */
 const TEXT_TYPES = textTypes();
 
@@ -262,6 +309,8 @@ function BlockMenu({
   selection,
   semantic,
   onTurnIntoTasks,
+  objectPath,
+  onCommentBlock,
 }: {
   editor: Editor;
   t: EditorT;
@@ -270,39 +319,47 @@ function BlockMenu({
   selection: EditorBlock[];
   semantic?: EditorSemanticHandlers;
   onTurnIntoTasks: () => void;
+  objectPath?: string;
+  onCommentBlock?: (blockId: string) => void;
 }) {
   const current = editor.getTextCursorPosition().block;
-  const done = (announce?: string) => {
+  // The same helpers as the block handle and the selection bar (U4), on the
+  // whole selection when there is one.
+  const ids = selection.length > 1 ? selection.map((block) => block.id!) : [current.id];
+  const done = (text?: string) => {
     onClose();
-    if (announce) {
-      const live = document.getElementById("qbbe-editor-live");
-      if (live) live.textContent = announce;
-    }
+    if (text) announce(text);
     requestAnimationFrame(() => editor.focus());
   };
   const canTurn = TEXT_TYPES.has(current.type);
+  const canColor = hasColors(editor, current.type);
+  const textColorId = React.useId();
+  const backgroundColorId = React.useId();
+  const colorOf = (prop: "textColor" | "backgroundColor") => {
+    const value = (current.props as Record<string, unknown>)[prop];
+    return typeof value === "string" ? value : "default";
+  };
   const turnInto = turnIntoTargets(current.type);
   return (
     <Dialog open onClose={() => done()} title={t("blockMenu.label")}>
       <div className="flex flex-col gap-1" role="group" aria-label={t("blockMenu.label")}>
-        <Button variant="ghost" className="justify-start" onClick={() => { editor.moveBlocksUp(); done(t("blockMenu.moved")); }}>
+        <Button variant="ghost" className="justify-start" onClick={() => { onClose(); moveAndAnnounce(editor, ids, "up", t); requestAnimationFrame(() => editor.focus()); }}>
           {t("blockMenu.moveUp")}
         </Button>
-        <Button variant="ghost" className="justify-start" onClick={() => { editor.moveBlocksDown(); done(t("blockMenu.moved")); }}>
+        <Button variant="ghost" className="justify-start" onClick={() => { onClose(); moveAndAnnounce(editor, ids, "down", t); requestAnimationFrame(() => editor.focus()); }}>
           {t("blockMenu.moveDown")}
         </Button>
-        <Button
-          variant="ghost"
-          className="justify-start"
-          onClick={() => {
-            const { id: _id, ...copy } = current as unknown as EditorBlock & { id: string };
-            void _id;
-            editor.insertBlocks([copy as PartialBlock<Schema["blockSchema"]>], current, "after");
-            done();
-          }}
-        >
+        <Button variant="ghost" className="justify-start" onClick={() => { duplicateBlocks(editor, ids); done(); }}>
           {t("blockMenu.duplicate")}
         </Button>
+        <Button variant="ghost" className="justify-start" onClick={() => { void copyBlockLink(objectPath, current.id, t); onClose(); requestAnimationFrame(() => editor.focus()); }}>
+          {t("handle.copyLink")}
+        </Button>
+        {onCommentBlock ? (
+          <Button variant="ghost" className="justify-start" onClick={() => { onClose(); onCommentBlock(current.id); }}>
+            {t("handle.comment")}
+          </Button>
+        ) : null}
         {semantic && canTurn ? (
           <div className="my-1 border-t border-line pt-1">
             <Button variant="ghost" className="w-full justify-start" onClick={() => { onClose(); onTurnIntoTasks(); }}>
@@ -334,25 +391,37 @@ function BlockMenu({
             ) : null}
           </div>
         ) : null}
+        {canColor ? (
+          <div className="my-1 grid grid-cols-2 gap-3 border-t border-line pt-2">
+            {(["textColor", "backgroundColor"] as const).map((prop) => (
+              <div key={prop}>
+                <Label htmlFor={prop === "textColor" ? textColorId : backgroundColorId}>{t(prop === "textColor" ? "handle.textColor" : "handle.backgroundColor")}</Label>
+                <Select
+                  id={prop === "textColor" ? textColorId : backgroundColorId}
+                  defaultValue={colorOf(prop)}
+                  onChange={(event) => colorBlocks(editor, ids, { [prop]: event.target.value as ColorKey })}
+                >
+                  {COLORS.map((color) => (
+                    <option key={color} value={color}>
+                      {t(`colors.${color}`)}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ))}
+          </div>
+        ) : null}
         {canTurn ? (
           <div className="my-1 border-t border-line pt-1">
             {turnInto.map(({ key, labelKey, block }) => (
-              <Button
-                key={key}
-                variant="ghost"
-                className="w-full justify-start"
-                onClick={() => {
-                  editor.updateBlock(current, block as PartialBlock<Schema["blockSchema"]>);
-                  done();
-                }}
-              >
+              <Button key={key} variant="ghost" className="w-full justify-start" onClick={() => { turnBlocksInto(editor, ids, block); done(); }}>
                 {t("blockMenu.turnInto", { type: t(labelKey) })}
               </Button>
             ))}
           </div>
         ) : null}
         <div className="border-t border-line pt-1">
-          <Button variant="ghost" className="w-full justify-start text-danger-fg" onClick={() => { editor.removeBlocks([current]); done(t("blockMenu.deleted")); }}>
+          <Button variant="ghost" className="w-full justify-start text-danger-fg" onClick={() => { deleteBlocks(editor, ids); done(t("blockMenu.deleted")); }}>
             {t("blockMenu.delete")}
           </Button>
         </div>
@@ -375,6 +444,8 @@ export default function BlockNoteEditorImpl({
   taskSuggestions,
   hintId,
   label,
+  objectPath,
+  onCommentBlock,
 }: BlockEditorProps) {
   const locale = useLocale();
   const t = useEditorT();
@@ -384,6 +455,7 @@ export default function BlockNoteEditorImpl({
   const [selection, setSelection] = React.useState<EditorBlock[]>([]);
   const [turningIntoTasks, setTurningIntoTasks] = React.useState(false);
   const [version, setVersion] = React.useState(0);
+  const [barShowing, setBarShowing] = React.useState(false);
   // Blocks read the latest handlers through a ref, so new handler objects do
   // not rebuild the schema (which would remount the editor).
   const [semanticBox] = React.useState(() => new HandlersBox(semantic ?? null));
@@ -417,7 +489,8 @@ export default function BlockNoteEditorImpl({
   useAccessibleNames(editor, t);
   const openBlockMenu = React.useCallback(() => {
     if (!editor.isEditable) return;
-    const picked = editor.getSelection()?.blocks ?? [editor.getTextCursorPosition().block];
+    const ids = currentSelection(editor);
+    const picked = ids.length > 0 ? ids.map((id) => editor.getBlock(id)!).filter(Boolean) : (editor.getSelection()?.blocks ?? [editor.getTextCursorPosition().block]);
     setSelection(JSON.parse(JSON.stringify(picked)) as EditorBlock[]);
     setMenuOpen(true);
   }, [editor]);
@@ -457,11 +530,16 @@ export default function BlockNoteEditorImpl({
         theme={theme}
         editable={editable}
         slashMenu={false}
+        sideMenu={false}
+        formattingToolbar={false}
         emojiPicker={false}
         onChange={handleChange}
       >
         <SuggestionMenuController triggerCharacter="/" getItems={getItems} />
+        <FormattingToolbarController floatingUIOptions={barShowing ? BELOW_SELECTION_BAR : undefined} />
+        {editable ? <BlockHandle t={t} objectPath={objectPath} onCommentBlock={onCommentBlock} /> : null}
       </BlockNoteView>
+      <MultiSelect editor={editor} containerRef={containerRef} t={t} enabled={editable} onBarChange={setBarShowing} />
       <p id="qbbe-editor-live" className="sr-only" aria-live="polite" />
       {menuOpen ? (
         <BlockMenu
@@ -471,6 +549,8 @@ export default function BlockNoteEditorImpl({
           selection={selection}
           semantic={semantic}
           onTurnIntoTasks={() => setTurningIntoTasks(true)}
+          objectPath={objectPath}
+          onCommentBlock={onCommentBlock}
         />
       ) : null}
       {turningIntoTasks && semantic ? (

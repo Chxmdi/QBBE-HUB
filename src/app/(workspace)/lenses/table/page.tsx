@@ -11,6 +11,7 @@ import { getLensT } from "@/features/lenses/i18n/server";
 import { TableLens } from "@/features/lenses/table/table-lens";
 import { applyViewerSetting, defaultColumns, specFor, stateFromLens, type TableState } from "@/features/lenses/table/model";
 import { getLens } from "@/features/lenses/services/lens-store.queries";
+import { ExportCsvButton } from "@/features/lenses/components/export-csv-button";
 import { loadViewerSetting } from "@/features/lenses/services/viewer-settings.actions";
 import { isEnabled } from "@/lib/feature-flags";
 
@@ -75,6 +76,13 @@ export default async function TableLensPage({
         eyebrow={t(`types.${typeKey}` as "types.task")}
         title={lens?.name ?? t("table.title")}
         description={t("table.description")}
+        actions={
+          type && initialState ? (
+            // The lens as it opened (its filters and shown columns), re-run
+            // under the viewer's session by the export route.
+            <ExportCsvButton spec={specFor(typeKey, initialState)} name={lens?.name ?? null} />
+          ) : null
+        }
       />
       {type && initialState ? (
         <TableLens

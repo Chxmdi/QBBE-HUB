@@ -14,7 +14,9 @@ export type BlockSchemaSource =
   /** `createSyncedBlockSpec` (content kept once, shown on several pages; needs the page's synced handlers). */
   | "synced"
   /** `createButtonBlockSpec` (runs a registered action; needs the page's action handlers). */
-  | "action";
+  | "action"
+  /** `createLayoutBlocks` (columns and the table of contents). */
+  | "layout";
 
 /** The least role allowed to insert the block. */
 export type BlockPermission = "any" | "editor" | "admin";
@@ -47,5 +49,5 @@ export interface BlockDefinition {
 }
 
 export const BLOCK_CATEGORIES: readonly BlockCategory[] = ["text", "list", "media", "semantic", "layout", "data"];
-export const BLOCK_SCHEMA_SOURCES: readonly BlockSchemaSource[] = ["default", "workspace", "semantic", "synced", "action"];
+export const BLOCK_SCHEMA_SOURCES: readonly BlockSchemaSource[] = ["default", "workspace", "semantic", "synced", "action", "layout"];
 export const BLOCK_PERMISSIONS: readonly BlockPermission[] = ["any", "editor", "admin"];

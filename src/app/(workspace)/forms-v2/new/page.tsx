@@ -17,7 +17,8 @@ export default async function NewFormV2Page() {
   await requireFormsV2();
   const session = await requireSession();
   if (!session.isAdmin) redirect("/forms-v2");
-  const text = formsV2Text(await getLocale());
+  const locale = await getLocale();
+  const text = formsV2Text(locale);
   const supabase = await createSupabasePageClient();
   const { data } = await supabase
     .from("project")
@@ -28,7 +29,7 @@ export default async function NewFormV2Page() {
   return (
     <div className="space-y-6">
       <PageHeader eyebrow={text.title} title={text.builderTitle} description={text.builderDescription} />
-      <FormV2Builder text={text} projects={(data ?? []) as { id: string; name: string }[]} />
+      <FormV2Builder text={text} locale={locale} projects={(data ?? []) as { id: string; name: string }[]} />
     </div>
   );
 }

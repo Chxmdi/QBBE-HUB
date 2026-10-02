@@ -3,6 +3,7 @@ import { filterSuggestionItems, insertOrUpdateBlockForSlashMenu, type BlockNoteE
 import type { DefaultReactSuggestionItem } from "@blocknote/react";
 import type { EditorKey, EditorT } from "@/features/editor/i18n";
 import { rankByTitle } from "@/features/editor/adapter/slash";
+import { insertColumn, insertColumnList, insertTableOfContents } from "@/features/editor/adapter/blocknote/layout-blocks";
 import { BLOCK_REGISTRY, blockDefinition } from "./registry";
 import type { BlockDefinition } from "./types";
 
@@ -66,14 +67,14 @@ type SlashEditor = BlockNoteEditor<any, any, any>;
 
 type SlashKeys = { title: EditorKey; subtext: EditorKey; aliases: EditorKey };
 
-/** Where a workspace or semantic block's slash item strings live; the registry test checks they resolve. */
+/** Where a workspace, layout or semantic block's slash item strings live; the registry test checks they resolve. */
 const dictionaryKeys = (entry: BlockDefinition): SlashKeys => {
   if (entry.schemaSource === "synced" || entry.schemaSource === "action") {
     const type = entry.type as "syncedBlock" | "button";
     return { title: `${type}.slash.title`, subtext: `${type}.slash.subtext`, aliases: `${type}.slash.aliases` };
   }
-  if (entry.schemaSource === "workspace") {
-    const type = entry.type as "callout" | "bookmark" | "embed";
+  if (entry.schemaSource === "workspace" || entry.schemaSource === "layout") {
+    const type = entry.type as "callout" | "bookmark" | "embed" | "columnList" | "column" | "tableOfContents";
     return { title: `slash.${type}.title`, subtext: `slash.${type}.subtext`, aliases: `slash.${type}.aliases` };
   }
   const type = entry.type as "task" | "decision" | "person" | "status" | "query" | "libraryFile" | "pageLink";
@@ -92,13 +93,25 @@ export interface SlashItemOptions {
 }
 
 /**
+ * Layout blocks keep their structure on insert (a column list arrives with two
+ * columns, a column joins the list around the cursor), so they insert through
+ * their own helpers rather than BlockNote's plain slash insert.
+ */
+const LAYOUT_INSERTS: Readonly<Record<string, (editor: SlashEditor) => void>> = {
+  columnList: insertColumnList,
+  column: insertColumn,
+  tableOfContents: insertTableOfContents,
+};
+
+/**
  * The slash menu's items: BlockNote's default items first, then one item per
- * workspace block and, when the page can show them, per semantic, synced and
- * button block, all
- * under the "Workspace" group with the registry's icon.
+ * workspace block, per layout block and, when the page can show them, per
+ * semantic, synced and button block, in registry order with the registry's
+ * icon. Layout blocks sit under the "Layout" group, the rest under "Workspace".
  */
 export function slashItems(t: EditorT, editor: SlashEditor, options: SlashItemOptions): DefaultReactSuggestionItem[] {
   const group = t("slash.group");
+  const layoutGroup = t("slash.layoutGroup");
   const own = BLOCK_REGISTRY.flatMap((entry): DefaultReactSuggestionItem[] => {
     if (entry.schemaSource === "default") return [];
     if (entry.schemaSource === "semantic" && !options.semantic) return [];
@@ -110,10 +123,12 @@ export function slashItems(t: EditorT, editor: SlashEditor, options: SlashItemOp
         title: t(keys.title),
         subtext: t(keys.subtext),
         aliases: t(keys.aliases).split(","),
-        group,
+        group: entry.schemaSource === "layout" ? layoutGroup : group,
         icon: React.createElement(entry.icon, { size: 18, "aria-hidden": true }),
         onItemClick: () => {
-          insertOrUpdateBlockForSlashMenu(editor, { type: entry.type } as PartialBlock);
+          const insert = LAYOUT_INSERTS[entry.type];
+          if (insert) insert(editor);
+          else insertOrUpdateBlockForSlashMenu(editor, { type: entry.type } as PartialBlock);
         },
       },
     ];

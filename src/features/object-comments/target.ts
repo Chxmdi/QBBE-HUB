@@ -5,8 +5,10 @@ import type { ObjectRef, ObjectTypeKey } from "@/lib/objects/contracts";
  *
  * Native records that already had comments keep their own parent type, so a
  * task has one thread whether it is opened from My work or as an object.
- * Everything else (pages, custom types, native types without comments of
- * their own) uses the `object` parent type, whose access is app.can.
+ * Pages have their own parent type too (U9), whose access is the page's rule
+ * (app.can_page). Everything else (custom types, native types without
+ * comments of their own) uses the `object` parent type, whose access is
+ * app.can.
  */
 const NATIVE_COMMENT_PARENTS: Partial<Record<ObjectTypeKey, string>> = {
   task: "task",
@@ -15,6 +17,7 @@ const NATIVE_COMMENT_PARENTS: Partial<Record<ObjectTypeKey, string>> = {
   meeting: "meeting",
   risk: "risk",
   contact: "contact",
+  page: "page",
 };
 
 export const commentParentTypes = [
@@ -31,6 +34,7 @@ export const commentParentTypes = [
   "contact",
   "opportunity",
   "object",
+  "page",
 ] as const;
 export type CommentParentType = (typeof commentParentTypes)[number];
 
@@ -47,11 +51,16 @@ export function commentTargetFor(object: ObjectRef, blockId: string | null = nul
 }
 
 /**
- * The page that shows an object's comments, for notification links. Until
- * integration gives every object its own page, this is the collaboration
- * screen behind the Workspace OS editor switch.
+ * The page that shows an object's comments, for notification links. A page's
+ * comments live under the page itself (U9), on the block's own thread when
+ * the comment is on a block. Other objects use the collaboration screen
+ * behind the Workspace OS editor switch until they get their own page.
  */
-export function objectCommentsPath(object: ObjectRef, commentId?: string): string {
+export function objectCommentsPath(object: ObjectRef, commentId?: string, blockId?: string | null): string {
+  if (object.type === "page") {
+    const query = blockId ? `?block=${encodeURIComponent(blockId)}` : "";
+    return `/pages/${object.id}${query}#${commentId ? `comment-${commentId}` : "page-collab"}`;
+  }
   const base = `/collab/objects/${object.id}?type=${encodeURIComponent(object.type)}`;
   return commentId ? `${base}#comment-${commentId}` : base;
 }

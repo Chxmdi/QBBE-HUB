@@ -50,10 +50,10 @@ describe("block registry", () => {
                 en: editorEn[type as "syncedBlock" | "button"].slash.title,
                 fr: editorFrCA[type as "syncedBlock" | "button"].slash.title,
               }
-          : schemaSource === "workspace"
+          : schemaSource === "workspace" || schemaSource === "layout"
             ? {
-                en: editorEn.slash[type as "callout" | "bookmark" | "embed"].title,
-                fr: editorFrCA.slash[type as "callout" | "bookmark" | "embed"].title,
+                en: editorEn.slash[type as "callout" | "bookmark" | "embed" | "columnList" | "column" | "tableOfContents"].title,
+                fr: editorFrCA.slash[type as "callout" | "bookmark" | "embed" | "columnList" | "column" | "tableOfContents"].title,
               }
             : {
                 en: editorEn.semantic.items[type as keyof typeof editorEn.semantic.items].title,
@@ -66,6 +66,9 @@ describe("block registry", () => {
   it("looks a block up by type", () => {
     expect(blockDefinition("callout")?.schemaSource).toBe("workspace");
     expect(blockDefinition("task")?.category).toBe("semantic");
+    expect(blockDefinition("columnList")?.schemaSource).toBe("layout");
+    expect(blockDefinition("column")?.childSupport).toBe(true);
+    expect(blockDefinition("tableOfContents")?.category).toBe("layout");
     expect(blockDefinition("sticker")).toBeUndefined();
   });
 
@@ -166,6 +169,9 @@ describe("derived menus", () => {
       "Callout",
       "Bookmark",
       "Embed",
+      "Columns",
+      "Column",
+      "Table of contents",
       "Task",
       "Decision",
       "Person",
@@ -174,7 +180,11 @@ describe("derived menus", () => {
       "Library file",
       "Link to page",
     ]);
-    expect(withSemantic.slice(2).every((item) => item.group === "Workspace" && item.icon && item.aliases?.length)).toBe(true);
+    const layoutTitles = new Set(["Columns", "Column", "Table of contents"]);
+    for (const item of withSemantic.slice(2)) {
+      expect(item.group, item.title).toBe(layoutTitles.has(item.title) ? "Layout" : "Workspace");
+      expect(item.icon && item.aliases?.length, item.title).toBeTruthy();
+    }
     // Each string resolved in the dictionary rather than falling back to its key.
     for (const item of withSemantic.slice(2)) {
       expect(item.title, "title").not.toMatch(/^(slash|semantic)\./);
@@ -183,7 +193,7 @@ describe("derived menus", () => {
     }
 
     const withoutSemantic = slashItems(t, editor, { semantic: false });
-    expect(withoutSemantic.map((item) => item.title)).toEqual(["Callout", "Bookmark", "Embed"]);
+    expect(withoutSemantic.map((item) => item.title)).toEqual(["Callout", "Bookmark", "Embed", "Columns", "Column", "Table of contents"]);
   });
 
   it("offers the synced block and the button only when the page has their handlers", () => {
@@ -205,6 +215,8 @@ describe("derived menus", () => {
     const titles = slashItems(createEditorT("fr-CA"), {} as never, { semantic: true }).map((item) => item.title);
     expect(titles).toContain("Encadré");
     expect(titles).toContain("Fichier de la bibliothèque");
+    expect(titles).toContain("Colonnes");
+    expect(slashItems(createEditorT("fr-CA"), {} as never, { semantic: false }).find((item) => item.title === "Colonnes")?.group).toBe("Mise en page");
     expect(new Set(titles).size).toBe(titles.length);
   });
 

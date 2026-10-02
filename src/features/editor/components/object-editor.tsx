@@ -382,6 +382,7 @@ export function ObjectEditor({
         taskSuggestions={taskSuggestions}
         hintId={editable ? hintId : undefined}
         label={label}
+        objectPath={objectType === "page" ? `/pages/${objectId}` : undefined}
       />
       {conflict ? (
         <ConflictDialog

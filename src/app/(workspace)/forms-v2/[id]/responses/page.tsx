@@ -21,8 +21,18 @@ interface ResponseRow {
   answers: Record<string, unknown>;
   object_type: string;
   object_id: string;
+  created_object_type: string | null;
+  created_object_id: string | null;
   submitter: { full_name: string | null } | null;
 }
+
+interface FileRow {
+  id: string;
+  title: string;
+  scan_status: "pending" | "clean" | "quarantined" | "rejected";
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function FormV2ResponsesPage({ params }: { params: Promise<{ id: string }> }) {
   await requireFormsV2();
@@ -37,7 +47,9 @@ export default async function FormV2ResponsesPage({ params }: { params: Promise<
     supabase.from("form_v2").select("title_en, title_fr, properties").eq("id", id).maybeSingle(),
     supabase
       .from("form_v2_response")
-      .select("id, submitted_at, answers, object_type, object_id, submitter:submitted_by(full_name)")
+      .select(
+        "id, submitted_at, answers, object_type, object_id, created_object_type, created_object_id, submitter:submitted_by(full_name)",
+      )
       .eq("form_id", id)
       .order("submitted_at", { ascending: false })
       .limit(500),
@@ -45,6 +57,31 @@ export default async function FormV2ResponsesPage({ params }: { params: Promise<
   if (!form) notFound();
   const properties = form.properties as FormV2Property[];
   const rows = (responses ?? []) as unknown as ResponseRow[];
+
+  // File answers are document ids; show each by its title and scan state.
+  const fileKeys = properties.filter((p) => p.kind === "file").map((p) => p.key);
+  const fileIds = [...new Set(rows.flatMap((r) => fileKeys.map((k) => r.answers[k])).filter(
+    (v): v is string => typeof v === "string" && UUID.test(v),
+  ))];
+  const files = new Map<string, FileRow>();
+  if (fileIds.length > 0) {
+    const { data } = await supabase.from("document").select("id, title, scan_status").in("id", fileIds);
+    for (const f of (data ?? []) as FileRow[]) files.set(f.id, f);
+  }
+  const fileCell = (value: unknown) => {
+    const f = typeof value === "string" ? files.get(value) : undefined;
+    return f ? `${f.title} · ${text.scan[f.scan_status]}` : "";
+  };
+  const createdLink = (r: ResponseRow) => {
+    const type = r.created_object_type ?? (r.object_type === "task" ? "task" : null);
+    const id = r.created_object_id ?? (r.object_type === "task" ? r.object_id : null);
+    if (!type || !id) return r.object_type;
+    return (
+      <Link href={type === "task" ? `/my-work?task=${id}` : `/objects/${id}`} className="text-brand-fg underline">
+        {type === "task" ? text.typeTask : `${text.typeRecord}: ${type}`}
+      </Link>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -67,17 +104,11 @@ export default async function FormV2ResponsesPage({ params }: { params: Promise<
                 <TableCell>{format.inZone(r.submitted_at, session.timeZone, { dateStyle: "medium", timeStyle: "short" })}</TableCell>
                 <TableCell>{r.submitter?.full_name ?? ""}</TableCell>
                 {properties.map((p) => (
-                  <TableCell key={p.key}>{answerText(p, r.answers[p.key], locale)}</TableCell>
+                  <TableCell key={p.key}>
+                    {p.kind === "file" ? fileCell(r.answers[p.key]) : answerText(p, r.answers[p.key], locale)}
+                  </TableCell>
                 ))}
-                <TableCell>
-                  {r.object_type === "task" ? (
-                    <Link href={`/my-work?task=${r.object_id}`} className="text-brand-fg underline">
-                      {text.typeTask}
-                    </Link>
-                  ) : (
-                    r.object_type
-                  )}
-                </TableCell>
+                <TableCell>{createdLink(r)}</TableCell>
               </TableRow>
             ))}
           </tbody>

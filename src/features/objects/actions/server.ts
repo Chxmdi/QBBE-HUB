@@ -1,8 +1,13 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActionContext, ActionRegistry } from "@/lib/objects/contracts";
 import { createCan } from "@/lib/objects/can";
+import { getSessionContext } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createUniversalTask, type TaskActor } from "@/features/universal-tasks/create-task";
 import { taskCreateChange } from "@/features/tasks/services/task.change-sets";
+import { taskCreateAction } from "@/features/universal-tasks/task-create-action";
+import { createImportAction } from "./import-rows";
+import { projectCreateAction } from "./project-create";
 import { createActionRegistry } from "./registry";
 import { createSetPropertyAction } from "./set-property";
 import { createTaskCreateAction } from "./task-create";
@@ -19,6 +24,10 @@ import { createSupabaseObjectWriter } from "./supabase-writer";
  * registry records the change set. `onTaskCreated` hears of the new task as
  * soon as it exists, so a caller can still report it if recording the change
  * set then fails (the task stands; only its undo is missing).
+ *
+ * object.import (CSV import, U15) creates rows through the shared task
+ * creation and project.create, and records them as one change set under its
+ * own key, so undo finds it here.
  */
 export async function createRequestActionRegistry(
   userId: string,
@@ -55,6 +64,20 @@ export async function createRequestActionRegistry(
         : undefined,
     ),
   );
+  const projectCreate = projectCreateAction();
+  registry.register(projectCreate);
+  // The same request's session (cached): the task's organization and the
+  // name its assignee is told about.
+  const session = await getSessionContext();
+  const taskCreate =
+    session && session.userId === userId
+      ? taskCreateAction(client as unknown as SupabaseClient, {
+          userId,
+          organizationId: session.organizationId,
+          displayName: session.profile.full_name,
+        })
+      : undefined;
+  registry.register(createImportAction({ task: taskCreate, project: projectCreate }));
   return { registry, context: { actor: { kind: "person", id: userId }, can: createCan(client) } };
 }
 

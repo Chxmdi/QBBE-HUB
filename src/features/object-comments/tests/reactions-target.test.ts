@@ -7,6 +7,11 @@ const MIGRATION = readFileSync(
   "supabase/migrations/20261103110100_object_comments.sql",
   "utf8",
 );
+// U9 redefines the parent-type check to add `page`; the latest definition wins.
+const PARENT_TYPES_MIGRATION = readFileSync(
+  "supabase/migrations/20261108040000_page_comments_versions.sql",
+  "utf8",
+);
 
 describe("reactions", () => {
   it("match the database's fixed set exactly", () => {
@@ -34,10 +39,10 @@ describe("reactions", () => {
 });
 
 describe("where an object's comments live", () => {
-  it("keeps native records on their own thread and everything else on `object`", () => {
+  it("keeps native records and pages on their own thread and everything else on `object`", () => {
     expect(commentTargetFor({ id: "t", type: "task" })).toEqual({ parentType: "task", parentId: "t", blockId: null });
     expect(commentTargetFor({ id: "p", type: "project" }, "b").parentType).toBe("project");
-    expect(commentTargetFor({ id: "x", type: "page" }).parentType).toBe("object");
+    expect(commentTargetFor({ id: "x", type: "page" }, "b")).toEqual({ parentType: "page", parentId: "x", blockId: "b" });
     expect(commentTargetFor({ id: "x", type: "decision" }).parentType).toBe("object");
     expect(commentTargetFor({ id: "x", type: "grant_application" }, "b")).toEqual({
       parentType: "object",
@@ -47,13 +52,20 @@ describe("where an object's comments live", () => {
   });
 
   it("lists the same parent types as the database check", () => {
-    const check = /constraint record_comment_parent_type_check\s+check \(parent_type in \(([^)]*)\)\)/.exec(MIGRATION)?.[1] ?? "";
+    const check =
+      /constraint record_comment_parent_type_check\s+check \(parent_type in \(([^)]*)\)\)/.exec(PARENT_TYPES_MIGRATION)?.[1] ?? "";
     const inDb = [...check.matchAll(/'([a-z_]+)'/g)].map((match) => match[1]);
     expect(inDb).toEqual([...commentParentTypes]);
   });
 
   it("links to the collaboration screen, anchored on the comment", () => {
     expect(objectCommentsPath({ id: "abc", type: "task" }, "c1")).toBe("/collab/objects/abc?type=task#comment-c1");
-    expect(objectCommentsPath({ id: "abc", type: "page" })).toBe("/collab/objects/abc?type=page");
+    expect(objectCommentsPath({ id: "abc", type: "decision" })).toBe("/collab/objects/abc?type=decision");
+  });
+
+  it("links a page's comments to the page itself, on the block's thread", () => {
+    expect(objectCommentsPath({ id: "abc", type: "page" })).toBe("/pages/abc#page-collab");
+    expect(objectCommentsPath({ id: "abc", type: "page" }, "c1")).toBe("/pages/abc#comment-c1");
+    expect(objectCommentsPath({ id: "abc", type: "page" }, "c1", "blk-1")).toBe("/pages/abc?block=blk-1#comment-c1");
   });
 });

@@ -52,6 +52,12 @@ export const RATE_LIMITS = {
   // Tighter than the rest: each one copies sensitive data out of the reach of
   // row-level security, and nobody legitimately needs a dozen an hour.
   "export:request": { limit: 10, windowSeconds: 3600 },
+  // A lens export is a CSV of what the viewer can already see, so it may be
+  // repeated more freely than a full data export; still few enough per hour
+  // to stop a script draining the workspace row by row.
+  "lens:export": { limit: 30, windowSeconds: 3600 },
+  // One import can create up to 2000 records; a handful an hour is plenty.
+  "import:run": { limit: 20, windowSeconds: 3600 },
   "job:run": { limit: 240, windowSeconds: 60 },
   "approval:submit": { limit: 60, windowSeconds: 3600 },
   "approval:delegate": { limit: 30, windowSeconds: 3600 },

@@ -4,6 +4,7 @@ import {
   Bookmark,
   ChevronRight,
   Code,
+  Columns2,
   File,
   FileText,
   Gavel,
@@ -19,8 +20,10 @@ import {
   MousePointerClick,
   PanelTop,
   Repeat2,
+  RectangleVertical,
   SquareCheck,
   Table,
+  TableOfContents,
   TextQuote,
   Type,
   UserRound,
@@ -54,7 +57,8 @@ const TEXT = { turnInto: TURN_INTO_TYPES, childSupport: true } as const;
 
 /** Dictionary keys a block's name may come from, by schema source. */
 type DefaultType = keyof typeof editorEn.types & keyof typeof editorFrCA.types;
-type WorkspaceType = Exclude<keyof typeof editorEn.slash, "group"> & keyof typeof editorFrCA.slash;
+type LayoutType = "columnList" | "column" | "tableOfContents";
+type WorkspaceType = Exclude<keyof typeof editorEn.slash, "group" | "layoutGroup" | LayoutType> & keyof typeof editorFrCA.slash;
 type SemanticType = keyof typeof editorEn.semantic.items & keyof typeof editorFrCA.semantic.items;
 
 type RequiredKeys = "icon" | "category";
@@ -83,6 +87,10 @@ const defaultBlock = (type: DefaultType, rest: Rest) =>
 /** A workspace block (blocks.tsx), named by its slash item. */
 const workspaceBlock = (type: WorkspaceType, rest: Rest) =>
   define(type, { en: editorEn.slash[type].title, fr: editorFrCA.slash[type].title }, "workspace", rest);
+
+/** A layout block (layout-blocks.tsx), named by its slash item. */
+const layoutBlock = (type: LayoutType, rest: Rest) =>
+  define(type, { en: editorEn.slash[type].title, fr: editorFrCA.slash[type].title }, "layout", rest);
 
 /** A semantic block (semantic-blocks.tsx), named by its slash item; it needs the page's handlers to render. */
 const semanticBlock = (type: SemanticType, rest: Rest) =>
@@ -120,6 +128,10 @@ export const BLOCK_REGISTRY: readonly BlockDefinition[] = Object.freeze([
   defaultBlock("audio", { icon: AudioLines, category: "media" }),
   workspaceBlock("bookmark", { icon: Bookmark, category: "media" }),
   workspaceBlock("embed", { icon: PanelTop, category: "media" }),
+  // A column list holds only columns, and a column holds the blocks it shows.
+  layoutBlock("columnList", { icon: Columns2, category: "layout", childSupport: true, commentSupport: false }),
+  layoutBlock("column", { icon: RectangleVertical, category: "layout", childSupport: true, commentSupport: false }),
+  layoutBlock("tableOfContents", { icon: TableOfContents, category: "layout" }),
   semanticBlock("task", { icon: ListChecks, category: "semantic" }),
   semanticBlock("decision", { icon: Gavel, category: "semantic" }),
   semanticBlock("person", { icon: UserRound, category: "semantic" }),

@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { PageHeader } from "@/components/shared/page-header";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { contentAdapterFor } from "@/features/versions/adapters/registry";
+import { contentAdapterFor, isEditorDocumentType } from "@/features/versions/adapters/registry";
+import { objectContentPath } from "@/features/versions/paths";
 import { objectTypeKeySchema } from "@/features/versions/schema";
 import { collabText } from "@/features/collab/messages";
 import { getObjectLock } from "@/features/collab/services/collab.queries";
@@ -38,6 +39,9 @@ export default async function LiveObjectPage({
 
   const m = collabText(await getLocale());
   const object = { id: id.data, type: type.data };
+  // Pages and meetings are co-edited in the block editor on their own screen.
+  const editorPath = isEditorDocumentType(object.type) ? objectContentPath(object) : null;
+  if (editorPath) redirect(editorPath);
   const adapter = contentAdapterFor(object.type);
   const snapshot = adapter ? await adapter.read(object) : null;
   if (!snapshot) {
