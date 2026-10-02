@@ -1,9 +1,15 @@
-import type * as React from "react";
+import { isEnabled } from "@/lib/feature-flags";
+import { PageWatchButton } from "@/features/notifications/components/page-watch-button";
+import { isWatchingPage } from "@/features/notifications/services/page-watch.queries";
 import type { PageHeaderUnitProps } from "./types";
 
 /**
- * Wave 2 unit C3: the watch button, shown in the page header next to the page's actions.
- * Only C3 edits this file. It may become a client component ("use client")
- * or render one. Until C3 lands it renders nothing.
+ * Wave 2 unit C3: the watch button, shown in the page header next to the
+ * page's actions. Anyone who can open the page may watch it; watchers are
+ * told about new comments (20261110040000_page_watch.sql).
  */
-export const C3PageWatch: (props: PageHeaderUnitProps) => React.ReactNode = () => null;
+export async function C3PageWatch({ page, session }: PageHeaderUnitProps) {
+  if (!(await isEnabled("wos_pages"))) return null;
+  const watching = await isWatchingPage(page.id, session.userId);
+  return <PageWatchButton pageId={page.id} initialWatching={watching} />;
+}
