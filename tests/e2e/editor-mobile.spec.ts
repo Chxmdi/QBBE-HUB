@@ -171,6 +171,9 @@ test("at 390 and 320 px the editor fits and its touch toolbar formats text [swit
   await page.setViewportSize(SMALL);
   await expect(toolbar).toBeVisible();
   expect(await sidewaysOverflow(page), "320 px: no sideways scroll").toEqual([]);
+  // A narrower window reflows the page above the editor; a phone keeps the
+  // line being typed in view, and the toolbar sticks on screen with it.
+  await editor.locator("a", { hasText: "The guide" }).scrollIntoViewIfNeeded();
   await onScreen(page, toolbar);
   await expect(page.getByTestId("editor-save-state")).toHaveText("Saved", { timeout: 30_000 });
 });
