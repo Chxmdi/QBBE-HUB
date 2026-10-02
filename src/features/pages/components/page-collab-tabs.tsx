@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { cursorBlockId } from "@/features/pages/cursor-block";
 
-type Tab = "comments" | "versions";
+type Tab = "comments" | "versions" | "activity";
 
 export interface PageCollabLabels {
   heading: string;
@@ -18,10 +18,12 @@ export interface PageCollabLabels {
   blockThread: string;
   allComments: string;
   openVersions: string;
+  activity: string;
 }
 
 /**
- * The tabs under a page: Comments and Versions (U9). The panels are rendered
+ * The tabs under a page: Comments and Versions (U9), and Activity when the
+ * activity history is switched on (wave 2 C2). The panels are rendered
  * on the server and handed in; this only switches between them and offers
  * "Comment on this block", which takes the block from where the cursor last
  * was in the editor and opens that block's thread.
@@ -33,6 +35,7 @@ export function PageCollabTabs({
   labels,
   comments,
   versions,
+  activity,
 }: {
   pageId: string;
   blockId: string | null;
@@ -40,6 +43,8 @@ export function PageCollabTabs({
   labels: PageCollabLabels;
   comments: React.ReactNode;
   versions: React.ReactNode;
+  /** The Activity panel, or null while its switch is off. */
+  activity: React.ReactNode;
 }) {
   const router = useRouter();
   const headingId = React.useId();
@@ -62,6 +67,7 @@ export function PageCollabTabs({
   const tabs = [
     { id: "comments", label: labels.comments },
     { id: "versions", label: labels.versions },
+    ...(activity ? [{ id: "activity", label: labels.activity }] : []),
   ];
 
   return (
@@ -121,6 +127,17 @@ export function PageCollabTabs({
           </Link>
         </p>
       </div>
+      {activity ? (
+        <div
+          role="tabpanel"
+          id="tabpanel-activity"
+          aria-labelledby="tab-activity"
+          hidden={active !== "activity"}
+          tabIndex={0}
+        >
+          {activity}
+        </div>
+      ) : null}
     </section>
   );
 }
