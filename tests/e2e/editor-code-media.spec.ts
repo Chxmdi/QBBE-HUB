@@ -66,6 +66,9 @@ async function caretAtEnd(block: Locator) {
 }
 
 async function seriousAxe(page: Page) {
+  // Scanned from the top of the page: scrolled down, the sticky top bar covers
+  // the sidebar rows behind it, and axe would report those as too small.
+  await page.evaluate(() => window.scrollTo(0, 0));
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
     .analyze();
@@ -360,7 +363,11 @@ test("every block type has a readable empty state [switches on]", async ({ page 
       .toMatch(/^".+"$/);
   }
   // Every other block says what to do next.
-  for (const [type, words] of Object.entries(EDIT_STATES)) await expect(blockOf(type), type).toContainText(words);
+  // Each block is brought into view first: long pages draw view blocks only when they are near the screen (E5).
+  for (const [type, words] of Object.entries(EDIT_STATES)) {
+    await blockOf(type).scrollIntoViewIfNeeded();
+    await expect(blockOf(type), type).toContainText(words);
+  }
 
   // Read-only, an empty block says it is empty rather than showing nothing.
   trash(pageId);
@@ -368,7 +375,9 @@ test("every block type has a readable empty state [switches on]", async ({ page 
   const readOnly = page.getByRole("textbox", { name: "Document content" });
   await expect(readOnly).toBeVisible({ timeout: 30_000 });
   for (const [type, words] of Object.entries(READ_STATES)) {
-    await expect(readOnly.locator(`.bn-block-content[data-content-type='${type}']`).first(), type).toContainText(words);
+    const block = readOnly.locator(`.bn-block-content[data-content-type='${type}']`).first();
+    await block.scrollIntoViewIfNeeded();
+    await expect(block, type).toContainText(words);
   }
 });
 
