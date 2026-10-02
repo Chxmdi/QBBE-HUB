@@ -226,10 +226,16 @@ export function LazyBlock({ type, blockId, children }: { type: string; blockId: 
   }, [blockId]);
 
   // A block already near the screen when it mounts renders before the first
-  // paint, so it never shows as waiting.
+  // paint, so it never shows as waiting. One drawn outside the page (BlockNote
+  // draws blocks off-page for the HTML it puts on the clipboard) renders at
+  // once: nothing would ever scroll it near the screen.
   React.useLayoutEffect(() => {
     const placeholder = placeholderRef.current;
-    if (shown || !wait || !placeholder?.isConnected) return;
+    if (shown || !wait || !placeholder) return;
+    if (!placeholder.isConnected) {
+      setShown(true);
+      return;
+    }
     hostRef.current = placeholder.parentElement;
     const rect = placeholder.getBoundingClientRect();
     if (rect.height > 0 && rect.bottom >= -LAZY_ROOT_MARGIN_PX && rect.top <= window.innerHeight + LAZY_ROOT_MARGIN_PX) reveal();

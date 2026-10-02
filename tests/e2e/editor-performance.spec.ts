@@ -351,6 +351,39 @@ test("waiting blocks are found by find in page and table of contents links still
   await expect(page).toHaveURL(/#block-/);
 });
 
+test("copying a page puts the real blocks on the clipboard, not the waiting ones [switches on]", async ({ page }) => {
+  test.setTimeout(120_000);
+  const id = longPage("copy", 100);
+  await signIn(page, "staff");
+  await openPage(page, id);
+  await waitForMark(page, "qbbe-editor:interactive");
+  await expect(page.locator(".qbbe-lazy-block").filter({ hasText: "E5test00092" })).toBeAttached();
+  // Select from the first paragraph to the last without scrolling, so the
+  // blocks far down stay waiting while the selection is copied.
+  await page.locator(".bn-block-content[data-content-type='paragraph']").filter({ hasText: "Paragraph 1 of a long page" }).click();
+  await page.evaluate(() => {
+    const text = (n: number) =>
+      [...document.querySelectorAll(".bn-block-content[data-content-type='paragraph'] p")].find((p) => p.textContent?.startsWith(`Paragraph ${n} of`))!.firstChild!;
+    const last = text(99);
+    window.getSelection()!.setBaseAndExtent(text(1), 0, last, last.textContent!.length);
+  });
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.scrollY)).toBeLessThan(200);
+  // The copy event the browser sends for Ctrl+C (headless Chromium does not
+  // send one for the key itself); the editor fills its clipboard data.
+  const html = await page.evaluate(() => {
+    const data = new DataTransfer();
+    document.querySelector(".bn-editor")!.dispatchEvent(new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }));
+    return data.getData("text/html");
+  });
+  expect(html).toContain("Paragraph 99 of a long page");
+  expect(html).not.toContain("qbbe-lazy-block");
+  expect(html).toContain("youtube-nocookie.com/embed/E5test00092");
+  expect(html).toContain("copy view 82");
+  // Still waiting on the page itself.
+  await expect(page.locator(".qbbe-lazy-block").filter({ hasText: "E5test00092" })).toBeAttached();
+});
+
 test("waiting blocks read well in French, at 320 px, from the keyboard and pass axe in both themes [switches on]", async ({ page, context }) => {
   test.setTimeout(180_000);
   const id = longPage("states", 100);
