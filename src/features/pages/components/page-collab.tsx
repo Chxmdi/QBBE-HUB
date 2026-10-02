@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Suspense } from "react";
 import { isEnabled } from "@/lib/feature-flags";
 import type { ObjectRef } from "@/lib/objects/contracts";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -9,7 +8,6 @@ import { VersionHistory } from "@/features/versions/components/version-history";
 import { listObjectVersions } from "@/features/versions/services/version.queries";
 import { PageCollabTabs } from "./page-collab-tabs";
 import { ActivityFeed } from "./page-collab-activity-feed";
-import { ActivityLoading } from "./page-collab-activity";
 
 /**
  * Comments and version history under a page's body (U9, plan A10 and V1-17).
@@ -60,9 +58,7 @@ export async function PageCollab({
       }}
       activity={
         activityOn ? (
-          <Suspense fallback={<ActivityLoading label={t("units.c2.loading")} />}>
-            <ActivityFeed objectId={pageId} kind="page" />
-          </Suspense>
+          <ActivityFeed objectId={pageId} kind="page" />
         ) : null
       }
       comments={

@@ -20,38 +20,39 @@ export interface ActivityLabels {
 
 /**
  * Wave 2 C2: an object's activity, newest first (the page's Activity tab and
- * the record page's Activity section). The first page is read on the server
- * and handed in; "Try again" and "Show older activity" read further pages
- * through the loadActivity action. Each entry says who did what, and when, in
- * the reader's language and time zone.
+ * the record page's Activity section). Every page of entries, the first
+ * included, is read in the browser through the loadActivity action once the
+ * screen is up: the record page refreshes itself after each property save,
+ * and reading activity on the server would make every one of those refreshes
+ * wait for it. Each entry says who did what, and when, in the reader's
+ * language and time zone.
  */
-export function ActivityPanel({
-  objectId,
-  initial,
-  labels,
-}: {
-  objectId: string;
-  initial: ActivityPage;
-  labels: ActivityLabels;
-}) {
-  const [items, setItems] = React.useState<ActivityItem[]>(initial.ok ? initial.items : []);
-  const [next, setNext] = React.useState<ActivityCursor | null>(initial.ok ? initial.next : null);
-  const [failed, setFailed] = React.useState<"first" | "older" | null>(initial.ok ? null : "first");
+export function ActivityPanel({ objectId, labels }: { objectId: string; labels: ActivityLabels }) {
+  const [items, setItems] = React.useState<ActivityItem[] | null>(null);
+  const [next, setNext] = React.useState<ActivityCursor | null>(null);
+  const [failed, setFailed] = React.useState<"first" | "older" | null>(null);
   const [pending, startTransition] = React.useTransition();
   const [loadedOlder, setLoadedOlder] = React.useState(false);
 
-  const load = (before: ActivityCursor | null) =>
-    startTransition(async () => {
-      const page = await loadActivity({ objectId, before }).catch(() => ({ ok: false }) as const);
-      if (!page.ok) {
-        setFailed(before ? "older" : "first");
-        return;
-      }
-      setFailed(null);
-      setItems((current) => (before ? [...current, ...page.items] : page.items));
-      setNext(page.next);
-      if (before) setLoadedOlder(true);
-    });
+  const load = React.useCallback(
+    (before: ActivityCursor | null) =>
+      startTransition(async () => {
+        const page: ActivityPage = await loadActivity({ objectId, before }).catch(() => ({ ok: false }) as const);
+        if (!page.ok) {
+          setFailed(before ? "older" : "first");
+          return;
+        }
+        setFailed(null);
+        setItems((current) => (before && current ? [...current, ...page.items] : page.items));
+        setNext(page.next);
+        if (before) setLoadedOlder(true);
+      }),
+    [objectId],
+  );
+
+  React.useEffect(() => {
+    load(null);
+  }, [load]);
 
   if (failed === "first") {
     return (
@@ -63,6 +64,8 @@ export function ActivityPanel({
       </div>
     );
   }
+
+  if (items === null) return <ActivityLoading label={labels.loading} />;
 
   if (items.length === 0) {
     return <p className="mt-4 text-body-sm text-muted">{labels.empty}</p>;

@@ -1,7 +1,5 @@
-import { requireSession } from "@/lib/auth";
 import { getLocale } from "@/lib/i18n/server";
 import { createPagesT } from "@/features/pages/i18n";
-import { loadActivityPage, type ActivityPage } from "@/features/pages/activity/activity.queries";
 import { ActivityPanel, type ActivityLabels } from "./page-collab-activity";
 
 async function activityLabels(kind: "page" | "record"): Promise<ActivityLabels> {
@@ -20,19 +18,10 @@ async function activityLabels(kind: "page" | "record"): Promise<ActivityLabels> 
 }
 
 /**
- * Wave 2 C2: the first page of an object's activity, read on the server as
- * the viewer, then handed to the client panel. A read that fails shows the
- * error with "Try again" rather than breaking the page around it. The caller
- * decides whether the unit's switches are on.
+ * Wave 2 C2: an object's activity panel with its words in the reader's
+ * language. The entries themselves are read by the panel, as the viewer.
+ * The caller decides whether the unit's switches are on.
  */
 export async function ActivityFeed({ objectId, kind }: { objectId: string; kind: "page" | "record" }) {
-  const session = await requireSession();
-  const [labels, locale] = await Promise.all([activityLabels(kind), getLocale()]);
-  let initial: ActivityPage;
-  try {
-    initial = await loadActivityPage(objectId, locale, session.timeZone);
-  } catch {
-    initial = { ok: false };
-  }
-  return <ActivityPanel key={objectId} objectId={objectId} initial={initial} labels={labels} />;
+  return <ActivityPanel key={objectId} objectId={objectId} labels={await activityLabels(kind)} />;
 }

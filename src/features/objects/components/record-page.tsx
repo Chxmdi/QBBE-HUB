@@ -17,7 +17,6 @@ import { VersionHistory } from "@/features/versions/components/version-history";
 import { listObjectVersions } from "@/features/versions/services/version.queries";
 import { createPagesT } from "@/features/pages/i18n";
 import { ActivityFeed } from "@/features/pages/components/page-collab-activity-feed";
-import { ActivityLoading } from "@/features/pages/components/page-collab-activity";
 import { getObjectsT } from "../i18n/translate";
 import type { ObjectsT } from "../i18n/translate";
 import type { RecordPageData } from "../services/record-page.queries";
@@ -169,9 +168,7 @@ async function ActivitySection({ objectId, locale, errorText }: { objectId: stri
           </p>
         }
       >
-        <Suspense fallback={<ActivityLoading label={t("units.c2.loading")} />}>
-          <ActivityFeed objectId={objectId} kind="record" />
-        </Suspense>
+        <ActivityFeed objectId={objectId} kind="record" />
       </SectionBoundary>
     </section>
   );

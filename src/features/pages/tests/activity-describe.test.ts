@@ -88,7 +88,7 @@ describe("C2-1: the migration names every event <type>.<verb>", () => {
       "relation.unlinked",
       "version.restored",
     ]) {
-      expect(written.has(event) || migration.includes(`'${event.split(".")[0]}.' || new.verb`), event).toBe(true);
+      expect(written.has(event) || migration.includes(`'${event.split(".")[0]}.' || e.verb`), event).toBe(true);
     }
   });
 
