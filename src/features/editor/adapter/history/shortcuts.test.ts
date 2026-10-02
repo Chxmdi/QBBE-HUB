@@ -84,6 +84,9 @@ describe("the keyboard shortcuts list (E2-4)", () => {
     expect(Object.keys(editorFrCA.units.e2.shortcuts.items).sort()).toEqual(Object.keys(editorEn.units.e2.shortcuts.items).sort());
     expect(Object.keys(editorEn.units.e2.shortcuts.items).sort()).toEqual(SHORTCUTS.map((shortcut) => shortcut.id).sort());
     expect(fr("units.e2.toolbar.undo")).toBe("Annuler");
+    // Its spoken name starts with the visible word but is not the « Annuler » of a cancel button.
+    expect(fr("units.e2.toolbar.undoName")).toBe("Annuler la dernière modification");
+    expect(en("units.e2.toolbar.undoName")).toBe("Undo");
     expect(fr("units.e2.toolbar.redo")).toBe("Rétablir");
     expect(fr("units.e2.announce.nothingToUndo")).toBe("Rien d’autre à annuler");
     expect(en("units.e2.announce.nothingToUndo")).toBe("Nothing more to undo");
