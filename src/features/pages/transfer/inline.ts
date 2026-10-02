@@ -55,6 +55,24 @@ export function mergeRuns(items: InlineContent[]): InlineContent[] {
   return out;
 }
 
+/**
+ * `value` without the spaces and tabs at its end. A scan, not `/[ \t]+$/`:
+ * that pattern retries from every space of a long run, so an imported line of
+ * many spaces would take quadratic time.
+ */
+export function trimEndSpaceTab(value: string): string {
+  let end = value.length;
+  while (end > 0 && (value[end - 1] === " " || value[end - 1] === "\t")) end--;
+  return end === value.length ? value : value.slice(0, end);
+}
+
+/** `value` without the spaces and tabs at either end (see trimEndSpaceTab). */
+export function trimSpaceTab(value: string): string {
+  let start = 0;
+  while (start < value.length && (value[start] === " " || value[start] === "\t")) start++;
+  return trimEndSpaceTab(value.slice(start));
+}
+
 /** Collapses runs of whitespace (not hard breaks) the way a browser reads HTML text. */
 export function trimRuns(items: InlineContent[]): InlineContent[] {
   const runs = mergeRuns(items);
@@ -62,7 +80,7 @@ export function trimRuns(items: InlineContent[]): InlineContent[] {
   if (first?.type === "text") runs[0] = { ...(first as InlineText), text: (first as InlineText).text.replace(/^[ \t]+/, "") };
   const lastIndex = runs.length - 1;
   const last = runs[lastIndex];
-  if (last?.type === "text") runs[lastIndex] = { ...(last as InlineText), text: (last as InlineText).text.replace(/[ \t]+$/, "") };
+  if (last?.type === "text") runs[lastIndex] = { ...(last as InlineText), text: trimEndSpaceTab((last as InlineText).text) };
   return mergeRuns(runs);
 }
 

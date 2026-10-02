@@ -9,7 +9,7 @@ import {
   type TableContent,
 } from "@/features/editor/adapter/content";
 import { matchEntity } from "./entities";
-import { mergeRuns, plain, safeHref, text, type Styles } from "./inline";
+import { mergeRuns, plain, safeHref, text, trimEndSpaceTab, trimSpaceTab, type Styles } from "./inline";
 
 /**
  * Pages as Markdown and back (wave 2 unit X1). Pure, so the export route, the
@@ -93,7 +93,7 @@ const EMPHASIS = [
 function wrap(inner: string, marker: string): string {
   const lead = /^\s*/.exec(inner)![0];
   if (lead.length === inner.length) return inner;
-  const trail = /\s*$/.exec(inner)![0];
+  const trail = inner.slice(inner.trimEnd().length);
   return `${lead}${marker}${inner.slice(lead.length, inner.length - trail.length)}${marker}${trail}`;
 }
 
@@ -344,7 +344,8 @@ const HEADING = /^ {0,3}(#{1,6})(?=[ \t]|$)(.*)$/;
 const RULE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 const QUOTE = /^ {0,3}>/;
 const ITEM = /^( {0,3})([-*+]|\d{1,9}[.)])(?:([ \t]+)(.*))?$/;
-const SEPARATOR = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
+/** Tested on a line already trimmed of spaces and tabs, so no two space runs meet (linear time). */
+const SEPARATOR = /^\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?$/;
 const TASK = /^\[([ xX])\](?:[ \t]+(.*))?$/;
 
 const blank = (line: string) => line.trim() === "";
@@ -355,8 +356,19 @@ function isFence(line: string): boolean {
   return Boolean(match) && !(match![2][0] === "`" && match![3].includes("`"));
 }
 
+/** A heading's optional closing hashes (`## Title ##`), removed by a scan rather than a backtracking pattern. */
+function withoutClosingHashes(body: string): string {
+  const end = trimEndSpaceTab(body).length;
+  let hashes = end;
+  while (hashes > 0 && body[hashes - 1] === "#") hashes--;
+  if (hashes === end) return body;
+  let space = hashes;
+  while (space > 0 && (body[space - 1] === " " || body[space - 1] === "\t")) space--;
+  return space === hashes ? body : body.slice(0, space);
+}
+
 function isTableStart(lines: string[], i: number): boolean {
-  return lines[i].includes("|") && i + 1 < lines.length && lines[i + 1].includes("-") && SEPARATOR.test(lines[i + 1]);
+  return lines[i].includes("|") && i + 1 < lines.length && lines[i + 1].includes("-") && SEPARATOR.test(trimSpaceTab(lines[i + 1]));
 }
 
 function isBlockStart(lines: string[], i: number): boolean {
@@ -370,18 +382,19 @@ function joinLines(source: string[]): string {
   source.forEach((raw, i) => {
     let line = i === 0 ? raw.replace(/^[ \t]+/, "") : raw.trim();
     if (i === source.length - 1) {
-      out += line.replace(/[ \t]+$/, "");
+      out += trimEndSpaceTab(line);
       return;
     }
-    const slashes = /\\*$/.exec(line)![0].length;
+    let slashes = 0;
+    while (slashes < line.length && line[line.length - 1 - slashes] === "\\") slashes++;
     let breakHere = false;
     if (slashes % 2 === 1) {
       line = line.slice(0, -1);
       breakHere = true;
-    } else if (/ {2,}$/.test(raw)) {
+    } else if (raw.endsWith("  ")) {
       breakHere = true;
     }
-    out += line.replace(/[ \t]+$/, "") + (breakHere ? "\n" : " ");
+    out += trimEndSpaceTab(line) + (breakHere ? "\n" : " ");
   });
   return out;
 }
@@ -464,7 +477,7 @@ export function parseBlocks(source: string[], depth = 0): EditorBlock[] {
     const heading = HEADING.exec(line);
     if (heading) {
       let body = heading[2].trim();
-      body = /^#+$/.test(body) ? "" : body.replace(/[ \t]+#+[ \t]*$/, "");
+      body = /^#+$/.test(body) ? "" : withoutClosingHashes(body);
       out.push({ type: "heading", props: { level: heading[1].length }, content: parseInline(body) });
       i++;
       continue;

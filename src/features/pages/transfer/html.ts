@@ -425,6 +425,25 @@ function blocks(nodes: Node[], depth = 0): EditorBlock[] {
 }
 
 /** An HTML file as editor content, with its first level 1 heading (or <title>) as the title. */
+/**
+ * The text of the first `<title>` whose closing tag follows within 500
+ * characters, found in linear time: each opening tag's end is looked up once,
+ * so a file of many unclosed `<title` tags cannot make the search quadratic.
+ */
+function titleElementText(source: string): string | null {
+  const opening = /<title(?=[\s/>])/gi;
+  let tagEnd = -1;
+  for (let match = opening.exec(source); match; match = opening.exec(source)) {
+    const after = match.index + match[0].length;
+    if (tagEnd < after) tagEnd = source.indexOf(">", after);
+    if (tagEnd < 0) return null;
+    const window = source.slice(tagEnd + 1, tagEnd + 1 + 500 + 64);
+    const closing = /<\/title\s*>/i.exec(window);
+    if (closing && closing.index <= 500) return window.slice(0, closing.index);
+  }
+  return null;
+}
+
 export function htmlToContent(source: string): { title: string | null; content: EditorContent } {
   const normalized = source.replace(/^﻿/, "").replace(/\r\n?/g, "\n");
   const tree = parseHtml(normalized);
@@ -436,8 +455,8 @@ export function htmlToContent(source: string): { title: string | null; content: 
     if (title) result.shift();
   }
   if (!title) {
-    const titleTag = /<title[^>]*>([\s\S]{0,500}?)<\/title\s*>/i.exec(normalized);
-    const value = titleTag ? decodeEntities(titleTag[1]).replace(/\s+/g, " ").trim() : "";
+    const titleText = titleElementText(normalized);
+    const value = titleText !== null ? decodeEntities(titleText).replace(/\s+/g, " ").trim() : "";
     title = value || null;
   }
   return { title, content: { version: CONTENT_VERSION, blocks: result } };

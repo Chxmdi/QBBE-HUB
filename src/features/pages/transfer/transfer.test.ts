@@ -508,3 +508,47 @@ describe("X1 second review fixes", () => {
     expect(canonical(content.blocks)).toEqual(canonical([p(t("one")), p(t("two")), p(t("three")), p(t("four"))]));
   });
 });
+
+// ---------------------------------------------------------------------------
+// Crafted input stays fast: every reader scans in linear time, so a file at the
+// import limit made of one pathological line cannot hold the server.
+
+describe("import readers on crafted input", () => {
+  const huge = (unit: string) => unit.repeat(Math.floor(IMPORT_MAX_BYTES / unit.length));
+  const fast = (run: () => unknown) => {
+    const started = performance.now();
+    run();
+    return performance.now() - started;
+  };
+
+  it.each([
+    ["a line of spaces", `x${huge(" ")}x\nnext`],
+    ["a line of spaces after a heading", `# Title${huge(" ")}x`],
+    ["a line of spaces and tabs before closing hashes", `## Title${huge(" \t")}#x`],
+    ["a line of backslashes", `${huge("\\")}x\nnext`],
+    ["a table separator of spaces", `| a | b |\n|${huge(" ")}x`],
+    ["a paragraph ending in spaces", `first line\n${huge(" ")}`],
+  ])("reads Markdown with %s in well under two seconds", (_label, source) => {
+    expect(fast(() => markdownToContent(source))).toBeLessThan(2000);
+  });
+
+  it.each([
+    ["many unclosed title tags", huge("<title ")],
+    ["a title tag with no end", `<title>${huge(" ")}`],
+    ["text ending in spaces", `<p>a${huge(" ")}</p>`],
+  ])("reads HTML with %s in well under two seconds", (_label, source) => {
+    expect(fast(() => htmlToContent(source))).toBeLessThan(2000);
+  });
+
+  it("keeps the meaning of what the scans replaced", () => {
+    expect(markdownToContent("## Agenda ##").content.blocks[0]).toMatchObject({ type: "heading", content: [{ text: "Agenda" }] });
+    expect(markdownToContent("## C# notes").content.blocks[0]).toMatchObject({ content: [{ text: "C# notes" }] });
+    expect(markdownToContent("## a ## #").content.blocks[0]).toMatchObject({ content: [{ text: "a ##" }] });
+    expect(markdownToContent("line one\\\nline two").content.blocks[0]).toMatchObject({ content: [{ text: "line one\nline two" }] });
+    expect(markdownToContent("line one\\\\\nline two").content.blocks[0]).toMatchObject({ content: [{ text: "line one\\ line two" }] });
+    expect(markdownToContent("line one  \nline two").content.blocks[0]).toMatchObject({ content: [{ text: "line one\nline two" }] });
+    expect(markdownToContent("| a | b |\n | :-- | --: | \n| 1 | 2 |").content.blocks[0]).toMatchObject({ type: "table" });
+    expect(htmlToContent("<html><head><title> Board  notes </title></head><body><p>x</p></body></html>").title).toBe("Board notes");
+    expect(htmlToContent("<titles>not a title</titles><title>Real</title>").title).toBe("Real");
+  });
+});
