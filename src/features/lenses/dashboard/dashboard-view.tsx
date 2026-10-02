@@ -14,6 +14,7 @@ import { useLensT } from "@/features/lenses/i18n/client";
 import { saveDashboardLayout } from "./actions";
 import { TILE_KINDS, type DashboardFilters, type DashboardLayout, type Tile, type TileKind, type TileSource } from "./schema";
 import { TileBody } from "./tiles";
+import { CHART_KINDS, chartIsGrouped, settingsFromTotalOption, type ChartKind } from "@/features/lenses/view-block/layouts/d3-chart";
 
 export interface DashboardInfo {
   id: string;
@@ -219,6 +220,8 @@ function AddTileDialog({
   const [width, setWidth] = React.useState<1 | 2 | 3>(1);
   const [measure, setMeasure] = React.useState("count");
   const [groupBy, setGroupBy] = React.useState("status");
+  const [chartKind, setChartKind] = React.useState<ChartKind>("bar");
+  const [chartTotal, setChartTotal] = React.useState("count");
   const [target, setTarget] = React.useState("10");
   const [body, setBody] = React.useState("");
   const ids = React.useId();
@@ -254,7 +257,7 @@ function AddTileDialog({
         tile = { ...base, kind, source: tileSource(), measure: m, target: Math.max(1, Number(target) || 1) };
         break;
       case "chart":
-        tile = { ...base, kind, source: tileSource(), groupBy };
+        tile = { ...base, kind, source: tileSource(), groupBy, chart: settingsFromTotalOption(chartKind, chartTotal) };
         break;
       case "progress":
         tile = typeOf === "project"
@@ -279,6 +282,8 @@ function AddTileDialog({
     setTitle("");
     setBody("");
     setMeasure("count");
+    setChartKind("bar");
+    setChartTotal("count");
     setTarget("10");
     setWidth(1);
   };
@@ -343,6 +348,33 @@ function AddTileDialog({
           </div>
         ) : null}
         {kind === "chart" ? (
+          <div>
+            <Label htmlFor={`${ids}-chart-kind`}>{t("units.d3.settings.kind")}</Label>
+            <Select id={`${ids}-chart-kind`} value={chartKind} onChange={(e) => setChartKind(e.target.value as ChartKind)}>
+              {CHART_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {t(`units.d3.kinds.${k}`)}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
+        {kind === "chart" ? (
+          <div>
+            <Label htmlFor={`${ids}-chart-total`}>{t("units.d3.settings.total")}</Label>
+            <Select id={`${ids}-chart-total`} value={chartTotal} onChange={(e) => setChartTotal(e.target.value)}>
+              <option value="count">{t("units.d3.settings.count")}</option>
+              {numbers.flatMap((p) =>
+                (["sum", "avg"] as const).map((fn) => (
+                  <option key={`${fn}:${p.key}`} value={`${fn}:${p.key}`}>
+                    {t(`units.d3.settings.${fn}`, { property: localized(p.name, locale) })}
+                  </option>
+                )),
+              )}
+            </Select>
+          </div>
+        ) : null}
+        {kind === "chart" && chartIsGrouped(chartKind) ? (
           <div>
             <Label htmlFor={`${ids}-group`}>{t("dashboard.groupBy")}</Label>
             <Select id={`${ids}-group`} value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
