@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { optionalDay } from "@/lib/schema";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import { DEFAULT_LOCALE, isLocale } from "@/lib/i18n/config";
 import { createTranslator } from "@/lib/i18n/translate";
@@ -41,7 +42,7 @@ export const universalTaskInputSchema = z.object({
   milestoneId: z.string().uuid().optional(),
   assigneeId: z.string().uuid().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
-  dueAt: z.string().optional(),
+  dueAt: optionalDay().optional(),
   completionCriteria: z.string().trim().max(2000).optional(),
   reviewerId: z.string().uuid().optional(),
   approverId: z.string().uuid().optional(),

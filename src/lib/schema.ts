@@ -52,3 +52,16 @@ export function isCalendarMonth(value: string): boolean {
 export function isCalendarYear(value: string): boolean {
   return /^\d{4}$/.test(value) && isCalendarDate(`${value}-01-01`);
 }
+
+/**
+ * An optional day: absent, blank (which callers store as no date), or a real
+ * YYYY-MM-DD date. Without it a mistyped or crafted date reached Postgres and
+ * came back as an unrelated message ("you don't have permission", "could not
+ * save") instead of one about the date.
+ */
+export function optionalDay(message = "Enter the date as YYYY-MM-DD.") {
+  return z
+    .string()
+    .trim()
+    .refine((value) => value === "" || isCalendarDate(value), message);
+}

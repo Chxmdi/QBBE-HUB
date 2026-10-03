@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requiredText, isCalendarDate } from "@/lib/schema";
+import { requiredText, isCalendarDate, optionalDay } from "@/lib/schema";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 import type { TaskStatus } from "@/types/entities";
 
@@ -69,7 +69,7 @@ export const createTaskSchema = z.object({
   milestoneId: z.string().uuid().optional(),
   assigneeId: z.string().uuid().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
-  dueAt: z.string().optional(),
+  dueAt: optionalDay().optional(),
   completionCriteria: z.string().trim().max(2000).optional(),
   reviewerId: z.string().uuid().optional(),
   approverId: z.string().uuid().optional(),
@@ -85,7 +85,7 @@ export const updateTaskSchema = z.object({
   description: z.string().trim().max(5000).nullable().optional(),
   assigneeId: z.string().uuid().nullable().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]).optional(),
-  dueAt: z.string().nullable().optional(),
+  dueAt: optionalDay().nullable().optional(),
   projectId: z.string().uuid().nullable().optional(),
   // Fields the create form could already set but nothing could afterwards
   // correct (P0-TSK-01, P0-TSK-02, P0-TSK-04).
@@ -132,7 +132,7 @@ export const bulkSchema = z.object({
   status: z.enum(BULK_STATUS_ENUM).optional(),
   assigneeId: z.string().uuid().nullable().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]).optional(),
-  dueAt: z.string().nullable().optional(),
+  dueAt: optionalDay().nullable().optional(),
 });
 
 export const checklistItemSchema = z.object({

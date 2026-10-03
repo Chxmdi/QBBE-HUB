@@ -7,6 +7,7 @@ import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translate";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isEnabled } from "@/lib/feature-flags";
+import { isRealTimeZone } from "@/lib/time";
 import { HUB_CATEGORIES } from "@/features/notifications/categories";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
@@ -21,15 +22,6 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
  * (`notification_pref_own`) is what actually prevents editing someone else's
  * preferences; the `user_id` below is a convenience, not the control.
  */
-
-function isRealTimezone(value: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 const hour = z.coerce.number().int().min(0).max(23);
 const deliveryMode = z.enum(["off", "immediate", "daily", "weekly"]);
@@ -50,7 +42,7 @@ const preferencesSchema = (t: TranslateFn) => z.object({
     .string()
     .trim()
     .max(80)
-    .refine(isRealTimezone, t("notifications.errors.badTimezone"))
+    .refine(isRealTimeZone, t("notifications.errors.badTimezone"))
     .optional(),
   categoryModes: z
     .object({

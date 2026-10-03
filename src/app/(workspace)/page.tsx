@@ -35,7 +35,7 @@ import {
   getWorkload,
 } from "@/features/dashboard/services/portfolio.queries";
 import { requireSession } from "@/lib/auth";
-import { DEFAULT_TIME_ZONE, calendarDateInZone } from "@/lib/time";
+import { calendarDateInZone, viewerTimeZone } from "@/lib/time";
 import type { ProjectHealth, Task } from "@/types/entities";
 import { healthSummaryLabel } from "@/features/dashboard/health";
 import { getFormatters, getT } from "@/lib/i18n/server";
@@ -168,7 +168,7 @@ export default async function HomePage({
   // buckets by the workspace zone. Formatting the label with the viewer's would
   // put the row's text at odds with the group it was filed under, which is the
   // defect this page had against UTC, reintroduced between people.
-  const timezone = session.profile.timezone ?? DEFAULT_TIME_ZONE;
+  const timezone = viewerTimeZone(session.profile.timezone);
   const { kpis, attention, healthCounts, statusBreakdown } = data;
 
   const activeTotal = Object.values(healthCounts).reduce((a, b) => a + b, 0);

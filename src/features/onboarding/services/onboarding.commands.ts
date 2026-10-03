@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import { isRealTimeZone } from "@/lib/time";
 import { requireSession } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translate";
@@ -14,7 +15,14 @@ function profileSchema(t: TranslateFn) {
   return z.object({
     fullName: requiredText(t("onboarding.errors.nameRequired"), 120),
     title: z.string().trim().max(120).optional(),
-    timezone: z.string().trim().max(80).optional(),
+    // The same check as the notification settings: a zone Intl cannot format
+    // in broke Home for its owner.
+    timezone: z
+      .string()
+      .trim()
+      .max(80)
+      .refine((value) => value === "" || isRealTimeZone(value), t("notifications.errors.badTimezone"))
+      .optional(),
   });
 }
 

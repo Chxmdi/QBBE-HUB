@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import { followUpSchema } from "@/features/crm/schemas";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -310,12 +311,6 @@ export async function recordInteraction(input: unknown): Promise<ActionResult> {
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   return { ok: true };
 }
-
-const followUpSchema = z.object({
-  crmOrganizationId: z.string().uuid(),
-  title: requiredText(V.followUpTitle, 300),
-  dueAt: requiredText(V.pickDueDate),
-});
 
 export async function createFollowUp(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
