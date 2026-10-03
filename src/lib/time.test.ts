@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_TIME_ZONE, formatInZone, isRealTimeZone, viewerTimeZone } from "@/lib/time";
+import { DEFAULT_TIME_ZONE, formatInZone, isRealTimeZone, viewerTimeZone, wallTimeToInstant } from "@/lib/time";
 import { dueLabel, formatDate } from "@/lib/utils";
 
 /** A `date` column's value is a calendar day, not UTC midnight shifted west. */
@@ -46,5 +46,19 @@ describe("time zones a person can save", () => {
     expect(viewerTimeZone(null)).toBe(DEFAULT_TIME_ZONE);
     expect(viewerTimeZone(undefined)).toBe(DEFAULT_TIME_ZONE);
     expect(viewerTimeZone("")).toBe(DEFAULT_TIME_ZONE);
+  });
+});
+
+describe("wall times a person types", () => {
+  it("refuses wall times that do not exist instead of rolling them forward", () => {
+    for (const wall of ["2026-02-31T09:00", "2026-04-31T09:00", "2027-02-29T09:00", "2026-02-28T24:00", "2026-02-28T09:60", "2026-02-28T09:00:61", "2026-13-01T09:00"]) {
+      expect(wallTimeToInstant(wall, "America/Toronto"), wall).toBeNull();
+    }
+  });
+
+  it("reads real wall times in the organization's zone", () => {
+    expect(wallTimeToInstant("2026-02-28T09:00", "America/Toronto")?.toISOString()).toBe("2026-02-28T14:00:00.000Z");
+    expect(wallTimeToInstant("2028-02-29T23:59:59", "UTC")?.toISOString()).toBe("2028-02-29T23:59:59.000Z");
+    expect(wallTimeToInstant("2026-07-01T00:00", "America/Toronto")?.toISOString()).toBe("2026-07-01T04:00:00.000Z");
   });
 });

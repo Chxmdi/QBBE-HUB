@@ -1,4 +1,5 @@
 import { DEFAULT_LOCALE, intlLocale, type Locale } from "@/lib/i18n/config";
+import { isCalendarDate } from "@/lib/schema";
 
 /**
  * Wall-clock time in a named zone, converted honestly.
@@ -92,7 +93,13 @@ export function wallTimeToInstant(
   wall: string,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(wall.trim())) return null;
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(wall.trim());
+  if (!match) return null;
+  // `Date.parse` rolls an impossible wall time forward rather than refusing
+  // it: 2026-02-31T09:00 became 3 March and 24:00 the next day, so a meeting,
+  // an event or a scheduled announcement was saved on a day nobody chose.
+  const [, day, hour, minute, second = "00"] = match;
+  if (!isCalendarDate(day) || Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59) return null;
   const naive = Date.parse(`${wall.trim()}Z`);
   if (Number.isNaN(naive)) return null;
 
