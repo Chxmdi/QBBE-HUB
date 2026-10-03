@@ -63,6 +63,7 @@ export const captureFrCA: Translation<CaptureMessages> = {
     saveFailed: "Impossible de l’enregistrer. Réessayez.",
     notFound: "Cet élément n’est plus dans votre boîte.",
     fileFailed: "Impossible de le classer : {message}",
+    taskNotAllowed: "Vous ne pouvez pas ajouter une tâche à cet endroit. Choisissez un projet auquel vous participez, ou classez-la sans projet.",
     noContact: "Choisissez un contact pour consigner ce courriel.",
   },
 };

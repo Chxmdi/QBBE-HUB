@@ -85,6 +85,8 @@ export const timeEn = {
       trigger: "New meeting",
       title: "Schedule meeting",
       submit: "Schedule",
+      needProjectFirst: "To schedule a meeting, you need a project you work on. Ask an administrator to add you to one.",
+      projectHint: "Choose a project you work on.",
     },
     fields: {
       title: "Title",
@@ -329,6 +331,8 @@ export const timeEn = {
       trigger: "New event",
       title: "Create event",
       submit: "Create event",
+      needWorkFirst: "To create an event, you need a program or project you work on. Ask an administrator to add you to one.",
+      workHint: "Choose a program or a project you work on.",
     },
     fields: {
       name: "Name",

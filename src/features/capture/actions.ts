@@ -12,6 +12,11 @@ import { parseForwardedEmail } from "./email";
 import { captureT } from "./i18n";
 import { CAPTURE_COLUMNS, type CaptureItem } from "./services/capture.queries";
 
+/** A row-level security or permission refusal, as opposed to any other failure. */
+function isRefusal(message: string | undefined): boolean {
+  return Boolean(message && /row-level security|permission denied|42501/i.test(message));
+}
+
 export interface CaptureResult {
   ok: boolean;
   error?: string;
@@ -172,7 +177,10 @@ export async function fileCapture(input: unknown): Promise<CaptureResult> {
       },
     );
     if (created.ok) refId = created.id;
-    else failure = created.message ?? created.reason;
+    // The database's own wording ("new row violates row-level security policy
+    // for table task") names tables and means nothing to the person filing.
+    else if (created.reason === "invalid" && created.message) failure = created.message;
+    else return { ok: false, error: t(created.reason === "failed" && isRefusal(created.message) ? "errors.taskNotAllowed" : "errors.saveFailed") };
   } else if (as === "document") {
     if (item.kind === "link" && item.url) {
       const { createDocumentLink } = await import("@/features/documents/services/document.commands");
