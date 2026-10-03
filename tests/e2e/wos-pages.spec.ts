@@ -192,6 +192,55 @@ test("a trashed page is listed in the trash and restored from there", async ({ p
   }
 });
 
+test("the page title stays readable while edited, and Enter carries on into the body", async ({ page }) => {
+  // Staging audit B5: the title vanished while hovered or focused (its text
+  // is transparent so a gradient shows through, and the field's hover/focus
+  // background covered the gradient). B6: Enter kept the caret in the title,
+  // so the next words were typed into it.
+  test.setTimeout(180_000);
+  const setEditor = (on: boolean) =>
+    sql(`update public.feature_flag set enabled = ${on} where key = 'wos_editor' and organization_id is null;`);
+  setEditor(true);
+  try {
+    await signIn(page, "staff");
+    const sidebar = page.getByRole("navigation", { name: "Pages" });
+    await page.goto("/pages");
+    await sidebar.getByRole("button", { name: "New page", exact: true }).click();
+    await expect(page).toHaveURL(/\/pages\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+    const pageUrl = page.url();
+    const pageId = pageUrl.split("/").pop()!;
+    const title = page.getByRole("textbox", { name: "Page title" });
+    const body = page.locator('article .ProseMirror[contenteditable="true"]');
+    await expect(body).toBeVisible({ timeout: 30_000 });
+
+    // The colour the title's letters are painted with, as the browser draws them.
+    const fill = () => title.evaluate((el) => getComputedStyle(el).webkitTextFillColor);
+    const transparent = /^(transparent|rgba\(0, 0, 0, 0\))$/;
+    await title.hover();
+    await expect.poll(fill).not.toMatch(transparent);
+    await title.focus();
+    await expect.poll(fill).not.toMatch(transparent);
+
+    const pageTitle = `Readable title ${Date.now()}`;
+    await title.fill(pageTitle);
+    await title.press("Enter");
+    await expect(body).toBeFocused();
+    await page.keyboard.type("First line of the body");
+    await expect(title).toHaveValue(pageTitle);
+    await expect(body).toContainText("First line of the body");
+
+    // Both reached the database: the title by its own save, the body by autosave.
+    await expect.poll(() => sql(`select title from public.page where id = '${pageId}';`), { timeout: 30_000 }).toBe(pageTitle);
+    await expect
+      .poll(() => sql(`select (content::text like '%First line of the body%')::text from public.editor_document where object_id = '${pageId}';`), {
+        timeout: 30_000,
+      })
+      .toBe("true");
+  } finally {
+    setEditor(false);
+  }
+});
+
 test("volunteers keep private pages and cannot see or create shared ones", async ({ page }) => {
   test.setTimeout(120_000);
   await signIn(page, "volunteer");
