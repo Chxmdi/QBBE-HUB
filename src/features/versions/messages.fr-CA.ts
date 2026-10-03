@@ -32,7 +32,7 @@ export const versionsFr: Catalogue<typeof versionsEn> = {
   },
   trash: {
     title: "Corbeille",
-    description: "Les éléments supprimés restent ici 30 jours. Restaurez-en un pour le remettre à sa place.",
+    description: "Les fiches supprimées restent ici 30 jours; les pages supprimées y restent jusqu’à ce qu’on les restaure. Restaurez un élément pour le remettre à sa place.",
     none: "La corbeille est vide.",
     delete: "Mettre à la corbeille",
     confirmDelete: "Mettre « {title} » à la corbeille? Il pourra être restauré pendant 30 jours.",
@@ -42,6 +42,8 @@ export const versionsFr: Catalogue<typeof versionsEn> = {
     deletedBy: "Supprimé par {name} le {date}",
     daysLeft: "{count} jours restants",
     lastDay: "Dernier jour",
+    untilRestored: "Jusqu’à la restauration",
+    untitled: "Sans titre",
     columns: {
       item: "Élément",
       type: "Type",

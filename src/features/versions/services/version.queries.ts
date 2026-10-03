@@ -12,12 +12,15 @@ export interface VersionSummary {
 }
 
 export interface TrashEntry {
+  /** "page": a workspace page, trashed by its own deleted_at and restored by restorePage. */
+  kind: "object" | "page";
   objectId: string;
   objectType: string;
   title: string;
   deletedAt: string;
   deletedByName: string | null;
-  purgeAfter: string;
+  /** When it is deleted for good; null when nothing deletes it (pages). */
+  purgeAfter: string | null;
 }
 
 async function names(db: Db, ids: string[]): Promise<Map<string, string>> {
@@ -53,16 +56,34 @@ export async function listObjectVersions(object: ObjectRef, limit = 100): Promis
   }));
 }
 
-/** What the reader may see in the trash: still restorable, newest first. */
-export async function listTrash(): Promise<TrashEntry[]> {
+/**
+ * What the reader may see in the trash: still restorable, newest first.
+ *
+ * Two kinds of thing are trashed differently. Records go through
+ * trash_object and object_trash. Workspace pages carry their own deleted_at
+ * (pages' "Move to trash"), which object_trash never sees, so they are read
+ * from the page table here; without that the trash showed as empty while
+ * trashed pages could only be found by their link (staging audit B3).
+ */
+export async function listTrash(options: { pages?: boolean } = {}): Promise<TrashEntry[]> {
   const db = await createSupabaseServerClient();
-  const { data } = await db
-    .from("object_trash")
-    .select("object_id, object_type, title, deleted_at, deleted_by, purge_after")
-    .is("restored_at", null)
-    .is("purged_at", null)
-    .order("deleted_at", { ascending: false })
-    .limit(200);
+  const [{ data }, { data: pageData }] = await Promise.all([
+    db
+      .from("object_trash")
+      .select("object_id, object_type, title, deleted_at, deleted_by, purge_after")
+      .is("restored_at", null)
+      .is("purged_at", null)
+      .order("deleted_at", { ascending: false })
+      .limit(200),
+    options.pages
+      ? db
+          .from("page")
+          .select("id, title, deleted_at, updated_by")
+          .not("deleted_at", "is", null)
+          .order("deleted_at", { ascending: false })
+          .limit(200)
+      : Promise.resolve({ data: [] }),
+  ]);
   const rows = (data ?? []) as {
     object_id: string;
     object_type: string;
@@ -71,8 +92,14 @@ export async function listTrash(): Promise<TrashEntry[]> {
     deleted_by: string | null;
     purge_after: string;
   }[];
-  const people = await names(db, rows.map((row) => row.deleted_by ?? ""));
-  return rows.map((row) => ({
+  // The page's last editor is whoever moved it to the trash.
+  const pages = (pageData ?? []) as { id: string; title: string; deleted_at: string; updated_by: string | null }[];
+  const people = await names(db, [
+    ...rows.map((row) => row.deleted_by ?? ""),
+    ...pages.map((page) => page.updated_by ?? ""),
+  ]);
+  const records: TrashEntry[] = rows.map((row) => ({
+    kind: "object",
     objectId: row.object_id,
     objectType: row.object_type,
     title: row.title,
@@ -80,6 +107,19 @@ export async function listTrash(): Promise<TrashEntry[]> {
     deletedByName: row.deleted_by ? people.get(row.deleted_by) ?? null : null,
     purgeAfter: row.purge_after,
   }));
+  const listed = new Set(records.map((entry) => entry.objectId));
+  const trashedPages: TrashEntry[] = pages
+    .filter((page) => !listed.has(page.id))
+    .map((page) => ({
+      kind: "page",
+      objectId: page.id,
+      objectType: "page",
+      title: page.title,
+      deletedAt: page.deleted_at,
+      deletedByName: page.updated_by ? people.get(page.updated_by) ?? null : null,
+      purgeAfter: null,
+    }));
+  return [...records, ...trashedPages].sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
 }
 
 /** Whether the object is in the trash (restorable) right now. */

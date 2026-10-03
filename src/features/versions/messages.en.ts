@@ -29,7 +29,7 @@ export const versionsEn = {
   },
   trash: {
     title: "Trash",
-    description: "Deleted items stay here for 30 days. Restore one to put it back where it was.",
+    description: "Deleted records stay here for 30 days; deleted pages stay until someone restores them. Restore one to put it back where it was.",
     none: "The trash is empty.",
     delete: "Move to trash",
     confirmDelete: "Move \"{title}\" to the trash? It can be restored for 30 days.",
@@ -39,6 +39,8 @@ export const versionsEn = {
     deletedBy: "Deleted by {name} on {date}",
     daysLeft: "{count} days left",
     lastDay: "Last day",
+    untilRestored: "Until restored",
+    untitled: "Untitled",
     columns: {
       item: "Item",
       type: "Type",
