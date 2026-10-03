@@ -103,7 +103,10 @@ export default async function EventsPage({
         title={t("events.title")}
         description={t("events.description")}
         actions={
-          session.isStaff ? (
+          session.isStaff && !session.isAdmin && (programs ?? []).length === 0 && (projects ?? []).length === 0 ? (
+            // An event outside a program or project is for administrators.
+            <p className="meta max-w-xs text-right">{t("events.create.needWorkFirst")}</p>
+          ) : session.isStaff ? (
             <EntityFormDialog
               triggerLabel={t("events.create.trigger")}
               title={t("events.create.title")}
@@ -118,6 +121,9 @@ export default async function EventsPage({
                   label: t("events.fields.program"),
                   type: "select",
                   colSpan: 1,
+                  // One of program or project is needed unless an administrator
+                  // creates it (createEvent); say so before anything is typed.
+                  hint: session.isAdmin ? undefined : t("events.create.workHint"),
                   options: (programs ?? []).map((p) => ({ value: p.id, label: p.name })),
                 },
                 {

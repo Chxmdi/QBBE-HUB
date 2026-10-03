@@ -196,6 +196,9 @@ export const portfolioEn = {
       descriptionPlaceholder: "Background a newcomer would need.",
       program: "Program",
       noProgram: "No program",
+      programHint: "Projects are created inside a program you manage.",
+      needProgram: "Projects are created inside a program, and you don't manage one yet. Ask an administrator to make you a lead or manager of a program, or propose the project instead.",
+      propose: "Propose a project",
       owner: "Accountable owner",
       me: "Me",
       sponsor: "Sponsor",
@@ -392,6 +395,7 @@ export const portfolioEn = {
       emptyTitle: "No programs yet",
       emptyArchivedBody: "Archived programs will appear here for review and restoration.",
       emptyBody: "Create a program to group related projects, events, and channels.",
+      emptyBodyStaff: "No programs yet. An administrator creates programs; they appear here once they exist.",
       projectCounts: "{active} active · {total} total projects",
       templatesHeading: "Program templates",
       templatesIntro:

@@ -56,6 +56,7 @@ export const workFrCA: typeof workEn = {
     dueToday: "Échéance aujourd’hui",
     viewMyWork: "Voir mon travail",
     programHealthEmpty: "Créez un programme pour voir ici la santé de sa réalisation.",
+    programHealthEmptyStaff: "Aucun programme pour l’instant. Un administrateur crée les programmes.",
     programCompletion: "Avancement de {name}",
     viewPortfolio: "Voir le portefeuille",
     tasksCompleted30: "tâches terminées · 30 derniers jours",

@@ -59,6 +59,41 @@ test("a note is captured, matched to its project, and filed as a task in one tap
     .toBe(`${project}:capture:filed`);
 });
 
+test("staff file a note as a personal task, which only they can see", async ({ page }) => {
+  // Staging audit B1: a staff member with no project got "new row violates
+  // row-level security policy for table task" here. A task with no project or
+  // program is now the creator's own (supabase/tests/personal-tasks.sql).
+  test.setTimeout(120_000);
+  const note = `Book a room for the volunteer debrief ${randomUUID().slice(0, 8)}`;
+
+  await signIn(page, "staff");
+  await page.goto("/capture");
+  await page.getByLabel("What do you want to remember?").fill(note);
+  await page.getByRole("button", { name: "Capture", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Captured." })).toBeVisible();
+
+  const item = page.getByRole("listitem").filter({ hasText: note });
+  await item.getByRole("button", { name: "Task, no project" }).click();
+  await expect(page.getByRole("listitem").filter({ hasText: note })).toHaveCount(0);
+  await expect(page.getByText(/Could not (file|save) it|can't add a task there/)).toHaveCount(0);
+
+  await expect
+    .poll(() =>
+      sql(`select coalesce(t.project_id::text, 'none') || ':' || u.email from task t
+           join auth.users u on u.id = t.created_by where t.title = '${note}'`),
+    )
+    .toBe("none:qa-staff@example.com");
+
+  // It is on their own task list, and nobody else's.
+  await page.goto("/my-work");
+  await expect(page.getByText(note, { exact: true })).toBeVisible();
+  await signOut(page);
+  await signIn(page, "lead");
+  await page.goto("/my-work");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByText(note)).toHaveCount(0);
+});
+
 test("a forwarded email is matched to its sender and logged to the contact", async ({ page }) => {
   test.setTimeout(120_000);
   const suffix = randomUUID().slice(0, 8);

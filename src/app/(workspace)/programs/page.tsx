@@ -83,7 +83,8 @@ export default async function ProgramsPage({
         description={t("programs.list.description")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <CreateProgramFromTemplateButton templates={programTemplates} />
+            {/* Only an administrator may create a program (program_scoped_insert). */}
+            {session.isAdmin ? <CreateProgramFromTemplateButton templates={programTemplates} /> : null}
             {session.isAdmin ? (
               <EntityFormDialog
                 triggerLabel={t("programs.list.saveTemplate")}
@@ -97,7 +98,9 @@ export default async function ProgramsPage({
                 ]}
               />
             ) : null}
-            <ProgramCreateDialog people={options.people} defaultOpen={params.create === "1"} />
+            {session.isAdmin ? (
+              <ProgramCreateDialog people={options.people} defaultOpen={params.create === "1"} />
+            ) : null}
           </div>
         }
       />
@@ -110,7 +113,11 @@ export default async function ProgramsPage({
         <EmptyState
           icon={<Layers />}
           title={archived ? t("programs.list.emptyArchivedTitle") : t("programs.list.emptyTitle")}
-          description={archived ? t("programs.list.emptyArchivedBody") : t("programs.list.emptyBody")}
+          description={
+            archived
+              ? t("programs.list.emptyArchivedBody")
+              : t(session.isAdmin ? "programs.list.emptyBody" : "programs.list.emptyBodyStaff")
+          }
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
