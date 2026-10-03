@@ -192,16 +192,22 @@ export async function updateOpportunity(input: unknown): Promise<ActionResult> {
     patch.decided_at = fields.decidedAt || null;
   }
 
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("opportunity")
     .update(patch)
-    .eq("id", opportunityId);
+    .eq("id", opportunityId)
+    .select("id");
 
   if (error) {
     return {
       ok: false,
       error: t("crm.errors.opportunityRefused"),
     };
+  }
+  // An owner without CRM access can read the opportunity but not change it;
+  // their update matches no row, and nobody should be told it was reassigned.
+  if (!changed || changed.length === 0) {
+    return { ok: false, error: t("crm.errors.opportunityUnavailable") };
   }
 
   if (fields.ownerId && fields.ownerId !== existing.owner_id) {

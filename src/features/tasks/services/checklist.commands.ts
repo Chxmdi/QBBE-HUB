@@ -57,11 +57,16 @@ export async function toggleChecklistItem(
   await requireSession();
   const t = await getT();
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
+  // Someone who can read the task but not edit it matches no row; that is a
+  // refusal, not a tick that silently disappears on the next load.
+  const { data: changed, error } = await supabase
     .from("checklist_item")
     .update({ completed_at: completed ? new Date().toISOString() : null })
-    .eq("id", itemId);
-  if (error) return { ok: false, error: t("tasks.errors.updateChecklistItem") };
+    .eq("id", itemId)
+    .select("id");
+  if (error || !changed || changed.length === 0) {
+    return { ok: false, error: t("tasks.errors.updateChecklistItem") };
+  }
   return { ok: true };
 }
 

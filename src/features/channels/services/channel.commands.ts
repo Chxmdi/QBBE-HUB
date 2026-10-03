@@ -198,11 +198,13 @@ export async function setChannelArchived(
     };
   }
 
-  const { error } = await supabase
+  // A refusal from row-level security matches no row rather than erroring.
+  const { data: changed, error } = await supabase
     .from("channel")
     .update({ archived_at: archived ? new Date().toISOString() : null })
-    .eq("id", channelId);
-  if (error) {
+    .eq("id", channelId)
+    .select("id");
+  if (error || !changed || changed.length === 0) {
     return { ok: false, error: t("channels.errors.ownerOrAdmin") };
   }
 
