@@ -126,10 +126,14 @@ jobs:
       - name: Install from lockfile
         run: npm ci --ignore-scripts
 
-      - name: Dependency audit (high+)
-        run: npm audit --audit-level=high
+      # Blocks on what the app ships. A development tool's advisory (the
+      # linter's, the test runner's) cannot reach a person using the Hub, and
+      # one with no released fix would otherwise hold every merge; the step
+      # below still lists those, every severity, on each run.
+      - name: Dependency audit (high+, shipped packages)
+        run: npm audit --audit-level=high --omit=dev
 
-      - name: Moderate and low advisories (reported, not blocking)
+      - name: All advisories, development tools included (reported, not blocking)
         if: always()
         run: |
           npm audit --audit-level=moderate > audit.txt 2>&1 || true
