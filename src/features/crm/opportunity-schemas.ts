@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { optionalDay, requiredText } from "@/lib/schema";
 import type { Locale } from "@/lib/i18n/config";
 import { peopleEn } from "@/lib/i18n/messages/workspace/people.en";
 
@@ -129,7 +129,7 @@ const money = z
   .optional()
   .nullable();
 
-const isoDate = z.string().trim().max(10);
+const isoDate = optionalDay();
 
 /**
  * Applied to both create and update, over whatever fields are present. An

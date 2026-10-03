@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import { actionSchema } from "@/features/meetings/schemas";
 import { requireSession } from "@/lib/auth";
 import { hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -697,13 +698,6 @@ export async function moveAgendaItem(input: unknown): Promise<ActionResult> {
   revalidatePath(`/meetings/${item.meeting_id as string}`);
   return { ok: true, id: parsed.data.agendaItemId };
 }
-
-const actionSchema = z.object({
-  meetingId: z.string().uuid(),
-  title: requiredText(K("meetings.errors.actionTitleRequired"), 300),
-  ownerId: z.string().uuid().optional(),
-  dueAt: z.string().optional(),
-});
 
 /** Meeting action → assigned task with source links (CAL-004, P0-MTG-02). */
 export async function addMeetingAction(input: unknown): Promise<ActionResult> {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { optionalDay, requiredText } from "@/lib/schema";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 
 /**
@@ -179,7 +179,7 @@ export const createProjectRequestSchema = z.object({
   beneficiaries: z.string().trim().max(2000).optional(),
   programId: z.string().uuid().nullable().optional(),
   sponsorId: z.string().uuid().nullable().optional(),
-  neededBy: z.string().trim().max(10).nullable().optional(),
+  neededBy: optionalDay().nullable().optional(),
   estimatedEffort: z.string().trim().max(200).optional(),
 });
 
@@ -216,7 +216,7 @@ export const requestApprovalSchema = z
       .string({ required_error: "Name the person who should decide." })
       .uuid({ message: "Name the person who should decide." }),
     note: z.string().trim().max(2000).optional(),
-    dueAt: z.string().trim().max(10).nullable().optional(),
+    dueAt: optionalDay().nullable().optional(),
     projectRequestId: z.string().uuid().optional(),
     reportId: z.string().uuid().optional(),
     opportunityId: z.string().uuid().optional(),
