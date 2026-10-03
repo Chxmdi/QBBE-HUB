@@ -82,3 +82,27 @@ describe("property values", () => {
     expect(Object.keys(taskSystemProperties).filter((key) => !seeded.includes(key))).toEqual([]);
   });
 });
+
+describe("values that do not fit their kind are refused before they are stored", () => {
+  it("refuses a date that is not a day, with a sentence rather than Postgres's wording", () => {
+    for (const value of ["2026-02-31", "2026-13-01", "tomorrow", 20261003]) {
+      expect(() => encodePropertyValue({ kind: "date", value } as never), String(value)).toThrow("Enter the date as YYYY-MM-DD.");
+    }
+    expect(encodePropertyValue({ kind: "date", value: "2028-02-29" }).value_date).toBe("2028-02-29");
+  });
+
+  it("checks both ends of a date range and their order", () => {
+    expect(() => encodePropertyValue({ kind: "date_range", value: { start: "2026-02-30", end: null } })).toThrow("YYYY-MM-DD");
+    expect(() => encodePropertyValue({ kind: "date_range", value: { start: "2026-03-01", end: "2026-04-31" } })).toThrow("YYYY-MM-DD");
+    expect(() => encodePropertyValue({ kind: "date_range", value: { start: "2026-03-05", end: "2026-03-01" } })).toThrow("on or after");
+    expect(encodePropertyValue({ kind: "date_range", value: { start: "2026-03-01", end: "2026-03-05" } })).toMatchObject({
+      value_date: "2026-03-01",
+      value_date_end: "2026-03-05",
+    });
+  });
+
+  it("refuses text and checkbox values of the wrong type", () => {
+    expect(() => encodePropertyValue({ kind: "text", value: 42 } as never)).toThrow("text");
+    expect(() => encodePropertyValue({ kind: "checkbox", value: "yes" } as never)).toThrow("true or false");
+  });
+});

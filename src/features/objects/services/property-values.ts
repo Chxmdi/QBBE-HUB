@@ -4,6 +4,7 @@ import type {
   PropertyValue,
   Uuid,
 } from "@/lib/objects/contracts";
+import { isCalendarDate } from "@/lib/schema";
 
 /** The typed columns of one `property_value` row. */
 export interface PropertyValueColumns {
@@ -87,6 +88,7 @@ export function encodePropertyValue(value: PropertyValue): PropertyValueColumns 
     case "phone":
     case "status":
     case "select":
+      if (typeof value.value !== "string") throw new Error("A text value must be text.");
       return { ...EMPTY, value_text: value.value };
     case "number":
     case "currency":
@@ -96,11 +98,21 @@ export function encodePropertyValue(value: PropertyValue): PropertyValueColumns 
       if (!Number.isFinite(value.value)) throw new Error("A number value must be finite.");
       return { ...EMPTY, value_number: value.value };
     case "checkbox":
+      if (typeof value.value !== "boolean") throw new Error("A checkbox value must be true or false.");
       return { ...EMPTY, value_bool: value.value };
+    // A date that is not a day (31 February) used to reach Postgres, which
+    // refused it with its own wording; the person now reads a sentence.
     case "date":
+      if (!isDay(value.value)) throw new Error("Enter the date as YYYY-MM-DD.");
       return { ...EMPTY, value_date: value.value };
     case "date_range":
-      return { ...EMPTY, value_date: value.value.start, value_date_end: value.value.end };
+      if (!value.value || !isDay(value.value.start) || (value.value.end != null && !isDay(value.value.end))) {
+        throw new Error("Enter the dates as YYYY-MM-DD.");
+      }
+      if (value.value.end != null && value.value.end < value.value.start) {
+        throw new Error("The range must end on or after the day it starts.");
+      }
+      return { ...EMPTY, value_date: value.value.start, value_date_end: value.value.end ?? null };
     case "multi_select":
       return { ...EMPTY, value_json: [...value.value] };
     case "person":
@@ -111,6 +123,11 @@ export function encodePropertyValue(value: PropertyValue): PropertyValueColumns 
     default:
       throw new Error(`Values of kind ${value.kind} are not stored in property_value.`);
   }
+}
+
+/** A real calendar day, YYYY-MM-DD. */
+function isDay(value: unknown): value is string {
+  return typeof value === "string" && isCalendarDate(value);
 }
 
 function isStringArray(value: unknown): value is string[] {

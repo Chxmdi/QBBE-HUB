@@ -109,7 +109,12 @@ export function createSupabaseObjectWriter(client: Client): ObjectWriter {
       if (error) throw new ObjectWriteError(error.message);
       return;
     }
-    const columns = encodePropertyValue({ kind: property.kind, value: change.after } as never);
+    let columns: ReturnType<typeof encodePropertyValue>;
+    try {
+      columns = encodePropertyValue({ kind: property.kind, value: change.after } as never);
+    } catch (error) {
+      throw new ObjectWriteError(error instanceof Error ? error.message : "invalid_value");
+    }
     const { error } = await client
       .from("property_value")
       .upsert({ object_id: change.object.id, property_id: property.propertyId, ...columns });

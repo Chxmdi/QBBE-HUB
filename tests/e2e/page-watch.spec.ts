@@ -113,6 +113,14 @@ async function caretAtEnd(page: Page, blockId: string) {
   const box = await block.boundingBox();
   if (!box) throw new Error(`block ${blockId} not visible`);
   await block.click({ position: { x: box.width - 4, y: box.height / 2 } });
+  // The editor learns where the caret is from a selectionchange that arrives a
+  // task after the click; a key pressed before it lands where the caret was
+  // (seen in CI: Enter after "first" made the new block after "third").
+  await expect
+    .poll(() => block.evaluate((el) => el.contains(document.getSelection()?.anchorNode ?? null)))
+    .toBe(true);
+  await block.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  await page.keyboard.press("End");
 }
 
 const blockOrder = (pageId: string) =>
