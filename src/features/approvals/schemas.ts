@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { requiredText, isCalendarDate } from "@/lib/schema";
 import type { Locale } from "@/lib/i18n/config";
 import { formatCurrency } from "@/lib/i18n/format";
 import { createTranslator, type MessageKey } from "@/lib/i18n/translate";
@@ -198,7 +198,7 @@ export function describeRange(min: number, max: number | null, locale: Locale = 
 }
 
 const isoDate = (message: string) =>
-  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, message);
+  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, message).refine(isCalendarDate, message);
 
 /**
  * Away cover: while an approver is away, their delegate decides their steps.

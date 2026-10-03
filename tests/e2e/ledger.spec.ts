@@ -106,3 +106,28 @@ test("the owner posts a balanced entry, reports it and reverses it; staff only r
     sql(`delete from ledger_reader where user_id = '${staffId}'`);
   }
 });
+
+/**
+ * A date that is not a day (February 31) was taken by the reports, refused by
+ * Postgres, and answered with a 500 and "Try again", which can never work.
+ * Now a report link with such a date falls back to the report's default, and
+ * the donor export, which needs both dates, says they are wrong.
+ */
+test("finance reports and exports treat a date that is not a day as missing, not as a server error", async ({ page }) => {
+  await signIn(page, "owner");
+  for (const path of [
+    "/api/finance/ledger/trial-balance?as_of=2026-02-31",
+    "/api/finance/ledger/general-ledger?from=2026-04-31&to=2026-05-31",
+    "/api/finance/ledger/export/journal?from=2026-01-01&to=2026-02-30",
+    "/api/finance/ledger/export/trial-balance?as_of=2026-06-31",
+    "/api/finance/ledger/export/receipts?from=2026-02-29&to=2026-03-31",
+    "/api/finance/sales-tax/worksheet?from=2026-09-31&to=2026-10-31",
+  ]) {
+    const response = await page.request.get(path);
+    expect(response.status(), path).toBe(200);
+  }
+  const balance = await page.request.get("/api/finance/ledger/trial-balance?as_of=2026-02-31");
+  expect(await balance.text()).not.toContain("2026-02-31");
+  const donors = await page.request.get("/api/finance/gifts/donors/export?from=2026-02-30&to=2026-03-31");
+  expect(donors.status()).toBe(400);
+});

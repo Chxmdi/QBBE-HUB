@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { requiredText } from "@/lib/schema";
+import { requiredText, isCalendarDate } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
@@ -58,12 +58,13 @@ function issueMessage(t: TranslateFn, message: string | undefined): string | und
 }
 
 const isoDate = (message: string) =>
-  requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message);
+  requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message).refine(isCalendarDate, message);
 
 const optionalDate = z
   .string()
   .trim()
   .regex(/^(\d{4}-\d{2}-\d{2})?$/, K("finance.ledger.errors.datesFormat"))
+  .refine((value) => value === "" || isCalendarDate(value), K("finance.ledger.errors.datesFormat"))
   .optional()
   .transform((v) => v || null);
 
@@ -457,7 +458,7 @@ export async function fundAvailableOn(fundId: unknown, date: unknown): Promise<n
   const auth = await authorizeAdminAction();
   if (!auth.ok) return null;
   const parsed = z
-    .object({ fundId: z.string().uuid(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+    .object({ fundId: z.string().uuid(), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate) })
     .safeParse({ fundId, date });
   if (!parsed.success) return null;
   const supabase = await createSupabaseServerClient();

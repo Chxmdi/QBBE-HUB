@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { requiredText } from "@/lib/schema";
+import { requiredText, isCalendarDate } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translate";
@@ -55,7 +55,7 @@ async function firstIssue(error: z.ZodError): Promise<string | undefined> {
   return (await getT())(message as MessageKey);
 }
 
-const isoDate = (message: MessageKey) => requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message);
+const isoDate = (message: MessageKey) => requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message).refine(isCalendarDate, message);
 
 const grantSchema = z.object({
   userId: z

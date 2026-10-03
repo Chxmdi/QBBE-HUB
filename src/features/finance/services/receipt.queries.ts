@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isCalendarDate } from "@/lib/schema";
 
 /** Filters shared by the receipts page and its CSV export. */
 export interface ReceiptFilters {
@@ -9,14 +10,13 @@ export interface ReceiptFilters {
   mine?: boolean;
 }
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Reads filters from the query string, dropping anything malformed. */
 export function parseReceiptFilters(params: Record<string, string | undefined>): ReceiptFilters {
   return {
-    from: params.from && DATE.test(params.from) ? params.from : undefined,
-    to: params.to && DATE.test(params.to) ? params.to : undefined,
+    from: params.from && isCalendarDate(params.from) ? params.from : undefined,
+    to: params.to && isCalendarDate(params.to) ? params.to : undefined,
     programId: params.program && UUID.test(params.program) ? params.program : undefined,
     status:
       params.status === "submitted" || params.status === "reviewed" ? params.status : undefined,

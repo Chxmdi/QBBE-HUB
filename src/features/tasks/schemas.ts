@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { requiredText, isCalendarDate } from "@/lib/schema";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 import type { TaskStatus } from "@/types/entities";
 
@@ -256,6 +256,7 @@ export const taskSeriesSchema = z.object({
   startsOn: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "A recurring task needs a valid start date.")
+    .refine(isCalendarDate, "A recurring task needs a valid start date.")
     .optional(),
 });
 
@@ -274,6 +275,7 @@ export const rescheduleSchema = z.object({
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "A reschedule needs a calendar date.")
+    .refine(isCalendarDate, "A reschedule needs a calendar date.")
     .nullable(),
 });
 

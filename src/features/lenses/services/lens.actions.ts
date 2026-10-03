@@ -15,6 +15,7 @@ import type { LensT } from "@/features/lenses/i18n";
 import { createRequestActionRegistry } from "@/features/objects/actions/server";
 import { SET_PROPERTY_ACTION } from "@/features/objects/actions/set-property";
 import { cellEditorFor, parseCellInput, PASTE_LIMIT, storedValue } from "@/features/lenses/table/editable";
+import { isCalendarDate } from "@/lib/schema";
 
 /**
  * Server actions for the lens screens. Reads go from the browser straight to
@@ -27,7 +28,7 @@ const cellSchema = z.discriminatedUnion("property", [
   z.object({ type: z.literal("task"), id: uuid, property: z.literal("title"), value: z.string().trim().min(1).max(300) }),
   z.object({ type: z.literal("task"), id: uuid, property: z.literal("status"), value: z.enum(TASK_STATUSES as unknown as [TaskStatus, ...TaskStatus[]]) }),
   z.object({ type: z.literal("task"), id: uuid, property: z.literal("priority"), value: z.enum(["low", "medium", "high", "critical"]) }),
-  z.object({ type: z.literal("task"), id: uuid, property: z.literal("due"), value: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable() }),
+  z.object({ type: z.literal("task"), id: uuid, property: z.literal("due"), value: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate).nullable() }),
   z.object({ type: z.literal("task"), id: uuid, property: z.literal("assignee"), value: uuid.nullable() }),
   z.object({ type: z.literal("task"), id: uuid, property: z.literal("reviewer"), value: uuid.nullable() }),
 ]);

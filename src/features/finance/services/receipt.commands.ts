@@ -7,7 +7,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { parseMoneyToCents } from "@/features/finance/money";
-import { requiredText } from "@/lib/schema";
+import { requiredText, isCalendarDate } from "@/lib/schema";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translate";
 
@@ -40,7 +40,7 @@ const receiptSchema = z
     documentDate: requiredText("finance.receipts.validation.dateRequired" satisfies MessageKey).regex(
       /^\d{4}-\d{2}-\d{2}$/,
       "finance.receipts.validation.dateRequired" satisfies MessageKey,
-    ),
+    ).refine(isCalendarDate, "finance.receipts.validation.dateRequired" satisfies MessageKey),
     vendor: requiredText("finance.receipts.validation.vendorRequired" satisfies MessageKey, 200),
     total: money("finance.receipts.validation.totalInvalid", true),
     gst: money("finance.receipts.validation.gstInvalid", false),

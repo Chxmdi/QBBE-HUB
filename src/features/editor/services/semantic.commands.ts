@@ -11,6 +11,7 @@ import { bulkUpdateTasks, createTask, updateTaskStatus } from "@/features/tasks/
 import { parseStoredSpec, toQueryBlockRow, type QueryBlockRow } from "@/features/editor/semantic/queries";
 import { contentToPlainText, normalizeContent, type EditorBlock } from "@/features/editor/adapter/content";
 import { createPage } from "@/features/pages/services/page.commands";
+import { isCalendarDate } from "@/lib/schema";
 
 /**
  * Data for semantic blocks (M5). Every read runs as the signed-in person, so
@@ -167,7 +168,7 @@ export async function listTaskProjects(): Promise<{ id: string; name: string }[]
 const taskExtrasSchema = z
   .object({
     assigneeId: idSchema.optional(),
-    dueAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    dueAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate).optional(),
   })
   .default({});
 
