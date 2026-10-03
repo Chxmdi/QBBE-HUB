@@ -95,28 +95,38 @@ export async function publishAnnouncement(
 
   if (!channel) return { ok: false, error: t("announcements.errors.noChannel") };
 
-  const { data: message, error: messageError } = await supabase
-    .from("message")
-    .insert({
-      organization_id: session.organizationId,
-      channel_id: channel.id,
-      author_id: session.userId,
-      body,
-    })
-    .select("id")
-    .single();
+  // A scheduled announcement keeps its text on its own row until the publish
+  // time; the scheduled-announcements job posts the message then. Posting it
+  // now would show the text in the channel, on Home and over realtime before
+  // the announcement is due.
+  let messageId: string | null = null;
+  if (!isScheduled) {
+    const { data: message, error: messageError } = await supabase
+      .from("message")
+      .insert({
+        organization_id: session.organizationId,
+        channel_id: channel.id,
+        author_id: session.userId,
+        body,
+      })
+      .select("id")
+      .single();
 
-  if (messageError || !message) {
-    return {
-      ok: false,
-      error: t("announcements.errors.noPermission"),
-    };
+    if (messageError || !message) {
+      return {
+        ok: false,
+        error: t("announcements.errors.noPermission"),
+      };
+    }
+    messageId = message.id as string;
   }
 
   const { data: announcement, error: annError } = await supabase
     .from("announcement")
     .insert({
-      message_id: message.id,
+      message_id: messageId,
+      body: messageId ? null : body,
+      channel_id: messageId ? null : channel.id,
       organization_id: session.organizationId,
       title,
       priority,

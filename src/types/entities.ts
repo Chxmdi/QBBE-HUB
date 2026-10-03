@@ -253,7 +253,8 @@ export interface MessageReaction {
 
 export interface Announcement {
   id: string;
-  message_id: string;
+  /** Null while a scheduled announcement waits for its publish time. */
+  message_id: string | null;
   title: string;
   priority: "normal" | "important" | "critical";
   requires_ack: boolean;
