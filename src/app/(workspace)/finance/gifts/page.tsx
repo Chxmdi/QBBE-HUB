@@ -16,6 +16,7 @@ import { RecordGiftDialog } from "@/features/gifts/components/record-gift-dialog
 import { GIFT_SELECT, GIFT_TYPE_KEY, donorName, type GiftRow } from "@/features/gifts/services/gift.data";
 import { recordGiftOptions } from "@/features/gifts/services/gift.options";
 import { getLocale, getT } from "@/lib/i18n/server";
+import { isCalendarYear } from "@/lib/schema";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("finance.gifts.list.metaTitle") };
@@ -32,7 +33,7 @@ export default async function GiftsPage({
   const params = await searchParams;
   const today = todayIn(session.timeZone);
   const currentYear = Number(today.slice(0, 4));
-  const year = /^\d{4}$/.test(params.year ?? "") ? Number(params.year) : currentYear;
+  const year = isCalendarYear(params.year ?? "") ? Number(params.year) : currentYear;
   const options = canManage ? await recordGiftOptions(supabase, session.organizationId, today, t) : null;
 
   const header = (

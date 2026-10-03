@@ -87,3 +87,13 @@ test("the owner records a gift, posts it and issues a bilingual not-a-receipt ac
   expect((await page.request.get("/api/finance/gifts/donors/export?from=2026-09-01&to=2026-09-30")).status()).toBe(403);
   expect((await page.request.get(href!)).status()).toBe(404);
 });
+
+/** Year 0000 has no days, and Postgres refused it: both gift pages showed "Something went wrong". */
+test("a year that does not exist shows the current year on the gift pages, not an error", async ({ page }) => {
+  await signIn(page, "owner");
+  for (const path of ["/finance/gifts?year=0000", "/finance/gifts/statement?year=0000"]) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Something went wrong" }), path).toHaveCount(0);
+  }
+});

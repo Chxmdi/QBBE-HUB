@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { requiredText, isCalendarDate } from "@/lib/schema";
+import { requiredText, isCalendarDate, isCalendarMonth } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
@@ -105,10 +105,7 @@ export async function recordChartApproval(input: unknown): Promise<ActionResult>
 }
 
 const fiscalYearSchema = z.object({
-  startMonth: requiredText(K("finance.ledger.errors.firstMonth")).regex(
-    /^\d{4}-\d{2}$/,
-    K("finance.ledger.errors.firstMonth"),
-  ),
+  startMonth: requiredText(K("finance.ledger.errors.firstMonth")).refine(isCalendarMonth, K("finance.ledger.errors.firstMonth")),
 });
 
 export async function createFiscalYear(input: unknown): Promise<ActionResult> {

@@ -133,6 +133,13 @@ test("the owner imports a statement, matches it and reconciles the month at a ze
   // Reconciled lines are locked.
   await page.goto(`${accountUrl}?month=2031-03`);
   await expect(page.getByRole("button", { name: `Unmatch ${fee}` })).toHaveCount(0);
+
+  // A month that does not exist (13, 00) shows the current month, not an error.
+  for (const month of ["2031-13", "2031-00"]) {
+    await page.goto(`${accountUrl}?month=${month}`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Something went wrong" }), month).toHaveCount(0);
+  }
   await signOut(page);
 
   // Staff without a ledger grant see nothing and cannot download the report.

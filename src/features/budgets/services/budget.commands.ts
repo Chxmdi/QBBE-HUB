@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { requiredText } from "@/lib/schema";
+import { requiredText, isCalendarMonth } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { parseMoneyToCents } from "@/features/ledger/money";
@@ -71,8 +71,8 @@ const optionalUuid = z
   .pipe(uuid.nullable());
 
 const createSchema = z.object({
-  startMonth: requiredText("finance.budgets.errors.startMonth" satisfies MessageKey).regex(
-    /^\d{4}-\d{2}$/,
+  startMonth: requiredText("finance.budgets.errors.startMonth" satisfies MessageKey).refine(
+    isCalendarMonth,
     "finance.budgets.errors.startMonth" satisfies MessageKey,
   ),
   name: requiredText("finance.budgets.errors.name" satisfies MessageKey, 200),

@@ -236,6 +236,16 @@ test("a read-only member is not offered a reschedule they would be refused", asy
   await expect(page.getByLabel(/^Reschedule /)).toHaveCount(0);
 });
 
+/** A date that is not a day parsed to an Invalid Date, and the calendar threw. */
+test("the calendar shows this week for a date that is not a day, or is not a date at all", async ({ page }) => {
+  await signIn(page, "volunteer");
+  for (const date of ["2026-02-30", "2026-13-01", "tomorrow"]) {
+    await page.goto(`/calendar?date=${date}`);
+    await expect(page.getByText(/on one calendar\./), date).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Something went wrong" }), date).toHaveCount(0);
+  }
+});
+
 test("a milestone can be blocked by another, and a cycle is never offered", async ({ page }) => {
   test.setTimeout(180_000);
   await signIn(page, "owner");
