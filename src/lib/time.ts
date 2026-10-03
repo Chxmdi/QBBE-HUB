@@ -28,6 +28,29 @@ import { DEFAULT_LOCALE, intlLocale, type Locale } from "@/lib/i18n/config";
  */
 export const DEFAULT_TIME_ZONE = "America/Toronto";
 
+/**
+ * Whether `value` is a zone this runtime can format in. `Intl` throws a
+ * RangeError for anything else, so a zone that is stored without this check
+ * takes down every screen that formats a time in it.
+ */
+export function isRealTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A person's own zone for display, or the workspace default when they have
+ * none or the stored one is not a real zone. A bad value saved before saving
+ * was checked must not leave its owner with an error page.
+ */
+export function viewerTimeZone(value: string | null | undefined): string {
+  return value && isRealTimeZone(value) ? value : DEFAULT_TIME_ZONE;
+}
+
 /** Milliseconds that `timeZone` is ahead of UTC at a given instant. */
 function offsetAt(instant: Date, timeZone: string): number {
   const parts = new Intl.DateTimeFormat("en-US", {

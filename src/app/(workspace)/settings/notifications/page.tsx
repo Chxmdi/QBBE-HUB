@@ -10,6 +10,7 @@ import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { getFormatters, getT } from "@/lib/i18n/server";
 import { isEnabled } from "@/lib/feature-flags";
+import { isRealTimeZone } from "@/lib/time";
 import { getPagesT } from "@/features/pages/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translate";
 
@@ -56,7 +57,9 @@ export default async function NotificationSettingsPage() {
 
   const values: PreferenceValues = {
     ...DEFAULT_PREFERENCES,
-    timezone: session.profile.timezone || DEFAULT_PREFERENCES.timezone,
+    timezone: session.profile.timezone && isRealTimeZone(session.profile.timezone)
+      ? session.profile.timezone
+      : DEFAULT_PREFERENCES.timezone,
     ...((prefRow ?? {}) as Partial<PreferenceValues>),
     category_modes:
       ((prefRow as { category_modes?: PreferenceValues["category_modes"] } | null)?.category_modes) ??
