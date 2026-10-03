@@ -1,7 +1,6 @@
 /* Wave 2 unit C1: presence and live co-editing. Only C1 edits this file. */
 "use client";
 
-import "./c1-presence.css";
 import * as React from "react";
 import type * as Y from "yjs";
 import { Awareness, removeAwarenessStates } from "y-protocols/awareness";

@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import "./blocknote/styles";
 import { useEditorT } from "@/features/editor/i18n/client";
 import type { BlockEditorProps } from "./types";
 import { editorReserve } from "./performance/reserve";

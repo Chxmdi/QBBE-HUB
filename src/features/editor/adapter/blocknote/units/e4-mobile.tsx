@@ -1,6 +1,5 @@
 "use client";
 
-import "./e4-mobile.css";
 import * as React from "react";
 import {
   ArrowDown,

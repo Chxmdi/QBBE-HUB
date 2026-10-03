@@ -1,6 +1,5 @@
 "use client";
 
-import "./e2-history.css";
 import * as React from "react";
 import { Keyboard, Redo2, Undo2 } from "lucide-react";
 import { yUndoPluginKey } from "y-prosemirror";
