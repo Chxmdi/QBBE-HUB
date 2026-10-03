@@ -1,6 +1,5 @@
 "use client";
 
-import "./e3-blocks.css";
 import * as React from "react";
 import { useEditorT } from "@/features/editor/i18n/client";
 import { blockDefinition } from "@/features/editor/registry";

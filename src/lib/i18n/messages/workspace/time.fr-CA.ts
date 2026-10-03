@@ -262,6 +262,7 @@ export const timeFrCA: typeof timeEn = {
     errors: {
       invalidInput: "Données non valides.",
       titleRequired: "Une réunion doit avoir un titre.",
+      linkHttps: "Utilisez un lien de réunion qui commence par https://.",
       startRequired: "Choisissez une heure de début.",
       invalidStart: "Heure de début non valide.",
       projectDenied: "Vous ne pouvez pas planifier de réunion dans ce projet.",

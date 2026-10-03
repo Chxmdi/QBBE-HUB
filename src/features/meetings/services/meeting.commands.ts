@@ -47,7 +47,16 @@ const createMeetingSchema = z.object({
   startsAt: requiredText(K("meetings.errors.startRequired")),
   durationMinutes: z.coerce.number().int().min(15).max(480).default(60),
   location: z.string().trim().max(300).optional(),
-  meetingLink: z.string().trim().url().max(500).optional().or(z.literal("")),
+  // https only, as for link documents: `.url()` alone accepts
+  // `javascript:alert(1)`, and the link is rendered as "Join" (staging audit S5).
+  meetingLink: z
+    .string()
+    .trim()
+    .url(K("meetings.errors.linkHttps"))
+    .max(500)
+    .refine((value) => /^https:\/\//i.test(value), K("meetings.errors.linkHttps"))
+    .optional()
+    .or(z.literal("")),
   // P1-MTG-04. Each occurrence is its own meeting row sharing a series id, so
   // editing one never changes the others.
   repeat: z.enum(["none", "weekly", "fortnightly", "monthly"]).default("none"),

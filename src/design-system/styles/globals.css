@@ -212,6 +212,24 @@
   }
 }
 
+/*
+ * A long form scrolls inside its dialog. Its action row (the row holding the
+ * submit button) stays pinned to the bottom of the visible area, so "Create"
+ * is never half hidden below the edge (staging audit M9).
+ */
+.dialog-body form > div:has(> button[type="submit"]) {
+  position: sticky;
+  /* Past the scroll area's own 1rem bottom padding, to the dialog's edge. */
+  bottom: -1rem;
+  z-index: 1;
+  margin-bottom: -1rem;
+  padding-block: 0.75rem;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-line);
+  /* Covers the last pixel row the dialog's rounded edge leaves below it. */
+  box-shadow: 0 0.5rem 0 var(--color-surface);
+}
+
 @layer utilities {
   /*
    * Major headings use an editorial display face and a deep blue gradient.

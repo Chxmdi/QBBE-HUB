@@ -61,8 +61,12 @@ const securityHeaders = [
       // has, and it fetches its language data from 'self' (connect-src).
       "worker-src 'self'",
       [
-        "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-        ...supabaseOrigins(),
+        "connect-src 'self'",
+        // Only this deployment's own Supabase project. A wildcard over every
+        // *.supabase.co project would let injected script send data to any
+        // project at all (staging audit S3); it is kept only for a build that
+        // names no project, which cannot reach Supabase anyway.
+        ...(supabaseOrigins().length ? supabaseOrigins() : ["https://*.supabase.co", "wss://*.supabase.co"]),
         "https://accounts.google.com https://oauth2.googleapis.com",
         "https://gmail.googleapis.com https://www.googleapis.com",
         "https://*.ingest.sentry.io",
