@@ -1,7 +1,5 @@
 "use client";
 
-import "@blocknote/ariakit/style.css";
-import "./editor.css";
 import * as React from "react";
 import * as Y from "yjs";
 import {
