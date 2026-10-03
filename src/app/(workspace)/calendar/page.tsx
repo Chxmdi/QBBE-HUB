@@ -24,6 +24,7 @@ import {
 } from "@/features/calendar/components/week-view";
 import { getLocale, getT } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
+import { isCalendarDate } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 
@@ -48,7 +49,9 @@ export default async function CalendarPage({
   const formats = calendarDateFormats(locale);
   const view = params.view === "month" ? "month" : "week";
 
-  const anchor = params.date
+  // A date that is not a day (2026-02-30, or any other text) parsed to an
+  // Invalid Date, and the range below then threw: the page showed an error.
+  const anchor = params.date && isCalendarDate(params.date)
     ? parse(params.date, "yyyy-MM-dd", new Date())
     : new Date();
 
