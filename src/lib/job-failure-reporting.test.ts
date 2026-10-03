@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { recordJobRun } from "@/lib/job-observability";
 
 /**
@@ -20,7 +20,7 @@ function fakeClient(insertResult: { error: { message: string } | null }) {
   } as unknown as Parameters<typeof recordJobRun>[0];
 }
 
-let consoleError: ReturnType<typeof vi.spyOn>;
+let consoleError: MockInstance<typeof console.error>;
 
 beforeEach(() => {
   consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
