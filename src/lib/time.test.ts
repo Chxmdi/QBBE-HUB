@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatInZone } from "@/lib/time";
+import { DEFAULT_TIME_ZONE, formatInZone, isRealTimeZone, viewerTimeZone } from "@/lib/time";
 import { dueLabel, formatDate } from "@/lib/utils";
 
 /** A `date` column's value is a calendar day, not UTC midnight shifted west. */
@@ -27,5 +27,24 @@ describe("formatInZone with a bare calendar date", () => {
       new Date(Date.UTC(year, month - 1, day)),
     );
     expect(dueLabel(farDay, "America/Toronto", "en").label).toBe(expected);
+  });
+});
+
+describe("time zones a person can save", () => {
+  it("knows real zones from made-up ones", () => {
+    for (const zone of ["America/Toronto", "Europe/Paris", "UTC", "Asia/Kolkata"]) {
+      expect(isRealTimeZone(zone), zone).toBe(true);
+    }
+    for (const zone of ["Mars/Olympus", "America/Montreal'; drop table x;--", "", "GMT+25"]) {
+      expect(isRealTimeZone(zone), zone).toBe(false);
+    }
+  });
+
+  it("shows a stored zone only when it is real, and the workspace default otherwise", () => {
+    expect(viewerTimeZone("Europe/Paris")).toBe("Europe/Paris");
+    expect(viewerTimeZone("Mars/Olympus")).toBe(DEFAULT_TIME_ZONE);
+    expect(viewerTimeZone(null)).toBe(DEFAULT_TIME_ZONE);
+    expect(viewerTimeZone(undefined)).toBe(DEFAULT_TIME_ZONE);
+    expect(viewerTimeZone("")).toBe(DEFAULT_TIME_ZONE);
   });
 });
