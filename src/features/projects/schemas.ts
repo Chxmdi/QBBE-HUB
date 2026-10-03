@@ -103,3 +103,57 @@ export function compareMilestones(
   }
   return a.name.localeCompare(b.name);
 }
+
+/** A new project. Kept out of the server action file so it can be tested. */
+export const createProjectSchema = z.object({
+  name: requiredText("A project needs a name.", 200),
+  outcome: z.string().trim().max(2000).optional(),
+  programId: z.string().uuid().optional(),
+  ownerId: z.string().uuid().optional(),
+  sponsorId: z.string().uuid().optional(),
+  startDate: optionalDay().optional(),
+  targetDate: optionalDay().optional(),
+  priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
+  health: z.enum(["on_track", "at_risk", "off_track", "paused", "unknown"]).default("unknown"),
+  healthReason: z.string().trim().max(2000).optional(),
+  reportingCadence: z.enum(["none", "weekly", "monthly"]).default("none"),
+  fundingSourceId: z.string().uuid().optional().or(z.literal("")),
+  stage: z
+    .enum(["proposed", "approved", "planning", "active"])
+    .default("planning"),
+}).superRefine((value, ctx) => {
+  if (value.stage === "active") {
+    if (!value.programId || !value.outcome || !value.targetDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "An active project needs a program, outcome and target date.",
+      });
+    }
+  }
+  if ((value.health === "at_risk" || value.health === "off_track") && !value.healthReason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Adverse health requires a reason.",
+    });
+  }
+});
+
+// health is deliberately absent. publishStatusUpdate is the only writer of
+// project.health after creation, which is what makes P0-PRJ-04's "adverse
+// health requires a reason" unbypassable through the interface. Accepting it
+// here would reopen exactly that hole.
+export const updateProjectSchema = z.object({
+  projectId: z.string().uuid(),
+  name: requiredText("A project needs a name.", 200),
+  outcome: z.string().trim().max(2000).optional(),
+  description: z.string().trim().max(4000).optional(),
+  // Empty string means "none"; a <select> cannot submit null.
+  programId: z.union([z.string().uuid(), z.literal("")]).optional(),
+  ownerId: z.string().uuid({ message: "A project needs an accountable owner." }),
+  sponsorId: z.union([z.string().uuid(), z.literal("")]).optional(),
+  startDate: optionalDay().optional(),
+  targetDate: optionalDay().optional(),
+  priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
+  reportingCadence: z.enum(["none", "weekly", "monthly"]).default("none"),
+  fundingSourceId: z.union([z.string().uuid(), z.literal("")]).optional(),
+});

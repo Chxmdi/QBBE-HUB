@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { optionalDay } from "@/lib/schema";
 import { createTaskSchema, updateTaskSchema } from "@/features/tasks/schemas";
-import { createMilestoneSchema, updateMilestoneSchema } from "@/features/projects/schemas";
+import {
+  createMilestoneSchema,
+  createProjectSchema,
+  updateMilestoneSchema,
+  updateProjectSchema,
+} from "@/features/projects/schemas";
+import { followUpSchema } from "@/features/crm/schemas";
+import { actionSchema } from "@/features/meetings/schemas";
 import {
   createDecisionRequestSchema,
   createIssueSchema,
@@ -64,6 +71,12 @@ describe("every date field in these forms refuses a date that is not a day", () 
       (d) => createMetricSchema.safeParse({ programId: id, name: "N", baseline: 1, target: 2, targetOn: d }),
     ],
     ["measurement date", (d) => recordMeasurementSchema.safeParse({ metricId: id, measuredOn: d, value: 3 })],
+    ["new project start date", (d) => createProjectSchema.safeParse({ name: "P", startDate: d })],
+    ["new project target date", (d) => createProjectSchema.safeParse({ name: "P", targetDate: d })],
+    ["project start date change", (d) => updateProjectSchema.safeParse({ projectId: id, name: "P", ownerId: id, startDate: d })],
+    ["project target date change", (d) => updateProjectSchema.safeParse({ projectId: id, name: "P", ownerId: id, targetDate: d })],
+    ["contact follow-up due date", (d) => followUpSchema.safeParse({ crmOrganizationId: id, title: "Call", dueAt: d })],
+    ["meeting action due date", (d) => actionSchema.safeParse({ meetingId: id, title: "Send notes", dueAt: d })],
   ];
 
   for (const [name, parse] of cases) {
