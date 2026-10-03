@@ -1,6 +1,5 @@
 "use client";
 
-import "./e5-performance.css";
 import * as React from "react";
 import { useBlockNoteContext } from "@blocknote/react";
 import { useEditorT } from "@/features/editor/i18n/client";

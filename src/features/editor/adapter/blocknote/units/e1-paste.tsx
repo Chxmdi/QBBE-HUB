@@ -1,7 +1,6 @@
 /* Wave 2 unit E1: paste and Markdown shortcuts. Only E1 edits this file. */
 "use client";
 
-import "./e1-paste.css";
 import * as React from "react";
 import * as Y from "yjs";
 import { createExtension, type PartialBlock } from "@blocknote/core";
