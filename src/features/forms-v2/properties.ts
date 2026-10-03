@@ -1,4 +1,5 @@
 import type { LocalizedText } from "@/lib/objects/contracts";
+import { isCalendarDate } from "@/lib/schema";
 
 /**
  * Forms for any type (V1-6): which properties a form can expose, and how
@@ -312,7 +313,7 @@ export function parseFormAnswers(
         break;
       }
       case "date":
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(Date.parse(`${text}T00:00:00Z`))) {
+        if (!isCalendarDate(text)) {
           return { ok: false, problem: "date", property: p };
         }
         answers[p.key] = text;

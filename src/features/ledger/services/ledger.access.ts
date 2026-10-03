@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireSession, type SessionContext, NO_ACCESS_REDIRECT } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { isCalendarDate } from "@/lib/schema";
 
 export interface LedgerSettings {
   chart_approved_on: string | null;
@@ -77,10 +78,8 @@ export function todayIn(timeZone: string): string {
   return new Date().toLocaleDateString("en-CA", { timeZone });
 }
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-
 export function dateParam(value: string | undefined, fallback: string): string {
-  return value && DATE.test(value) && !Number.isNaN(Date.parse(value)) ? value : fallback;
+  return value && isCalendarDate(value) ? value : fallback;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

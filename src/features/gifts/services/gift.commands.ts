@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { requiredText } from "@/lib/schema";
+import { requiredText, isCalendarDate } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -70,7 +70,7 @@ async function authorize(
   return { ok: true, organizationId: auth.session.organizationId, userId: auth.session.userId };
 }
 
-const isoDate = (message: MessageKey) => requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message);
+const isoDate = (message: MessageKey) => requiredText(message).regex(/^\d{4}-\d{2}-\d{2}$/, message).refine(isCalendarDate, message);
 const optionalUuid = z
   .string()
   .trim()
@@ -88,6 +88,7 @@ const optionalDate = z
   .string()
   .trim()
   .regex(/^(\d{4}-\d{2}-\d{2})?$/, "finance.gifts.errors.dateFormat")
+  .refine((value) => value === "" || isCalendarDate(value), "finance.gifts.errors.dateFormat")
   .optional()
   .transform((v) => v || null);
 

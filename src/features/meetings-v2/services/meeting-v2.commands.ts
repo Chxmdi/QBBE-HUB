@@ -17,6 +17,7 @@ import { meetingTaskInput } from "../meeting-task";
 import { planReview, summarizeSteps } from "../review";
 import { RECORDING_TAG } from "./meeting-v2.queries";
 import { meetingsV2Enabled } from "../flag";
+import { isCalendarDate } from "@/lib/schema";
 
 export interface CommandResult {
   ok: boolean;
@@ -42,6 +43,7 @@ const optionalUuid = z.string().uuid().optional().or(z.literal("").transform(() 
 const optionalDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isCalendarDate)
   .optional()
   .or(z.literal("").transform(() => undefined));
 

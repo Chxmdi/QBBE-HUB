@@ -2,6 +2,7 @@ import { requireStaff } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { centsToDecimal, csvField } from "@/features/finance/money";
+import { isCalendarDate } from "@/lib/schema";
 
 /**
  * The donor list as CSV (#156). Read through public.gift_donor_list, which
@@ -15,7 +16,6 @@ import { centsToDecimal, csvField } from "@/features/finance/money";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface DonorRow {
   donor_kind: string;
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const from = url.searchParams.get("from") ?? "";
   const to = url.searchParams.get("to") ?? "";
-  if (!DATE.test(from) || !DATE.test(to) || from > to) {
+  if (!isCalendarDate(from) || !isCalendarDate(to) || from > to) {
     return new Response(t("finance.gifts.api.invalidRange"), { status: 400 });
   }
   const supabase = await createSupabaseServerClient();

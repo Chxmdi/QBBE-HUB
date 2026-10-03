@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isProjectStale } from "@/features/projects/stale";
 import type { OrgRole, ProjectHealth, ProjectStage } from "@/types/entities";
+import { isCalendarDate } from "@/lib/schema";
 
 export const PROJECT_STAGES = [
   "proposed",
@@ -25,6 +26,7 @@ const optionalUuid = z.string().uuid().optional();
 const optionalDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isCalendarDate)
   .optional();
 
 export const portfolioFilterSchema = z.object({

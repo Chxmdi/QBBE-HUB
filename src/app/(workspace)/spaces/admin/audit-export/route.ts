@@ -4,6 +4,7 @@ import { toCsv } from "@/features/spaces/admin/sign-in-rules";
 import { authorizeAdminAction } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isCalendarDate } from "@/lib/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
  */
 const PAGE_ROWS = 1_000;
 const MAX_ROWS = 50_000;
-const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate);
 
 /**
  * Audit log export (V2-9): owners and admins with two-step sign-in download
