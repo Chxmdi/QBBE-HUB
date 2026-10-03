@@ -33,7 +33,7 @@ export default async function CapturePage() {
       <section aria-labelledby="capture-inbox" className="mt-6">
         <h2 id="capture-inbox" className="flex items-baseline justify-between text-[15px] font-semibold text-ink">
           <span>{t("inbox.title")}</span>
-          {items.length ? <span className="text-xs font-normal text-muted">{t("inbox.count", { count: items.length })}</span> : null}
+          {items.length ? <span className="text-xs font-normal text-muted">{t(items.length === 1 ? "inbox.countOne" : "inbox.count", { count: items.length })}</span> : null}
         </h2>
         {items.length === 0 ? (
           <p className="mt-2 text-sm text-muted">{t("inbox.empty")}</p>

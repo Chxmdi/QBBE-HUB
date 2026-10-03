@@ -97,8 +97,10 @@ test.describe("public pages", () => {
 
   test("an unknown address is not found for a visitor", async ({ page }) => {
     setSwitches(true);
-    await page.goto("/p/no-such-page-here");
+    const response = await page.goto("/p/no-such-page-here");
     await expect(page).toHaveURL(/\/p\/no-such-page-here$/);
-    await expect(page.getByText(/could not be found/i)).toBeVisible();
+    expect(response?.status()).toBe(404);
+    // The site's own not-found page (src/app/not-found.tsx), not Next.js's default.
+    await expect(page.getByRole("heading", { name: "Not found — or not yours to see" })).toBeVisible();
   });
 });

@@ -63,7 +63,7 @@ export function Dialog({
           <X className="size-4" aria-hidden />
         </button>
       </div>
-      <div className="max-h-[75vh] overflow-y-auto px-5 py-4">{children}</div>
+      <div className="dialog-body max-h-[75vh] overflow-y-auto px-5 py-4">{children}</div>
     </dialog>
   );
 }

@@ -34,6 +34,7 @@ export const captureFrCA: Translation<CaptureMessages> = {
     title: "Boîte de saisie",
     empty: "Votre boîte de saisie est vide.",
     count: "{count} éléments en attente",
+    countOne: "1 élément en attente",
     suggestions: "Classer",
     fileTask: "Tâche dans {project}",
     fileTaskNoProject: "Tâche, sans projet",

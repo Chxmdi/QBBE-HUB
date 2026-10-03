@@ -71,7 +71,7 @@ test("the graph lens centres on a project, filters by depth and has a keyboard-u
 
     // Filter to tasks only, from the form, without a centre.
     await page.getByLabel("Centre on").selectOption("");
-    for (const type of ["Programme", "Project", "Milestone"]) await page.getByLabel(type, { exact: true }).uncheck();
+    for (const type of ["Program", "Project", "Milestone"]) await page.getByLabel(type, { exact: true }).uncheck();
     await page.getByRole("button", { name: "Apply" }).click();
     await expect(page).toHaveURL(/type=task/);
     await expect(page.getByRole("link", { name: `${marker} project`, exact: true })).toHaveCount(0);
