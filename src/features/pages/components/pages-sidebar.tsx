@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, FileText, Lock, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Loader2, Lock, Plus } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { usePagesT } from "@/features/pages/i18n/client";
@@ -266,6 +266,7 @@ function NewPageButton({
       aria-label={label}
       title={label}
       disabled={pending}
+      aria-busy={pending || undefined}
       onClick={() =>
         startTransition(async () => {
           const result = await createPage({ visibility, parentPageId: parentPageId ?? null });
@@ -282,7 +283,9 @@ function NewPageButton({
         compact && "p-1.5",
       )}
     >
-      <Plus className="size-4" aria-hidden />
+      {/* Creating and opening a page takes a few seconds; a faded "+" alone
+          did not show that anything was happening (staging audit M12). */}
+      {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Plus className="size-4" aria-hidden />}
     </button>
   );
 }

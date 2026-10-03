@@ -313,3 +313,24 @@
   border: 0;
   border-top: 1px solid var(--color-line);
 }
+
+/* Headings in the page body: the page title's display face, a clear step below
+   the title (34 px) rather than BlockNote's 3em and 2em, which made a level-2
+   heading nearly as large as the title (staging audit M14). */
+/* A level-1 heading may carry no data-level at all (it is BlockNote's default). */
+.qbbe-editor [data-content-type="heading"]:not([data-level]),
+.qbbe-editor [data-content-type="heading"][data-level="1"],
+.qbbe-editor [data-content-type="heading"][data-level="2"],
+.qbbe-editor [data-content-type="heading"][data-level="3"] {
+  font-family: var(--font-display);
+}
+.qbbe-editor [data-content-type="heading"]:not([data-level]),
+.qbbe-editor [data-content-type="heading"][data-level="1"] {
+  --level: 1.75em;
+}
+.qbbe-editor [data-content-type="heading"][data-level="2"] {
+  --level: 1.4em;
+}
+.qbbe-editor [data-content-type="heading"][data-level="3"] {
+  --level: 1.2em;
+}

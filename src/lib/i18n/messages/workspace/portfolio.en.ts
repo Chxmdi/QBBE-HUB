@@ -376,6 +376,7 @@ export const portfolioEn = {
     },
   },
   programs: {
+    loadingList: "Loading programs",
     metaTitle: "Programs",
     detailMetaTitle: "Program",
     list: {
