@@ -103,10 +103,6 @@ type Editor = BlockNoteEditor<Schema["blockSchema"], Schema["inlineContentSchema
 
 /** The Yjs fragment that holds the document (the same name co-editing will sync). */
 const FRAGMENT = "document-store";
-/** While someone types, changes are reported at most this often... */
-const CHANGE_EVERY_MS = 200;
-/** ...each waiting at most this long for an idle moment. */
-const CHANGE_IDLE_MS = 100;
 
 /**
  * The document's Yjs state: the saved state when there is one, otherwise the
@@ -519,26 +515,6 @@ export default function BlockNoteEditorImpl({
   }, [editor]);
   useKeyboardConditions(containerRef, openBlockMenu);
 
-  // Serializing the whole document and its collaboration state is O(document):
-  // on a long page, doing it inside every key press made typing slow. The
-  // first change after a pause is reported at once (so the save state turns
-  // to Saving with the first key); later changes in the same burst are
-  // reported at most every CHANGE_EVERY_MS, at an idle moment, which is well
-  // inside the save queue's batch delay, so "Saved" never shows over an edit
-  // it has not seen. A pending change is reported at once when the page is
-  // hidden or left, or the editor closes, so nothing is lost.
-  const onChangeRef = React.useRef(onChange);
-  React.useLayoutEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-  const pendingChange = React.useRef<{ cancel: () => void } | null>(null);
-  const lastChangeAt = React.useRef(-Infinity);
-  const emitChange = React.useCallback(() => {
-    pendingChange.current?.cancel();
-    pendingChange.current = null;
-    lastChangeAt.current = performance.now();
-    onChangeRef.current?.(toContent(editor.document), bytesToBase64(Y.encodeStateAsUpdate(doc)));
-  }, [editor, doc]);
   const handleChange = React.useCallback(() => {
     const blocks = editor.document;
     // F5: keep a way out below a final table.
@@ -548,43 +524,8 @@ export default function BlockNoteEditorImpl({
       return;
     }
     setVersion((n) => n + 1);
-    if (!onChangeRef.current || pendingChange.current) return;
-    const wait = lastChangeAt.current + CHANGE_EVERY_MS - performance.now();
-    if (wait <= 0) {
-      emitChange();
-      return;
-    }
-    let idle: number | null = null;
-    const timer = setTimeout(() => {
-      if (typeof window.requestIdleCallback === "function") idle = window.requestIdleCallback(emitChange, { timeout: CHANGE_IDLE_MS });
-      else emitChange();
-    }, wait);
-    pendingChange.current = {
-      cancel: () => {
-        clearTimeout(timer);
-        if (idle !== null) window.cancelIdleCallback(idle);
-      },
-    };
-  }, [editor, editable, emitChange]);
-  // Before the save queue's own listeners (capture runs first at the target),
-  // and on unmount before its passive-effect cleanup (layout cleanups run first).
-  React.useLayoutEffect(() => {
-    const flush = () => {
-      if (pendingChange.current) emitChange();
-    };
-    const hidden = () => {
-      if (document.visibilityState === "hidden") flush();
-    };
-    window.addEventListener("beforeunload", flush, { capture: true });
-    window.addEventListener("pagehide", flush, { capture: true });
-    document.addEventListener("visibilitychange", hidden, { capture: true });
-    return () => {
-      window.removeEventListener("beforeunload", flush, { capture: true });
-      window.removeEventListener("pagehide", flush, { capture: true });
-      document.removeEventListener("visibilitychange", hidden, { capture: true });
-      flush();
-    };
-  }, [emitChange]);
+    onChange?.(toContent(blocks), () => bytesToBase64(Y.encodeStateAsUpdate(doc)));
+  }, [editor, editable, onChange, doc]);
 
   const getItems = React.useCallback(
     async (query: string) =>

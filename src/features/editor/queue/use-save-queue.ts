@@ -61,7 +61,8 @@ export interface SaveQueue {
   status: QueueStatus;
   conflict: SaveConflict | null;
   seed: EditorSeed;
-  enqueue: (content: EditorContent, state: string | null) => void;
+  /** A local edit. The collaboration state may be given as a function, encoded only when the edit is sent or kept. */
+  enqueue: (content: EditorContent, state: string | null | (() => string)) => void;
   /** After a conflict: send the waiting edits on top of the server's version. */
   keepMine: () => void;
   /** After a conflict: drop the waiting edits and mount the editor on the server's content. */
@@ -121,9 +122,27 @@ export function useSaveQueue(options: SaveQueueOptions): SaveQueue {
     };
   }, []);
 
+  // The newest edit's collaboration state, still to be encoded. Encoding is
+  // O(document), so it waits until the edit is sent or kept on the device. Only
+  // the newest edit is ever sent or kept (each replaces the ones before), and
+  // the editor has not changed since it (a change would be a newer edit), so
+  // encoding then gives exactly that edit's state.
+  const unencoded = React.useRef<{ id: string; encode: () => string } | null>(null);
+  const encodeNewest = React.useCallback(() => {
+    const waiting = unencoded.current;
+    if (!waiting) return;
+    unencoded.current = null;
+    const pending = state.current.pending;
+    const newest = pending.at(-1);
+    if (!newest || newest.id !== waiting.id) return;
+    state.current = { ...state.current, pending: [...pending.slice(0, -1), { ...newest, state: waiting.encode() }] };
+  }, []);
+
   const persist = React.useCallback(() => {
-    if (storage && typeof ownerId === "string") persistQueue(storage, objectId, state.current, ownerId);
-  }, [storage, objectId, ownerId]);
+    if (!storage || typeof ownerId !== "string") return;
+    encodeNewest();
+    persistQueue(storage, objectId, state.current, ownerId);
+  }, [storage, objectId, ownerId, encodeNewest]);
 
   const commit = React.useCallback(
     (
@@ -163,6 +182,7 @@ export function useSaveQueue(options: SaveQueueOptions): SaveQueue {
   const flush = React.useCallback(
     (force: boolean) => {
       if (!enabled || !alive.current) return;
+      encodeNewest();
       const begun = beginFlush(state.current, Date.now(), force);
       commit(begun.state);
       const batch = begun.batch;
@@ -176,7 +196,7 @@ export function useSaveQueue(options: SaveQueueOptions): SaveQueue {
           commit(completeFlush(state.current, outcome, Date.now()));
         });
     },
-    [commit, enabled],
+    [commit, enabled, encodeNewest],
   );
   React.useEffect(() => {
     flushRef.current = flush;
@@ -230,9 +250,12 @@ export function useSaveQueue(options: SaveQueueOptions): SaveQueue {
   }, [commit, enabled, persist]);
 
   const add = React.useCallback(
-    (content: EditorContent, yjs: string | null) => {
+    (content: EditorContent, yjs: string | null | (() => string)) => {
       if (!enabled) return;
-      const next = enqueue(state.current, { id: newId(), kind: "replace", content, state: yjs, at: Date.now() });
+      const id = newId();
+      const lazy = typeof yjs === "function";
+      unencoded.current = lazy ? { id, encode: yjs } : null;
+      const next = enqueue(state.current, { id, kind: "replace", content, state: lazy ? null : yjs, at: Date.now() });
       // On its way within the batch delay: written when the batch forms. Otherwise (offline, failed, conflict) now.
       commit(next, undefined, !(next.status === "saving" && next.online));
     },
