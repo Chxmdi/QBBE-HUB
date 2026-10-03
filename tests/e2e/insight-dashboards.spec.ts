@@ -61,10 +61,10 @@ test("the dashboards show role templates, programme totals and trends with a tab
     await templates.getByRole("link", { name: "Finance" }).click();
     await expect(page).toHaveURL(/template=finance/);
     await expect(page.getByRole("term").filter({ hasText: "Gifts received this year" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Totals by programme" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Totals by program" })).toHaveCount(0);
     await expectAccessible(page);
 
-    await templates.getByRole("link", { name: "Programmes" }).click();
+    await templates.getByRole("link", { name: "Programs" }).click();
     await expect(page.getByRole("term").filter({ hasText: "Outcome measurements, last 90 days" })).toBeVisible();
     await expect(page.getByRole("img", { name: /^Tasks created per week/ })).toBeVisible();
 
