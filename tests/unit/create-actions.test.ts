@@ -18,6 +18,11 @@ describe("create actions (P0-QC-01, P0-CMD-01)", () => {
     expect(createActions({ isAdmin: true, isStaff: true }).map((a) => a.label)).toContain("Announcement");
   });
 
+  it("offers a new program only to administrators, the only ones the database lets create one", () => {
+    expect(createActions({ isAdmin: false, isStaff: true }).map((a) => a.label)).not.toContain("Program");
+    expect(createActions({ isAdmin: true, isStaff: true }).map((a) => a.label)).toContain("Program");
+  });
+
   it("points every action at a workspace page that exists", () => {
     for (const action of createActions({ isAdmin: true, isStaff: true })) {
       const route = action.href.split("?")[0];

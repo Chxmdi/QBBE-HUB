@@ -83,6 +83,8 @@ export const timeFrCA: typeof timeEn = {
       trigger: "Nouvelle réunion",
       title: "Planifier une réunion",
       submit: "Planifier",
+      needProjectFirst: "Pour planifier une réunion, il vous faut un projet auquel vous participez. Demandez à un administrateur de vous y ajouter.",
+      projectHint: "Choisissez un projet auquel vous participez.",
     },
     fields: {
       title: "Titre",
@@ -338,6 +340,8 @@ export const timeFrCA: typeof timeEn = {
       trigger: "Nouvel événement",
       title: "Créer un événement",
       submit: "Créer l’événement",
+      needWorkFirst: "Pour créer un événement, il vous faut un programme ou un projet auquel vous participez. Demandez à un administrateur de vous y ajouter.",
+      workHint: "Choisissez un programme ou un projet auquel vous participez.",
     },
     fields: {
       name: "Nom",

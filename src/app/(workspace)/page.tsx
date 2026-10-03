@@ -35,6 +35,8 @@ import {
   getWorkload,
 } from "@/features/dashboard/services/portfolio.queries";
 import { requireSession } from "@/lib/auth";
+import { createSupabasePageClient } from "@/lib/supabase/page";
+import { managedPrograms } from "@/features/budgets/services/budget.queries";
 import { calendarDateInZone, viewerTimeZone } from "@/lib/time";
 import type { ProjectHealth, Task } from "@/types/entities";
 import { healthSummaryLabel } from "@/features/dashboard/health";
@@ -138,7 +140,7 @@ export default async function HomePage({
   const [t, format] = await Promise.all([getT(), getFormatters()]);
   const lens = dashboardLens(session.role);
   const showPortfolio = lens !== "volunteer";
-  const [data, portfolio, workload, outcomes, commitments] = await Promise.all([
+  const [data, portfolio, workload, outcomes, commitments, canCreateProject] = await Promise.all([
     getDashboardData(session.userId, session.timeZone),
     showPortfolio
       ? getPortfolio({
@@ -152,6 +154,15 @@ export default async function HomePage({
       : Promise.resolve({ people: [], teams: [] }),
     showPortfolio ? getOutcomeRollup() : Promise.resolve([]),
     getCommitments(session.timeZone),
+    // A project goes inside a program its creator manages; only an
+    // administrator may create one outside every program.
+    session.isAdmin
+      ? Promise.resolve(true)
+      : session.isStaff
+        ? createSupabasePageClient()
+            .then((supabase) => managedPrograms(supabase, session.organizationId))
+            .then((programs) => programs.length > 0)
+        : Promise.resolve(false),
   ]);
   const todayInZone =
     calendarDateInZone(new Date(), session.timeZone) ??
@@ -358,7 +369,7 @@ export default async function HomePage({
                 </p>
               )}
             </div>
-            {session.isStaff ? (
+            {canCreateProject ? (
               <div className="ml-auto">
                 <Link
                   href="/projects?create=1"
@@ -467,7 +478,7 @@ export default async function HomePage({
               </h2>
               {data.programHealth.length === 0 ? (
                 <p className="py-6 text-center text-[13.5px] text-muted">
-                  {t("home.programHealthEmpty")}
+                  {t(session.isAdmin ? "home.programHealthEmpty" : "home.programHealthEmptyStaff")}
                 </p>
               ) : (
                 <ul className="space-y-4">

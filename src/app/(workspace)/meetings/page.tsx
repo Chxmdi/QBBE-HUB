@@ -106,7 +106,11 @@ export default async function MeetingsPage({
         title={t("meetings.title")}
         description={t("meetings.description")}
         actions={
-          session.isStaff ? (
+          session.isStaff && !session.isAdmin && (projects ?? []).length === 0 ? (
+            // A meeting outside a project is for administrators; without a
+            // project to choose there is nothing this form could save.
+            <p className="meta max-w-xs text-right">{t("meetings.create.needProjectFirst")}</p>
+          ) : session.isStaff ? (
             <EntityFormDialog
               triggerLabel={t("meetings.create.trigger")}
               title={t("meetings.create.title")}
@@ -121,6 +125,9 @@ export default async function MeetingsPage({
                   label: t("meetings.fields.linkedProject"),
                   type: "select",
                   colSpan: 1,
+                  // Optional only for administrators, as createMeeting decides.
+                  required: !session.isAdmin,
+                  hint: session.isAdmin ? undefined : t("meetings.create.projectHint"),
                   options: (projects ?? []).map((p) => ({
                     value: p.id,
                     label: p.name,

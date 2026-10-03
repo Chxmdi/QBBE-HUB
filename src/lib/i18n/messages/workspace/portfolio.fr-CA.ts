@@ -194,6 +194,9 @@ export const portfolioFrCA: typeof portfolioEn = {
       descriptionPlaceholder: "Le contexte dont une nouvelle personne aurait besoin.",
       program: "Programme",
       noProgram: "Aucun programme",
+      programHint: "Les projets se créent dans un programme que vous gérez.",
+      needProgram: "Les projets se créent dans un programme, et vous n’en gérez aucun pour l’instant. Demandez à un administrateur de vous nommer responsable ou gestionnaire d’un programme, ou proposez plutôt le projet.",
+      propose: "Proposer un projet",
       owner: "Personne responsable",
       me: "Moi",
       sponsor: "Commanditaire",
@@ -392,6 +395,7 @@ export const portfolioFrCA: typeof portfolioEn = {
         "Les programmes archivés s’afficheront ici pour être consultés et restaurés.",
       emptyBody:
         "Créez un programme pour regrouper des projets, des événements et des canaux liés.",
+      emptyBodyStaff: "Aucun programme pour l’instant. Un administrateur crée les programmes; ils apparaissent ici dès qu’ils existent.",
       projectCounts: "{active} actifs · {total} projets au total",
       templatesHeading: "Modèles de programme",
       templatesIntro:

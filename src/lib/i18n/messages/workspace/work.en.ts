@@ -57,6 +57,7 @@ export const workEn = {
     dueToday: "Due today",
     viewMyWork: "View my work",
     programHealthEmpty: "Create a program to see its delivery health here.",
+    programHealthEmptyStaff: "No programs yet. An administrator creates programs.",
     programCompletion: "{name} completion",
     viewPortfolio: "View portfolio",
     tasksCompleted30: "tasks completed · last 30 days",

@@ -61,6 +61,7 @@ export const captureEn = {
     saveFailed: "Could not save it. Try again.",
     notFound: "That item is no longer in your inbox.",
     fileFailed: "Could not file it: {message}",
+    taskNotAllowed: "You can't add a task there. Choose a project you work on, or file it with no project.",
     noContact: "Choose a contact to log this email to.",
   },
 } as const;
