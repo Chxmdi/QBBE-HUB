@@ -60,7 +60,13 @@ function cleanUp(templateIds: string[], extraPageIds: string[] = []) {
 }
 
 async function axeProblems(page: Page): Promise<string[]> {
-  await page.waitForLoadState("networkidle");
+  // Not "networkidle": that waits for the whole browser, including Next.js's
+  // background prefetches of linked screens, and one left open (seen on
+  // /capture?_rsc=…, which the server answers in ~150 ms) held this test until
+  // its four-minute timeout about one run in five. What the scan needs is this
+  // screen loaded and nothing on it still saying it is loading.
+  await page.waitForLoadState("load");
+  await expect(page.getByRole("status").filter({ hasText: /^(Chargement|Loading)/ })).toHaveCount(0, { timeout: 30_000 });
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
     .analyze();
