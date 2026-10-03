@@ -189,7 +189,9 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
   if (!existing) return { ok: false, error: await tr("events.errors.notFound") };
   if (existing.status === "cancelled") return { ok: false, error: await tr("events.errors.cancelledLocked") };
 
-  const { error } = await supabase.from("event").update({
+  // Reading an event and managing it are separate rights; a reader's update
+  // matches no row, so ask for the row back rather than reporting success.
+  const { data: changed, error } = await supabase.from("event").update({
     name: data.name,
     description: data.description || null,
     event_type: data.eventType || null,
@@ -197,8 +199,9 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
     ends_at: schedule.ends.toISOString(),
     location: data.location || null,
     volunteer_need: data.volunteerNeed ?? null,
-  }).eq("id", existing.id);
+  }).eq("id", existing.id).select("id");
   if (error) return { ok: false, error: await tr("events.errors.updateFailed") };
+  if (!changed || changed.length === 0) return { ok: false, error: await tr("events.errors.manageDenied") };
 
   try {
     await updateGoogleEventRecord({
@@ -323,11 +326,17 @@ export async function updateEventStatus(input: unknown): Promise<ActionResult> {
     .eq("id", parsed.data.eventId)
     .maybeSingle();
   if (!existing) return { ok: false, error: await tr("events.errors.notFound") };
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("event")
     .update({ status: parsed.data.status })
-    .eq("id", existing.id);
+    .eq("id", existing.id)
+    .select("id");
   if (error) return { ok: false, error: await tr("events.errors.updateFailed") };
+  // Without this, a reader's "cancel" changed nothing here yet still deleted
+  // the owner's Google Calendar event below, which runs with service rights.
+  if (!changed || changed.length === 0) {
+    return { ok: false, error: await tr("events.errors.manageDenied") };
+  }
   if (parsed.data.status === "cancelled" && existing.status !== "cancelled") {
     try {
       await deleteGoogleEventRecord({

@@ -419,6 +419,7 @@ export const timeEn = {
       createFailed: "Could not create the event.",
       notFound: "Event not found.",
       cancelledLocked: "Cancelled events cannot be changed.",
+      manageDenied: "Only someone who manages this event can change it.",
       updateFailed: "Could not update the event.",
       assignFailed: "Could not assign that role.",
       checklistTitleRequired: "A checklist item needs a description.",
