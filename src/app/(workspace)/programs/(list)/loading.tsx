@@ -4,7 +4,8 @@ import { getT } from "@/lib/i18n/server";
 /**
  * Shown while the programs and their projects load. Without it the screen
  * stayed blank for about two seconds on in-app navigation (staging audit M13).
- * Shaped like the page: a header, then a grid of program cards.
+ * Shaped like the page: a header, then a grid of program cards. It sits in the
+ * (list) group so it covers only the list, not each program's own page.
  */
 export default async function Loading() {
   const t = await getT();
