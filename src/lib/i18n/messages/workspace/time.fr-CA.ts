@@ -425,6 +425,7 @@ export const timeFrCA: typeof timeEn = {
       createFailed: "Impossible de créer l’événement.",
       notFound: "Événement introuvable.",
       cancelledLocked: "Un événement annulé ne peut pas être modifié.",
+      manageDenied: "Seule une personne qui gère cet événement peut le modifier.",
       updateFailed: "Impossible de mettre à jour l’événement.",
       assignFailed: "Impossible d’attribuer ce rôle.",
       checklistTitleRequired: "Un élément de la liste doit avoir une description.",
