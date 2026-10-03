@@ -61,15 +61,20 @@ export async function recordProjectDecision(
   }
 
   if (data.requestId) {
-    const { error: requestError } = await supabase
+    const { data: closed, error: requestError } = await supabase
       .from("decision_request")
       .update({ status: "decided", decision_id: decision.id })
       .eq("id", data.requestId)
-      .eq("status", "open");
-    if (requestError) {
+      .eq("status", "open")
+      .select("id");
+    // No row: the request was already decided (two people answering at once)
+    // or is not this person's to close. Keep no decision that answers nothing,
+    // or a retry would record the same decision twice.
+    if (requestError || !closed || closed.length === 0) {
+      await supabase.from("decision").delete().eq("id", decision.id);
       return {
         ok: false,
-        error: t("risks.errors.requestNotClosed"),
+        error: t("risks.errors.requestAlreadyAnswered"),
       };
     }
   }

@@ -279,6 +279,7 @@ export const timeEn = {
       invalidMeeting: "Invalid meeting.",
       completedCannotCancel: "Completed meetings cannot be cancelled.",
       cancelDenied: "Only the organizer or an admin can cancel this meeting.",
+      carryDenied: "Only the organizer or the person who proposed this item can carry it forward.",
       cancelFailed: "Could not cancel the meeting.",
       chooseLink: "Choose a record to link.",
       agendaTitleRequired: "Agenda items need a title.",

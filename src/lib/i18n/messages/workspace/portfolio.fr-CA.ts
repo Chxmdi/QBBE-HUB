@@ -674,6 +674,7 @@ export const portfolioFrCA: typeof portfolioEn = {
         "Vous n’avez pas la permission de consigner une décision dans ce projet.",
       requestNotClosed:
         "La décision a été enregistrée, mais la demande n’a pas pu être fermée.",
+      requestAlreadyAnswered: "Cette demande a déjà reçu une réponse; aucune décision n’a été consignée.",
       reopenFailed: "Impossible de rouvrir la décision.",
       assigneeCannotRead:
         "Cette personne n’a pas accès à ce projet; on ne peut donc pas lui demander de décider.",

@@ -664,6 +664,7 @@ export const portfolioEn = {
       escalateFailed: "Could not raise the issue from this risk.",
       noDecisionPermission: "You don't have permission to record a decision on this project.",
       requestNotClosed: "The decision was saved, but the request could not be closed.",
+      requestAlreadyAnswered: "That request was already answered, so no decision was recorded.",
       reopenFailed: "Could not reopen the decision.",
       assigneeCannotRead:
         "That person is not allowed to read this project, so they cannot be asked to decide.",

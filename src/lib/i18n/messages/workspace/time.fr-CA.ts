@@ -280,6 +280,7 @@ export const timeFrCA: typeof timeEn = {
       invalidMeeting: "Réunion non valide.",
       completedCannotCancel: "Une réunion terminée ne peut pas être annulée.",
       cancelDenied: "Seul l’organisateur ou un administrateur peut annuler cette réunion.",
+      carryDenied: "Seul l’organisateur ou la personne qui a proposé ce point peut le reporter.",
       cancelFailed: "Impossible d’annuler la réunion.",
       chooseLink: "Choisissez un dossier à lier.",
       agendaTitleRequired: "Les points à l’ordre du jour doivent avoir un titre.",

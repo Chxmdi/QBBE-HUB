@@ -327,7 +327,7 @@ export async function escalateRiskToIssue(input: unknown): Promise<ActionResult>
 
   // The risk is now history. Closing it needs a reason, and "it happened" is
   // the truest one available.
-  await supabase
+  const { data: closedRisk } = await supabase
     .from("risk")
     .update({
       status: "closed",
@@ -335,7 +335,15 @@ export async function escalateRiskToIssue(input: unknown): Promise<ActionResult>
       mitigation:
         risk.mitigation ?? t("risks.materialised"),
     })
-    .eq("id", riskId);
+    .eq("id", riskId)
+    .select("id");
+  // Both writes need the same right, so this only fails when the risk changed
+  // underneath (closed by someone else). Do not leave a new issue beside a
+  // risk that still claims to be open.
+  if (!closedRisk || closedRisk.length === 0) {
+    await supabase.from("issue").delete().eq("id", issue.id);
+    return { ok: false, error: t("risks.errors.escalateFailed") };
+  }
 
   await supabase.from("activity_event").insert({
     organization_id: risk.organization_id,
