@@ -52,8 +52,9 @@ create policy ack_insert on public.announcement_acknowledgment
   );
 
 -- Posts the waiting message of one due announcement. Locks the row so two job
--- runs cannot post it twice; returns the message id, or null when the
--- announcement is not due yet or does not exist.
+-- runs cannot post it twice. Returns the new message id only to the call that
+-- posted it, so the caller fires the "announcement published" workflows once;
+-- returns null when it was already posted, is not due yet, or does not exist.
 create or replace function public.release_scheduled_announcement(p_announcement uuid)
 returns uuid
 language plpgsql
@@ -69,7 +70,7 @@ begin
     return null;
   end if;
   if v_row.message_id is not null then
-    return v_row.message_id;
+    return null;
   end if;
   if v_row.publish_at > now() then
     return null;

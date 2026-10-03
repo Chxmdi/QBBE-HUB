@@ -87,8 +87,8 @@ test("a scheduled announcement stays hidden until the job posts it at its publis
     await expect(staff.getByText(title)).toHaveCount(0);
     const channelId = sql(`
       select c.id from channel c
-      join announcement a on a.channel_id = c.id
-      where a.title = '${title}';
+      join announcement a on a.organization_id = c.organization_id
+      where a.title = '${title}' and c.type = 'announcements' and c.is_mandatory;
     `);
     expect(channelId).toMatch(/^[0-9a-f-]{36}$/);
     await staff.goto(`/channels/${channelId}`);
@@ -96,6 +96,22 @@ test("a scheduled announcement stays hidden until the job posts it at its publis
     await expect(staff.getByText(body)).toHaveCount(0);
     await staff.goto("/");
     await expect(staff.getByText(body)).toHaveCount(0);
+
+    // A workflow listens for published announcements; it must fire when the
+    // scheduled one actually goes out, not when it was written.
+    const ruleName = `Announcement relay ${stamp}`;
+    sql(`
+      insert into workflow_rule (organization_id, name, trigger_event, action)
+      select organization_id, '${ruleName}', 'announcement_published', '{"type":"notify_admins"}'
+      from announcement where title = '${title}';
+    `);
+    const executions = () =>
+      sql(`
+        select count(*) from workflow_execution e
+        join workflow_rule r on r.id = e.rule_id
+        where r.name = '${ruleName}';
+      `);
+    expect(executions()).toBe("0");
 
     // The publish time arrives and the job runs.
     sql(`update announcement set publish_at = now() - interval '1 minute' where title = '${title}';`);
@@ -106,6 +122,17 @@ test("a scheduled announcement stays hidden until the job posts it at its publis
     expect(
       sql(`select count(*) from message m join announcement a on a.message_id = m.id where a.title = '${title}';`),
     ).toBe("1");
+    expect(executions()).toBe("1");
+
+    // A second run posts nothing more and fires nothing more.
+    const again = await request.post("/api/jobs/scheduled-announcements", {
+      headers: { "x-job-secret": JOB_SECRET },
+    });
+    expect(again.ok()).toBeTruthy();
+    expect(
+      sql(`select count(*) from message where body = '${body}';`),
+    ).toBe("1");
+    expect(executions()).toBe("1");
 
     await staff.goto(`/channels/${channelId}`);
     await expect(staff.getByText(body)).toBeVisible();

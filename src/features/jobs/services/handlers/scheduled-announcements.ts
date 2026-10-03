@@ -1,4 +1,5 @@
 import { recordJobRun } from "@/lib/job-observability";
+import { fireWorkflows } from "@/features/admin/services/workflow.runtime";
 import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { createNotifications, notificationDedupeKey } from "../notify";
 import type { JobContext, JobResult } from "../runner";
@@ -26,6 +27,13 @@ interface AnnouncementRow {
   publish_at: string;
 }
 
+interface WaitingRow {
+  id: string;
+  organization_id: string;
+  title: string;
+  created_by: string;
+}
+
 const LOOKBACK_MS = 2 * 86_400_000;
 
 export async function scheduledAnnouncements({
@@ -35,7 +43,7 @@ export async function scheduledAnnouncements({
 }: JobContext): Promise<JobResult> {
   const { data: waiting, error: waitingError } = await db
     .from("announcement")
-    .select("id")
+    .select("id, organization_id, title, created_by")
     .is("message_id", null)
     .lte("publish_at", now.toISOString())
     .order("publish_at", { ascending: true })
@@ -45,12 +53,30 @@ export async function scheduledAnnouncements({
 
   let released = 0;
   let failed = 0;
-  for (const row of (waiting ?? []) as { id: string }[]) {
-    const { error: releaseError } = await db.rpc("release_scheduled_announcement", {
-      p_announcement: row.id,
+  for (const row of (waiting ?? []) as WaitingRow[]) {
+    const { data: messageId, error: releaseError } = await db.rpc(
+      "release_scheduled_announcement",
+      { p_announcement: row.id },
+    );
+    if (releaseError) {
+      failed += 1;
+      continue;
+    }
+    // Null means another run posted it first; only the run that posted it
+    // fires the workflows, so they run once.
+    if (!messageId) continue;
+    released += 1;
+    // Publishing now fires these at once; a scheduled announcement fires them
+    // when it actually goes out.
+    await fireWorkflows(db, {
+      organizationId: row.organization_id,
+      actorId: row.created_by,
+      eventType: "announcement_published",
+      title: row.title,
+      sourceType: "announcement",
+      sourceId: row.id,
+      link: "/announcements",
     });
-    if (releaseError) failed += 1;
-    else released += 1;
   }
 
   const { data: dueRows, error } = await db

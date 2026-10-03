@@ -118,8 +118,8 @@ begin
   v_released := public.release_scheduled_announcement(v_due);
   perform tests.ok(v_released is not null, 'a due announcement is posted');
   perform tests.ok(
-    public.release_scheduled_announcement(v_due) = v_released,
-    'posting it again returns the same message and posts nothing new'
+    public.release_scheduled_announcement(v_due) is null,
+    'posting it again reports nothing new and posts nothing'
   );
   select count(*) into v_count from public.message where body = 'Due text';
   perform tests.ok(v_count = 1, 'the due text is posted exactly once');
