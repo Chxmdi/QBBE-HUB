@@ -208,7 +208,10 @@ function MediaBlockView(props: AnyMediaProps & { kind: MediaKind; t: EditorT }) 
   const [recheck, setRecheck] = React.useState({ key: loadKey, count: 0 });
   const rechecks = recheck.key === loadKey ? recheck.count : 0;
   const resolved = useResolvedAddress(editor, p.url, attempt, rechecks);
-  const waitingOnScan = address === "library" && resolved.state === "unavailable" && !uploading;
+  // A failed lookup (a server error mid-wait) keeps asking too: one dropped
+  // answer must not leave a file that has since passed its scan hidden.
+  const waitingOnScan =
+    address === "library" && (resolved.state === "unavailable" || resolved.state === "failed") && !uploading;
   React.useEffect(() => {
     if (!waitingOnScan || rechecks >= MAX_SCAN_CHECKS) return;
     const timer = setTimeout(() => setRecheck({ key: loadKey, count: rechecks + 1 }), nextScanCheckMs(rechecks));

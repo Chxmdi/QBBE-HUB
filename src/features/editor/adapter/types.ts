@@ -128,8 +128,13 @@ export interface BlockEditorProps {
    */
   initialState?: string | null;
   editable: boolean;
-  /** The document as JSON and its collaboration state, after every change. */
-  onChange?: (content: EditorContent, state: string) => void;
+  /**
+   * The document as JSON after every change, and a way to encode its
+   * collaboration state. Encoding is O(document), so it is left to the caller
+   * to do when it needs the state (the save queue: when it sends or keeps an
+   * edit), not on every key press.
+   */
+  onChange?: (content: EditorContent, encodeState: () => string) => void;
   files?: EditorFileHandlers;
   /** Enables the semantic blocks (task, decision, person, status, query, library file). */
   semantic?: EditorSemanticHandlers;

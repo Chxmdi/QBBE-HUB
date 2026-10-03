@@ -114,10 +114,11 @@ const READY_ATTRIBUTE = "data-blocks-ready";
 const HOLD_MS = 2_000;
 
 /**
- * After a table of contents link is followed, keeps its heading where it
- * landed while the view blocks and embeds around it render (they change
- * height, and the browser's own scroll anchoring does not always pick the
- * heading). Anything the person does (scroll, click, key) ends the hold.
+ * After a table of contents link is followed, or find in page lands in a
+ * waiting block, keeps that heading or block where it landed while the view
+ * blocks and embeds around it render (they change height, and the browser's
+ * own scroll anchoring does not always pick the target). Anything the person
+ * does (scroll, click, key) ends the hold.
  */
 export function E5Outside({ containerRef }: EditorUnitProps) {
   React.useEffect(() => {
@@ -151,9 +152,23 @@ export function E5Outside({ containerRef }: EditorUnitProps) {
       const target = id ? document.getElementById(id) : null;
       if (target) hold(target);
     };
+    // Find in page (Ctrl+F) selects the match. When that lands in a waiting
+    // block, the block renders and the blocks around it change height, which
+    // can carry the match off the screen: the browser anchors to the waiting
+    // block, which is replaced. Hold the block's outer element, which stays.
+    const onSelection = () => {
+      const node = document.getSelection()?.anchorNode ?? null;
+      const element = node instanceof Element ? node : node?.parentElement;
+      const waiting = element?.closest?.(".qbbe-lazy-block");
+      if (!waiting || !containerRef.current?.contains(waiting)) return;
+      const outer = waiting.closest<HTMLElement>(".bn-block-outer") ?? waiting.parentElement;
+      if (outer) hold(outer);
+    };
     document.addEventListener("click", onClick);
+    document.addEventListener("selectionchange", onSelection);
     return () => {
       document.removeEventListener("click", onClick);
+      document.removeEventListener("selectionchange", onSelection);
       stop?.();
     };
   }, [containerRef]);
