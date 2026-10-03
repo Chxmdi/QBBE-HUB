@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { optionalDay, requiredText } from "@/lib/schema";
 import type { TranslateFn } from "@/lib/i18n/translate";
 
 /**
@@ -48,7 +48,7 @@ export const createMilestoneSchema = z.object({
   name: requiredText("A milestone needs a name.", 200),
   description: z.string().trim().max(2000).optional(),
   ownerId: optionalUuid,
-  dueDate: z.string().optional(),
+  dueDate: optionalDay().optional(),
   /** A new milestone is not completed, so completion is not offered here. */
   status: z.enum(["planned", "in_progress"]).default("planned"),
 });
@@ -58,7 +58,7 @@ export const updateMilestoneSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   description: z.string().trim().max(2000).nullable().optional(),
   ownerId: optionalUuid,
-  dueDate: z.string().nullable().optional(),
+  dueDate: optionalDay().nullable().optional(),
   /**
    * Completion goes through completeMilestone, which is the only path that
    * asks for evidence. Leaving it out of the edit form is what stops the

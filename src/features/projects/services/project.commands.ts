@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { optionalDay, requiredText } from "@/lib/schema";
 import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { hasProgramCapability, hasProjectCapability } from "@/lib/access-capabilities";
@@ -20,8 +20,8 @@ const createProjectSchema = z.object({
   programId: z.string().uuid().optional(),
   ownerId: z.string().uuid().optional(),
   sponsorId: z.string().uuid().optional(),
-  startDate: z.string().optional(),
-  targetDate: z.string().optional(),
+  startDate: optionalDay().optional(),
+  targetDate: optionalDay().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
   health: z.enum(["on_track", "at_risk", "off_track", "paused", "unknown"]).default("unknown"),
   healthReason: z.string().trim().max(2000).optional(),
@@ -634,8 +634,8 @@ const updateProjectSchema = z.object({
   programId: z.union([z.string().uuid(), z.literal("")]).optional(),
   ownerId: z.string().uuid({ message: "A project needs an accountable owner." }),
   sponsorId: z.union([z.string().uuid(), z.literal("")]).optional(),
-  startDate: z.string().optional(),
-  targetDate: z.string().optional(),
+  startDate: optionalDay().optional(),
+  targetDate: optionalDay().optional(),
   priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
   reportingCadence: z.enum(["none", "weekly", "monthly"]).default("none"),
   fundingSourceId: z.union([z.string().uuid(), z.literal("")]).optional(),

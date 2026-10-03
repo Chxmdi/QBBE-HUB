@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { isCalendarDate, requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -314,7 +314,7 @@ export async function recordInteraction(input: unknown): Promise<ActionResult> {
 const followUpSchema = z.object({
   crmOrganizationId: z.string().uuid(),
   title: requiredText(V.followUpTitle, 300),
-  dueAt: requiredText(V.pickDueDate),
+  dueAt: requiredText(V.pickDueDate).refine(isCalendarDate, V.pickDueDate),
 });
 
 export async function createFollowUp(input: unknown): Promise<ActionResult> {

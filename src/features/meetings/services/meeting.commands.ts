@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { optionalDay, requiredText } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -702,7 +702,7 @@ const actionSchema = z.object({
   meetingId: z.string().uuid(),
   title: requiredText(K("meetings.errors.actionTitleRequired"), 300),
   ownerId: z.string().uuid().optional(),
-  dueAt: z.string().optional(),
+  dueAt: optionalDay().optional(),
 });
 
 /** Meeting action → assigned task with source links (CAL-004, P0-MTG-02). */
