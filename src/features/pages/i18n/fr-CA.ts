@@ -16,6 +16,7 @@ export const pagesFrCA: PagesMessages = {
   },
   sidebar: {
     label: "Pages",
+    allPages: "Toutes les pages",
     favourites: "Favoris",
     recent: "Récentes",
     workspace: "Espace de travail",

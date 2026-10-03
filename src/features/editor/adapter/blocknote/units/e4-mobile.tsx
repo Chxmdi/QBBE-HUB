@@ -214,13 +214,21 @@ function useToolbarShortcut(ref: React.RefObject<HTMLElement | null>) {
   }, [ref]);
 }
 
-/** Whether focus is anywhere inside the editor's container. */
+/**
+ * Whether focus is inside the editor's container, other than on the undo and
+ * redo bar. That bar has its own buttons: counting it raised the toolbar the
+ * moment one was pressed, over the button itself when it sat near the bottom
+ * of a phone screen, so the tap ended on the toolbar and did nothing.
+ */
 function useFocusWithin(ref: React.RefObject<HTMLElement | null>): boolean {
   const [inside, setInside] = React.useState(false);
   React.useEffect(() => {
     const root = ref.current;
     if (!root) return;
-    const read = () => setInside(root.contains(document.activeElement));
+    const read = () => {
+      const active = document.activeElement;
+      setInside(root.contains(active) && !active?.closest(".qbbe-history-bar"));
+    };
     read();
     const onOut = (event: FocusEvent) => {
       if (event.relatedTarget instanceof Node && root.contains(event.relatedTarget)) return;
