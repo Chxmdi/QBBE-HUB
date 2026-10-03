@@ -383,3 +383,28 @@ test("with the phone switch off, the editor at 390 px has no touch toolbar [swit
     switches(true);
   }
 });
+
+// The touch toolbar used to rise whenever focus went anywhere in the editor,
+// the undo bar included: pressing Undo, Redo or Keyboard shortcuts near the
+// bottom of a phone screen raised it over the button, and the tap ended on the
+// toolbar and did nothing.
+test("at 320 px the undo bar's buttons work by touch, with the touch toolbar open or not [switches on]", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize(SMALL);
+  await signIn(page, "staff");
+  await newPage(page, `Undo bar ${Date.now()}`);
+  const editor = page.getByRole("textbox", { name: "Document content" });
+  const bar = page.getByRole("group", { name: "Undo history" });
+
+  await editor.click();
+  await page.keyboard.type("Typed words");
+  await expect(page.getByRole("toolbar", { name: "Touch toolbar" })).toBeVisible();
+  await bar.scrollIntoViewIfNeeded();
+  await bar.getByRole("button", { name: /^Undo/ }).click();
+  await expect(editor).not.toContainText("Typed words");
+
+  const shortcuts = page.getByRole("button", { name: "Keyboard shortcuts" });
+  await shortcuts.scrollIntoViewIfNeeded();
+  await shortcuts.click();
+  await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
+});

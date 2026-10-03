@@ -18,6 +18,8 @@ export const pagesEn = {
   },
   sidebar: {
     label: "Pages",
+    /** Below desktop width the tree folds behind this button while a page is open. */
+    allPages: "All pages",
     favourites: "Favourites",
     recent: "Recent",
     workspace: "Workspace",
