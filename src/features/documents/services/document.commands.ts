@@ -239,12 +239,16 @@ export async function archiveDocument(documentId: string): Promise<ActionResult>
 export async function restoreDocument(documentId: string): Promise<ActionResult> {
   await requireSession();
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("document")
     .update({ archived_at: null })
     .eq("id", documentId)
-    .not("archived_at", "is", null);
-  if (error) return { ok: false, error: (await getT())("documents.errors.restore") };
+    .not("archived_at", "is", null)
+    .select("id");
+  // No row: refused, or not archived to begin with. Either way nothing was restored.
+  if (error || !changed || changed.length === 0) {
+    return { ok: false, error: (await getT())("documents.errors.restore") };
+  }
   revalidatePath("/documents");
   return { ok: true };
 }

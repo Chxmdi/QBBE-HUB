@@ -48,9 +48,10 @@ const calls = () => recorded.flat();
 
 const { deleteMessage } = await import("@/features/channels/services/message.commands");
 const { setChannelArchived } = await import("@/features/channels/services/channel.commands");
-const { archiveDocument } = await import("@/features/documents/services/document.commands");
+const { archiveDocument, restoreDocument } = await import("@/features/documents/services/document.commands");
 const { updateOpportunity } = await import("@/features/crm/services/opportunity.commands");
 const { closeProject } = await import("@/features/projects/services/project.commands");
+const { toggleChecklistItem } = await import("@/features/tasks/services/checklist.commands");
 
 /** Reads succeed; `allowed` decides whether updates match the row. */
 function db(allowed: boolean, reads: Record<string, unknown> = {}) {
@@ -106,6 +107,13 @@ describe("archiveDocument", () => {
     answer = db(true);
     expect(await archiveDocument(ID)).toEqual({ ok: true });
   });
+
+  it("reports a refused restore instead of success", async () => {
+    answer = db(false);
+    expect(await restoreDocument(ID)).toEqual({ ok: false, error: "Could not restore the document." });
+    answer = db(true);
+    expect(await restoreDocument(ID)).toEqual({ ok: true });
+  });
 });
 
 describe("updateOpportunity", () => {
@@ -136,5 +144,14 @@ describe("closeProject", () => {
     const order = calls().filter((c) => c.action === "update").map((c) => c.table);
     expect(order.indexOf("project")).toBeGreaterThanOrEqual(0);
     expect(order.indexOf("task")).toBeGreaterThan(order.indexOf("project"));
+  });
+});
+
+describe("toggleChecklistItem", () => {
+  it("reports a refused tick instead of success", async () => {
+    answer = db(false);
+    expect((await toggleChecklistItem(ID, true)).ok).toBe(false);
+    answer = db(true);
+    expect(await toggleChecklistItem(ID, true)).toEqual({ ok: true });
   });
 });
