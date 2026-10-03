@@ -983,7 +983,8 @@ export async function updateAgendaItem(input: unknown): Promise<ActionResult> {
       title: data.title,
       kind: data.kind,
       time_box_minutes: data.timeBoxMinutes ?? null,
-      ...(data.ownerId ? { owner_id: data.ownerId } : {}),
+      // Choosing "—" sends no owner; that clears it rather than keeping the old one.
+      owner_id: data.ownerId || null,
       desired_outcome: data.desiredOutcome || null,
       ...linkColumns(data.link || undefined),
     })
