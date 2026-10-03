@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "./fixtures";
-import { signIn } from "./auth";
+import { signIn, signOut } from "./auth";
 import { sql } from "./db";
 
 /**
@@ -134,6 +134,62 @@ test("staff build a page tree and manage it from the keyboard", async ({ page })
   await page.getByRole("button", { name: "Restore" }).click();
   await expect(page.getByText("This page is in the trash.")).toHaveCount(0, { timeout: 30_000 });
   await expect(workspace.getByRole("link", { name: `${parentTitle} (copy)` })).toBeVisible();
+});
+
+test("a trashed page is listed in the trash and restored from there", async ({ page }) => {
+  // Staging audit B3: the trash said "The trash is empty" while pages sat in
+  // it, so a trashed page could only be found again by its link. The trash
+  // screen sits behind wos_editor, which this spec otherwise leaves alone.
+  test.setTimeout(180_000);
+  const setEditor = (on: boolean) =>
+    sql(`update public.feature_flag set enabled = ${on} where key = 'wos_editor' and organization_id is null;`);
+  setEditor(true);
+  try {
+    await signIn(page, "staff");
+    const pageTitle = `Retired handbook ${Date.now()}`;
+    const sidebar = page.getByRole("navigation", { name: "Pages" });
+    const workspace = sidebar.getByRole("region", { name: "Workspace" });
+
+    await page.goto("/pages");
+    await sidebar.getByRole("button", { name: "New page", exact: true }).click();
+    await expect(page).toHaveURL(/\/pages\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+    const pageUrl = page.url();
+    const title = page.getByRole("textbox", { name: "Page title" });
+    await title.fill(pageTitle);
+    await title.press("Enter");
+    await expect(workspace.getByRole("link", { name: pageTitle })).toBeVisible({ timeout: 30_000 });
+    await chooseAction(page, pageTitle, "Move to trash");
+    await expect(page.getByText("This page is in the trash.")).toBeVisible({ timeout: 30_000 });
+
+    await page.goto("/collab/trash");
+    const row = page.getByRole("row").filter({ has: page.getByRole("rowheader", { name: pageTitle }) });
+    await expect(row).toBeVisible();
+    await expect(row.getByRole("cell", { name: "Page", exact: true })).toBeVisible();
+    await expect(row.getByText("Deleted by QA Staff")).toBeVisible();
+    // Nothing deletes a trashed page for good, so no countdown is promised.
+    await expect(row.getByRole("cell", { name: "Until restored" })).toBeVisible();
+    await expect(row.getByRole("link", { name: pageTitle })).toHaveAttribute("href", new URL(pageUrl).pathname);
+    await expectNoSeriousAxeViolations(page);
+
+    // Someone who cannot read the page does not see it in their trash.
+    await signOut(page);
+    await signIn(page, "volunteer");
+    await page.goto("/collab/trash");
+    await expect(page.getByRole("heading", { level: 1, name: "Trash" })).toBeVisible();
+    await expect(page.getByText(pageTitle)).toHaveCount(0);
+
+    await signOut(page);
+    await signIn(page, "staff");
+    await page.goto("/collab/trash");
+    await page.getByRole("button", { name: `Restore ${pageTitle}` }).click();
+    await expect(page.getByText("Restored.")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("rowheader", { name: pageTitle })).toHaveCount(0);
+    await page.goto(pageUrl);
+    await expect(page.getByRole("textbox", { name: "Page title" })).toHaveValue(pageTitle);
+    await expect(page.getByText("This page is in the trash.")).toHaveCount(0);
+  } finally {
+    setEditor(false);
+  }
 });
 
 test("volunteers keep private pages and cannot see or create shared ones", async ({ page }) => {

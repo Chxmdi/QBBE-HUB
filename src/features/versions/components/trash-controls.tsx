@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import type { ObjectRef } from "@/lib/objects/contracts";
 import { fill } from "@/features/collab/i18n";
 import { versionsText } from "../messages";
 import { restoreObject, trashObject } from "../services/version.commands";
+import { restorePage } from "@/features/pages/services/page.commands";
 import type { TrashEntry } from "../services/version.queries";
 import { daysLeft } from "../trash";
 
@@ -77,10 +79,21 @@ export function TrashTable({ entries }: { entries: TrashEntry[] }) {
           </thead>
           <tbody className="divide-y divide-line">
             {entries.map((entry) => {
-              const left = daysLeft(entry.purgeAfter);
+              const left = entry.purgeAfter ? daysLeft(entry.purgeAfter) : null;
+              const title = entry.title.trim() || m.trash.untitled;
               return (
                 <tr key={entry.objectId}>
-                  <th scope="row" className="px-4 py-2 font-medium">{entry.title}</th>
+                  <th scope="row" className="px-4 py-2 font-medium">
+                    {entry.kind === "page" ? (
+                      // The page's own screen says it is in the trash and shows
+                      // what it held, with its own Restore button.
+                      <Link href={`/pages/${entry.objectId}`} className="hover:underline">
+                        {title}
+                      </Link>
+                    ) : (
+                      title
+                    )}
+                  </th>
                   <td className="px-4 py-2">{typeName(entry.objectType)}</td>
                   <td className="px-4 py-2">
                     {fill(m.trash.deletedBy, {
@@ -88,17 +101,22 @@ export function TrashTable({ entries }: { entries: TrashEntry[] }) {
                       date: format.dateTime(entry.deletedAt),
                     })}
                   </td>
-                  <td className="px-4 py-2">{left === 0 ? m.trash.lastDay : fill(m.trash.daysLeft, { count: left })}</td>
+                  <td className="px-4 py-2">
+                    {left === null ? m.trash.untilRestored : left === 0 ? m.trash.lastDay : fill(m.trash.daysLeft, { count: left })}
+                  </td>
                   <td className="px-4 py-2">
                     <Button
                       size="sm"
                       variant="secondary"
                       loading={busy === entry.objectId}
-                      aria-label={fill(m.trash.restoreNamed, { title: entry.title })}
+                      aria-label={fill(m.trash.restoreNamed, { title })}
                       onClick={async () => {
                         setBusy(entry.objectId);
                         setMessage(null);
-                        const result = await restoreObject(entry.objectId);
+                        const result =
+                          entry.kind === "page"
+                            ? await restorePage({ pageId: entry.objectId })
+                            : await restoreObject(entry.objectId);
                         setBusy(null);
                         // The restored row (and with the last one, the table)
                         // leaves on refresh, so success goes to the page-level toast.

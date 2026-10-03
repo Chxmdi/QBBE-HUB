@@ -19,7 +19,7 @@ export default async function TrashPage() {
   if (!(await isEnabled("wos_editor"))) notFound();
   await requireSession();
   const m = versionsText(await getLocale());
-  const entries = await listTrash();
+  const entries = await listTrash({ pages: await isEnabled("wos_pages") });
   return (
     <>
       <PageHeader title={m.trash.title} description={m.trash.description} />
