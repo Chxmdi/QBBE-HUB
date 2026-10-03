@@ -469,7 +469,8 @@ export default async function MeetingDetailPage({
         {meeting.location ? (
           <span className="text-[13px] text-muted">{meeting.location}</span>
         ) : null}
-        {meeting.meeting_link ? (
+        {/* Only web links: one stored before links had to be https is not offered. */}
+        {meeting.meeting_link && /^https?:\/\//i.test(meeting.meeting_link) ? (
           <a
             href={meeting.meeting_link}
             target="_blank"

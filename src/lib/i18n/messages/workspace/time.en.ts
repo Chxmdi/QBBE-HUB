@@ -262,6 +262,7 @@ export const timeEn = {
     errors: {
       invalidInput: "Invalid input.",
       titleRequired: "A meeting needs a title.",
+      linkHttps: "Use a meeting link that starts with https://.",
       startRequired: "Pick a start time.",
       invalidStart: "Invalid start time.",
       projectDenied: "You cannot schedule a meeting on this project.",

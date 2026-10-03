@@ -35,7 +35,7 @@ vi.mock("@/lib/supabase/server", () => ({
   },
 }));
 
-const { updateMeeting, cancelMeeting } = await import("../services/meeting.commands");
+const { createMeeting, updateMeeting, cancelMeeting } = await import("../services/meeting.commands");
 
 /** `allowed` is what row-level security decides; the app's own check may differ. */
 function db({ organizer = ME, status = "scheduled", allowed = true } = {}) {
@@ -114,5 +114,25 @@ describe("cancelMeeting", () => {
     expect((await cancelMeeting({ meetingId: MEETING })).ok).toBe(true);
     const marked = tableCalls.find((c) => c.table === "integration_connection" && c.action === "update");
     expect(marked?.payload).toMatchObject({ status: "degraded", last_error: "Google down" });
+  });
+});
+
+describe("createMeeting meeting link", () => {
+  const base = { title: "Board", startsAt: "2026-11-10T18:00" };
+  const refused = "Use a meeting link that starts with https://.";
+
+  it.each(["javascript:alert(1)", "data:text/html,<script>alert(1)</script>", "http://meet.example.org/board"])(
+    "refuses %s before anything is saved (staging audit S5)",
+    async (meetingLink) => {
+      expect(await createMeeting({ ...base, meetingLink })).toEqual({ ok: false, error: refused });
+      expect(tableCalls.filter((call) => call.action === "insert")).toEqual([]);
+    },
+  );
+
+  it("accepts an https link, or none", async () => {
+    for (const meetingLink of ["https://meet.google.com/abc-defg-hij", ""]) {
+      const result = await createMeeting({ ...base, meetingLink });
+      expect(result.error).not.toBe(refused);
+    }
   });
 });

@@ -31,6 +31,7 @@ export const captureEn = {
     title: "Inbox",
     empty: "Your capture inbox is empty.",
     count: "{count} items waiting",
+    countOne: "1 item waiting",
     suggestions: "File it",
     fileTask: "Task in {project}",
     fileTaskNoProject: "Task, no project",
