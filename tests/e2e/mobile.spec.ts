@@ -145,7 +145,10 @@ test("a staff member works through the phone screens at 390px", async ({ page })
   expect(await axeProblems(page)).toEqual([]);
   expect(await fitsWidth(page)).toBe(true);
   await page.getByRole("button", { name: `Approve “Phone approval ${stamp}”` }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Approved." })).toBeVisible({ timeout: 30_000 });
+  // The refresh drops the decided item from the list; the confirmation must
+  // outlive it (it once lived on the item's card and left with it).
+  await expect(page.getByText(`Phone approval ${stamp}`)).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByRole("status").filter({ hasText: "Approved." })).toBeVisible();
   expect(sql(`select status from public.approval_item where title = 'Phone approval ${stamp}';`)).toBe("approved");
 
   // French.

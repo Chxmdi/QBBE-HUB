@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label, Textarea } from "@/components/ui/input";
 import { decideApproval } from "@/features/approvals/services/approval.commands";
+import { usePhoneStatus } from "./phone-status";
 import { useMobileT } from "./use-mobile-t";
 
 /** One waiting approval, decided with the ordinary approval action. */
@@ -15,7 +16,12 @@ export function ApprovalCard({ id, title, requester, amount }: { id: string; tit
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [localStatus, setLocalStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  // On the phone screens the layout shows it: the refresh below drops a
+  // decided item from the list, and with it any message shown on its card.
+  const phoneStatus = usePhoneStatus();
+  const setStatus = phoneStatus ?? setLocalStatus;
+  const status = phoneStatus ? null : localStatus;
 
   async function decide(decision: "approve" | "reject") {
     setBusy(true);
