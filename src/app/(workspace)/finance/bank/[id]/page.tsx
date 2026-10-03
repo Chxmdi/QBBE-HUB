@@ -35,6 +35,7 @@ import { getLedgerAccess, todayIn, uuidParam } from "@/features/ledger/services/
 import { loadEntryChoices } from "@/features/ledger/services/ledger.queries";
 import { getLocale, getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translate";
+import { isCalendarMonth } from "@/lib/schema";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("finance.bank.account.metaTitle") };
@@ -77,7 +78,7 @@ export default async function BankAccountPage({
   const account = (await loadBankAccounts(supabase, session.organizationId)).find((a) => a.id === accountId);
   if (!account) notFound();
 
-  const month = /^\d{4}-\d{2}$/.test(query.month ?? "") ? query.month! : todayIn(session.timeZone).slice(0, 7);
+  const month = isCalendarMonth(query.month ?? "") ? query.month! : todayIn(session.timeZone).slice(0, 7);
   const { from, to } = monthOf(`${month}-01`);
   const unmatchedOnly = query.show === "unmatched";
 

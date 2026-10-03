@@ -16,6 +16,7 @@ import {
 } from "@/features/gifts/services/gift.data";
 import { intlLocale } from "@/lib/i18n/config";
 import { getFormatters, getLocale, getT } from "@/lib/i18n/server";
+import { isCalendarYear } from "@/lib/schema";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("finance.gifts.statement.metaTitle") };
@@ -38,7 +39,7 @@ export default async function StatementPage({
   const [t, locale, format] = await Promise.all([getT(), getLocale(), getFormatters()]);
   const params = await searchParams;
   const today = todayIn(session.timeZone);
-  const year = /^\d{4}$/.test(params.year ?? "") ? Number(params.year) : Number(today.slice(0, 4));
+  const year = isCalendarYear(params.year ?? "") ? Number(params.year) : Number(today.slice(0, 4));
   const language: AckLanguage = params.lang === "en" ? "en" : "fr";
   const donor = parseDonorKey(params.donor);
   const header = (

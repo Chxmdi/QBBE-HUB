@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCalendarDate } from "@/lib/schema";
+import { isCalendarDate, isCalendarMonth, isCalendarYear } from "@/lib/schema";
 import { dateParam } from "@/features/ledger/services/ledger.access";
 import { isValidValue } from "@/features/offline/op-log";
 import { rescheduleSchema, taskSeriesSchema } from "@/features/tasks/schemas";
@@ -13,9 +13,9 @@ import { isCalendarDate as templateIsCalendarDate } from "@/features/templates-v
  * through and Postgres refused them: a finance export answered 500 and a form
  * failed with a generic message.
  */
-const IMPOSSIBLE = ["2026-02-29", "2026-02-30", "2026-02-31", "2026-04-31", "2026-06-31", "2026-09-31", "2026-11-31", "2100-02-29"];
+const IMPOSSIBLE = ["0001-02-29", "0100-02-29", "2026-02-29", "2026-02-30", "2026-02-31", "2026-04-31", "2026-06-31", "2026-09-31", "2026-11-31", "2100-02-29"];
 const MALFORMED = ["2026-13-01", "2026-00-10", "2026-01-00", "2026-01-32", "0000-01-01", "26-01-01", "2026-1-1", "2026/01/01", "2026-01-01T00:00", " 2026-01-01", ""];
-const REAL = ["2026-01-01", "2026-02-28", "2028-02-29", "2000-02-29", "2026-04-30", "2026-12-31", "1999-12-31"];
+const REAL = ["0001-01-01", "0099-12-31", "0004-02-29", "2026-01-01", "2026-02-28", "2028-02-29", "2000-02-29", "2026-04-30", "2026-12-31", "1999-12-31"];
 
 describe("isCalendarDate", () => {
   it("accepts real days, leap days included", () => {
@@ -66,5 +66,17 @@ describe("dates that arrive in links and requests", () => {
 
     expect(portfolioFilterSchema.safeParse({ from: "2026-02-30" }).success).toBe(false);
     expect(portfolioFilterSchema.safeParse({ from: "2026-02-28" }).success).toBe(true);
+  });
+});
+
+describe("months and years in links", () => {
+  it("a month is YYYY-MM with a month from 01 to 12", () => {
+    for (const month of ["2026-01", "2026-12", "2000-02"]) expect(isCalendarMonth(month), month).toBe(true);
+    for (const month of ["2026-00", "2026-13", "0000-01", "2026-1", "202601", "2026-01-01", ""]) expect(isCalendarMonth(month), month).toBe(false);
+  });
+
+  it("a year is four digits from 0001", () => {
+    for (const year of ["0001", "2026", "9999"]) expect(isCalendarYear(year), year).toBe(true);
+    for (const year of ["0000", "26", "20260", "-2026", ""]) expect(isCalendarYear(year), year).toBe(false);
   });
 });
