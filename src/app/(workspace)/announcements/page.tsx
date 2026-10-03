@@ -27,6 +27,8 @@ interface AnnouncementRow {
   publish_at: string;
   expires_at: string | null;
   created_at: string;
+  /** The text of a due announcement whose message the job has not posted yet. */
+  body: string | null;
   message: { id: string; body: string; channel_id: string | null } | null;
   author: { full_name: string; avatar_url: string | null } | null;
 }
@@ -53,7 +55,7 @@ export default async function AnnouncementsPage() {
       supabase
         .from("announcement")
         .select(
-          "id, title, priority, requires_ack, ack_deadline, publish_at, expires_at, created_at, " +
+          "id, title, priority, requires_ack, ack_deadline, publish_at, expires_at, created_at, body, " +
             "message:message_id(id, body, channel_id), author:created_by(full_name, avatar_url)",
         )
         .lte("publish_at", now)
@@ -131,9 +133,9 @@ export default async function AnnouncementsPage() {
         </div>
 
         <h2 className="text-[16px] font-semibold">{announcement.title}</h2>
-        {announcement.message?.body ? (
+        {(announcement.message?.body ?? announcement.body) ? (
           <p className="mt-1.5 text-[13.5px] whitespace-pre-wrap">
-            {announcement.message.body}
+            {announcement.message?.body ?? announcement.body}
           </p>
         ) : null}
 

@@ -4,8 +4,12 @@ import { createNotifications, notificationDedupeKey } from "../notify";
 import type { JobContext, JobResult } from "../runner";
 
 /**
- * Fans out notifications for announcements whose publish time has arrived
+ * Posts and fans out announcements whose publish time has arrived
  * (P1-ANN-07).
+ *
+ * A scheduled announcement waits with no channel message, so its text is not
+ * readable before it is due. The first step posts the waiting message of
+ * every due announcement, whatever its age, so an outage only delays it.
  *
  * The window looks back two days rather than only at the current minute, so an
  * outage in the runtime delays an announcement instead of losing it. Repeats
@@ -29,9 +33,30 @@ export async function scheduledAnnouncements({
   definition,
   now,
 }: JobContext): Promise<JobResult> {
+  const { data: waiting, error: waitingError } = await db
+    .from("announcement")
+    .select("id")
+    .is("message_id", null)
+    .lte("publish_at", now.toISOString())
+    .order("publish_at", { ascending: true })
+    .limit(definition.batch_size);
+
+  if (waitingError) throw new Error(`could not load waiting announcements: ${waitingError.message}`);
+
+  let released = 0;
+  let failed = 0;
+  for (const row of (waiting ?? []) as { id: string }[]) {
+    const { error: releaseError } = await db.rpc("release_scheduled_announcement", {
+      p_announcement: row.id,
+    });
+    if (releaseError) failed += 1;
+    else released += 1;
+  }
+
   const { data: dueRows, error } = await db
     .from("announcement")
     .select("id, organization_id, title, priority, created_by, publish_at")
+    .not("message_id", "is", null)
     .lte("publish_at", now.toISOString())
     .gte("publish_at", new Date(now.getTime() - LOOKBACK_MS).toISOString())
     .order("publish_at", { ascending: true })
@@ -40,7 +65,6 @@ export async function scheduledAnnouncements({
   if (error) throw new Error(`could not load announcements: ${error.message}`);
 
   let fanned = 0;
-  let failed = 0;
 
   for (const announcement of (dueRows ?? []) as unknown as AnnouncementRow[]) {
     const startedAt = new Date().toISOString();
@@ -112,6 +136,6 @@ export async function scheduledAnnouncements({
   return {
     processed: fanned,
     failed,
-    metadata: { announcements: (dueRows ?? []).length },
+    metadata: { announcements: (dueRows ?? []).length, released },
   };
 }
