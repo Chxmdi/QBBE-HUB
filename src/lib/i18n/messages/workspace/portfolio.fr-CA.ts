@@ -374,6 +374,7 @@ export const portfolioFrCA: typeof portfolioEn = {
     },
   },
   programs: {
+    loadingList: "Chargement des programmes",
     metaTitle: "Programmes",
     detailMetaTitle: "Programme",
     list: {
