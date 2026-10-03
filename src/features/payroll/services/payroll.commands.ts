@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { requiredText } from "@/lib/schema";
+import { requiredText, isCalendarDate } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
@@ -62,7 +62,7 @@ async function authorize(): Promise<
 }
 
 const id = z.string().uuid();
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "finance.payroll.errors.runDates" satisfies MessageKey);
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "finance.payroll.errors.runDates" satisfies MessageKey).refine(isCalendarDate, "finance.payroll.errors.runDates" satisfies MessageKey);
 const cents = z.number().int().min(0).max(10_000_000_000_000);
 
 const runSchema = z

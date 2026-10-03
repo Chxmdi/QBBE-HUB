@@ -16,6 +16,8 @@
  * wrong can pick the wrong winner, which is why every overwrite is shown.
  */
 
+import { isCalendarDate } from "@/lib/schema";
+
 export const OFFLINE_FIELDS = ["status", "priority", "due_at", "start_at", "title"] as const;
 export type OfflineField = (typeof OFFLINE_FIELDS)[number];
 
@@ -104,7 +106,7 @@ export function isValidValue(field: OfflineField, value: FieldValue): boolean {
   if (field === "status") return value !== null && (TASK_STATUSES as readonly string[]).includes(value);
   if (field === "priority") return value !== null && (TASK_PRIORITIES as readonly string[]).includes(value);
   if (field === "title") return value !== null && value.trim().length > 0 && value.length <= 300;
-  return value === null || /^\d{4}-\d{2}-\d{2}$/.test(value);
+  return value === null || isCalendarDate(value);
 }
 
 /** What the person is shown after a sync. */

@@ -14,6 +14,7 @@ import { calendarDateInZone } from "@/lib/time";
 import { calendarRange, calendarSpec } from "@/features/lenses/calendar/model";
 import { calendarPath, composeSpec, parseViewBlockProps, viewConditionSchema } from "./schema";
 import { withD4Columns } from "./layouts/d4.ids";
+import { isCalendarDate } from "@/lib/schema";
 
 /**
  * Data for view blocks (U6). Each read runs as the signed-in reader through
@@ -48,7 +49,7 @@ export type ViewBlockOptions =
   | { ok: false; reason: ViewBlockFailure };
 
 const localSchema = z.array(viewConditionSchema).max(20);
-const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate);
 const windowSchema = z.object({ from: isoDay, to: isoDay }).strict().optional();
 
 async function ready() {

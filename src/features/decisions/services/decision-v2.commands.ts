@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { decisionsV2Enabled } from "../flag";
 import { decisionsV2T } from "../i18n";
 import { parseOptions } from "../revisit";
+import { isCalendarDate } from "@/lib/schema";
 
 export interface CommandResult {
   ok: boolean;
@@ -36,6 +37,7 @@ const recordSchema = z.object({
   revisitOn: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isCalendarDate)
     .optional()
     .or(z.literal("").transform(() => undefined)),
 });

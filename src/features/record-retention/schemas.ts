@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { requiredText, isCalendarDate } from "@/lib/schema";
 import { opsEn } from "@/lib/i18n/messages/workspace/ops.en";
 import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
 
@@ -189,6 +189,7 @@ export const classifyDocumentSchema = z.object({
     .string()
     .trim()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the date as YYYY-MM-DD.")
+    .refine(isCalendarDate, "Enter the date as YYYY-MM-DD.")
     .optional()
     .or(z.literal("")),
 });

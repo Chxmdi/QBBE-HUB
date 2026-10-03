@@ -1,5 +1,6 @@
 import type { EditorBlock } from "@/features/editor/adapter/content";
 import type { LocalizedText } from "@/lib/objects/contracts";
+import { isCalendarDate } from "@/lib/schema";
 
 /**
  * Templates for objects, pages and spaces (V1-13). The body shapes match the
@@ -105,12 +106,7 @@ export function addDays(date: string, days: number): string {
   return moved.toISOString().slice(0, 10);
 }
 
-export function isCalendarDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [y, m, d] = value.split("-").map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
-}
+export { isCalendarDate };
 
 export function pick(text: LocalizedText | undefined, locale: string): string {
   if (!text) return "";

@@ -20,3 +20,19 @@ export function requiredText(message: string, max?: number) {
     .min(1, message);
   return max === undefined ? text : text.max(max);
 }
+
+/**
+ * A real calendar day written as YYYY-MM-DD.
+ *
+ * The pattern alone lets 2026-02-31 through, and so does `Date.parse`, which
+ * quietly rolls it over to March 3. Postgres refuses such a date, so a form or
+ * a link carrying one ended in a generic failure (or a 500 on an export)
+ * instead of a sentence saying what was wrong. Every date that arrives from a
+ * person, a link or an API call is checked with this.
+ */
+export function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return y >= 1 && date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}

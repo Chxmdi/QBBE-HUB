@@ -7,6 +7,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { goalsEnabled } from "../flag";
 import { goalsT } from "../i18n";
+import { isCalendarDate } from "@/lib/schema";
 
 export interface CommandResult {
   ok: boolean;
@@ -30,7 +31,7 @@ const createSchema = z.object({
   description: z.string().trim().max(4000).optional(),
   programId: optionalUuid,
   ownerId: optionalUuid,
-  targetOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal("").transform(() => undefined)),
+  targetOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isCalendarDate).optional().or(z.literal("").transform(() => undefined)),
 });
 
 /** RLS decides who may: administrators, or managers of the chosen program. */
