@@ -32,7 +32,7 @@ Every row records the commit, environment, command, result and artifact.
 
 | Area | Finding |
 |---|---|
-| CI gates | Verify job: lint, typecheck, unit, build, public-route browsers (all three), `npm audit --audit-level=high`. Database security job: RLS suite, Supabase security advisor, signed-in browser suites and `qa-matrix`. `scripts/protect-main.sh` makes both `Verify` and `Database security` required checks on `main`. |
+| CI gates | Verify job: lint, typecheck, unit, build, public-route browsers (all three), `npm audit --audit-level=high --omit=dev` (shipped packages block; development-tool advisories are reported in the run summary). Database security job: RLS suite, Supabase security advisor, signed-in browser suites and `qa-matrix`. `scripts/protect-main.sh` makes both `Verify` and `Database security` required checks on `main`. |
 | Roles in fixtures | `supabase/tests/qa-users.sql` has one user per org role (owner, admin, staff, volunteer, guest). **Browser suites exercise mostly owner and volunteer.** Admin, staff and guest have almost no browser coverage; scoped roles (program lead, project manager, contributor, read-only) are covered only in SQL. |
 | Database allow/deny | Strong: 22 SQL test files, about 456 assertions, including scoped grants, revocation, cross-organization access and leftover surfaces. |
 | Browser journeys | 16 specs, 76 checks. Identity, programs, projects, milestones, tasks, work planning, documents and events are covered. **No browser spec for CRM, reports, channels/DMs, meetings, notifications or admin.** |
