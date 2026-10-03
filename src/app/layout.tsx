@@ -24,8 +24,24 @@ export const viewport: Viewport = {
   ],
 };
 
-/** Applies the persisted theme before paint to avoid a flash. */
+/**
+ * Applies the persisted theme before paint to avoid a flash.
+ *
+ * It first removes any comment a host slipped into <head> ahead of it. Netlify
+ * adds "This site is hosted on Netlify" right after the charset tag on
+ * *.netlify.app addresses; React then finds that comment where it expects this
+ * script and fails hydration (error #418) on every page. This runs while the
+ * page is still parsing, before React hydrates.
+ */
 const themeScript = `
+try {
+  var s = document.currentScript, n = s && s.previousSibling;
+  while (n) {
+    var prev = n.previousSibling;
+    if (n.nodeType === 8 || (n.nodeType === 3 && !n.textContent.trim())) n.parentNode.removeChild(n);
+    n = prev;
+  }
+} catch (e) {}
 try {
   var t = localStorage.getItem('qbbe-theme');
   if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {

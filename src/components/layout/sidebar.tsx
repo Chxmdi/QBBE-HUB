@@ -292,7 +292,10 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="qbbe-sidebar hidden w-[248px] shrink-0 lg:block">
+      {/* Screen height and sticky: stretched to a long page, the account menu sat
+          at the page's end and every change in page height repainted the
+          whole gradient. */}
+      <aside className="qbbe-sidebar sticky top-0 hidden h-dvh w-[248px] shrink-0 self-start lg:block">
         {nav}
       </aside>
       {mobileOpen ? (

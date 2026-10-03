@@ -57,11 +57,26 @@ async function openPage(page: Page, pageId: string, name = "Document content"): 
   return editor;
 }
 
+/**
+ * Clicks into a block and waits until the editor has taken the click. The
+ * browser moves the caret at once but tells the editor (selectionchange) a
+ * task later; keys pressed before that act where the caret was before, which
+ * under load typed a line into the block above it.
+ */
+async function clickInto(block: Locator, options?: Parameters<Locator["click"]>[0]) {
+  await block.click(options);
+  await expect
+    .poll(() => block.evaluate((el) => el.contains(document.getSelection()?.anchorNode ?? null)))
+    .toBe(true);
+  // The selectionchange task was queued before this one, so it has run.
+  await block.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)));
+}
+
 /** Puts the caret at the end of a one-line block, then opens an empty line below it. */
 async function newLineAfter(page: Page, block: Locator) {
   const box = await block.boundingBox();
   if (!box) throw new Error("block not visible");
-  await block.click({ position: { x: box.width - 4, y: box.height / 2 } });
+  await clickInto(block, { position: { x: box.width - 4, y: box.height / 2 } });
   await page.keyboard.press("End");
   await page.keyboard.press("Enter");
 }
@@ -225,7 +240,7 @@ test("pasted Markdown becomes the same blocks as typing it [switches on]", async
   // Typed: each line into its own emptied paragraph.
   for (const [index, line] of lines.entries()) {
     const slot = editor.locator("[data-content-type='paragraph']", { hasText: slots[index] });
-    await slot.click();
+    await clickInto(slot);
     await page.keyboard.press("End");
     await page.keyboard.press("Shift+Home");
     await page.keyboard.press("Backspace");
@@ -428,7 +443,7 @@ test("every Markdown shortcut works when typed at the start of a line [switches 
   await signIn(page, "staff");
   const editor = await openPage(page, pageId);
   for (const [index, item] of cases.entries()) {
-    await editor.locator("[data-content-type='paragraph']", { hasText: slots[index] }).click();
+    await clickInto(editor.locator("[data-content-type='paragraph']", { hasText: slots[index] }));
     await page.keyboard.press("End");
     await page.keyboard.press("Shift+Home");
     await page.keyboard.press("Backspace");
@@ -494,7 +509,7 @@ test("a paste larger than the editor can save shows the too-large state and the 
   await alert.getByRole("button", { name: "Dismiss" }).click();
   await expect(alert).toHaveCount(0);
   expect(await pageWidth()).toBe(withNotice);
-  await editor.locator("[data-content-type='paragraph']", { hasText: `Still typing ${stamp}` }).click();
+  await clickInto(editor.locator("[data-content-type='paragraph']", { hasText: `Still typing ${stamp}` }));
   await page.keyboard.press("End");
   await paste(editor, { "text/plain": "x".repeat(1_000_000) });
   await expect(alert).toBeVisible();

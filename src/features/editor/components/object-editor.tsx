@@ -224,7 +224,7 @@ export function ObjectEditor({
   const mine = React.useCallback(() => latestQueued()?.content ?? latest.current, [latestQueued]);
 
   const onChange = React.useCallback(
-    (content: EditorContent, state: string) => {
+    (content: EditorContent, encodeState: () => string) => {
       const removed = removedTaskIds(latest.current, content);
       latest.current = content;
       if (removed.length > 0) {
@@ -239,7 +239,7 @@ export function ObjectEditor({
           });
         }, REMOVAL_GRACE_MS);
       }
-      enqueue(content, state);
+      enqueue(content, encodeState);
     },
     [enqueue],
   );

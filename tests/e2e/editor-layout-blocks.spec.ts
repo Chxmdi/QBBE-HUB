@@ -155,11 +155,16 @@ test("two columns and a table of contents render and read from the keyboard [swi
   }
 
   // Under 640 px the columns stack.
+  // Both measured in one frame, once the page has laid out at the new width.
   await page.setViewportSize({ width: 600, height: 900 });
-  const leftNarrow = await box(columns.nth(0));
-  const rightNarrow = await box(columns.nth(1));
-  expect(rightNarrow.y).toBeGreaterThanOrEqual(leftNarrow.y + leftNarrow.height - 1);
-  expect(Math.abs(leftNarrow.x - rightNarrow.x)).toBeLessThan(2);
+  await expect
+    .poll(() =>
+      columns.evaluateAll((els) => {
+        const [left, right] = els.map((e) => e.getBoundingClientRect());
+        return right.top >= left.bottom - 1 && Math.abs(left.x - right.x) < 2;
+      }),
+    )
+    .toBe(true);
 
   // Reloaded from the saved state: the same layout and the same links.
   await page.setViewportSize({ width: 1280, height: 900 });

@@ -524,7 +524,7 @@ export default function BlockNoteEditorImpl({
       return;
     }
     setVersion((n) => n + 1);
-    onChange?.(toContent(blocks), bytesToBase64(Y.encodeStateAsUpdate(doc)));
+    onChange?.(toContent(blocks), () => bytesToBase64(Y.encodeStateAsUpdate(doc)));
   }, [editor, editable, onChange, doc]);
 
   const getItems = React.useCallback(
