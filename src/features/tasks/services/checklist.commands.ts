@@ -117,12 +117,16 @@ export async function reorderChecklist(input: unknown): Promise<ActionResult> {
   if (!ordered.length) return { ok: false, error: t("tasks.errors.reorderChecklist") };
 
   for (const [index, id] of ordered.entries()) {
-    const { error } = await supabase
+    const { data: placed, error } = await supabase
       .from("checklist_item")
       .update({ sort_key: index + 1 })
       .eq("id", id)
-      .eq("task_id", taskId);
-    if (error) return { ok: false, error: t("tasks.errors.reorderChecklist") };
+      .eq("task_id", taskId)
+      .select("id");
+    // A reader can see the list but not reorder it; that matches no row.
+    if (error || !placed || placed.length === 0) {
+      return { ok: false, error: t("tasks.errors.reorderChecklist") };
+    }
   }
   return { ok: true };
 }

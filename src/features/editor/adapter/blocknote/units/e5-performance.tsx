@@ -125,11 +125,20 @@ export function E5Outside({ containerRef }: EditorUnitProps) {
     let stop: (() => void) | null = null;
     const hold = (target: HTMLElement) => {
       stop?.();
+      const startAnchor = document.getSelection()?.anchorNode ?? null;
       let frame = requestAnimationFrame(() => {
         const landed = target.getBoundingClientRect().top;
         const until = performance.now() + HOLD_MS;
         const keep = () => {
           if (!target.isConnected || performance.now() > until) return release();
+          // A new find in page match, or any new selection, somewhere else:
+          // follow it. The selection changes before its selectionchange event
+          // arrives, so without this the old hold could pull the page back to
+          // the previous match and keep the new one off screen. A selection
+          // that only moves within the target (its waiting block rendering in
+          // place) keeps the hold.
+          const anchor = document.getSelection()?.anchorNode ?? null;
+          if (anchor && anchor !== startAnchor && !target.contains(anchor)) return release();
           const drift = target.getBoundingClientRect().top - landed;
           if (Math.abs(drift) > 1) window.scrollBy(0, drift);
           frame = requestAnimationFrame(keep);

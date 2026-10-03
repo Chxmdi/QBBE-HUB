@@ -261,8 +261,11 @@ jobs:
         run: npx playwright install --with-deps $(echo $SIGNED_IN_BROWSERS $MOBILE | tr ' ' '\n' | sort -u)
 
       - name: Start the app
+        # Each server log line gets a UTC time so a browser check that failed on
+        # the connection (its job-log line is timestamped) can be matched to what
+        # the server was doing at that moment.
         run: |
-          nohup npx next start -p 3000 -H 127.0.0.1 > "$RUNNER_TEMP/next.log" 2>&1 &
+          nohup bash -c 'npx next start -p 3000 -H 127.0.0.1 2>&1 | while IFS= read -r line; do printf "%s %s\n" "$(date -u +%H:%M:%S.%3N)" "$line"; done' > "$RUNNER_TEMP/next.log" 2>&1 &
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
 
       - name: Signed-in lifecycle and access checks

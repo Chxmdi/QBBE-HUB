@@ -848,12 +848,17 @@ export async function restoreTasks(taskIds: string[]): Promise<ActionResult> {
   );
   if (ids.length === 0) return { ok: false, error: t("tasks.errors.chooseRestore") };
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
+  const { data: restored, error } = await supabase
     .from("task")
     .update({ archived_at: null })
     .in("id", ids)
-    .not("archived_at", "is", null);
-  if (error) return { ok: false, error: t("tasks.errors.restoreFailed") };
+    .not("archived_at", "is", null)
+    .select("id");
+  // None restored: refused, or none of them archived. Saying "restored" then
+  // would leave the person looking for tasks that never came back.
+  if (error || !restored || restored.length === 0) {
+    return { ok: false, error: t("tasks.errors.restoreFailed") };
+  }
   revalidatePath("/my-work");
   return { ok: true };
 }

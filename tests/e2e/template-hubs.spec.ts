@@ -227,7 +227,16 @@ test.describe("with the switches on", () => {
       const editorPanel = page.getByTestId("template-editor");
       const english = editorPanel.getByRole("textbox", { name: "Page content (English)" });
       await expect(english).toBeVisible({ timeout: 30_000 });
-      await english.getByText(`First words ${stamp}`).click();
+      const firstWords = english.getByText(`First words ${stamp}`);
+      await firstWords.click();
+      // The editor learns where the click put the caret from a selectionchange
+      // that arrives a task later; End pressed before it was undone by the
+      // editor restoring the click position (seen in CI: the typed words landed
+      // inside the number, "First words 17 and second words91054161520").
+      await expect
+        .poll(() => firstWords.evaluate((el) => el.contains(document.getSelection()?.anchorNode ?? null)))
+        .toBe(true);
+      await firstWords.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)));
       await page.keyboard.press("End");
       await page.keyboard.type(" and second words");
       await expect(english).toContainText(`First words ${stamp} and second words`);

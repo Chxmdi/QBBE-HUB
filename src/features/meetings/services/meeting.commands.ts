@@ -641,11 +641,15 @@ export async function triageAgendaItem(input: unknown): Promise<ActionResult> {
     };
   }
 
-  const { error } = await supabase
+  const { data: triaged, error } = await supabase
     .from("agenda_item")
     .update({ status: parsed.data.decision })
-    .eq("id", parsed.data.agendaItemId);
-  if (error) return { ok: false, error: await tr("meetings.errors.updateAgendaFailed") };
+    .eq("id", parsed.data.agendaItemId)
+    .select("id");
+  // Row-level security refuses by matching no row, which is not an error.
+  if (error || !triaged || triaged.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.updateAgendaFailed") };
+  }
 
   revalidatePath(`/meetings/${item.meeting_id as string}`);
   return { ok: true, id: parsed.data.agendaItemId };
@@ -694,17 +698,27 @@ export async function moveAgendaItem(input: unknown): Promise<ActionResult> {
   // Already at the end it was heading for. Not an error worth a message.
   if (!neighbour) return { ok: true, id: parsed.data.agendaItemId };
 
-  const [{ error: firstError }, { error: secondError }] = await Promise.all([
-    supabase
-      .from("agenda_item")
-      .update({ sort_key: neighbour.sort_key as number })
-      .eq("id", item.id as string),
-    supabase
+  // One after the other, each asking for its row back: a refusal matches no row
+  // rather than erroring, and a half-done swap would leave two items sharing a
+  // position, so the first is put back if the second does not land.
+  const { data: moved, error: firstError } = await supabase
+    .from("agenda_item")
+    .update({ sort_key: neighbour.sort_key as number })
+    .eq("id", item.id as string)
+    .select("id");
+  if (firstError || !moved || moved.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.reorderFailed") };
+  }
+  const { data: swapped, error: secondError } = await supabase
+    .from("agenda_item")
+    .update({ sort_key: item.sort_key as number })
+    .eq("id", neighbour.id as string)
+    .select("id");
+  if (secondError || !swapped || swapped.length === 0) {
+    await supabase
       .from("agenda_item")
       .update({ sort_key: item.sort_key as number })
-      .eq("id", neighbour.id as string),
-  ]);
-  if (firstError || secondError) {
+      .eq("id", item.id as string);
     return { ok: false, error: await tr("meetings.errors.reorderFailed") };
   }
 
@@ -822,11 +836,15 @@ export async function saveMeetingNotes(input: unknown): Promise<ActionResult> {
       error: await tr("meetings.errors.cancelledNoNotes"),
     };
   }
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("meeting")
     .update({ notes: parsed.data.notes || null })
-    .eq("id", parsed.data.meetingId);
-  if (error) return { ok: false, error: await tr("meetings.errors.notesFailed") };
+    .eq("id", parsed.data.meetingId)
+    .select("id");
+  // A reader's save matches no row; say so rather than lose their notes quietly.
+  if (error || !saved || saved.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.notesFailed") };
+  }
   revalidatePath(`/meetings/${parsed.data.meetingId}`);
   return { ok: true };
 }
@@ -1089,15 +1107,13 @@ export async function combineAgendaItem(input: unknown): Promise<ActionResult> {
   const outcome = [target.desired_outcome, `Also covers: ${source.title}`]
     .filter(Boolean)
     .join("\n");
-  const { error: targetError } = await supabase
-    .from("agenda_item")
-    .update({ desired_outcome: outcome.slice(0, 1000) })
-    .eq("id", targetItemId);
-  if (targetError) return { ok: false, error: await tr("meetings.errors.combineFailed") };
-  const { error } = await supabase
+  // The item being folded in goes first: it is the write the organizer rule
+  // guards, and the target's note should only say "also covers" once it does.
+  const { data: combined, error } = await supabase
     .from("agenda_item")
     .update({ status: "combined", combined_into_id: targetItemId })
-    .eq("id", agendaItemId);
+    .eq("id", agendaItemId)
+    .select("id");
   if (error) {
     return {
       ok: false,
@@ -1105,6 +1121,21 @@ export async function combineAgendaItem(input: unknown): Promise<ActionResult> {
         ? await tr("meetings.errors.onlyOrganizerCombines")
         : await tr("meetings.errors.combineFailed"),
     };
+  }
+  if (!combined || combined.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.onlyOrganizerCombines") };
+  }
+  const { data: noted, error: targetError } = await supabase
+    .from("agenda_item")
+    .update({ desired_outcome: outcome.slice(0, 1000) })
+    .eq("id", targetItemId)
+    .select("id");
+  if (targetError || !noted || noted.length === 0) {
+    await supabase
+      .from("agenda_item")
+      .update({ status: source.status, combined_into_id: null })
+      .eq("id", agendaItemId);
+    return { ok: false, error: await tr("meetings.errors.combineFailed") };
   }
   revalidatePath(`/meetings/${source.meeting_id}`);
   return { ok: true, id: targetItemId };
@@ -1177,6 +1208,20 @@ export async function carryForwardAgendaItem(
     .select("id", { count: "exact", head: true })
     .eq("meeting_id", targetMeetingId);
 
+  // Defer this one first. Copying first let someone who may not change this
+  // agenda leave the item active here and proposed there, with nothing saying
+  // it had moved.
+  if (item.status !== "deferred") {
+    const { data: deferred } = await supabase
+      .from("agenda_item")
+      .update({ status: "deferred" })
+      .eq("id", agendaItemId)
+      .select("id");
+    if (!deferred || deferred.length === 0) {
+      return { ok: false, error: await tr("meetings.errors.carryDenied") };
+    }
+  }
+
   const { error: insertError } = await supabase.from("agenda_item").insert({
     ...(full as Record<string, unknown>),
     meeting_id: targetMeetingId,
@@ -1185,14 +1230,11 @@ export async function carryForwardAgendaItem(
     proposed_by: session.userId,
     carried_from_id: agendaItemId,
   });
-  if (insertError)
+  if (insertError) {
+    if (item.status !== "deferred") {
+      await supabase.from("agenda_item").update({ status: item.status }).eq("id", agendaItemId);
+    }
     return { ok: false, error: await tr("meetings.errors.carryFailed") };
-
-  if (item.status !== "deferred") {
-    await supabase
-      .from("agenda_item")
-      .update({ status: "deferred" })
-      .eq("id", agendaItemId);
   }
   revalidatePath(`/meetings/${item.meeting_id}`);
   revalidatePath(`/meetings/${targetMeetingId}`);
