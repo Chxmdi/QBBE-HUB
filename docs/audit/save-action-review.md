@@ -14,6 +14,8 @@ Verdicts:
 - **Checked already**: the scan missed an existing row check.
 - **Guarded**: an app-side check before the write matches the database rule,
   so the refused case cannot reach the write.
+  "Guarded" verdicts come from reading the surrounding code; only the "Fixed"
+  rows have tests that prove the refused case.
 - **Known, low impact**: a refusal can still show as success, but nothing
   else happens afterwards (no audit, notification or external call), and the
   next load shows the true state. Left as is; listed so it is not mistaken for
