@@ -446,11 +446,16 @@ export async function deleteMessage(messageId: string): Promise<ActionResult> {
   const t = await getT();
   const supabase = await createSupabaseServerClient();
   // Soft delete preserves audit evidence (MSG-004).
-  const { error } = await supabase
+  // Row-level security decides who may delete; a refusal matches no row and is
+  // not an error, so ask for the row back before writing the audit record.
+  const { data: deleted, error } = await supabase
     .from("message")
     .update({ deleted_at: new Date().toISOString() })
-    .eq("id", messageId);
-  if (error) return { ok: false, error: t("messages.errors.deleteFailed") };
+    .eq("id", messageId)
+    .select("id");
+  if (error || !deleted || deleted.length === 0) {
+    return { ok: false, error: t("messages.errors.deleteFailed") };
+  }
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,

@@ -393,17 +393,6 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
     return { ok: false, error: t("projects.errors.closingUpdateFailed") };
   }
 
-  if (archiveOpenTasks) {
-    await supabase
-      .from("task")
-      .update({ archived_at: new Date().toISOString() })
-      .eq("project_id", projectId)
-      .is("archived_at", null)
-      .in("status", [
-        "not_started", "ready", "in_progress", "waiting", "blocked", "in_review",
-      ]);
-  }
-
   const { data: project, error } = await supabase
     .from("project")
     .update({
@@ -415,6 +404,19 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
     .maybeSingle();
 
   if (error || !project) return { ok: false, error: t("projects.errors.closeFailed") };
+
+  // Only once the project is closed: archiving first left a still-open project
+  // with its open tasks hidden whenever the stage move failed.
+  if (archiveOpenTasks) {
+    await supabase
+      .from("task")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("project_id", projectId)
+      .is("archived_at", null)
+      .in("status", [
+        "not_started", "ready", "in_progress", "waiting", "blocked", "in_review",
+      ]);
+  }
 
   // The closure record, and the evidence for it. Written after the stage move
   // so a failed close leaves no closure claiming a project that is still open.

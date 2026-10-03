@@ -372,7 +372,10 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
       ok: false,
       error: await tr("meetings.errors.rescheduleDenied"),
     };
-  const { error } = await supabase
+  // Row-level security can still refuse (an administrator without a verified
+  // second factor, for one); that matches no row and is not an error, so ask
+  // for the row back before touching the organizer's calendar.
+  const { data: changed, error } = await supabase
     .from("meeting")
     .update({
       title: data.title,
@@ -381,8 +384,12 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
       ends_at: ends.toISOString(),
       location: data.location || null,
     })
-    .eq("id", data.meetingId);
+    .eq("id", data.meetingId)
+    .select("id");
   if (error) return { ok: false, error: await tr("meetings.errors.updateFailed") };
+  if (!changed || changed.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.rescheduleDenied") };
+  }
   try {
     // Same reasoning as create: the Calendar event is updated, the organizer's
     // own meeting link is left alone.
@@ -444,11 +451,17 @@ export async function cancelMeeting(input: unknown): Promise<ActionResult> {
     };
   }
 
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("meeting")
     .update({ status: "cancelled", meeting_link: null })
-    .eq("id", existing.id);
+    .eq("id", existing.id)
+    .select("id");
   if (error) return { ok: false, error: await tr("meetings.errors.cancelFailed") };
+  // A refused cancel changes nothing here; it must not delete the organizer's
+  // Calendar event below, which runs with the organizer's stored connection.
+  if (!changed || changed.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.cancelDenied") };
+  }
 
   try {
     await deleteGoogleMeetingEvent({
