@@ -46,6 +46,9 @@ interface Row {
   account: QaAccount;
   staffSurfaces: Access; // /crm, /reports, /people/me/work (their own work summary)
   adminSurfaces: Access; // /admin, /admin/access, /people/overview, someone else's work summary
+  // Offered only to someone the database lets create one: an administrator,
+  // or a lead or manager of a program (project_scoped_insert). Other staff see
+  // why, with a link to propose the project instead (staging audit B1, M7).
   newProject: boolean;
   projects: Record<string, RecordAccess>;
   programs: Record<string, RecordAccess>;
@@ -66,7 +69,7 @@ const MATRIX: Row[] = [
     account: "staff",
     staffSurfaces: "allowed",
     adminSurfaces: "redirected",
-    newProject: true,
+    newProject: false,
     projects: { [FALL]: "none", [TUTOR]: "none" },
     programs: { [FAMILY]: "none", [TUTORING]: "none" },
   },
@@ -98,7 +101,8 @@ const MATRIX: Row[] = [
     account: "pm",
     staffSurfaces: "allowed",
     adminSurfaces: "redirected",
-    newProject: true,
+    // Manages a project, not a program.
+    newProject: false,
     projects: { [FALL]: "manage", [TUTOR]: "none" },
     programs: { [FAMILY]: "none", [TUTORING]: "none" },
   },
@@ -180,6 +184,12 @@ test.describe("role matrix", () => {
         page.getByRole("button", { name: "New project" }),
         `${row.account} ${row.newProject ? "is" : "is not"} offered New project`,
       ).toHaveCount(row.newProject ? 1 : 0);
+      if (row.staffSurfaces === "allowed") {
+        await expect(
+          page.getByTestId("project-create-unavailable"),
+          `${row.account} ${row.newProject ? "is not" : "is"} told why they cannot create a project`,
+        ).toHaveCount(row.newProject ? 0 : 1);
+      }
 
       for (const [name, access] of Object.entries(row.projects)) {
         await where(`/projects/${projectIds[name]}`);

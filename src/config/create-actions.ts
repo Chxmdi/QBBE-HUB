@@ -17,8 +17,10 @@ export function createActions(role: { isAdmin: boolean; isStaff: boolean }): Cre
     { label: "Project proposal", href: "/requests?create=1" },
     ...(role.isStaff
       ? [
+          // Whether a staff member manages a program (and so may create a
+          // project) is answered on /projects, which explains it when not.
           { label: "Project", href: "/projects?create=1" },
-          { label: "Program", href: "/programs?create=1" },
+          ...(role.isAdmin ? [{ label: "Program", href: "/programs?create=1" }] : []),
           { label: "Meeting", href: "/meetings?create=1" },
           { label: "Event", href: "/events?create=1" },
           { label: "Channel", href: "/channels?create=1" },

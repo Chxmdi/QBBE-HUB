@@ -222,3 +222,25 @@ test("an approved template builds a program with its projects and milestones", a
   );
   expect(due).toBe(expected);
 });
+
+test("staff are not offered a program they could not create, and are told who creates one", async ({
+  page,
+}) => {
+  // Only an administrator may create a program (program_scoped_insert). The
+  // staging audit found staff offered "New program" and "Create a program",
+  // which failed with "Admin access required" after the form was filled in.
+  test.setTimeout(120_000);
+  await signIn(page, "staff");
+  await page.goto("/programs?create=1");
+  await expect(page.getByRole("heading", { name: "Programs", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New program" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Create program" })).toHaveCount(0);
+  await expect(page.getByLabel("Create program from template")).toHaveCount(0);
+  await expect(page.getByText("An administrator creates programs")).toBeVisible();
+
+  // The quick-create menu agrees.
+  await page.getByRole("button", { name: "Quick create" }).click();
+  const menu = page.locator("#topbar-create-panel");
+  await expect(menu.getByRole("link", { name: "New task" })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "New program" })).toHaveCount(0);
+});

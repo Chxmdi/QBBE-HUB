@@ -20,6 +20,7 @@ import { SaveViewButton } from "@/features/tasks/components/save-view-button";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { managedPrograms } from "@/features/budgets/services/budget.queries";
 import { getFormatters, getT } from "@/lib/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -50,7 +51,7 @@ export default async function ProjectsPage({
     ...(archived ? { status: "archived" } : {}),
   });
 
-  const [portfolio, options, { data: programs }, templateStructures, { data: funders }] = await Promise.all([
+  const [portfolio, options, { data: programs }, templateStructures, { data: funders }, managed] = await Promise.all([
     getPortfolio({
       userId: session.userId,
       role: session.role,
@@ -65,7 +66,13 @@ export default async function ProjectsPage({
       .in("category", ["funder", "sponsor", "donor", "government"])
       .eq("status", "active")
       .order("name"),
+    // A project goes inside a program its creator manages; only an
+    // administrator may create one outside every program (project_scoped_insert).
+    session.isAdmin ? Promise.resolve([]) : managedPrograms(supabase, session.organizationId),
   ]);
+  const managedIds = new Set(managed.map((program) => program.id));
+  const creatablePrograms = (programs ?? []).filter((p) => session.isAdmin || managedIds.has(p.id));
+  const canCreate = session.isAdmin || creatablePrograms.length > 0;
   const templates = templateStructures
     .filter((t) => t.approved_at)
     .map((t) => ({ id: t.id, name: t.name }));
@@ -79,8 +86,9 @@ export default async function ProjectsPage({
         description={t("projects.list.description")}
         actions={
           session.isStaff ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <CreateFromTemplateButton templates={templates} />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {/* It makes a project outside every program, which only an administrator may do. */}
+              {session.isAdmin ? <CreateFromTemplateButton templates={templates} /> : null}
               <EntityFormDialog
                 triggerLabel={t("projects.list.saveTemplate")}
                 triggerVariant="secondary"
@@ -92,15 +100,25 @@ export default async function ProjectsPage({
                   { name: "outcome", label: t("projects.list.templateOutcome"), type: "textarea" },
                 ]}
               />
-              <ProjectCreateDialog
-                programs={(programs ?? []).map((p) => ({ id: p.id, label: p.name }))}
-                people={options.people}
-                funders={((funders ?? []) as { id: string; name: string }[]).map((funder) => ({
-                  id: funder.id,
-                  label: funder.name,
-                }))}
-                defaultOpen={params.create === "1"}
-              />
+              {canCreate ? (
+                <ProjectCreateDialog
+                  programs={creatablePrograms.map((p) => ({ id: p.id, label: p.name }))}
+                  people={options.people}
+                  funders={((funders ?? []) as { id: string; name: string }[]).map((funder) => ({
+                    id: funder.id,
+                    label: funder.name,
+                  }))}
+                  defaultOpen={params.create === "1"}
+                  allowNoProgram={session.isAdmin}
+                />
+              ) : (
+                <p className="meta max-w-sm text-right" data-testid="project-create-unavailable">
+                  {t("projects.create.needProgram")}{" "}
+                  <Link href="/requests?create=1" className="text-brand hover:underline">
+                    {t("projects.create.propose")}
+                  </Link>
+                </p>
+              )}
             </div>
           ) : undefined
         }

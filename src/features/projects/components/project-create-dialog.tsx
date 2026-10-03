@@ -16,11 +16,14 @@ export function ProjectCreateDialog({
   people,
   funders = [],
   defaultOpen = false,
+  allowNoProgram = true,
 }: {
   programs: Option[];
   people: Option[];
   funders?: Option[];
   defaultOpen?: boolean;
+  /** Only administrators may create a project outside every program. */
+  allowNoProgram?: boolean;
 }) {
   const router = useRouter();
   const t = useT();
@@ -93,14 +96,25 @@ export function ProjectCreateDialog({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="project-program">{t("projects.create.program")}</Label>
-              <Select id="project-program" name="programId" defaultValue="">
-                <option value="">{t("projects.create.noProgram")}</option>
+              <Select
+                id="project-program"
+                name="programId"
+                defaultValue={allowNoProgram ? "" : programs[0]?.id}
+                required={!allowNoProgram}
+                aria-describedby={allowNoProgram ? undefined : "project-program-hint"}
+              >
+                {allowNoProgram ? <option value="">{t("projects.create.noProgram")}</option> : null}
                 {programs.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}
                   </option>
                 ))}
               </Select>
+              {allowNoProgram ? null : (
+                <p id="project-program-hint" className="meta mt-1">
+                  {t("projects.create.programHint")}
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="project-owner">{t("projects.create.owner")}</Label>
