@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as React from "react";
@@ -51,6 +52,19 @@ export function PageCollabTabs({
   const hintId = React.useId();
   const [active, setActive] = React.useState<Tab>("comments");
   const [cursorBlock, setCursorBlock] = React.useState<string | null>(null);
+  // Opening a block's thread loads it from the server. Until it arrives the
+  // comments below are about to be replaced, so they are locked (anything
+  // typed there would be lost) and the button says it is working; once it
+  // arrives the cursor goes to that thread's comment box (audit M11).
+  const [opening, startOpening] = React.useTransition();
+  const focusThread = React.useRef(false);
+  const commentsRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!blockId || !focusThread.current) return;
+    focusThread.current = false;
+    commentsRef.current?.querySelector<HTMLTextAreaElement>("textarea:not([disabled])")?.focus();
+  }, [blockId]);
 
   // Remember the last block the cursor was in, so clicking the button (which
   // moves focus out of the editor) still knows which block was meant.
@@ -90,12 +104,20 @@ export function PageCollabTabs({
               variant="secondary"
               size="sm"
               aria-describedby={hintId}
-              disabled={!cursorBlock}
+              disabled={!cursorBlock || opening}
+              aria-busy={opening}
               onClick={() => {
                 const id = cursorBlockId() ?? cursorBlock;
-                if (id) router.push(`/pages/${pageId}?block=${encodeURIComponent(id)}#page-collab`);
+                if (!id) return;
+                focusThread.current = true;
+                // No jump to the section: the button is already in it, and
+                // scrolling would move whatever the next click aims at.
+                startOpening(() =>
+                  router.push(`/pages/${pageId}?block=${encodeURIComponent(id)}`, { scroll: false }),
+                );
               }}
             >
+              {opening ? <Loader2 aria-hidden className="size-3.5 animate-spin" /> : null}
               {labels.commentOnBlock}
             </Button>
             <p id={hintId} className="text-caption text-muted">
@@ -103,15 +125,22 @@ export function PageCollabTabs({
             </p>
           </div>
         ) : null}
-        {blockId ? (
-          <p role="status" className="mt-4 text-body-sm text-muted">
-            {labels.blockThread}{" "}
-            <Link href={`/pages/${pageId}#page-collab`} className="font-medium text-brand-fg hover:underline">
-              {labels.allComments}
-            </Link>
-          </p>
-        ) : null}
-        {comments}
+        <div
+          ref={commentsRef}
+          aria-busy={opening}
+          inert={opening}
+          className={opening ? "opacity-60 transition-opacity" : undefined}
+        >
+          {blockId ? (
+            <p role="status" className="mt-4 text-body-sm text-muted">
+              {labels.blockThread}{" "}
+              <Link href={`/pages/${pageId}#page-collab`} className="font-medium text-brand-fg hover:underline">
+                {labels.allComments}
+              </Link>
+            </p>
+          ) : null}
+          {comments}
+        </div>
       </div>
       <div
         role="tabpanel"

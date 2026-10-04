@@ -255,6 +255,18 @@ export const en = {
     breadcrumb: "Breadcrumb",
     loadFailed: "This couldn't be loaded.",
     somethingWrong: "Something went wrong. Try again.",
+    fieldErrors: {
+      summary: "Check the highlighted fields.",
+      required: "Fill this in.",
+      number: "Enter a number.",
+      wholeNumber: "Enter a whole number.",
+      atLeast: "Enter {min} or more.",
+      atMost: "Enter {max} or less.",
+      tooLong: "Use {max} characters or fewer.",
+      email: "Enter an email address, like name@example.org.",
+      url: "Enter a web address that starts with https://.",
+      invalid: "Check this value.",
+    },
     toast: {
       success: "Success",
       warning: "Warning",

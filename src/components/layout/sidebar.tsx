@@ -52,6 +52,7 @@ function programDot(name: string): string {
 export function Sidebar({
   isAdmin,
   isStaff,
+  canReadLedger = false,
   switches,
   channels,
   programs,
@@ -64,6 +65,7 @@ export function Sidebar({
 }: {
   isAdmin: boolean;
   isStaff: boolean;
+  canReadLedger?: boolean;
   switches?: NavSwitches;
   channels: SidebarChannel[];
   programs: SidebarProgram[];
@@ -76,7 +78,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const t = useT();
-  const groups = visibleNav({ isAdmin, isStaff }, switches);
+  const groups = visibleNav({ isAdmin, isStaff, canReadLedger }, switches);
   // One current entry, the most specific one: "/lenses/board" marks Board,
   // not Board and Saved lenses together.
   const activeHref = activeNavHref(groups, pathname);

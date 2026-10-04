@@ -23,19 +23,21 @@ import { navGroupLabel, navItemLabel } from "@/lib/i18n/navigation";
 export function MobileNav({
   isAdmin,
   isStaff,
+  canReadLedger = false,
   switches,
   counts,
   onOpenMore,
 }: {
   isAdmin: boolean;
   isStaff: boolean;
+  canReadLedger?: boolean;
   switches?: NavSwitches;
   counts: SidebarCounts;
   onOpenMore: () => void;
 }) {
   const pathname = usePathname();
   const t = useT();
-  const groups = visibleNav({ isAdmin, isStaff }, switches);
+  const groups = visibleNav({ isAdmin, isStaff, canReadLedger }, switches);
   const tabs = mobileTabs(groups, switches);
   // The sidebar's own rule (the most specific entry), so "/spaces/admin"
   // lights Setup's entry and not the Pages tab through "/spaces".

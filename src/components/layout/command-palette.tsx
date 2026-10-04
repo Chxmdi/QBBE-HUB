@@ -43,12 +43,14 @@ export function CommandPalette({
   onClose,
   isAdmin,
   isStaff,
+  canReadLedger = false,
   switches,
 }: {
   open: boolean;
   onClose: () => void;
   isAdmin: boolean;
   isStaff: boolean;
+  canReadLedger?: boolean;
   switches?: NavSwitches;
 }) {
   const router = useRouter();
@@ -60,7 +62,7 @@ export function CommandPalette({
   const [activeIndex, setActiveIndex] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  const navItems = visibleNav({ isAdmin, isStaff }, switches)
+  const navItems = visibleNav({ isAdmin, isStaff, canReadLedger }, switches)
     .flatMap((g) => g.items)
     .map((item) => ({ ...item, label: navItemLabel(t, item) }));
   const remoteResults = query.length >= 2 ? results : [];

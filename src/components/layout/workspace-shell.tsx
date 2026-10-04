@@ -26,6 +26,7 @@ export function WorkspaceShell({
   avatarUrl,
   isAdmin,
   isStaff,
+  canReadLedger = false,
   navSwitches,
   unreadCount,
   channels,
@@ -40,6 +41,8 @@ export function WorkspaceShell({
   avatarUrl: string | null;
   isAdmin: boolean;
   isStaff: boolean;
+  /** Staff an administrator made a ledger reader see the ledger screens in the menus. */
+  canReadLedger?: boolean;
   navSwitches?: NavSwitches;
   unreadCount: number;
   channels: SidebarChannel[];
@@ -84,6 +87,7 @@ export function WorkspaceShell({
       <Sidebar
         isAdmin={isAdmin}
         isStaff={isStaff}
+        canReadLedger={canReadLedger}
         switches={navSwitches}
         channels={channels}
         programs={programs}
@@ -119,11 +123,13 @@ export function WorkspaceShell({
         onClose={() => setPaletteOpen(false)}
         isAdmin={isAdmin}
         isStaff={isStaff}
+        canReadLedger={canReadLedger}
         switches={navSwitches}
       />
       <MobileNav
         isAdmin={isAdmin}
         isStaff={isStaff}
+        canReadLedger={canReadLedger}
         switches={navSwitches}
         counts={counts}
         onOpenMore={() => setNavOpen(true)}

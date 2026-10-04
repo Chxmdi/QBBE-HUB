@@ -140,3 +140,29 @@ test("an event can be given an accountable owner for an area", async ({ page }) 
       .filter({ hasText: "logistics" }),
   ).toBeVisible({ timeout: 30_000 });
 });
+
+test("the New event form shows every problem next to its field, in plain words, before sending (audit M3)", async ({ page }) => {
+  await signIn(page, "owner");
+  await page.goto("/events");
+  await page.getByRole("button", { name: "New event" }).click();
+  const dialog = page.getByRole("dialog", { name: "Create event" });
+  await dialog.getByLabel("Volunteers needed").fill("-1");
+  await dialog.getByRole("button", { name: "Create event", exact: true }).click();
+
+  // Name and start are missing and the count is below zero: all three are
+  // flagged at once, each under its own field, and nothing is sent.
+  const name = dialog.getByLabel("Name", { exact: true });
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(name).toHaveAccessibleDescription(/Fill this in\./);
+  await expect(name).toBeFocused();
+  await expect(dialog.getByLabel("Starts", { exact: true })).toHaveAccessibleDescription(/Fill this in\./);
+  const volunteers = dialog.getByLabel("Volunteers needed");
+  await expect(volunteers).toHaveAccessibleDescription(/Enter 0 or more\./);
+  await expect(dialog.getByRole("alert")).toHaveText("Check the highlighted fields.");
+  await expect(dialog.getByText(/greater than or equal/)).toHaveCount(0);
+
+  // Fixing a field takes its message away.
+  await volunteers.fill("4");
+  await expect(volunteers).not.toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByText("Enter 0 or more.")).toHaveCount(0);
+});
