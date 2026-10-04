@@ -196,7 +196,20 @@ export const test = base.extend({
       return response;
     };
 
+    // A script the Content Security Policy blocked is a broken screen even
+    // when nothing on it looks wrong yet: only scripts carrying the request's
+    // nonce may run, and eval is refused (staging audit S1). Every browser
+    // reports a blocked script on the console, so any test that meets one
+    // fails here, naming it, instead of somewhere later.
+    const blockedScripts: string[] = [];
+    page.on("console", (message) => {
+      const text = message.text();
+      if (/Content.Security.Policy/i.test(text) && /script|eval/i.test(text)) blockedScripts.push(text);
+    });
+
     await provide(page);
+
+    expect(blockedScripts, "scripts blocked by the Content Security Policy").toEqual([]);
   },
 });
 

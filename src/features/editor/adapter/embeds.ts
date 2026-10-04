@@ -1,7 +1,7 @@
 /**
  * Allow-listed embeds. Only these providers can be framed, and only through
  * the embed address built here from a parsed id, never the pasted URL itself.
- * `next.config.ts` lists the same origins in `frame-src`; a unit test keeps
+ * `src/lib/security/content-security-policy.ts` lists the same origins in `frame-src`; a unit test keeps
  * the two in step.
  */
 
