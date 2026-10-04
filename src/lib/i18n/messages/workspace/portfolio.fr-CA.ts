@@ -396,6 +396,7 @@ export const portfolioFrCA: typeof portfolioEn = {
         "Les programmes archivés s’afficheront ici pour être consultés et restaurés.",
       emptyBody:
         "Créez un programme pour regrouper des projets, des événements et des canaux liés.",
+      createdByAdmin: "Les programmes sont créés par un administrateur.",
       emptyBodyStaff: "Aucun programme pour l’instant. Un administrateur crée les programmes; ils apparaissent ici dès qu’ils existent.",
       projectCounts: "{active} actifs · {total} projets au total",
       templatesHeading: "Modèles de programme",
