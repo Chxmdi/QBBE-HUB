@@ -1,6 +1,12 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EMBED_FRAME_ORIGINS, embedFor, safeBookmarkUrl } from "@/features/editor/adapter/embeds";
+import { contentSecurityPolicy } from "@/lib/security/content-security-policy";
+
+/** The sources one directive of the policy pages are sent with lists. */
+function directive(name: string, supabaseUrl = "https://example.supabase.co"): string[] {
+  const policy = contentSecurityPolicy({ nonce: "test", development: false, supabaseUrl });
+  return policy.split("; ").find((part) => part.startsWith(`${name} `))!.split(" ").slice(1);
+}
 
 describe("embed allow-list", () => {
   it.each([
@@ -32,16 +38,13 @@ describe("embed allow-list", () => {
   });
 
   it("lets video and audio blocks play https links and library files", () => {
-    const config = readFileSync("next.config.ts", "utf8");
-    const mediaSrc = config.match(/"media-src ([^"]+)"/)?.[1].split(" ") ?? [];
-    expect(mediaSrc).toEqual(expect.arrayContaining(["'self'", "blob:", "https:"]));
-    expect(config).toMatch(/"media-src[^\n]*supabaseOrigins\(\)/);
-    expect(config).toMatch(/"img-src[^\n]*supabaseOrigins\(\)/);
+    const local = "http://127.0.0.1:54321";
+    expect(directive("media-src", local)).toEqual(expect.arrayContaining(["'self'", "blob:", "https:", local]));
+    expect(directive("img-src", local)).toEqual(expect.arrayContaining([local]));
   });
 
   it("only ever frames the origins the Content Security Policy allows", () => {
-    const config = readFileSync("next.config.ts", "utf8");
-    const frameSrc = config.match(/"frame-src ([^"]+)"/)?.[1].split(" ") ?? [];
+    const frameSrc = directive("frame-src");
     expect([...frameSrc].sort()).toEqual([...EMBED_FRAME_ORIGINS].sort());
     for (const url of [
       "https://youtu.be/dQw4w9WgXcQ",
