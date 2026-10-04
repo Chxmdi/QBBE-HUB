@@ -145,6 +145,9 @@ export default async function EventsPage({
                   name: "volunteerNeed",
                   label: t("events.fields.volunteersNeeded"),
                   type: "number",
+                  min: 0,
+                  max: 500,
+                  step: 1,
                   colSpan: 1,
                 },
               ]}

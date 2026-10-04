@@ -396,6 +396,7 @@ export const portfolioEn = {
       emptyTitle: "No programs yet",
       emptyArchivedBody: "Archived programs will appear here for review and restoration.",
       emptyBody: "Create a program to group related projects, events, and channels.",
+      createdByAdmin: "Programs are created by an administrator.",
       emptyBodyStaff: "No programs yet. An administrator creates programs; they appear here once they exist.",
       projectCounts: "{active} active · {total} total projects",
       templatesHeading: "Program templates",

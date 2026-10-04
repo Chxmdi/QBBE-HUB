@@ -177,6 +177,8 @@ test("a block comment stays anchored after blocks move [switches on]", async ({ 
   await commentOnBlock.click();
   await expect(page).toHaveURL(new RegExp(`/pages/${pageId}\\?block=second`));
   await expect(collab.getByRole("heading", { name: /Comments on this block/ })).toBeVisible();
+  // The cursor is already in that thread's comment box, so typing lands there (audit M11).
+  await expect(collab.getByRole("textbox", { name: "Comment" })).toBeFocused();
   await collab.getByRole("textbox", { name: "Comment" }).fill("Check this figure.");
   await collab.getByRole("button", { name: "Post comment" }).click();
   await expect(collab.getByText("Check this figure.")).toBeVisible();

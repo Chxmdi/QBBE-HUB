@@ -236,7 +236,8 @@ test("staff are not offered a program they could not create, and are told who cr
   await expect(page.getByRole("button", { name: "New program" })).toHaveCount(0);
   await expect(page.getByRole("dialog", { name: "Create program" })).toHaveCount(0);
   await expect(page.getByLabel("Create program from template")).toHaveCount(0);
-  await expect(page.getByText("An administrator creates programs")).toBeVisible();
+  // Told whether or not any program exists yet (other tests may have made some).
+  await expect(page.getByText("Programs are created by an administrator.", { exact: true })).toBeVisible();
 
   // The quick-create menu agrees.
   await page.getByRole("button", { name: "Quick create" }).click();

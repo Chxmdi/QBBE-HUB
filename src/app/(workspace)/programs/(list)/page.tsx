@@ -84,7 +84,14 @@ export default async function ProgramsPage({
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {/* Only an administrator may create a program (program_scoped_insert). */}
-            {session.isAdmin ? <CreateProgramFromTemplateButton templates={programTemplates} /> : null}
+            {session.isAdmin ? (
+              <CreateProgramFromTemplateButton templates={programTemplates} />
+            ) : (
+              // Staff are told who creates programs whether or not any exist yet.
+              <p className="meta max-w-xs text-right" data-testid="program-create-admin-only">
+                {t("programs.list.createdByAdmin")}
+              </p>
+            )}
             {session.isAdmin ? (
               <EntityFormDialog
                 triggerLabel={t("programs.list.saveTemplate")}

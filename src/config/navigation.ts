@@ -107,8 +107,12 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** Minimum access: 'member' (everyone), 'staff', 'admin'. */
-  access: "member" | "staff" | "admin";
+  /**
+   * Minimum access: 'member' (everyone), 'staff', 'admin', or 'ledger' (an
+   * administrator, or staff an administrator made a ledger reader: the
+   * screens behind `getLedgerAccess`).
+   */
+  access: "member" | "staff" | "admin" | "ledger";
   /**
    * Shown only while this switch is on. Entries without one are the menu as
    * it was before Workspace OS and never move.
@@ -211,16 +215,16 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Events", href: "/events", icon: Building2, access: "member" },
       { label: "Signatures", href: "/signatures", icon: FileSignature, access: "member" },
       { label: "Relationships", href: "/crm", icon: Handshake, access: "staff" },
-      { label: "Ledger", href: "/finance/ledger", icon: Landmark, access: "staff" },
-      { label: "Budgets", href: "/finance/budgets", icon: PiggyBank, access: "staff" },
-      { label: "GST and QST", href: "/finance/sales-tax", icon: Percent, access: "staff" },
-      { label: "Bank", href: "/finance/bank", icon: Landmark, access: "staff" },
+      { label: "Ledger", href: "/finance/ledger", icon: Landmark, access: "ledger" },
+      { label: "Budgets", href: "/finance/budgets", icon: PiggyBank, access: "ledger" },
+      { label: "GST and QST", href: "/finance/sales-tax", icon: Percent, access: "ledger" },
+      { label: "Bank", href: "/finance/bank", icon: Landmark, access: "ledger" },
       { label: "Reports", href: "/reports", icon: BarChart3, access: "staff" },
       { label: "Documents", href: "/documents", icon: FolderOpen, access: "member" },
       { label: "Receipts", href: "/finance/receipts", icon: Receipt, access: "staff" },
-      { label: "Gifts and grants", href: "/finance/gifts", icon: Gift, access: "staff" },
+      { label: "Gifts and grants", href: "/finance/gifts", icon: Gift, access: "ledger" },
       { label: "Bills & invoices", href: "/finance/payables", icon: Wallet, access: "staff" },
-      { label: "Payroll", href: "/finance/payroll", icon: Banknote, access: "staff" },
+      { label: "Payroll", href: "/finance/payroll", icon: Banknote, access: "ledger" },
       { label: "People", href: "/people", icon: Users, access: "member" },
       { label: "Admin", href: "/admin", icon: Settings, access: "admin" },
     ],
@@ -387,8 +391,24 @@ export function navGroupsFor(switches: NavSwitches = NO_SWITCHES): NavGroup[] {
   return switches.wos_home === true ? NAV_GROUPS_V2 : NAV_GROUPS;
 }
 
-function allowed(item: NavItem, role: { isAdmin: boolean; isStaff: boolean }): boolean {
-  return item.access === "admin" ? role.isAdmin : item.access === "staff" ? role.isStaff : true;
+/** Who is looking: `canReadLedger` is true for staff an administrator made a ledger reader. */
+export interface NavRole {
+  isAdmin: boolean;
+  isStaff: boolean;
+  canReadLedger?: boolean;
+}
+
+function allowed(item: NavItem, role: NavRole): boolean {
+  switch (item.access) {
+    case "admin":
+      return role.isAdmin;
+    case "ledger":
+      return role.isAdmin || (role.isStaff && role.canReadLedger === true);
+    case "staff":
+      return role.isStaff;
+    default:
+      return true;
+  }
 }
 
 /**
@@ -400,7 +420,7 @@ function allowed(item: NavItem, role: { isAdmin: boolean; isStaff: boolean }): b
  * consolidated groups (NAV_GROUPS_V2) instead; the same rules apply.
  */
 export function visibleNav(
-  role: { isAdmin: boolean; isStaff: boolean },
+  role: NavRole,
   switches: NavSwitches = NO_SWITCHES,
 ): VisibleNavGroup[] {
   const on = (item: NavItem) => !item.switch || switches[item.switch] === true;

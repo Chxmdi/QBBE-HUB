@@ -60,16 +60,16 @@ const MENU_BEFORE_WORKSPACE_OS = [
       ["/events", "member"],
       ["/signatures", "member"],
       ["/crm", "staff"],
-      ["/finance/ledger", "staff"],
-      ["/finance/budgets", "staff"],
-      ["/finance/sales-tax", "staff"],
-      ["/finance/bank", "staff"],
+      ["/finance/ledger", "ledger"],
+      ["/finance/budgets", "ledger"],
+      ["/finance/sales-tax", "ledger"],
+      ["/finance/bank", "ledger"],
       ["/reports", "staff"],
       ["/documents", "member"],
       ["/finance/receipts", "staff"],
-      ["/finance/gifts", "staff"],
+      ["/finance/gifts", "ledger"],
       ["/finance/payables", "staff"],
-      ["/finance/payroll", "staff"],
+      ["/finance/payroll", "ledger"],
       ["/people", "member"],
       ["/admin", "admin"],
     ],
@@ -139,11 +139,12 @@ const skeleton = (groups: { label: string; items: { href: string; access: string
   groups.map((g) => ({ label: g.label, items: g.items.map((i) => [i.href, i.access]) }));
 
 describe("visibleNav with every switch off", () => {
+  // Ledger screens: administrators, and staff made ledger readers (none of these roles).
   const before = (role: { isAdmin: boolean; isStaff: boolean }) =>
     MENU_BEFORE_WORKSPACE_OS.map((g) => ({
       label: g.label,
       items: g.items.filter(([, access]) =>
-        access === "admin" ? role.isAdmin : access === "staff" ? role.isStaff : true,
+        access === "admin" || access === "ledger" ? role.isAdmin : access === "staff" ? role.isStaff : true,
       ),
     })).filter((g) => g.items.length > 0);
 
@@ -392,5 +393,31 @@ describe("the WORKSPACE_OS_FLAGS override", () => {
     expect(overriddenNavSwitches("")).toEqual(new Set());
     expect([...overriddenNavSwitches("all")].sort()).toEqual([...NAV_SWITCH_KEYS].sort());
     expect(overriddenNavSwitches(" wos_lenses , WOS_GOALS,typo")).toEqual(new Set(["wos_lenses", "wos_goals"]));
+  });
+});
+
+describe("ledger screens in the menus (audit M6)", () => {
+  const LEDGER = ["/finance/ledger", "/finance/budgets", "/finance/sales-tax", "/finance/bank", "/finance/gifts", "/finance/payroll"];
+  const hrefs = (role: Parameters<typeof visibleNav>[0]) =>
+    visibleNav(role, ALL_SWITCHES).flatMap((group) => group.items.map((item) => item.href));
+
+  it("hides them from staff who are not ledger readers, who would only meet 'You do not have access'", () => {
+    const staff = hrefs(STAFF);
+    for (const href of LEDGER) expect(staff, href).not.toContain(href);
+    expect(staff).toEqual(expect.arrayContaining(["/finance/receipts", "/finance/payables"]));
+  });
+
+  it("lists them for ledger readers and administrators", () => {
+    const reader = hrefs({ ...STAFF, canReadLedger: true });
+    const admin = hrefs(ADMIN);
+    for (const href of LEDGER) {
+      expect(reader, href).toContain(href);
+      expect(admin, href).toContain(href);
+    }
+  });
+
+  it("never lists them for a volunteer, even one flagged as a reader", () => {
+    const volunteer = hrefs({ ...VOLUNTEER, canReadLedger: true });
+    for (const href of LEDGER) expect(volunteer, href).not.toContain(href);
   });
 });

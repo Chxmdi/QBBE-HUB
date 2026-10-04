@@ -258,6 +258,18 @@ export const frCA: Messages = {
     breadcrumb: "Fil d’Ariane",
     loadFailed: "Impossible de charger ce contenu.",
     somethingWrong: "Une erreur s’est produite. Réessayez.",
+    fieldErrors: {
+      summary: "Vérifiez les champs signalés.",
+      required: "Remplissez ce champ.",
+      number: "Entrez un nombre.",
+      wholeNumber: "Entrez un nombre entier.",
+      atLeast: "Entrez {min} ou plus.",
+      atMost: "Entrez {max} ou moins.",
+      tooLong: "Utilisez {max} caractères ou moins.",
+      email: "Entrez une adresse courriel, comme nom@exemple.org.",
+      url: "Entrez une adresse Web qui commence par https://.",
+      invalid: "Vérifiez cette valeur.",
+    },
     toast: {
       success: "Réussite",
       warning: "Avertissement",
