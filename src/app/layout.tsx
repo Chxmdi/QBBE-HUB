@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "@/design-system/styles/globals.css";
 import { I18nProvider } from "@/lib/i18n/client";
 import { htmlLang } from "@/lib/i18n/config";
@@ -56,10 +57,12 @@ export default async function RootLayout({
   // The person's language decides `lang` for the whole document, so screen
   // readers pronounce French as French and the axe sweep sees the truth.
   const locale = await getLocale();
+  // The proxy's per-request nonce: the policy runs no inline script without it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang={htmlLang(locale)} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
         <I18nProvider locale={locale}>{children}</I18nProvider>

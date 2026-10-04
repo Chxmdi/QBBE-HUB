@@ -1,8 +1,18 @@
 import { type NextRequest } from "next/server";
+import { contentSecurityPolicy, createNonce } from "@/lib/security/content-security-policy";
 import { updateSession } from "@/lib/supabase/middleware";
 
 export async function proxy(request: NextRequest) {
-  return await updateSession(request);
+  // A fresh nonce per request (staging audit S1). Next.js reads the policy
+  // from the request to put the nonce on its own scripts; the root layout
+  // reads `x-nonce` for the theme script. The browser gets the same policy.
+  const nonce = createNonce();
+  const policy = contentSecurityPolicy({ nonce });
+  request.headers.set("x-nonce", nonce);
+  request.headers.set("content-security-policy", policy);
+  const response = await updateSession(request);
+  response.headers.set("Content-Security-Policy", policy);
+  return response;
 }
 
 export const config = {
