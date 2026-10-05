@@ -102,7 +102,8 @@ test("the sidebar shows the new groups and keeps classic screens [switches on]",
   // The replacements sit in the new groups and are the current ones.
   await expect(nav.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("href", "/home");
   await expect(nav.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("aria-current", "page");
-  await expect(nav.getByRole("link", { name: "My Work", exact: true })).toHaveAttribute("href", "/lenses/my-work");
+  // Its name carries the open-item count when there is one ("My Work 2 open items").
+  await expect(nav.getByRole("link", { name: /^My Work(?:\s*\d+\+?\s*open items)?$/ })).toHaveAttribute("href", "/lenses/my-work");
   // Builders and administration tools are under Setup for a staff member.
   for (const name of ["Blueprints", "Page layouts", "API access tokens", "Workspace upkeep"]) {
     await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
