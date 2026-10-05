@@ -93,7 +93,7 @@ async function paste(editor: Locator, data: Record<string, string>, files: Paste
         const bytes = Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0));
         transfer.items.add(new File([bytes], file.name, { type: file.type }));
       }
-      el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+      el.dispatchEvent(Object.defineProperty(new ClipboardEvent("paste", { bubbles: true, cancelable: true }), "clipboardData", { value: transfer }));
     },
     { data, files },
   );
@@ -374,7 +374,7 @@ test("a pasted image uploads through the scanned upload and says while its scan 
   await editor.evaluate((el) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File([new Uint8Array(25 * 1024 * 1024 + 1)], "e1-paste-huge.bin", { type: "application/octet-stream" }));
-    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+    el.dispatchEvent(Object.defineProperty(new ClipboardEvent("paste", { bubbles: true, cancelable: true }), "clipboardData", { value: transfer }));
   });
   const notice = page.getByTestId("editor-paste-too-large");
   await expect(notice).toContainText("A file was left out. Files can be at most 25 MB.");
@@ -472,7 +472,7 @@ test("a paste larger than the editor can save shows the too-large state and the 
     const line = "A long pasted line of text that keeps going. ";
     data.setData("text/plain", Array.from({ length: 40_000 }, () => line).join("\n"));
     data.setData("text/html", `<p>${line.repeat(40_000)}</p>`);
-    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    el.dispatchEvent(Object.defineProperty(new ClipboardEvent("paste", { bubbles: true, cancelable: true }), "clipboardData", { value: data }));
   });
   const alert = page.getByTestId("editor-paste-too-large");
   await expect(alert).toBeVisible();
@@ -554,7 +554,7 @@ test("with the editor switch off, there is no editor to paste into [switch off]"
     await page.evaluate(() => {
       const data = new DataTransfer();
       data.setData("text/plain", "# Pasted with the switch off");
-      document.body.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+      document.body.dispatchEvent(Object.defineProperty(new ClipboardEvent("paste", { bubbles: true, cancelable: true }), "clipboardData", { value: data }));
     });
     await expect(page.getByText("Pasted with the switch off")).toHaveCount(0);
     await expect(page.getByTestId("editor-paste-too-large")).toHaveCount(0);

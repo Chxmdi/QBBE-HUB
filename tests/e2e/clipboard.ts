@@ -61,9 +61,10 @@ export async function useClipboard(page: Page): Promise<TestClipboard> {
       page.evaluate((value) => {
         const data = new DataTransfer();
         data.setData("text/plain", value);
-        const event = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
-        // WebKit may ignore clipboardData in the constructor.
-        if (!event.clipboardData) Object.defineProperty(event, "clipboardData", { value: data });
+        // Set on the event itself: Firefox keeps data passed to the constructor
+        // of a script-made paste event unreadable.
+        const event = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "clipboardData", { value: data });
         (document.activeElement ?? document.body).dispatchEvent(event);
       }, text),
   };

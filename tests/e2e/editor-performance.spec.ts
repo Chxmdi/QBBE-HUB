@@ -418,7 +418,7 @@ test("copying a page puts the real blocks on the clipboard, not the waiting ones
   // send one for the key itself); the editor fills its clipboard data.
   const html = await page.evaluate(() => {
     const data = new DataTransfer();
-    document.querySelector(".bn-editor")!.dispatchEvent(new ClipboardEvent("copy", { clipboardData: data, bubbles: true, cancelable: true }));
+    document.querySelector(".bn-editor")!.dispatchEvent(Object.defineProperty(new ClipboardEvent("copy", { bubbles: true, cancelable: true }), "clipboardData", { value: data }));
     return data.getData("text/html");
   });
   expect(html).toContain("Paragraph 99 of a long page");

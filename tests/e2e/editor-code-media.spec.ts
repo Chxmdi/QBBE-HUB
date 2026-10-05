@@ -260,7 +260,7 @@ test("video and audio actually play: https links, and a file added in the editor
   await editor.evaluate((el, { name, base64 }) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], name, { type: "video/webm" }));
-    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+    el.dispatchEvent(Object.defineProperty(new ClipboardEvent("paste", { bubbles: true, cancelable: true }), "clipboardData", { value: transfer }));
   }, { name, base64: CLIP.toString("base64") });
   await expect(editor.locator("[data-upload-state='pending']")).toContainText(name, { timeout: 30_000 });
   const documentId = sql(`select id from public.document where title = '${name}'`);
