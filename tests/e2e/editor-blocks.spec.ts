@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "./fixtures";
+import { useClipboard } from "./clipboard";
 import { signIn } from "./auth";
 import { sql } from "./db";
 
@@ -90,10 +91,10 @@ test("the handle menu duplicates and recolours a block [switches on]", async ({ 
   expect(sql(`select count(*) from public.block where object_id = '${pageId}' and text = 'Budget ${stamp}'`)).toBe("2");
 
   // Copy link names the block on this page.
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const clipboard = await useClipboard(page);
   menu = await openHandle(page, editor.locator("[data-content-type='paragraph']", { hasText: `Agenda ${stamp}` }));
   await menu.getByRole("menuitem", { name: "Copy link" }).click();
-  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  const copied = await clipboard.read();
   expect(copied).toMatch(new RegExp(`/pages/${pageId}#block-[0-9a-f-]+$`));
 
   // Accessible with the handle menu open, in both themes.
