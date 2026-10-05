@@ -39,6 +39,15 @@ jobs:
   security:
     name: Security
     uses: ./.github/workflows/security.yml
+    # A called workflow may not ask for more than its caller grants, or GitHub
+    # refuses to start the whole run ("startup failure"). security.yml's
+    # secret scan and dependency review read and comment on pull requests;
+    # both run only on pull requests, so here the access goes unused.
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+      pull-requests: write
 
   performance:
     name: Performance
