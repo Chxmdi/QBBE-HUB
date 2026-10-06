@@ -11,18 +11,10 @@ Every release names its commit and keeps its evidence.
 - You know which migrations are new since the last release:
   `git diff --name-only <last-release-sha> <sha> -- supabase/migrations`.
 
-## 1. Certify the commit
+## 1. Deploy to staging
 
-1. GitHub, **Actions**, **Release candidate**, **Run workflow**, branch `main`.
-2. Wait for it to finish. It runs CI in all browsers and on phones, the
-   security scans and the 50-user test, then uploads
-   `qa-evidence-<sha>.md`.
-3. A red job means this commit is not a release candidate. Fix forward and
-   start again with the new commit.
-4. Download the evidence file from the run's **Artifacts** and keep it with
-   the release record below.
-
-## 2. Deploy to staging
+Staging comes first: the Release candidate's performance gate measures the
+staging site, which must be running the commit being certified.
 
 1. **Actions**, **Deploy Netlify**, **Run workflow**, branch `main`,
    environment `staging`.
@@ -31,10 +23,26 @@ Every release names its commit and keeps its evidence.
 3. Check staging by hand as its release checklist requires
    (`staging-provisioning.md`).
 
+## 2. Certify the commit
+
+1. GitHub, **Actions**, **Release candidate**, **Run workflow**, branch `main`,
+   at the commit staging is running.
+2. Wait for it to finish. It runs CI in all browsers and on phones, the
+   security scans, and the 50-user test against the staging site (the same
+   test on one GitHub runner also runs, for information only), then uploads
+   `qa-evidence-<sha>.md`. If the `staging` environment requires a reviewer,
+   the **Performance (staging)** job waits for that approval.
+3. A red job means this commit is not a release candidate. Fix forward and
+   start again with the new commit. **Performance (staging)** red with
+   "Staging is running …, not …" means step 1 was skipped or staging has
+   moved on: deploy this commit to staging, then run the candidate again.
+4. Download the evidence file from the run's **Artifacts** and keep it with
+   the release record below.
+
 ## 3. Deploy to production
 
 Same as staging with environment `production`. The workflow refuses unless
-step 1's Release candidate run is green for this exact commit.
+step 2's Release candidate run is green for this exact commit.
 
 ## 4. Record the release
 

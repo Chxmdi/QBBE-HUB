@@ -159,16 +159,18 @@ Postgres. See the verification table in `jobs.md`.
 ## 7. Certify a release candidate — one run, every gate, evidence written
 
 The release-candidate workflow (#116) runs every automated gate at one commit
-and writes down what passed. Use it before any release, and for staging
-certification once #55 exists.
+and writes down what passed. Use it before any release. Its performance gate
+measures the staging site, so deploy the commit to staging first
+(`release-procedure.md`).
 
 1. Pick the commit to certify and give it a tag, so the evidence names
    something stable: `git tag rc-2026-10-01 <sha> && git push origin rc-2026-10-01`.
    You should see the tag under **Code → Tags** on GitHub.
 2. On GitHub, open **Actions → Release candidate → Run workflow**, choose the
    tag in **Use workflow from**, and click **Run workflow**.
-   A run appears with four jobs: **CI (all browsers)**, **Security**,
-   **Performance** and **Evidence**. It takes about 45 minutes.
+   A run appears with five jobs: **CI (all browsers)**, **Security**,
+   **Performance (staging)**, **Performance (local, informational)** and
+   **Evidence**. It takes about 45 minutes.
 3. When it finishes, open the run. The summary page shows a table headed
    **QA evidence for <sha>** with one row per gate and its result. The same
    file is attached to the run as `qa-evidence-<sha>`.
@@ -180,6 +182,21 @@ certification once #55 exists.
    is a finding.
 
 What the run does not cover, and is still owed by a person: the screen-reader
-pass, real iPhone and Android handsets (OPS-SIGNOFF), and anything that needs
-staging (#55).
+pass and real iPhone and Android handsets (OPS-SIGNOFF).
+
+### The 50-user test on staging
+
+**Performance (staging)** (`perf-staging.yml`, also runnable on its own from
+**Actions**) puts a fixture on the staging project the first time it runs
+and keeps it: 50 people `qa-perf-01..50@example.com`, a program "Performance
+Program" with 10 projects and 2,000 tasks, and a public channel `perf-general`
+with 1,000 messages. Each run gives the 50 people a password made up for that
+run only; it is never shown or stored, so nobody can sign in as them
+afterwards. The fixture is visible to staff on staging (the program, the
+projects, the channel). To remove it, run the workflow by hand with
+**teardown** ticked, or run `node scripts/qa/perf-staging.mjs teardown` with
+the staging environment's values.
+
+The job refuses any site or project that is not the registered staging pair,
+so it cannot be pointed at production.
 

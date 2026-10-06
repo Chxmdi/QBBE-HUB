@@ -5,9 +5,11 @@ name: Performance
 # a workspace holding 10 projects, 2,000 tasks and a 1,000-message channel.
 # The run fails when any screen's 95th percentile exceeds 2 s.
 #
-# This measures the local stack on a CI runner, which makes it a regression
-# signal rather than the acceptance figure: the acceptance run is the same
-# script against staging once it exists (#55).
+# This measures the local stack on one CI runner, which holds the database,
+# the API, Auth and three app instances together and misses the 2 s target on
+# its own. It is a regression signal, not the acceptance figure: the
+# acceptance run is the same script against the staging site
+# (perf-staging.yml), which the Release candidate gates on.
 
 on:
   schedule:
