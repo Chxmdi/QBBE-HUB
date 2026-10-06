@@ -16,16 +16,21 @@
 // apply (invitations are inserted first, since sign-up is by invitation
 // only), and no password is ever written down or committed.
 //
-// Hosted projects are reached through the Supabase Management API (SQL) and
-// the Auth admin API (people). The script refuses any project that is not the
-// registered staging project: it never runs against production.
+// Hosted projects are reached over a direct database connection (PERF_DB_URL,
+// run through psql; the workflow builds it from the project's database
+// password the same way the deploy job connects) and the Auth admin API
+// (people). Without PERF_DB_URL, SQL goes through the Supabase Management
+// API's query endpoint with SUPABASE_ACCESS_TOKEN. The script refuses any
+// project that is not the registered staging project: it never runs against
+// production.
 //
 // Environment:
-//   SUPABASE_PROJECT_REF, STAGING_SUPABASE_PROJECT_REF, SUPABASE_ACCESS_TOKEN,
+//   SUPABASE_PROJECT_REF, STAGING_SUPABASE_PROJECT_REF,
+//   PERF_DB_URL or SUPABASE_ACCESS_TOKEN,
 //   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
 //   SUPABASE_SERVICE_ROLE_KEY.
 // With PERF_LOCAL=1 (the local stack, for checking this script), SQL goes
-// through `docker exec … psql` instead of the Management API.
+// through `docker exec … psql`, or through psql over PERF_DB_URL when set.
 
 import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
@@ -47,6 +52,7 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ref = process.env.SUPABASE_PROJECT_REF;
 const stagingRef = process.env.STAGING_SUPABASE_PROJECT_REF;
 const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+const dbUrl = process.env.PERF_DB_URL;
 
 function need(name, value) {
   if (!value) {
@@ -66,7 +72,7 @@ if (local) {
 } else {
   need("SUPABASE_PROJECT_REF", ref);
   need("STAGING_SUPABASE_PROJECT_REF", stagingRef);
-  need("SUPABASE_ACCESS_TOKEN", accessToken);
+  if (!dbUrl) need("SUPABASE_ACCESS_TOKEN", accessToken);
   // Staging only, by registration and by the address the people sign in to.
   if (!/^[a-z]{20}$/.test(ref) || ref !== stagingRef) {
     console.error("Refusing: SUPABASE_PROJECT_REF is not the registered staging project. This script never runs against production.");
@@ -74,6 +80,12 @@ if (local) {
   }
   if (url.replace(/\/$/, "") !== `https://${ref}.supabase.co`) {
     console.error(`Refusing: NEXT_PUBLIC_SUPABASE_URL (${url}) is not project ${ref}.`);
+    process.exit(1);
+  }
+  // The direct connection must be this project's too (Supabase user names
+  // are postgres.<ref> on the pooler, postgres on the direct host).
+  if (dbUrl && !new RegExp(`^postgres(ql)?://postgres(\\.${ref})?:[^@]*@(db\\.${ref}\\.supabase\\.co|[a-z0-9-]+\\.pooler\\.supabase\\.com)(:\\d+)?/postgres(\\?.*)?$`).test(dbUrl)) {
+    console.error(`Refusing: PERF_DB_URL is not a connection to project ${ref}.`);
     process.exit(1);
   }
 }
@@ -85,13 +97,23 @@ const PEOPLE = Array.from({ length: COUNT }, (_, i) => {
 });
 
 // ---------------------------------------------------------------------------
-// SQL: the Management API on a hosted project, psql on the local stack.
+// SQL: psql over PERF_DB_URL (or docker exec on the local stack); otherwise
+// the Management API.
 // ---------------------------------------------------------------------------
 
+const PSQL_FLAGS = ["-v", "ON_ERROR_STOP=1", "-q", "-t", "-A"];
+const viaPsql = Boolean(dbUrl) || local;
+
 async function query(sql) {
+  if (dbUrl) {
+    const result = spawnSync("psql", ["-X", ...PSQL_FLAGS, dbUrl], { input: sql, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+    return result.stdout.trim();
+  }
   if (local) {
     const sudo = spawnSync("docker", ["info"], { stdio: "ignore" }).status !== 0;
-    const argv = ["exec", "-i", "supabase_db_workspace", "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-q", "-t", "-A"];
+    const argv = ["exec", "-i", "supabase_db_workspace", "psql", "-U", "postgres", "-d", "postgres", ...PSQL_FLAGS];
     const result = spawnSync(sudo ? "sudo" : "docker", sudo ? ["docker", ...argv] : argv, { input: sql, encoding: "utf8" });
     if (result.status !== 0) throw new Error(result.stderr || result.stdout);
     return result.stdout.trim();
@@ -113,8 +135,8 @@ async function exec(sql) {
 
 /** Runs a SELECT and returns its rows as objects. */
 async function rows(sql) {
-  // Both paths answer JSON: the local path by wrapping the select.
-  const text = local ? await query(`select coalesce(json_agg(t), '[]'::json) from (${sql}) as t;`) : await query(sql);
+  // Both paths answer JSON: the psql path by wrapping the select.
+  const text = viaPsql ? await query(`select coalesce(json_agg(t), '[]'::json) from (${sql}) as t;`) : await query(sql);
   return JSON.parse(text || "[]");
 }
 

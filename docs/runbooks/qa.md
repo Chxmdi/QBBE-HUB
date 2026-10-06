@@ -195,7 +195,10 @@ run only; it is never shown or stored, so nobody can sign in as them
 afterwards. The fixture is visible to staff on staging (the program, the
 projects, the channel). To remove it, run the workflow by hand with
 **teardown** ticked, or run `node scripts/qa/perf-staging.mjs teardown` with
-the staging environment's values.
+the staging environment's values (the script writes the fixture over a direct
+database connection, `PERF_DB_URL`, which the job builds from the
+environment's `SUPABASE_DB_PASSWORD` after `supabase link`, the same way the
+deploy job applies migrations).
 
 The job refuses any site or project that is not the registered staging pair,
 so it cannot be pointed at production.

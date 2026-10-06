@@ -60,6 +60,7 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SITE_URL: ${{ vars.SITE_URL }}
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +77,7 @@ jobs:
       # for deploys: this job can only ever reach the staging pair.
       - name: Refuse anything but the registered staging site and project
         run: |
-          for name in NETLIFY_SITE_ID NETLIFY_AUTH_TOKEN SUPABASE_PROJECT_REF STAGING_SUPABASE_PROJECT_REF SUPABASE_ACCESS_TOKEN SITE_URL; do
+          for name in NETLIFY_SITE_ID NETLIFY_AUTH_TOKEN SUPABASE_PROJECT_REF STAGING_SUPABASE_PROJECT_REF SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD SITE_URL; do
             [ -n "${!name:-}" ] || { echo "::error::Missing ${name} on the staging environment."; exit 1; }
           done
           [ "$NETLIFY_SITE_ID" = "2169b17a-8dc3-49de-a466-4281e1285de2" ] \
@@ -119,6 +120,36 @@ jobs:
             echo "SUPABASE_SERVICE_ROLE_KEY=$service"
           } >> "$GITHUB_ENV"
           echo "Site ${NETLIFY_SITE_ID} reads ${url}."
+
+      # The fixture is written over a direct database connection, the same
+      # way the deploy job applies migrations: `supabase link` with the
+      # environment's database password, which also records the project's
+      # connection pooler address. (The Management API's SQL endpoint answered
+      # 401 to this environment's access token, so it is only a fallback.)
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.114.0
+
+      - name: Local config's signing key
+        run: scripts/local-signing-key.sh
+
+      - name: Connect to the staging database
+        run: |
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" > /dev/null
+          template=$(cat supabase/.temp/pooler-url 2>/dev/null || true)
+          if [ -z "$template" ]; then
+            template=$(curl -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/config/database/pooler" \
+              | python3 -c "import json,sys; print(next((p.get('connection_string','') for p in json.load(sys.stdin) if p.get('pool_mode')=='session'), ''))")
+          fi
+          [ -n "$template" ] || { echo "::error::Could not find the staging database's pooler address."; exit 1; }
+          # Session mode (port 5432): the seeding runs in one connection.
+          url=$(PW="$SUPABASE_DB_PASSWORD" python3 -c "import os,sys,urllib.parse; print(sys.argv[1].replace('[YOUR-PASSWORD]', urllib.parse.quote(os.environ['PW'], safe='')).replace(':6543/', ':5432/'))" "$template")
+          echo "::add-mask::$url"
+          echo "PERF_DB_URL=$url" >> "$GITHUB_ENV"
+          psql -X -v ON_ERROR_STOP=1 -q -t -A "$url" -c "select 1" > /dev/null \
+            || { echo "::error::Could not connect to the staging database with SUPABASE_DB_PASSWORD."; exit 1; }
+          echo "Connected to the staging database through its pooler."
 
       - name: Put the fixture in place and sign in the 50 people
         run: node scripts/qa/perf-staging.mjs prepare "$RUNNER_TEMP/perf-sessions.json"
