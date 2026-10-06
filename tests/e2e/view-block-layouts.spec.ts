@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "./fixtures";
 import { signIn } from "./auth";
 import { sql } from "./db";
+import { setTheme } from "./theme";
 
 /**
  * Wave 2 unit D4: the view block's timeline, gallery (with a cover) and feed
@@ -101,13 +102,6 @@ async function chooseLayout(page: Page, block: Locator, layout: string, extra?: 
 async function seriousAxe(page: Page) {
   const results = await new AxeBuilder({ page }).include("[data-view-block]").analyze();
   return results.violations.filter((v) => v.impact === "critical" || v.impact === "serious").map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
-}
-
-async function setTheme(page: Page, theme: "light" | "dark") {
-  await page.evaluate((t) => {
-    localStorage.setItem("qbbe-theme", t);
-    document.documentElement.classList.toggle("dark", t === "dark");
-  }, theme);
 }
 
 /**

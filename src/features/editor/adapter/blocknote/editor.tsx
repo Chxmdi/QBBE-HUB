@@ -441,6 +441,7 @@ export default function BlockNoteEditorImpl({
   initialState,
   editable,
   onChange,
+  onEditPending,
   files,
   semantic,
   taskSuggestions,
@@ -543,8 +544,13 @@ export default function BlockNoteEditorImpl({
     if (pending.timer) clearTimeout(pending.timer);
     deliverRef.current();
   }, []);
+  const editPendingRef = React.useRef(onEditPending);
+  React.useEffect(() => {
+    editPendingRef.current = onEditPending;
+  }, [onEditPending]);
   const handleChange = React.useCallback(() => {
     if (pendingChange.current) return;
+    editPendingRef.current?.();
     const pending: { frame: number; timer: ReturnType<typeof setTimeout> | null } = { frame: 0, timer: null };
     pending.frame = requestAnimationFrame(() => {
       pending.timer = setTimeout(flushChange, 0);

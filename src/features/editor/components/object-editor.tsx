@@ -223,6 +223,9 @@ export function ObjectEditor({
 
   const mine = React.useCallback(() => latestQueued()?.content ?? latest.current, [latestQueued]);
 
+  // An edit the editor has not handed over yet (see onEditPending). Kept
+  // outside React state so that only the save indicator redraws for it.
+  const editPending = React.useMemo(() => createFlag(), []);
   const onChange = React.useCallback(
     (content: EditorContent, encodeState: () => string) => {
       const removed = removedTaskIds(latest.current, content);
@@ -240,8 +243,9 @@ export function ObjectEditor({
         }, REMOVAL_GRACE_MS);
       }
       enqueue(content, encodeState);
+      editPending.set(false);
     },
-    [enqueue],
+    [enqueue, editPending],
   );
 
   const files = React.useMemo<EditorFileHandlers>(
@@ -358,14 +362,7 @@ export function ObjectEditor({
             {t("progressive.toggle")}
           </label>
           <div className="flex items-center gap-2">
-            <p
-              role={alert ? "alert" : "status"}
-              data-testid="editor-save-state"
-              data-save-status={status}
-              className={cn("text-caption", alert ? "text-danger-fg" : "text-muted")}
-            >
-              {message[status]}
-            </p>
+            <SaveState status={status} message={message} alert={alert} editPending={editPending} />
             {conflict && !conflictOpen ? (
               <Button size="sm" variant="secondary" onClick={() => setDismissed(0)}>
                 {t("conflictDialog.open")}
@@ -380,6 +377,7 @@ export function ObjectEditor({
         initialState={seed.state}
         editable={editable && status !== "forbidden"}
         onChange={editable ? onChange : undefined}
+        onEditPending={editable ? editPending.markPending : undefined}
         files={files}
         semantic={semantic}
         taskSuggestions={taskSuggestions}
@@ -421,5 +419,54 @@ export function ObjectEditor({
         </Dialog>
       ) : null}
     </div>
+  );
+}
+
+/** A boolean other components can watch without rendering this one. */
+function createFlag() {
+  let value = false;
+  const listeners = new Set<() => void>();
+  const set = (next: boolean) => {
+    if (next === value) return;
+    value = next;
+    listeners.forEach((listener) => listener());
+  };
+  return {
+    get: () => value,
+    set,
+    markPending: () => set(true),
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+/**
+ * The save indicator. While an edit is waiting to be handed to the queue it
+ * says "Saving", never "Saved" for text that is not saved yet.
+ */
+function SaveState({
+  status,
+  message,
+  alert,
+  editPending,
+}: {
+  status: QueueStatus;
+  message: Record<QueueStatus, string | null>;
+  alert: boolean;
+  editPending: ReturnType<typeof createFlag>;
+}) {
+  const pending = React.useSyncExternalStore(editPending.subscribe, editPending.get, () => false);
+  const shown: QueueStatus = pending && (status === "saved" || status === "idle") ? "saving" : status;
+  return (
+    <p
+      role={alert ? "alert" : "status"}
+      data-testid="editor-save-state"
+      data-save-status={shown}
+      className={cn("text-caption", alert ? "text-danger-fg" : "text-muted")}
+    >
+      {message[shown]}
+    </p>
   );
 }
