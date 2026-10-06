@@ -49,13 +49,25 @@ jobs:
       security-events: write
       pull-requests: write
 
+  # Informational: one 4-CPU runner holds the database, the API, Auth and
+  # three app instances, and it misses the 2 s target on its own. The gate is
+  # the same test on staging, below.
   performance:
-    name: Performance
+    name: Performance (local, informational)
     uses: ./.github/workflows/perf.yml
+
+  # The acceptance figure: the same 50 people on the staging site, which must
+  # be running this commit (deploy to staging first).
+  performance_staging:
+    name: Performance (staging)
+    uses: ./.github/workflows/perf-staging.yml
+    with:
+      expect_commit: true
+    secrets: inherit
 
   evidence:
     name: Evidence
-    needs: [ci, security, performance]
+    needs: [ci, security, performance, performance_staging]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -68,6 +80,7 @@ jobs:
           CI_RESULT: ${{ needs.ci.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
           PERF_RESULT: ${{ needs.performance.result }}
+          PERF_STAGING_RESULT: ${{ needs.performance_staging.result }}
         run: |
           file="qa-evidence-${SHA}.md"
           mark() { [ "$1" = "success" ] && echo "pass" || echo "**$1**"; }
@@ -80,10 +93,11 @@ jobs:
             echo "|---|---|---|"
             echo "| CI | Lint, typecheck, unit, build, dependency audit; database allow/deny suite and security advisor; every signed-in journey, the role matrix and the accessibility/responsive matrix in Chromium, Firefox and WebKit; phone emulation; realtime delivery and latency (p95 <= 5 s) | $(mark "$CI_RESULT") |"
             echo "| Security | CodeQL (security-extended) | $(mark "$SECURITY_RESULT") |"
-            echo "| Performance | 50 signed-in people on the busiest screens, p95 <= 2 s each | $(mark "$PERF_RESULT") |"
+            echo "| Performance (staging) | 50 signed-in people on the busiest screens of the staging site running this commit, p95 <= 2 s each | $(mark "$PERF_STAGING_RESULT") |"
+            echo "| Performance (local, informational) | The same test on one GitHub runner holding the whole stack; not a gate | $(mark "$PERF_RESULT") |"
             echo
-            echo "Environment: the local Supabase stack on a GitHub-hosted runner."
-            echo "Not covered here: staging (#55), a screen-reader pass, real handsets (OPS-SIGNOFF)."
+            echo "Environment: the local Supabase stack on a GitHub-hosted runner, and the staging site for the performance gate."
+            echo "Not covered here: a screen-reader pass, real handsets (OPS-SIGNOFF)."
           } > "$file"
           cat "$file" >> "$GITHUB_STEP_SUMMARY"
           echo "EVIDENCE_FILE=$file" >> "$GITHUB_ENV"
@@ -95,7 +109,7 @@ jobs:
           retention-days: 90
 
       - name: Every gate must pass
-        if: needs.ci.result != 'success' || needs.security.result != 'success' || needs.performance.result != 'success'
+        if: needs.ci.result != 'success' || needs.security.result != 'success' || needs.performance_staging.result != 'success'
         run: |
           echo "::error::Not every gate passed; see the evidence table in the run summary."
           exit 1

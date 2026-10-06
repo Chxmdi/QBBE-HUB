@@ -1,0 +1,147 @@
+name: Performance (staging)
+
+# The 50-user load test against the staging site (#115, #55): the same k6
+# script as perf.yml, pointed at real hosting rather than one GitHub runner
+# that holds the database, the API, Auth and the app together. This is the
+# acceptance figure; perf.yml stays as a regression signal.
+#
+# It runs under the `staging` GitHub environment, so its secrets and any
+# approval rule apply, and it refuses any site or project that is not the
+# registered staging pair. The fixture (50 people, 10 projects, 2,000 tasks,
+# a channel with 1,000 messages) is created on staging once and kept; each run
+# gives the 50 people a password of its own, which is never written down.
+# `teardown` removes the fixture.
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: How long the 50 users keep working (k6 duration, e.g. 2m)
+        type: string
+        required: false
+        default: 2m
+      expect_commit:
+        description: Fail unless staging is running this workflow's commit
+        type: boolean
+        required: false
+        default: true
+      teardown:
+        description: Remove the fixture from staging after the run
+        type: boolean
+        required: false
+        default: false
+  workflow_call:
+    inputs:
+      duration:
+        type: string
+        required: false
+        default: 2m
+      expect_commit:
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  load:
+    name: 50-user load test on staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    # One run at a time: two sets of 50 people would measure each other.
+    concurrency:
+      group: perf-staging
+      cancel-in-progress: false
+    env:
+      NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install from lockfile
+        run: npm ci
+
+      # The same registrations scripts/check-deploy-environment.sh enforces
+      # for deploys: this job can only ever reach the staging pair.
+      - name: Refuse anything but the registered staging site and project
+        run: |
+          for name in NETLIFY_SITE_ID NETLIFY_AUTH_TOKEN SUPABASE_PROJECT_REF STAGING_SUPABASE_PROJECT_REF SUPABASE_ACCESS_TOKEN SITE_URL; do
+            [ -n "${!name:-}" ] || { echo "::error::Missing ${name} on the staging environment."; exit 1; }
+          done
+          [ "$NETLIFY_SITE_ID" = "2169b17a-8dc3-49de-a466-4281e1285de2" ] \
+            || { echo "::error::Refusing: NETLIFY_SITE_ID is not the registered staging site."; exit 1; }
+          [ "$SUPABASE_PROJECT_REF" = "$STAGING_SUPABASE_PROJECT_REF" ] \
+            || { echo "::error::Refusing: SUPABASE_PROJECT_REF is not the registered staging project."; exit 1; }
+          echo "Staging site and project match their registrations."
+
+      - name: Staging must be running this commit
+        if: inputs.expect_commit
+        run: |
+          deployed=$(curl -fsS -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
+            "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}" \
+            | python3 -c "import json,sys; d=(json.load(sys.stdin).get('published_deploy') or {}); print(d.get('title') or '')")
+          if [ "$deployed" != "$GITHUB_SHA" ]; then
+            echo "::error::Staging is running '${deployed:-<unknown>}', not ${GITHUB_SHA}. Deploy this commit to staging first (Deploy Netlify, environment staging), then run this again."
+            exit 1
+          fi
+          echo "Staging is running ${GITHUB_SHA}."
+
+      # The site's public address and keys, as the deploy workflow reads them;
+      # the service role key from the project's own key list. All masked.
+      - name: Read the site's Supabase address and keys
+        run: |
+          get() { npx --yes netlify-cli@27.5.0 env:get "$1" --context production --site "$NETLIFY_SITE_ID" 2>/dev/null | tail -n 1 | tr -d '[:space:]'; }
+          url=$(get NEXT_PUBLIC_SUPABASE_URL)
+          anon=$(get NEXT_PUBLIC_SUPABASE_ANON_KEY)
+          service=$(get SUPABASE_SERVICE_ROLE_KEY)
+          if [ -z "$service" ]; then
+            service=$(curl -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/api-keys?reveal=true" \
+              | python3 -c "import json,sys; print(next((k.get('api_key','') for k in json.load(sys.stdin) if k.get('name')=='service_role'), ''))")
+          fi
+          [ -n "$url" ] && [ -n "$anon" ] && [ -n "$service" ] || { echo "::error::Could not read the site's Supabase address, anon key or service role key."; exit 1; }
+          echo "::add-mask::$anon"
+          echo "::add-mask::$service"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$url"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$anon"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$service"
+          } >> "$GITHUB_ENV"
+          echo "Site ${NETLIFY_SITE_ID} reads ${url}."
+
+      - name: Put the fixture in place and sign in the 50 people
+        run: node scripts/qa/perf-staging.mjs prepare "$RUNNER_TEMP/perf-sessions.json"
+
+      - uses: grafana/setup-k6-action@v1
+
+      - name: 50 people for ${{ inputs.duration || '2m' }}
+        run: |
+          k6 run \
+            -e BASE_URL="${SITE_URL%/}" \
+            -e SESSIONS="$RUNNER_TEMP/perf-sessions.json" \
+            -e DURATION=${{ inputs.duration || '2m' }} \
+            --summary-export=perf-summary-staging.json \
+            scripts/qa/perf.k6.js
+
+      - name: Remove the fixture from staging
+        if: always() && inputs.teardown
+        run: node scripts/qa/perf-staging.mjs teardown
+
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-summary-staging
+          path: perf-summary-staging.json
+          retention-days: 90
