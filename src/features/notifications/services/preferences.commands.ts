@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isEnabled } from "@/lib/feature-flags";
+import { isRealTimeZone } from "@/lib/time";
+import { HUB_CATEGORIES } from "@/features/notifications/categories";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 /**
@@ -18,19 +23,11 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
  * preferences; the `user_id` below is a convenience, not the control.
  */
 
-function isRealTimezone(value: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 const hour = z.coerce.number().int().min(0).max(23);
 const deliveryMode = z.enum(["off", "immediate", "daily", "weekly"]);
 
-const preferencesSchema = z.object({
+/** Built per call so the time-zone message is in the person's language. */
+const preferencesSchema = (t: TranslateFn) => z.object({
   emailCritical: z.boolean().optional(),
   emailDigest: z.boolean().optional(),
   emailAssignments: z.boolean().optional(),
@@ -45,7 +42,7 @@ const preferencesSchema = z.object({
     .string()
     .trim()
     .max(80)
-    .refine(isRealTimezone, "That is not a recognised time zone.")
+    .refine(isRealTimeZone, t("notifications.errors.badTimezone"))
     .optional(),
   categoryModes: z
     .object({
@@ -53,8 +50,13 @@ const preferencesSchema = z.object({
       mention: deliveryMode,
       announcement: deliveryMode,
       due_date: deliveryMode,
+      // Wave 2, C3 (wos_pages): comments, approvals and watched pages.
+      comment: deliveryMode.optional(),
+      approval: deliveryMode.optional(),
+      watched_page: deliveryMode.optional(),
     })
     .optional(),
+  hubMutedCategories: z.array(z.enum(HUB_CATEGORIES)).max(HUB_CATEGORIES.length).optional(),
   mutedProjectIds: z.array(z.string().uuid()).max(100).optional(),
   mutedThreadIds: z.array(z.string().uuid()).max(100).optional(),
 });
@@ -77,14 +79,24 @@ export async function saveNotificationPreferences(
   input: unknown,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  const parsed = preferencesSchema.safeParse(input);
+  const t = await getT();
+  const parsed = preferencesSchema(t).safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Those preferences are not valid.",
+      error: parsed.error.issues[0]?.message ?? t("notifications.errors.invalid"),
     };
   }
 
+  const modes = parsed.data.categoryModes;
+  const pageChoices =
+    parsed.data.hubMutedCategories !== undefined ||
+    (modes !== undefined && (modes.comment ?? modes.approval ?? modes.watched_page) !== undefined);
+  if (pageChoices && !(await isEnabled("wos_pages"))) {
+    return { ok: false, error: t("notifications.errors.invalid") };
+  }
+
+  const supabase = await createSupabaseServerClient();
   const patch: Record<string, unknown> = {
     user_id: session.userId,
     updated_at: new Date().toISOString(),
@@ -94,9 +106,16 @@ export async function saveNotificationPreferences(
     if (value !== undefined) patch[column] = value;
   }
 
-  if (parsed.data.categoryModes) {
-    const modes = parsed.data.categoryModes;
-    patch.category_modes = modes;
+  if (modes) {
+    // Merged over what is stored, so modes this form does not show (followed
+    // changes, or the page categories while their switch is off) are kept.
+    const { data: stored } = await supabase
+      .from("notification_preference")
+      .select("category_modes")
+      .eq("user_id", session.userId)
+      .maybeSingle();
+    const current = (stored?.category_modes ?? {}) as Record<string, string>;
+    patch.category_modes = { ...current, ...modes };
     patch.email_assignments = modes.assignment !== "off";
     patch.email_mentions = modes.mention !== "off";
     patch.email_announcements = modes.announcement !== "off";
@@ -105,6 +124,7 @@ export async function saveNotificationPreferences(
       (mode) => mode === "daily" || mode === "weekly",
     );
   }
+  if (parsed.data.hubMutedCategories) patch.hub_muted_categories = [...new Set(parsed.data.hubMutedCategories)];
   if (parsed.data.mutedProjectIds) patch.muted_project_ids = parsed.data.mutedProjectIds;
   if (parsed.data.mutedThreadIds) patch.muted_thread_ids = parsed.data.mutedThreadIds;
 
@@ -117,17 +137,16 @@ export async function saveNotificationPreferences(
     if ((start === null) !== (end === null)) {
       return {
         ok: false,
-        error: "Set both a start and an end for quiet hours, or clear both.",
+        error: t("notifications.errors.quietBothEnds"),
       };
     }
   }
 
-  const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("notification_preference")
     .upsert(patch, { onConflict: "user_id" });
 
-  if (error) return { ok: false, error: "Could not save your preferences." };
+  if (error) return { ok: false, error: t("notifications.errors.saveFailed") };
 
   revalidatePath("/settings/notifications");
   revalidatePath("/", "layout");
@@ -140,8 +159,9 @@ export async function setThreadMuted(
   muted: boolean,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   if (!z.string().uuid().safeParse(threadId).success) {
-    return { ok: false, error: "Unknown thread." };
+    return { ok: false, error: t("notifications.errors.unknownThread") };
   }
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
@@ -161,7 +181,7 @@ export async function setThreadMuted(
     },
     { onConflict: "user_id" },
   );
-  if (error) return { ok: false, error: "Could not update that thread." };
+  if (error) return { ok: false, error: t("notifications.errors.threadFailed") };
   revalidatePath("/", "layout");
   return { ok: true };
 }

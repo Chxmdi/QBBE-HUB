@@ -3,17 +3,24 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import { followUpSchema } from "@/features/crm/schemas";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { crmMessage } from "@/features/crm/labels";
+import { getT } from "@/lib/i18n/server";
+import { peopleEn } from "@/lib/i18n/messages/workspace/people.en";
+
+/** English validation text from the catalogue, translated by `crmMessage`. */
+const V = peopleEn.crm.validation;
 
 const orgSchema = z.object({
-  name: requiredText("Organizations need a name.", 200),
+  name: requiredText(V.orgName, 200),
   category: z.enum([
     "funder", "sponsor", "school", "university", "community",
     "government", "vendor", "media", "donor", "association",
   ]),
-  website: z.string().trim().url().max(300).optional().or(z.literal("")),
+  website: z.string().trim().url(V.invalidUrl).max(300).optional().or(z.literal("")),
   notes: z.string().trim().max(5000).optional(),
   nextActionAt: z.string().optional(),
   sensitiveNotes: z.string().trim().max(5000).optional(),
@@ -104,10 +111,11 @@ async function saveSensitiveNote(
 
 export async function createCrmOrganization(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
   const parsed = orgSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: crmMessage(t, parsed.error.issues[0]?.message) };
   }
   const { name, category, website, notes, nextActionAt, sensitiveNotes } = parsed.data;
 
@@ -126,11 +134,11 @@ export async function createCrmOrganization(input: unknown): Promise<ActionResul
     })
     .select("id")
     .single();
-  if (error || !org) return { ok: false, error: "Could not save the organization." };
+  if (error || !org) return { ok: false, error: t("crm.errors.saveOrg") };
 
   if (sensitiveNotes) {
     const saved = await saveSensitiveNote(supabase, session.organizationId, org.id as string, sensitiveNotes);
-    if (!saved) return { ok: false, error: "The organization was saved, but its sensitive notes were not." };
+    if (!saved) return { ok: false, error: t("crm.errors.sensitiveNotSaved") };
   }
 
   revalidatePath("/crm");
@@ -139,10 +147,11 @@ export async function createCrmOrganization(input: unknown): Promise<ActionResul
 
 export async function updateCrmOrganization(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
   const parsed = orgSchema.extend({ id: z.string().uuid() }).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: crmMessage(t, parsed.error.issues[0]?.message) };
   }
   const { id, name, category, website, notes, nextActionAt, sensitiveNotes } = parsed.data;
   const supabase = await createSupabaseServerClient();
@@ -154,11 +163,11 @@ export async function updateCrmOrganization(input: unknown): Promise<ActionResul
     next_action_at: nextActionAt || null,
   };
   const { error } = await supabase.from("crm_organization").update(patch).eq("id", id);
-  if (error) return { ok: false, error: "Could not update the organization." };
+  if (error) return { ok: false, error: t("crm.errors.updateOrg") };
   if (sensitiveNotes !== undefined) {
     const saved = await saveSensitiveNote(supabase, session.organizationId, id, sensitiveNotes);
     if (!saved) {
-      return { ok: false, error: "Only the relationship owner or an administrator can change sensitive notes." };
+      return { ok: false, error: t("crm.errors.sensitiveForbidden") };
     }
   }
   revalidatePath("/crm");
@@ -171,7 +180,8 @@ export async function setCrmOrganizationStatus(
   status: "active" | "inactive",
 ): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("crm_organization").update({ status }).eq("id", id);
   if (error) {
@@ -179,8 +189,8 @@ export async function setCrmOrganizationStatus(
       ok: false,
       error:
         status === "active"
-          ? "An active relationship needs an owner and a next action."
-          : "Could not archive the organization.",
+          ? t("crm.errors.activeNeeds")
+          : t("crm.errors.archiveFailed"),
     };
   }
   revalidatePath("/crm");
@@ -190,7 +200,7 @@ export async function setCrmOrganizationStatus(
 
 const agreementSchema = z.object({
   crmOrganizationId: z.string().uuid(),
-  title: requiredText("Agreements need a title.", 200),
+  title: requiredText(V.agreementTitle, 200),
   contactId: z.string().uuid().optional(),
   status: z.enum(["draft", "active", "ended"]).default("draft"),
   startsOn: z.string().optional(),
@@ -200,10 +210,11 @@ const agreementSchema = z.object({
 
 export async function createCrmAgreement(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
   const parsed = agreementSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: crmMessage(t, parsed.error.issues[0]?.message) };
   }
   const data = parsed.data;
   const supabase = await createSupabaseServerClient();
@@ -222,16 +233,16 @@ export async function createCrmAgreement(input: unknown): Promise<ActionResult> 
     })
     .select("id")
     .single();
-  if (error || !row) return { ok: false, error: "Could not save the agreement." };
+  if (error || !row) return { ok: false, error: t("crm.errors.saveAgreement") };
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   return { ok: true, id: row.id as string };
 }
 
 const contactSchema = z.object({
   crmOrganizationId: z.string().uuid(),
-  fullName: requiredText("Contacts need a name.", 200),
+  fullName: requiredText(V.contactName, 200),
   roleTitle: z.string().trim().max(200).optional(),
-  email: z.string().trim().email().max(300).optional().or(z.literal("")),
+  email: z.string().trim().email(V.invalidEmail).max(300).optional().or(z.literal("")),
   phone: z.string().trim().max(50).optional(),
   communicationNotes: z.string().trim().max(5000).optional(),
   status: z.enum(["active", "inactive"]).optional(),
@@ -239,10 +250,11 @@ const contactSchema = z.object({
 
 export async function createCrmContact(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
   const parsed = contactSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: crmMessage(t, parsed.error.issues[0]?.message) };
   }
   const data = parsed.data;
 
@@ -258,7 +270,7 @@ export async function createCrmContact(input: unknown): Promise<ActionResult> {
     status: data.status ?? "active",
     owner_id: session.userId,
   });
-  if (error) return { ok: false, error: "Could not save the contact." };
+  if (error) return { ok: false, error: t("crm.errors.saveContact") };
 
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   return { ok: true };
@@ -268,17 +280,18 @@ const interactionSchema = z.object({
   crmOrganizationId: z.string().uuid(),
   contactId: z.string().uuid().optional(),
   interactionType: z.enum(["meeting", "call", "email", "message", "note", "other"]),
-  summary: requiredText("Describe the interaction.", 5000),
+  summary: requiredText(V.describeInteraction, 5000),
   nextSteps: z.string().trim().max(2000).optional(),
   documentId: z.string().uuid().optional(),
 });
 
 export async function recordInteraction(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
   const parsed = interactionSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: crmMessage(t, parsed.error.issues[0]?.message) };
   }
   const data = parsed.data;
 
@@ -293,24 +306,19 @@ export async function recordInteraction(input: unknown): Promise<ActionResult> {
     next_steps: data.nextSteps || null,
     document_id: data.documentId || null,
   });
-  if (error) return { ok: false, error: "Could not record the interaction." };
+  if (error) return { ok: false, error: t("crm.errors.recordInteraction") };
 
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   return { ok: true };
 }
 
-const followUpSchema = z.object({
-  crmOrganizationId: z.string().uuid(),
-  title: requiredText("Follow-ups need a description.", 300),
-  dueAt: requiredText("Pick a due date."),
-});
-
 export async function createFollowUp(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
   const parsed = followUpSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: crmMessage(t, parsed.error.issues[0]?.message) };
   }
   const data = parsed.data;
 
@@ -322,7 +330,7 @@ export async function createFollowUp(input: unknown): Promise<ActionResult> {
     title: data.title,
     due_at: data.dueAt,
   });
-  if (error) return { ok: false, error: "Could not create the follow-up." };
+  if (error) return { ok: false, error: t("crm.errors.createFollowUp") };
 
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   revalidatePath("/crm");
@@ -331,13 +339,14 @@ export async function createFollowUp(input: unknown): Promise<ActionResult> {
 
 export async function completeFollowUp(followUpId: string): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("crm_follow_up")
     .update({ status: "done", completed_at: new Date().toISOString() })
     .eq("id", followUpId);
-  if (error) return { ok: false, error: "Could not complete the follow-up." };
+  if (error) return { ok: false, error: t("crm.errors.completeFollowUp") };
   revalidatePath("/crm");
   return { ok: true };
 }
@@ -355,10 +364,11 @@ const crmLinkSchema = z.object({
 
 export async function createCrmLink(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
   const parsed = crmLinkSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: crmMessage(t, parsed.error.issues[0]?.message) };
   }
   const data = parsed.data;
   if (
@@ -369,7 +379,7 @@ export async function createCrmLink(input: unknown): Promise<ActionResult> {
     !data.opportunityId &&
     !data.agreementId
   ) {
-    return { ok: false, error: "Choose a program, project, event, grant, agreement or task to link." };
+    return { ok: false, error: t("crm.errors.chooseLink") };
   }
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("crm_link").insert({
@@ -383,28 +393,30 @@ export async function createCrmLink(input: unknown): Promise<ActionResult> {
     opportunity_id: data.opportunityId || null,
     agreement_id: data.agreementId || null,
   });
-  if (error) return { ok: false, error: "Could not link that record." };
+  if (error) return { ok: false, error: t("crm.errors.linkFailed") };
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   return { ok: true };
 }
 
 export async function convertFollowUpToTask(followUpId: string): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
   const supabase = await createSupabaseServerClient();
   const { data: followUp } = await supabase
     .from("crm_follow_up")
     .select("id, title, due_at, owner_id, task_id, crm_organization_id")
     .eq("id", followUpId)
     .maybeSingle();
-  if (!followUp) return { ok: false, error: "That follow-up no longer exists." };
+  if (!followUp) return { ok: false, error: t("crm.errors.followUpGone") };
   if (followUp.task_id) return { ok: true, id: followUp.task_id as string };
 
   const { createTask } = await import("@/features/tasks/services/task.commands");
   const created = await createTask({
     title: followUp.title,
-    dueAt: followUp.due_at,
-    assigneeId: followUp.owner_id,
+    dueAt: followUp.due_at ?? undefined,
+    assigneeId: followUp.owner_id ?? undefined,
+    source: { type: "contact", id: followUp.id },
   });
   if (!created.ok || !created.id) return created;
 
@@ -414,7 +426,7 @@ export async function convertFollowUpToTask(followUpId: string): Promise<ActionR
     .eq("id", followUpId)
     .is("task_id", null);
   if (error) {
-    return { ok: false, error: "The task was created, but the follow-up could not be linked." };
+    return { ok: false, error: t("crm.errors.taskNotLinked") };
   }
 
   revalidatePath("/crm");

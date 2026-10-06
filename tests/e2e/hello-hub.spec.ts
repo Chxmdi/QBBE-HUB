@@ -31,7 +31,11 @@ test("owner edits, archives and restores a program", async ({ page }) => {
   await expect(page.getByRole("heading", { name, exact: true })).toHaveCount(0);
   await page.getByRole("link", { name: "Archived programs", exact: true }).click();
   await page.getByRole("link").filter({ has: page.getByRole("heading", { name, exact: true }) }).click();
-  await expect(page.getByText("Revised program purpose", { exact: true })).toBeVisible();
+  // The archived list card also shows the description, so wait for the
+  // program's own page; there the closed edit form holds a hidden copy.
+  await expect(page).toHaveURL(/\/programs\/[0-9a-f-]+$/, { timeout: 60_000 });
+  await expect(page.getByRole("heading", { level: 1, name, exact: true })).toBeVisible();
+  await expect(page.getByText("Revised program purpose", { exact: true }).filter({ visible: true })).toBeVisible();
   await page.getByRole("button", { name: "Edit program" }).click();
   programDialog = page.getByRole("dialog", { name: "Edit program" });
   await programDialog.getByLabel("Status", { exact: true }).selectOption("active");

@@ -1,4 +1,6 @@
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { getT } from "@/lib/i18n/server";
+import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Rate limiting for the Hub's own write paths.
@@ -44,11 +46,46 @@ export const RATE_LIMITS = {
   "access-grant:project": { limit: 120, windowSeconds: 3600 },
   "announcement:publish": { limit: 20, windowSeconds: 3600 },
   "document:upload": { limit: 60, windowSeconds: 3600 },
+  "receipt:submit": { limit: 60, windowSeconds: 3600 },
+  "form:submit": { limit: 60, windowSeconds: 3600 },
   "report:generate": { limit: 30, windowSeconds: 3600 },
   // Tighter than the rest: each one copies sensitive data out of the reach of
   // row-level security, and nobody legitimately needs a dozen an hour.
   "export:request": { limit: 10, windowSeconds: 3600 },
+  // A lens export is a CSV of what the viewer can already see, so it may be
+  // repeated more freely than a full data export; still few enough per hour
+  // to stop a script draining the workspace row by row.
+  "lens:export": { limit: 30, windowSeconds: 3600 },
+  // One import can create up to 2000 records; a handful an hour is plenty.
+  "import:run": { limit: 20, windowSeconds: 3600 },
   "job:run": { limit: 240, windowSeconds: 60 },
+  "approval:submit": { limit: 60, windowSeconds: 3600 },
+  "approval:delegate": { limit: 30, windowSeconds: 3600 },
+  "ledger:write": { limit: 240, windowSeconds: 60 },
+  "gift:write": { limit: 240, windowSeconds: 60 },
+  "gift:email": { limit: 60, windowSeconds: 3600 },
+  "payables:write": { limit: 240, windowSeconds: 60 },
+  "bank:write": { limit: 240, windowSeconds: 60 },
+  "payroll:write": { limit: 240, windowSeconds: 60 },
+  // Workspace OS writes (epic #199). Each creates rows or copies data; the
+  // ceilings are far above what a person does by hand and stop a runaway
+  // script or a stuck client from filling a table.
+  "page:create": { limit: 60, windowSeconds: 60 },
+  // Page export and import (wave 2 unit X1): each copies a whole page out or in.
+  "page:export": { limit: 30, windowSeconds: 3600 },
+  "page:import": { limit: 20, windowSeconds: 3600 },
+  "comment:create": { limit: 60, windowSeconds: 60 },
+  "capture:create": { limit: 60, windowSeconds: 60 },
+  "project:create": { limit: 120, windowSeconds: 3600 },
+  "share:write": { limit: 120, windowSeconds: 3600 },
+  "app:write": { limit: 240, windowSeconds: 3600 },
+  "blueprint:write": { limit: 240, windowSeconds: 3600 },
+  "blueprint:build": { limit: 30, windowSeconds: 3600 },
+  "template:write": { limit: 60, windowSeconds: 3600 },
+  // One property on one object from its record page, and undoing it (U14).
+  "property:write": { limit: 240, windowSeconds: 60 },
+  // Autosave is debounced on the device; this only catches a loop.
+  "editor:save": { limit: 600, windowSeconds: 60 },
 } as const;
 
 export type RateLimitedAction = keyof typeof RATE_LIMITS;
@@ -98,14 +135,19 @@ export async function checkRateLimit(rule: RateLimitRule): Promise<RateLimitResu
 }
 
 /** Wording a person can act on: what happened, and when they can try again. */
-export function rateLimitMessage(result: RateLimitResult): string {
-  if (!result.resetAt) return "You're doing that too quickly. Wait a moment and try again.";
+export function rateLimitMessage(
+  result: RateLimitResult,
+  t: TranslateFn = createTranslator("en"),
+): string {
+  if (!result.resetAt) return t("shell.rateLimit.soon");
   const seconds = Math.max(1, Math.ceil((result.resetAt.getTime() - Date.now()) / 1000));
   const wait =
     seconds < 60
-      ? `${seconds} second${seconds === 1 ? "" : "s"}`
-      : `${Math.ceil(seconds / 60)} minute${seconds < 120 ? "" : "s"}`;
-  return `You're doing that too quickly. Try again in about ${wait}.`;
+      ? t(seconds === 1 ? "shell.rateLimit.secondOne" : "shell.rateLimit.secondOther", { count: seconds })
+      : t(seconds < 120 ? "shell.rateLimit.minuteOne" : "shell.rateLimit.minuteOther", {
+          count: Math.ceil(seconds / 60),
+        });
+  return t("shell.rateLimit.later", { wait });
 }
 
 /**
@@ -119,5 +161,5 @@ export async function enforceRateLimit(
   const { limit, windowSeconds } = RATE_LIMITS[action];
   const result = await checkRateLimit({ action, subject, limit, windowSeconds });
   if (result.allowed) return null;
-  return { ok: false, error: rateLimitMessage(result) };
+  return { ok: false, error: rateLimitMessage(result, await getT()) };
 }

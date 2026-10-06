@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { updateProgram } from "@/features/programs/services/program.commands";
+import { PROGRAM_COLORS } from "@/features/programs/colors";
+import { useT } from "@/lib/i18n/client";
 
 export function ProgramEditDialog({ program, people }: {
   program: {
@@ -16,6 +18,7 @@ export function ProgramEditDialog({ program, people }: {
   people: { id: string; label: string }[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,48 +37,48 @@ export function ProgramEditDialog({ program, people }: {
         importantLinks: form.get("importantLinks"),
         leadId: form.get("leadId"),
       });
-      if (!result.ok) { setError(result.error ?? "Could not save the program."); return; }
+      if (!result.ok) { setError(result.error ?? t("programs.edit.error")); return; }
       setOpen(false);
       router.refresh();
     } catch {
-      setError("Could not save the program. Please try again.");
+      setError(t("programs.edit.errorRetry"));
     } finally { setSaving(false); }
   }
   return <>
-    <Button variant="secondary" onClick={() => { setError(null); setOpen(true); }}>Edit program</Button>
-    <Dialog open={open} onClose={() => { if (!saving) setOpen(false); }} title="Edit program">
+    <Button variant="secondary" onClick={() => { setError(null); setOpen(true); }}>{t("programs.edit.open")}</Button>
+    <Dialog open={open} onClose={() => { if (!saving) setOpen(false); }} title={t("programs.edit.title")}>
       <form key={`${program.name}:${program.status}:${program.description}:${program.lead_id ?? ""}`} onSubmit={submit} className="space-y-4">
-        <div><Label htmlFor="edit-program-name">Name</Label>
+        <div><Label htmlFor="edit-program-name">{t("programs.edit.name")}</Label>
           <Input id="edit-program-name" name="name" defaultValue={program.name} required maxLength={200} /></div>
-        <div><Label htmlFor="edit-program-description">Description</Label>
+        <div><Label htmlFor="edit-program-description">{t("programs.edit.description")}</Label>
           <Textarea id="edit-program-description" name="description" defaultValue={program.description ?? ""} maxLength={2000} /></div>
-        <div><Label htmlFor="edit-program-status">Status</Label>
+        <div><Label htmlFor="edit-program-status">{t("programs.edit.status")}</Label>
           <Select id="edit-program-status" name="status" defaultValue={program.status}>
-            <option value="active">Active</option><option value="paused">Paused</option><option value="archived">Archived</option>
+            <option value="active">{t("programs.edit.statuses.active")}</option>
+            <option value="paused">{t("programs.edit.statuses.paused")}</option>
+            <option value="archived">{t("programs.edit.statuses.archived")}</option>
           </Select></div>
-        <div><Label htmlFor="edit-program-lead">Program lead</Label>
+        <div><Label htmlFor="edit-program-lead">{t("programs.edit.lead")}</Label>
           <Select id="edit-program-lead" name="leadId" defaultValue={program.lead_id ?? ""}>
-            <option value="">No lead</option>
+            <option value="">{t("programs.edit.noLead")}</option>
             {people.map((person) => (
               <option key={person.id} value={person.id}>{person.label}</option>
             ))}
           </Select>
-          <p className="mt-1 text-[12.5px] text-muted">The lead can manage this program and everything in it.</p></div>
-        <div><Label htmlFor="edit-program-color">Colour</Label>
+          <p className="mt-1 text-[12.5px] text-muted">{t("programs.edit.leadHint")}</p></div>
+        <div><Label htmlFor="edit-program-color">{t("programs.edit.color")}</Label>
           <Select id="edit-program-color" name="color" defaultValue={program.color ?? "neutral"}>
-            <option value="neutral">Neutral</option>
-            <option value="blue">Blue</option>
-            <option value="green">Green</option>
-            <option value="amber">Amber</option>
-            <option value="rose">Rose</option>
+            {PROGRAM_COLORS.map((value) => (
+              <option key={value} value={value}>{t(`programs.edit.colors.${value}`)}</option>
+            ))}
           </Select></div>
-        <div><Label htmlFor="edit-program-links">Important links</Label>
-          <Textarea id="edit-program-links" name="importantLinks" defaultValue={(program.important_links ?? []).map((link) => `${link.label}|${link.url}`).join("\n")} placeholder="Label|https://example.org" /></div>
-        <p className="text-sm text-muted">Archived programs remain available in the archive. Choose Active or Paused to restore a program. Its projects keep their own status.</p>
+        <div><Label htmlFor="edit-program-links">{t("programs.edit.links")}</Label>
+          <Textarea id="edit-program-links" name="importantLinks" defaultValue={(program.important_links ?? []).map((link) => `${link.label}|${link.url}`).join("\n")} placeholder={t("programs.edit.linksPlaceholder")} /></div>
+        <p className="text-sm text-muted">{t("programs.edit.archiveNote")}</p>
         {error ? <p role="alert" className="text-sm text-danger-fg">{error}</p> : null}
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" disabled={saving} onClick={() => setOpen(false)}>Cancel</Button>
-          <Button type="submit" loading={saving} disabled={saving}>Save program</Button>
+          <Button type="button" variant="secondary" disabled={saving} onClick={() => setOpen(false)}>{t("programs.edit.cancel")}</Button>
+          <Button type="submit" loading={saving} disabled={saving}>{t("programs.edit.submit")}</Button>
         </div>
       </form>
     </Dialog>

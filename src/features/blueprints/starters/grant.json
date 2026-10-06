@@ -1,0 +1,327 @@
+{
+  "version": 1,
+  "key": "grant",
+  "name": {
+    "en": "Grant",
+    "fr": "Subvention"
+  },
+  "description": {
+    "en": "Funders, grant applications from idea to award, and the reports they require.",
+    "fr": "Les bailleurs de fonds, les demandes de subvention de l’idée à l’octroi et les rapports exigés."
+  },
+  "types": [
+    {
+      "key": "funder",
+      "name": {
+        "en": "Funder",
+        "fr": "Bailleur de fonds"
+      },
+      "icon": "landmark",
+      "properties": [
+        {
+          "key": "website",
+          "name": {
+            "en": "Website",
+            "fr": "Site Web"
+          },
+          "kind": "url"
+        },
+        {
+          "key": "contact_email",
+          "name": {
+            "en": "Contact email",
+            "fr": "Courriel de la personne-ressource"
+          },
+          "kind": "email"
+        },
+        {
+          "key": "kind",
+          "name": {
+            "en": "Kind",
+            "fr": "Genre"
+          },
+          "kind": "select",
+          "choices": [
+            {
+              "key": "foundation",
+              "label": {
+                "en": "Foundation",
+                "fr": "Fondation"
+              }
+            },
+            {
+              "key": "government",
+              "label": {
+                "en": "Government",
+                "fr": "Gouvernement"
+              }
+            },
+            {
+              "key": "corporate",
+              "label": {
+                "en": "Corporate",
+                "fr": "Entreprise"
+              }
+            },
+            {
+              "key": "community",
+              "label": {
+                "en": "Community",
+                "fr": "Communautaire"
+              }
+            }
+          ]
+        }
+      ],
+      "layout": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "key": "grant_application",
+      "name": {
+        "en": "Grant application",
+        "fr": "Demande de subvention"
+      },
+      "icon": "file-signature",
+      "properties": [
+        {
+          "key": "stage",
+          "name": {
+            "en": "Stage",
+            "fr": "Étape"
+          },
+          "kind": "status",
+          "choices": [
+            {
+              "key": "researching",
+              "label": {
+                "en": "Researching",
+                "fr": "Recherche"
+              }
+            },
+            {
+              "key": "drafting",
+              "label": {
+                "en": "Drafting",
+                "fr": "Rédaction"
+              }
+            },
+            {
+              "key": "submitted",
+              "label": {
+                "en": "Submitted",
+                "fr": "Soumise"
+              }
+            },
+            {
+              "key": "awarded",
+              "label": {
+                "en": "Awarded",
+                "fr": "Accordée"
+              }
+            },
+            {
+              "key": "declined",
+              "label": {
+                "en": "Declined",
+                "fr": "Refusée"
+              }
+            }
+          ]
+        },
+        {
+          "key": "deadline",
+          "name": {
+            "en": "Deadline",
+            "fr": "Date limite"
+          },
+          "kind": "date",
+          "required": true
+        },
+        {
+          "key": "amount_requested",
+          "name": {
+            "en": "Amount requested",
+            "fr": "Montant demandé"
+          },
+          "kind": "currency",
+          "currency": "CAD"
+        },
+        {
+          "key": "amount_awarded",
+          "name": {
+            "en": "Amount awarded",
+            "fr": "Montant accordé"
+          },
+          "kind": "currency",
+          "currency": "CAD"
+        },
+        {
+          "key": "lead",
+          "name": {
+            "en": "Lead",
+            "fr": "Responsable"
+          },
+          "kind": "person"
+        },
+        {
+          "key": "funder",
+          "name": {
+            "en": "Funder",
+            "fr": "Bailleur de fonds"
+          },
+          "kind": "relation",
+          "relation": "submitted_to"
+        }
+      ],
+      "layout": {
+        "x": 320,
+        "y": 40
+      }
+    },
+    {
+      "key": "grant_report",
+      "name": {
+        "en": "Grant report",
+        "fr": "Rapport de subvention"
+      },
+      "icon": "file-text",
+      "properties": [
+        {
+          "key": "due_on",
+          "name": {
+            "en": "Due",
+            "fr": "Échéance"
+          },
+          "kind": "date",
+          "required": true
+        },
+        {
+          "key": "state",
+          "name": {
+            "en": "State",
+            "fr": "État"
+          },
+          "kind": "select",
+          "choices": [
+            {
+              "key": "due",
+              "label": {
+                "en": "Due",
+                "fr": "À remettre"
+              }
+            },
+            {
+              "key": "submitted",
+              "label": {
+                "en": "Submitted",
+                "fr": "Remis"
+              }
+            }
+          ]
+        },
+        {
+          "key": "grant",
+          "name": {
+            "en": "Grant",
+            "fr": "Subvention"
+          },
+          "kind": "relation",
+          "relation": "reports_on"
+        }
+      ],
+      "layout": {
+        "x": 600,
+        "y": 40
+      }
+    }
+  ],
+  "relations": [
+    {
+      "key": "submitted_to",
+      "from": "grant_application",
+      "to": "funder",
+      "name": {
+        "en": "is submitted to",
+        "fr": "est soumise à"
+      },
+      "reverseName": {
+        "en": "applications",
+        "fr": "demandes"
+      },
+      "cardinality": "one_to_many"
+    },
+    {
+      "key": "reports_on",
+      "from": "grant_report",
+      "to": "grant_application",
+      "name": {
+        "en": "reports on",
+        "fr": "rend compte de"
+      },
+      "reverseName": {
+        "en": "reports",
+        "fr": "rapports"
+      },
+      "cardinality": "one_to_many"
+    }
+  ],
+  "lenses": [
+    {
+      "key": "grant_deadlines",
+      "type": "grant_application",
+      "kind": "calendar",
+      "name": {
+        "en": "Deadlines",
+        "fr": "Dates limites"
+      },
+      "groupBy": "deadline"
+    },
+    {
+      "key": "report_calendar",
+      "type": "grant_report",
+      "kind": "calendar",
+      "name": {
+        "en": "Reports due",
+        "fr": "Rapports à remettre"
+      },
+      "groupBy": "due_on"
+    }
+  ],
+  "forms": [],
+  "workflows": [
+    {
+      "key": "grant_awarded",
+      "type": "grant_application",
+      "name": {
+        "en": "Grant awarded",
+        "fr": "Subvention accordée"
+      },
+      "trigger": {
+        "on": "property_changed",
+        "property": "stage",
+        "to": "awarded"
+      },
+      "steps": [
+        {
+          "kind": "create_task",
+          "title": {
+            "en": "Set up the reporting schedule",
+            "fr": "Établir le calendrier des rapports"
+          },
+          "dueInDays": 7
+        },
+        {
+          "kind": "notify",
+          "role": "admin",
+          "message": {
+            "en": "A grant was awarded.",
+            "fr": "Une subvention a été accordée."
+          }
+        }
+      ]
+    }
+  ]
+}

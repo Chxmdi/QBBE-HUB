@@ -19,14 +19,21 @@ import {
   completeOnboarding,
   saveOnboardingProfile,
 } from "@/features/onboarding/services/onboarding.commands";
+import { useT } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
-  { id: "profile", label: "Your profile", icon: UserRound },
-  { id: "notifications", label: "Notifications", icon: BellRing },
-  { id: "integrations", label: "Integrations", icon: Plug },
-  { id: "tour", label: "Get oriented", icon: Compass },
+  { id: "profile", label: "onboarding.steps.profile", icon: UserRound },
+  { id: "notifications", label: "onboarding.steps.notifications", icon: BellRing },
+  { id: "integrations", label: "onboarding.steps.integrations", icon: Plug },
+  { id: "tour", label: "onboarding.steps.tour", icon: Compass },
 ] as const;
+
+/** Splits a translated sentence around one placeholder, for inline markup. */
+function around(text: string): [string, string] {
+  const [before = "", after = ""] = text.split("\u0000");
+  return [before, after];
+}
 
 const TIMEZONES = [
   "America/Toronto",
@@ -49,6 +56,7 @@ export function OnboardingFlow({
   initialTitle: string | null;
   role: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
@@ -60,10 +68,10 @@ export function OnboardingFlow({
     const result = await completeOnboarding();
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not finish setup.");
+      setError(result.error ?? t("onboarding.errors.finishFailed"));
       return;
     }
-    toast(`Welcome to QBBE Hub, ${initialName.split(" ")[0]}.`);
+    toast(t("onboarding.welcomeToast", { name: initialName.split(" ")[0] }));
     router.push("/");
     router.refresh();
   }
@@ -80,7 +88,7 @@ export function OnboardingFlow({
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not save your profile.");
+      setError(result.error ?? t("onboarding.errors.profileFailed"));
       return;
     }
     setStep(1);
@@ -97,11 +105,14 @@ export function OnboardingFlow({
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not save preferences.");
+      setError(result.error ?? t("onboarding.errors.prefsFailed"));
       return;
     }
     setStep(2);
   }
+
+  const [accessBefore, accessAfter] = around(t("onboarding.accessLevel", { role: "\u0000" }));
+  const [tourBefore, tourAfter] = around(t("onboarding.tourIntro", { shortcut: "\u0000" }));
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">
@@ -112,7 +123,7 @@ export function OnboardingFlow({
       </div>
 
       {/* Progress — visible, not gamified */}
-      <ol className="mb-6 flex items-center justify-center gap-2" aria-label="Setup progress">
+      <ol className="mb-6 flex items-center justify-center gap-2" aria-label={t("onboarding.progress")}>
         {STEPS.map((s, i) => (
           <li key={s.id} className="flex items-center gap-2">
             <span
@@ -143,20 +154,19 @@ export function OnboardingFlow({
 
       <div className="card p-6">
         <p className="eyebrow mb-1">
-          Step {step + 1} of {STEPS.length}
+          {t("onboarding.stepOf", { step: step + 1, total: STEPS.length })}
         </p>
         <h1 className="mb-1 text-[22px] font-semibold tracking-[-0.01em]">
-          {STEPS[step].label}
+          {t(STEPS[step].label)}
         </h1>
 
         {step === 0 ? (
           <form onSubmit={handleProfile} className="mt-4 space-y-4">
             <p className="text-[13.5px] text-muted">
-              Your name and role appear beside your work, messages, and
-              approvals across the Hub.
+              {t("onboarding.profileIntro")}
             </p>
             <div>
-              <Label htmlFor="onb-name">Full name</Label>
+              <Label htmlFor="onb-name">{t("onboarding.fullName")}</Label>
               <Input
                 id="onb-name"
                 name="fullName"
@@ -167,21 +177,22 @@ export function OnboardingFlow({
               />
             </div>
             <div>
-              <Label htmlFor="onb-title">Role or title</Label>
+              <Label htmlFor="onb-title">{t("onboarding.roleTitle")}</Label>
               <Input
                 id="onb-title"
                 name="title"
                 maxLength={120}
                 defaultValue={initialTitle ?? ""}
-                placeholder="e.g. Program Coordinator"
+                placeholder={t("onboarding.rolePlaceholder")}
               />
               <FieldHint>
-                Your access level is <strong>{role}</strong> — only an
-                administrator can change that.
+                {accessBefore}
+                <strong>{role}</strong>
+                {accessAfter}
               </FieldHint>
             </div>
             <div>
-              <Label htmlFor="onb-tz">Time zone</Label>
+              <Label htmlFor="onb-tz">{t("onboarding.timeZone")}</Label>
               <Select id="onb-tz" name="timezone" defaultValue="America/Toronto">
                 {TIMEZONES.map((tz) => (
                   <option key={tz} value={tz}>
@@ -189,7 +200,7 @@ export function OnboardingFlow({
                   </option>
                 ))}
               </Select>
-              <FieldHint>Due dates and meeting times display in this zone.</FieldHint>
+              <FieldHint>{t("onboarding.timeZoneHint")}</FieldHint>
             </div>
             {error ? (
               <p role="alert" className="text-[13px] text-danger-fg">
@@ -197,7 +208,7 @@ export function OnboardingFlow({
               </p>
             ) : null}
             <Button type="submit" loading={saving} className="w-full">
-              Continue <ArrowRight className="size-4" aria-hidden />
+              {t("onboarding.continue")} <ArrowRight className="size-4" aria-hidden />
             </Button>
           </form>
         ) : null}
@@ -205,8 +216,7 @@ export function OnboardingFlow({
         {step === 1 ? (
           <form onSubmit={handleNotifications} className="mt-4 space-y-4">
             <p className="text-[13.5px] text-muted">
-              You can change these any time. Critical security notices and
-              required announcements are always delivered.
+              {t("onboarding.notificationsIntro")}
             </p>
             <label className="flex items-start gap-2.5 rounded-(--radius-sm) border border-line p-3 text-[13.5px]">
               <Checkbox
@@ -214,9 +224,9 @@ export function OnboardingFlow({
                 defaultChecked className="mt-0.5"
               />
               <span>
-                <span className="block font-medium">Email me urgent items</span>
+                <span className="block font-medium">{t("onboarding.emailUrgent")}</span>
                 <span className="text-muted">
-                  Direct assignments, mentions, and critical announcements.
+                  {t("onboarding.emailUrgentHint")}
                 </span>
               </span>
             </label>
@@ -225,10 +235,9 @@ export function OnboardingFlow({
                 name="emailDigest" className="mt-0.5"
               />
               <span>
-                <span className="block font-medium">Send a daily digest</span>
+                <span className="block font-medium">{t("onboarding.dailyDigest")}</span>
                 <span className="text-muted">
-                  Group routine activity into one summary instead of separate
-                  emails.
+                  {t("onboarding.dailyDigestHint")}
                 </span>
               </span>
             </label>
@@ -244,10 +253,10 @@ export function OnboardingFlow({
                 onClick={() => setStep(2)}
                 className="flex-1"
               >
-                Skip
+                {t("onboarding.skip")}
               </Button>
               <Button type="submit" loading={saving} className="flex-1">
-                Continue
+                {t("onboarding.continue")}
               </Button>
             </div>
           </form>
@@ -256,16 +265,12 @@ export function OnboardingFlow({
         {step === 2 ? (
           <div className="mt-4 space-y-4">
             <p className="text-[13.5px] text-muted">
-              Gmail and Google Calendar connect the Hub to your mailbox and
-              schedule. These are optional and can be set up later by an
-              administrator.
+              {t("onboarding.integrationsIntro")}
             </p>
             <div className="rounded-(--radius-sm) border border-line p-3">
-              <p className="text-[13.5px] font-medium">Gmail & Google Calendar</p>
+              <p className="text-[13.5px] font-medium">{t("onboarding.googleTitle")}</p>
               <p className="mt-0.5 text-[13px] text-muted">
-                Requires QBBE-approved Google credentials. Until an
-                administrator configures them, these stay disconnected — the
-                Hub works fully without them.
+                {t("onboarding.googleBody")}
               </p>
             </div>
             <div className="flex gap-2">
@@ -275,10 +280,10 @@ export function OnboardingFlow({
                 onClick={() => setStep(3)}
                 className="flex-1"
               >
-                Skip for now
+                {t("onboarding.skipForNow")}
               </Button>
               <Button onClick={() => setStep(3)} className="flex-1">
-                Continue
+                {t("onboarding.continue")}
               </Button>
             </div>
           </div>
@@ -287,36 +292,28 @@ export function OnboardingFlow({
         {step === 3 ? (
           <div className="mt-4 space-y-4">
             <p className="text-[13.5px] text-muted">
-              Here&apos;s where things live. You can always press{" "}
+              {tourBefore}
               <kbd className="rounded border border-line bg-surface-soft px-1.5 py-0.5 text-[11px]">
                 ⌘K
-              </kbd>{" "}
-              to search or jump anywhere.
+              </kbd>
+              {tourAfter}
             </p>
             <ul className="space-y-2 text-[13.5px]">
               <li className="flex gap-2">
-                <span className="font-medium">Home</span>
-                <span className="text-muted">
-                  — what needs attention today, and portfolio health.
-                </span>
+                <span className="font-medium">{t("onboarding.tour.home")}</span>
+                <span className="text-muted">{t("onboarding.tour.homeHint")}</span>
               </li>
               <li className="flex gap-2">
-                <span className="font-medium">My Work</span>
-                <span className="text-muted">
-                  — everything assigned to you, grouped by urgency.
-                </span>
+                <span className="font-medium">{t("onboarding.tour.myWork")}</span>
+                <span className="text-muted">{t("onboarding.tour.myWorkHint")}</span>
               </li>
               <li className="flex gap-2">
-                <span className="font-medium">Channels</span>
-                <span className="text-muted">
-                  — team conversation that stays close to the work.
-                </span>
+                <span className="font-medium">{t("onboarding.tour.channels")}</span>
+                <span className="text-muted">{t("onboarding.tour.channelsHint")}</span>
               </li>
               <li className="flex gap-2">
-                <span className="font-medium">Announcements</span>
-                <span className="text-muted">
-                  — official notices; some need your acknowledgment.
-                </span>
+                <span className="font-medium">{t("onboarding.tour.announcements")}</span>
+                <span className="text-muted">{t("onboarding.tour.announcementsHint")}</span>
               </li>
             </ul>
             {error ? (
@@ -325,7 +322,7 @@ export function OnboardingFlow({
               </p>
             ) : null}
             <Button onClick={finish} loading={saving} className="w-full">
-              Enter the workspace <ArrowRight className="size-4" aria-hidden />
+              {t("onboarding.enter")} <ArrowRight className="size-4" aria-hidden />
             </Button>
           </div>
         ) : null}
@@ -337,7 +334,7 @@ export function OnboardingFlow({
           onClick={() => setStep((s) => s - 1)}
           className="mt-4 text-center text-[13px] text-muted hover:text-ink"
         >
-          ← Back
+          {t("onboarding.back")}
         </button>
       ) : null}
     </main>

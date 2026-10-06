@@ -1,0 +1,368 @@
+{
+  "version": 1,
+  "key": "recruiting",
+  "name": {
+    "en": "Recruiting",
+    "fr": "Recrutement"
+  },
+  "description": {
+    "en": "Job openings, the candidates who apply and their interviews.",
+    "fr": "Les postes à pourvoir, les candidatures reçues et les entrevues."
+  },
+  "types": [
+    {
+      "key": "job_opening",
+      "name": {
+        "en": "Job opening",
+        "fr": "Poste à pourvoir"
+      },
+      "icon": "briefcase",
+      "properties": [
+        {
+          "key": "stage",
+          "name": {
+            "en": "Stage",
+            "fr": "Étape"
+          },
+          "kind": "status",
+          "choices": [
+            {
+              "key": "open",
+              "label": {
+                "en": "Open",
+                "fr": "Ouvert"
+              }
+            },
+            {
+              "key": "interviewing",
+              "label": {
+                "en": "Interviewing",
+                "fr": "En entrevues"
+              }
+            },
+            {
+              "key": "filled",
+              "label": {
+                "en": "Filled",
+                "fr": "Pourvu"
+              }
+            },
+            {
+              "key": "closed",
+              "label": {
+                "en": "Closed",
+                "fr": "Fermé"
+              }
+            }
+          ]
+        },
+        {
+          "key": "department",
+          "name": {
+            "en": "Department",
+            "fr": "Service"
+          },
+          "kind": "text"
+        },
+        {
+          "key": "salary",
+          "name": {
+            "en": "Salary",
+            "fr": "Salaire"
+          },
+          "kind": "currency",
+          "currency": "CAD"
+        },
+        {
+          "key": "closes_on",
+          "name": {
+            "en": "Closes on",
+            "fr": "Date limite"
+          },
+          "kind": "date"
+        },
+        {
+          "key": "hiring_manager",
+          "name": {
+            "en": "Hiring manager",
+            "fr": "Gestionnaire d’embauche"
+          },
+          "kind": "person"
+        }
+      ],
+      "layout": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "key": "candidate",
+      "name": {
+        "en": "Candidate",
+        "fr": "Candidat"
+      },
+      "icon": "user",
+      "properties": [
+        {
+          "key": "email",
+          "name": {
+            "en": "Email",
+            "fr": "Courriel"
+          },
+          "kind": "email",
+          "required": true
+        },
+        {
+          "key": "phone",
+          "name": {
+            "en": "Phone",
+            "fr": "Téléphone"
+          },
+          "kind": "phone"
+        },
+        {
+          "key": "stage",
+          "name": {
+            "en": "Stage",
+            "fr": "Étape"
+          },
+          "kind": "status",
+          "choices": [
+            {
+              "key": "applied",
+              "label": {
+                "en": "Applied",
+                "fr": "Candidature reçue"
+              }
+            },
+            {
+              "key": "screening",
+              "label": {
+                "en": "Screening",
+                "fr": "Présélection"
+              }
+            },
+            {
+              "key": "interview",
+              "label": {
+                "en": "Interview",
+                "fr": "Entrevue"
+              }
+            },
+            {
+              "key": "offer",
+              "label": {
+                "en": "Offer",
+                "fr": "Offre"
+              }
+            },
+            {
+              "key": "hired",
+              "label": {
+                "en": "Hired",
+                "fr": "Embauché"
+              }
+            },
+            {
+              "key": "declined",
+              "label": {
+                "en": "Declined",
+                "fr": "Refusé"
+              }
+            }
+          ]
+        },
+        {
+          "key": "resume",
+          "name": {
+            "en": "Résumé",
+            "fr": "CV"
+          },
+          "kind": "file"
+        },
+        {
+          "key": "applied_for",
+          "name": {
+            "en": "Applied for",
+            "fr": "Poste visé"
+          },
+          "kind": "relation",
+          "relation": "applies_for"
+        }
+      ],
+      "layout": {
+        "x": 320,
+        "y": 40
+      }
+    },
+    {
+      "key": "interview",
+      "name": {
+        "en": "Interview",
+        "fr": "Entrevue"
+      },
+      "icon": "calendar",
+      "properties": [
+        {
+          "key": "scheduled_for",
+          "name": {
+            "en": "Scheduled for",
+            "fr": "Prévue le"
+          },
+          "kind": "date",
+          "required": true
+        },
+        {
+          "key": "interviewers",
+          "name": {
+            "en": "Interviewers",
+            "fr": "Intervieweurs"
+          },
+          "kind": "person"
+        },
+        {
+          "key": "score",
+          "name": {
+            "en": "Score",
+            "fr": "Note"
+          },
+          "kind": "rating"
+        },
+        {
+          "key": "notes",
+          "name": {
+            "en": "Notes",
+            "fr": "Notes"
+          },
+          "kind": "text"
+        },
+        {
+          "key": "candidate",
+          "name": {
+            "en": "Candidate",
+            "fr": "Candidat"
+          },
+          "kind": "relation",
+          "relation": "interview_of"
+        }
+      ],
+      "layout": {
+        "x": 600,
+        "y": 40
+      }
+    }
+  ],
+  "relations": [
+    {
+      "key": "applies_for",
+      "from": "candidate",
+      "to": "job_opening",
+      "name": {
+        "en": "applies for",
+        "fr": "postule à"
+      },
+      "reverseName": {
+        "en": "applicants",
+        "fr": "candidatures"
+      },
+      "cardinality": "many_to_many"
+    },
+    {
+      "key": "interview_of",
+      "from": "interview",
+      "to": "candidate",
+      "name": {
+        "en": "interviews",
+        "fr": "fait passer une entrevue à"
+      },
+      "reverseName": {
+        "en": "interviews",
+        "fr": "entrevues"
+      },
+      "cardinality": "one_to_many"
+    }
+  ],
+  "lenses": [
+    {
+      "key": "interview_calendar",
+      "type": "interview",
+      "kind": "calendar",
+      "name": {
+        "en": "Interview calendar",
+        "fr": "Calendrier des entrevues"
+      },
+      "groupBy": "scheduled_for"
+    }
+  ],
+  "forms": [
+    {
+      "key": "application_form",
+      "type": "candidate",
+      "name": {
+        "en": "Apply",
+        "fr": "Postuler"
+      },
+      "fields": [
+        "title",
+        "email",
+        "phone",
+        "resume",
+        "applied_for"
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "key": "new_candidate",
+      "type": "candidate",
+      "name": {
+        "en": "New candidate",
+        "fr": "Nouvelle candidature"
+      },
+      "trigger": {
+        "on": "created"
+      },
+      "steps": [
+        {
+          "kind": "create_task",
+          "title": {
+            "en": "Screen the application",
+            "fr": "Présélectionner la candidature"
+          },
+          "dueInDays": 3
+        }
+      ]
+    },
+    {
+      "key": "candidate_hired",
+      "type": "candidate",
+      "name": {
+        "en": "Candidate hired",
+        "fr": "Candidat embauché"
+      },
+      "trigger": {
+        "on": "property_changed",
+        "property": "stage",
+        "to": "hired"
+      },
+      "steps": [
+        {
+          "kind": "create_task",
+          "title": {
+            "en": "Start onboarding",
+            "fr": "Commencer l’accueil"
+          },
+          "dueInDays": 5
+        },
+        {
+          "kind": "notify",
+          "role": "admin",
+          "message": {
+            "en": "A candidate was hired.",
+            "fr": "Un candidat a été embauché."
+          }
+        }
+      ]
+    }
+  ]
+}

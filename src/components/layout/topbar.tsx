@@ -15,7 +15,9 @@ import {
 } from "lucide-react";
 import { setDisplayDensity } from "@/features/onboarding/services/onboarding.commands";
 import { Avatar } from "@/components/ui/avatar";
-import { cn, relativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { useFormatters, useT } from "@/lib/i18n/client";
+import { createActionLabel } from "@/lib/i18n/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types/entities";
 import { createActions } from "@/config/create-actions";
@@ -80,6 +82,8 @@ export function Topbar({
   const [badge, setBadge] = useState(unreadCount);
   const router = useRouter();
   const menuRef = useDismissable(() => setOpenMenu(null));
+  const t = useT();
+  const format = useFormatters();
 
   function toggleTheme() {
     const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
@@ -130,7 +134,7 @@ export function Topbar({
       <button
         type="button"
         onClick={onOpenNav}
-        aria-label="Open navigation"
+        aria-label={t("nav.openNavigation")}
         className="rounded-(--radius-sm) p-2 text-brand-fg transition-colors hover:bg-brand-soft lg:hidden"
       >
         <Menu className="size-5" aria-hidden />
@@ -146,7 +150,7 @@ export function Topbar({
           className="absolute inset-y-2 left-0 w-[3px] rounded-r-full bg-gradient-to-b from-brand via-brand-mid to-accent"
         />
         <Search className="ml-1 size-4 text-brand-fg" aria-hidden />
-        <span className="flex-1 truncate">Search or jump to…</span>
+        <span className="flex-1 truncate">{t("topbar.searchPlaceholder")}</span>
         <kbd className="hidden rounded border border-line bg-surface-soft px-1.5 py-0.5 text-[11px] text-muted md:inline">
           ⌘K
         </kbd>
@@ -157,7 +161,7 @@ export function Topbar({
           <button
             type="button"
             onClick={() => setOpenMenu(openMenu === "create" ? null : "create")}
-            aria-label="Quick create"
+            aria-label={t("topbar.quickCreate")}
             aria-expanded={openMenu === "create"}
             aria-controls="topbar-create-panel"
             className="qbbe-primary-action flex size-9 items-center justify-center rounded-(--radius-sm) transition-transform active:scale-[0.97]"
@@ -176,7 +180,7 @@ export function Topbar({
                   onClick={() => setOpenMenu(null)}
                   className="block px-3 py-1.5 text-[13.5px] hover:bg-brand-soft/60"
                 >
-                  New {l.label.toLowerCase()}
+                  {createActionLabel(t, l)}
                 </Link>
               ))}
             </div>
@@ -187,7 +191,11 @@ export function Topbar({
           <button
             type="button"
             onClick={openNotifications}
-            aria-label={`Notifications${badge > 0 ? ` (${badge} unread)` : ""}`}
+            aria-label={
+              badge > 0
+                ? t("topbar.notificationsUnread", { count: badge })
+                : t("topbar.notifications")
+            }
             aria-expanded={openMenu === "notifications"}
             aria-controls="topbar-notifications-panel"
             className="relative flex size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-brand-soft/60 hover:text-brand-fg"
@@ -203,30 +211,30 @@ export function Topbar({
             <div
               id="topbar-notifications-panel"
               role="region"
-              aria-label="Notifications"
+              aria-label={t("topbar.notifications")}
               className="absolute right-0 mt-2 w-80 rounded-(--radius-md) border border-line bg-surface shadow-(--shadow-pop)"
             >
               <div className="flex items-center justify-between border-b border-line px-3.5 py-2.5">
-                <p className="section-heading text-[15px]">Notifications</p>
+                <p className="section-heading text-[15px]">{t("topbar.notifications")}</p>
                 <button
                   type="button"
                   onClick={markAllRead}
                   className="text-[12px] font-semibold text-brand-fg hover:underline"
                 >
-                  Mark all read
+                  {t("topbar.markAllRead")}
                 </button>
               </div>
               <ul className="max-h-96 overflow-y-auto py-1">
                 {notificationsFailed ? (
                   <li>
                     <ErrorState
-                      message="Notifications couldn't be loaded."
+                      message={t("topbar.notificationsFailed")}
                       onRetry={loadNotifications}
                     />
                   </li>
                 ) : notifications.length === 0 ? (
                   <li className="px-3.5 py-6 text-center text-[13px] text-muted">
-                    You&apos;re all caught up.
+                    {t("topbar.allCaughtUp")}
                   </li>
                 ) : (
                   (["actionable", "informational"] as const).map((band) => {
@@ -239,7 +247,7 @@ export function Topbar({
                     return (
                       <li key={band}>
                         <p className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.08em] text-brand-fg uppercase">
-                          {band === "actionable" ? "Needs you" : "For information"}
+                          {band === "actionable" ? t("topbar.needsYou") : t("topbar.forInformation")}
                         </p>
                         <ul>
                           {items.map((n) => (
@@ -258,7 +266,7 @@ export function Topbar({
                                 <span className="flex items-start gap-2">
                                   {!n.read_at ? (
                                     <>
-                                      <span className="sr-only">Unread. </span>
+                                      <span className="sr-only">{t("common.unreadPrefix")}</span>
                                       <span
                                         aria-hidden
                                         className="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent"
@@ -277,7 +285,7 @@ export function Topbar({
                                       </span>
                                     ) : null}
                                     <span className="meta">
-                                      {relativeTime(n.created_at)}
+                                      {format.relative(n.created_at)}
                                     </span>
                                   </span>
                                 </span>
@@ -295,7 +303,7 @@ export function Topbar({
                 onClick={() => setOpenMenu(null)}
                 className="block border-t border-line px-3.5 py-2 text-center text-[12.5px] font-semibold text-brand-fg hover:bg-brand-soft/45"
               >
-                Open Inbox
+                {t("topbar.openInbox")}
               </Link>
             </div>
           ) : null}
@@ -308,8 +316,18 @@ export function Topbar({
             await setDisplayDensity(next);
             router.refresh();
           }}
-          aria-label={`Switch to ${density === "compact" ? "comfortable" : "compact"} density`}
-          title={`${density === "compact" ? "Comfortable" : "Compact"} density`}
+          aria-label={t("topbar.switchDensity", {
+            density:
+              density === "compact"
+                ? t("topbar.density.comfortable")
+                : t("topbar.density.compact"),
+          })}
+          title={t("topbar.densityTitle", {
+            density:
+              density === "compact"
+                ? t("topbar.density.comfortableTitle")
+                : t("topbar.density.compactTitle"),
+          })}
           className="hidden size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-brand-soft/60 hover:text-brand-fg md:flex"
         >
           {density === "compact" ? (
@@ -322,7 +340,7 @@ export function Topbar({
         <button
           type="button"
           onClick={toggleTheme}
-          aria-label="Toggle color theme"
+          aria-label={t("topbar.toggleTheme")}
           className="flex size-9 items-center justify-center rounded-(--radius-sm) text-muted transition-colors hover:bg-brand-soft/60 hover:text-brand-fg"
         >
           <Sun className="hidden size-4.5 dark:block" aria-hidden />
@@ -333,7 +351,7 @@ export function Topbar({
           <button
             type="button"
             onClick={() => setOpenMenu(openMenu === "profile" ? null : "profile")}
-            aria-label="Account menu"
+            aria-label={t("topbar.accountMenu")}
             aria-expanded={openMenu === "profile"}
             aria-controls="topbar-account-panel"
             className="ml-1 flex items-center rounded-full ring-2 ring-transparent transition-shadow hover:ring-accent/35"
@@ -353,21 +371,21 @@ export function Topbar({
                 onClick={() => setOpenMenu(null)}
                 className="block px-3 py-1.5 text-[13.5px] text-ink hover:bg-brand-soft/55"
               >
-                Account settings
+                {t("topbar.accountSettings")}
               </Link>
               <Link
                 href="/settings/notifications"
                 onClick={() => setOpenMenu(null)}
                 className="block px-3 py-1.5 text-[13.5px] text-ink hover:bg-brand-soft/55"
               >
-                Email preferences
+                {t("topbar.emailPreferences")}
               </Link>
               <form action="/auth/sign-out" method="post">
                 <button
                   type="submit"
                   className="w-full px-3 py-1.5 text-left text-[13.5px] text-danger-fg hover:bg-surface-soft"
                 >
-                  Sign out
+                  {t("topbar.signOut")}
                 </button>
               </form>
             </div>

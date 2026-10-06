@@ -16,14 +16,17 @@ import {
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import { fireWorkflows } from "@/features/admin/services/workflow.runtime";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { issueMessage, K, tr } from "./event.i18n";
+import { DEFAULT_LOCALE, isLocale } from "@/lib/i18n/config";
+import { createTranslator } from "@/lib/i18n/translate";
 
 const createEventSchema = z.object({
-  name: requiredText("An event needs a name.", 200),
+  name: requiredText(K("events.errors.nameRequired"), 200),
   description: z.string().trim().max(5000).optional(),
   programId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),
   eventType: z.string().trim().max(60).optional(),
-  startsAt: requiredText("Pick a start time."),
+  startsAt: requiredText(K("events.errors.startRequired")),
   endsAt: z.string().optional(),
   location: z.string().trim().max(300).optional(),
   volunteerNeed: z.coerce.number().int().min(0).max(500).optional(),
@@ -68,24 +71,24 @@ export async function createEvent(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = createEventSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: await issueMessage(parsed.error.issues[0]?.message) };
   }
   const data = parsed.data;
   const schedule = eventSchedule(data.startsAt, data.endsAt, session.timeZone);
-  if (!schedule) return { ok: false, error: "End time must be after the event starts." };
+  if (!schedule) return { ok: false, error: await tr("events.errors.endAfterStart") };
   const { starts, ends } = schedule;
 
   const supabase = await createSupabaseServerClient();
   if (data.projectId) {
     if (!(await hasProjectCapability(supabase, data.projectId, "collaborate"))) {
-      return { ok: false, error: "You cannot create an event on this project." };
+      return { ok: false, error: await tr("events.errors.projectDenied") };
     }
   } else if (data.programId) {
     if (!(await hasProgramCapability(supabase, data.programId, "collaborate"))) {
-      return { ok: false, error: "You cannot create an event on this program." };
+      return { ok: false, error: await tr("events.errors.programDenied") };
     }
   } else if (!session.isAdmin) {
-    return { ok: false, error: "Link the event to work you can access, or ask an administrator." };
+    return { ok: false, error: await tr("events.errors.needWork") };
   }
   // The id is generated here rather than read back, because reading it back
   // cannot work. `event_read` is `app.can_read_event(id)`, a STABLE function
@@ -115,7 +118,7 @@ export async function createEvent(input: unknown): Promise<ActionResult> {
       created_by: session.userId,
     });
 
-  if (error) return { ok: false, error: "Could not create the event." };
+  if (error) return { ok: false, error: await tr("events.errors.createFailed") };
   const event = { id: eventId };
 
   await supabase.from("activity_event").insert({
@@ -158,10 +161,10 @@ export async function createEvent(input: unknown): Promise<ActionResult> {
 
 const updateEventSchema = z.object({
   eventId: z.string().uuid(),
-  name: requiredText("An event needs a name.", 200),
+  name: requiredText(K("events.errors.nameRequired"), 200),
   description: z.string().trim().max(5000).optional(),
   eventType: z.string().trim().max(60).optional(),
-  startsAt: requiredText("Pick a start time."),
+  startsAt: requiredText(K("events.errors.startRequired")),
   endsAt: z.string().optional(),
   location: z.string().trim().max(300).optional(),
   volunteerNeed: z.coerce.number().int().min(0).max(500).optional(),
@@ -172,10 +175,10 @@ const updateEventSchema = z.object({
 export async function updateEvent(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = updateEventSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  if (!parsed.success) return { ok: false, error: await issueMessage(parsed.error.issues[0]?.message) };
   const data = parsed.data;
   const schedule = eventSchedule(data.startsAt, data.endsAt, session.timeZone);
-  if (!schedule) return { ok: false, error: "End time must be after the event starts." };
+  if (!schedule) return { ok: false, error: await tr("events.errors.endAfterStart") };
 
   const supabase = await createSupabaseServerClient();
   const { data: existing } = await supabase
@@ -183,10 +186,12 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
     .select("id, owner_id, status")
     .eq("id", data.eventId)
     .maybeSingle();
-  if (!existing) return { ok: false, error: "Event not found." };
-  if (existing.status === "cancelled") return { ok: false, error: "Cancelled events cannot be changed." };
+  if (!existing) return { ok: false, error: await tr("events.errors.notFound") };
+  if (existing.status === "cancelled") return { ok: false, error: await tr("events.errors.cancelledLocked") };
 
-  const { error } = await supabase.from("event").update({
+  // Reading an event and managing it are separate rights; a reader's update
+  // matches no row, so ask for the row back rather than reporting success.
+  const { data: changed, error } = await supabase.from("event").update({
     name: data.name,
     description: data.description || null,
     event_type: data.eventType || null,
@@ -194,8 +199,9 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
     ends_at: schedule.ends.toISOString(),
     location: data.location || null,
     volunteer_need: data.volunteerNeed ?? null,
-  }).eq("id", existing.id);
-  if (error) return { ok: false, error: "Could not update the event." };
+  }).eq("id", existing.id).select("id");
+  if (error) return { ok: false, error: await tr("events.errors.updateFailed") };
+  if (!changed || changed.length === 0) return { ok: false, error: await tr("events.errors.manageDenied") };
 
   try {
     await updateGoogleEventRecord({
@@ -237,7 +243,7 @@ const assignSchema = z.object({
 export async function assignEventRole(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = assignSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: await tr("events.errors.invalidInput") };
   const { eventId, userId, role } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -247,7 +253,7 @@ export async function assignEventRole(input: unknown): Promise<ActionResult> {
     role,
   });
   if (error && error.code !== "23505") {
-    return { ok: false, error: "Could not assign that role." };
+    return { ok: false, error: await tr("events.errors.assignFailed") };
   }
 
   const { data: event } = await supabase
@@ -259,16 +265,29 @@ export async function assignEventRole(input: unknown): Promise<ActionResult> {
   // A duplicate role is already assigned. Do not emit a second notification
   // or trigger another workflow execution for the same state transition.
   if (!error && userId !== session.userId) {
+    // Written in the recipient's saved language, not the assigner's.
+    const { data: recipient } = await supabase
+      .from("user_profile")
+      .select("locale")
+      .eq("id", userId)
+      .maybeSingle();
+    const recipientT = createTranslator(
+      isLocale(recipient?.locale) ? recipient.locale : DEFAULT_LOCALE,
+    );
+    const roleLabel = recipientT(`events.roles.${role}`);
     await createNotifications(supabase, [{
       user_id: userId,
       organization_id: session.organizationId,
       category: "assignment",
-      title: `You own ${role.replace(/_/g, " ")} for “${event?.name ?? "an event"}”`,
+      title: recipientT("events.notify.title", {
+        role: roleLabel,
+        name: event?.name ?? recipientT("events.notify.anEvent"),
+      }),
       source_type: "event",
       source_id: eventId,
       link: `/events/${eventId}`,
-      reason: `assigned ${role.replace(/_/g, " ")}`,
-      context: event?.name ?? "Event",
+      reason: recipientT("events.notify.reason", { role: roleLabel }),
+      context: event?.name ?? recipientT("events.notify.context"),
       dedupe_key: notificationDedupeKey("event", eventId, userId),
     }]);
   }
@@ -299,19 +318,25 @@ const statusSchema = z.object({
 export async function updateEventStatus(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = statusSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: await tr("events.errors.invalidInput") };
   const supabase = await createSupabaseServerClient();
   const { data: existing } = await supabase
     .from("event")
     .select("id, owner_id, status")
     .eq("id", parsed.data.eventId)
     .maybeSingle();
-  if (!existing) return { ok: false, error: "Event not found." };
-  const { error } = await supabase
+  if (!existing) return { ok: false, error: await tr("events.errors.notFound") };
+  const { data: changed, error } = await supabase
     .from("event")
     .update({ status: parsed.data.status })
-    .eq("id", existing.id);
-  if (error) return { ok: false, error: "Could not update the event." };
+    .eq("id", existing.id)
+    .select("id");
+  if (error) return { ok: false, error: await tr("events.errors.updateFailed") };
+  // Without this, a reader's "cancel" changed nothing here yet still deleted
+  // the owner's Google Calendar event below, which runs with service rights.
+  if (!changed || changed.length === 0) {
+    return { ok: false, error: await tr("events.errors.manageDenied") };
+  }
   if (parsed.data.status === "cancelled" && existing.status !== "cancelled") {
     try {
       await deleteGoogleEventRecord({

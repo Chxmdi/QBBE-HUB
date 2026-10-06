@@ -71,6 +71,25 @@ test("a recurring meeting's agenda is edited, combined and carried forward", asy
     agenda.getByText(`Budget review ${suffix}`, { exact: true }),
   ).toBeVisible();
 
+  // An owner can be given and taken away again.
+  const reviewed = agenda
+    .getByRole("listitem")
+    .filter({ hasText: `Budget review ${suffix}` });
+  const ownerOf = () =>
+    sql(
+      `select coalesce(owner_id::text, 'none') from agenda_item a join meeting m on m.id = a.meeting_id where m.id = '${firstId}' and a.title = 'Budget review ${suffix}'`,
+    );
+  await reviewed.getByRole("button", { name: "Edit item" }).click();
+  await edit.getByLabel("Owner").selectOption({ index: 1 });
+  await edit.getByRole("button", { name: "Save item" }).click();
+  await expect(edit).toBeHidden({ timeout: 30_000 });
+  await expect.poll(ownerOf).not.toBe("none");
+  await reviewed.getByRole("button", { name: "Edit item" }).click();
+  await edit.getByLabel("Owner").selectOption("");
+  await edit.getByRole("button", { name: "Save item" }).click();
+  await expect(edit).toBeHidden({ timeout: 30_000 });
+  await expect.poll(ownerOf).toBe("none");
+
   // Combine the venue into the budget review.
   await page.getByRole("button", { name: `Combine "Venue ${suffix}"` }).click();
   await agenda

@@ -14,9 +14,12 @@ import { EventChecklist } from "@/features/events/components/event-checklist";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDateTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 
-export const metadata: Metadata = { title: "Event" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("events.detailTitle") };
+}
 export const dynamic = "force-dynamic";
 
 const EVENT_ROLES = [
@@ -31,6 +34,16 @@ export default async function EventDetailPage({
 }) {
   const session = await requireSession();
   const { id } = await params;
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
+  // Status and role codes are closed sets in the database; an unexpected one
+  // shows as it is stored rather than as a raw key.
+  const codeLabel = (group: "statusBadges" | "roles", code: string) => {
+    const key = `events.${group}.${code}` as MessageKey;
+    const label = t(key);
+    return label === key ? code.replace(/_/g, " ") : label;
+  };
+  const statusLabel = (status: string) => codeLabel("statusBadges", status);
+  const roleLabel = (role: string) => codeLabel("roles", role);
   const supabase = await createSupabasePageClient();
 
   const { data: eventRow } = await supabase
@@ -84,16 +97,16 @@ export default async function EventDetailPage({
   return (
     <div>
       <Breadcrumbs
-        items={[{ label: "Events", href: "/events" }, { label: event.name }]}
+        items={[{ label: t("events.title"), href: "/events" }, { label: event.name }]}
       />
       <PageHeader
-        eyebrow={formatDateTime(event.starts_at)}
+        eyebrow={format.dateTime(event.starts_at)}
         title={event.name}
         description={event.description ?? undefined}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={event.status === "completed" ? "success" : event.status === "cancelled" ? "neutral" : "info"}>
-              {(event.status as string).replace(/_/g, " ")}
+              {statusLabel(event.status)}
             </Badge>
             {/* The type was stored and shown only inside the edit dialog, so a
                 value nobody could see without opening a form to change it. */}
@@ -101,42 +114,38 @@ export default async function EventDetailPage({
             {session.isStaff && event.status !== "cancelled" ? (
               <>
                 <EntityFormDialog
-                  triggerLabel="Edit"
+                  triggerLabel={t("events.detail.edit")}
                   triggerVariant="secondary"
-                  title="Edit event"
-                  submitLabel="Save changes"
+                  title={t("events.detail.editTitle")}
+                  submitLabel={t("events.detail.saveChanges")}
                   action={updateEvent}
                   extraValues={{ eventId: event.id }}
                   fields={[
-                    { name: "name", label: "Name", type: "text", required: true, defaultValue: event.name },
-                    { name: "description", label: "Description", type: "textarea", defaultValue: event.description ?? "" },
-                    { name: "eventType", label: "Event type", type: "text", defaultValue: event.event_type ?? "", colSpan: 1 },
-                    { name: "volunteerNeed", label: "Volunteers needed", type: "number", defaultValue: event.volunteer_need ? String(event.volunteer_need) : "", colSpan: 1 },
-                    { name: "startsAt", label: "Starts", type: "datetime-local", required: true, colSpan: 1, defaultValue: instantToWallTime(event.starts_at, session.timeZone) },
-                    { name: "endsAt", label: "Ends", type: "datetime-local", required: true, colSpan: 1, defaultValue: instantToWallTime(event.ends_at ?? new Date(new Date(event.starts_at).getTime() + 60 * 60_000).toISOString(), session.timeZone) },
-                    { name: "location", label: "Location", type: "text", defaultValue: event.location ?? "" },
+                    { name: "name", label: t("events.fields.name"), type: "text", required: true, defaultValue: event.name },
+                    { name: "description", label: t("events.fields.description"), type: "textarea", defaultValue: event.description ?? "" },
+                    { name: "eventType", label: t("events.fields.eventType"), type: "text", defaultValue: event.event_type ?? "", colSpan: 1 },
+                    { name: "volunteerNeed", label: t("events.fields.volunteersNeeded"), type: "number", defaultValue: event.volunteer_need ? String(event.volunteer_need) : "", colSpan: 1 },
+                    { name: "startsAt", label: t("events.fields.starts"), type: "datetime-local", required: true, colSpan: 1, defaultValue: instantToWallTime(event.starts_at, session.timeZone) },
+                    { name: "endsAt", label: t("events.fields.ends"), type: "datetime-local", required: true, colSpan: 1, defaultValue: instantToWallTime(event.ends_at ?? new Date(new Date(event.starts_at).getTime() + 60 * 60_000).toISOString(), session.timeZone) },
+                    { name: "location", label: t("events.fields.location"), type: "text", defaultValue: event.location ?? "" },
                   ]}
                 />
                 <EntityFormDialog
-                  triggerLabel="Update status"
+                  triggerLabel={t("events.detail.updateStatus")}
                   triggerVariant="secondary"
-                  title="Update event status"
-                  submitLabel="Save status"
+                  title={t("events.detail.updateStatusTitle")}
+                  submitLabel={t("events.detail.saveStatus")}
                   action={updateEventStatus}
                   extraValues={{ eventId: event.id }}
                   fields={[{
                     name: "status",
-                    label: "Status",
+                    label: t("events.fields.status"),
                     type: "select",
                     required: true,
                     defaultValue: event.status,
-                    options: [
-                      { value: "planning", label: "Planning" },
-                      { value: "confirmed", label: "Confirmed" },
-                      { value: "in_progress", label: "In progress" },
-                      { value: "completed", label: "Completed" },
-                      { value: "cancelled", label: "Cancelled — remove Google event" },
-                    ],
+                    options: (
+                      ["planning", "confirmed", "in_progress", "completed", "cancelled"] as const
+                    ).map((value) => ({ value, label: t(`events.statusOptions.${value}`) })),
                   }]}
                 />
               </>
@@ -151,7 +160,7 @@ export default async function EventDetailPage({
             <Avatar name={owner.full_name} src={owner.avatar_url} size="sm" />
             <span>
               <span className="font-medium">{owner.full_name}</span>
-              <span className="meta ml-1.5">Event owner</span>
+              <span className="meta ml-1.5">{t("events.detail.owner")}</span>
             </span>
           </span>
         ) : null}
@@ -160,7 +169,12 @@ export default async function EventDetailPage({
         ) : null}
         {event.volunteer_need ? (
           <span className="text-[13px] text-muted">
-            {event.volunteer_need} volunteers needed
+            {t(
+              event.volunteer_need === 1
+                ? "events.detail.volunteersNeededOne"
+                : "events.detail.volunteersNeededOther",
+              { count: event.volunteer_need },
+            )}
           </span>
         ) : null}
         {program ? (
@@ -184,18 +198,18 @@ export default async function EventDetailPage({
       <section aria-labelledby="event-preparation" className="max-w-2xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 id="event-preparation" className="section-heading">
-            Preparation checklist
+            {t("events.detail.checklist")}
           </h2>
           {session.isStaff ? (
             <EntityFormDialog
-              triggerLabel="Add item"
+              triggerLabel={t("events.detail.addItem")}
               triggerVariant="secondary"
-              title="Add checklist item"
-              submitLabel="Add"
+              title={t("events.detail.addChecklistItem")}
+              submitLabel={t("events.detail.add")}
               action={addEventChecklistItem}
               extraValues={{ eventId: event.id }}
               fields={[
-                { name: "title", label: "What needs doing", type: "text", required: true },
+                { name: "title", label: t("events.fields.whatNeedsDoing"), type: "text", required: true },
               ]}
             />
           ) : null}
@@ -209,32 +223,32 @@ export default async function EventDetailPage({
       <section aria-labelledby="event-roles" className="max-w-2xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 id="event-roles" className="section-heading">
-            Role assignments
+            {t("events.detail.roleAssignments")}
           </h2>
           {session.isStaff ? (
             <EntityFormDialog
-              triggerLabel="Assign role"
+              triggerLabel={t("events.detail.assignRole")}
               triggerVariant="secondary"
-              title="Assign event role"
-              submitLabel="Assign"
+              title={t("events.detail.assignRoleTitle")}
+              submitLabel={t("events.detail.assign")}
               action={assignEventRole}
               extraValues={{ eventId: event.id }}
               fields={[
                 {
                   name: "userId",
-                  label: "Person",
+                  label: t("events.fields.person"),
                   type: "select",
                   required: true,
                   options: options.people.map((p) => ({ value: p.id, label: p.label })),
                 },
                 {
                   name: "role",
-                  label: "Responsibility",
+                  label: t("events.fields.responsibility"),
                   type: "select",
                   required: true,
                   options: EVENT_ROLES.map((role) => ({
                     value: role,
-                    label: role.replace(/_/g, " "),
+                    label: t(`events.roles.${role}`),
                   })),
                 },
               ]}
@@ -243,8 +257,7 @@ export default async function EventDetailPage({
         </div>
         {assignmentList.length === 0 ? (
           <p className="card px-4 py-6 text-center text-[13px] text-muted">
-            Assign distinct owners for logistics, communications, volunteers,
-            venue, content, registration, and follow-up.
+            {t("events.detail.rolesEmpty")}
           </p>
         ) : (
           <ul className="card divide-y divide-line">
@@ -258,9 +271,9 @@ export default async function EventDetailPage({
                   />
                 ) : null}
                 <span className="flex-1 text-[13.5px] font-medium">
-                  {assignment.user_profile?.full_name ?? "Unknown"}
+                  {assignment.user_profile?.full_name ?? t("events.detail.unknown")}
                 </span>
-                <Badge tone="brand">{assignment.role.replace(/_/g, " ")}</Badge>
+                <Badge tone="brand">{roleLabel(assignment.role)}</Badge>
               </li>
             ))}
           </ul>

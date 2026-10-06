@@ -1,0 +1,25 @@
+/* Wave 2 unit C1: presence and live co-editing. Only C1 edits this file. */
+
+/* Another person's cursor: the label always shows their name, in white on
+   their colour (each colour gives 4.5:1 or more). */
+.qbbe-editor .bn-editor .c1-cursor .c1-cursor__label {
+  color: #fff;
+  max-height: 1.1rem;
+  max-width: 12rem;
+  padding: 0.1rem 0.3rem;
+  top: -17px;
+  left: 0;
+  border-radius: 3px 3px 3px 0;
+  text-overflow: ellipsis;
+  transition: none;
+}
+
+.qbbe-editor .c1-also-editing {
+  border: 1px solid var(--color-line);
+  border-left: 3px solid var(--color-warning, #b45309);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+  color: var(--color-ink);
+  padding: 0.4rem 0.6rem;
+  overflow-wrap: anywhere;
+}

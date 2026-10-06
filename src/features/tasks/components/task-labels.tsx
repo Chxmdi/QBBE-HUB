@@ -12,6 +12,8 @@ import {
   createLabel,
   detachTaskLabel,
 } from "@/features/tasks/services/label.commands";
+import { useT } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/translate";
 
 export interface TaskLabel {
   id: string;
@@ -19,13 +21,13 @@ export interface TaskLabel {
   color: LabelColor;
 }
 
-const COLOR_LABELS: Record<LabelColor, string> = {
-  neutral: "Grey",
-  brand: "Green",
-  info: "Blue",
-  success: "Teal",
-  warning: "Amber",
-  danger: "Red",
+const COLOR_LABELS: Record<LabelColor, MessageKey> = {
+  neutral: "tasks.labels.colors.neutral",
+  brand: "tasks.labels.colors.brand",
+  info: "tasks.labels.colors.info",
+  success: "tasks.labels.colors.success",
+  warning: "tasks.labels.colors.warning",
+  danger: "tasks.labels.colors.danger",
 };
 
 /**
@@ -51,6 +53,7 @@ export function TaskLabels({
   canEdit: boolean;
   onChanged: () => void | Promise<void>;
 }) {
+  const t = useT();
   const { toast } = useToast();
   const [pending, startTransition] = useTransition();
   const [adding, setAdding] = useState(false);
@@ -65,7 +68,7 @@ export function TaskLabels({
     startTransition(async () => {
       const result = await attachTaskLabel({ taskId, labelId });
       if (!result.ok) {
-        toast(result.error ?? "Could not add that label.", { tone: "error" });
+        toast(result.error ?? t("tasks.labels.addFailed"), { tone: "error" });
         return;
       }
       setChoice("");
@@ -78,7 +81,7 @@ export function TaskLabels({
     startTransition(async () => {
       const result = await detachTaskLabel({ taskId, labelId: label.id });
       if (!result.ok) {
-        toast(result.error ?? "Could not remove that label.", { tone: "error" });
+        toast(result.error ?? t("tasks.labels.removeFailed"), { tone: "error" });
         return;
       }
       await onChanged();
@@ -91,14 +94,14 @@ export function TaskLabels({
     startTransition(async () => {
       const created = await createLabel({ name, color: newColor });
       if (!created.ok || !created.id) {
-        toast(created.error ?? "Could not create the label.", { tone: "error" });
+        toast(created.error ?? t("tasks.labels.createFailed"), { tone: "error" });
         return;
       }
       // Creating a label from inside a task means "put this on this task".
       // Making that two steps is how a label ends up created and unused.
       const linked = await attachTaskLabel({ taskId, labelId: created.id });
       if (!linked.ok) {
-        toast(linked.error ?? "Label created, but not added to this task.", {
+        toast(linked.error ?? t("tasks.labels.createdNotAdded"), {
           tone: "error",
         });
         return;
@@ -113,13 +116,12 @@ export function TaskLabels({
   return (
     <section aria-labelledby="drawer-labels">
       <h3 id="drawer-labels" className="section-heading mb-2">
-        Labels
+        {t("tasks.labels.heading")}
       </h3>
 
       {attached.length === 0 ? (
         <p className="text-[13px] text-muted">
-          No labels. A label is how this task is found from the filter bar
-          alongside others like it.
+          {t("tasks.labels.empty")}
         </p>
       ) : (
         <ul className="flex flex-wrap items-center gap-1.5">
@@ -132,7 +134,7 @@ export function TaskLabels({
                     type="button"
                     onClick={() => detach(label)}
                     disabled={pending}
-                    aria-label={`Remove label ${label.name}`}
+                    aria-label={t("tasks.labels.removeLabel", { name: label.name })}
                     className="ml-0.5 rounded-full p-0.5 transition-opacity hover:opacity-70 disabled:opacity-50"
                   >
                     <X className="size-3" aria-hidden="true" />
@@ -149,7 +151,7 @@ export function TaskLabels({
           <div className="mt-2.5 space-y-3 rounded-(--radius-sm) border border-line bg-surface-soft/50 p-3">
             {selectable.length > 0 ? (
               <div>
-                <Label htmlFor="task-label-existing">Add an existing label</Label>
+                <Label htmlFor="task-label-existing">{t("tasks.labels.addExisting")}</Label>
                 <div className="flex items-center gap-2">
                   <Select
                     id="task-label-existing"
@@ -157,7 +159,7 @@ export function TaskLabels({
                     onChange={(event) => setChoice(event.target.value)}
                     className="h-9 text-[13px]"
                   >
-                    <option value="">Choose a label…</option>
+                    <option value="">{t("tasks.labels.chooseLabel")}</option>
                     {selectable.map((label) => (
                       <option key={label.id} value={label.id}>
                         {label.name}
@@ -170,32 +172,32 @@ export function TaskLabels({
                     onClick={() => choice && attach(choice)}
                     disabled={!choice || pending}
                   >
-                    Add
+                    {t("tasks.add")}
                   </Button>
                 </div>
               </div>
             ) : null}
 
             <div>
-              <Label htmlFor="task-label-new">Or make a new one</Label>
+              <Label htmlFor="task-label-new">{t("tasks.labels.orNew")}</Label>
               <div className="flex items-center gap-2">
                 <Input
                   id="task-label-new"
                   value={newName}
                   maxLength={40}
-                  placeholder="Fundraising"
+                  placeholder={t("tasks.labels.placeholder")}
                   onChange={(event) => setNewName(event.target.value)}
                   className="h-9 text-[13px]"
                 />
                 <Select
-                  aria-label="Label colour"
+                  aria-label={t("tasks.labels.colorLabel")}
                   value={newColor}
                   onChange={(event) => setNewColor(event.target.value as LabelColor)}
                   className="h-9 w-auto text-[13px]"
                 >
                   {LABEL_COLORS.map((color) => (
                     <option key={color} value={color}>
-                      {COLOR_LABELS[color]}
+                      {t(COLOR_LABELS[color])}
                     </option>
                   ))}
                 </Select>
@@ -205,12 +207,11 @@ export function TaskLabels({
                   onClick={createAndAttach}
                   disabled={!newName.trim() || pending}
                 >
-                  Create
+                  {t("tasks.labels.create")}
                 </Button>
               </div>
               <p className="mt-1 text-[12.5px] text-muted">
-                Labels belong to the whole organization, so everyone can filter
-                by this one afterwards. Creating one is a staff action.
+                {t("tasks.labels.orgHint")}
               </p>
             </div>
 
@@ -220,7 +221,7 @@ export function TaskLabels({
               size="sm"
               onClick={() => setAdding(false)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
           </div>
         ) : (
@@ -232,7 +233,7 @@ export function TaskLabels({
             onClick={() => setAdding(true)}
           >
             <Plus className="size-3.5" aria-hidden="true" />
-            Add label
+            {t("tasks.labels.addLabel")}
           </Button>
         )
       ) : null}

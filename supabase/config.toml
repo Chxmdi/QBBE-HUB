@@ -172,7 +172,12 @@ jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
 # jwt_issuer = ""
 # Path to JWT signing key. DO NOT commit your signing keys file to git.
-# signing_keys_path = "./signing_keys.json"
+# Asymmetric (ES256) signing keys, so the request proxy can verify a session
+# locally with getClaims() instead of calling Auth on every request (#138).
+# The key file is generated, never committed: run scripts/local-signing-key.sh
+# before `supabase start` (CI does). Hosted projects switch in the dashboard;
+# see docs/runbooks/deployment.md.
+signing_keys_path = "./signing_keys.json"
 # If disabled, the refresh token will never expire.
 enable_refresh_token_rotation = true
 # Allows refresh tokens to be reused after expiry, up to the specified interval in seconds.
@@ -327,6 +332,17 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
+# Google sign-in (V2-9, epic #199). Off locally. On the hosted projects it
+# is turned on in the Supabase dashboard; docs/runbooks/google-sign-in.md
+# has every step. Sign-up stays invite-only: an uninvited Google account is
+# refused by the same database check as an uninvited email.
+[auth.external.google]
+enabled = false
+client_id = ""
+# DO NOT commit the secret. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+skip_nonce_check = false
+
 [auth.external.apple]
 enabled = false
 client_id = ""

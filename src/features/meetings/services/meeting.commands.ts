@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
+import { actionSchema } from "@/features/meetings/schemas";
 import { requireSession } from "@/lib/auth";
 import { hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -16,15 +17,46 @@ import {
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { wallTimeToInstant } from "@/lib/time";
 import { composeMeetingSummary } from "./meeting.summary";
+import { getLocale, getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
+
+/** Validation messages are catalogue keys, translated when the action returns. */
+const K = (key: MessageKey): string => key;
+
+/** One message in the caller's language. */
+async function tr(key: MessageKey): Promise<string> {
+  return (await getT())(key);
+}
+
+/**
+ * A validation message in the caller's language. Our own messages are keys;
+ * zod's built-in ones are English sentences, shown as they are in English and
+ * replaced by a general message in French.
+ */
+async function issueMessage(message: string | undefined): Promise<string> {
+  const t = await getT();
+  if (message?.startsWith("meetings.")) return t(message as MessageKey);
+  if (message && (await getLocale()) === "en") return message;
+  return t("meetings.errors.invalidInput");
+}
 
 const createMeetingSchema = z.object({
-  title: requiredText("A meeting needs a title.", 200),
+  title: requiredText(K("meetings.errors.titleRequired"), 200),
   purpose: z.string().trim().max(2000).optional(),
   projectId: z.string().uuid().optional(),
-  startsAt: requiredText("Pick a start time."),
+  startsAt: requiredText(K("meetings.errors.startRequired")),
   durationMinutes: z.coerce.number().int().min(15).max(480).default(60),
   location: z.string().trim().max(300).optional(),
-  meetingLink: z.string().trim().url().max(500).optional().or(z.literal("")),
+  // https only, as for link documents: `.url()` alone accepts
+  // `javascript:alert(1)`, and the link is rendered as "Join" (staging audit S5).
+  meetingLink: z
+    .string()
+    .trim()
+    .url(K("meetings.errors.linkHttps"))
+    .max(500)
+    .refine((value) => /^https:\/\//i.test(value), K("meetings.errors.linkHttps"))
+    .optional()
+    .or(z.literal("")),
   // P1-MTG-04. Each occurrence is its own meeting row sharing a series id, so
   // editing one never changes the others.
   repeat: z.enum(["none", "weekly", "fortnightly", "monthly"]).default("none"),
@@ -53,7 +85,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
   const {
@@ -74,7 +106,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
   // zone — UTC in production — and store an instant hours from what was typed.
   const starts = wallTimeToInstant(startsAt, session.timeZone);
   if (!starts) {
-    return { ok: false, error: "Invalid start time." };
+    return { ok: false, error: await tr("meetings.errors.invalidStart") };
   }
   const ends = new Date(starts.getTime() + durationMinutes * 60_000);
 
@@ -83,17 +115,18 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
     if (!(await hasProjectCapability(supabase, projectId, "collaborate"))) {
       return {
         ok: false,
-        error: "You cannot schedule a meeting on this project.",
+        error: await tr("meetings.errors.projectDenied"),
       };
     }
   } else if (!session.isAdmin) {
     return {
       ok: false,
       error:
-        "Link the meeting to a project you can access, or ask an administrator.",
+        await tr("meetings.errors.needProject"),
     };
   }
 
+  const defaultAgendaTitle = await tr("meetings.defaults.agendaItem");
   let agendaItems: { title?: string; notes?: string }[] = [];
   if (agendaTemplateId) {
     const { data: template } = await supabase
@@ -102,7 +135,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
       .eq("id", agendaTemplateId)
       .maybeSingle();
     if (!template?.approved_at) {
-      return { ok: false, error: "That agenda template has not been approved yet." };
+      return { ok: false, error: await tr("meetings.errors.templateNotApproved") };
     }
     agendaItems = Array.isArray(template.items)
       ? (template.items as { title?: string; notes?: string }[])
@@ -153,7 +186,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
     })),
   );
 
-  if (error) return { ok: false, error: "Could not create the meeting." };
+  if (error) return { ok: false, error: await tr("meetings.errors.createFailed") };
 
   await supabase.from("meeting_attendee").insert(
     occurrences.map((occurrence) => ({
@@ -168,7 +201,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
       occurrences.flatMap((occurrence) =>
         agendaItems.map((item, index) => ({
           meeting_id: occurrence.id,
-          title: (item.title || "Agenda item").slice(0, 200),
+          title: (item.title || defaultAgendaTitle).slice(0, 200),
           desired_outcome: item.notes || null,
           sort_key: index + 1,
           proposed_by: session.userId,
@@ -218,7 +251,7 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
 
 const attendeeSchema = z.object({
   meetingId: z.string().uuid(),
-  userId: z.string().uuid({ message: "Choose a person to invite." }),
+  userId: z.string().uuid({ message: K("meetings.errors.choosePerson") }),
 });
 
 /**
@@ -244,7 +277,7 @@ export async function addMeetingAttendee(
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
 
@@ -257,7 +290,7 @@ export async function addMeetingAttendee(
       { onConflict: "meeting_id,user_id", ignoreDuplicates: true },
     );
   if (error)
-    return { ok: false, error: "Could not add that person to the meeting." };
+    return { ok: false, error: await tr("meetings.errors.addAttendeeFailed") };
 
   revalidatePath(`/meetings/${parsed.data.meetingId}`);
   return { ok: true, id: parsed.data.meetingId };
@@ -271,7 +304,7 @@ export async function removeMeetingAttendee(
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
 
@@ -288,7 +321,7 @@ export async function removeMeetingAttendee(
   if (meeting?.organizer_id === parsed.data.userId) {
     return {
       ok: false,
-      error: "The organizer cannot be removed from their own meeting.",
+      error: await tr("meetings.errors.organizerCannotLeave"),
     };
   }
 
@@ -300,7 +333,7 @@ export async function removeMeetingAttendee(
   if (error)
     return {
       ok: false,
-      error: "Could not remove that person from the meeting.",
+      error: await tr("meetings.errors.removeAttendeeFailed"),
     };
 
   revalidatePath(`/meetings/${parsed.data.meetingId}`);
@@ -309,9 +342,9 @@ export async function removeMeetingAttendee(
 
 const updateMeetingSchema = z.object({
   meetingId: z.string().uuid(),
-  title: requiredText("A meeting needs a title.", 200),
+  title: requiredText(K("meetings.errors.titleRequired"), 200),
   purpose: z.string().trim().max(2000).optional(),
-  startsAt: requiredText("Pick a start time."),
+  startsAt: requiredText(K("meetings.errors.startRequired")),
   durationMinutes: z.coerce.number().int().min(15).max(480),
   location: z.string().trim().max(300).optional(),
 });
@@ -324,11 +357,11 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
   if (!parsed.success)
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   const data = parsed.data;
   const starts = wallTimeToInstant(data.startsAt, session.timeZone);
-  if (!starts) return { ok: false, error: "Invalid start time." };
+  if (!starts) return { ok: false, error: await tr("meetings.errors.invalidStart") };
   const ends = new Date(starts.getTime() + data.durationMinutes * 60_000);
   const supabase = await createSupabaseServerClient();
   const { data: existing } = await supabase
@@ -336,19 +369,22 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
     .select("id, organizer_id, status")
     .eq("id", data.meetingId)
     .maybeSingle();
-  if (!existing) return { ok: false, error: "Meeting not found." };
+  if (!existing) return { ok: false, error: await tr("meetings.errors.notFound") };
   if (existing.status === "completed" || existing.status === "cancelled") {
     return {
       ok: false,
-      error: "Completed or cancelled meetings cannot be rescheduled.",
+      error: await tr("meetings.errors.cannotReschedule"),
     };
   }
   if (existing.organizer_id !== session.userId && !session.isAdmin)
     return {
       ok: false,
-      error: "Only the organizer or an admin can reschedule this meeting.",
+      error: await tr("meetings.errors.rescheduleDenied"),
     };
-  const { error } = await supabase
+  // Row-level security can still refuse (an administrator without a verified
+  // second factor, for one); that matches no row and is not an error, so ask
+  // for the row back before touching the organizer's calendar.
+  const { data: changed, error } = await supabase
     .from("meeting")
     .update({
       title: data.title,
@@ -357,8 +393,12 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
       ends_at: ends.toISOString(),
       location: data.location || null,
     })
-    .eq("id", data.meetingId);
-  if (error) return { ok: false, error: "Could not update the meeting." };
+    .eq("id", data.meetingId)
+    .select("id");
+  if (error) return { ok: false, error: await tr("meetings.errors.updateFailed") };
+  if (!changed || changed.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.rescheduleDenied") };
+  }
   try {
     // Same reasoning as create: the Calendar event is updated, the organizer's
     // own meeting link is left alone.
@@ -401,7 +441,7 @@ const cancelMeetingSchema = z.object({ meetingId: z.string().uuid() });
 export async function cancelMeeting(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
   const parsed = cancelMeetingSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid meeting." };
+  if (!parsed.success) return { ok: false, error: await tr("meetings.errors.invalidMeeting") };
 
   const supabase = await createSupabaseServerClient();
   const { data: existing } = await supabase
@@ -409,22 +449,28 @@ export async function cancelMeeting(input: unknown): Promise<ActionResult> {
     .select("id, organizer_id, status")
     .eq("id", parsed.data.meetingId)
     .maybeSingle();
-  if (!existing) return { ok: false, error: "Meeting not found." };
+  if (!existing) return { ok: false, error: await tr("meetings.errors.notFound") };
   if (existing.status === "completed")
-    return { ok: false, error: "Completed meetings cannot be cancelled." };
+    return { ok: false, error: await tr("meetings.errors.completedCannotCancel") };
   if (existing.status === "cancelled") return { ok: true, id: existing.id };
   if (existing.organizer_id !== session.userId && !session.isAdmin) {
     return {
       ok: false,
-      error: "Only the organizer or an admin can cancel this meeting.",
+      error: await tr("meetings.errors.cancelDenied"),
     };
   }
 
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("meeting")
     .update({ status: "cancelled", meeting_link: null })
-    .eq("id", existing.id);
-  if (error) return { ok: false, error: "Could not cancel the meeting." };
+    .eq("id", existing.id)
+    .select("id");
+  if (error) return { ok: false, error: await tr("meetings.errors.cancelFailed") };
+  // A refused cancel changes nothing here; it must not delete the organizer's
+  // Calendar event below, which runs with the organizer's stored connection.
+  if (!changed || changed.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.cancelDenied") };
+  }
 
   try {
     await deleteGoogleMeetingEvent({
@@ -485,14 +531,14 @@ const agendaLink = z
   .string()
   .regex(
     /^(task|milestone|risk|issue|event|decision|contact):[0-9a-f-]{36}$/,
-    "Choose a record to link.",
+    K("meetings.errors.chooseLink"),
   )
   .optional()
   .or(z.literal(""));
 
 const agendaSchema = z.object({
   meetingId: z.string().uuid(),
-  title: requiredText("Agenda items need a title.", 300),
+  title: requiredText(K("meetings.errors.agendaTitleRequired"), 300),
   kind: z.enum(["information", "discussion", "decision"]).default("discussion"),
   timeBoxMinutes: z.coerce.number().int().min(1).max(240).optional(),
   ownerId: z.string().uuid().optional().or(z.literal("")),
@@ -506,7 +552,7 @@ export async function addAgendaItem(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
   const {
@@ -525,12 +571,12 @@ export async function addAgendaItem(input: unknown): Promise<ActionResult> {
     .select("status")
     .eq("id", meetingId)
     .maybeSingle();
-  if (!meeting) return { ok: false, error: "Meeting not found." };
+  if (!meeting) return { ok: false, error: await tr("meetings.errors.notFound") };
   if (meeting.status === "completed" || meeting.status === "cancelled") {
     return {
       ok: false,
       error:
-        "Agenda cannot be changed after a meeting is completed or cancelled.",
+        await tr("meetings.errors.agendaLocked"),
     };
   }
   const { count } = await supabase
@@ -552,7 +598,7 @@ export async function addAgendaItem(input: unknown): Promise<ActionResult> {
     desired_outcome: desiredOutcome || null,
     ...linkColumns(link || undefined),
   });
-  if (error) return { ok: false, error: "Could not add the agenda item." };
+  if (error) return { ok: false, error: await tr("meetings.errors.addAgendaFailed") };
 
   revalidatePath(`/meetings/${meetingId}`);
   return { ok: true };
@@ -572,7 +618,7 @@ const AGENDA_DECISIONS = ["accepted", "deferred", "declined", "done"] as const;
 const triageSchema = z.object({
   agendaItemId: z.string().uuid(),
   decision: z.enum(AGENDA_DECISIONS, {
-    errorMap: () => ({ message: "Choose accept, defer, decline or done." }),
+    errorMap: () => ({ message: K("meetings.errors.chooseDecision") }),
   }),
 });
 
@@ -582,7 +628,7 @@ export async function triageAgendaItem(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
 
@@ -592,7 +638,7 @@ export async function triageAgendaItem(input: unknown): Promise<ActionResult> {
     .select("meeting_id, meeting:meeting_id(status)")
     .eq("id", parsed.data.agendaItemId)
     .maybeSingle();
-  if (!item) return { ok: false, error: "Agenda item not found." };
+  if (!item) return { ok: false, error: await tr("meetings.errors.agendaNotFound") };
 
   const meetingStatus = (
     item as unknown as { meeting: { status: string } | null }
@@ -600,15 +646,19 @@ export async function triageAgendaItem(input: unknown): Promise<ActionResult> {
   if (meetingStatus === "cancelled") {
     return {
       ok: false,
-      error: "A cancelled meeting's agenda cannot be triaged.",
+      error: await tr("meetings.errors.cancelledNoTriage"),
     };
   }
 
-  const { error } = await supabase
+  const { data: triaged, error } = await supabase
     .from("agenda_item")
     .update({ status: parsed.data.decision })
-    .eq("id", parsed.data.agendaItemId);
-  if (error) return { ok: false, error: "Could not update the agenda item." };
+    .eq("id", parsed.data.agendaItemId)
+    .select("id");
+  // Row-level security refuses by matching no row, which is not an error.
+  if (error || !triaged || triaged.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.updateAgendaFailed") };
+  }
 
   revalidatePath(`/meetings/${item.meeting_id as string}`);
   return { ok: true, id: parsed.data.agendaItemId };
@@ -632,7 +682,7 @@ export async function moveAgendaItem(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
 
@@ -642,7 +692,7 @@ export async function moveAgendaItem(input: unknown): Promise<ActionResult> {
     .select("id, meeting_id, sort_key")
     .eq("id", parsed.data.agendaItemId)
     .maybeSingle();
-  if (!item) return { ok: false, error: "Agenda item not found." };
+  if (!item) return { ok: false, error: await tr("meetings.errors.agendaNotFound") };
 
   const goingUp = parsed.data.direction === "up";
   const { data: neighbour } = await supabase
@@ -657,30 +707,33 @@ export async function moveAgendaItem(input: unknown): Promise<ActionResult> {
   // Already at the end it was heading for. Not an error worth a message.
   if (!neighbour) return { ok: true, id: parsed.data.agendaItemId };
 
-  const [{ error: firstError }, { error: secondError }] = await Promise.all([
-    supabase
-      .from("agenda_item")
-      .update({ sort_key: neighbour.sort_key as number })
-      .eq("id", item.id as string),
-    supabase
+  // One after the other, each asking for its row back: a refusal matches no row
+  // rather than erroring, and a half-done swap would leave two items sharing a
+  // position, so the first is put back if the second does not land.
+  const { data: moved, error: firstError } = await supabase
+    .from("agenda_item")
+    .update({ sort_key: neighbour.sort_key as number })
+    .eq("id", item.id as string)
+    .select("id");
+  if (firstError || !moved || moved.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.reorderFailed") };
+  }
+  const { data: swapped, error: secondError } = await supabase
+    .from("agenda_item")
+    .update({ sort_key: item.sort_key as number })
+    .eq("id", neighbour.id as string)
+    .select("id");
+  if (secondError || !swapped || swapped.length === 0) {
+    await supabase
       .from("agenda_item")
       .update({ sort_key: item.sort_key as number })
-      .eq("id", neighbour.id as string),
-  ]);
-  if (firstError || secondError) {
-    return { ok: false, error: "Could not reorder the agenda." };
+      .eq("id", item.id as string);
+    return { ok: false, error: await tr("meetings.errors.reorderFailed") };
   }
 
   revalidatePath(`/meetings/${item.meeting_id as string}`);
   return { ok: true, id: parsed.data.agendaItemId };
 }
-
-const actionSchema = z.object({
-  meetingId: z.string().uuid(),
-  title: requiredText("Actions need a description.", 300),
-  ownerId: z.string().uuid().optional(),
-  dueAt: z.string().optional(),
-});
 
 /** Meeting action → assigned task with source links (CAL-004, P0-MTG-02). */
 export async function addMeetingAction(input: unknown): Promise<ActionResult> {
@@ -689,7 +742,7 @@ export async function addMeetingAction(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
   const { meetingId, title, ownerId, dueAt } = parsed.data;
@@ -700,11 +753,11 @@ export async function addMeetingAction(input: unknown): Promise<ActionResult> {
     .select("title, project_id, status")
     .eq("id", meetingId)
     .maybeSingle();
-  if (!meeting) return { ok: false, error: "Meeting not found." };
+  if (!meeting) return { ok: false, error: await tr("meetings.errors.notFound") };
   if (meeting.status === "cancelled") {
     return {
       ok: false,
-      error: "Actions cannot be added after a meeting is cancelled.",
+      error: await tr("meetings.errors.cancelledNoActions"),
     };
   }
 
@@ -718,7 +771,7 @@ export async function addMeetingAction(input: unknown): Promise<ActionResult> {
   if (error || !taskId)
     return {
       ok: false,
-      error: "Could not create the meeting action. No changes were saved.",
+      error: await tr("meetings.errors.actionFailed"),
     };
 
   revalidatePath(`/meetings/${meetingId}`);
@@ -727,7 +780,7 @@ export async function addMeetingAction(input: unknown): Promise<ActionResult> {
 
 const decisionSchema = z.object({
   meetingId: z.string().uuid(),
-  title: requiredText("Decisions need a statement.", 300),
+  title: requiredText(K("meetings.errors.decisionRequired"), 300),
   detail: z.string().trim().max(2000).optional(),
 });
 
@@ -737,7 +790,7 @@ export async function recordDecision(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
   const { meetingId, title, detail } = parsed.data;
@@ -748,11 +801,11 @@ export async function recordDecision(input: unknown): Promise<ActionResult> {
     .select("project_id, status")
     .eq("id", meetingId)
     .maybeSingle();
-  if (!meeting) return { ok: false, error: "Meeting not found." };
+  if (!meeting) return { ok: false, error: await tr("meetings.errors.notFound") };
   if (meeting.status === "cancelled") {
     return {
       ok: false,
-      error: "Decisions cannot be recorded for a cancelled meeting.",
+      error: await tr("meetings.errors.cancelledNoDecisions"),
     };
   }
 
@@ -764,7 +817,7 @@ export async function recordDecision(input: unknown): Promise<ActionResult> {
     detail: detail || null,
     decided_by: session.userId,
   });
-  if (error) return { ok: false, error: "Could not record the decision." };
+  if (error) return { ok: false, error: await tr("meetings.errors.decisionFailed") };
 
   revalidatePath(`/meetings/${meetingId}`);
   return { ok: true };
@@ -778,25 +831,29 @@ const notesSchema = z.object({
 export async function saveMeetingNotes(input: unknown): Promise<ActionResult> {
   await requireSession();
   const parsed = notesSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: await tr("meetings.errors.invalidInput") };
   const supabase = await createSupabaseServerClient();
   const { data: meeting } = await supabase
     .from("meeting")
     .select("status")
     .eq("id", parsed.data.meetingId)
     .maybeSingle();
-  if (!meeting) return { ok: false, error: "Meeting not found." };
+  if (!meeting) return { ok: false, error: await tr("meetings.errors.notFound") };
   if (meeting.status === "cancelled") {
     return {
       ok: false,
-      error: "Notes cannot be changed for a cancelled meeting.",
+      error: await tr("meetings.errors.cancelledNoNotes"),
     };
   }
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("meeting")
     .update({ notes: parsed.data.notes || null })
-    .eq("id", parsed.data.meetingId);
-  if (error) return { ok: false, error: "Could not save notes." };
+    .eq("id", parsed.data.meetingId)
+    .select("id");
+  // A reader's save matches no row; say so rather than lose their notes quietly.
+  if (error || !saved || saved.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.notesFailed") };
+  }
   revalidatePath(`/meetings/${parsed.data.meetingId}`);
   return { ok: true };
 }
@@ -819,9 +876,9 @@ export async function completeMeeting(
     )
     .eq("id", meetingId)
     .maybeSingle();
-  if (!meeting) return { ok: false, error: "Meeting not found." };
+  if (!meeting) return { ok: false, error: await tr("meetings.errors.notFound") };
   if (meeting.status === "cancelled")
-    return { ok: false, error: "Cancelled meetings cannot be completed." };
+    return { ok: false, error: await tr("meetings.errors.cancelledNoComplete") };
 
   const [decisionsResult, actionsResult, attendeesResult] = await Promise.all([
     supabase.from("decision").select("title").eq("meeting_id", meetingId),
@@ -842,7 +899,7 @@ export async function completeMeeting(
   ) {
     return {
       ok: false,
-      error: "Could not load the meeting summary. Try again.",
+      error: await tr("meetings.errors.summaryLoadFailed"),
     };
   }
   const { data: decisions } = decisionsResult;
@@ -865,7 +922,7 @@ export async function completeMeeting(
       dueAt: a.due_at,
       ownerName: a.owner?.full_name ?? null,
     })),
-  });
+  }, await getT());
 
   const { data: completedId, error: completionError } = await supabase.rpc(
     "complete_meeting",
@@ -877,7 +934,7 @@ export async function completeMeeting(
   if (completionError || !completedId) {
     return {
       ok: false,
-      error: "Could not complete the meeting and post its summary. Try again.",
+      error: await tr("meetings.errors.completeFailed"),
     };
   }
 
@@ -901,7 +958,7 @@ export async function completeMeeting(
 
 const editAgendaSchema = z.object({
   agendaItemId: z.string().uuid(),
-  title: requiredText("Agenda items need a title.", 300),
+  title: requiredText(K("meetings.errors.agendaTitleRequired"), 300),
   kind: z.enum(["information", "discussion", "decision"]),
   timeBoxMinutes: z.coerce.number().int().min(1).max(240).optional(),
   ownerId: z.string().uuid().optional().or(z.literal("")),
@@ -943,13 +1000,13 @@ export async function updateAgendaItem(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
   const data = parsed.data;
   const supabase = await createSupabaseServerClient();
   const item = await openAgendaItem(supabase, data.agendaItemId);
-  if (!item) return { ok: false, error: "Agenda item not found." };
+  if (!item) return { ok: false, error: await tr("meetings.errors.agendaNotFound") };
   if (
     item.meeting?.status === "completed" ||
     item.meeting?.status === "cancelled"
@@ -957,7 +1014,7 @@ export async function updateAgendaItem(input: unknown): Promise<ActionResult> {
     return {
       ok: false,
       error:
-        "Agenda cannot be changed after a meeting is completed or cancelled.",
+        await tr("meetings.errors.agendaLocked"),
     };
   }
   const { data: updated, error } = await supabase
@@ -966,14 +1023,15 @@ export async function updateAgendaItem(input: unknown): Promise<ActionResult> {
       title: data.title,
       kind: data.kind,
       time_box_minutes: data.timeBoxMinutes ?? null,
-      ...(data.ownerId ? { owner_id: data.ownerId } : {}),
+      // Choosing "—" sends no owner; that clears it rather than keeping the old one.
+      owner_id: data.ownerId || null,
       desired_outcome: data.desiredOutcome || null,
       ...linkColumns(data.link || undefined),
     })
     .eq("id", data.agendaItemId)
     .select("id");
   if (error || !updated || updated.length === 0) {
-    return { ok: false, error: "Could not update the agenda item." };
+    return { ok: false, error: await tr("meetings.errors.updateAgendaFailed") };
   }
   revalidatePath(`/meetings/${item.meeting_id}`);
   return { ok: true, id: data.agendaItemId };
@@ -985,11 +1043,11 @@ export async function removeAgendaItem(
 ): Promise<ActionResult> {
   await requireSession();
   if (!z.string().uuid().safeParse(agendaItemId).success) {
-    return { ok: false, error: "Agenda item not found." };
+    return { ok: false, error: await tr("meetings.errors.agendaNotFound") };
   }
   const supabase = await createSupabaseServerClient();
   const item = await openAgendaItem(supabase, agendaItemId);
-  if (!item) return { ok: false, error: "Agenda item not found." };
+  if (!item) return { ok: false, error: await tr("meetings.errors.agendaNotFound") };
   if (
     item.meeting?.status === "completed" ||
     item.meeting?.status === "cancelled"
@@ -997,7 +1055,7 @@ export async function removeAgendaItem(
     return {
       ok: false,
       error:
-        "Agenda cannot be changed after a meeting is completed or cancelled.",
+        await tr("meetings.errors.agendaLocked"),
     };
   }
   const { data: removed, error } = await supabase
@@ -1006,7 +1064,7 @@ export async function removeAgendaItem(
     .eq("id", agendaItemId)
     .select("id");
   if (error || !removed || removed.length === 0) {
-    return { ok: false, error: "Only the organizer can remove agenda items." };
+    return { ok: false, error: await tr("meetings.errors.onlyOrganizerRemoves") };
   }
   revalidatePath(`/meetings/${item.meeting_id}`);
   return { ok: true, id: agendaItemId };
@@ -1016,7 +1074,7 @@ const combineSchema = z.object({
   agendaItemId: z.string().uuid(),
   targetItemId: z
     .string()
-    .uuid({ message: "Choose the item to combine it into." }),
+    .uuid({ message: K("meetings.errors.chooseCombineTarget") }),
 });
 
 /**
@@ -1030,12 +1088,12 @@ export async function combineAgendaItem(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
   const { agendaItemId, targetItemId } = parsed.data;
   if (agendaItemId === targetItemId) {
-    return { ok: false, error: "An item cannot be combined into itself." };
+    return { ok: false, error: await tr("meetings.errors.combineSelf") };
   }
   const supabase = await createSupabaseServerClient();
   const [source, target] = await Promise.all([
@@ -1043,7 +1101,7 @@ export async function combineAgendaItem(input: unknown): Promise<ActionResult> {
     openAgendaItem(supabase, targetItemId),
   ]);
   if (!source || !target || source.meeting_id !== target.meeting_id) {
-    return { ok: false, error: "Both items must be on this meeting's agenda." };
+    return { ok: false, error: await tr("meetings.errors.combineSameAgenda") };
   }
   if (
     source.meeting?.status === "completed" ||
@@ -1052,28 +1110,41 @@ export async function combineAgendaItem(input: unknown): Promise<ActionResult> {
     return {
       ok: false,
       error:
-        "Agenda cannot be changed after a meeting is completed or cancelled.",
+        await tr("meetings.errors.agendaLocked"),
     };
   }
   const outcome = [target.desired_outcome, `Also covers: ${source.title}`]
     .filter(Boolean)
     .join("\n");
-  const { error: targetError } = await supabase
-    .from("agenda_item")
-    .update({ desired_outcome: outcome.slice(0, 1000) })
-    .eq("id", targetItemId);
-  if (targetError) return { ok: false, error: "Could not combine the items." };
-  const { error } = await supabase
+  // The item being folded in goes first: it is the write the organizer rule
+  // guards, and the target's note should only say "also covers" once it does.
+  const { data: combined, error } = await supabase
     .from("agenda_item")
     .update({ status: "combined", combined_into_id: targetItemId })
-    .eq("id", agendaItemId);
+    .eq("id", agendaItemId)
+    .select("id");
   if (error) {
     return {
       ok: false,
       error: error.message.includes("organizer")
-        ? "Only the meeting organizer can combine agenda items."
-        : "Could not combine the items.",
+        ? await tr("meetings.errors.onlyOrganizerCombines")
+        : await tr("meetings.errors.combineFailed"),
     };
+  }
+  if (!combined || combined.length === 0) {
+    return { ok: false, error: await tr("meetings.errors.onlyOrganizerCombines") };
+  }
+  const { data: noted, error: targetError } = await supabase
+    .from("agenda_item")
+    .update({ desired_outcome: outcome.slice(0, 1000) })
+    .eq("id", targetItemId)
+    .select("id");
+  if (targetError || !noted || noted.length === 0) {
+    await supabase
+      .from("agenda_item")
+      .update({ status: source.status, combined_into_id: null })
+      .eq("id", agendaItemId);
+    return { ok: false, error: await tr("meetings.errors.combineFailed") };
   }
   revalidatePath(`/meetings/${source.meeting_id}`);
   return { ok: true, id: targetItemId };
@@ -1083,7 +1154,7 @@ const carrySchema = z.object({
   agendaItemId: z.string().uuid(),
   targetMeetingId: z
     .string()
-    .uuid({ message: "Choose the meeting to carry it to." }),
+    .uuid({ message: K("meetings.errors.chooseCarryTarget") }),
 });
 
 /**
@@ -1099,13 +1170,13 @@ export async function carryForwardAgendaItem(
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues[0]?.message ?? "Invalid input.",
+      error: await issueMessage(parsed.error.issues[0]?.message),
     };
   }
   const { agendaItemId, targetMeetingId } = parsed.data;
   const supabase = await createSupabaseServerClient();
   const item = await openAgendaItem(supabase, agendaItemId);
-  if (!item) return { ok: false, error: "Agenda item not found." };
+  if (!item) return { ok: false, error: await tr("meetings.errors.agendaNotFound") };
   if (
     item.status === "done" ||
     item.status === "declined" ||
@@ -1113,7 +1184,7 @@ export async function carryForwardAgendaItem(
   ) {
     return {
       ok: false,
-      error: "Only an unfinished item can be carried forward.",
+      error: await tr("meetings.errors.carryUnfinished"),
     };
   }
   const { data: target } = await supabase
@@ -1122,16 +1193,16 @@ export async function carryForwardAgendaItem(
     .eq("id", targetMeetingId)
     .maybeSingle();
   if (!target || target.id === item.meeting_id) {
-    return { ok: false, error: "Choose a later meeting you can see." };
+    return { ok: false, error: await tr("meetings.errors.carryChooseLater") };
   }
   if (target.status === "completed" || target.status === "cancelled") {
-    return { ok: false, error: "That meeting is already over." };
+    return { ok: false, error: await tr("meetings.errors.carryOver") };
   }
   if (
     item.meeting &&
     new Date(target.starts_at as string) <= new Date(item.meeting.starts_at)
   ) {
-    return { ok: false, error: "Carry an item forward to a later meeting." };
+    return { ok: false, error: await tr("meetings.errors.carryLater") };
   }
 
   const { data: full } = await supabase
@@ -1146,6 +1217,20 @@ export async function carryForwardAgendaItem(
     .select("id", { count: "exact", head: true })
     .eq("meeting_id", targetMeetingId);
 
+  // Defer this one first. Copying first let someone who may not change this
+  // agenda leave the item active here and proposed there, with nothing saying
+  // it had moved.
+  if (item.status !== "deferred") {
+    const { data: deferred } = await supabase
+      .from("agenda_item")
+      .update({ status: "deferred" })
+      .eq("id", agendaItemId)
+      .select("id");
+    if (!deferred || deferred.length === 0) {
+      return { ok: false, error: await tr("meetings.errors.carryDenied") };
+    }
+  }
+
   const { error: insertError } = await supabase.from("agenda_item").insert({
     ...(full as Record<string, unknown>),
     meeting_id: targetMeetingId,
@@ -1154,14 +1239,11 @@ export async function carryForwardAgendaItem(
     proposed_by: session.userId,
     carried_from_id: agendaItemId,
   });
-  if (insertError)
-    return { ok: false, error: "Could not carry the item forward." };
-
-  if (item.status !== "deferred") {
-    await supabase
-      .from("agenda_item")
-      .update({ status: "deferred" })
-      .eq("id", agendaItemId);
+  if (insertError) {
+    if (item.status !== "deferred") {
+      await supabase.from("agenda_item").update({ status: item.status }).eq("id", agendaItemId);
+    }
+    return { ok: false, error: await tr("meetings.errors.carryFailed") };
   }
   revalidatePath(`/meetings/${item.meeting_id}`);
   revalidatePath(`/meetings/${targetMeetingId}`);

@@ -1,0 +1,122 @@
+import { x1PagesEn } from "./units/x1.en";
+import { c1PagesEn } from "./units/c1.en";
+import { c2PagesEn } from "./units/c2.en";
+import { c3PagesEn } from "./units/c3.en";
+/**
+ * English strings for Workspace OS pages (M4a). Kept in the module rather than
+ * the shared catalogue so parallel streams do not collide on one file;
+ * integration can fold it into `src/lib/i18n/messages` later.
+ */
+export const pagesEn = {
+  meta: { title: "Pages" },
+  home: {
+    eyebrow: "Workspace",
+    title: "Pages",
+    description: "Notes, guides and plans your team writes together.",
+    emptyTitle: "No pages yet",
+    emptyBody: "Create a page to start writing. Pages can hold other pages.",
+  },
+  sidebar: {
+    label: "Pages",
+    /** Below desktop width the tree folds behind this button while a page is open. */
+    allPages: "All pages",
+    favourites: "Favourites",
+    recent: "Recent",
+    workspace: "Workspace",
+    private: "Private",
+    noFavourites: "Star a page to keep it here.",
+    noRecent: "Pages you open appear here.",
+    noPages: "No pages here yet.",
+    newPage: "New page",
+    newPrivatePage: "New private page",
+    newPageFromTemplate: "New page from template",
+    newSubpage: "Add a page inside {title}",
+    expand: "Expand {title}",
+    collapse: "Collapse {title}",
+    actions: "Actions for {title}",
+  },
+  page: {
+    untitled: "Untitled",
+    titleLabel: "Page title",
+    titlePlaceholder: "Untitled",
+    breadcrumb: "Page location",
+    private: "Private",
+    trashed: "This page is in the trash.",
+    readOnly: "You can read this page but not change it.",
+    bodyComingSoon: "The page body opens here once the editor is turned on.",
+    subpages: "Pages inside",
+  },
+  actions: {
+    favourite: "Add to favourites",
+    unfavourite: "Remove from favourites",
+    rename: "Rename",
+    icon: "Change icon",
+    removeIcon: "Remove icon",
+    cover: "Change cover",
+    removeCover: "Remove cover",
+    move: "Move to…",
+    moveUp: "Move up",
+    moveDown: "Move down",
+    duplicate: "Duplicate",
+    trash: "Move to trash",
+    restore: "Restore",
+  },
+  dialogs: {
+    renameTitle: "Rename page",
+    iconTitle: "Choose an icon",
+    iconLabel: "Icon (an emoji or up to 32 characters)",
+    coverTitle: "Choose a cover",
+    moveTitle: "Move page",
+    moveLabel: "Move inside",
+    moveTopLevel: "Top level of {area}",
+    save: "Save",
+    cancel: "Cancel",
+  },
+  covers: {
+    brand: "Brand",
+    accent: "Accent",
+    success: "Green",
+    warning: "Amber",
+    info: "Blue",
+    soft: "Plain",
+  },
+  toasts: {
+    created: "Page created.",
+    duplicated: "Page duplicated.",
+    moved: "Page moved.",
+    trashed: "Page moved to the trash.",
+    restored: "Page restored.",
+  },
+  errors: {
+    invalidInput: "Check the page details and try again.",
+    notAllowed: "You don't have permission to change this page.",
+    notFound: "That page no longer exists or you can't see it.",
+    cannotMoveInside: "A page can't be moved inside itself or its own pages.",
+    failed: "Something went wrong. Try again.",
+  },
+  collab: {
+    heading: "Discussion and history",
+    tabs: {
+      comments: "Comments",
+      versions: "Versions",
+    },
+    commentOnBlock: "Comment on this block",
+    noBlockSelected: "Place the cursor in a block of the page to comment on it.",
+    blockThread: "Showing the comments on one block.",
+    allComments: "All comments",
+    openVersions: "Open the full version history",
+    blockThreads: "Comments on blocks",
+    blockThreadLink: "“{text}”: {count} open",
+    removedBlock: "a block no longer on the page",
+  },
+  copySuffix: "{title} (copy)",
+  // Wave 2 units: each unit adds its strings in its own file under units/.
+  units: {
+    x1: x1PagesEn,
+    c1: c1PagesEn,
+    c2: c2PagesEn,
+    c3: c3PagesEn,
+  },
+};
+
+export type PagesMessages = typeof pagesEn;

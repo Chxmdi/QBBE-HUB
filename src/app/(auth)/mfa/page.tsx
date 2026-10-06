@@ -3,14 +3,24 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { MfaFlow } from "./mfa-flow";
 import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
+import { hasAccountantGrant } from "@/features/ledger/services/ledger.access";
 import { requireSession } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "Multi-factor authentication" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("auth.mfa.title") };
+}
 
 export default async function MfaPage() {
   const session = await requireSession();
-  if (!session.isAdmin) redirect("/");
+  const t = await getT();
+  // The external accountant (#154) opens the books only after MFA too.
+  const isAccountant =
+    !session.isAdmin && (await hasAccountantGrant(await createSupabasePageClient(), session));
+  if (!session.isAdmin && !isAccountant) redirect("/");
+  const mfaRequired = session.isAdmin || isAccountant;
 
   const supabase = await createSupabaseServerClient();
   const [assuranceResult, factorResult] = await Promise.all([
@@ -21,10 +31,10 @@ export default async function MfaPage() {
     assuranceResult.data &&
     factorResult.data &&
     !requiresAdministratorMfa(
-      session.isAdmin,
+      mfaRequired,
       assuranceResult.data.currentLevel,
       assuranceResult.data.nextLevel,
-      verifiedTotpFactors(factorResult.data.all).length > 0,
+      verifiedTotpFactors(factorResult.data.all, t).length > 0,
     )
   ) {
     redirect("/");
@@ -33,12 +43,14 @@ export default async function MfaPage() {
   return (
     <div className="space-y-4">
       <div className="text-center">
-        <h2 className="text-lg font-semibold">Protect your administrator account</h2>
+        <h2 className="text-lg font-semibold">
+          {isAccountant ? t("auth.mfa.accountantHeading") : t("auth.mfa.adminHeading")}
+        </h2>
         <p className="mt-1 text-[13px] leading-relaxed text-muted">
-          QBBE Hub requires an authenticator code for owners and administrators.
+          {isAccountant ? t("auth.mfa.accountantBody") : t("auth.mfa.adminBody")}
         </p>
       </div>
-      <Suspense fallback={<div className="card p-6 text-center text-sm">Loading security check…</div>}>
+      <Suspense fallback={<div className="card p-6 text-center text-sm">{t("auth.mfa.loading")}</div>}>
         <MfaFlow />
       </Suspense>
     </div>

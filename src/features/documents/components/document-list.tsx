@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FileSpreadsheet,
   FileText,
+  History,
   Image as ImageIcon,
   Link2,
   Paperclip,
@@ -30,7 +31,11 @@ import {
   getDocumentDownloadUrl,
   restoreDocument,
 } from "@/features/documents/services/document.commands";
-import { formatDate } from "@/lib/utils";
+import { useFormatters, useT } from "@/lib/i18n/client";
+import type { Formatters } from "@/lib/i18n/format";
+import type { TranslateFn } from "@/lib/i18n/translate";
+import { folderLabel, type LibraryFolder } from "@/features/documents/services/library";
+import { SearchSnippet } from "@/features/documents/components/search-snippet";
 
 export interface DocumentRow {
   id: string;
@@ -45,6 +50,10 @@ export interface DocumentRow {
   owner: { full_name: string } | null;
   project: { id: string; name: string } | null;
   program: { id: string; name: string } | null;
+  folder: Pick<LibraryFolder, "id" | "category" | "name" | "visibility"> | null;
+  tags: string[];
+  version_number: number;
+  requires_acknowledgement: boolean;
 }
 
 /** File-type icon from the MIME type, falling back safely (§10.15). */
@@ -61,11 +70,15 @@ function DocumentIcon({ doc }: { doc: DocumentRow }) {
   return <Paperclip className="size-4" aria-hidden />;
 }
 
-function formatSize(bytes: number | null): string {
+function formatSize(bytes: number | null, t: TranslateFn, format: Formatters): string {
   if (bytes === null) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024) return t("documents.size.bytes", { size: format.number(bytes) });
+  if (bytes < 1024 * 1024) {
+    return t("documents.size.kilobytes", { size: format.number(Math.round(bytes / 1024)) });
+  }
+  return t("documents.size.megabytes", {
+    size: format.number(bytes / (1024 * 1024), { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+  });
 }
 
 export function DocumentList({
@@ -73,15 +86,20 @@ export function DocumentList({
   canManage,
   highlightId = null,
   archived = false,
+  snippets,
 }: {
   documents: DocumentRow[];
   canManage: boolean;
+  /** Search passages found inside files, by document id (#147). */
+  snippets?: Record<string, string>;
   /** Deep-linked from search: this row is anchored and marked. */
   highlightId?: string | null;
   archived?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
+  const format = useFormatters();
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const { sorted, sortKey, direction, onSort } = useSort<DocumentRow>(
@@ -100,7 +118,7 @@ export function DocumentList({
     const result = await getDocumentDownloadUrl(doc.id);
     setBusyId(null);
     if (!result.ok || !result.url) {
-      toast(result.error ?? "Could not open this document.", { tone: "error" });
+      toast(result.error ?? t("documents.list.openFailed"), { tone: "error" });
       return;
     }
     window.open(result.url, "_blank", "noopener,noreferrer");
@@ -109,21 +127,21 @@ export function DocumentList({
   async function restore(doc: DocumentRow) {
     const result = await restoreDocument(doc.id);
     if (result.ok) {
-      toast("Document restored.");
+      toast(t("documents.list.restored"));
       router.refresh();
     } else {
-      toast(result.error ?? "Could not restore.", { tone: "error" });
+      toast(result.error ?? t("documents.list.restoreFailed"), { tone: "error" });
     }
   }
 
   async function archive(doc: DocumentRow) {
-    if (!window.confirm(`Archive “${doc.title}”? It leaves the active list.`)) return;
+    if (!window.confirm(t("documents.list.confirmArchive", { title: doc.title }))) return;
     const result = await archiveDocument(doc.id);
     if (result.ok) {
-      toast("Document archived.");
+      toast(t("documents.list.archivedToast"));
       router.refresh();
     } else {
-      toast(result.error ?? "Could not archive.", { tone: "error" });
+      toast(result.error ?? t("documents.list.archiveFailed"), { tone: "error" });
     }
   }
 
@@ -131,36 +149,36 @@ export function DocumentList({
     <DataTable minWidth="820px">
       <TableHead>
         <SortableHeader
-          label="Name"
+          label={t("documents.list.name")}
           sortKey="title"
           activeKey={sortKey}
           direction={direction}
           onSort={onSort}
         />
         <SortableHeader
-          label="Context"
+          label={t("documents.list.context")}
           sortKey="context"
           activeKey={sortKey}
           direction={direction}
           onSort={onSort}
         />
         <SortableHeader
-          label="Owner"
+          label={t("documents.list.owner")}
           sortKey="owner"
           activeKey={sortKey}
           direction={direction}
           onSort={onSort}
         />
-        <TableHeader>Access</TableHeader>
+        <TableHeader>{t("documents.list.access")}</TableHeader>
         <SortableHeader
-          label="Added"
+          label={t("documents.list.added")}
           sortKey="created_at"
           activeKey={sortKey}
           direction={direction}
           onSort={onSort}
         />
         <TableHeader className="w-10">
-          <span className="sr-only">Actions</span>
+          <span className="sr-only">{t("documents.list.actions")}</span>
         </TableHeader>
       </TableHead>
       <tbody>
@@ -169,11 +187,11 @@ export function DocumentList({
           const scanLabel = doc.kind !== "file"
             ? null
             : doc.scan_status === "pending"
-              ? "Security check pending"
+              ? t("documents.list.scanPending")
               : doc.scan_status === "quarantined"
-                ? "Quarantined"
+                ? t("documents.list.quarantined")
                 : doc.scan_status === "rejected"
-                  ? "Rejected"
+                  ? t("documents.list.rejected")
                   : null;
           return (
             <TableRow
@@ -202,11 +220,33 @@ export function DocumentList({
                         {doc.description}
                       </span>
                     ) : null}
+                    {snippets?.[doc.id] ? <SearchSnippet snippet={snippets[doc.id]} /> : null}
                     <span className="meta">
-                      {doc.kind === "link" ? "External link" : formatSize(doc.size_bytes)}
+                      {doc.kind === "link"
+                        ? t("documents.list.externalLink")
+                        : formatSize(doc.size_bytes, t, format)}
+                      {doc.version_number > 1
+                        ? t("documents.versionSuffix", { number: doc.version_number })
+                        : ""}
                     </span>
                   </span>
                 </button>
+                {doc.tags.length || doc.requires_acknowledgement ? (
+                  <div className="mt-1 flex flex-wrap gap-1 pl-6.5">
+                    {doc.requires_acknowledgement ? (
+                      <Badge tone="info">{t("documents.list.requiredReading")}</Badge>
+                    ) : null}
+                    {doc.tags.map((tag) => (
+                      <Link
+                        key={tag}
+                        href={`/documents?tag=${encodeURIComponent(tag)}`}
+                        className="rounded-full bg-surface-soft px-2 py-0.5 text-[12px] text-muted hover:text-brand-fg"
+                      >
+                        #{tag}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
               </TableCell>
               <TableCell className="text-muted">
                 {doc.project ? (
@@ -223,16 +263,28 @@ export function DocumentList({
                   >
                     {doc.program.name}
                   </Link>
+                ) : doc.folder ? (
+                  <Link
+                    href={`/documents?folder=${doc.folder.id}`}
+                    className="hover:text-brand-fg hover:underline"
+                  >
+                    {folderLabel(doc.folder, t)}
+                  </Link>
                 ) : (
-                  "General"
+                  t("documents.list.general")
                 )}
+                {(doc.project || doc.program) && doc.folder ? (
+                  <span className="meta block">{folderLabel(doc.folder, t)}</span>
+                ) : null}
               </TableCell>
               <TableCell className="text-muted">
                 {doc.owner?.full_name ?? "—"}
               </TableCell>
               <TableCell>
                 <Badge tone={doc.visibility === "staff" ? "accent" : "neutral"}>
-                  {doc.visibility === "staff" ? "Staff only" : "All members"}
+                  {doc.visibility === "staff"
+                    ? t("documents.list.staffOnly")
+                    : t("documents.list.allMembers")}
                 </Badge>
                 {scanLabel ? (
                   <span id={`document-scan-${doc.id}`}>
@@ -246,14 +298,17 @@ export function DocumentList({
                 ) : null}
               </TableCell>
               <TableCell className="whitespace-nowrap text-muted">
-                {formatDate(doc.created_at)}
+                {format.date(doc.created_at)}
               </TableCell>
               <TableCell>
                 <Menu
-                  label={`Actions for ${doc.title}`}
+                  label={t("documents.list.actionsFor", { title: doc.title })}
                   items={[
                     {
-                      label: doc.kind === "link" ? "Open link" : "Download",
+                      label:
+                        doc.kind === "link"
+                          ? t("documents.list.openLink")
+                          : t("documents.list.download"),
                       onSelect: () => open(doc),
                       disabled: fileUnavailable,
                       icon:
@@ -263,10 +318,15 @@ export function DocumentList({
                           <Download className="size-4" aria-hidden />
                         ),
                     },
+                    {
+                      label: t("documents.list.detailsAndVersions"),
+                      onSelect: () => router.push(`/documents/${doc.id}`),
+                      icon: <History className="size-4" aria-hidden />,
+                    },
                     ...(canManage
                       ? [
                           {
-                            label: archived ? "Restore" : "Archive",
+                            label: archived ? t("documents.list.restore") : t("documents.list.archive"),
                             onSelect: () => (archived ? restore(doc) : archive(doc)),
                             destructive: !archived,
                           },

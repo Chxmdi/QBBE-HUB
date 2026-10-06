@@ -6,12 +6,18 @@ import { ReduceMotionSetting } from "@/features/onboarding/components/reduce-mot
 import { verifiedTotpFactors } from "@/features/auth/mfa";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { LanguageSettings } from "@/features/preferences/components/language-switcher";
+import { isLocale } from "@/lib/i18n/config";
+import { getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Account settings" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("settings.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const session = await requireSession();
+  const t = await getT();
   const supabase = await createSupabasePageClient();
   const [{ data: preference }, { data: memberships }, factorResult, { data: profile }] = await Promise.all([
     supabase
@@ -45,9 +51,12 @@ export default async function SettingsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Account"
-        title="Settings"
-        description="Manage how QBBE Hub notifies you. Workspace admins manage organization-wide defaults separately."
+        eyebrow={t("settings.eyebrow")}
+        title={t("settings.heading")}
+        description={t("settings.description")}
+      />
+      <LanguageSettings
+        current={isLocale(session.profile.locale) ? session.profile.locale : "auto"}
       />
       <NotificationPreferencesForm
         initial={{
@@ -60,7 +69,7 @@ export default async function SettingsPage() {
       />
       <ReduceMotionSetting initial={profile?.reduce_motion === true} />
       {session.isAdmin && factorResult.data ? (
-        <MfaSettings initialFactors={verifiedTotpFactors(factorResult.data.all)} />
+        <MfaSettings initialFactors={verifiedTotpFactors(factorResult.data.all, t)} />
       ) : null}
     </div>
   );

@@ -2,6 +2,7 @@ import { DEFAULT_TIME_ZONE } from "@/lib/time";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getT } from "@/lib/i18n/server";
 import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
 import type { OrgRole, Profile } from "@/types/entities";
 
@@ -104,6 +105,13 @@ export const getSessionContext = cache(
   },
 );
 
+/**
+ * Where a signed-in member lands when a page is not theirs to see. Home reads
+ * `denied` and says so; a bare redirect to "/" left people wondering whether
+ * the link was broken.
+ */
+export const NO_ACCESS_REDIRECT = "/?denied=1";
+
 /** Redirects to sign-in when unauthenticated; inactive members get a dedicated page. */
 export async function requireSession(): Promise<SessionContext> {
   const session = await getSessionContext();
@@ -127,14 +135,14 @@ export async function requireSession(): Promise<SessionContext> {
  */
 export async function requireStaff(): Promise<SessionContext> {
   const session = await requireSession();
-  if (!session.isStaff) redirect("/");
+  if (!session.isStaff) redirect(NO_ACCESS_REDIRECT);
   return session;
 }
 
 /** Route gate for admin-only surfaces. */
 export async function requireAdmin(): Promise<SessionContext> {
   const session = await requireSession();
-  if (!session.isAdmin) redirect("/");
+  if (!session.isAdmin) redirect(NO_ACCESS_REDIRECT);
   return session;
 }
 
@@ -153,10 +161,12 @@ export async function authorizeAdminAction(options?: {
   ownerOnly?: boolean;
 }): Promise<PrivilegedActionAuthorization> {
   const session = await requireSession();
+  // The constants above are the English wording; the person sees their language.
+  const t = await getT();
   if (!session.isAdmin || (options?.ownerOnly && session.role !== "owner")) {
     return {
       ok: false,
-      error: options?.ownerOnly ? OWNER_ACCESS_REQUIRED_ERROR : ADMIN_ACCESS_REQUIRED_ERROR,
+      error: options?.ownerOnly ? t("account.errors.ownerRequired") : t("account.errors.adminRequired"),
       reason: "role",
     };
   }
@@ -172,7 +182,7 @@ export async function authorizeAdminAction(options?: {
     factorResult.error ||
     !factorResult.data
   ) {
-    return { ok: false, error: ADMIN_MFA_UNAVAILABLE_ERROR, reason: "unavailable" };
+    return { ok: false, error: t("account.errors.mfaUnavailable"), reason: "unavailable" };
   }
   if (
     requiresAdministratorMfa(
@@ -182,7 +192,7 @@ export async function authorizeAdminAction(options?: {
       verifiedTotpFactors(factorResult.data.all).length > 0,
     )
   ) {
-    return { ok: false, error: ADMIN_MFA_REQUIRED_ERROR, reason: "mfa" };
+    return { ok: false, error: t("account.errors.mfaRequired"), reason: "mfa" };
   }
 
   return { ok: true, session };
@@ -192,6 +202,6 @@ export async function authorizeAdminAction(options?: {
 export async function requireAdminAal2(): Promise<SessionContext> {
   const authorization = await authorizeAdminAction();
   if (authorization.ok) return authorization.session;
-  if (authorization.reason === "role") redirect("/");
+  if (authorization.reason === "role") redirect(NO_ACCESS_REDIRECT);
   redirect("/mfa");
 }

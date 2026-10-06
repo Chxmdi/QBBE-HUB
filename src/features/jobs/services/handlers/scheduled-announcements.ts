@@ -1,10 +1,16 @@
 import { recordJobRun } from "@/lib/job-observability";
+import { fireWorkflows } from "@/features/admin/services/workflow.runtime";
+import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { createNotifications, notificationDedupeKey } from "../notify";
 import type { JobContext, JobResult } from "../runner";
 
 /**
- * Fans out notifications for announcements whose publish time has arrived
+ * Posts and fans out announcements whose publish time has arrived
  * (P1-ANN-07).
+ *
+ * A scheduled announcement waits with no channel message, so its text is not
+ * readable before it is due. The first step posts the waiting message of
+ * every due announcement, whatever its age, so an outage only delays it.
  *
  * The window looks back two days rather than only at the current minute, so an
  * outage in the runtime delays an announcement instead of losing it. Repeats
@@ -21,6 +27,13 @@ interface AnnouncementRow {
   publish_at: string;
 }
 
+interface WaitingRow {
+  id: string;
+  organization_id: string;
+  title: string;
+  created_by: string;
+}
+
 const LOOKBACK_MS = 2 * 86_400_000;
 
 export async function scheduledAnnouncements({
@@ -28,9 +41,48 @@ export async function scheduledAnnouncements({
   definition,
   now,
 }: JobContext): Promise<JobResult> {
+  const { data: waiting, error: waitingError } = await db
+    .from("announcement")
+    .select("id, organization_id, title, created_by")
+    .is("message_id", null)
+    .lte("publish_at", now.toISOString())
+    .order("publish_at", { ascending: true })
+    .limit(definition.batch_size);
+
+  if (waitingError) throw new Error(`could not load waiting announcements: ${waitingError.message}`);
+
+  let released = 0;
+  let failed = 0;
+  for (const row of (waiting ?? []) as WaitingRow[]) {
+    const { data: messageId, error: releaseError } = await db.rpc(
+      "release_scheduled_announcement",
+      { p_announcement: row.id },
+    );
+    if (releaseError) {
+      failed += 1;
+      continue;
+    }
+    // Null means another run posted it first; only the run that posted it
+    // fires the workflows, so they run once.
+    if (!messageId) continue;
+    released += 1;
+    // Publishing now fires these at once; a scheduled announcement fires them
+    // when it actually goes out.
+    await fireWorkflows(db, {
+      organizationId: row.organization_id,
+      actorId: row.created_by,
+      eventType: "announcement_published",
+      title: row.title,
+      sourceType: "announcement",
+      sourceId: row.id,
+      link: "/announcements",
+    });
+  }
+
   const { data: dueRows, error } = await db
     .from("announcement")
     .select("id, organization_id, title, priority, created_by, publish_at")
+    .not("message_id", "is", null)
     .lte("publish_at", now.toISOString())
     .gte("publish_at", new Date(now.getTime() - LOOKBACK_MS).toISOString())
     .order("publish_at", { ascending: true })
@@ -39,7 +91,6 @@ export async function scheduledAnnouncements({
   if (error) throw new Error(`could not load announcements: ${error.message}`);
 
   let fanned = 0;
-  let failed = 0;
 
   for (const announcement of (dueRows ?? []) as unknown as AnnouncementRow[]) {
     const startedAt = new Date().toISOString();
@@ -59,13 +110,17 @@ export async function scheduledAnnouncements({
 
     let count = 0;
     try {
+      // Each person reads the notification in their own saved language.
+      const translatorFor = await recipientTranslators(db, recipients);
       count = await createNotifications(
         db,
         recipients.map((userId) => ({
           user_id: userId,
           organization_id: announcement.organization_id,
           category: "announcement",
-          title: `Announcement: ${announcement.title}`,
+          title: translatorFor(userId)("jobs.notify.announcementTitle", {
+            title: announcement.title,
+          }),
           source_type: "announcement",
           source_id: announcement.id,
           link: `/announcements#${announcement.id}`,
@@ -107,6 +162,6 @@ export async function scheduledAnnouncements({
   return {
     processed: fanned,
     failed,
-    metadata: { announcements: (dueRows ?? []).length },
+    metadata: { announcements: (dueRows ?? []).length, released },
   };
 }

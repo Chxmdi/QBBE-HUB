@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +9,7 @@ import {
 } from "@/components/shared/status-badges";
 import { StatusSelect } from "@/features/tasks/components/status-select";
 import { cn, dueLabel } from "@/lib/utils";
+import { useLocale, useT } from "@/lib/i18n/client";
 import type { Task } from "@/types/entities";
 
 /** Dense, scan-friendly task row shared by My Work and project views. */
@@ -28,7 +31,9 @@ export function TaskRow({
   timeZone: string;
   showStatusControl?: boolean;
 }) {
-  const due = dueLabel(task.due_at, timeZone);
+  const t = useT();
+  const locale = useLocale();
+  const due = dueLabel(task.due_at, timeZone, locale);
   return (
     <div className="interactive-row flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-3 py-2.5 last:border-b-0">
       <div className="min-w-0 flex-1 basis-52">
@@ -42,10 +47,12 @@ export function TaskRow({
               {task.project.name}
             </Link>
           ) : (
-            <span>No project</span>
+            <span>{t("tasks.noProject")}</span>
           )}
           {task.blocked_reason ? (
-            <span className="text-danger-fg">Blocked: {task.blocked_reason}</span>
+            <span className="text-danger-fg">
+              {t("tasks.blockedReason", { reason: task.blocked_reason })}
+            </span>
           ) : null}
         </p>
       </div>
@@ -65,7 +72,7 @@ export function TaskRow({
       {task.assignee ? (
         <Avatar name={task.assignee.full_name} src={task.assignee.avatar_url} size="sm" />
       ) : (
-        <Badge tone="neutral">Unassigned</Badge>
+        <Badge tone="neutral">{t("tasks.unassigned")}</Badge>
       )}
       {showStatusControl ? (
         <StatusSelect taskId={task.id} taskTitle={task.title} status={task.status} />

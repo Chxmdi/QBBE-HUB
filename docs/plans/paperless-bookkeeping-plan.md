@@ -1,0 +1,181 @@
+# Paperless office and bookkeeping: plan and task checklist
+
+Written 2026-09-27 against `main` at `c4c583e` (after PR #160). Covers the
+roadmap #157 and the epics #139 (paperless), #140 (bookkeeping) and #141
+(French interface).
+
+## What "done" means
+
+- Every receipt, bill, form, contract, consent and approval is captured,
+  routed, signed, filed and retained in the app, and can be found (#139).
+- QBBE keeps its books in the app: double-entry ledger with funds, payables and
+  receivables, bank reconciliation, GST/QST, budgets, year-end support, payroll
+  imported from a provider, and gift acknowledgements (#140).
+- Everything works in French and English (#141).
+- The books go live only after the accountant signs off, following one full
+  month-end run in parallel with the current spreadsheets (#157).
+
+**2026-10-01 is the date the books start from, not the day they go live.**
+Everything from that date is captured in the app and entered into the ledger,
+so nothing is re-keyed from paper later. Staff cannot use any of it until the
+app is deployed. See [`launch-readiness-plan.md`](launch-readiness-plan.md).
+
+## Where it stands (checked against `main`)
+
+| Item | Issue | Merged in | State |
+|---|---|---|---|
+| Receipt capture v1 (upload, manual entry, inbox, CSV) | #142 | #158, #166 | Done |
+| Receipt reading on the device (OCR) | #142 v2 | #175 | Done; forwarding-by-email half not built |
+| Approvals routing | #143 | #164 | Done; issue still open |
+| E-signatures v1 | #144 | #159 | Built; counsel review owed |
+| Digital forms | #145 | #159 | Done |
+| Retention rules and legal hold | #146 | #163 | Done |
+| Document library v1 | #147 | #161 | Built; issue still open |
+| Ledger core | #148 | #162 | Done |
+| Fund accounting | #149 | #162 | Done; issue still open |
+| Payables and receivables | #150 | #169 | Done |
+| Bank import and reconciliation | #151 | #167 | Done; bank presets unverified |
+| GST/QST | #152 | #168 | Done; accountant to confirm setup |
+| Budgets vs actuals | #153 | #170 | Done |
+| Year-end, statements, GL export, accountant login | #154 | #171 | Done |
+| Payroll import | #155 | PR #177 | In review |
+| Gift acknowledgements | #156 | PR #172 | CI re-running (job timeout raised to 60 min) |
+| French interface v1 | #141 | #160 | Done; French reviewer owed |
+
+Supporting fixes merged the same day:
+- #165: navigation race in browser tests.
+- #174: danger-text contrast.
+- #176: shared test lists made conflict-free. New features add
+  `tests/e2e/routes/<feature>.json` and need no `test-db.mjs` entry.
+
+## Task checklist
+
+### A. Code still in flight
+- [ ] Merge #172 gift acknowledgements. Its CI is re-running with the 60-minute
+  Database security limit.
+- [ ] Review #177 payroll import:
+  - RLS: reads through `app.can_read_ledger`, writes only by admin with MFA,
+    `search_path = ''` on SECURITY DEFINER functions;
+  - no employee names, SINs or per-employee lines stored;
+  - duplicate runs refused and every run balanced.
+
+  Then merge it with main, move its role-matrix/qa-matrix lines into
+  `tests/e2e/routes/payroll.json`, run the combined tests and merge.
+- [ ] Review and merge #173, the contrast test for tinted badges.
+
+### B. Follow-ups found during review
+- [ ] Split or shard the Database security CI job. It reached 45 minutes with
+  today's features, and running every signed-in spec adds more; 80 is a stopgap.
+- [ ] Translate the approvals, payables, bank, GST/QST, budgets, year-end and
+  gifts screens. v1 translates the sidebar and main screens only.
+- [ ] Test receipt reading in Safari/WebKit and Firefox, and on real phone
+  photos of real receipts. So far only Chromium and synthetic images.
+- [ ] #142 v2 remainder: a forwarding email address for invoices.
+- [x] Make the signed-in browser spec list in `.github/workflows/ci.yml`
+  automatic (read it from `tests/e2e/routes/*.json` or a glob). Every new
+  feature still edits that one shared line, so parallel branches conflict.
+- [x] #143 approvals: delegation while an approver is away (Approvals, Away
+  cover tab; migration `20260930160000_approval_delegation.sql`).
+- [x] #149 fund accounting: a statement of changes in fund balances
+  (Statements page and CSV), and releasing restricted money to unrestricted
+  when its conditions are met (Funds, then Release restricted money).
+- [ ] #144 e-signatures, v1 is in-app only: external signers by emailed link,
+  ordered or parallel routing, the signer's IP address, and a certificate on a
+  sealed PDF are not built. Build-or-buy and counsel's review come first.
+- [x] #147 document library: search looks inside PDFs (text layer) and
+  scans/photos (in-browser Tesseract), receipts included, in French and
+  English, returning only what the searcher may open; letter, contract and
+  acknowledgement templates generate PDFs into the library (migration
+  20261001100000, `supabase/tests/document-search-templates.sql`,
+  `tests/e2e/document-search.spec.ts`).
+- [ ] Close #143 and #149 once the items above land. #141 stays open until the
+  finance screens are translated and a French reviewer signs off. #144 stays
+  open for the gaps listed; #147 can close once this lands.
+- [ ] Record in the accountant runbook that a granted accountant can read bank
+  statement lines and donor gift records. They read through the same
+  `can_read_ledger` rule.
+
+### B2. Fixes from the runtime audit (27 September 2026)
+
+The app was built from `main`, run locally and driven in a browser as owner,
+staff and volunteer, in English and French.
+
+- [x] Merge #186: French for the finance screens.
+- [x] French for every other screen, and Quebec date and number formats
+  ("28 sept. 2026", "1 234,56 $"). The audit found English on 68 of 70 pages in
+  French; #188 translates them, with a browser check that fails on English text
+  in French.
+- [x] The job runner is a checked deployment step: `GET /api/health/jobs`,
+  a deploy smoke check, and a red banner on Admin → Jobs. Without it no upload
+  ever opens and no notification is sent.
+- [x] Remove the committed `.env.production`, which made any local build that
+  did not set its own values talk to the hosted Supabase project.
+- [x] Pages a member may not see say so ("That page isn't available to you")
+  instead of silently returning Home.
+- [x] Run the flows the audit could not reach on an empty database: fund
+  release, statements with data, bank and payroll import. Done on 28 September
+  2026 from a fresh seed, through the app's own screens only: chart approval,
+  fiscal year, a restricted grant fund, grant receipt and expense, an
+  over-release (refused) and a release, a bank statement matched and reconciled
+  at a zero difference, and a Nethris pay run split 40/60 between the grant and
+  the general fund. Fund balances, the three statements and the bank report all
+  agree to the cent. Two questions for the accountant, not defects: the
+  statement of financial position shows interfund "Due from/to other funds"
+  gross (3,000 on each side) rather than eliminated; and the release form's
+  "available today" figure is as at today, not the release date chosen.
+- [x] Close #143 and #149 once their acceptance is confirmed on `main`; update
+  #141 and #147. (#143, #147 and #149 closed with their PRs; #141 stays open
+  for the French reviewer's pass.)
+
+### C. Needed from QBBE (nobody else can supply these)
+- [ ] Accountant:
+  - balances as at 2026-09-30;
+  - the fiscal year-end;
+  - GST/QST registration and filing period;
+  - whether the public service body rebate applies;
+  - the tax-form mapping for the nonprofit returns;
+  - the wording of the gift acknowledgement ("not an official receipt").
+- [ ] Accountant review of the chart of accounts, fund structure and tax setup,
+  before real transactions are entered (target about 2026-10-09).
+- [ ] Record retention periods confirmed by the accountant, at least 6 years for
+  financial records.
+- [ ] Counsel: which documents may be signed electronically under Quebec's legal
+  framework for information technology (#144), and French-language
+  obligations (#141).
+- [ ] A fluent French reviewer for all French wording (#141).
+- [ ] One real export per data source, to confirm the import presets:
+  - one statement from each bank QBBE uses (Desjardins, National Bank, RBC, TD
+    or BMO; #151);
+  - one pay-run journal from the payroll provider (#155).
+- [ ] The deployment setup, so staff can use the app. See
+  [`launch-readiness-plan.md`](launch-readiness-plan.md).
+
+### D. Taking the books live
+- [ ] From 2026-10-01: capture every receipt, bill and statement in the app, or
+  in the interim Drive folder `Finance 2026-27` until the app is deployed.
+- [ ] Enter the opening balances as at 2026-10-01 once the accountant supplies
+  them.
+- [ ] Enter October transactions from the captured receipts and statements.
+- [ ] Parallel run: at the November month-end, compare the ledger with the
+  spreadsheets and explain every difference.
+- [ ] Accountant signs off. The ledger becomes the official books (about
+  mid-December 2026), covering everything since 2026-10-01.
+
+## Decisions made (recorded on the issues)
+
+- **Payroll (#155).** Payroll is imported from the provider's per-run journal,
+  with presets for:
+  - Nethris (Desjardins);
+  - Employeur D;
+  - ADP Workforce Now;
+  - Ceridian Powerpay;
+  - a column mapping for any other provider.
+
+  Only run-level totals and the fund/program split are stored. Payroll itself
+  is not calculated in the app.
+- **Receipt reading (#142 v2).** Tesseract.js runs in the browser, in English and
+  French. There is no external service, and photos never leave the device for
+  reading. Its suggestions fill empty fields only, and a person always
+  confirms them.
+- **Gifts (#156).** Acknowledgements only, never tax receipts, while QBBE is a
+  registered nonprofit and not a registered charity.

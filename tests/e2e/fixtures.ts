@@ -146,7 +146,45 @@ export const test = base.extend({
 
     page.goto = async (url, options) => {
       await settle();
-      const response = await goto(url, options);
+      let response: Awaited<ReturnType<typeof goto>> = null;
+      // Two different things are reported as "interrupted by another
+      // navigation", and a goto can meet one and then the other:
+      //
+      // - 'Navigation to "X" is interrupted by another navigation to "Y"':
+      //   the page being left committed a router.refresh() (its RSC response
+      //   had arrived, so settle() no longer saw it in flight) and rewrote the
+      //   address to Y before X committed. Seen as task-core's
+      //   `/my-work?task=…` interrupted by `/my-work` (#134, #135). The app
+      //   did nothing wrong: settle and navigate again.
+      // - '... to "X" is interrupted by another navigation to "X"': the page
+      //   did arrive at X, and Next's client router wrote X to the address
+      //   again while it was still loading (a same-document history update).
+      //   Playwright stops waiting for "load" on the first. That is a
+      //   successful navigation: wait for the load state asked for and go on.
+      // - 'WebKit encountered an internal error': how WebKit reports the first
+      //   case. It names neither address, so it is treated as X ≠ Y: settle
+      //   and navigate again. Seen as mobile Safari's goto to /sign-up in
+      //   public-routes (#188).
+      //
+      // Up to three attempts; anything past that is a real failure.
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          response = await goto(url, options);
+          break;
+        } catch (error) {
+          const message = String(error);
+          const match = /Navigation to "([^"]+)" is interrupted by another navigation to "([^"]+)"/.exec(message);
+          const webkitInterrupted = /WebKit encountered an internal error/.test(message);
+          if ((!match && !webkitInterrupted) || attempt >= 3) throw error;
+          if (match && match[1] === match[2]) {
+            await page.waitForLoadState(
+              options?.waitUntil === "commit" ? "domcontentloaded" : (options?.waitUntil ?? "load"),
+            );
+            break;
+          }
+          await settle();
+        }
+      }
       await waitUntilInteractive(page);
       return response;
     };
@@ -158,7 +196,20 @@ export const test = base.extend({
       return response;
     };
 
+    // A script the Content Security Policy blocked is a broken screen even
+    // when nothing on it looks wrong yet: only scripts carrying the request's
+    // nonce may run, and eval is refused (staging audit S1). Every browser
+    // reports a blocked script on the console, so any test that meets one
+    // fails here, naming it, instead of somewhere later.
+    const blockedScripts: string[] = [];
+    page.on("console", (message) => {
+      const text = message.text();
+      if (/Content.Security.Policy/i.test(text) && /script|eval/i.test(text)) blockedScripts.push(text);
+    });
+
     await provide(page);
+
+    expect(blockedScripts, "scripts blocked by the Content Security Policy").toEqual([]);
   },
 });
 

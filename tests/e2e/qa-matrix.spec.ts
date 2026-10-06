@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "./fixtures";
 import AxeBuilder from "@axe-core/playwright";
 import { signIn } from "./auth";
+import { featureQaRoutes } from "./feature-routes";
 
 /**
  * Visual QA + accessibility matrix (Part II §16.1):
@@ -25,13 +26,22 @@ const ROUTES = [
   { path: "/meetings", name: "meetings" },
   { path: "/events", name: "events" },
   { path: "/people", name: "people" },
+  { path: "/people/overview", name: "team-overview" },
+  { path: "/approvals", name: "approvals" },
+  { path: "/admin/approvals", name: "approval-rules" },
   { path: "/crm", name: "crm" },
   { path: "/reports", name: "reports" },
   { path: "/documents", name: "documents" },
+  { path: "/finance/receipts", name: "receipts" },
+  { path: "/forms", name: "forms" },
+  { path: "/signatures", name: "signatures" },
   { path: "/admin", name: "admin" },
+  { path: "/admin/records", name: "admin-records" },
   // Every primitive in every state (UI-008), so the sweep covers them.
   { path: "/admin/design-system", name: "design-system" },
   { path: "/search?q=workshop", name: "search" },
+  // New features add their routes in tests/e2e/routes/<feature>.json.
+  ...featureQaRoutes(),
 ];
 
 const WIDTHS = [
@@ -91,22 +101,24 @@ async function overflowCulprits(page: Page): Promise<string> {
 }
 
 test.describe("QA matrix", () => {
-  // The responsive sweep visits 240 authenticated route/theme/viewport
-  // combinations. It is intentionally broader than the default unit-style
-  // Playwright timeout and runs outside the regular CI unit suite.
+  // Each responsive sweep test visits every route at one theme and width.
+  // It is intentionally broader than the default unit-style Playwright
+  // timeout and runs outside the regular CI unit suite.
   test.setTimeout(10 * 60_000);
 
   test.beforeEach(async ({ page }) => {
     await signIn(page, "owner");
   });
 
-  test("every route renders in both themes without horizontal overflow", async ({
-    page,
-  }) => {
-    const failures: string[] = [];
-
-    for (const theme of ["light", "dark"] as const) {
-      for (const size of WIDTHS) {
+  // One test per theme and width, so each has the whole timeout for the
+  // route list: as a single test the sweep outgrew ten minutes once the
+  // finance screens were added, and every new route pushed it further.
+  for (const theme of ["light", "dark"] as const) {
+    for (const size of WIDTHS) {
+      test(`every route renders without horizontal overflow: ${theme} @${size.name}`, async ({
+        page,
+      }) => {
+        const failures: string[] = [];
         await page.setViewportSize({ width: size.w, height: size.h });
         for (const route of ROUTES) {
           await page.goto(route.path);
@@ -126,11 +138,10 @@ test.describe("QA matrix", () => {
             );
           }
         }
-      }
+        expect(failures, failures.join("\n")).toEqual([]);
+      });
     }
-
-    expect(failures, failures.join("\n")).toEqual([]);
-  });
+  }
 
   test("no critical or serious accessibility violations", async ({ page }) => {
     const violations: string[] = [];
@@ -202,6 +213,15 @@ test.describe("QA matrix", () => {
         open: async () => {
           await page.goto("/");
           await page.getByRole("button", { name: /^Notifications/ }).click();
+        },
+      },
+      {
+        name: "receipt submit dialog",
+        width: 390,
+        open: async () => {
+          await page.goto("/finance/receipts");
+          await page.getByRole("button", { name: "Submit receipt" }).click();
+          await expect(page.getByRole("dialog", { name: "Submit a receipt or bill" })).toBeVisible();
         },
       },
       {
@@ -442,7 +462,7 @@ test.describe("authorization", () => {
     await signIn(page, "volunteer");
 
     // Staff-only and admin-only: the route must redirect, not render.
-    for (const path of ["/crm", "/reports", "/admin"]) {
+    for (const path of ["/crm", "/reports", "/finance/receipts", "/admin"]) {
       await page.goto(path);
       await page.waitForLoadState("networkidle");
       expect(page.url(), `${path} must not render for a volunteer`).not.toContain(

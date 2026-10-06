@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { updateProject } from "@/features/projects/services/project.commands";
+import { priorityLabel } from "@/components/shared/status-badges";
+import { useT } from "@/lib/i18n/client";
 
 type Option = { id: string; label: string };
 
@@ -39,6 +41,7 @@ export function ProjectEditDialog({
   funders?: Option[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,13 +67,13 @@ export function ProjectEditDialog({
         fundingSourceId: form.get("fundingSourceId"),
       });
       if (!result.ok) {
-        setError(result.error ?? "Could not save the project.");
+        setError(result.error ?? t("projects.edit.error"));
         return;
       }
       setOpen(false);
       router.refresh();
     } catch {
-      setError("Could not save the project. Please try again.");
+      setError(t("projects.edit.errorRetry"));
     } finally {
       setSaving(false);
     }
@@ -79,16 +82,16 @@ export function ProjectEditDialog({
   return (
     <>
       <Button variant="secondary" onClick={() => { setError(null); setOpen(true); }}>
-        Edit project
+        {t("projects.edit.open")}
       </Button>
       <Dialog
         open={open}
         onClose={() => { if (!saving) setOpen(false); }}
-        title="Edit project"
+        title={t("projects.edit.title")}
       >
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <Label htmlFor="edit-project-name">Name</Label>
+            <Label htmlFor="edit-project-name">{t("projects.edit.name")}</Label>
             <Input
               id="edit-project-name"
               name="name"
@@ -98,7 +101,7 @@ export function ProjectEditDialog({
             />
           </div>
           <div>
-            <Label htmlFor="edit-project-outcome">Outcome</Label>
+            <Label htmlFor="edit-project-outcome">{t("projects.edit.outcome")}</Label>
             <Textarea
               id="edit-project-outcome"
               name="outcome"
@@ -107,7 +110,7 @@ export function ProjectEditDialog({
             />
           </div>
           <div>
-            <Label htmlFor="edit-project-description">Description</Label>
+            <Label htmlFor="edit-project-description">{t("projects.edit.description")}</Label>
             <Textarea
               id="edit-project-description"
               name="description"
@@ -116,20 +119,20 @@ export function ProjectEditDialog({
             />
           </div>
           <div>
-            <Label htmlFor="edit-project-program">Program</Label>
+            <Label htmlFor="edit-project-program">{t("projects.edit.program")}</Label>
             <Select
               id="edit-project-program"
               name="programId"
               defaultValue={project.program_id ?? ""}
             >
-              <option value="">No program</option>
+              <option value="">{t("projects.edit.noProgram")}</option>
               {programs.map((program) => (
                 <option key={program.id} value={program.id}>{program.label}</option>
               ))}
             </Select>
           </div>
           <div>
-            <Label htmlFor="edit-project-owner">Owner</Label>
+            <Label htmlFor="edit-project-owner">{t("projects.edit.owner")}</Label>
             <Select
               id="edit-project-owner"
               name="ownerId"
@@ -141,17 +144,17 @@ export function ProjectEditDialog({
               ))}
             </Select>
             <p className="mt-1 text-[12.5px] text-muted">
-              One accountable owner. They can manage this project.
+              {t("projects.edit.ownerHint")}
             </p>
           </div>
           <div>
-            <Label htmlFor="edit-project-sponsor">Sponsor</Label>
+            <Label htmlFor="edit-project-sponsor">{t("projects.edit.sponsor")}</Label>
             <Select
               id="edit-project-sponsor"
               name="sponsorId"
               defaultValue={project.sponsor_id ?? ""}
             >
-              <option value="">No sponsor</option>
+              <option value="">{t("projects.edit.noSponsor")}</option>
               {people.map((person) => (
                 <option key={person.id} value={person.id}>{person.label}</option>
               ))}
@@ -159,7 +162,7 @@ export function ProjectEditDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="edit-project-start">Start date</Label>
+              <Label htmlFor="edit-project-start">{t("projects.edit.startDate")}</Label>
               <Input
                 id="edit-project-start"
                 name="startDate"
@@ -168,7 +171,7 @@ export function ProjectEditDialog({
               />
             </div>
             <div>
-              <Label htmlFor="edit-project-target">Target date</Label>
+              <Label htmlFor="edit-project-target">{t("projects.edit.targetDate")}</Label>
               <Input
                 id="edit-project-target"
                 name="targetDate"
@@ -179,54 +182,54 @@ export function ProjectEditDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="edit-project-priority">Priority</Label>
+              <Label htmlFor="edit-project-priority">{t("projects.edit.priority")}</Label>
               <Select
                 id="edit-project-priority"
                 name="priority"
                 defaultValue={project.priority ?? "medium"}
               >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
+                {(["low", "medium", "high", "critical"] as const).map((value) => (
+                  <option key={value} value={value}>
+                    {priorityLabel(value, t)}
+                  </option>
+                ))}
               </Select>
             </div>
             <div>
-              <Label htmlFor="edit-project-cadence">Reporting cadence</Label>
+              <Label htmlFor="edit-project-cadence">{t("projects.edit.cadence")}</Label>
               <Select
                 id="edit-project-cadence"
                 name="reportingCadence"
                 defaultValue={project.reporting_cadence ?? "none"}
               >
-                <option value="none">No set cadence</option>
-                <option value="weekly">Weekly</option>
-                <option value="monthly">Monthly</option>
+                <option value="none">{t("projects.edit.noCadence")}</option>
+                <option value="weekly">{t("projects.edit.weekly")}</option>
+                <option value="monthly">{t("projects.edit.monthly")}</option>
               </Select>
             </div>
           </div>
           <div>
-            <Label htmlFor="edit-project-funding">Funding source</Label>
+            <Label htmlFor="edit-project-funding">{t("projects.edit.funding")}</Label>
             <Select
               id="edit-project-funding"
               name="fundingSourceId"
               defaultValue={project.funding_source_id ?? ""}
             >
-              <option value="">None</option>
+              <option value="">{t("projects.edit.none")}</option>
               {funders.map((funder) => (
                 <option key={funder.id} value={funder.id}>{funder.label}</option>
               ))}
             </Select>
           </div>
           <p className="text-sm text-muted">
-            Health is set by publishing a status update, so that marking a
-            project at risk always carries a reason.
+            {t("projects.edit.healthNote")}
           </p>
           {error ? <p role="alert" className="text-sm text-danger-fg">{error}</p> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" disabled={saving} onClick={() => setOpen(false)}>
-              Cancel
+              {t("projects.edit.cancel")}
             </Button>
-            <Button type="submit" loading={saving} disabled={saving}>Save project</Button>
+            <Button type="submit" loading={saving} disabled={saving}>{t("projects.edit.submit")}</Button>
           </div>
         </form>
       </Dialog>

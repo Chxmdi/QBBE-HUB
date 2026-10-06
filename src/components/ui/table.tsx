@@ -14,14 +14,61 @@ export function DataTable({
   children,
   className,
   minWidth = "720px",
+  scrollLabel,
 }: {
   children: React.ReactNode;
   className?: string;
   minWidth?: string;
+  /** Names the scrolling area; otherwise the enclosing section's heading does. */
+  scrollLabel?: string;
 }) {
+  const scroller = React.useRef<HTMLDivElement>(null);
+  // null while the table needs no tab stop; otherwise the heading that names it.
+  const [focusStop, setFocusStop] = React.useState<{ labelledBy?: string } | null>(null);
+
+  // A table taller or wider than its box scrolls, and a keyboard user can only
+  // scroll what can take focus (WCAG 2.1.1). Most tables have a link or button
+  // to land on; one made only of figures does not, so its scrolling area joins
+  // the tab order — only then, so short tables add no extra tab stop.
+  React.useEffect(() => {
+    const element = scroller.current;
+    if (!element) return;
+    const check = () => {
+      const scrolls =
+        element.scrollHeight > element.clientHeight || element.scrollWidth > element.clientWidth;
+      const focusable = element.querySelector(
+        "a[href], button, input, select, textarea, [tabindex]:not([tabindex='-1'])",
+      );
+      const labelledBy =
+        element.closest("section[aria-labelledby]")?.getAttribute("aria-labelledby") ?? undefined;
+      setFocusStop((current) =>
+        scrolls && !focusable
+          ? current && current.labelledBy === labelledBy
+            ? current
+            : { labelledBy }
+          : null,
+      );
+    };
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [children]);
+
   return (
     <div className={cn("card overflow-hidden", className)}>
-      <div className="max-h-[70vh] overflow-auto">
+      <div
+        ref={scroller}
+        className="max-h-[70vh] overflow-auto"
+        {...(focusStop
+          ? {
+              role: scrollLabel || focusStop.labelledBy ? "region" : undefined,
+              tabIndex: 0,
+              "aria-label": scrollLabel,
+              "aria-labelledby": scrollLabel ? undefined : focusStop.labelledBy,
+            }
+          : {})}
+      >
         <table
           className="w-full text-left text-[13.5px]"
           style={{ minWidth }}

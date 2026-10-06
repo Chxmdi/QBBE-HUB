@@ -10,24 +10,51 @@ import { GmailReplyForm } from "@/features/inbox/components/gmail-reply-form";
 import { getGmailMessageDetail } from "@/features/inbox/services/gmail.commands";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { cn, relativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 import { inboxItemVisible } from "@/features/notifications/services/mute";
+import { NoticeCategory } from "@/features/notifications/components/notice-category";
 import type { Notification } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Inbox" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("inbox.title") };
+}
 export const dynamic = "force-dynamic";
 
 const CATEGORIES = [
-  { key: "all", label: "All" },
-  { key: "mention", label: "Mentions" },
-  { key: "assignment", label: "Assignments" },
-  { key: "reply", label: "Replies" },
-  { key: "due_date", label: "Due dates" },
-  { key: "approval", label: "Approvals" },
-  { key: "decision", label: "Decisions" },
-  { key: "announcement", label: "Announcements" },
-  { key: "mail", label: "Mail" },
+  "all",
+  "mention",
+  "assignment",
+  "reply",
+  "due_date",
+  "approval",
+  "decision",
+  "announcement",
+  "mail",
 ] as const;
+
+/** Notification categories with a label; anything else shows its code. */
+const CATEGORY_LABELS = [
+  "mention",
+  "assignment",
+  "reply",
+  "due_date",
+  "approval",
+  "decision",
+  "announcement",
+  "digest",
+  "governance",
+  "hr",
+  "meeting",
+  "system",
+] as const;
+
+function categoryLabel(category: string, t: TranslateFn): string {
+  return (CATEGORY_LABELS as readonly string[]).includes(category)
+    ? t(`inbox.category.${category as (typeof CATEGORY_LABELS)[number]}`)
+    : category;
+}
 
 export default async function InboxPage({
   searchParams,
@@ -35,6 +62,7 @@ export default async function InboxPage({
   searchParams: Promise<{ filter?: string; google_error?: string; message?: string }>;
 }) {
   const session = await requireSession();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const params = await searchParams;
   const filter = params.filter ?? "all";
   const supabase = await createSupabasePageClient();
@@ -95,9 +123,9 @@ export default async function InboxPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Unified triage"
-        title="Inbox"
-        description="Platform notifications, mentions, assignments, replies, and announcements in one place."
+        eyebrow={t("inbox.eyebrow")}
+        title={t("inbox.title")}
+        description={t("inbox.description")}
       />
       {params.google_error ? (
         <p role="alert" className="mb-4 rounded-(--radius-sm) bg-danger/10 px-3 py-2 text-[13px] text-danger-fg">
@@ -106,50 +134,50 @@ export default async function InboxPage({
       ) : null}
 
       {/* Source filters (P0-INB-01) */}
-      <nav aria-label="Inbox filters" className="mb-5 flex flex-wrap gap-1.5">
+      <nav aria-label={t("inbox.filtersLabel")} className="mb-5 flex flex-wrap gap-1.5">
         {CATEGORIES.map((category) => (
           <Link
-            key={category.key}
-            href={category.key === "all" ? "/inbox" : `/inbox?filter=${category.key}`}
-            aria-current={filter === category.key ? "page" : undefined}
+            key={category}
+            href={category === "all" ? "/inbox" : `/inbox?filter=${category}`}
+            aria-current={filter === category ? "page" : undefined}
             className={cn(
               "rounded-full border px-3 py-1 text-[13px] font-medium transition-colors",
-              filter === category.key
+              filter === category
                 ? "border-brand bg-brand text-white"
                 : "border-line bg-surface text-muted hover:text-ink",
             )}
           >
-            {category.label}
+            {t(`inbox.filters.${category}`)}
           </Link>
         ))}
       </nav>
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_320px]">
-        <section aria-label="Notifications">
+        <section aria-label={t("inbox.notificationsLabel")}>
           {filter === "mail" && gmailConnection?.status === "connected" ? <GmailComposeForm /> : null}
           {filter === "mail" ? (
             gmailConnection?.status !== "connected" ? (
               <EmptyState
                 icon={<Mail />}
-                title="Gmail is not connected"
+                title={t("inbox.gmailNotConnectedTitle")}
                 description={
                   googleConfigured
-                    ? "Connect your QBBE Google account to list mail and securely reply without storing message bodies in QBBE Hub."
-                    : "Gmail stays disconnected until an administrator sets GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and the redirect URI. This is not a fake inbox."
+                    ? t("inbox.gmailConnectPrompt")
+                    : t("inbox.gmailNotConfigured")
                 }
               />
             ) : (mail ?? []).length === 0 ? (
               <EmptyState
                 icon={<Mail />}
-                title="No mail synced yet"
-                description="After a successful Gmail sync, thread metadata appears here. Message bodies are not stored in logs."
+                title={t("inbox.noMailTitle")}
+                description={t("inbox.noMailBody")}
               />
             ) : (
               <ul className="card divide-y divide-line">
                 {((mail ?? []) as { id: string; external_id: string; subject: string | null; snippet: string | null; from_address: string | null; received_at: string | null }[]).map(
                   (row) => (
                     <li key={row.id} className="px-4 py-3">
-                      <Link href={`/inbox?filter=mail&message=${encodeURIComponent(row.external_id)}`} className="text-[13.5px] font-medium hover:text-brand-fg">{row.subject ?? "(no subject)"}</Link>
+                      <Link href={`/inbox?filter=mail&message=${encodeURIComponent(row.external_id)}`} className="text-[13.5px] font-medium hover:text-brand-fg">{row.subject ?? t("common.noSubject")}</Link>
                       <p className="meta truncate">{row.from_address} · {row.snippet}</p>
                     </li>
                   ),
@@ -159,8 +187,8 @@ export default async function InboxPage({
           ) : items.length === 0 ? (
             <EmptyState
               icon={<InboxIcon />}
-              title="Inbox zero"
-              description="Notifications about mentions, assignments, replies, and announcements will arrive here."
+              title={t("inbox.zeroTitle")}
+              description={t("inbox.zeroBody")}
             />
           ) : (
             <ul className="card divide-y divide-line">
@@ -175,7 +203,7 @@ export default async function InboxPage({
                   {/* aria-label is ignored on a bare span, so read/unread was
                       carried by the dot's colour alone. */}
                   {!notification.read_at ? (
-                    <span className="sr-only">Unread. </span>
+                    <span className="sr-only">{t("common.unreadPrefix")}</span>
                   ) : null}
                   <span
                     aria-hidden
@@ -199,8 +227,8 @@ export default async function InboxPage({
                       <p className="meta truncate">{notification.body}</p>
                     ) : null}
                     <p className="meta mt-0.5 flex items-center gap-2">
-                      <Badge tone="neutral">{notification.category}</Badge>
-                      {relativeTime(notification.created_at)}
+                      <Badge tone="neutral"><NoticeCategory category={notification.category} fallback={categoryLabel(notification.category, t)} /></Badge>
+                      {format.relative(notification.created_at)}
                     </p>
                   </div>
                   {!notification.read_at ? (
@@ -212,22 +240,22 @@ export default async function InboxPage({
           )}
           {selectedMail ? (
             <article className="card mt-5 p-5">
-              <p className="text-[15px] font-semibold">{selectedMail.subject ?? "(no subject)"}</p>
-              <p className="meta mt-1">From: {selectedMail.from ?? "Unknown"} · To: {selectedMail.to ?? "Unknown"}</p>
-              <pre className="mt-4 max-h-96 overflow-auto whitespace-pre-wrap font-sans text-[13.5px] leading-relaxed">{selectedMail.body || "No plain-text body was supplied by Gmail."}</pre>
+              <p className="text-[15px] font-semibold">{selectedMail.subject ?? t("common.noSubject")}</p>
+              <p className="meta mt-1">{t("inbox.fromTo", { from: selectedMail.from ?? t("common.unknown"), to: selectedMail.to ?? t("common.unknown") })}</p>
+              <pre className="mt-4 max-h-96 overflow-auto whitespace-pre-wrap font-sans text-[13.5px] leading-relaxed">{selectedMail.body || t("inbox.noBody")}</pre>
               {selectedMail.from ? <GmailReplyForm to={selectedMail.from} subject={selectedMail.subject ?? ""} threadId={selectedMail.threadId} messageId={selectedMail.messageId} /> : null}
             </article>
           ) : null}
           {unread.length > 0 ? (
             <p className="meta mt-3">
-              {unread.length} unread of {items.length} shown
+              {t("inbox.unreadSummary", { unread: unread.length, shown: items.length })}
             </p>
           ) : null}
         </section>
 
         {/* Gmail integration status — honest state, no misleading stubs
             (P0-GML-01, P0-UX rule §7.1) */}
-        <aside aria-label="Connected email">
+        <aside aria-label={t("inbox.connectedEmail")}>
           <div className="card p-5">
             <p className="mb-2 flex items-center gap-2 text-[14px] font-semibold">
               <Mail className="size-4 text-muted" aria-hidden />
@@ -235,37 +263,38 @@ export default async function InboxPage({
             </p>
             {gmailConnection?.status === "connected" ? (
               <>
-                <Badge tone="success">Connected</Badge>
+                <Badge tone="success">{t("inbox.connected")}</Badge>
                 <p className="meta mt-2">
-                  Last sync:{" "}
-                  {gmailConnection.last_sync_at
-                    ? relativeTime(gmailConnection.last_sync_at)
-                    : "never"}
+                  {t("inbox.lastSync", {
+                    when: gmailConnection.last_sync_at
+                      ? format.relative(gmailConnection.last_sync_at)
+                      : t("common.never"),
+                  })}
                 </p>
                 {gmailConnection.last_error ? (
                   <p className="mt-2 text-[13px] text-warning-fg">
-                    Reconnect required: {gmailConnection.last_error}
+                    {t("inbox.reconnectRequired", { error: gmailConnection.last_error })}
                   </p>
                 ) : null}
-                <p className="meta mt-2">Compose new mail here or open a synced message to read it on demand and reply through Gmail. Existing connections using the older modify scope should reconnect to receive the narrower read + send grant.</p>
+                <p className="meta mt-2">{t("inbox.connectedHelp")}</p>
               </>
             ) : (
               <>
-                <Badge tone="neutral">Not connected</Badge>
+                <Badge tone="neutral">{t("inbox.notConnected")}</Badge>
                 <p className="mt-2.5 text-[13px] text-muted">
                   {googleConfigured
-                    ? "Connect Gmail to list mail and send/reply from a selected message."
-                    : "Gmail integration requires a QBBE-approved Google OAuth configuration. Once credentials exist, Connect appears here."}
+                    ? t("inbox.connectHelp")
+                    : t("inbox.configHelp")}
                 </p>
                 {googleConfigured ? (
                   <a
                     href="/api/integrations/google/start?provider=gmail"
                     className="mt-3 inline-flex h-9 items-center rounded-(--radius-sm) bg-brand px-3 text-[13px] font-medium text-white hover:bg-brand-strong"
                   >
-                    Connect Gmail
+                    {t("inbox.connectGmail")}
                   </a>
                 ) : (
-                  <p className="meta mt-2">See docs/runbooks/integrations.md for setup.</p>
+                  <p className="meta mt-2">{t("inbox.setupDocs")}</p>
                 )}
               </>
             )}

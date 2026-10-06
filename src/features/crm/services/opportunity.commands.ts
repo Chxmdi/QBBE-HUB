@@ -6,6 +6,10 @@ import { calendarDateInZone } from "@/lib/time";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
+import { crmMessage } from "@/features/crm/labels";
+import { isLocale } from "@/lib/i18n/config";
+import { getT } from "@/lib/i18n/server";
+import { createTranslator } from "@/lib/i18n/translate";
 import {
   SETTLED_STAGES,
   createOpportunitySchema,
@@ -34,11 +38,19 @@ async function notifyOwner(
   },
 ) {
   if (!input.ownerId || input.ownerId === input.actorId) return;
+  // Written in the owner's saved language, not the actor's (null means English).
+  const { data: profile } = await supabase
+    .from("user_profile")
+    .select("locale")
+    .eq("id", input.ownerId)
+    .maybeSingle();
+  const locale = (profile as { locale?: string | null } | null)?.locale;
+  const t = createTranslator(isLocale(locale) ? locale : "en");
   await createNotifications(supabase, [{
     user_id: input.ownerId,
     organization_id: input.organizationId,
     category: "assignment",
-    title: `You own an opportunity: ${input.title}`,
+    title: t("crm.pipeline.ownerNotification", { title: input.title }),
     source_type: "opportunity",
     source_id: input.opportunityId,
     link: `/crm/${input.crmOrganizationId}?tab=opportunities&opportunity=${input.opportunityId}`,
@@ -51,9 +63,10 @@ async function notifyOwner(
 
 export async function createOpportunity(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = createOpportunitySchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: crmMessage(t, parsed.error.issues[0]?.message) };
   }
   const data = parsed.data;
 
@@ -86,7 +99,7 @@ export async function createOpportunity(input: unknown): Promise<ActionResult> {
   if (error || !created) {
     return {
       ok: false,
-      error: "You don't have permission to record opportunities, or the save failed.",
+      error: t("crm.errors.opportunityPermission"),
     };
   }
 
@@ -121,9 +134,10 @@ function workspaceToday(timeZone: string): string {
 
 export async function updateOpportunity(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = updateOpportunitySchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: crmMessage(t, parsed.error.issues[0]?.message) };
   }
   const { opportunityId, ...fields } = parsed.data;
 
@@ -138,7 +152,7 @@ export async function updateOpportunity(input: unknown): Promise<ActionResult> {
     .maybeSingle();
 
   if (!existing) {
-    return { ok: false, error: "That opportunity is not available to you." };
+    return { ok: false, error: t("crm.errors.opportunityUnavailable") };
   }
 
   const patch: Record<string, unknown> = {};
@@ -178,16 +192,22 @@ export async function updateOpportunity(input: unknown): Promise<ActionResult> {
     patch.decided_at = fields.decidedAt || null;
   }
 
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("opportunity")
     .update(patch)
-    .eq("id", opportunityId);
+    .eq("id", opportunityId)
+    .select("id");
 
   if (error) {
     return {
       ok: false,
-      error: "That change was refused — check the stage, amount and dates agree.",
+      error: t("crm.errors.opportunityRefused"),
     };
+  }
+  // An owner without CRM access can read the opportunity but not change it;
+  // their update matches no row, and nobody should be told it was reassigned.
+  if (!changed || changed.length === 0) {
+    return { ok: false, error: t("crm.errors.opportunityUnavailable") };
   }
 
   if (fields.ownerId && fields.ownerId !== existing.owner_id) {

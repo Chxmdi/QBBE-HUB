@@ -7,9 +7,11 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/utils";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
-const createChannelSchema = z.object({
-  name: requiredText("A channel needs a name.", 80),
+const createChannelSchema = (t: TranslateFn) => z.object({
+  name: requiredText(t("channels.errors.nameRequired"), 80),
   purpose: z.string().trim().max(500).optional(),
   privacy: z.enum(["public", "private"]).default("public"),
   type: z
@@ -22,10 +24,11 @@ const createChannelSchema = z.object({
 
 export async function createChannel(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
-  const parsed = createChannelSchema.safeParse(input);
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("channels.errors.staffRequired") };
+  const parsed = createChannelSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("channels.errors.invalidInput") };
   }
   const { name, purpose, privacy, type, projectId, programId, postingPolicy } =
     parsed.data;
@@ -55,8 +58,8 @@ export async function createChannel(input: unknown): Promise<ActionResult> {
       ok: false,
       error:
         error?.code === "23505"
-          ? "A channel with that name already exists."
-          : "Could not create the channel.",
+          ? t("channels.errors.duplicate")
+          : t("channels.errors.createFailed"),
     };
   }
 
@@ -81,14 +84,15 @@ export async function createChannel(input: unknown): Promise<ActionResult> {
 
 export async function joinChannel(channelId: string): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const parsed = z.string().uuid().safeParse(channelId);
-  if (!parsed.success) return { ok: false, error: "Invalid channel." };
+  if (!parsed.success) return { ok: false, error: t("channels.errors.invalidChannel") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("join_channel", {
     p_channel_id: parsed.data,
   });
   if (error && error.code !== "23505") {
-    return { ok: false, error: "Could not join this channel." };
+    return { ok: false, error: t("channels.errors.joinFailed") };
   }
   revalidatePath("/channels");
   revalidatePath(`/channels/${channelId}`);
@@ -97,6 +101,7 @@ export async function joinChannel(channelId: string): Promise<ActionResult> {
 
 export async function leaveChannel(channelId: string): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
   const { data: channel } = await supabase
     .from("channel")
@@ -104,13 +109,13 @@ export async function leaveChannel(channelId: string): Promise<ActionResult> {
     .eq("id", channelId)
     .maybeSingle();
   if (channel?.is_mandatory) {
-    return { ok: false, error: "You cannot leave a mandatory channel." };
+    return { ok: false, error: t("channels.errors.mandatoryLeave") };
   }
   // RLS also blocks leaving mandatory channels (P0-ANN-01).
   const { error } = await supabase.rpc("leave_channel", {
     p_channel_id: channelId,
   });
-  if (error) return { ok: false, error: "You cannot leave this channel." };
+  if (error) return { ok: false, error: t("channels.errors.leaveFailed") };
   revalidatePath("/channels");
   return { ok: true };
 }
@@ -123,8 +128,9 @@ const muteSchema = z.object({
 /** Updates only the caller's delivery preference for a channel. */
 export async function setChannelMute(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = muteSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid channel preference." };
+  if (!parsed.success) return { ok: false, error: t("channels.errors.invalidPreference") };
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
@@ -132,7 +138,7 @@ export async function setChannelMute(input: unknown): Promise<ActionResult> {
     .update({ muted_level: parsed.data.mutedLevel })
     .eq("channel_id", parsed.data.channelId)
     .eq("user_id", session.userId);
-  if (error) return { ok: false, error: "Could not update this channel preference." };
+  if (error) return { ok: false, error: t("channels.errors.preferenceFailed") };
 
   revalidatePath("/settings");
   return { ok: true };
@@ -143,22 +149,23 @@ export async function addChannelMember(
   userId: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
   const { data: channel } = await supabase
     .from("channel")
     .select("owner_id")
     .eq("id", channelId)
     .maybeSingle();
-  if (!channel) return { ok: false, error: "Channel not found." };
+  if (!channel) return { ok: false, error: t("channels.errors.notFound") };
   if (!session.isAdmin && channel.owner_id !== session.userId) {
-    return { ok: false, error: "Only the channel owner or an admin can add members." };
+    return { ok: false, error: t("channels.errors.ownerOrAdminAdd") };
   }
   const { error } = await supabase.rpc("add_channel_member", {
     p_channel_id: channelId,
     p_user_id: userId,
   });
   if (error && error.code !== "23505") {
-    return { ok: false, error: "Could not add that member." };
+    return { ok: false, error: t("channels.errors.addFailed") };
   }
   revalidatePath(`/channels/${channelId}`);
   return { ok: true };
@@ -175,6 +182,7 @@ export async function setChannelArchived(
   archived: boolean,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
 
   const { data: channel } = await supabase
@@ -182,20 +190,22 @@ export async function setChannelArchived(
     .select("is_mandatory, name")
     .eq("id", channelId)
     .maybeSingle();
-  if (!channel) return { ok: false, error: "Channel not found." };
+  if (!channel) return { ok: false, error: t("channels.errors.notFound") };
   if (channel.is_mandatory && archived) {
     return {
       ok: false,
-      error: "The mandatory announcements channel cannot be archived.",
+      error: t("channels.errors.mandatoryArchive"),
     };
   }
 
-  const { error } = await supabase
+  // A refusal from row-level security matches no row rather than erroring.
+  const { data: changed, error } = await supabase
     .from("channel")
     .update({ archived_at: archived ? new Date().toISOString() : null })
-    .eq("id", channelId);
-  if (error) {
-    return { ok: false, error: "Only the channel owner or an admin can do that." };
+    .eq("id", channelId)
+    .select("id");
+  if (error || !changed || changed.length === 0) {
+    return { ok: false, error: t("channels.errors.ownerOrAdmin") };
   }
 
   await supabase.from("audit_event").insert({

@@ -26,6 +26,10 @@ on:
 
 permissions:
   contents: read
+  # The verify job calls ci.yml, which pulls the Supabase images from ghcr.io.
+  # A called workflow cannot hold more than its caller grants, so without this
+  # GitHub refuses to start the run at all (startup_failure).
+  packages: read
 
 concurrency:
   group: netlify-${{ inputs.environment }}
@@ -100,9 +104,39 @@ jobs:
           esac
           echo "Site ${NETLIFY_SITE_ID} reads Supabase project ${SUPABASE_PROJECT_REF}."
 
+      # WORKSPACE_OS_FLAGS turns unfinished Workspace OS modules on without
+      # touching the feature_flag table (src/lib/feature-flags.ts). It is for
+      # staging only; on production it would show unfinished screens to
+      # everyone. Read the production site's variables the same way as the
+      # database check above, and fail closed: a list that cannot be read
+      # stops the deploy too.
+      - name: Refuse Workspace OS switch overrides on production
+        if: inputs.environment == 'production'
+        run: |
+          npx --yes netlify-cli@27.5.0 env:list --json \
+            --context production --site "$NETLIFY_SITE_ID" > site-env.json 2>/dev/null \
+            || { echo "::error::Could not read the production site's environment variables."; exit 1; }
+          node -e '
+            const vars = JSON.parse(require("fs").readFileSync("site-env.json", "utf8"));
+            // Present at all counts, even empty or hidden as a secret value.
+            if (!vars || typeof vars !== "object" || Object.hasOwn(vars, "WORKSPACE_OS_FLAGS")) {
+              console.log("::error::WORKSPACE_OS_FLAGS is set on the production Netlify site (or its variables could not be read). Delete it (Site configuration > Environment variables) and deploy again.");
+              process.exit(1);
+            }
+          ' || exit 1
+          rm -f site-env.json
+          echo "Production site ${NETLIFY_SITE_ID} has no WORKSPACE_OS_FLAGS override."
+
       - uses: supabase/setup-cli@v3
         with:
           version: 2.114.0
+
+      # supabase/config.toml names a local-only signing key file (#138), and
+      # `db push` refuses to run while that file is missing. This creates a
+      # throwaway one on the runner so the config reads; `db push` only
+      # applies migrations and sends nothing from this file to the project.
+      - name: Local config's signing key
+        run: scripts/local-signing-key.sh
 
       - name: Link the environment's database
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
@@ -111,6 +145,9 @@ jobs:
       # this commit does not have (drift), so an out-of-band change stops the
       # deploy here rather than being silently built on.
       - name: Migrations this deploy will apply (dry run)
+        # Explicit bash adds pipefail, so a failed dry run fails this step
+        # instead of being hidden by `tee`.
+        shell: bash
         run: |
           supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD" | tee migration-plan.txt
           {
@@ -184,3 +221,27 @@ jobs:
           done
           echo "::error::${SITE_URL%/}/sign-in did not answer 200 (last: ${code}). Roll back with the 'Rollback Netlify' workflow, deploy ${PREVIOUS:-<see the Publish summary>}."
           exit 1
+
+      # A site whose background jobs are not wired looks healthy but never
+      # scans an upload (so no file ever opens) and never sends a notification.
+      # app.configure_job_runner is a one-time step per environment; this is
+      # the check that it was done, for this site, with this site's secret.
+      - name: Background jobs reach this site
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: |
+          body=$(curl -s "${SITE_URL%/}/api/health/jobs" || true)
+          status=$(printf '%s' "$body" | python3 -c "import json,sys; print(json.load(sys.stdin).get('jobRunner','unknown'))" 2>/dev/null || echo unknown)
+          echo "Job runner: ${status}"
+          case "$status" in
+            ready) ;;
+            not_configured|other_site|secret_mismatch)
+              echo "::error::Background jobs are not wired to ${SITE_URL%/} (${status}). In this environment's Supabase SQL editor run: select app.configure_job_runner('${SITE_URL%/}', '<this site's CRON_JOB_SECRET>'); then re-run this job. See docs/runbooks/jobs.md."
+              exit 1 ;;
+            app_secret_missing)
+              echo "::error::The site has no CRON_JOB_SECRET. Set it in the Netlify site's environment settings (32+ characters), redeploy, then run app.configure_job_runner with the same value."
+              exit 1 ;;
+            *)
+              echo "::error::Could not read the job runner status from ${SITE_URL%/}/api/health/jobs (got: ${body:0:200})."
+              exit 1 ;;
+          esac

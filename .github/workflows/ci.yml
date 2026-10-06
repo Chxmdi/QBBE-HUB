@@ -3,7 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # Only pull requests into main. Workspace OS work is batched on
+  # wos/integration (checked locally per PR) and tested here once, through
+  # its pull request to main.
   pull_request:
+    branches: [main]
   workflow_call:
     inputs:
       browsers:
@@ -20,6 +24,14 @@ on:
         type: boolean
         required: false
         default: false
+
+# A new push to a pull request replaces its previous run, so parallel work
+# does not queue behind runs nobody will read. Pushes to main, deploys,
+# nightly and release-candidate calls get a group of their own run, so they
+# are never cancelled.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -52,6 +64,14 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Reuse the previous build's cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-verify-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'next.config.*') }}
+          restore-keys: |
+            next-verify-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
       - name: Production build
         run: npm run build
         env:
@@ -59,6 +79,12 @@ jobs:
           # environment. Never real secrets in CI config (ENV-003).
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+
+      - name: Reuse downloaded test browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
@@ -100,10 +126,14 @@ jobs:
       - name: Install from lockfile
         run: npm ci --ignore-scripts
 
-      - name: Dependency audit (high+)
-        run: npm audit --audit-level=high
+      # Blocks on what the app ships. A development tool's advisory (the
+      # linter's, the test runner's) cannot reach a person using the Hub, and
+      # one with no released fix would otherwise hold every merge; the step
+      # below still lists those, every severity, on each run.
+      - name: Dependency audit (high+, shipped packages)
+        run: npm audit --audit-level=high --omit=dev
 
-      - name: Moderate and low advisories (reported, not blocking)
+      - name: All advisories, development tools included (reported, not blocking)
         if: always()
         run: |
           npm audit --audit-level=moderate > audit.txt 2>&1 || true
@@ -114,84 +144,20 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  database-security:
-    name: Database security
+  # The database and signed-in browser checks used to run as one job that
+  # took 40 minutes and gated every merge. They now run as parallel jobs, each
+  # with its own throwaway local Supabase, and one final job keeps the
+  # "Database security" name that branch protection requires (#199, W0-1).
+  database-core:
+    name: "Database security: RLS, advisor, realtime"
     runs-on: ubuntu-latest
-    # Three browsers take roughly three times as long as one.
-    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 90 || 30 }}
-    env:
-      SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: ./.github/actions/local-supabase
         with:
-          node-version: 22
-          cache: npm
-
-      - name: Install from lockfile
-        run: npm ci
-
-      - name: Set up Supabase CLI
-        uses: supabase/setup-cli@v3
-        with:
-          version: 2.114.0
-
-      - name: Avoid local DB port collisions on CI runners
-        run: |
-          if lsof -iTCP:54322 -sTCP:LISTEN -t >/dev/null; then
-            sed -i 's/^port = 54322$/port = 65432/' supabase/config.toml
-          fi
-
-      - name: Authenticate to ghcr.io before pulling service images
-        # Anonymous pulls from ghcr.io draw on a shared allowance, and on
-        # 2026-09-23 that allowance refused every image for three consecutive
-        # attempts across three minutes — a database job failing on a registry.
-        # An authenticated pull uses this repository's own allowance instead.
-        # This token is issued to the workflow run and needs no secret to be
-        # configured.
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
-      - name: Start migrated local database
-        # `supabase start` pulls a dozen images, and a registry refusing them
-        # fails this job before a single assertion runs. That happened four
-        # times on 2026-09-23, during a GitHub incident, with the database job
-        # reporting a registry problem as a database security failure.
-        #
-        # Three things are done about it.
-        #
-        # The services this job never uses are excluded, so their images are
-        # not pulled at all: Studio is a web UI nothing here opens,
-        # edge-runtime serves functions this project does not have, and
-        # logflare, vector and supavisor are analytics and pooling. What stays
-        # is what the checks below need — gotrue for sign-in, kong and
-        # postgrest for the API, realtime for the revocation spec, storage-api
-        # for uploads, mailpit for the recovery email, and postgres-meta for
-        # the advisor.
-        #
-        # `supabase/setup-cli` pins SUPABASE_INTERNAL_IMAGE_REGISTRY to
-        # ghcr.io, so every image comes from one registry and one registry's
-        # bad day stops everything. The later attempts fall back to Docker Hub,
-        # which publishes the same images.
-        #
-        # The retry then covers a transient refusal from either.
-        run: |
-          for attempt in 1 2 3; do
-            if [ "$attempt" = 1 ]; then
-              export SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io
-            else
-              export SUPABASE_INTERNAL_IMAGE_REGISTRY=docker.io
-            fi
-            echo "Attempt $attempt, pulling from $SUPABASE_INTERNAL_IMAGE_REGISTRY"
-            if supabase start -x studio,edge-runtime,logflare,vector,supavisor; then
-              exit 0
-            fi
-            echo "::warning::supabase start failed on attempt $attempt via $SUPABASE_INTERNAL_IMAGE_REGISTRY"
-            supabase stop --no-backup || true
-            sleep $((attempt * 20))
-          done
-          echo "::error::supabase start failed three times across both registries"
-          exit 1
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: RLS allow/deny matrix
         run: npm run test:db
@@ -199,73 +165,163 @@ jobs:
       - name: Database security advisor
         run: supabase db advisors --local --type security --fail-on error
 
-      - name: Configure synthetic local Auth for browser checks
-        run: |
-          supabase status -o json > "$RUNNER_TEMP/supabase-status.json"
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const status = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/supabase-status.json`, 'utf8'));
-          if (!status.API_URL || !status.ANON_KEY) throw new Error('Local Supabase configuration missing');
-          if (!status.SERVICE_ROLE_KEY) throw new Error('Local service role key missing');
-          fs.appendFileSync(process.env.GITHUB_ENV,
-            `NEXT_PUBLIC_SUPABASE_URL=${status.API_URL}\nNEXT_PUBLIC_SUPABASE_ANON_KEY=${status.ANON_KEY}\n`);
-          // Jobs run as the service role; the notification checks drain the
-          // queue into the local Mailpit (SMTP 54325) and read it back. Both are
-          // the throwaway local stack's, never a hosted project's.
-          fs.appendFileSync(process.env.GITHUB_ENV,
-            `SUPABASE_SERVICE_ROLE_KEY=${status.SERVICE_ROLE_KEY}\nSMTP_HOST=127.0.0.1\nSMTP_PORT=54325\n`);
-          fs.unlinkSync(`${process.env.RUNNER_TEMP}/supabase-status.json`);
-          NODE
-
-      - name: Seed the workspace the browser checks read
-        # The suite above rolls its fixtures back, as every database test
-        # should. That leaves a migrated but empty workspace, and the access
-        # inventory has programmes and projects to show only if some exist —
-        # it used to read whatever rls.sql had committed. This is the same
-        # seeding path docs/runbooks/qa.md documents for running these suites
-        # locally, so CI and a developer machine now start from one fixture.
+      - name: Seed the workspace the realtime probe reads
         run: npm run db:seed
-
-      - name: Build authenticated test app
-        run: npm run build
-
-      - name: Install authenticated test browsers
-        run: npx playwright install --with-deps chromium firefox webkit
-
-      - name: Authenticated lifecycle and access checks
-        env:
-          # A per-run value: the job routes need one, and nothing outside this
-          # runner ever sees it.
-          CRON_JOB_SECRET: ci-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          npx next start -p 3000 -H 127.0.0.1 &
-          npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
-          npx playwright test mfa realtime-revocation hello-hub access-impact my-work identity-lifecycle programs projects milestones task-core work-planning documents events error-states role-matrix realtime-delivery crm reports raid-decisions portfolio-search collaboration meetings-comments notifications epic05-administration epic05-continuity $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
-
-      - name: Signed-in accessibility, responsive and keyboard matrix
-        # WCAG 2.2 AA axe scans in both themes, a 6-width x 2-theme overflow
-        # sweep, 200% zoom and keyboard paths across every workspace route
-        # (#101). It ran nowhere before this step existed. The server started
-        # in the previous step is still listening.
-        run: npx playwright test qa-matrix $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
-
-      - name: Phone emulation (qa-matrix and public routes)
-        if: inputs.mobile
-        run: npx playwright test qa-matrix public-routes --project=mobile-chrome --project=mobile-safari
 
       - name: Realtime latency (p95 within 5 s)
         # 30 messages from one signed-in member to another over Realtime;
         # fails if any is lost or the 95th percentile exceeds 5 s (#113).
         run: npm run qa:realtime-latency
 
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop
+
+  browsers:
+    # Every signed-in spec runs: the list is built from the folder, so a new
+    # feature's spec is picked up without editing this file. The specs are
+    # split across four machines by measured time (scripts/ci/spec-groups.mjs),
+    # keeping specs that read each other's records on one machine; qa-matrix,
+    # the longest single file (WCAG 2.2 AA axe scans in both themes, a 6-width
+    # x 2-theme overflow sweep, 200% zoom and keyboard paths across every
+    # workspace route, #101), is split by test across three more. Playwright
+    # still runs one worker per machine, so no two tests share a database.
+    # Every part runs twice: once as production runs today (every Workspace
+    # OS switch off) and once with every switch on (WORKSPACE_OS_FLAGS=all),
+    # so a pull request cannot break either state. Tests that prove a screen
+    # is hidden while its switch is off end their title with "[switch off]"
+    # and are left out of the switches-on rows; tests that need the switches
+    # end with "[switches on]" and are left out of the switches-off rows
+    # (scripts/ci/switch-tests.mjs keeps the titles honest).
+    name: "Database security: ${{ matrix.suite }} ${{ matrix.part }}/${{ matrix.parts }}${{ matrix.flags == 'all' && ' (switches on)' || '' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 90 || 40 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { suite: signed-in, part: 1, parts: 4, flags: off }
+          - { suite: signed-in, part: 2, parts: 4, flags: off }
+          - { suite: signed-in, part: 3, parts: 4, flags: off }
+          - { suite: signed-in, part: 4, parts: 4, flags: off }
+          - { suite: qa-matrix, part: 1, parts: 3, flags: off }
+          - { suite: qa-matrix, part: 2, parts: 3, flags: off }
+          - { suite: qa-matrix, part: 3, parts: 3, flags: off }
+          - { suite: signed-in, part: 1, parts: 4, flags: all }
+          - { suite: signed-in, part: 2, parts: 4, flags: all }
+          - { suite: signed-in, part: 3, parts: 4, flags: all }
+          - { suite: signed-in, part: 4, parts: 4, flags: all }
+          - { suite: qa-matrix, part: 1, parts: 3, flags: all }
+          - { suite: qa-matrix, part: 2, parts: 3, flags: all }
+          - { suite: qa-matrix, part: 3, parts: 3, flags: all }
+    env:
+      SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
+      # Read by the build and by the running server (per request).
+      WORKSPACE_OS_FLAGS: ${{ matrix.flags == 'all' && 'all' || '' }}
+      # The tests each row leaves out (see the job comment).
+      SWITCH_GREP_INVERT: ${{ matrix.flags == 'all' && '\[switch off\]' || '\[switches on\]' }}
+      # A per-run value: the job routes and the specs that call them need the
+      # same one, and nothing outside this runner ever sees it.
+      CRON_JOB_SECRET: ci-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/local-supabase
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Seed the workspace the browser checks read
+        # A migrated but empty workspace has no programmes or projects for
+        # the access inventory to show. Same seeding path as
+        # docs/runbooks/qa.md, so CI and a developer machine start alike.
+        run: npm run db:seed
+
+      - name: Reuse the previous build's cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'next.config.*') }}
+          restore-keys: |
+            next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
+      - name: Build authenticated test app
+        run: npm run build
+
+      - name: Reuse downloaded test browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install authenticated test browsers
+        # Only the browsers this run uses: installing all three pulls every
+        # engine's system packages, which took 14 minutes on one runner.
+        env:
+          MOBILE: ${{ inputs.mobile && 'chromium webkit' || '' }}
+        run: npx playwright install --with-deps $(echo $SIGNED_IN_BROWSERS $MOBILE | tr ' ' '\n' | sort -u)
+
+      - name: Start the app
+        # Each server log line gets a UTC time so a browser check that failed on
+        # the connection (its job-log line is timestamped) can be matched to what
+        # the server was doing at that moment.
+        run: |
+          nohup bash -c 'npx next start -p 3000 -H 127.0.0.1 2>&1 | while IFS= read -r line; do printf "%s %s\n" "$(date -u +%H:%M:%S.%3N)" "$line"; done' > "$RUNNER_TEMP/next.log" 2>&1 &
+          npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
+
+      - name: Signed-in lifecycle and access checks
+        if: matrix.suite == 'signed-in'
+        run: |
+          SPECS=$(node scripts/ci/spec-groups.mjs ${{ matrix.part }} ${{ matrix.parts }})
+          npx playwright test $SPECS --grep-invert "$SWITCH_GREP_INVERT" $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+
+      - name: Signed-in accessibility, responsive and keyboard matrix
+        if: matrix.suite == 'qa-matrix'
+        run: npx playwright test qa-matrix --fully-parallel --shard=${{ matrix.part }}/${{ matrix.parts }} --grep-invert "$SWITCH_GREP_INVERT" $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+
+      - name: Phone emulation (qa-matrix and public routes)
+        if: matrix.suite == 'qa-matrix' && inputs.mobile
+        run: npx playwright test qa-matrix public-routes --fully-parallel --shard=${{ matrix.part }}/${{ matrix.parts }} --project=mobile-chrome --project=mobile-safari
+
+      - name: Show the app server log after a failure
+        # Server-side errors behind a failed browser check, readable in the
+        # job log without downloading the evidence artifact.
+        if: failure()
+        run: tail -n 300 "$RUNNER_TEMP/next.log" || true
+
+      - name: Name the evidence after this part
+        if: failure()
+        id: evidence
+        run: echo "name=authenticated-browser-failures-${{ matrix.suite }}-${{ strategy.job-index }}" >> "$GITHUB_OUTPUT"
+
       - name: Preserve authenticated failure evidence
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: authenticated-browser-failures
-          path: test-results/
+          name: ${{ steps.evidence.outputs.name }}
+          path: |
+            test-results/
+            ${{ runner.temp }}/next.log
           retention-days: 7
 
       - name: Stop local Supabase
         if: always()
         run: supabase stop
+
+  database-security:
+    # The check branch protection requires (scripts/protect-main.sh). It passes
+    # only when every part above passed; a skipped, cancelled or failed part
+    # fails it.
+    name: Database security
+    needs: [database-core, browsers]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every database and browser part passed
+        env:
+          CORE: ${{ needs.database-core.result }}
+          BROWSERS: ${{ needs.browsers.result }}
+        run: |
+          echo "Database, advisor and realtime: $CORE"
+          echo "Signed-in browser parts: $BROWSERS"
+          [ "$CORE" = success ] && [ "$BROWSERS" = success ] || { echo "::error::A database security part did not pass."; exit 1; }

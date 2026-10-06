@@ -9,6 +9,7 @@ import {
   combineAgendaItem,
   removeAgendaItem,
 } from "@/features/meetings/services/meeting.commands";
+import { useT } from "@/lib/i18n/client";
 
 interface Option {
   id: string;
@@ -34,6 +35,7 @@ export function AgendaItemControls({
   laterMeetings: Option[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [mode, setMode] = useState<"none" | "combine" | "carry">("none");
   const [choice, setChoice] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export function AgendaItemControls({
     const result = await action();
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "That did not work.");
+      setError(result.error ?? t("meetings.itemControls.failed"));
       return;
     }
     setMode("none");
@@ -62,31 +64,31 @@ export function AgendaItemControls({
             <Button
               variant="ghost"
               onClick={() => setMode("combine")}
-              aria-label={`Combine "${title}"`}
+              aria-label={t("meetings.itemControls.combineAria", { title })}
             >
-              Combine
+              {t("meetings.itemControls.combine")}
             </Button>
           ) : null}
           {unfinished && laterMeetings.length > 0 ? (
             <Button
               variant="ghost"
               onClick={() => setMode("carry")}
-              aria-label={`Carry "${title}" forward`}
+              aria-label={t("meetings.itemControls.carryAria", { title })}
             >
-              Carry forward
+              {t("meetings.itemControls.carryForward")}
             </Button>
           ) : null}
           <Button
             variant="ghost"
             loading={busy}
-            aria-label={`Remove "${title}"`}
+            aria-label={t("meetings.itemControls.removeAria", { title })}
             onClick={() => {
-              if (window.confirm(`Remove "${title}" from the agenda?`)) {
+              if (window.confirm(t("meetings.itemControls.confirmRemove", { title }))) {
                 void run(() => removeAgendaItem(agendaItemId));
               }
             }}
           >
-            Remove
+            {t("meetings.itemControls.remove")}
           </Button>
         </>
       ) : (
@@ -106,7 +108,9 @@ export function AgendaItemControls({
         >
           <div>
             <Label htmlFor={`${mode}-${agendaItemId}`}>
-              {mode === "combine" ? "Combine into" : "Carry to"}
+              {mode === "combine"
+                ? t("meetings.itemControls.combineInto")
+                : t("meetings.itemControls.carryTo")}
             </Label>
             <Select
               id={`${mode}-${agendaItemId}`}
@@ -114,7 +118,7 @@ export function AgendaItemControls({
               onChange={(event) => setChoice(event.target.value)}
               required
             >
-              <option value="">Choose…</option>
+              <option value="">{t("meetings.itemControls.choose")}</option>
               {(mode === "combine" ? otherItems : laterMeetings).map(
                 (option) => (
                   <option key={option.id} value={option.id}>
@@ -125,10 +129,12 @@ export function AgendaItemControls({
             </Select>
           </div>
           <Button type="submit" loading={busy}>
-            {mode === "combine" ? "Combine" : "Carry forward"}
+            {mode === "combine"
+              ? t("meetings.itemControls.combine")
+              : t("meetings.itemControls.carryForward")}
           </Button>
           <Button type="button" variant="ghost" onClick={() => setMode("none")}>
-            Cancel
+            {t("meetings.itemControls.cancel")}
           </Button>
         </form>
       )}

@@ -1,0 +1,71 @@
+/**
+ * Wave 2 unit E2: its editor strings, read as t("units.e2.…"). Only E2 edits
+ * this file and e2.fr-CA.ts (which must have exactly the same keys).
+ */
+export const e2EditorEn = {
+  toolbar: {
+    label: "Undo history",
+    undo: "Undo",
+    // The button's spoken name; it begins with the visible word.
+    undoName: "Undo",
+    redo: "Redo",
+    shortcuts: "Keyboard shortcuts",
+  },
+  announce: {
+    undone: "Undone.",
+    redone: "Redone.",
+    nothingToUndo: "Nothing more to undo",
+    nothingToRedo: "Nothing more to redo",
+    restarted: "Someone else saved this page. Undo starts again from here.",
+  },
+  shortcuts: {
+    title: "Keyboard shortcuts",
+    intro: "Press ? outside the text to open this list again.",
+    action: "What it does",
+    keys: "Keys",
+    or: "or",
+    groups: {
+      history: "Undo and redo",
+      format: "Text",
+      blocks: "Blocks",
+      move: "Moving around",
+      help: "Help",
+    },
+    keyNames: {
+      shift: "Shift",
+      escape: "Esc",
+      enter: "Enter",
+      up: "Up",
+      down: "Down",
+      then: "then",
+    },
+    items: {
+      undo: "Undo the last change",
+      redo: "Redo what was undone",
+      bold: "Bold",
+      italic: "Italic",
+      underline: "Underline",
+      strike: "Strikethrough",
+      code: "Inline code",
+      lineBreak: "Line break inside a block",
+      selectAll: "Select all the text",
+      slash: "Open the list of blocks to add",
+      blockMenu: "Open the block menu: move, duplicate, color, turn into, delete",
+      paragraph: "Turn into a paragraph",
+      heading: "Turn into a heading, level 1 to 6",
+      numbered: "Turn into a numbered list",
+      bullet: "Turn into a bulleted list",
+      checklist: "Turn into a checklist",
+      toggle: "Turn into a toggle list",
+      quote: "Turn into a quote",
+      nest: "Indent the block under the one above",
+      unnest: "Outdent the block",
+      moveBlock: "Move the block up or down",
+      moveSelection: "Move the selected blocks up or down",
+      selectBlocks: "Select several blocks",
+      toolbar: "Go to the formatting toolbar or the selection bar",
+      leave: "Leave the editor",
+      shortcuts: "Show these keyboard shortcuts (outside the text)",
+    },
+  },
+};

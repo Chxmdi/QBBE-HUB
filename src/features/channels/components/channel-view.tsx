@@ -19,6 +19,7 @@ import {
 } from "@/features/channels/history";
 import { authorizeRealtime, createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 import type { Message } from "@/types/entities";
 
 const MESSAGE_SELECT =
@@ -41,6 +42,7 @@ export function Composer({
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const t = useT();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   async function submit() {
@@ -52,7 +54,7 @@ export function Composer({
     setSending(false);
     if (!result.ok) {
       // Never show success for a rejected send (Appendix B: Optimistic UI).
-      setError(result.error ?? "Message not sent.");
+      setError(result.error ?? t("messages.composer.notSent"));
       return;
     }
     setBody("");
@@ -62,7 +64,7 @@ export function Composer({
   if (disabled) {
     return (
       <p className="border-t border-line bg-surface-soft/60 px-4 py-3 text-center text-[13px] text-muted">
-        {disabledHint ?? "You don't have permission to post here."}
+        {disabledHint ?? t("messages.composer.noPermission")}
       </p>
     );
   }
@@ -71,7 +73,7 @@ export function Composer({
     <div className="border-t border-line bg-surface p-3">
       {error ? (
         <p role="alert" className="mb-2 text-[12.5px] text-danger-fg">
-          {error} <button type="button" onClick={submit} className="font-medium underline">Retry</button>
+          {error} <button type="button" onClick={submit} className="font-medium underline">{t("messages.composer.retry")}</button>
         </p>
       ) : null}
       {/* The textarea suppresses its own outline so the box reads as one
@@ -98,13 +100,13 @@ export function Composer({
           onClick={submit}
           loading={sending}
           disabled={!body.trim()}
-          aria-label="Send message"
+          aria-label={t("messages.composer.send")}
         >
           <SendHorizonal className="size-4" aria-hidden />
         </Button>
       </div>
       <p className="meta mt-1.5 px-1">
-        Enter to send · Shift+Enter for a new line · @Full Name or @Team to mention
+        {t("messages.composer.help")}
       </p>
     </div>
   );
@@ -138,6 +140,7 @@ export function ChannelView({
   isStaff?: boolean;
   mutedThreadIds?: string[];
 }) {
+  const t = useT();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [hasOlder, setHasOlder] = useState(
     initialMessages.length >= CHANNEL_HISTORY_PAGE_SIZE,
@@ -354,7 +357,7 @@ export function ChannelView({
             role="status"
             className="border-b border-line bg-warning/10 px-4 py-1.5 text-center text-[12.5px] text-warning-fg"
           >
-            Reconnecting to live updates… messages you send are still saved.
+            {t("messages.view.reconnecting")}
           </p>
         ) : null}
         {/* role="log" is the chat transcript pattern: new arrivals are read
@@ -362,13 +365,13 @@ export function ChannelView({
         <div
           ref={scrollRef}
           role="log"
-          aria-label="Messages"
+          aria-label={t("messages.view.log")}
           className="min-h-0 flex-1 overflow-y-auto py-3"
         >
           {olderFailed ? (
             <ErrorState
               className="mb-2"
-              message="Older messages couldn't be loaded."
+              message={t("messages.view.olderFailed")}
               onRetry={() => void loadOlder()}
             />
           ) : hasOlder ? (
@@ -379,15 +382,15 @@ export function ChannelView({
                 disabled={loadingOlder}
                 className="rounded-(--radius-sm) px-3 py-1 text-[12.5px] font-medium text-brand-fg hover:underline disabled:opacity-60"
               >
-                {loadingOlder ? "Loading older messages…" : "Load older messages"}
+                {loadingOlder ? t("messages.view.loadingOlder") : t("messages.view.loadOlder")}
               </button>
             </div>
           ) : null}
           {roots.length === 0 ? (
             <p className="px-4 py-10 text-center text-[13.5px] text-muted">
               {channelId
-                ? "No messages yet. This channel keeps discussion close to the work it belongs to — start the conversation below."
-                : "No messages yet. This conversation is private to its participants."}
+                ? t("messages.view.emptyChannel")
+                : t("messages.view.emptyConversation")}
             </p>
           ) : (
             roots.map((message) => (
@@ -410,7 +413,7 @@ export function ChannelView({
           )}
         </div>
         <Composer
-          placeholder="Write a message…"
+          placeholder={t("messages.composer.placeholder")}
           disabled={!canPost}
           disabledHint={postDisabledHint}
           onSend={handleSend}
@@ -420,11 +423,11 @@ export function ChannelView({
       {/* Thread panel (P0-MSG-02) */}
       {threadRoot ? (
         <aside
-          aria-label="Thread"
+          aria-label={t("messages.view.thread")}
           className="flex w-full min-w-0 flex-col border-l border-line md:w-96"
         >
           <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
-            <h2 className="text-[13.5px] font-semibold">Thread</h2>
+            <h2 className="text-[13.5px] font-semibold">{t("messages.view.thread")}</h2>
             <div className="flex items-center gap-1">
               <button
                 type="button"
@@ -440,12 +443,14 @@ export function ChannelView({
                   void setThreadMuted(threadRoot.id, muted);
                 }}
               >
-                {mutedThreads.has(threadRoot.id) ? "Unmute thread" : "Mute thread"}
+                {mutedThreads.has(threadRoot.id)
+                  ? t("messages.view.unmuteThread")
+                  : t("messages.view.muteThread")}
               </button>
               <button
                 type="button"
                 onClick={() => setThreadRootId(null)}
-                aria-label="Close thread"
+                aria-label={t("messages.view.closeThread")}
                 className="rounded p-1 text-muted hover:bg-surface-soft hover:text-ink"
               >
                 <X className="size-4" aria-hidden />
@@ -479,9 +484,9 @@ export function ChannelView({
             ))}
           </div>
           <Composer
-            placeholder="Reply in thread…"
+            placeholder={t("messages.composer.threadPlaceholder")}
             disabled={replyPolicy === "disabled"}
-            disabledHint="Replies are disabled here."
+            disabledHint={t("messages.composer.repliesDisabled")}
             onSend={handleThreadReply}
             autoFocus
           />

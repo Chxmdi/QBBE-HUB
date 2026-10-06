@@ -8,14 +8,18 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { buildReportSnapshot } from "@/features/reports/services/report.snapshot";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
-const generateSchema = z.object({
-  reportType: z.enum(["program_quarterly", "project"]),
-  programId: z.string().uuid().optional(),
-  projectId: z.string().uuid().optional(),
-  periodStart: requiredText("Pick a period start."),
-  periodEnd: requiredText("Pick a period end."),
-});
+function generateSchema(t: TranslateFn) {
+  return z.object({
+    reportType: z.enum(["program_quarterly", "project"]),
+    programId: z.string().uuid().optional(),
+    projectId: z.string().uuid().optional(),
+    periodStart: requiredText(t("reports.errors.pickStart")),
+    periodEnd: requiredText(t("reports.errors.pickEnd")),
+  });
+}
 
 /**
  * Report generation from a versioned snapshot of live data (RPT-001):
@@ -24,13 +28,14 @@ const generateSchema = z.object({
  */
 export async function generateReport(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
 
   const limited = await enforceRateLimit("report:generate", session.userId);
   if (limited) return limited;
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
-  const parsed = generateSchema.safeParse(input);
+  if (!session.isStaff) return { ok: false, error: t("reports.errors.staffRequired") };
+  const parsed = generateSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("reports.errors.invalidInput") };
   }
   const { reportType, programId, projectId, periodStart, periodEnd } = parsed.data;
 
@@ -61,9 +66,10 @@ export async function generateReport(input: unknown): Promise<ActionResult> {
     .select("id")
     .single();
 
-  if (error || !report) return { ok: false, error: "Could not save the report." };
+  if (error || !report) return { ok: false, error: t("reports.errors.saveFailed") };
 
-  // Version 1. The report row keeps a copy of the latest snapshot, but the
+  // Version 1. The note is stored in English and shown in the reader's
+  // language by the version history. The report row keeps a copy of the latest snapshot, but the
   // version is the record that cannot be rewritten.
   const { error: versionError } = await supabase.rpc("record_report_version", {
     p_report_id: report.id,
@@ -71,7 +77,7 @@ export async function generateReport(input: unknown): Promise<ActionResult> {
     p_note: "First generation.",
   });
   if (versionError) {
-    return { ok: false, error: "The report was saved but its version was not recorded." };
+    return { ok: false, error: t("reports.errors.versionNotRecorded") };
   }
 
   await supabase.from("audit_event").insert({
@@ -98,10 +104,11 @@ export async function generateReport(input: unknown): Promise<ActionResult> {
  */
 export async function regenerateReport(reportId: string): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
 
   const limited = await enforceRateLimit("report:generate", session.userId);
   if (limited) return limited;
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  if (!session.isStaff) return { ok: false, error: t("reports.errors.staffRequired") };
 
   const supabase = await createSupabaseServerClient();
   const { data: report } = await supabase
@@ -110,9 +117,9 @@ export async function regenerateReport(reportId: string): Promise<ActionResult> 
     .eq("id", reportId)
     .maybeSingle();
 
-  if (!report) return { ok: false, error: "That report is not available to you." };
+  if (!report) return { ok: false, error: t("reports.errors.notAvailable") };
   if (!report.period_start || !report.period_end) {
-    return { ok: false, error: "That report has no period, so it cannot be rebuilt." };
+    return { ok: false, error: t("reports.errors.noPeriod") };
   }
 
   const built = await buildReportSnapshot(supabase, {
@@ -131,7 +138,7 @@ export async function regenerateReport(reportId: string): Promise<ActionResult> 
   });
 
   if (error || !versionId) {
-    return { ok: false, error: "Could not record a new version of this report." };
+    return { ok: false, error: t("reports.errors.newVersionFailed") };
   }
 
   await supabase.from("audit_event").insert({
@@ -164,8 +171,9 @@ async function decideLatestVersion(
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
+  const t = await getT();
   if (decision === "rejected" && !note?.trim()) {
-    return { ok: false, error: "Say why you are sending it back." };
+    return { ok: false, error: t("reports.errors.sayWhy") };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -178,7 +186,7 @@ async function decideLatestVersion(
     .maybeSingle();
 
   if (!latest) {
-    return { ok: false, error: "That report has no version to decide on." };
+    return { ok: false, error: t("reports.errors.noVersion") };
   }
 
   const { error } = await supabase.rpc("decide_report_version", {
@@ -194,8 +202,8 @@ async function decideLatestVersion(
       ok: false,
       error:
         error.code === "23505"
-          ? "This version has already been decided. Regenerate it to decide again."
-          : "Could not record that decision.",
+          ? t("reports.errors.alreadyDecided")
+          : t("reports.errors.decisionFailed"),
     };
   }
 

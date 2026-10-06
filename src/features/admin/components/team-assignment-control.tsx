@@ -15,6 +15,8 @@ import {
   assignTeamToProject,
   removeTeamAssignment,
 } from "@/features/admin/services/team.commands";
+import { scopeRoleLabel } from "@/features/admin/labels";
+import { useT } from "@/lib/i18n/client";
 
 type Option = { id: string; name: string };
 type ProgramAssignment = {
@@ -29,7 +31,6 @@ type ProjectAssignment = {
 };
 type Operation = "program-save" | "project-save" | `program-remove:${string}` | `project-remove:${string}`;
 
-const roleLabel = (role: string) => role.replaceAll("_", " ");
 
 function currentProgramRole(
   assignments: ProgramAssignment[],
@@ -65,6 +66,7 @@ export function TeamAssignmentManager({
   projectAssignments: ProjectAssignment[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [isTransitioning, startTransition] = useTransition();
   const [operation, setOperation] = useState<Operation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,13 +96,13 @@ export function TeamAssignmentManager({
       try {
         const result = await run();
         if (!result.ok) {
-          setError(result.error ?? "Could not update the team assignment.");
+          setError(result.error ?? t("admin.access.team.failed"));
           return;
         }
         setNotice(success);
         router.refresh();
       } catch {
-        setError("Could not update the team assignment. Reload and try again.");
+        setError(t("admin.access.team.failedReload"));
       } finally {
         setOperation(null);
       }
@@ -112,7 +114,7 @@ export function TeamAssignmentManager({
     begin(
       "program-save",
       () => assignTeamToProgram({ teamId: programTeamId, programId, role: programRole }),
-      "Program team assignment saved.",
+      t("admin.access.team.programSaved"),
     );
   }
 
@@ -121,7 +123,7 @@ export function TeamAssignmentManager({
     begin(
       "project-save",
       () => assignTeamToProject({ teamId: projectTeamId, projectId, role: projectRole }),
-      "Project team assignment saved.",
+      t("admin.access.team.projectSaved"),
     );
   }
 
@@ -147,25 +149,25 @@ export function TeamAssignmentManager({
 
   return (
     <section aria-labelledby="team-access" className="mt-8">
-      <h2 id="team-access" className="section-heading">Team access</h2>
+      <h2 id="team-access" className="section-heading">{t("admin.access.team.heading")}</h2>
       <p className="mt-2 text-sm text-muted">
-        An assignment grants every active team member the selected role. Removing it keeps any owner, lead, direct, or other team access.
+        {t("admin.access.team.intro")}
       </p>
       {error ? <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p> : null}
       {notice ? <p role="status" className="mt-3 text-sm text-success-fg">{notice}</p> : null}
 
       {!teams.length ? (
-        <p className="card mt-4 p-5 text-sm text-muted">Create a team before assigning team access.</p>
+        <p className="card mt-4 p-5 text-sm text-muted">{t("admin.access.team.noTeams")}</p>
       ) : (
         <div className="mt-4 grid gap-5 xl:grid-cols-2">
           <div className="card p-5">
-            <h3 className="font-semibold">Program assignments</h3>
+            <h3 className="font-semibold">{t("admin.access.team.programAssignments")}</h3>
             {!programs.length ? (
-              <p className="mt-4 text-sm text-muted">Create a program before assigning this team.</p>
+              <p className="mt-4 text-sm text-muted">{t("admin.access.team.noPrograms")}</p>
             ) : null}
             <form onSubmit={saveProgram} className="mt-4 grid gap-3 sm:grid-cols-2">
               <div>
-                <Label htmlFor="program-team-assignment-team">Team</Label>
+                <Label htmlFor="program-team-assignment-team">{t("admin.access.team.team")}</Label>
                 <Select
                   id="program-team-assignment-team"
                   value={programTeamId}
@@ -177,7 +179,7 @@ export function TeamAssignmentManager({
                 </Select>
               </div>
               <div>
-                <Label htmlFor="program-team-assignment-program">Program</Label>
+                <Label htmlFor="program-team-assignment-program">{t("admin.access.team.program")}</Label>
                 <Select
                   id="program-team-assignment-program"
                   value={programId}
@@ -189,14 +191,14 @@ export function TeamAssignmentManager({
                 </Select>
               </div>
               <div>
-                <Label htmlFor="program-team-assignment-role">Role</Label>
+                <Label htmlFor="program-team-assignment-role">{t("admin.access.team.role")}</Label>
                 <Select
                   id="program-team-assignment-role"
                   value={programRole}
                   onChange={(event) => setProgramRole(event.target.value as ProgramAccessRole)}
                   disabled={pending}
                 >
-                  {programAccessRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
+                  {programAccessRoles.map((role) => <option key={role} value={role}>{scopeRoleLabel(role, t)}</option>)}
                 </Select>
               </div>
               <div className="flex items-end">
@@ -206,19 +208,19 @@ export function TeamAssignmentManager({
                   disabled={pending || !programs.length}
                   className="w-full"
                 >
-                  Add or update program assignment
+                  {t("admin.access.team.saveProgram")}
                 </Button>
               </div>
             </form>
             <AssignmentList
-              empty="No program team assignments."
+              empty={t("admin.access.team.noProgramAssignments")}
               rows={programAssignments.map((assignment) => ({
                 key: `${assignment.program_id}:${assignment.team_id}`,
-                label: `${teamNames.get(assignment.team_id) ?? "Unknown team"} · ${programNames.get(assignment.program_id) ?? "Unknown program"} · ${roleLabel(assignment.role)}`,
+                label: `${teamNames.get(assignment.team_id) ?? t("admin.access.team.unknownTeam")} · ${programNames.get(assignment.program_id) ?? t("admin.access.team.unknownProgram")} · ${scopeRoleLabel(assignment.role, t)}`,
                 remove: () => begin(
                   `program-remove:${assignment.program_id}:${assignment.team_id}`,
                   () => removeTeamAssignment("program", assignment.program_id, assignment.team_id),
-                  "Program team assignment removed.",
+                  t("admin.access.team.programRemoved"),
                 ),
                 loading: operation === `program-remove:${assignment.program_id}:${assignment.team_id}`,
               }))}
@@ -227,13 +229,13 @@ export function TeamAssignmentManager({
           </div>
 
           <div className="card p-5">
-            <h3 className="font-semibold">Project assignments</h3>
+            <h3 className="font-semibold">{t("admin.access.team.projectAssignments")}</h3>
             {!projects.length ? (
-              <p className="mt-4 text-sm text-muted">Create a project before assigning this team.</p>
+              <p className="mt-4 text-sm text-muted">{t("admin.access.team.noProjects")}</p>
             ) : null}
             <form onSubmit={saveProject} className="mt-4 grid gap-3 sm:grid-cols-2">
               <div>
-                <Label htmlFor="project-team-assignment-team">Team</Label>
+                <Label htmlFor="project-team-assignment-team">{t("admin.access.team.team")}</Label>
                 <Select
                   id="project-team-assignment-team"
                   value={projectTeamId}
@@ -245,7 +247,7 @@ export function TeamAssignmentManager({
                 </Select>
               </div>
               <div>
-                <Label htmlFor="project-team-assignment-project">Project</Label>
+                <Label htmlFor="project-team-assignment-project">{t("admin.access.team.project")}</Label>
                 <Select
                   id="project-team-assignment-project"
                   value={projectId}
@@ -257,14 +259,14 @@ export function TeamAssignmentManager({
                 </Select>
               </div>
               <div>
-                <Label htmlFor="project-team-assignment-role">Role</Label>
+                <Label htmlFor="project-team-assignment-role">{t("admin.access.team.role")}</Label>
                 <Select
                   id="project-team-assignment-role"
                   value={projectRole}
                   onChange={(event) => setProjectRole(event.target.value as ProjectAccessRole)}
                   disabled={pending}
                 >
-                  {projectAccessRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
+                  {projectAccessRoles.map((role) => <option key={role} value={role}>{scopeRoleLabel(role, t)}</option>)}
                 </Select>
               </div>
               <div className="flex items-end">
@@ -274,19 +276,19 @@ export function TeamAssignmentManager({
                   disabled={pending || !projects.length}
                   className="w-full"
                 >
-                  Add or update project assignment
+                  {t("admin.access.team.saveProject")}
                 </Button>
               </div>
             </form>
             <AssignmentList
-              empty="No project team assignments."
+              empty={t("admin.access.team.noProjectAssignments")}
               rows={projectAssignments.map((assignment) => ({
                 key: `${assignment.project_id}:${assignment.team_id}`,
-                label: `${teamNames.get(assignment.team_id) ?? "Unknown team"} · ${projectNames.get(assignment.project_id) ?? "Unknown project"} · ${roleLabel(assignment.role)}`,
+                label: `${teamNames.get(assignment.team_id) ?? t("admin.access.team.unknownTeam")} · ${projectNames.get(assignment.project_id) ?? t("admin.access.team.unknownProject")} · ${scopeRoleLabel(assignment.role, t)}`,
                 remove: () => begin(
                   `project-remove:${assignment.project_id}:${assignment.team_id}`,
                   () => removeTeamAssignment("project", assignment.project_id, assignment.team_id),
-                  "Project team assignment removed.",
+                  t("admin.access.team.projectRemoved"),
                 ),
                 loading: operation === `project-remove:${assignment.project_id}:${assignment.team_id}`,
               }))}
@@ -308,6 +310,7 @@ function AssignmentList({
   empty: string;
   disabled: boolean;
 }) {
+  const t = useT();
   if (!rows.length) return <p className="mt-4 text-sm text-muted">{empty}</p>;
   return (
     <ul className="mt-4 divide-y divide-line border-t border-line">
@@ -321,9 +324,9 @@ function AssignmentList({
             loading={row.loading}
             disabled={disabled}
             onClick={row.remove}
-            aria-label={`Remove ${row.label}`}
+            aria-label={t("admin.access.team.removeLabel", { label: row.label })}
           >
-            Remove
+            {t("admin.access.team.remove")}
           </Button>
         </li>
       ))}

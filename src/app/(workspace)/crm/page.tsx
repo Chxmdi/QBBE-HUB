@@ -16,13 +16,17 @@ import {
   PipelineTotals,
 } from "@/features/crm/components/pipeline-summary";
 import { getPipeline } from "@/features/crm/services/opportunity.queries";
-import { requireSession } from "@/lib/auth";
+import { requireSession, NO_ACCESS_REDIRECT } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDate } from "@/lib/utils";
+import { categoryLabel } from "@/features/crm/labels";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import type { Formatters } from "@/lib/i18n/format";
 import type { CrmFollowUp, CrmOrganization } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Relationships" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("crm.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function CrmPage({
@@ -38,9 +42,10 @@ export default async function CrmPage({
   const now = new Date();
   const today =
     calendarDateInZone(now, session.timeZone) ?? now.toISOString().slice(0, 10);
-  if (!session.isStaff) redirect("/");
+  if (!session.isStaff) redirect(NO_ACCESS_REDIRECT);
   const params = await searchParams;
   const supabase = await createSupabasePageClient();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
 
   const [{ data: organizations }, { data: followUps }, pipeline] = await Promise.all([
     supabase
@@ -71,50 +76,50 @@ export default async function CrmPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Relationship CRM"
-        title="Relationships"
-        description="Funders, schools, partners, and vendors — with one accountable owner and a next follow-up per relationship."
+        eyebrow={t("crm.eyebrow")}
+        title={t("crm.title")}
+        description={t("crm.description")}
         actions={
           <div className="flex flex-wrap gap-2">
             <CrmOrganizationDialog defaultOpen={params.create === "organization"} />
             {organizationOptions.length > 0 ? <EntityFormDialog
-              triggerLabel="New contact"
+              triggerLabel={t("crm.contacts.newContact")}
               triggerVariant="secondary"
-              title="Add CRM contact"
-              submitLabel="Add contact"
+              title={t("crm.contacts.addCrmTitle")}
+              submitLabel={t("crm.contacts.submit")}
               defaultOpen={params.create === "contact"}
               action={createCrmContact}
               fields={[
                 {
                   name: "crmOrganizationId",
-                  label: "Organization",
+                  label: t("crm.fields.organization"),
                   type: "select",
                   required: true,
                   options: organizationOptions,
                 },
-                { name: "fullName", label: "Name", type: "text", required: true },
-                { name: "roleTitle", label: "Role", type: "text" },
-                { name: "email", label: "Email", type: "email" },
-                { name: "phone", label: "Phone", type: "text" },
+                { name: "fullName", label: t("crm.fields.name"), type: "text", required: true },
+                { name: "roleTitle", label: t("crm.fields.role"), type: "text" },
+                { name: "email", label: t("crm.fields.email"), type: "email" },
+                { name: "phone", label: t("crm.fields.phone"), type: "text" },
               ]}
             /> : null}
             {organizationOptions.length > 0 ? <EntityFormDialog
-              triggerLabel="New follow-up"
+              triggerLabel={t("crm.followUps.newFollowUp")}
               triggerVariant="secondary"
-              title="Add CRM follow-up"
-              submitLabel="Add follow-up"
+              title={t("crm.followUps.addCrmTitle")}
+              submitLabel={t("crm.followUps.submit")}
               defaultOpen={params.create === "follow-up"}
               action={createFollowUp}
               fields={[
                 {
                   name: "crmOrganizationId",
-                  label: "Organization",
+                  label: t("crm.fields.organization"),
                   type: "select",
                   required: true,
                   options: organizationOptions,
                 },
-                { name: "title", label: "Follow-up", type: "text", required: true },
-                { name: "dueAt", label: "Due date", type: "date", required: true },
+                { name: "title", label: t("crm.fields.followUp"), type: "text", required: true },
+                { name: "dueAt", label: t("crm.fields.dueDate"), type: "date", required: true },
               ]}
             /> : null}
           </div>
@@ -123,7 +128,7 @@ export default async function CrmPage({
 
       {organizationOptions.length === 0 && ["contact", "follow-up"].includes(params.create ?? "") ? (
         <p role="status" className="mb-5 rounded-(--radius-sm) bg-surface-soft px-3 py-2 text-[13px] text-muted">
-          Create an organization first, then add its contacts and follow-ups.
+          {t("crm.createOrgFirst")}
         </p>
       ) : null}
 
@@ -132,13 +137,13 @@ export default async function CrmPage({
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1fr_360px]">
         <section aria-labelledby="crm-orgs">
           <h2 id="crm-orgs" className="section-heading mb-3">
-            Organizations
+            {t("crm.organizations")}
           </h2>
           {orgList.length === 0 ? (
             <EmptyState
               icon={<Handshake />}
-              title="No relationship records yet"
-              description="Track funders, schools, universities, community partners, vendors, and government contacts."
+              title={t("crm.emptyTitle")}
+              description={t("crm.emptyDescription")}
             />
           ) : (
             <ul className="card divide-y divide-line">
@@ -155,11 +160,11 @@ export default async function CrmPage({
                       <p className="meta truncate">{org.website}</p>
                     ) : null}
                   </div>
-                  <Badge tone="neutral">{org.category}</Badge>
+                  <Badge tone="neutral">{categoryLabel(org.category, t)}</Badge>
                   {org.owner ? (
                     <span
                       className="flex items-center gap-1.5 text-[12.5px] text-muted"
-                      title={`Owner: ${org.owner.full_name}`}
+                      title={t("crm.ownerTitle", { name: org.owner.full_name })}
                     >
                       <Avatar name={org.owner.full_name} src={org.owner.avatar_url} size="sm" />
                     </span>
@@ -175,21 +180,23 @@ export default async function CrmPage({
 
           <section aria-labelledby="crm-followups">
           <h2 id="crm-followups" className="section-heading mb-3">
-            Follow-up queue
+            {t("crm.followUpQueue")}
           </h2>
           {followUpList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              Open follow-ups across all relationships appear here, soonest first.
+              {t("crm.followUpQueueEmpty")}
             </p>
           ) : (
             <>
               <FollowUpGroup
-                title="Overdue"
+                title={t("crm.overdue")}
                 items={followUpList.filter((item) => item.due_at < today)}
+                format={format}
               />
               <FollowUpGroup
-                title="Upcoming"
+                title={t("crm.upcoming")}
                 items={followUpList.filter((item) => item.due_at >= today)}
+                format={format}
               />
             </>
           )}
@@ -203,9 +210,11 @@ export default async function CrmPage({
 function FollowUpGroup({
   title,
   items,
+  format,
 }: {
   title: string;
   items: CrmFollowUp[];
+  format: Formatters;
 }) {
   if (items.length === 0) return null;
   return (
@@ -217,7 +226,7 @@ function FollowUpGroup({
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13.5px] font-medium">{followUp.title}</p>
               <p className="meta">
-                {followUp.crm_organization?.name} · {formatDate(followUp.due_at)}
+                {followUp.crm_organization?.name} · {format.date(followUp.due_at)}
               </p>
             </div>
             <FollowUpTaskButton followUpId={followUp.id} taskId={followUp.task_id} />

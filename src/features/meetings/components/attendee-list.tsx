@@ -9,6 +9,7 @@ import {
   removeMeetingAttendee,
 } from "@/features/meetings/services/meeting.commands";
 import { Select } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
 
 export interface Attendee {
   userId: string;
@@ -38,6 +39,7 @@ export function AttendeeList({
   canManage: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,7 +49,7 @@ export function AttendeeList({
   async function invite(formData: FormData) {
     const userId = String(formData.get("userId") ?? "");
     if (!userId) {
-      setError("Choose a person to invite.");
+      setError(t("meetings.attendeeList.choosePerson"));
       return;
     }
     setError(null);
@@ -55,7 +57,7 @@ export function AttendeeList({
     const result = await addMeetingAttendee({ meetingId, userId });
     setPending(null);
     if (!result.ok) {
-      setError(result.error ?? "Could not add that person.");
+      setError(result.error ?? t("meetings.attendeeList.addError"));
       return;
     }
     router.refresh();
@@ -64,7 +66,7 @@ export function AttendeeList({
   async function remove(attendee: Attendee) {
     if (
       !window.confirm(
-        `Remove ${attendee.name} from this meeting? They will lose access to its agenda, notes and decisions unless they are staff.`,
+        t("meetings.attendeeList.confirmRemove", { name: attendee.name }),
       )
     ) return;
     setError(null);
@@ -72,7 +74,7 @@ export function AttendeeList({
     const result = await removeMeetingAttendee({ meetingId, userId: attendee.userId });
     setPending(null);
     if (!result.ok) {
-      setError(result.error ?? "Could not remove that person.");
+      setError(result.error ?? t("meetings.attendeeList.removeError"));
       return;
     }
     router.refresh();
@@ -82,8 +84,7 @@ export function AttendeeList({
     <div>
       {attendees.length === 0 ? (
         <p className="meta">
-          Nobody is invited yet. Only staff can see this meeting until someone is
-          added.
+          {t("meetings.attendeeList.empty")}
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
@@ -92,7 +93,7 @@ export function AttendeeList({
               <Avatar name={attendee.name} src={attendee.avatarUrl} size="sm" />
               <span className="text-[13px] text-ink">{attendee.name}</span>
               {attendee.isOrganizer ? (
-                <span className="meta">Organizer</span>
+                <span className="meta">{t("meetings.attendeeList.organizer")}</span>
               ) : null}
               {canManage && !attendee.isOrganizer ? (
                 <Button
@@ -100,9 +101,9 @@ export function AttendeeList({
                   className="ml-auto"
                   onClick={() => remove(attendee)}
                   loading={pending === attendee.userId}
-                  aria-label={`Remove ${attendee.name} from this meeting`}
+                  aria-label={t("meetings.attendeeList.removeAria", { name: attendee.name })}
                 >
-                  Remove
+                  {t("meetings.attendeeList.remove")}
                 </Button>
               ) : null}
             </li>
@@ -114,7 +115,7 @@ export function AttendeeList({
         <form action={invite} className="mt-3 flex items-end gap-2">
           <div className="flex-1">
             <label htmlFor="attendee-picker" className="meta mb-1 block">
-              Invite someone
+              {t("meetings.attendeeList.inviteLabel")}
             </label>
             <Select
               id="attendee-picker"
@@ -123,7 +124,7 @@ export function AttendeeList({
               className="h-9 px-2 text-[13px]"
             >
               <option value="" disabled>
-                Choose a person…
+                {t("meetings.attendeeList.choosePlaceholder")}
               </option>
               {invitable.map((person) => (
                 <option key={person.id} value={person.id}>
@@ -133,7 +134,7 @@ export function AttendeeList({
             </Select>
           </div>
           <Button type="submit" variant="secondary" loading={pending !== null}>
-            Invite
+            {t("meetings.attendeeList.invite")}
           </Button>
         </form>
       ) : null}

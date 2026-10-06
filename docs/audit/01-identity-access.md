@@ -16,7 +16,7 @@ All paths are relative to `/home/user/QBBE-HUB`.
 ### AUTH-001 — Supabase Auth is the identity provider
 **Verdict:** Complete
 **Requirement:** Supabase Auth is the primary identity provider unless a later org-wide SSO decision supersedes it.
-**Evidence:** All three clients are `@supabase/ssr`/`supabase-js` auth clients — `src/lib/supabase/server.ts:14`, `src/lib/supabase/client.ts:6`, `src/lib/supabase/middleware.ts:21`. Sign-in is `supabase.auth.signInWithPassword` (`src/app/(auth)/sign-in/sign-in-form.tsx:23`), sign-up is `supabase.auth.signUp` (`src/app/(auth)/sign-up/sign-up-form.tsx:38`), sign-out is a route handler at `src/app/auth/sign-out/route.ts`. Session refresh runs on every non-static request through the Next 16 proxy (`proxy.ts:4`, matcher at `:8-14`) calling `updateSession` (`src/lib/supabase/middleware.ts:13`). No competing identity provider exists: `grep` for `signInWithOAuth|signInWithOtp|sso` across `src/` returns nothing.
+**Evidence:** All three clients are `@supabase/ssr`/`supabase-js` auth clients — `src/lib/supabase/server.ts:14`, `src/lib/supabase/client.ts:6`, `src/lib/supabase/middleware.ts:21`. Sign-in is `supabase.auth.signInWithPassword` (`src/app/(auth)/sign-in/sign-in-form.tsx:23`), sign-up is `supabase.auth.signUp` (`src/app/(auth)/sign-up/sign-up-form.tsx:38`), sign-out is a route handler at `src/app/auth/sign-out/route.ts`. Session refresh runs on every non-static request through the Next 16 proxy (`src/proxy.ts:4`, matcher at `:8-14`; until 2026-09-26 the file sat at the repository root, where Next.js ignores it because the app lives in `src/`, so it never ran) calling `updateSession` (`src/lib/supabase/middleware.ts:13`). No competing identity provider exists: `grep` for `signInWithOAuth|signInWithOtp|sso` across `src/` returns nothing.
 
 ### AUTH-002 — Authorization modelled as membership, roles, scoped memberships, permissions
 **Verdict:** Complete
@@ -359,11 +359,17 @@ findings here were all found by looking somewhere no assertion points.
 
 Recorded because an understated readiness is an error too.
 
-- **No `SECURITY DEFINER` RPC is reachable by a signed-in user.** All four
-  public RPCs granted to `authenticated` are `SECURITY INVOKER` and so run
-  under the caller's policies; every definer function is `service_role`-only,
-  with the two deliberate narrowings written down
-  (`20260820180000_tighten_definer_grants.sql`). Independently confirmed:
+- **Correction (2026-09-26): `SECURITY DEFINER` functions *are* reachable by
+  signed-in users.** This entry used to say none were. A query of the local
+  database on 2026-09-26 (`pg_proc` where `prosecdef` and `authenticated` has
+  execute, schema `public`) lists 24, among them the capability checks
+  (`has_task_capability` and friends), the channel and team membership
+  actions, `transfer_organization_ownership`, `my_open_task_count` (#115) and
+  `team_overview` (#136). A definer function is only as safe as the caller
+  check inside it. The last two were written with that check and have database
+  tests proving who gets nothing back (`supabase/tests/my-open-task-count.sql`,
+  `supabase/tests/team-overview.sql`); the other 22 have not been re-reviewed
+  for this correction. Independently confirmed:
   **75 tables, 75 `enable row level security`**, and exactly one `using (true)`
   policy in the schema — immutable reference data.
 - **AUTH-009 is genuinely met**, which no document claims. ~20 centralized

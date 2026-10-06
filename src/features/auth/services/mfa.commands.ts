@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { authorizeAdminAction } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
@@ -18,8 +19,9 @@ const eventSchema = z.enum([
  * backed by a current, non-stale AAL2 session.
  */
 export async function recordMfaSecurityEvent(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const parsed = eventSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid security event." };
+  if (!parsed.success) return { ok: false, error: t("auth.mfa.audit.invalidEvent") };
 
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
@@ -35,7 +37,7 @@ export async function recordMfaSecurityEvent(input: unknown): Promise<ActionResu
     .gte("created_at", new Date(Date.now() - 60_000).toISOString())
     .limit(1)
     .maybeSingle();
-  if (recentError) return { ok: false, error: "Could not verify the security audit trail." };
+  if (recentError) return { ok: false, error: t("auth.mfa.audit.verifyFailed") };
   if (recent) return { ok: true, id: recent.id as string };
 
   const { data: event, error } = await supabase
@@ -52,6 +54,6 @@ export async function recordMfaSecurityEvent(input: unknown): Promise<ActionResu
     .select("id")
     .single();
 
-  if (error || !event) return { ok: false, error: "Could not record the security event." };
+  if (error || !event) return { ok: false, error: t("auth.mfa.audit.recordFailed") };
   return { ok: true, id: event.id as string };
 }

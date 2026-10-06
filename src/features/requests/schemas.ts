@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { optionalDay, requiredText } from "@/lib/schema";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Intake: proposing work, and asking a named person to decide.
@@ -103,6 +104,49 @@ export const DECISION_LABELS: Record<ApprovalDecision, string> = {
   withdrawn: "Withdrawn",
 };
 
+/** Catalogue keys for the labels above, for display in the reader's language. */
+export const REQUEST_STATUS_KEYS: Record<ProjectRequestStatus, MessageKey> = {
+  submitted: "requests.statuses.submitted",
+  in_review: "requests.statuses.in_review",
+  approved: "requests.statuses.approved",
+  declined: "requests.statuses.declined",
+  withdrawn: "requests.statuses.withdrawn",
+  deferred: "requests.statuses.deferred",
+  returned: "requests.statuses.returned",
+};
+
+export const DECISION_KEYS: Record<ApprovalDecision, MessageKey> = {
+  pending: "requests.decisions.pending",
+  approved: "requests.decisions.approved",
+  rejected: "requests.decisions.rejected",
+  withdrawn: "requests.decisions.withdrawn",
+};
+
+export function requestStatusLabel(status: ProjectRequestStatus, t: TranslateFn): string {
+  return t(REQUEST_STATUS_KEYS[status]);
+}
+
+/**
+ * The schemas below keep their English sentences (the tests read them); this
+ * maps each one to its catalogue key so a server action can answer in the
+ * reader's language. Zod's own wording passes through unchanged.
+ */
+const ISSUE_KEYS: Record<string, MessageKey> = {
+  "Give the proposal a name.": "requests.validation.titleRequired",
+  "Say what you are proposing — a title on its own is not a request.":
+    "requests.validation.summaryRequired",
+  "Say why — the next person to propose this needs to know.": "requests.validation.explainDecision",
+  "Name the person who should decide.": "requests.validation.nameApprover",
+  "An approval is about exactly one record.": "requests.validation.oneSubject",
+  "Say why you are rejecting it.": "requests.validation.rejectReason",
+};
+
+export function requestIssueText(message: string | undefined, t: TranslateFn): string {
+  if (!message) return t("requests.errors.invalidInput");
+  const key = ISSUE_KEYS[message];
+  return key ? t(key) : message;
+}
+
 /** How long a request has been waiting, in whole days. */
 export function daysWaiting(since: string, now: Date): number {
   const submitted = new Date(since).getTime();
@@ -135,7 +179,7 @@ export const createProjectRequestSchema = z.object({
   beneficiaries: z.string().trim().max(2000).optional(),
   programId: z.string().uuid().nullable().optional(),
   sponsorId: z.string().uuid().nullable().optional(),
-  neededBy: z.string().trim().max(10).nullable().optional(),
+  neededBy: optionalDay().nullable().optional(),
   estimatedEffort: z.string().trim().max(200).optional(),
 });
 
@@ -172,7 +216,7 @@ export const requestApprovalSchema = z
       .string({ required_error: "Name the person who should decide." })
       .uuid({ message: "Name the person who should decide." }),
     note: z.string().trim().max(2000).optional(),
-    dueAt: z.string().trim().max(10).nullable().optional(),
+    dueAt: optionalDay().nullable().optional(),
     projectRequestId: z.string().uuid().optional(),
     reportId: z.string().uuid().optional(),
     opportunityId: z.string().uuid().optional(),

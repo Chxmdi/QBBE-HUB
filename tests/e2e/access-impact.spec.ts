@@ -52,12 +52,19 @@ test("owner reviews live access and grant sources", async ({ page }) => {
 test("volunteer cannot access the administrator access inventory", async ({ page }) => {
   await signIn(page, "volunteer");
   const response = await page.goto("/admin/access");
-  await expect(page).toHaveURL(/\/$/);
+  // Read the denied response now: the browser drops a response's body once
+  // the page navigates again (the home page may refresh itself).
+  const body = (await response?.text()) ?? "";
+  // Sent home with a reason, not silently: the notice says the page is not theirs.
+  await expect(page).toHaveURL(/\/\?denied=1$/);
+  await expect(
+    page.getByRole("status").filter({ hasText: "That page isn’t available to you" }),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Access impact", exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Active members", exact: true })).toHaveCount(0);
   await expect(page.getByText("Proposed access and sources", { exact: true })).toHaveCount(0);
   // Also guard against inventory accidentally serialized into the denied response.
-  expect(await response?.text()).not.toContain("proposed readable records of");
+  expect(body).not.toContain("proposed readable records of");
 });
 
 /**
@@ -72,7 +79,7 @@ test("staff-only surfaces are closed to a volunteer who types the address", asyn
   await signIn(page, "volunteer");
   for (const path of ["/crm", "/reports"]) {
     await page.goto(path);
-    await expect(page, `${path} must not render for a volunteer`).toHaveURL(/\/$/);
+    await expect(page, `${path} must not render for a volunteer`).toHaveURL(/\/\?denied=1$/);
   }
   await expect(page.getByRole("heading", { name: "Reports", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Generate report" })).toHaveCount(0);

@@ -1,0 +1,11 @@
+/*
+ * The view block lives inside the editor, where BlockNote resets the size,
+ * margin and padding of every paragraph, heading and list item
+ * (.bn-default-styles, unlayered, so it beats Tailwind's layered utilities).
+ * Inside a view block, hand those properties back to the utilities.
+ */
+.bn-default-styles [data-view-block] :is(p, h1, h2, h3, h4, h5, h6, li) {
+  font-size: revert-layer;
+  margin: revert-layer;
+  padding: revert-layer;
+}

@@ -51,6 +51,8 @@ export interface Profile {
   avatar_url: string | null;
   title: string | null;
   timezone: string | null;
+  /** Chosen interface language; null follows the browser (#141). */
+  locale?: string | null;
 }
 
 export interface Membership {
@@ -251,7 +253,8 @@ export interface MessageReaction {
 
 export interface Announcement {
   id: string;
-  message_id: string;
+  /** Null while a scheduled announcement waits for its publish time. */
+  message_id: string | null;
   title: string;
   priority: "normal" | "important" | "critical";
   requires_ack: boolean;

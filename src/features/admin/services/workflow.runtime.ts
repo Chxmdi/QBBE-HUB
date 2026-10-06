@@ -5,6 +5,8 @@ import {
   type WorkflowRuleRow,
 } from "@/features/admin/workflow-match";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "@/lib/i18n/config";
+import { createTranslator } from "@/lib/i18n/translate";
 
 /**
  * Runs the workflow rules that match an event, and records what each one did.
@@ -77,8 +79,10 @@ export async function fireWorkflows(
     memberIdsByTeam.set(teamId, memberIds);
   }
 
-  const executions: Record<string, unknown>[] = [];
-
+  // Each person reads the notification in their own saved language, not the
+  // language of whoever triggered the rule.
+  const allRecipientIds = new Set<string>();
+  const recipientsByRule = new Map<string, string[]>();
   for (const rule of matched) {
     const recipients = workflowRecipients({
       actionType: rule.action?.type ?? "notify_assignee",
@@ -88,6 +92,24 @@ export async function fireWorkflows(
       adminIds,
       actorId: options.actorId,
     });
+    recipientsByRule.set(rule.id, recipients);
+    for (const id of recipients) allRecipientIds.add(id);
+  }
+  const localeByUser = new Map<string, Locale>();
+  if (allRecipientIds.size > 0) {
+    const { data: profiles } = await supabase
+      .from("user_profile")
+      .select("id, locale")
+      .in("id", [...allRecipientIds]);
+    for (const profile of (profiles ?? []) as { id: string; locale: string | null }[]) {
+      if (isLocale(profile.locale)) localeByUser.set(profile.id, profile.locale);
+    }
+  }
+
+  const executions: Record<string, unknown>[] = [];
+
+  for (const rule of matched) {
+    const recipients = recipientsByRule.get(rule.id) ?? [];
 
     const entry = {
       organization_id: options.organizationId,
@@ -114,7 +136,10 @@ export async function fireWorkflows(
       user_id: userId,
       organization_id: options.organizationId,
       category: "assignment",
-      title: `Workflow: ${options.title}`,
+      title: createTranslator(localeByUser.get(userId) ?? DEFAULT_LOCALE)(
+        "admin.workflowNotification",
+        { title: options.title },
+      ),
       source_type: options.sourceType,
       source_id: options.sourceId,
       link: options.link,

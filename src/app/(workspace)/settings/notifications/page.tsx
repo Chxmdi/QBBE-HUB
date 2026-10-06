@@ -8,9 +8,17 @@ import {
 import { DEFAULT_PREFERENCES, PREFERENCE_COLUMNS } from "@/features/notifications/services/delivery-rules";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDateTime, relativeTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import { isEnabled } from "@/lib/feature-flags";
+import { isRealTimeZone } from "@/lib/time";
+import { getPagesT } from "@/features/pages/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 
-export const metadata: Metadata = { title: "Email preferences" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("notifications.page.title") };
+}
+
+const STATUSES = new Set(["sent", "queued", "sending", "bounced", "failed", "suppressed"]);
 export const dynamic = "force-dynamic";
 
 interface RecentDelivery {
@@ -29,6 +37,7 @@ interface RecentDelivery {
  */
 export default async function NotificationSettingsPage() {
   const session = await requireSession();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const supabase = await createSupabasePageClient();
 
   const [{ data: prefRow }, { data: deliveryRows }, { data: projects }] = await Promise.all([
@@ -48,7 +57,9 @@ export default async function NotificationSettingsPage() {
 
   const values: PreferenceValues = {
     ...DEFAULT_PREFERENCES,
-    timezone: session.profile.timezone || DEFAULT_PREFERENCES.timezone,
+    timezone: session.profile.timezone && isRealTimeZone(session.profile.timezone)
+      ? session.profile.timezone
+      : DEFAULT_PREFERENCES.timezone,
     ...((prefRow ?? {}) as Partial<PreferenceValues>),
     category_modes:
       ((prefRow as { category_modes?: PreferenceValues["category_modes"] } | null)?.category_modes) ??
@@ -62,9 +73,14 @@ export default async function NotificationSettingsPage() {
   return (
     <div className="max-w-3xl">
       <PageHeader
-        eyebrow="Settings"
-        title="Email preferences"
-        description="Choose what reaches your inbox, and when. Everything still appears in the Hub either way."
+        eyebrow={t("notifications.page.eyebrow")}
+        title={t("notifications.page.heading")}
+        description={
+          // With wos_pages on (C3) a kind of notice can also be kept out of the Hub.
+          (await isEnabled("wos_pages"))
+            ? (await getPagesT())("units.c3.preferences.description")
+            : t("notifications.page.description")
+        }
       />
 
       <NotificationPreferencesForm
@@ -74,12 +90,11 @@ export default async function NotificationSettingsPage() {
 
       <section aria-labelledby="recent-email" className="mt-10">
         <h2 id="recent-email" className="section-heading mb-3">
-          Recent email to you
+          {t("notifications.page.recentHeading")}
         </h2>
         {deliveries.length === 0 ? (
           <p className="card px-4 py-6 text-center text-[13px] text-muted">
-            Nothing sent yet. Mail from the Hub will be listed here with its
-            delivery status.
+            {t("notifications.page.recentEmpty")}
           </p>
         ) : (
           <ul className="card divide-y divide-line">
@@ -94,10 +109,14 @@ export default async function NotificationSettingsPage() {
                   </span>
                   <span className="meta">
                     {delivery.sent_at
-                      ? `sent ${formatDateTime(delivery.sent_at)}`
+                      ? t("notifications.page.sentAt", {
+                          when: format.dateTime(delivery.sent_at),
+                        })
                       : delivery.scheduled_for
-                        ? `held until ${formatDateTime(delivery.scheduled_for)}`
-                        : relativeTime(delivery.created_at)}
+                        ? t("notifications.page.heldUntil", {
+                            when: format.dateTime(delivery.scheduled_for),
+                          })
+                        : format.relative(delivery.created_at)}
                   </span>
                 </span>
                 <Badge
@@ -111,7 +130,9 @@ export default async function NotificationSettingsPage() {
                           : "info"
                   }
                 >
-                  {delivery.status}
+                  {STATUSES.has(delivery.status)
+                    ? t(`notifications.page.status.${delivery.status}` as MessageKey)
+                    : delivery.status}
                 </Badge>
               </li>
             ))}

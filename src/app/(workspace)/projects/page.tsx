@@ -20,9 +20,12 @@ import { SaveViewButton } from "@/features/tasks/components/save-view-button";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { managedPrograms } from "@/features/budgets/services/budget.queries";
+import { getFormatters, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Projects" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("projects.metaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function ProjectsPage({
@@ -33,6 +36,8 @@ export default async function ProjectsPage({
   const session = await requireSession();
   const params = await searchParams;
   const supabase = await createSupabasePageClient();
+  const t = await getT();
+  const format = await getFormatters();
 
   // Without this, an archived project is reachable only by someone who already
   // knows its URL, so restoring one is effectively impossible through the
@@ -46,7 +51,7 @@ export default async function ProjectsPage({
     ...(archived ? { status: "archived" } : {}),
   });
 
-  const [portfolio, options, { data: programs }, templateStructures, { data: funders }] = await Promise.all([
+  const [portfolio, options, { data: programs }, templateStructures, { data: funders }, managed] = await Promise.all([
     getPortfolio({
       userId: session.userId,
       role: session.role,
@@ -61,7 +66,13 @@ export default async function ProjectsPage({
       .in("category", ["funder", "sponsor", "donor", "government"])
       .eq("status", "active")
       .order("name"),
+    // A project goes inside a program its creator manages; only an
+    // administrator may create one outside every program (project_scoped_insert).
+    session.isAdmin ? Promise.resolve([]) : managedPrograms(supabase, session.organizationId),
   ]);
+  const managedIds = new Set(managed.map((program) => program.id));
+  const creatablePrograms = (programs ?? []).filter((p) => session.isAdmin || managedIds.has(p.id));
+  const canCreate = session.isAdmin || creatablePrograms.length > 0;
   const templates = templateStructures
     .filter((t) => t.approved_at)
     .map((t) => ({ id: t.id, name: t.name }));
@@ -70,62 +81,73 @@ export default async function ProjectsPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Portfolio"
-        title="Projects"
-        description="Every project keeps one accountable owner, a stage, health, and a target date."
+        eyebrow={t("projects.list.eyebrow")}
+        title={t("projects.list.title")}
+        description={t("projects.list.description")}
         actions={
           session.isStaff ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <CreateFromTemplateButton templates={templates} />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {/* It makes a project outside every program, which only an administrator may do. */}
+              {session.isAdmin ? <CreateFromTemplateButton templates={templates} /> : null}
               <EntityFormDialog
-                triggerLabel="Save template"
+                triggerLabel={t("projects.list.saveTemplate")}
                 triggerVariant="secondary"
-                title="Project template"
-                submitLabel="Save"
+                title={t("projects.list.templateDialogTitle")}
+                submitLabel={t("projects.list.templateSubmit")}
                 action={createProjectTemplate}
                 fields={[
-                  { name: "name", label: "Name", type: "text", required: true },
-                  { name: "outcome", label: "Default outcome", type: "textarea" },
+                  { name: "name", label: t("projects.list.templateName"), type: "text", required: true },
+                  { name: "outcome", label: t("projects.list.templateOutcome"), type: "textarea" },
                 ]}
               />
-              <ProjectCreateDialog
-                programs={(programs ?? []).map((p) => ({ id: p.id, label: p.name }))}
-                people={options.people}
-                funders={((funders ?? []) as { id: string; name: string }[]).map((funder) => ({
-                  id: funder.id,
-                  label: funder.name,
-                }))}
-                defaultOpen={params.create === "1"}
-              />
+              {canCreate ? (
+                <ProjectCreateDialog
+                  programs={creatablePrograms.map((p) => ({ id: p.id, label: p.name }))}
+                  people={options.people}
+                  funders={((funders ?? []) as { id: string; name: string }[]).map((funder) => ({
+                    id: funder.id,
+                    label: funder.name,
+                  }))}
+                  defaultOpen={params.create === "1"}
+                  allowNoProgram={session.isAdmin}
+                />
+              ) : (
+                <p className="meta max-w-sm text-right" data-testid="project-create-unavailable">
+                  {t("projects.create.needProgram")}{" "}
+                  <Link href="/requests?create=1" className="text-brand hover:underline">
+                    {t("projects.create.propose")}
+                  </Link>
+                </p>
+              )}
             </div>
           ) : undefined
         }
       />
 
-      <nav aria-label="Project archive" className="mb-6 flex gap-4 text-sm">
+      <nav aria-label={t("projects.list.archiveNav")} className="mb-6 flex gap-4 text-sm">
         <Link
           href="/projects"
           aria-current={!archived ? "page" : undefined}
           className="hover:underline"
         >
-          Current projects
+          {t("projects.list.current")}
         </Link>
         <Link
           href="/projects?archived=1"
           aria-current={archived ? "page" : undefined}
           className="hover:underline"
         >
-          Archived projects
+          {t("projects.list.archived")}
         </Link>
       </nav>
 
-      <p className="meta mb-3">Last refreshed {formatDateTime(portfolio.refreshedAt)}</p>
+      <p className="meta mb-3">{t("projects.list.lastRefreshed", { when: format.dateTime(portfolio.refreshedAt) })}</p>
       {views.length > 0 ? (
-        <nav aria-label="Saved views" className="mb-3 flex flex-wrap gap-2">
+        <nav aria-label={t("projects.list.savedViews")} className="mb-3 flex flex-wrap gap-2">
           {views.map((view) => (
             <Link key={view.id} href={`/projects?view=${view.id}`} className="text-[13px] hover:underline">
               {view.name}
-              {view.shared ? " · shared" : ""}
+              {view.shared ? t("projects.list.sharedSuffix") : ""}
             </Link>
           ))}
         </nav>
@@ -143,11 +165,11 @@ export default async function ProjectsPage({
       {projectList.length === 0 ? (
         <EmptyState
           icon={<FolderKanban />}
-          title={archived ? "No archived projects" : "Your first program starts here"}
+          title={archived ? t("projects.list.emptyArchivedTitle") : t("projects.list.emptyTitle")}
           description={
             archived
-              ? "Archived projects stay here so they can be reviewed and restored."
-              : "A project brings tasks, meetings, communication, and reporting together around one clear outcome with an accountable owner."
+              ? t("projects.list.emptyArchivedBody")
+              : t("projects.list.emptyBody")
           }
         />
       ) : (
@@ -156,15 +178,15 @@ export default async function ProjectsPage({
             <table className="w-full text-left text-[13.5px]">
               <thead>
                 <tr className="border-b border-line bg-surface-soft/60">
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Project</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Program</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Owner</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Health</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Progress</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Next milestone</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Target</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Main blocker</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">Last update</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("projects.list.columns.project")}</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("projects.list.columns.program")}</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("projects.list.columns.owner")}</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("projects.list.columns.health")}</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("projects.list.columns.progress")}</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("projects.list.columns.nextMilestone")}</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("projects.list.columns.target")}</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("projects.list.columns.mainBlocker")}</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">{t("projects.list.columns.lastUpdate")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -177,7 +199,7 @@ export default async function ProjectsPage({
                       >
                         {project.name}
                       </Link>
-                      {project.stale ? <p className="meta">Stale</p> : null}
+                      {project.stale ? <p className="meta">{t("projects.list.stale")}</p> : null}
                     </td>
                     <td className="px-4 py-3 text-muted">{project.programName ?? "—"}</td>
                     <td className="px-4 py-3">
@@ -193,16 +215,16 @@ export default async function ProjectsPage({
                     <td className="px-4 py-3">
                       <HealthBadge health={project.health} />
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{project.progressPercent}%</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{t("projects.list.percent", { value: format.number(project.progressPercent) })}</td>
                     <td className="px-4 py-3 text-muted">{project.nextMilestone ?? "—"}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-muted">
-                      {formatDate(project.targetDate)}
+                      {format.date(project.targetDate)}
                     </td>
                     <td className="max-w-48 truncate px-4 py-3 text-muted">
                       {project.mainBlocker ?? "—"}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-muted">
-                      {formatDate(project.lastUpdateAt)}
+                      {format.date(project.lastUpdateAt)}
                     </td>
                   </tr>
                 ))}

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { reportError } from "@/lib/observability";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Root boundary. A segment's own error.tsx does not catch errors thrown by
@@ -19,6 +20,7 @@ export default function RootError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useT();
   useEffect(() => {
     reportError(error, { digest: error.digest });
   }, [error]);
@@ -26,19 +28,18 @@ export default function RootError({
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-3 px-4 text-center">
       <AlertTriangle className="size-8 text-warning-fg" aria-hidden />
-      <h1 className="text-[18px] font-semibold">The Hub couldn&apos;t load</h1>
+      <h1 className="text-[18px] font-semibold">{t("errors.rootTitle")}</h1>
       <p className="max-w-md text-[13.5px] text-muted">
-        Something failed before the page could be built. Your data is safe —
-        try again, and if this keeps happening let an administrator know
-        {error.digest ? ` (reference: ${error.digest})` : ""}.
+        {t("errors.rootBody")}
+        {error.digest ? t("errors.reference", { digest: error.digest }) : ""}.
       </p>
       <div className="mt-2 flex items-center gap-2">
-        <Button onClick={reset}>Try again</Button>
+        <Button onClick={reset}>{t("common.tryAgain")}</Button>
         <a
           href="/sign-in"
           className="text-[13.5px] font-medium text-brand-fg hover:underline"
         >
-          Back to sign in
+          {t("common.backToSignIn")}
         </a>
       </div>
     </main>

@@ -4,10 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { joinChannel } from "@/features/channels/services/channel.commands";
+import { useT } from "@/lib/i18n/client";
 
 export function JoinChannelButton({ channelId }: { channelId: string }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "saving" | "error">("idle");
+  const t = useT();
 
   async function handleJoin() {
     setState("saving");
@@ -22,11 +24,11 @@ export function JoinChannelButton({ channelId }: { channelId: string }) {
   return (
     <span className="flex items-center gap-2">
       <Button size="sm" variant="secondary" onClick={handleJoin} loading={state === "saving"}>
-        Join
+        {t("channels.join.button")}
       </Button>
       {state === "error" ? (
         <span role="alert" className="text-[12px] text-danger-fg">
-          Couldn&apos;t join
+          {t("channels.join.failed")}
         </span>
       ) : null}
     </span>

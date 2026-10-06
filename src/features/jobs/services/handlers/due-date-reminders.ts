@@ -1,3 +1,4 @@
+import { recipientLocales, reminderDate, translators } from "../i18n";
 import { createNotifications, type NotificationDraft } from "../notify";
 import type { JobContext, JobResult } from "../runner";
 
@@ -42,6 +43,8 @@ interface TaskRow {
 /** Calendar date in the organization's zone, which is what "due today" means. */
 function dateInZone(timezone: string, at: Date): string {
   try {
+    // "en-CA" here is a machine format, not display: it yields YYYY-MM-DD,
+    // which is compared with due dates as a string.
     return new Intl.DateTimeFormat("en-CA", {
       timeZone: timezone,
       year: "numeric",
@@ -131,6 +134,12 @@ export async function dueDateReminders({
   const soonTruncated = (soonTaskRows ?? []).length >= definition.batch_size;
 
   const drafts: NotificationDraft[] = [];
+  // Each person reads their reminder in their own saved language.
+  const translatorFor = translators();
+  const taskLocales = await recipientLocales(
+    db,
+    (taskRows as unknown as TaskRow[]).map((task) => task.assignee_id),
+  );
 
   for (const task of taskRows as unknown as TaskRow[]) {
     const zone = zones.get(task.organization_id) ?? "America/Toronto";
@@ -143,22 +152,26 @@ export async function dueDateReminders({
     else if (due === addDays(today, 1)) state = "tomorrow";
     if (!state) continue;
 
-    const label =
+    const locale = taskLocales.get(task.assignee_id) ?? "en";
+    const t = translatorFor(locale);
+    const date = reminderDate(due, locale);
+    const label = t(
       state === "overdue"
-        ? "Overdue"
+        ? "jobs.notify.overdue"
         : state === "today"
-          ? "Due today"
-          : "Due tomorrow";
+          ? "jobs.notify.dueToday"
+          : "jobs.notify.dueTomorrow",
+    );
 
     drafts.push({
       user_id: task.assignee_id,
       organization_id: task.organization_id,
       category: "due_date",
-      title: `${label}: ${task.title}`,
+      title: t("jobs.notify.labelled", { label, title: task.title }),
       body:
         state === "overdue"
-          ? `This was due ${due}. Update the due date or move it forward.`
-          : `Due ${due}.`,
+          ? t("jobs.notify.taskOverdueBody", { date })
+          : t("jobs.notify.dueBody", { date }),
       source_type: "task",
       source_id: task.id,
       link: `/my-work?task=${task.id}`,
@@ -213,6 +226,11 @@ export async function dueDateReminders({
   const soonFollowUpsTruncated =
     (soonFollowUps ?? []).length >= definition.batch_size;
 
+  const followUpLocales = await recipientLocales(
+    db,
+    (followUpRows as unknown as FollowUpRow[]).map((followUp) => followUp.owner_id),
+  );
+
   for (const followUp of followUpRows as unknown as FollowUpRow[]) {
     const zone = zones.get(followUp.organization_id) ?? "America/Toronto";
     const today = dateInZone(zone, now);
@@ -224,12 +242,18 @@ export async function dueDateReminders({
     else if (due === addDays(today, 1)) state = "tomorrow";
     if (!state) continue;
 
+    const locale = followUpLocales.get(followUp.owner_id) ?? "en";
+    const t = translatorFor(locale);
+
     drafts.push({
       user_id: followUp.owner_id,
       organization_id: followUp.organization_id,
       category: "due_date",
-      title: `${state === "overdue" ? "Overdue follow-up" : "Follow-up due"}: ${followUp.title}`,
-      body: `Due ${due}.`,
+      title: t("jobs.notify.labelled", {
+        label: t(state === "overdue" ? "jobs.notify.followUpOverdue" : "jobs.notify.followUpDue"),
+        title: followUp.title,
+      }),
+      body: t("jobs.notify.dueBody", { date: reminderDate(due, locale) }),
       source_type: "crm_follow_up",
       source_id: followUp.id,
       link: "/crm",

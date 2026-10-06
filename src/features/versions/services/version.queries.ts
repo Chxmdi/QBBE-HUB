@@ -1,0 +1,177 @@
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { ObjectRef } from "@/lib/objects/contracts";
+
+type Db = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+
+export interface VersionSummary {
+  id: string;
+  kind: "auto" | "manual" | "restore";
+  label: string | null;
+  createdAt: string;
+  createdByName: string | null;
+}
+
+export interface TrashEntry {
+  /** "page": a workspace page, trashed by its own deleted_at and restored by restorePage. */
+  kind: "object" | "page";
+  objectId: string;
+  objectType: string;
+  title: string;
+  deletedAt: string;
+  deletedByName: string | null;
+  /** When it is deleted for good; null when nothing deletes it (pages). */
+  purgeAfter: string | null;
+}
+
+async function names(db: Db, ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const { data } = await db.from("user_profile").select("id, full_name").in("id", unique);
+  return new Map(((data ?? []) as { id: string; full_name: string }[]).map((row) => [row.id, row.full_name]));
+}
+
+/** An object's versions, newest first, as the reader may see them (RLS). */
+export async function listObjectVersions(object: ObjectRef, limit = 100): Promise<VersionSummary[]> {
+  const db = await createSupabaseServerClient();
+  const { data } = await db
+    .from("object_version")
+    .select("id, kind, label, created_at, created_by")
+    .eq("object_id", object.id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  const rows = (data ?? []) as {
+    id: string;
+    kind: VersionSummary["kind"];
+    label: string | null;
+    created_at: string;
+    created_by: string | null;
+  }[];
+  const people = await names(db, rows.map((row) => row.created_by ?? ""));
+  return rows.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    label: row.label,
+    createdAt: row.created_at,
+    createdByName: row.created_by ? people.get(row.created_by) ?? null : null,
+  }));
+}
+
+/**
+ * What the reader may see in the trash: still restorable, newest first.
+ *
+ * Two kinds of thing are trashed differently. Records go through
+ * trash_object and object_trash. Workspace pages carry their own deleted_at
+ * (pages' "Move to trash"), which object_trash never sees, so they are read
+ * from the page table here; without that the trash showed as empty while
+ * trashed pages could only be found by their link (staging audit B3).
+ */
+export async function listTrash(options: { pages?: boolean } = {}): Promise<TrashEntry[]> {
+  const db = await createSupabaseServerClient();
+  const [{ data }, { data: pageData }] = await Promise.all([
+    db
+      .from("object_trash")
+      .select("object_id, object_type, title, deleted_at, deleted_by, purge_after")
+      .is("restored_at", null)
+      .is("purged_at", null)
+      .order("deleted_at", { ascending: false })
+      .limit(200),
+    options.pages
+      ? db
+          .from("page")
+          .select("id, title, deleted_at, updated_by")
+          .not("deleted_at", "is", null)
+          .order("deleted_at", { ascending: false })
+          .limit(200)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const rows = (data ?? []) as {
+    object_id: string;
+    object_type: string;
+    title: string;
+    deleted_at: string;
+    deleted_by: string | null;
+    purge_after: string;
+  }[];
+  // The page's last editor is whoever moved it to the trash.
+  const pages = (pageData ?? []) as { id: string; title: string; deleted_at: string; updated_by: string | null }[];
+  const people = await names(db, [
+    ...rows.map((row) => row.deleted_by ?? ""),
+    ...pages.map((page) => page.updated_by ?? ""),
+  ]);
+  const records: TrashEntry[] = rows.map((row) => ({
+    kind: "object",
+    objectId: row.object_id,
+    objectType: row.object_type,
+    title: row.title,
+    deletedAt: row.deleted_at,
+    deletedByName: row.deleted_by ? people.get(row.deleted_by) ?? null : null,
+    purgeAfter: row.purge_after,
+  }));
+  const listed = new Set(records.map((entry) => entry.objectId));
+  const trashedPages: TrashEntry[] = pages
+    .filter((page) => !listed.has(page.id))
+    .map((page) => ({
+      kind: "page",
+      objectId: page.id,
+      objectType: "page",
+      title: page.title,
+      deletedAt: page.deleted_at,
+      deletedByName: page.updated_by ? people.get(page.updated_by) ?? null : null,
+      purgeAfter: null,
+    }));
+  return [...records, ...trashedPages].sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+}
+
+/** Whether the object is in the trash (restorable) right now. */
+export async function isInTrash(objectId: string): Promise<boolean> {
+  const db = await createSupabaseServerClient();
+  const { data } = await db
+    .from("object_trash")
+    .select("id")
+    .eq("object_id", objectId)
+    .is("restored_at", null)
+    .is("purged_at", null)
+    .limit(1);
+  return (data ?? []).length > 0;
+}
+
+export interface VersionDetail extends VersionSummary {
+  objectId: string;
+  objectType: string;
+  content: unknown;
+  properties: Record<string, unknown>;
+}
+
+/** One version with its snapshot, or null when the reader cannot see it. */
+export async function getObjectVersion(versionId: string): Promise<VersionDetail | null> {
+  const db = await createSupabaseServerClient();
+  const { data } = await db
+    .from("object_version")
+    .select("id, object_id, object_type, kind, label, content, properties, created_at, created_by")
+    .eq("id", versionId)
+    .maybeSingle();
+  if (!data) return null;
+  const row = data as {
+    id: string;
+    object_id: string;
+    object_type: string;
+    kind: VersionSummary["kind"];
+    label: string | null;
+    content: unknown;
+    properties: Record<string, unknown> | null;
+    created_at: string;
+    created_by: string | null;
+  };
+  const people = await names(db, [row.created_by ?? ""]);
+  return {
+    id: row.id,
+    objectId: row.object_id,
+    objectType: row.object_type,
+    kind: row.kind,
+    label: row.label,
+    content: row.content,
+    properties: row.properties ?? {},
+    createdAt: row.created_at,
+    createdByName: row.created_by ? people.get(row.created_by) ?? null : null,
+  };
+}

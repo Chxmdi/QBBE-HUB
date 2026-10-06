@@ -17,15 +17,20 @@ import {
 import { PageHeader } from "@/components/shared/page-header";
 import {
   AgendaView,
+  calendarDateFormats,
   KIND_STYLES,
   WeekView,
   type CalendarItem,
 } from "@/features/calendar/components/week-view";
+import { getLocale, getT } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
+import { isCalendarDate } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 
-export const metadata: Metadata = { title: "Calendar" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("calendar.title") };
+}
 export const dynamic = "force-dynamic";
 
 /**
@@ -40,9 +45,13 @@ export default async function CalendarPage({
 }) {
   const session = await requireSession();
   const params = await searchParams;
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
+  const formats = calendarDateFormats(locale);
   const view = params.view === "month" ? "month" : "week";
 
-  const anchor = params.date
+  // A date that is not a day (2026-02-30, or any other text) parsed to an
+  // Invalid Date, and the range below then threw: the page showed an error.
+  const anchor = params.date && isCalendarDate(params.date)
     ? parse(params.date, "yyyy-MM-dd", new Date())
     : new Date();
 
@@ -214,8 +223,8 @@ export default async function CalendarPage({
 
   const title =
     view === "week"
-      ? `${format(rangeStartDate, "MMM d")} – ${format(rangeEndDate, "MMM d, yyyy")}`
-      : format(anchor, "MMMM yyyy");
+      ? `${format(rangeStartDate, formats.rangeStart, formats.options)} – ${format(rangeEndDate, formats.rangeEnd, formats.options)}`
+      : format(anchor, formats.monthYear, formats.options);
 
   const monthDays =
     view === "month"
@@ -225,14 +234,14 @@ export default async function CalendarPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Schedule"
+        eyebrow={t("calendar.eyebrow")}
         title={title}
-        description="Tasks, milestones, meetings, events, and CRM follow-ups on one calendar."
+        description={t("calendar.description")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <div
               role="group"
-              aria-label="Calendar view"
+              aria-label={t("calendar.viewGroup")}
               className="flex rounded-(--radius-sm) border border-line"
             >
               {(["week", "month"] as const).map((option) => (
@@ -247,14 +256,14 @@ export default async function CalendarPage({
                       : "text-muted hover:text-ink",
                   )}
                 >
-                  {option}
+                  {t(`calendar.views.${option}`)}
                 </Link>
               ))}
             </div>
-            <nav aria-label="Date navigation" className="flex items-center gap-1">
+            <nav aria-label={t("calendar.dateNavigation")} className="flex items-center gap-1">
               <Link
                 href={`/calendar?view=${view}&date=${previous}`}
-                aria-label={`Previous ${view}`}
+                aria-label={t(`calendar.previous.${view}`)}
                 className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-surface-soft"
               >
                 ←
@@ -263,11 +272,11 @@ export default async function CalendarPage({
                 href={`/calendar?view=${view}`}
                 className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-surface-soft"
               >
-                Today
+                {t("calendar.today")}
               </Link>
               <Link
                 href={`/calendar?view=${view}&date=${next}`}
-                aria-label={`Next ${view}`}
+                aria-label={t(`calendar.next.${view}`)}
                 className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-surface-soft"
               >
                 →
@@ -287,24 +296,24 @@ export default async function CalendarPage({
               KIND_STYLES[kind],
             )}
           >
-            {kind.replace(/_/g, "-")}
+            {t(`calendar.legend.${kind}`)}
           </span>
         ))}
       </div>
 
       {/* Mobile: agenda. Desktop: week grid or month grid. */}
       <div className="md:hidden">
-        <AgendaView items={items} />
+        <AgendaView items={items} locale={locale} />
       </div>
       <div className="hidden md:block">
         {view === "week" ? (
-          <WeekView anchor={anchor} items={items} />
+          <WeekView anchor={anchor} items={items} locale={locale} />
         ) : (
           <div className="card relative overflow-x-auto">
             <table className="w-full min-w-[720px] table-fixed border-collapse">
               <thead>
                 <tr>
-                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                  {monthDays.slice(0, 7).map((date) => format(date, "EEE", formats.options)).map((day) => (
                     <th
                       key={day}
                       scope="col"
@@ -359,7 +368,7 @@ export default async function CalendarPage({
                             ))}
                             {dayItems.length > 3 ? (
                               <li className="px-1.5 text-[10.5px] text-muted">
-                                +{dayItems.length - 3} more
+                                {t("calendar.more", { count: dayItems.length - 3 })}
                               </li>
                             ) : null}
                           </ul>

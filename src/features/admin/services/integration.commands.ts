@@ -5,10 +5,12 @@ import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { mapVmsSnapshot } from "@/features/admin/services/vms";
+import { getT } from "@/lib/i18n/server";
 
 export async function disconnectIntegration(
   provider: "gmail" | "google_calendar" | "google_drive" | "volunteer_system",
 ): Promise<ActionResult> {
+  const t = await getT();
   let session = await requireSession();
   if (provider === "volunteer_system") {
     const authorization = await authorizeAdminAction();
@@ -33,7 +35,7 @@ export async function disconnectIntegration(
     .select("id")
     .maybeSingle();
 
-  if (error || !disconnected) return { ok: false, error: "Could not disconnect." };
+  if (error || !disconnected) return { ok: false, error: t("admin.errors.disconnectFailed") };
 
   if (provider === "gmail") {
     await supabase.from("gmail_message").delete().eq("user_id", session.userId);
@@ -60,7 +62,7 @@ export async function disconnectIntegration(
       .eq("organization_id", session.organizationId);
     const { error: clearError } = await supabase.rpc("clear_org_vms_ids");
     if (clearError) {
-      return { ok: false, error: "VMS disconnected, but linked identity cleanup failed." };
+      return { ok: false, error: t("admin.errors.vmsCleanupFailed") };
     }
   }
 
@@ -81,6 +83,7 @@ export async function disconnectIntegration(
 }
 
 export async function connectVolunteerSystem(): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
@@ -88,7 +91,7 @@ export async function connectVolunteerSystem(): Promise<ActionResult> {
     return {
       ok: false,
       error:
-        "Volunteer Management System is not configured. Set VMS_API_URL (and VMS_API_KEY) first.",
+        t("admin.errors.vmsNotConfigured"),
     };
   }
   try {
@@ -104,20 +107,20 @@ export async function connectVolunteerSystem(): Promise<ActionResult> {
     if (!response.ok) {
       return {
         ok: false,
-        error: `VMS responded ${response.status}. Connection was not recorded.`,
+        error: t("admin.errors.vmsResponded", { status: response.status }),
       };
     }
     const snapshot = mapVmsSnapshot(await response.json());
     if (!snapshot.recognized) {
       return {
         ok: false,
-        error: "VMS responded, but its payload did not match the configured identity/assignment contract.",
+        error: t("admin.errors.vmsBadPayload"),
       };
     }
   } catch {
     return {
       ok: false,
-      error: "Could not reach the Volunteer Management System. Connection was not recorded.",
+      error: t("admin.errors.vmsUnreachable"),
     };
   }
   const supabase = await createSupabaseServerClient();
@@ -147,7 +150,7 @@ export async function connectVolunteerSystem(): Promise<ActionResult> {
         status: "connected",
         last_sync_at: null,
       });
-      if (insertError) return { ok: false, error: "Could not record the VMS connection." };
+      if (insertError) return { ok: false, error: t("admin.errors.vmsRecordFailed") };
     }
   }
   await supabase.from("audit_event").insert({
@@ -165,11 +168,12 @@ export async function linkVmsIdentity(
   userId: string,
   vmsId: string,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
   const normalized = vmsId.trim();
-  if (normalized.length > 200) return { ok: false, error: "VMS id is too long." };
+  if (normalized.length > 200) return { ok: false, error: t("admin.errors.vmsIdTooLong") };
 
   const supabase = await createSupabaseServerClient();
   const { data: membership, error: membershipError } = await supabase
@@ -180,7 +184,7 @@ export async function linkVmsIdentity(
     .eq("status", "active")
     .maybeSingle();
   if (membershipError || !membership) {
-    return { ok: false, error: "Only active members of this organization can be linked to VMS identities." };
+    return { ok: false, error: t("admin.errors.vmsOnlyActive") };
   }
 
   const { data: updated, error } = await supabase
@@ -193,7 +197,7 @@ export async function linkVmsIdentity(
     .eq("id", userId)
     .select("id")
     .maybeSingle();
-  if (error || !updated) return { ok: false, error: "Could not store the VMS id." };
+  if (error || !updated) return { ok: false, error: t("admin.errors.vmsStoreFailed") };
 
   if (!normalized) {
     await supabase

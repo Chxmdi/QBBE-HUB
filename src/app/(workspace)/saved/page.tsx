@@ -6,9 +6,11 @@ import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDateTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Saved messages" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("shell.saved.title") };
+}
 export const dynamic = "force-dynamic";
 
 interface SavedMessageRow {
@@ -34,6 +36,8 @@ function messageHref(message: NonNullable<SavedMessageRow["message"]>): string |
 
 export default async function SavedMessagesPage() {
   const session = await requireSession();
+  const t = await getT();
+  const format = await getFormatters();
   const supabase = await createSupabasePageClient();
   const { data } = await supabase
     .from("saved_message")
@@ -49,15 +53,15 @@ export default async function SavedMessagesPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Communication"
-        title="Saved messages"
-        description="Keep important conversations close at hand. Access is checked again each time you open a message."
+        eyebrow={t("shell.saved.eyebrow")}
+        title={t("shell.saved.title")}
+        description={t("shell.saved.description")}
       />
       {visible.length === 0 ? (
         <EmptyState
           icon={<Bookmark />}
-          title="No saved messages"
-          description="Use the message actions menu in a channel or direct message to save something for later."
+          title={t("shell.saved.emptyTitle")}
+          description={t("shell.saved.emptyBody")}
         />
       ) : (
         <ul className="card divide-y divide-line">
@@ -66,23 +70,23 @@ export default async function SavedMessagesPage() {
             const href = messageHref(message);
             const location = message.channel
               ? `#${message.channel.slug}`
-              : message.conversation?.title || "Direct message";
+              : message.conversation?.title || t("shell.saved.directMessage");
             const content = (
               <>
                 <Avatar
-                  name={message.author?.full_name ?? "Unknown"}
+                  name={message.author?.full_name ?? t("shell.saved.unknown")}
                   src={message.author?.avatar_url}
                   size="md"
                 />
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <span className="text-[14px] font-semibold">
-                      {message.author?.full_name ?? "Unknown"}
+                      {message.author?.full_name ?? t("shell.saved.unknown")}
                     </span>
-                    <span className="meta">{location} · {formatDateTime(message.created_at)}</span>
+                    <span className="meta">{location} · {format.dateTime(message.created_at)}</span>
                   </span>
                   <span className="mt-0.5 block whitespace-pre-wrap text-[13.5px] text-ink">
-                    {message.deleted_at ? "This message was deleted." : message.body}
+                    {message.deleted_at ? t("shell.saved.deleted") : message.body}
                   </span>
                 </span>
               </>

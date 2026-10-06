@@ -1,4 +1,9 @@
-import { TASK_STATUS_LABELS } from "@/features/tasks/schemas";
+import {
+  TASK_STATUS_LABELS,
+  taskPriorityText,
+  taskStatusText,
+} from "@/features/tasks/schemas";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 import type { TaskStatus } from "@/types/entities";
 
 /**
@@ -153,6 +158,30 @@ export function describeChange(change: TaskFieldChange): string {
   if (from !== null && to === null) return `cleared ${name} (was ${from})`;
   if (from === null && to === null) return `changed ${name}`;
   return `changed ${name} from ${from} to ${to}`;
+}
+
+/**
+ * One change, in the reader's language (#141).
+ *
+ * Statuses and priorities are re-read from their stored codes, because the
+ * label saved at write time is English. Names resolved at write time (people,
+ * projects) are data and stay as they were.
+ */
+export function describeChangeIn(change: TaskFieldChange, t: TranslateFn): string {
+  const field = t(`tasks.history.fields.${change.field}` as MessageKey);
+  const shown = (code: string | null, label: string | null): string | null => {
+    if (code === null) return label;
+    if (change.field === "status") return taskStatusText(code as TaskStatus, t);
+    if (change.field === "priority") return taskPriorityText(code, t);
+    return label ?? code;
+  };
+  const from = shown(change.from, change.fromLabel);
+  const to = shown(change.to, change.toLabel);
+
+  if (from === null && to !== null) return t("tasks.history.set", { field, to });
+  if (from !== null && to === null) return t("tasks.history.cleared", { field, from });
+  if (from === null && to === null) return t("tasks.history.changed", { field });
+  return t("tasks.history.changedFromTo", { field, from: from ?? "", to: to ?? "" });
 }
 
 /** The activity summary for a whole mutation. */

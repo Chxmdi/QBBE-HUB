@@ -1,5 +1,8 @@
+"use client";
+
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * A load that failed, said plainly, with a way to try again (P0-UX-05,
@@ -9,7 +12,7 @@ import { cn } from "@/lib/utils";
  * there was nothing when in fact nothing could be read.
  */
 export function ErrorState({
-  message = "This couldn't be loaded.",
+  message,
   onRetry,
   className,
 }: {
@@ -17,6 +20,7 @@ export function ErrorState({
   onRetry?: () => void;
   className?: string;
 }) {
+  const t = useT();
   return (
     <div
       role="alert"
@@ -26,14 +30,14 @@ export function ErrorState({
       )}
     >
       <AlertTriangle className="size-5 text-warning-fg" aria-hidden />
-      <p>{message}</p>
+      <p>{message ?? t("ui.loadFailed")}</p>
       {onRetry ? (
         <button
           type="button"
           onClick={onRetry}
           className="rounded-(--radius-sm) px-2 py-1 text-[12.5px] font-semibold text-brand-fg underline-offset-2 hover:underline"
         >
-          Try again
+          {t("common.tryAgain")}
         </button>
       ) : null}
     </div>

@@ -2,8 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createLabelSchema, taskLabelSchema } from "@/features/tasks/schemas";
+import {
+  createLabelSchema,
+  taskLabelSchema,
+  translateTaskError,
+} from "@/features/tasks/schemas";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 /**
@@ -24,9 +29,10 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 export async function createLabel(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = createLabelSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: translateTaskError(t, parsed.error.issues[0]?.message) ?? t("tasks.errors.invalidInput") };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -45,9 +51,9 @@ export async function createLabel(input: unknown): Promise<ActionResult> {
     // save", because the label the person wanted already exists and they can
     // just pick it.
     if (error.code === "23505") {
-      return { ok: false, error: "A label with that name already exists." };
+      return { ok: false, error: t("tasks.errors.labelExists") };
     }
-    return { ok: false, error: "Could not create the label." };
+    return { ok: false, error: t("tasks.errors.createLabel") };
   }
 
   revalidatePath("/", "layout");
@@ -56,8 +62,9 @@ export async function createLabel(input: unknown): Promise<ActionResult> {
 
 export async function attachTaskLabel(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = taskLabelSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: t("tasks.errors.invalidInput") };
   const { taskId, labelId } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -69,7 +76,7 @@ export async function attachTaskLabel(input: unknown): Promise<ActionResult> {
   // duplicate, not a failure. The person asked for the label to be on the task
   // and it is.
   if (error && error.code !== "23505") {
-    return { ok: false, error: "Could not add that label." };
+    return { ok: false, error: t("tasks.errors.addLabel") };
   }
 
   if (!error) await recordLabelChange(supabase, session, taskId, labelId, "added");
@@ -79,8 +86,9 @@ export async function attachTaskLabel(input: unknown): Promise<ActionResult> {
 
 export async function detachTaskLabel(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = taskLabelSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: t("tasks.errors.invalidInput") };
   const { taskId, labelId } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -90,7 +98,7 @@ export async function detachTaskLabel(input: unknown): Promise<ActionResult> {
     .eq("task_id", taskId)
     .eq("label_id", labelId);
 
-  if (error) return { ok: false, error: "Could not remove that label." };
+  if (error) return { ok: false, error: t("tasks.errors.removeLabel") };
 
   await recordLabelChange(supabase, session, taskId, labelId, "removed");
   revalidatePath("/", "layout");

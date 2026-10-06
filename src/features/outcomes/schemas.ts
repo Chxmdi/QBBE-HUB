@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { isCalendarDate, optionalDay, requiredText } from "@/lib/schema";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * Outputs and outcomes.
@@ -27,6 +28,16 @@ export const DIRECTION_LABELS: Record<MetricDirection, string> = {
   increase: "Higher is better",
   decrease: "Lower is better",
 };
+
+/** A session's status in the reader's language (#141). */
+export function operationStatusLabel(status: OperationStatus, t: TranslateFn): string {
+  return t(`outcomes.operationStatus.${status}`);
+}
+
+/** Which way a metric counts as better, in the reader's language (#141). */
+export function directionLabel(direction: MetricDirection, t: TranslateFn): string {
+  return t(`outcomes.direction.${direction}`);
+}
 
 /** The same arithmetic the database stores, so a form can show it before saving. */
 export function contactHours(
@@ -170,7 +181,7 @@ export const recordOperationSchema = z
     programId: z.string().uuid(),
     projectId: z.string().uuid().nullable().optional(),
     title: requiredText("Give the session a name.", 200),
-    occurredOn: requiredText("When did it happen?", 10),
+    occurredOn: requiredText("When did it happen?", 10).refine(isCalendarDate, "When did it happen?"),
     location: z.string().trim().max(200).optional(),
     status: z.enum(OPERATION_STATUSES).default("planned"),
     attendeeCount: wholeNumber,
@@ -211,9 +222,9 @@ export const createMetricSchema = z
     unit: requiredText("What is it measured in?", 60).default("people"),
     direction: z.enum(METRIC_DIRECTIONS).default("increase"),
     baseline: number,
-    baselineOn: z.string().trim().max(10).nullable().optional(),
+    baselineOn: optionalDay().nullable().optional(),
     target: number,
-    targetOn: z.string().trim().max(10).nullable().optional(),
+    targetOn: optionalDay().nullable().optional(),
     ownerId: z.string().uuid().nullable().optional(),
   })
   .refine(
@@ -244,7 +255,7 @@ export const createMetricSchema = z
 
 export const recordMeasurementSchema = z.object({
   metricId: z.string().uuid(),
-  measuredOn: requiredText("When was it measured?", 10),
+  measuredOn: requiredText("When was it measured?", 10).refine(isCalendarDate, "When was it measured?"),
   value: z.preprocess(
     (v) => (typeof v === "string" ? Number(v.replace(/[,\s]/g, "")) : v),
     z.number({ invalid_type_error: "Enter the measured value as a number." }),

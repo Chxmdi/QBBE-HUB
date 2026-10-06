@@ -9,6 +9,7 @@ import {
   setMemberActive,
 } from "@/features/admin/services/admin.commands";
 import type { OrgRole } from "@/types/entities";
+import { useT } from "@/lib/i18n/client";
 
 export function MemberRoleSelect({
   membershipId,
@@ -18,11 +19,12 @@ export function MemberRoleSelect({
   role: OrgRole;
 }) {
   const router = useRouter();
+  const t = useT();
   const [value, setValue] = useState<OrgRole>(role);
   const [error, setError] = useState<string | null>(null);
 
   if (role === "owner") {
-    return <span className="text-[13px] font-medium">Primary Owner</span>;
+    return <span className="text-[13px] font-medium">{t("admin.roles.owner")}</span>;
   }
 
   async function handleChange(next: OrgRole) {
@@ -32,7 +34,7 @@ export function MemberRoleSelect({
     const result = await changeMemberRole({ membershipId, role: next });
     if (!result.ok) {
       setValue(previous);
-      setError(result.error ?? "Failed.");
+      setError(result.error ?? t("admin.genericFailed"));
       return;
     }
     router.refresh();
@@ -41,16 +43,16 @@ export function MemberRoleSelect({
   return (
     <div>
       <Select
-        aria-label="Member role"
+        aria-label={t("admin.members.roleLabel")}
         value={value}
         onChange={(e) => handleChange(e.target.value as OrgRole)}
         className="h-8 w-32 text-[12.5px]"
       >
-        <option value="admin">Admin</option>
-        <option value="leadership_viewer">Leadership viewer</option>
-        <option value="staff">Staff</option>
-        <option value="volunteer">Volunteer</option>
-        <option value="guest">Guest</option>
+        <option value="admin">{t("admin.roles.admin")}</option>
+        <option value="leadership_viewer">{t("admin.roles.leadership_viewer")}</option>
+        <option value="staff">{t("admin.roles.staff")}</option>
+        <option value="volunteer">{t("admin.roles.volunteer")}</option>
+        <option value="guest">{t("admin.roles.guest")}</option>
       </Select>
       {error ? (
         <p role="alert" className="mt-1 text-[12px] text-danger-fg">
@@ -73,6 +75,7 @@ export function MemberActiveToggle({
   isSelf: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
 
   if (isOwner || isSelf) return null;
@@ -80,15 +83,13 @@ export function MemberActiveToggle({
   async function handleToggle() {
     if (
       active &&
-      !window.confirm(
-        "Deactivate this account? They lose access immediately; history and attribution are preserved.",
-      )
+      !window.confirm(t("admin.members.deactivateConfirm"))
     )
       return;
     setError(null);
     const result = await setMemberActive(membershipId, !active);
     if (!result.ok) {
-      setError(result.error ?? "Failed.");
+      setError(result.error ?? t("admin.genericFailed"));
       return;
     }
     router.refresh();
@@ -105,7 +106,7 @@ export function MemberActiveToggle({
             : "text-[12.5px] font-medium text-success-fg hover:underline"
         }
       >
-        {active ? "Deactivate" : "Reactivate"}
+        {active ? t("admin.members.deactivate") : t("admin.members.reactivate")}
       </button>
       {error ? (
         <p role="alert" className="mt-1 text-[12px] text-danger-fg">
@@ -118,6 +119,7 @@ export function MemberActiveToggle({
 
 export function RevokeInvitationButton({ invitationId }: { invitationId: string }) {
   const router = useRouter();
+  const t = useT();
   async function handleRevoke() {
     const result = await revokeInvitation(invitationId);
     if (result.ok) router.refresh();
@@ -128,7 +130,7 @@ export function RevokeInvitationButton({ invitationId }: { invitationId: string 
       onClick={handleRevoke}
       className="text-[12.5px] font-medium text-danger-fg hover:underline"
     >
-      Revoke
+      {t("admin.members.revoke")}
     </button>
   );
 }

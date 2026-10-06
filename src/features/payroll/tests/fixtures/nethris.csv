@@ -1,0 +1,6 @@
+Journal de paie - Organisme Exemple (données fictives)
+No de paie;Date de paie;Début de période;Fin de période;Employé;NAS;Salaire brut;Impôt fédéral;Impôt provincial;RRQ;AE;RQAP;Autres retenues;RRQ employeur;AE employeur;RQAP employeur;FSS;CNESST;CNT;Salaire net
+101;2026-10-16;2026-10-01;2026-10-14;Personne Fictive Un;000 000 000;2 000,00;180,00;220,00;120,00;26,40;9,88;10,00;120,00;36,96;13,84;33,00;25,00;1,20;1 433,72
+101;2026-10-16;2026-10-01;2026-10-14;Personne Fictive Deux;000 000 001;1 500,00;120,00;150,00;90,00;19,80;7,41;;90,00;27,72;10,38;24,75;18,75;0,90;1 112,79
+Total;2026-10-16;2026-10-01;2026-10-14;;;3 500,00;300,00;370,00;210,00;46,20;17,29;10,00;210,00;64,68;24,22;57,75;43,75;2,10;2 546,51
+102;2026-10-30;2026-10-15;2026-10-28;Personne Fictive Un;000 000 000;2 000,00;180,00;220,00;120,00;26,40;9,88;10,00;120,00;36,96;13,84;33,00;25,00;1,20;1 433,72

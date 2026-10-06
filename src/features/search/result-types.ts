@@ -12,6 +12,8 @@
  * halves of the feature describe the same thing in the same sequence.
  */
 
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+
 export const SEARCH_RESULT_TYPES = [
   "person",
   "task",
@@ -23,6 +25,7 @@ export const SEARCH_RESULT_TYPES = [
   "agenda",
   "contact",
   "document",
+  "page",
   "risk",
   "issue",
   "opportunity",
@@ -51,6 +54,7 @@ export const SEARCH_TYPE_LABELS: Record<
   agenda: { singular: "Agenda item", plural: "Agenda items" },
   contact: { singular: "Contact", plural: "Contacts" },
   document: { singular: "Document", plural: "Documents" },
+  page: { singular: "Page", plural: "Pages" },
   risk: { singular: "Risk", plural: "Risks" },
   issue: { singular: "Issue", plural: "Issues" },
   opportunity: { singular: "Opportunity", plural: "Opportunities" },
@@ -63,11 +67,17 @@ function isKnown(type: string): type is SearchResultType {
   return type in SEARCH_TYPE_LABELS;
 }
 
+/**
+ * Pass `t` to get the reader's language; without it the English table above
+ * answers (tests and non-UI callers).
+ */
 export function searchTypeLabel(
   type: string,
   form: "singular" | "plural" = "plural",
+  t?: TranslateFn,
 ): string {
-  return isKnown(type) ? SEARCH_TYPE_LABELS[type][form] : type;
+  if (!isKnown(type)) return type;
+  return t ? t(`shell.search.types.${type}.${form}` as MessageKey) : SEARCH_TYPE_LABELS[type][form];
 }
 
 /** Search-page ordering, so headings appear in the same order every time. */

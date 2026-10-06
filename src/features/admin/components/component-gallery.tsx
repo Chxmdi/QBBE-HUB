@@ -20,6 +20,7 @@ import {
 import { ListSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Every primitive in every state it can be in (UI-008), rendered with the real
@@ -34,8 +35,17 @@ const COLOR_TOKENS = [
   "brand-fg", "accent-fg", "success-fg", "warning-fg", "danger-fg", "info-fg",
 ];
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const id = `gallery-${title.toLowerCase().replace(/\W+/g, "-")}`;
+/** `slug` is the English title as a slug, so section ids stay the same in every language. */
+function Section({
+  slug,
+  title,
+  children,
+}: {
+  slug: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  const id = `gallery-${slug}`;
   return (
     <section aria-labelledby={id} className="border-b border-line py-6">
       <h2 id={id} className="section-heading mb-4">
@@ -48,6 +58,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function ComponentGallery() {
   const { toast } = useToast();
+  const t = useT();
   const [tab, setTab] = useState("one");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -55,7 +66,7 @@ export function ComponentGallery() {
 
   return (
     <div>
-      <Section title="Colour tokens">
+      <Section slug="colour-tokens" title={t("admin.designSystem.sections.colours")}>
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {COLOR_TOKENS.map((token) => (
             <li key={token} className="text-[12px]">
@@ -70,87 +81,87 @@ export function ComponentGallery() {
         </ul>
       </Section>
 
-      <Section title="Buttons">
+      <Section slug="buttons" title={t("admin.designSystem.sections.buttons")}>
         <div className="flex flex-wrap items-center gap-2">
-          <Button>Primary</Button>
-          <Button variant="secondary">Secondary</Button>
-          <Button variant="ghost">Ghost</Button>
-          <Button variant="danger">Delete</Button>
-          <Button size="sm">Small</Button>
-          <Button loading>Saving</Button>
-          <Button disabled>Disabled</Button>
-          <Button aria-label="Add">
+          <Button>{t("admin.designSystem.primary")}</Button>
+          <Button variant="secondary">{t("admin.designSystem.secondary")}</Button>
+          <Button variant="ghost">{t("admin.designSystem.ghost")}</Button>
+          <Button variant="danger">{t("admin.designSystem.delete")}</Button>
+          <Button size="sm">{t("admin.designSystem.small")}</Button>
+          <Button loading>{t("admin.designSystem.saving")}</Button>
+          <Button disabled>{t("admin.designSystem.disabled")}</Button>
+          <Button aria-label={t("admin.designSystem.add")}>
             <Plus className="size-4" aria-hidden />
           </Button>
         </div>
       </Section>
 
-      <Section title="Form controls">
+      <Section slug="form-controls" title={t("admin.designSystem.sections.forms")}>
         <div className="grid max-w-2xl gap-5 sm:grid-cols-2">
           <div>
-            <Label htmlFor="gallery-input">Text input</Label>
-            <Input id="gallery-input" placeholder="Placeholder" aria-describedby="gallery-input-hint" />
+            <Label htmlFor="gallery-input">{t("admin.designSystem.textInput")}</Label>
+            <Input id="gallery-input" placeholder={t("admin.designSystem.placeholder")} aria-describedby="gallery-input-hint" />
             <FieldHint>
-              <span id="gallery-input-hint">A hint under the field.</span>
+              <span id="gallery-input-hint">{t("admin.designSystem.hint")}</span>
             </FieldHint>
           </div>
           <div>
-            <Label htmlFor="gallery-disabled">Disabled input</Label>
-            <Input id="gallery-disabled" disabled defaultValue="Not editable" />
+            <Label htmlFor="gallery-disabled">{t("admin.designSystem.disabledInput")}</Label>
+            <Input id="gallery-disabled" disabled defaultValue={t("admin.designSystem.notEditable")} />
           </div>
           <div>
-            <Label htmlFor="gallery-select">Select</Label>
+            <Label htmlFor="gallery-select">{t("admin.designSystem.select")}</Label>
             <Select id="gallery-select" defaultValue="b">
-              <option value="a">First</option>
-              <option value="b">Second</option>
+              <option value="a">{t("admin.designSystem.first")}</option>
+              <option value="b">{t("admin.designSystem.second")}</option>
             </Select>
           </div>
           <div>
-            <Label htmlFor="gallery-textarea">Textarea</Label>
-            <Textarea id="gallery-textarea" defaultValue="Two lines of text." />
+            <Label htmlFor="gallery-textarea">{t("admin.designSystem.textarea")}</Label>
+            <Textarea id="gallery-textarea" defaultValue={t("admin.designSystem.twoLines")} />
           </div>
           <label className="flex items-start gap-2 text-[13.5px]">
             <Checkbox className="mt-0.5" defaultChecked />
-            Checkbox, checked
+            {t("admin.designSystem.checkboxChecked")}
           </label>
           <label className="flex items-start gap-2 text-[13.5px]">
             <Checkbox className="mt-0.5" disabled />
-            Checkbox, disabled
+            {t("admin.designSystem.checkboxDisabled")}
           </label>
           <label className="flex items-center gap-2 text-[13.5px]">
             <Switch checked={switchOn} onChange={(e) => setSwitchOn(e.target.checked)} />
-            Switch ({switchOn ? "on" : "off"})
+            {switchOn ? t("admin.designSystem.switchOn") : t("admin.designSystem.switchOff")}
           </label>
           <label className="flex items-center gap-2 text-[13.5px]">
             <Switch disabled />
-            Switch, disabled
+            {t("admin.designSystem.switchDisabled")}
           </label>
         </div>
       </Section>
 
-      <Section title="Badges and avatars">
+      <Section slug="badges-and-avatars" title={t("admin.designSystem.sections.badges")}>
         <div className="flex flex-wrap items-center gap-2">
           {(["neutral", "brand", "success", "warning", "danger", "info", "accent"] as const).map(
             (tone) => (
               <Badge key={tone} tone={tone}>
-                {tone}
+                {t(`admin.designSystem.tones.${tone}`)}
               </Badge>
             ),
           )}
         </div>
         <div className="mt-4 flex items-center gap-2">
           {(["xs", "sm", "md", "lg"] as const).map((size) => (
-            <Avatar key={size} name={`Gallery ${size}`} size={size} />
+            <Avatar key={size} name={t("admin.designSystem.galleryName", { size })} size={size} />
           ))}
         </div>
       </Section>
 
-      <Section title="Tabs">
+      <Section slug="tabs" title={t("admin.designSystem.sections.tabs")}>
         <Tabs
           tabs={[
-            { id: "one", label: "Overview" },
-            { id: "two", label: "Activity", count: 3 },
-            { id: "three", label: "Files" },
+            { id: "one", label: t("admin.designSystem.overview") },
+            { id: "two", label: t("admin.designSystem.activity"), count: 3 },
+            { id: "three", label: t("admin.designSystem.files") },
           ]}
           active={tab}
           onChange={setTab}
@@ -158,48 +169,51 @@ export function ComponentGallery() {
         {/* Each tab names its panel through aria-controls, so the panels are
             part of the example, not optional. */}
         <TabPanel id="one" active={tab}>
-          <p className="py-3 text-[13px] text-muted">Overview panel.</p>
+          <p className="py-3 text-[13px] text-muted">{t("admin.designSystem.overviewPanel")}</p>
         </TabPanel>
         <TabPanel id="two" active={tab}>
-          <p className="py-3 text-[13px] text-muted">Activity panel.</p>
+          <p className="py-3 text-[13px] text-muted">{t("admin.designSystem.activityPanel")}</p>
         </TabPanel>
         <TabPanel id="three" active={tab}>
-          <p className="py-3 text-[13px] text-muted">Files panel.</p>
+          <p className="py-3 text-[13px] text-muted">{t("admin.designSystem.filesPanel")}</p>
         </TabPanel>
       </Section>
 
-      <Section title="Overlays and feedback">
+      <Section slug="overlays-and-feedback" title={t("admin.designSystem.sections.overlays")}>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setDialogOpen(true)}>
-            Open dialog
+            {t("admin.designSystem.openDialog")}
           </Button>
           <Button variant="secondary" onClick={() => setDrawerOpen(true)}>
-            Open drawer
+            {t("admin.designSystem.openDrawer")}
           </Button>
-          <Button variant="secondary" onClick={() => toast("Saved.")}>
-            Show toast
+          <Button variant="secondary" onClick={() => toast(t("admin.designSystem.toastSaved"))}>
+            {t("admin.designSystem.showToast")}
           </Button>
-          <Button variant="secondary" onClick={() => toast("Could not save.", { tone: "error" })}>
-            Show error toast
+          <Button
+            variant="secondary"
+            onClick={() => toast(t("admin.designSystem.toastError"), { tone: "error" })}
+          >
+            {t("admin.designSystem.showErrorToast")}
           </Button>
         </div>
-        <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title="A short decision">
-          <p className="text-[13.5px]">Dialogs are for short, focused decisions (UI-010).</p>
+        <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} title={t("admin.designSystem.dialogTitle")}>
+          <p className="text-[13.5px]">{t("admin.designSystem.dialogBody")}</p>
           <div className="mt-4 flex justify-end">
-            <Button onClick={() => setDialogOpen(false)}>Done</Button>
+            <Button onClick={() => setDialogOpen(false)}>{t("admin.designSystem.done")}</Button>
           </div>
         </Dialog>
         <Drawer
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
-          title="Contextual editing"
-          description="Drawers keep the page behind them in view (UI-010)."
+          title={t("admin.designSystem.drawerTitle")}
+          description={t("admin.designSystem.drawerDescription")}
         >
-          <p className="text-[13.5px]">Drawer content.</p>
+          <p className="text-[13.5px]">{t("admin.designSystem.drawerContent")}</p>
         </Drawer>
       </Section>
 
-      <Section title="Loading and empty">
+      <Section slug="loading-and-empty" title={t("admin.designSystem.sections.loading")}>
         <div className="grid gap-6 md:grid-cols-2">
           <div>
             <Skeleton className="mb-3 h-6 w-40" />
@@ -207,9 +221,9 @@ export function ComponentGallery() {
           </div>
           <EmptyState
             icon={<Inbox className="size-6" aria-hidden />}
-            title="Nothing here yet"
-            description="An empty state says what would appear and how to add it."
-            action={<Button size="sm">Add the first one</Button>}
+            title={t("admin.designSystem.emptyTitle")}
+            description={t("admin.designSystem.emptyDescription")}
+            action={<Button size="sm">{t("admin.designSystem.emptyAction")}</Button>}
           />
         </div>
       </Section>

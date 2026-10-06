@@ -3,8 +3,10 @@ import {
   DEFAULT_TIME_ZONE,
   addCalendarDays,
   calendarDateInZone,
+  formatInZone,
   startOfDayInstant,
 } from "@/lib/time";
+import { getLocale, getT } from "@/lib/i18n/server";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import type {
   ActivityEvent,
@@ -90,7 +92,11 @@ export async function getDashboardData(
   userId: string,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): Promise<DashboardData> {
-  const supabase = await createSupabasePageClient();
+  const [supabase, t, locale] = await Promise.all([
+    createSupabasePageClient(),
+    getT(),
+    getLocale(),
+  ]);
 
   // "Today" is a question about the organization's calendar, not the server's.
   // This previously read `new Date().toISOString().slice(0, 10)` — the host's
@@ -377,7 +383,7 @@ export async function getDashboardData(
             ackCount: ackCount ?? 0,
             totalRecipients: activeMembersRes.count ?? 0,
             acknowledgedByMe: ackedIds.has(ann.id),
-            authorName: ann.author?.full_name ?? "Leadership",
+            authorName: ann.author?.full_name ?? t("dashboard.leadership"),
           },
           recentMessages: (
             (recentMsgRes.data ?? []) as unknown as Message[]
@@ -434,7 +440,12 @@ export async function getDashboardData(
       return at >= start && at < end;
     }).length;
     weeklyCompleted.push({
-      label: `${end.toLocaleDateString("en-CA", { month: "short", day: "numeric" })}`,
+      label: formatInZone(
+        end.toISOString(),
+        timeZone,
+        { month: "short", day: "numeric" },
+        locale,
+      ),
       value: count,
     });
   }
@@ -472,26 +483,26 @@ export async function getDashboardData(
       overdueMilestones: (overdueMilestonesRes.data ?? []).map((row) => ({
         id: row.id as string,
         title: row.name as string,
-        reason: `Due ${row.due_date as string}`,
+        reason: t("dashboard.reasons.due", { date: row.due_date as string }),
         href: `/projects/${row.project_id}`,
       })),
       pendingDecisions: (pendingDecisionsRes.data ?? []).map((row) => ({
         id: row.id as string,
         title: row.context as string,
-        reason: `Decide by ${row.due_at as string}`,
+        reason: t("dashboard.reasons.decideBy", { date: row.due_at as string }),
         href: `/projects/${row.project_id}?tab=risks`,
       })),
       upcomingCommitments: [
         ...(upcomingMilestonesRes.data ?? []).map((row) => ({
           id: row.id as string,
           title: row.name as string,
-          reason: `Milestone · ${row.due_date as string}`,
+          reason: t("dashboard.reasons.milestone", { date: row.due_date as string }),
           href: `/projects/${row.project_id}`,
         })),
         ...(upcomingFollowUpsRes.data ?? []).map((row) => ({
           id: row.id as string,
           title: row.title as string,
-          reason: `Follow-up · ${row.due_at as string}`,
+          reason: t("dashboard.reasons.followUp", { date: row.due_at as string }),
           href: `/crm/${row.crm_organization_id}`,
         })),
         ...((reportingProjectsRes.data ?? []) as {
@@ -510,8 +521,8 @@ export async function getDashboardData(
               id: `report-${project.id}`,
               title: project.name,
               reason: isProjectStale(project, now)
-                ? "Reporting date overdue"
-                : `Report due ${due}`,
+                ? t("dashboard.reasons.reportOverdue")
+                : t("dashboard.reasons.reportDue", { date: due }),
               href: `/projects/${project.id}?tab=updates`,
             };
           })

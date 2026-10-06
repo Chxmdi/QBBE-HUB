@@ -3,6 +3,7 @@
 import * as React from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Accessible modal built on the native <dialog> element: focus trapping,
@@ -21,6 +22,7 @@ export function Dialog({
   children: React.ReactNode;
   className?: string;
 }) {
+  const t = useT();
   const ref = React.useRef<HTMLDialogElement>(null);
   const titleId = React.useId();
 
@@ -55,13 +57,13 @@ export function Dialog({
         <button
           type="button"
           onClick={onClose}
-          aria-label="Close dialog"
+          aria-label={t("ui.closeDialog")}
           className="rounded-(--radius-sm) p-1 text-muted transition-colors hover:bg-surface-soft hover:text-ink"
         >
           <X className="size-4" aria-hidden />
         </button>
       </div>
-      <div className="max-h-[75vh] overflow-y-auto px-5 py-4">{children}</div>
+      <div className="dialog-body max-h-[75vh] overflow-y-auto px-5 py-4">{children}</div>
     </dialog>
   );
 }

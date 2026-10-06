@@ -19,22 +19,26 @@ import {
   parseTaskFilters,
   type TaskFilters,
 } from "@/features/tasks/filters";
-import { TASK_STATUS_LABELS } from "@/features/tasks/schemas";
+import { taskStatusText } from "@/features/tasks/schemas";
 import { getMyWork, getPickerOptions, getArchivedTasks } from "@/features/tasks/services/task.queries";
 import { RestoreTaskButton } from "@/features/tasks/components/restore-task-button";
 import { requireSession } from "@/lib/auth";
+import { getLocale, getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 import { calendarDateInZone, formatInZone } from "@/lib/time";
 import { myWorkBucket } from "@/lib/utils";
 import type { Task } from "@/types/entities";
 
-export const metadata: Metadata = { title: "My Work" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("myWork.title") };
+}
 export const dynamic = "force-dynamic";
 
-const BUCKETS: { key: ReturnType<typeof myWorkBucket>; label: string }[] = [
-  { key: "overdue", label: "Overdue" },
-  { key: "today", label: "Due today" },
-  { key: "this_week", label: "This week" },
-  { key: "later", label: "Later / unscheduled" },
+const BUCKETS: { key: ReturnType<typeof myWorkBucket>; label: MessageKey }[] = [
+  { key: "overdue", label: "myWork.buckets.overdue" },
+  { key: "today", label: "myWork.buckets.today" },
+  { key: "this_week", label: "myWork.buckets.thisWeek" },
+  { key: "later", label: "myWork.buckets.later" },
 ];
 
 export default async function MyWorkPage({
@@ -43,6 +47,7 @@ export default async function MyWorkPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireSession();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   const params = await searchParams;
   const filters = parseTaskFilters(params);
   const today = calendarDateInZone(new Date(), session.timeZone) ?? "";
@@ -64,7 +69,7 @@ export default async function MyWorkPage({
   }
   const groups = BUCKETS.map((bucket) => ({
     key: bucket.key,
-    label: bucket.label,
+    label: t(bucket.label),
     tasks: grouped.get(bucket.key)!,
   }));
 
@@ -77,19 +82,27 @@ export default async function MyWorkPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Command center"
-        title="My Work"
-        description="Everything you own or must review, grouped by urgency. Select rows for bulk changes, or open a task for full detail."
+        eyebrow={t("myWork.eyebrow")}
+        title={t("myWork.title")}
+        description={t("myWork.description")}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Suspense fallback={null}>
               <SaveViewButton path="/my-work" />
             </Suspense>
+            {session.isStaff ? (
+              <Link
+                href="/people/me/work"
+                className="text-[13px] font-medium text-brand-fg hover:underline"
+              >
+                {t("personWork.myWorkSummary")}
+              </Link>
+            ) : null}
             <Link
               href={params.archived === "1" ? "/my-work" : "/my-work?archived=1"}
               className="text-[13px] font-medium text-brand-fg hover:underline"
             >
-              {params.archived === "1" ? "Open work" : "Archived"}
+              {params.archived === "1" ? t("myWork.openWork") : t("myWork.archived")}
             </Link>
             <TaskCreateDialog
               projects={options.projects}
@@ -121,7 +134,8 @@ export default async function MyWorkPage({
           // built on the board. It is not a mistake in the filters; it is a
           // filter that cannot apply here.
           scopedToUserId: session.userId,
-          statusLabel: (status) => TASK_STATUS_LABELS[status],
+          statusLabel: (status) => taskStatusText(status, t),
+          t,
         })}
       />
 
@@ -131,13 +145,12 @@ export default async function MyWorkPage({
           className="mb-5 rounded-(--radius-md) border border-danger/25 bg-danger/10 px-4 py-3"
         >
           <p className="text-[13.5px] font-medium text-danger-fg">
-            Your work could not be loaded.
+            {t("myWork.loadFailed")}
           </p>
           <p className="mt-0.5 text-[13px] text-muted">
-            This is a loading failure, not an empty workload — nothing has been
-            changed or lost.
+            {t("myWork.loadFailedDetail")}
           </p>
-          <RetryLink filters={filters} />
+          <RetryLink filters={filters} label={t("common.tryAgain")} />
         </div>
       ) : null}
 
@@ -147,13 +160,13 @@ export default async function MyWorkPage({
             id="review-queue"
             className="section-heading mb-2 flex items-center gap-2"
           >
-            Waiting for your review
+            {t("myWork.reviewHeading")}
             <span className="meta font-normal">{work.reviewing.length}</span>
           </h2>
           <Suspense fallback={<ListSkeleton rows={2} />}>
             <TaskList
               groups={[
-                { key: "review", label: "Review queue", tasks: work.reviewing },
+                { key: "review", label: t("myWork.reviewQueue"), tasks: work.reviewing },
               ]}
               people={options.people}
               timeZone={session.timeZone}
@@ -170,7 +183,7 @@ export default async function MyWorkPage({
             className="section-heading mb-2 flex items-center gap-2"
           >
             <OctagonAlert className="size-4 text-danger-fg" aria-hidden />
-            Blocked
+            {t("myWork.blocked")}
             <span className="meta font-normal">{work.blocked.length}</span>
           </h2>
           <ul className="card divide-y divide-line">
@@ -196,11 +209,11 @@ export default async function MyWorkPage({
       {params.archived === "1" ? (
         <section aria-labelledby="archived-tasks" className="mb-8">
           <h2 id="archived-tasks" className="section-heading mb-3">
-            Archived tasks
+            {t("myWork.archivedHeading")}
           </h2>
           {archivedTasks.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              Nothing archived that you can restore.
+              {t("myWork.archivedEmpty")}
             </p>
           ) : (
             <ul className="card divide-y divide-line">
@@ -219,14 +232,14 @@ export default async function MyWorkPage({
         filtersActive ? (
           <EmptyState
             icon={<ClipboardList />}
-            title="No tasks match these filters"
-            description="Try widening a filter — or clear them to see all of your open work."
+            title={t("myWork.noMatchTitle")}
+            description={t("myWork.noMatchBody")}
           />
         ) : nothingAtAll ? (
           <EmptyState
             icon={<ClipboardList />}
-            title="Your workload is clear"
-            description="When tasks are assigned to you — from projects, meetings, or conversations — they appear here grouped by due date."
+            title={t("myWork.clearTitle")}
+            description={t("myWork.clearBody")}
           />
         ) : null
       ) : (
@@ -246,7 +259,7 @@ export default async function MyWorkPage({
             className="section-heading mb-2 flex items-center gap-2"
           >
             <CalendarClock className="size-4" aria-hidden />
-            Upcoming meetings
+            {t("myWork.upcomingMeetings")}
           </h2>
           <ul className="card divide-y divide-line">
             {work.meetings.map((meeting) => (
@@ -261,13 +274,18 @@ export default async function MyWorkPage({
                   {meeting.title}
                 </Link>
                 <span className="meta">
-                  {formatInZone(meeting.starts_at, session.timeZone, {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
+                  {formatInZone(
+                    meeting.starts_at,
+                    session.timeZone,
+                    {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    },
+                    locale,
+                  )}
                 </span>
                 {meeting.project ? (
                   <span className="meta ml-auto truncate">
@@ -288,7 +306,7 @@ export default async function MyWorkPage({
 }
 
 /** Retry the same view, filters intact — a reload is the whole remedy. */
-function RetryLink({ filters }: { filters: TaskFilters }) {
+function RetryLink({ filters, label }: { filters: TaskFilters; label: string }) {
   const query = new URLSearchParams(
     Object.entries(filters).filter((entry): entry is [string, string] =>
       Boolean(entry[1]),
@@ -299,7 +317,7 @@ function RetryLink({ filters }: { filters: TaskFilters }) {
       href={query ? `/my-work?${query}` : "/my-work"}
       className="mt-2 inline-block text-[13px] font-medium text-brand-fg hover:underline"
     >
-      Try again
+      {label}
     </Link>
   );
 }

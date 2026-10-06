@@ -10,9 +10,12 @@ import { AnnouncementComposeDialog } from "@/features/announcements/components/a
 import { ProgressBar } from "@/features/dashboard/components/charts";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { cn, formatDate, relativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
 
-export const metadata: Metadata = { title: "Announcements" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("announcements.title") };
+}
 export const dynamic = "force-dynamic";
 
 interface AnnouncementRow {
@@ -24,6 +27,8 @@ interface AnnouncementRow {
   publish_at: string;
   expires_at: string | null;
   created_at: string;
+  /** The text of a due announcement whose message the job has not posted yet. */
+  body: string | null;
   message: { id: string; body: string; channel_id: string | null } | null;
   author: { full_name: string; avatar_url: string | null } | null;
 }
@@ -41,6 +46,7 @@ const PRIORITY_TONE = {
  */
 export default async function AnnouncementsPage() {
   const session = await requireSession();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const supabase = await createSupabasePageClient();
   const now = new Date().toISOString();
 
@@ -49,7 +55,7 @@ export default async function AnnouncementsPage() {
       supabase
         .from("announcement")
         .select(
-          "id, title, priority, requires_ack, ack_deadline, publish_at, expires_at, created_at, " +
+          "id, title, priority, requires_ack, ack_deadline, publish_at, expires_at, created_at, body, " +
             "message:message_id(id, body, channel_id), author:created_by(full_name, avatar_url)",
         )
         .lte("publish_at", now)
@@ -113,23 +119,23 @@ export default async function AnnouncementsPage() {
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Megaphone className="size-4 text-brand-fg" aria-hidden />
           <Badge tone={PRIORITY_TONE[announcement.priority]}>
-            {announcement.priority}
+            {t(`announcements.priority.${announcement.priority}`)}
           </Badge>
           {announcement.requires_ack ? (
             <Badge tone={acknowledged ? "success" : "warning"}>
-              {acknowledged ? "Acknowledged" : "Acknowledgment required"}
+              {acknowledged ? t("announcements.acknowledged") : t("announcements.ackRequired")}
             </Badge>
           ) : null}
-          {muted ? <Badge tone="neutral">Expired</Badge> : null}
+          {muted ? <Badge tone="neutral">{t("announcements.expired")}</Badge> : null}
           <span className="meta ml-auto">
-            {relativeTime(announcement.publish_at)}
+            {format.relative(announcement.publish_at)}
           </span>
         </div>
 
         <h2 className="text-[16px] font-semibold">{announcement.title}</h2>
-        {announcement.message?.body ? (
+        {(announcement.message?.body ?? announcement.body) ? (
           <p className="mt-1.5 text-[13.5px] whitespace-pre-wrap">
-            {announcement.message.body}
+            {announcement.message?.body ?? announcement.body}
           </p>
         ) : null}
 
@@ -146,7 +152,7 @@ export default async function AnnouncementsPage() {
           ) : null}
           {announcement.ack_deadline ? (
             <span className="meta">
-              Acknowledge by {formatDate(announcement.ack_deadline)}
+              {t("announcements.ackBy", { date: format.date(announcement.ack_deadline) })}
             </span>
           ) : null}
           {announcement.message?.channel_id ? (
@@ -154,7 +160,7 @@ export default async function AnnouncementsPage() {
               href={`/channels/${announcement.message.channel_id}`}
               className="text-[12.5px] font-medium text-brand-fg hover:underline"
             >
-              Open in channel →
+              {t("announcements.openInChannel")}
             </Link>
           ) : null}
           <span className="ml-auto">
@@ -163,7 +169,7 @@ export default async function AnnouncementsPage() {
             ) : acknowledged ? (
               <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-success-fg">
                 <CheckCircle2 className="size-4" aria-hidden />
-                You acknowledged this
+                {t("announcements.youAcknowledged")}
               </span>
             ) : null}
           </span>
@@ -173,10 +179,13 @@ export default async function AnnouncementsPage() {
         {session.isAdmin && announcement.requires_ack ? (
           <div className="mt-3 border-t border-line pt-3">
             <p className="meta mb-1">
-              {ackCount} of {totalMembers ?? 0} members acknowledged
+              {t(ackCount === 1 ? "announcements.ackProgressOne" : "announcements.ackProgressOther", {
+                count: ackCount,
+                total: totalMembers ?? 0,
+              })}
             </p>
             <ProgressBar
-              label="Announcement acknowledgment progress"
+              label={t("announcements.progressLabel")}
               percent={
                 totalMembers && totalMembers > 0
                   ? (ackCount / totalMembers) * 100
@@ -195,17 +204,17 @@ export default async function AnnouncementsPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Official communication"
-        title="Announcements"
-        description="Organization-wide notices. Items requiring acknowledgment stay visible until you confirm them."
+        eyebrow={t("announcements.eyebrow")}
+        title={t("announcements.title")}
+        description={t("announcements.description")}
         actions={session.isAdmin ? <AnnouncementComposeDialog /> : undefined}
       />
 
       {rows.length === 0 ? (
         <EmptyState
           icon={<Megaphone />}
-          title="No announcements yet"
-          description="Official notices from leadership appear here, and stay pinned until acknowledged when required."
+          title={t("announcements.emptyTitle")}
+          description={t("announcements.emptyBody")}
         />
       ) : (
         <div className="max-w-3xl space-y-8">
@@ -215,11 +224,11 @@ export default async function AnnouncementsPage() {
               className="section-heading mb-3 flex items-center gap-1.5"
             >
               <Pin className="size-4 text-muted" aria-hidden />
-              Current
+              {t("announcements.current")}
             </h2>
             {active.length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No active announcements right now.
+                {t("announcements.noneActive")}
               </p>
             ) : (
               <div className="space-y-3">
@@ -236,7 +245,7 @@ export default async function AnnouncementsPage() {
           {history.length > 0 ? (
             <section aria-labelledby="announcement-history">
               <h2 id="announcement-history" className="section-heading mb-3">
-                History
+                {t("announcements.history")}
               </h2>
               <div className="space-y-3">
                 {history.map((announcement) => (

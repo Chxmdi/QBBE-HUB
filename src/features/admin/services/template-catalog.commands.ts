@@ -6,6 +6,9 @@ import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requiredText } from "@/lib/schema";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { getT } from "@/lib/i18n/server";
+import { calendarDateInZone } from "@/lib/time";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 const KINDS = ["task", "event", "update", "report"] as const;
 
@@ -17,7 +20,9 @@ function revalidateCatalog() {
 
 async function requireStaff() {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false as const, error: "Staff access required.", session };
+  if (!session.isStaff) {
+    return { ok: false as const, error: (await getT())("admin.errors.staffRequired"), session };
+  }
   return { ok: true as const, session };
 }
 
@@ -25,10 +30,11 @@ export async function setProjectTemplateApproval(
   templateId: string,
   approved: boolean,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   if (!z.string().uuid().safeParse(templateId).success) {
-    return { ok: false, error: "Invalid template." };
+    return { ok: false, error: t("admin.errors.invalidTemplate") };
   }
   const db = await createSupabaseServerClient();
   const { data, error } = await db
@@ -45,23 +51,24 @@ export async function setProjectTemplateApproval(
     .eq("organization_id", authorization.session.organizationId)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: "Could not update the template." };
+  if (error || !data) return { ok: false, error: t("admin.errors.updateTemplateFailed") };
   revalidateCatalog();
   return { ok: true, id: templateId };
 }
 
-const agendaSchema = z.object({
-  name: requiredText("Name the agenda.", 200),
+const agendaSchema = (t: TranslateFn) => z.object({
+  name: requiredText(t("admin.errors.nameAgenda"), 200),
   items: z.string().trim().max(8000),
 });
 
 /** One title per line. Structure only — no owners, history, or private notes. */
 export async function createAgendaTemplate(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const staff = await requireStaff();
   if (!staff.ok) return { ok: false, error: staff.error };
-  const parsed = agendaSchema.safeParse(input);
+  const parsed = agendaSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid agenda." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("admin.errors.invalidAgenda") };
   }
   const items = parsed.data.items
     .split("\n")
@@ -69,7 +76,7 @@ export async function createAgendaTemplate(input: unknown): Promise<ActionResult
     .filter(Boolean)
     .slice(0, 40)
     .map((title) => ({ title }));
-  if (items.length === 0) return { ok: false, error: "Add at least one agenda item." };
+  if (items.length === 0) return { ok: false, error: t("admin.errors.agendaNeedsItem") };
 
   const db = await createSupabaseServerClient();
   const { data, error } = await db
@@ -83,7 +90,7 @@ export async function createAgendaTemplate(input: unknown): Promise<ActionResult
     })
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: "Could not save the agenda template." };
+  if (error || !data) return { ok: false, error: t("admin.errors.saveAgendaFailed") };
   revalidateCatalog();
   return { ok: true, id: data.id as string };
 }
@@ -92,10 +99,11 @@ export async function setAgendaTemplateApproval(
   templateId: string,
   approved: boolean,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   if (!z.string().uuid().safeParse(templateId).success) {
-    return { ok: false, error: "Invalid template." };
+    return { ok: false, error: t("admin.errors.invalidTemplate") };
   }
   const db = await createSupabaseServerClient();
   const { data, error } = await db
@@ -112,15 +120,15 @@ export async function setAgendaTemplateApproval(
     .eq("organization_id", authorization.session.organizationId)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: "Could not update the agenda template." };
+  if (error || !data) return { ok: false, error: t("admin.errors.updateAgendaFailed") };
   revalidateCatalog();
   return { ok: true, id: templateId };
 }
 
-const recordSchema = z.object({
+const recordSchema = (t: TranslateFn) => z.object({
   kind: z.enum(KINDS),
-  name: requiredText("Name the template.", 200),
-  title: requiredText("The record needs a title.", 200),
+  name: requiredText(t("admin.errors.nameTemplate"), 200),
+  title: requiredText(t("admin.errors.recordNeedsTitle"), 200),
   description: z.string().trim().max(4000).optional(),
   priority: z.enum(["low", "medium", "high", "critical"]).optional(),
   eventType: z.string().trim().max(80).optional(),
@@ -129,11 +137,12 @@ const recordSchema = z.object({
 });
 
 export async function createRecordTemplate(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const staff = await requireStaff();
   if (!staff.ok) return { ok: false, error: staff.error };
-  const parsed = recordSchema.safeParse(input);
+  const parsed = recordSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid template." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("admin.errors.invalidTemplate") };
   }
   const { kind, name, title, description, priority, eventType, progressSummary, reportType } =
     parsed.data;
@@ -156,7 +165,7 @@ export async function createRecordTemplate(input: unknown): Promise<ActionResult
     })
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: "Could not save the template." };
+  if (error || !data) return { ok: false, error: t("admin.errors.saveTemplateFailed") };
   revalidateCatalog();
   return { ok: true, id: data.id as string };
 }
@@ -165,10 +174,11 @@ export async function setRecordTemplateApproval(
   templateId: string,
   approved: boolean,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   if (!z.string().uuid().safeParse(templateId).success) {
-    return { ok: false, error: "Invalid template." };
+    return { ok: false, error: t("admin.errors.invalidTemplate") };
   }
   const db = await createSupabaseServerClient();
   const { data, error } = await db
@@ -185,7 +195,7 @@ export async function setRecordTemplateApproval(
     .eq("organization_id", authorization.session.organizationId)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: "Could not update the template." };
+  if (error || !data) return { ok: false, error: t("admin.errors.updateTemplateFailed") };
   revalidateCatalog();
   return { ok: true, id: templateId };
 }
@@ -209,10 +219,11 @@ interface RecordStructure {
  * not on the template, so they cannot come along.
  */
 export async function instantiateRecordTemplate(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const staff = await requireStaff();
   if (!staff.ok) return { ok: false, error: staff.error };
   const parsed = instantiateSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid template." };
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidTemplate") };
   const projectId = parsed.data.projectId || null;
 
   const db = await createSupabaseServerClient();
@@ -222,9 +233,9 @@ export async function instantiateRecordTemplate(input: unknown): Promise<ActionR
     .eq("id", parsed.data.templateId)
     .eq("organization_id", staff.session.organizationId)
     .maybeSingle();
-  if (!template) return { ok: false, error: "Template not found." };
+  if (!template) return { ok: false, error: t("admin.errors.templateNotFound") };
   if (!template.approved_at) {
-    return { ok: false, error: "This template has not been approved yet, so it cannot be used." };
+    return { ok: false, error: t("admin.errors.thisTemplateNotApproved") };
   }
 
   const structure = (template.structure ?? {}) as RecordStructure;
@@ -232,33 +243,28 @@ export async function instantiateRecordTemplate(input: unknown): Promise<ActionR
   const description = structure.description || null;
 
   if (template.kind === "task") {
-    let programId: string | null = null;
-    if (projectId) {
-      const { data: project } = await db
-        .from("project")
-        .select("program_id")
-        .eq("id", projectId)
-        .maybeSingle();
-      programId = (project?.program_id as string | null) ?? null;
-    }
-    const { data, error } = await db
-      .from("task")
-      .insert({
-        organization_id: staff.session.organizationId,
-        program_id: programId,
-        project_id: projectId,
+    // Through the shared create-task action (M7a), so the task records the
+    // template it came from (M7b) and gets the same activity entry as any other.
+    const { createUniversalTask } = await import("@/features/universal-tasks/create-task");
+    const created = await createUniversalTask(
+      db,
+      {
+        userId: staff.session.userId,
+        organizationId: staff.session.organizationId,
+        displayName: staff.session.profile.full_name,
+      },
+      {
         title,
-        description,
-        priority: structure.priority || "medium",
-        requester_id: staff.session.userId,
-        created_by: staff.session.userId,
+        description: description ?? undefined,
+        projectId: projectId ?? undefined,
+        priority: (structure.priority || "medium") as "low" | "medium" | "high" | "critical",
         status: "not_started",
-      })
-      .select("id")
-      .maybeSingle();
-    if (error || !data) return { ok: false, error: "Could not create the task." };
+        source: { type: "template", id: template.id as string },
+      },
+    );
+    if (!created.ok) return { ok: false, error: t("admin.errors.createTaskFailed") };
     revalidatePath("/my-work");
-    return { ok: true, id: data.id as string };
+    return { ok: true, id: created.id };
   }
 
   if (template.kind === "event") {
@@ -279,25 +285,28 @@ export async function instantiateRecordTemplate(input: unknown): Promise<ActionR
       })
       .select("id")
       .maybeSingle();
-    if (error || !data) return { ok: false, error: "Could not create the event." };
+    if (error || !data) return { ok: false, error: t("admin.errors.createEventFailed") };
     revalidatePath("/events");
     return { ok: true, id: data.id as string };
   }
 
   if (template.kind === "update") {
-    if (!projectId) return { ok: false, error: "Choose the project this update belongs to." };
+    if (!projectId) return { ok: false, error: t("admin.errors.chooseUpdateProject") };
     const { error } = await db.from("project_status_update").insert({
       project_id: projectId,
       author_id: staff.session.userId,
       health: "on_track",
       progress_summary: structure.progressSummary || title,
     });
-    if (error) return { ok: false, error: "Could not create the update." };
+    if (error) return { ok: false, error: t("admin.errors.createUpdateFailed") };
     revalidatePath(`/projects/${projectId}`);
     return { ok: true };
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  // The workspace's calendar date, not the server's: a report started at
+  // 9 pm in Montreal is for today, not for tomorrow in UTC.
+  const today =
+    calendarDateInZone(new Date(), staff.session.timeZone) ?? new Date().toISOString().slice(0, 10);
   const { data, error } = await db
     .from("report_instance")
     .insert({
@@ -313,7 +322,7 @@ export async function instantiateRecordTemplate(input: unknown): Promise<ActionR
     })
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: "Could not create the report." };
+  if (error || !data) return { ok: false, error: t("admin.errors.createReportFailed") };
   revalidatePath("/reports");
   return { ok: true, id: data.id as string };
 }

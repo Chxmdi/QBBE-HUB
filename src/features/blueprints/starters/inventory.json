@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "key": "inventory",
+  "name": {
+    "en": "Inventory",
+    "fr": "Inventaire"
+  },
+  "description": {
+    "en": "Supplies and equipment, where they are, who supplies them and every change in stock.",
+    "fr": "Les fournitures et l’équipement, leur emplacement, leurs fournisseurs et chaque mouvement de stock."
+  },
+  "types": [
+    {
+      "key": "stock_item",
+      "name": {
+        "en": "Item",
+        "fr": "Article"
+      },
+      "icon": "package",
+      "properties": [
+        {
+          "key": "sku",
+          "name": {
+            "en": "Code",
+            "fr": "Code"
+          },
+          "kind": "text"
+        },
+        {
+          "key": "category",
+          "name": {
+            "en": "Category",
+            "fr": "Catégorie"
+          },
+          "kind": "select",
+          "choices": [
+            {
+              "key": "supplies",
+              "label": {
+                "en": "Supplies",
+                "fr": "Fournitures"
+              }
+            },
+            {
+              "key": "equipment",
+              "label": {
+                "en": "Equipment",
+                "fr": "Équipement"
+              }
+            },
+            {
+              "key": "books",
+              "label": {
+                "en": "Books",
+                "fr": "Livres"
+              }
+            },
+            {
+              "key": "merchandise",
+              "label": {
+                "en": "Merchandise",
+                "fr": "Articles promotionnels"
+              }
+            }
+          ]
+        },
+        {
+          "key": "quantity",
+          "name": {
+            "en": "Quantity",
+            "fr": "Quantité"
+          },
+          "kind": "number"
+        },
+        {
+          "key": "reorder_level",
+          "name": {
+            "en": "Reorder at",
+            "fr": "Seuil de commande"
+          },
+          "kind": "number"
+        },
+        {
+          "key": "unit_cost",
+          "name": {
+            "en": "Unit cost",
+            "fr": "Coût unitaire"
+          },
+          "kind": "currency",
+          "currency": "CAD"
+        },
+        {
+          "key": "storage_location",
+          "name": {
+            "en": "Stored at",
+            "fr": "Entreposé à"
+          },
+          "kind": "text"
+        },
+        {
+          "key": "status",
+          "name": {
+            "en": "Status",
+            "fr": "Statut"
+          },
+          "kind": "status",
+          "choices": [
+            {
+              "key": "in_stock",
+              "label": {
+                "en": "In stock",
+                "fr": "En stock"
+              }
+            },
+            {
+              "key": "low",
+              "label": {
+                "en": "Low",
+                "fr": "Bas"
+              }
+            },
+            {
+              "key": "out",
+              "label": {
+                "en": "Out",
+                "fr": "Épuisé"
+              }
+            },
+            {
+              "key": "retired",
+              "label": {
+                "en": "Retired",
+                "fr": "Retiré"
+              }
+            }
+          ]
+        },
+        {
+          "key": "supplier",
+          "name": {
+            "en": "Supplier",
+            "fr": "Fournisseur"
+          },
+          "kind": "relation",
+          "relation": "supplied_by"
+        }
+      ],
+      "layout": {
+        "x": 40,
+        "y": 40
+      }
+    },
+    {
+      "key": "supplier",
+      "name": {
+        "en": "Supplier",
+        "fr": "Fournisseur"
+      },
+      "icon": "truck",
+      "properties": [
+        {
+          "key": "email",
+          "name": {
+            "en": "Email",
+            "fr": "Courriel"
+          },
+          "kind": "email"
+        },
+        {
+          "key": "phone",
+          "name": {
+            "en": "Phone",
+            "fr": "Téléphone"
+          },
+          "kind": "phone"
+        },
+        {
+          "key": "website",
+          "name": {
+            "en": "Website",
+            "fr": "Site Web"
+          },
+          "kind": "url"
+        }
+      ],
+      "layout": {
+        "x": 360,
+        "y": 40
+      }
+    },
+    {
+      "key": "stock_movement",
+      "name": {
+        "en": "Stock movement",
+        "fr": "Mouvement de stock"
+      },
+      "icon": "arrow-left-right",
+      "properties": [
+        {
+          "key": "moved_on",
+          "name": {
+            "en": "Date",
+            "fr": "Date"
+          },
+          "kind": "date",
+          "required": true
+        },
+        {
+          "key": "change",
+          "name": {
+            "en": "Change",
+            "fr": "Variation"
+          },
+          "kind": "number",
+          "required": true
+        },
+        {
+          "key": "reason",
+          "name": {
+            "en": "Reason",
+            "fr": "Motif"
+          },
+          "kind": "select",
+          "choices": [
+            {
+              "key": "received",
+              "label": {
+                "en": "Received",
+                "fr": "Reçu"
+              }
+            },
+            {
+              "key": "used",
+              "label": {
+                "en": "Used",
+                "fr": "Utilisé"
+              }
+            },
+            {
+              "key": "lost",
+              "label": {
+                "en": "Lost or damaged",
+                "fr": "Perdu ou endommagé"
+              }
+            },
+            {
+              "key": "adjusted",
+              "label": {
+                "en": "Count adjusted",
+                "fr": "Inventaire ajusté"
+              }
+            }
+          ]
+        },
+        {
+          "key": "item",
+          "name": {
+            "en": "Item",
+            "fr": "Article"
+          },
+          "kind": "relation",
+          "relation": "movement_of"
+        }
+      ],
+      "layout": {
+        "x": 40,
+        "y": 240
+      }
+    }
+  ],
+  "relations": [
+    {
+      "key": "supplied_by",
+      "from": "stock_item",
+      "to": "supplier",
+      "name": {
+        "en": "is supplied by",
+        "fr": "est fourni par"
+      },
+      "reverseName": {
+        "en": "items",
+        "fr": "articles"
+      },
+      "cardinality": "many_to_many"
+    },
+    {
+      "key": "movement_of",
+      "from": "stock_movement",
+      "to": "stock_item",
+      "name": {
+        "en": "moves",
+        "fr": "déplace"
+      },
+      "reverseName": {
+        "en": "movements",
+        "fr": "mouvements"
+      },
+      "cardinality": "one_to_many"
+    }
+  ],
+  "lenses": [],
+  "forms": [],
+  "workflows": [
+    {
+      "key": "stock_low",
+      "type": "stock_item",
+      "name": {
+        "en": "Stock is low",
+        "fr": "Stock bas"
+      },
+      "trigger": {
+        "on": "property_changed",
+        "property": "status",
+        "to": "low"
+      },
+      "steps": [
+        {
+          "kind": "create_task",
+          "title": {
+            "en": "Reorder this item",
+            "fr": "Commander de nouveau cet article"
+          },
+          "dueInDays": 3
+        },
+        {
+          "kind": "notify",
+          "role": "staff",
+          "message": {
+            "en": "An item is running low.",
+            "fr": "Un article est presque épuisé."
+          }
+        }
+      ]
+    }
+  ]
+}

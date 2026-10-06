@@ -7,7 +7,9 @@ import { ChevronRight, Plus, X } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { QbbeLogo } from "@/components/layout/qbbe-logo";
 import { cn } from "@/lib/utils";
-import { visibleNav } from "@/config/navigation";
+import { activeNavHref, navBadge, visibleNav, type NavSwitches } from "@/config/navigation";
+import { useT } from "@/lib/i18n/client";
+import { navGroupLabel, navItemLabel } from "@/lib/i18n/navigation";
 
 export interface SidebarChannel {
   id: string;
@@ -44,10 +46,14 @@ function programDot(name: string): string {
 /**
  * QBBE navigation shell using the approved blue/gold brand while preserving
  * permission-aware navigation, live counts, channels, and program shortcuts.
+ * `switches` are the Workspace OS switches read on the server for this
+ * request (epic #199); without them the menu is the one from before.
  */
 export function Sidebar({
   isAdmin,
   isStaff,
+  canReadLedger = false,
+  switches,
   channels,
   programs,
   counts,
@@ -59,6 +65,8 @@ export function Sidebar({
 }: {
   isAdmin: boolean;
   isStaff: boolean;
+  canReadLedger?: boolean;
+  switches?: NavSwitches;
   channels: SidebarChannel[];
   programs: SidebarProgram[];
   counts: SidebarCounts;
@@ -69,22 +77,23 @@ export function Sidebar({
   onMobileClose: () => void;
 }) {
   const pathname = usePathname();
-  const groups = visibleNav({ isAdmin, isStaff });
-
-  const badgeFor = (href: string): number =>
-    href === "/my-work" ? counts.myWork : href === "/inbox" ? counts.inbox : 0;
+  const t = useT();
+  const groups = visibleNav({ isAdmin, isStaff, canReadLedger }, switches);
+  // One current entry, the most specific one: "/lenses/board" marks Board,
+  // not Board and Saved lenses together.
+  const activeHref = activeNavHref(groups, pathname);
 
   const nav = (
-    <nav aria-label="Main navigation" className="relative flex h-full flex-col overflow-hidden">
+    <nav aria-label={t("nav.main")} className="relative flex h-full flex-col overflow-hidden">
       <div className="relative px-4 pt-4 pb-3">
         <div className="flex items-start gap-2">
-          <Link href="/" onClick={onMobileClose} aria-label="QBBE Hub home" className="min-w-0 flex-1">
+          <Link href="/" onClick={onMobileClose} aria-label={t("nav.homeLink")} className="min-w-0 flex-1">
             <QbbeLogo />
           </Link>
           <button
             type="button"
             onClick={onMobileClose}
-            aria-label="Close navigation"
+            aria-label={t("nav.closeNavigation")}
             className="mt-0.5 rounded-(--radius-sm) p-1.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
           >
             <X className="size-5" aria-hidden />
@@ -92,7 +101,7 @@ export function Sidebar({
         </div>
         <div className="qbbe-brand-rule mt-3" aria-hidden />
         <p className="mt-2 text-[10.5px] font-semibold tracking-[0.08em] text-white/68">
-          Internal operations workspace
+          {t("common.internalWorkspace")}
         </p>
       </div>
 
@@ -109,15 +118,12 @@ export function Sidebar({
                     : "text-white/72",
               )}
             >
-              {group.label}
+              {navGroupLabel(t, group)}
             </p>
             <ul className="space-y-0.5">
               {group.items.map((item) => {
-                const active =
-                  item.href === "/"
-                    ? pathname === "/"
-                    : pathname.startsWith(item.href);
-                const badge = badgeFor(item.href);
+                const active = item.href === activeHref;
+                const badge = navBadge(item, counts);
                 return (
                   <li key={item.href}>
                     <Link
@@ -139,7 +145,7 @@ export function Sidebar({
                         )}
                         aria-hidden
                       />
-                      {item.label}
+                      {navItemLabel(t, item)}
                       {badge > 0 ? (
                         <span
                           className={cn(
@@ -150,7 +156,7 @@ export function Sidebar({
                           )}
                         >
                           {badge > 99 ? "99+" : badge}
-                          <span className="sr-only"> open items</span>
+                          <span className="sr-only">{t("common.openItems")}</span>
                         </span>
                       ) : null}
                     </Link>
@@ -164,7 +170,7 @@ export function Sidebar({
         {channels.length > 0 ? (
           <div>
             <p className="px-2 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] text-nav-label-blue uppercase">
-              Channels
+              {t("nav.channelsHeading")}
             </p>
             <ul className="space-y-0.5">
               {channels.map((channel) => {
@@ -192,7 +198,7 @@ export function Sidebar({
                       <span className="truncate">{channel.slug}</span>
                       {channel.unread ? (
                         <>
-                          <span className="sr-only">Unread messages</span>
+                          <span className="sr-only">{t("nav.unreadMessages")}</span>
                           <span
                             aria-hidden
                             className="ml-auto size-1.5 rounded-full bg-accent shadow-[0_0_0_2px_rgb(255_255_255_/_0.08)]"
@@ -210,11 +216,11 @@ export function Sidebar({
         {isStaff && programs.length > 0 ? (
           <div>
             <p className="flex items-center justify-between px-2 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] text-nav-label-gold uppercase">
-              Programs
+              {t("nav.programsHeading")}
               <Link
                 href="/programs"
                 onClick={onMobileClose}
-                aria-label="Add or manage programs"
+                aria-label={t("nav.managePrograms")}
                 className="rounded p-0.5 text-white/65 transition-colors hover:bg-white/8 hover:text-white"
               >
                 <Plus className="size-3.5" aria-hidden />
@@ -253,7 +259,7 @@ export function Sidebar({
                   onClick={onMobileClose}
                   className="block rounded-(--radius-sm) px-2.5 py-[6px] text-[12.5px] font-medium text-white/55 hover:bg-white/8 hover:text-white"
                 >
-                  View all programs
+                  {t("nav.viewAllPrograms")}
                 </Link>
               </li>
             </ul>
@@ -288,7 +294,10 @@ export function Sidebar({
 
   return (
     <>
-      <aside className="qbbe-sidebar hidden w-[248px] shrink-0 lg:block">
+      {/* Screen height and sticky: stretched to a long page, the account menu sat
+          at the page's end and every change in page height repainted the
+          whole gradient. */}
+      <aside className="qbbe-sidebar sticky top-0 hidden h-dvh w-[248px] shrink-0 self-start lg:block">
         {nav}
       </aside>
       {mobileOpen ? (
@@ -309,6 +318,7 @@ function MobileNavDrawer({
   children: React.ReactNode;
 }) {
   const panelRef = React.useRef<HTMLElement>(null);
+  const t = useT();
 
   React.useEffect(() => {
     const panel = panelRef.current;
@@ -356,7 +366,7 @@ function MobileNavDrawer({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Navigation"
+        aria-label={t("nav.navigation")}
         className="qbbe-sidebar absolute inset-y-0 left-0 w-72 shadow-(--shadow-pop)"
       >
         {children}

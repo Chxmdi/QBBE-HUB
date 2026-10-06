@@ -21,13 +21,21 @@ import { DeepLinkScroll } from "@/components/shared/deep-link-scroll";
 import { OpportunityPipeline } from "@/features/crm/components/opportunity-pipeline";
 import { getOpportunitiesForCrmOrganization } from "@/features/crm/services/opportunity.queries";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
-import { requireSession } from "@/lib/auth";
+import { requireSession, NO_ACCESS_REDIRECT } from "@/lib/auth";
 import { calendarDateInZone } from "@/lib/time";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDate, relativeTime } from "@/lib/utils";
+import {
+  agreementStatusLabel,
+  categoryLabel,
+  followUpStatusLabel,
+  interactionTypeLabel,
+} from "@/features/crm/labels";
+import { getFormatters, getT } from "@/lib/i18n/server";
 import type { CrmContact, CrmFollowUp, CrmInteraction } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Relationship" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("crm.detailMetaTitle") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function CrmDetailPage({
@@ -38,7 +46,7 @@ export default async function CrmDetailPage({
   searchParams: Promise<{ opportunity?: string; contact?: string }>;
 }) {
   const session = await requireSession();
-  if (!session.isStaff) redirect("/");
+  if (!session.isStaff) redirect(NO_ACCESS_REDIRECT);
   const { id } = await params;
   const { opportunity: highlightId = null, contact: highlightContact = null } = await searchParams;
   // The workspace's calendar date, not the server's: this drives both the
@@ -48,6 +56,7 @@ export default async function CrmDetailPage({
     calendarDateInZone(nowInstant, session.timeZone) ??
     nowInstant.toISOString().slice(0, 10);
   const supabase = await createSupabasePageClient();
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
 
   const { data: org } = await supabase
     .from("crm_organization")
@@ -147,12 +156,22 @@ export default async function CrmDetailPage({
   return (
     <div>
       <Breadcrumbs
-        items={[{ label: "Relationships", href: "/crm" }, { label: org.name as string }]}
+        items={[{ label: t("crm.title"), href: "/crm" }, { label: org.name as string }]}
       />
       <PageHeader
-        eyebrow={org.category as string}
+        eyebrow={categoryLabel(org.category as string, t)}
         title={org.name as string}
-        description={[org.notes, org.next_action_at ? `Next action ${formatDate(org.next_action_at as string)}` : null, sensitiveNotes ? `Sensitive: ${sensitiveNotes}` : null].filter(Boolean).join(" · ") || undefined}
+        description={
+          [
+            org.notes,
+            org.next_action_at
+              ? t("crm.nextAction", { date: format.date(org.next_action_at as string) })
+              : null,
+            sensitiveNotes ? t("crm.sensitive", { notes: sensitiveNotes }) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || undefined
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <CrmOrganizationDialog
@@ -176,7 +195,7 @@ export default async function CrmDetailPage({
                 <Avatar name={owner.full_name} src={owner.avatar_url} size="md" />
                 <span>
                   <span className="block font-medium">{owner.full_name}</span>
-                  <span className="meta">Relationship owner</span>
+                  <span className="meta">{t("crm.relationshipOwner")}</span>
                 </span>
               </span>
             ) : null}
@@ -204,39 +223,39 @@ export default async function CrmDetailPage({
         <section aria-labelledby="interactions-heading">
           <div className="mb-3 flex items-center justify-between">
             <h2 id="interactions-heading" className="section-heading">
-              Interaction history
+              {t("crm.interactions.heading")}
             </h2>
             <EntityFormDialog
-              triggerLabel="Record interaction"
+              triggerLabel={t("crm.interactions.record")}
               triggerVariant="secondary"
-              title="Record interaction"
-              submitLabel="Record"
+              title={t("crm.interactions.record")}
+              submitLabel={t("crm.interactions.submit")}
               action={recordInteraction}
               extraValues={{ crmOrganizationId: org.id as string }}
               fields={[
                 {
                   name: "interactionType",
-                  label: "Type",
+                  label: t("crm.fields.type"),
                   type: "select",
                   required: true,
                   colSpan: 1,
                   defaultValue: "note",
                   options: ["meeting", "call", "email", "message", "note", "other"].map(
-                    (t) => ({ value: t, label: t }),
+                    (type) => ({ value: type, label: interactionTypeLabel(type, t) }),
                   ),
                 },
                 {
                   name: "contactId",
-                  label: "Contact",
+                  label: t("crm.fields.contact"),
                   type: "select",
                   colSpan: 1,
                   options: contactList.map((c) => ({ value: c.id, label: c.full_name })),
                 },
-                { name: "summary", label: "Summary", type: "textarea", required: true },
-                { name: "nextSteps", label: "Next steps / outcome", type: "textarea" },
+                { name: "summary", label: t("crm.fields.summary"), type: "textarea", required: true },
+                { name: "nextSteps", label: t("crm.fields.nextSteps"), type: "textarea" },
                 {
                   name: "documentId",
-                  label: "Document",
+                  label: t("crm.fields.document"),
                   type: "select",
                   options: ((documents ?? []) as { id: string; title: string }[]).map((doc) => ({
                     value: doc.id,
@@ -248,8 +267,7 @@ export default async function CrmDetailPage({
           </div>
           {interactionList.length === 0 ? (
             <p className="card px-4 py-6 text-center text-[13px] text-muted">
-              Meetings, calls, emails, and notes recorded here preserve
-              relationship continuity when ownership changes.
+              {t("crm.interactions.empty")}
             </p>
           ) : (
             <ol className="space-y-3">
@@ -266,9 +284,11 @@ export default async function CrmDetailPage({
                     <span className="text-[13px] font-medium">
                       {interaction.owner?.full_name}
                     </span>
-                    <Badge tone="neutral">{interaction.interaction_type}</Badge>
+                    <Badge tone="neutral">
+                      {interactionTypeLabel(interaction.interaction_type, t)}
+                    </Badge>
                     <span className="meta ml-auto">
-                      {relativeTime(interaction.occurred_at)}
+                      {format.relative(interaction.occurred_at)}
                     </span>
                   </div>
                   <p className="text-[13.5px] whitespace-pre-wrap">
@@ -276,7 +296,7 @@ export default async function CrmDetailPage({
                   </p>
                   {interaction.next_steps ? (
                     <p className="mt-1.5 text-[13px]">
-                      <span className="font-medium">Next:</span>{" "}
+                      <span className="font-medium">{t("crm.interactions.next")}</span>{" "}
                       {interaction.next_steps}
                     </p>
                   ) : null}
@@ -301,27 +321,27 @@ export default async function CrmDetailPage({
           <section aria-labelledby="contacts-heading">
             <div className="mb-3 flex items-center justify-between">
               <h2 id="contacts-heading" className="section-heading">
-                Contacts
+                {t("crm.contacts.heading")}
               </h2>
               <EntityFormDialog
-                triggerLabel="Add"
+                triggerLabel={t("crm.add")}
                 triggerVariant="secondary"
-                title="Add contact"
-                submitLabel="Add contact"
+                title={t("crm.contacts.addTitle")}
+                submitLabel={t("crm.contacts.submit")}
                 action={createCrmContact}
                 extraValues={{ crmOrganizationId: org.id as string }}
                 fields={[
-                  { name: "fullName", label: "Name", type: "text", required: true },
-                  { name: "roleTitle", label: "Role", type: "text", colSpan: 1 },
-                  { name: "email", label: "Email", type: "email", colSpan: 1 },
-                  { name: "phone", label: "Phone", type: "text", colSpan: 1 },
-                  { name: "communicationNotes", label: "Consent or communication notes", type: "textarea" },
+                  { name: "fullName", label: t("crm.fields.name"), type: "text", required: true },
+                  { name: "roleTitle", label: t("crm.fields.role"), type: "text", colSpan: 1 },
+                  { name: "email", label: t("crm.fields.email"), type: "email", colSpan: 1 },
+                  { name: "phone", label: t("crm.fields.phone"), type: "text", colSpan: 1 },
+                  { name: "communicationNotes", label: t("crm.fields.communicationNotes"), type: "textarea" },
                 ]}
               />
             </div>
             {contactList.length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No contacts recorded yet.
+                {t("crm.contacts.empty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -335,7 +355,7 @@ export default async function CrmDetailPage({
                     <p className="meta">
                       {[contact.role_title, contact.email, contact.phone]
                         .filter(Boolean)
-                        .join(" · ") || "No details"}
+                        .join(" · ") || t("crm.contacts.noDetails")}
                     </p>
                     {contact.communication_notes ? (
                       <p className="meta">{contact.communication_notes}</p>
@@ -344,14 +364,14 @@ export default async function CrmDetailPage({
                       .filter((link) => link.contact_id === contact.id)
                       .map((link) => (
                         <p key={link.id} className="meta">
-                          Linked:{" "}
+                          {t("crm.contacts.linked")}{" "}
                           {link.program?.name ??
                             link.project?.name ??
                             link.event?.name ??
                             link.task?.title ??
                             link.opportunity?.title ??
                             link.agreement?.title ??
-                            "record"}
+                            t("crm.contacts.linkedFallback")}
                         </p>
                       ))}
                   </li>
@@ -363,24 +383,24 @@ export default async function CrmDetailPage({
           <section aria-labelledby="followups-heading">
             <div className="mb-3 flex items-center justify-between">
               <h2 id="followups-heading" className="section-heading">
-                Follow-ups
+                {t("crm.followUps.heading")}
               </h2>
               <EntityFormDialog
-                triggerLabel="Add"
+                triggerLabel={t("crm.add")}
                 triggerVariant="secondary"
-                title="Schedule follow-up"
-                submitLabel="Schedule"
+                title={t("crm.followUps.scheduleTitle")}
+                submitLabel={t("crm.followUps.schedule")}
                 action={createFollowUp}
                 extraValues={{ crmOrganizationId: org.id as string }}
                 fields={[
-                  { name: "title", label: "Follow-up", type: "text", required: true },
-                  { name: "dueAt", label: "Due date", type: "date", required: true },
+                  { name: "title", label: t("crm.fields.followUp"), type: "text", required: true },
+                  { name: "dueAt", label: t("crm.fields.dueDate"), type: "date", required: true },
                 ]}
               />
             </div>
             {followUpList.length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                Every active relationship should have a next action date.
+                {t("crm.followUps.empty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -390,11 +410,11 @@ export default async function CrmDetailPage({
                       {followUp.title}
                     </span>
                     <span className="meta whitespace-nowrap">
-                      {formatDate(followUp.due_at)}
+                      {format.date(followUp.due_at)}
                     </span>
                     <FollowUpTaskButton followUpId={followUp.id} taskId={followUp.task_id} />
                     <Badge tone={followUp.status === "done" ? "success" : "warning"}>
-                      {followUp.status}
+                      {followUpStatusLabel(followUp.status, t)}
                     </Badge>
                   </li>
                 ))}
@@ -404,45 +424,47 @@ export default async function CrmDetailPage({
 
           <section aria-labelledby="agreements-heading">
             <div className="mb-3 flex items-center justify-between">
-              <h2 id="agreements-heading" className="section-heading">Agreements</h2>
+              <h2 id="agreements-heading" className="section-heading">
+                {t("crm.agreements.heading")}
+              </h2>
               <EntityFormDialog
-                triggerLabel="Add"
+                triggerLabel={t("crm.add")}
                 triggerVariant="secondary"
-                title="Add agreement"
-                submitLabel="Save"
+                title={t("crm.agreements.addTitle")}
+                submitLabel={t("crm.save")}
                 action={createCrmAgreement}
                 extraValues={{ crmOrganizationId: org.id as string }}
                 fields={[
-                  { name: "title", label: "Title", type: "text", required: true },
+                  { name: "title", label: t("crm.fields.title"), type: "text", required: true },
                   {
                     name: "status",
-                    label: "Status",
+                    label: t("crm.fields.status"),
                     type: "select",
                     defaultValue: "draft",
                     options: [
-                      { value: "draft", label: "Draft" },
-                      { value: "active", label: "Active" },
-                      { value: "ended", label: "Ended" },
+                      { value: "draft", label: t("crm.agreements.statusOptions.draft") },
+                      { value: "active", label: t("crm.agreements.statusOptions.active") },
+                      { value: "ended", label: t("crm.agreements.statusOptions.ended") },
                     ],
                   },
-                  { name: "startsOn", label: "Starts", type: "date", colSpan: 1 },
-                  { name: "endsOn", label: "Ends", type: "date", colSpan: 1 },
+                  { name: "startsOn", label: t("crm.fields.starts"), type: "date", colSpan: 1 },
+                  { name: "endsOn", label: t("crm.fields.ends"), type: "date", colSpan: 1 },
                   {
                     name: "contactId",
-                    label: "Contact",
+                    label: t("crm.fields.contact"),
                     type: "select",
                     options: contactList.map((contact) => ({
                       value: contact.id,
                       label: contact.full_name,
                     })),
                   },
-                  { name: "notes", label: "Notes", type: "textarea" },
+                  { name: "notes", label: t("crm.fields.notes"), type: "textarea" },
                 ]}
               />
             </div>
             {agreementList.length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                Record a memorandum, grant letter, or other agreement here.
+                {t("crm.agreements.empty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -450,9 +472,9 @@ export default async function CrmDetailPage({
                   <li key={agreement.id} className="px-4 py-2.5">
                     <p className="text-[13.5px] font-medium">{agreement.title}</p>
                     <p className="meta">
-                      {agreement.status}
-                      {agreement.starts_on ? ` · ${formatDate(agreement.starts_on)}` : ""}
-                      {agreement.ends_on ? ` → ${formatDate(agreement.ends_on)}` : ""}
+                      {agreementStatusLabel(agreement.status, t)}
+                      {agreement.starts_on ? ` · ${format.date(agreement.starts_on)}` : ""}
+                      {agreement.ends_on ? ` → ${format.date(agreement.ends_on)}` : ""}
                     </p>
                   </li>
                 ))}
@@ -462,36 +484,38 @@ export default async function CrmDetailPage({
 
           <section aria-labelledby="links-heading">
             <div className="mb-3 flex items-center justify-between">
-              <h2 id="links-heading" className="section-heading">Linked work</h2>
+              <h2 id="links-heading" className="section-heading">
+                {t("crm.links.heading")}
+              </h2>
               <EntityFormDialog
-                triggerLabel="Link"
+                triggerLabel={t("crm.links.trigger")}
                 triggerVariant="secondary"
-                title="Link a record"
-                submitLabel="Link"
+                title={t("crm.links.title")}
+                submitLabel={t("crm.links.submit")}
                 action={createCrmLink}
                 extraValues={{ crmOrganizationId: org.id as string }}
                 fields={[
                   {
                     name: "contactId",
-                    label: "Contact",
+                    label: t("crm.fields.contact"),
                     type: "select",
                     options: contactList.map((contact) => ({ value: contact.id, label: contact.full_name })),
                   },
                   {
                     name: "programId",
-                    label: "Program",
+                    label: t("crm.fields.program"),
                     type: "select",
                     options: programOptions.map((program) => ({ value: program.id, label: program.label })),
                   },
                   {
                     name: "projectId",
-                    label: "Project",
+                    label: t("crm.fields.project"),
                     type: "select",
                     options: options.projects.map((project) => ({ value: project.id, label: project.label })),
                   },
                   {
                     name: "eventId",
-                    label: "Event",
+                    label: t("crm.fields.event"),
                     type: "select",
                     options: ((events ?? []) as { id: string; name: string }[]).map((event) => ({
                       value: event.id,
@@ -500,7 +524,7 @@ export default async function CrmDetailPage({
                   },
                   {
                     name: "taskId",
-                    label: "Task",
+                    label: t("crm.fields.task"),
                     type: "select",
                     options: ((tasks ?? []) as { id: string; title: string }[]).map((task) => ({
                       value: task.id,
@@ -509,7 +533,7 @@ export default async function CrmDetailPage({
                   },
                   {
                     name: "opportunityId",
-                    label: "Grant",
+                    label: t("crm.fields.grant"),
                     type: "select",
                     options: [...pipeline.open, ...pipeline.settled].map((item) => ({
                       value: item.id,
@@ -518,7 +542,7 @@ export default async function CrmDetailPage({
                   },
                   {
                     name: "agreementId",
-                    label: "Agreement",
+                    label: t("crm.fields.agreement"),
                     type: "select",
                     options: agreementList.map((agreement) => ({
                       value: agreement.id,
@@ -530,7 +554,7 @@ export default async function CrmDetailPage({
             </div>
             {linkRows.length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                Link this relationship to a program, project, event, grant, agreement or task.
+                {t("crm.links.empty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -546,7 +570,7 @@ export default async function CrmDetailPage({
                       link.contact?.full_name,
                     ]
                       .filter(Boolean)
-                      .join(" · ") || "Linked record"}
+                      .join(" · ") || t("crm.links.fallback")}
                   </li>
                 ))}
               </ul>

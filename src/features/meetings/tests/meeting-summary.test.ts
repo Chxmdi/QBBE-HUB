@@ -68,3 +68,21 @@ describe("the rest of the summary is unchanged by the attendees line", () => {
     expect(summary).toContain("Actions: none recorded");
   });
 });
+
+describe("a meeting summary in French", () => {
+  it("is written in the language it is given", async () => {
+    const { createTranslator } = await import("@/lib/i18n/translate");
+    const summary = composeMeetingSummary(
+      {
+        ...base,
+        attendees: [{ fullName: "Amara Osei" }],
+        actions: [{ title: "Réserver la salle", ownerName: null, dueAt: "2026-09-30" }],
+      },
+      createTranslator("fr-CA"),
+    );
+    expect(summary).toContain("Résumé de la réunion — Programme review");
+    expect(summary).toContain("Participants : Amara Osei");
+    expect(summary).toContain("Décisions : aucune consignée");
+    expect(summary).toContain("• Réserver la salle (échéance : 2026-09-30)");
+  });
+});

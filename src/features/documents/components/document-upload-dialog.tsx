@@ -11,9 +11,18 @@ import { useToast } from "@/components/ui/toast";
 import {
   createDocumentLink,
   registerUploadedDocument,
+  saveDocumentText,
 } from "@/features/documents/services/document.commands";
+import { useFileTextReader } from "@/features/documents/text-extract/use-file-text-reader";
+import { TextReadingStatus } from "@/features/documents/text-extract/text-reading-status";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
+import {
+  folderLabel,
+  groupFolders,
+  type LibraryFolder,
+} from "@/features/documents/services/library";
+import { useT } from "@/lib/i18n/client";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -22,9 +31,14 @@ export function DocumentUploadDialog({
   projects,
   programs,
   approvedHosts = [],
+  folders = [],
+  defaultFolderId = "",
 }: {
   projects: Option[];
   programs: Option[];
+  /** Library folders the person can see (#147). */
+  folders?: LibraryFolder[];
+  defaultFolderId?: string;
   /**
    * What the library will accept, so the form can say so before somebody types
    * a link it is going to refuse. The list is the organization's own, read
@@ -34,11 +48,20 @@ export function DocumentUploadDialog({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("file");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  // The words in the chosen file are read on this device while the form is
+  // filled in, so search can find the file by them (#147).
+  const reader = useFileTextReader();
+
+  function close() {
+    reader.reset();
+    setOpen(false);
+  }
 
   function contextFields(form: FormData) {
     return {
@@ -46,6 +69,8 @@ export function DocumentUploadDialog({
       programId: (form.get("programId") as string) || undefined,
       visibility: (form.get("visibility") as string) || "organization",
       description: (form.get("description") as string) || undefined,
+      folderId: (form.get("folderId") as string) || undefined,
+      tags: (form.get("tags") as string) || undefined,
     };
   }
 
@@ -55,16 +80,16 @@ export function DocumentUploadDialog({
     const form = new FormData(e.currentTarget);
     const file = form.get("file") as File | null;
     if (!file || file.size === 0) {
-      setError("Choose a file to upload.");
+      setError(t("documents.upload.chooseFile"));
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError("Files must be 25 MB or smaller.");
+      setError(t("documents.upload.tooLarge"));
       return;
     }
 
     setSaving(true);
-    setProgress("Uploading…");
+    setProgress(t("documents.upload.uploading"));
     const supabase = createSupabaseBrowserClient();
     // Random prefix avoids collisions; the path is never the authorization.
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
@@ -77,11 +102,11 @@ export function DocumentUploadDialog({
     if (uploadError) {
       setSaving(false);
       setProgress(null);
-      setError("Upload failed. Check your connection and try again.");
+      setError(t("documents.upload.uploadFailed"));
       return;
     }
 
-    setProgress("Saving record…");
+    setProgress(t("documents.upload.savingRecord"));
     const result = await registerUploadedDocument({
       title: (form.get("title") as string) || file.name,
       storagePath: path,
@@ -96,12 +121,24 @@ export function DocumentUploadDialog({
       // Registration can fail after Storage accepted the bytes. The matching
       // policy permits owners to remove only their own unregistered uploads.
       await supabase.storage.from("documents").remove([path]);
-      setError(result.error ?? "Could not save the document record.");
+      setError(result.error ?? t("documents.upload.saveRecordFailed"));
       return;
     }
-    toast("Document uploaded. Downloads become available after the security check.");
-    setOpen(false);
+    await storeText(result.id);
+    toast(t("documents.upload.uploaded"));
+    close();
     router.refresh();
+  }
+
+  /** Saves the file's words once its record exists. Never fails the upload. */
+  async function storeText(documentId: string | undefined) {
+    if (!documentId) return;
+    setSaving(true);
+    setProgress(t("documents.upload.readingWords"));
+    const found = await reader.result();
+    if (found) await saveDocumentText({ id: documentId, ...found });
+    setSaving(false);
+    setProgress(null);
   }
 
   async function handleLink(e: React.FormEvent<HTMLFormElement>) {
@@ -116,11 +153,11 @@ export function DocumentUploadDialog({
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not save the resource.");
+      setError(result.error ?? t("documents.upload.saveResourceFailed"));
       return;
     }
-    toast("Resource added.");
-    setOpen(false);
+    toast(t("documents.upload.resourceAdded"));
+    close();
     router.refresh();
   }
 
@@ -128,9 +165,9 @@ export function DocumentUploadDialog({
     <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <Label htmlFor="doc-project">Project</Label>
+          <Label htmlFor="doc-project">{t("documents.upload.project")}</Label>
           <Select id="doc-project" name="projectId" defaultValue="">
-            <option value="">No project</option>
+            <option value="">{t("documents.upload.noProject")}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
@@ -139,9 +176,9 @@ export function DocumentUploadDialog({
           </Select>
         </div>
         <div>
-          <Label htmlFor="doc-program">Program</Label>
+          <Label htmlFor="doc-program">{t("documents.upload.program")}</Label>
           <Select id="doc-program" name="programId" defaultValue="">
-            <option value="">No program</option>
+            <option value="">{t("documents.upload.noProgram")}</option>
             {programs.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
@@ -150,16 +187,43 @@ export function DocumentUploadDialog({
           </Select>
         </div>
       </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <Label htmlFor="doc-folder">{t("documents.upload.folder")}</Label>
+          <Select id="doc-folder" name="folderId" defaultValue={defaultFolderId}>
+            <option value="">{t("documents.upload.noFolder")}</option>
+            {groupFolders(folders, t).map((group) => (
+              <optgroup key={group.category} label={group.label}>
+                {group.folders.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {folderLabel(f, t)}
+                    {f.visibility === "staff" ? t("documents.staffOnlySuffix") : ""}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="doc-tags">
+            {t("documents.upload.tags")}{" "}
+            <span className="font-normal text-muted">{t("documents.upload.optional")}</span>
+          </Label>
+          <Input id="doc-tags" name="tags" maxLength={500} placeholder={t("documents.upload.tagsPlaceholder")} />
+        </div>
+      </div>
+      <FieldHint>{t("documents.upload.folderHint")}</FieldHint>
       <div>
-        <Label htmlFor="doc-visibility">Who can see this</Label>
+        <Label htmlFor="doc-visibility">{t("documents.upload.visibility")}</Label>
         <Select id="doc-visibility" name="visibility" defaultValue="organization">
-          <option value="organization">All active members</option>
-          <option value="staff">Staff and admins only</option>
+          <option value="organization">{t("documents.upload.allActive")}</option>
+          <option value="staff">{t("documents.upload.staffAndAdmins")}</option>
         </Select>
       </div>
       <div>
         <Label htmlFor="doc-description">
-          Description <span className="font-normal text-muted">(optional)</span>
+          {t("documents.upload.description")}{" "}
+          <span className="font-normal text-muted">{t("documents.upload.optional")}</span>
         </Label>
         <Textarea id="doc-description" name="description" maxLength={2000} rows={2} />
       </div>
@@ -170,13 +234,13 @@ export function DocumentUploadDialog({
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus className="size-4" aria-hidden />
-        Add resource
+        {t("documents.upload.trigger")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Add a resource">
+      <Dialog open={open} onClose={close} title={t("documents.upload.title")}>
         <Tabs
           tabs={[
-            { id: "file", label: "Upload file" },
-            { id: "link", label: "External link" },
+            { id: "file", label: t("documents.upload.tabFile") },
+            { id: "link", label: t("documents.upload.tabLink") },
           ]}
           active={tab}
           onChange={setTab}
@@ -185,20 +249,24 @@ export function DocumentUploadDialog({
         <TabPanel id="file" active={tab}>
           <form onSubmit={handleUpload} className="space-y-4">
             <div>
-              <Label htmlFor="doc-file">File</Label>
-              <Input id="doc-file" name="file" type="file" required />
-              <FieldHint>
-                Up to 25 MB. Files stay private and unavailable for download until
-                their security check passes.
-              </FieldHint>
+              <Label htmlFor="doc-file">{t("documents.upload.file")}</Label>
+              <Input
+                id="doc-file"
+                name="file"
+                type="file"
+                required
+                onChange={(e) => reader.read(e.target.files?.[0])}
+              />
+              <FieldHint>{t("documents.upload.fileHint")}</FieldHint>
+              <TextReadingStatus state={reader.state} onSkip={reader.skip} />
             </div>
             <div>
-              <Label htmlFor="doc-file-title">Title</Label>
+              <Label htmlFor="doc-file-title">{t("documents.upload.fileTitle")}</Label>
               <Input
                 id="doc-file-title"
                 name="title"
                 maxLength={200}
-                placeholder="Defaults to the file name"
+                placeholder={t("documents.upload.fileTitlePlaceholder")}
               />
             </div>
             {contextInputs}
@@ -209,12 +277,12 @@ export function DocumentUploadDialog({
             ) : null}
             <div className="flex items-center justify-end gap-2 pt-1">
               {progress ? <span className="meta">{progress}</span> : null}
-              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-                Cancel
+              <Button type="button" variant="secondary" onClick={close}>
+                {t("documents.upload.cancel")}
               </Button>
               <Button type="submit" loading={saving}>
                 <Upload className="size-4" aria-hidden />
-                Upload
+                {t("documents.upload.submit")}
               </Button>
             </div>
           </form>
@@ -223,24 +291,24 @@ export function DocumentUploadDialog({
         <TabPanel id="link" active={tab}>
           <form onSubmit={handleLink} className="space-y-4">
             <div>
-              <Label htmlFor="doc-link-title">Title</Label>
+              <Label htmlFor="doc-link-title">{t("documents.upload.linkTitle")}</Label>
               <Input id="doc-link-title" name="title" required maxLength={200} />
             </div>
             <div>
-              <Label htmlFor="doc-url">URL</Label>
+              <Label htmlFor="doc-url">{t("documents.upload.url")}</Label>
               <Input
                 id="doc-url"
                 name="url"
                 type="url"
                 required
-                placeholder="https://drive.google.com/…"
+                placeholder={t("documents.upload.urlPlaceholder")}
               />
               <FieldHint>
                 {approvedHosts.length
-                  ? `Links must be https and point at ${approvedHosts
-                      .map((h) => h.label || h.host)
-                      .join(", ")}, so access stays managed by the organization.`
-                  : "No approved sources are configured yet. An administrator can add one before external links can be saved."}
+                  ? t("documents.upload.approvedHosts", {
+                      hosts: approvedHosts.map((h) => h.label || h.host).join(", "),
+                    })
+                  : t("documents.upload.noApprovedHosts")}
               </FieldHint>
             </div>
             {contextInputs}
@@ -250,11 +318,11 @@ export function DocumentUploadDialog({
               </p>
             ) : null}
             <div className="flex justify-end gap-2 pt-1">
-              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-                Cancel
+              <Button type="button" variant="secondary" onClick={close}>
+                {t("documents.upload.cancel")}
               </Button>
               <Button type="submit" loading={saving}>
-                Add resource
+                {t("documents.upload.trigger")}
               </Button>
             </div>
           </form>

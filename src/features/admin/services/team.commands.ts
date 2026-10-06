@@ -6,9 +6,11 @@ import { requiredText } from "@/lib/schema";
 import { authorizeAdminAction } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
-const createTeamSchema = z.object({
-  name: requiredText("A team needs a name.", 120),
+const createTeamSchema = (t: TranslateFn) => z.object({
+  name: requiredText(t("admin.errors.teamNeedsName"), 120),
   description: z.string().trim().max(500).optional(),
   ownerId: z.string().uuid().optional(),
 });
@@ -26,12 +28,13 @@ const projectAssignmentSchema = z.object({
 });
 
 export async function createTeam(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
-  const parsed = createTeamSchema.safeParse(input);
+  const parsed = createTeamSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("admin.errors.invalidInput") };
   }
   const supabase = await createSupabaseServerClient();
   const { data: teamId, error } = await supabase.rpc("create_team_with_channel", {
@@ -43,8 +46,8 @@ export async function createTeam(input: unknown): Promise<ActionResult> {
     return {
       ok: false,
       error: error?.message.includes("active organization member")
-        ? "Choose an active member of this organization as team owner."
-        : "Could not create the team and its private channel.",
+        ? t("admin.errors.teamOwnerNotActive")
+        : t("admin.errors.teamCreateFailed"),
     };
   }
 
@@ -59,11 +62,12 @@ export async function addTeamMember(
   teamId: string,
   userId: string,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = z.object({ teamId: z.string().uuid(), userId: z.string().uuid() })
     .safeParse({ teamId, userId });
-  if (!parsed.success) return { ok: false, error: "Invalid team member." };
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidTeamMember") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("add_team_member", {
     p_team_id: parsed.data.teamId,
@@ -73,8 +77,8 @@ export async function addTeamMember(
     return {
       ok: false,
       error: error.message.includes("active")
-        ? "Only active members of this organization can join the team."
-        : "Could not add the member.",
+        ? t("admin.errors.onlyActiveCanJoin")
+        : t("admin.errors.addMemberFailed"),
     };
   }
   revalidatePath("/people");
@@ -87,11 +91,12 @@ export async function removeTeamMember(
   teamId: string,
   userId: string,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = z.object({ teamId: z.string().uuid(), userId: z.string().uuid() })
     .safeParse({ teamId, userId });
-  if (!parsed.success) return { ok: false, error: "Invalid team member." };
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidTeamMember") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("remove_team_member", {
     p_team_id: parsed.data.teamId,
@@ -101,8 +106,8 @@ export async function removeTeamMember(
     return {
       ok: false,
       error: error.message.includes("ownership")
-        ? "Transfer team ownership before removing its owner."
-        : "Could not remove the member.",
+        ? t("admin.errors.transferBeforeRemovingOwner")
+        : t("admin.errors.removeMemberFailed"),
     };
   }
   revalidatePath("/people");
@@ -114,13 +119,14 @@ export async function transferTeamOwnership(
   teamId: string,
   ownerId: string,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = z.object({
     teamId: z.string().uuid(),
     ownerId: z.string().uuid(),
   }).safeParse({ teamId, ownerId });
-  if (!parsed.success) return { ok: false, error: "Choose a valid team owner." };
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidTeamOwner") };
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("transfer_team_ownership", {
@@ -131,8 +137,8 @@ export async function transferTeamOwnership(
     return {
       ok: false,
       error: error.message.includes("active organization member")
-        ? "Choose an active member of this organization."
-        : "Could not transfer team ownership.",
+        ? t("admin.errors.chooseActiveMember")
+        : t("admin.errors.teamTransferFailed"),
     };
   }
 
@@ -143,11 +149,12 @@ export async function transferTeamOwnership(
 }
 
 export async function assignTeamToProgram(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
   const parsed = programAssignmentSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Choose a valid program and role." };
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidProgramAssignment") };
   const supabase = await createSupabaseServerClient();
   const { data: assignment, error } = await supabase
     .from("program_team_assignment")
@@ -160,7 +167,7 @@ export async function assignTeamToProgram(input: unknown): Promise<ActionResult>
     })
     .select("team_id")
     .maybeSingle();
-  if (error || !assignment) return { ok: false, error: "Could not assign the team to that program." };
+  if (error || !assignment) return { ok: false, error: t("admin.errors.programAssignFailed") };
   revalidatePath("/admin");
   revalidatePath("/admin/access");
   revalidatePath("/programs");
@@ -169,11 +176,12 @@ export async function assignTeamToProgram(input: unknown): Promise<ActionResult>
 }
 
 export async function assignTeamToProject(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
   const parsed = projectAssignmentSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Choose a valid project and role." };
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidProjectAssignment") };
   const supabase = await createSupabaseServerClient();
   const { data: assignment, error } = await supabase
     .from("project_team_assignment")
@@ -186,7 +194,7 @@ export async function assignTeamToProject(input: unknown): Promise<ActionResult>
     })
     .select("team_id")
     .maybeSingle();
-  if (error || !assignment) return { ok: false, error: "Could not assign the team to that project." };
+  if (error || !assignment) return { ok: false, error: t("admin.errors.projectAssignFailed") };
   revalidatePath("/admin");
   revalidatePath("/admin/access");
   revalidatePath("/projects");
@@ -198,6 +206,7 @@ export async function removeTeamAssignment(
   scopeId: string,
   teamId: string,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
@@ -206,7 +215,7 @@ export async function removeTeamAssignment(
     scopeId: z.string().uuid(),
     teamId: z.string().uuid(),
   }).safeParse({ scope, scopeId, teamId });
-  if (!parsed.success) return { ok: false, error: "Invalid team assignment." };
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidTeamAssignment") };
   const supabase = await createSupabaseServerClient();
   const scopeColumn = parsed.data.scope === "program" ? "program_id" : "project_id";
   const table = parsed.data.scope === "program"
@@ -220,7 +229,7 @@ export async function removeTeamAssignment(
     .eq(scopeColumn, parsed.data.scopeId)
     .select("team_id")
     .maybeSingle();
-  if (error || !removed) return { ok: false, error: "Could not remove the team assignment." };
+  if (error || !removed) return { ok: false, error: t("admin.errors.removeAssignmentFailed") };
   revalidatePath("/admin");
   revalidatePath("/admin/access");
   revalidatePath("/programs");

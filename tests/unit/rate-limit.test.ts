@@ -113,8 +113,45 @@ describe("the configured ceilings", () => {
     }
   });
 
+  it("keep CSV export and import under the ordinary write ceilings", () => {
+    // Each export copies rows out of the workspace and each import can create
+    // thousands of records; neither should be possible at the rate of a chat.
+    expect(RATE_LIMITS["lens:export"].windowSeconds).toBe(3600);
+    expect(RATE_LIMITS["lens:export"].limit).toBeLessThanOrEqual(60);
+    expect(RATE_LIMITS["import:run"].windowSeconds).toBe(3600);
+    expect(RATE_LIMITS["import:run"].limit).toBeLessThanOrEqual(60);
+    // A full data export is the most sensitive of the three and stays the tightest.
+    expect(RATE_LIMITS["export:request"].limit).toBeLessThan(RATE_LIMITS["lens:export"].limit);
+  });
+
   it("leave the busiest job far more headroom than its schedule needs", () => {
     // drain-notifications runs once a minute; anything near that would be a bug.
     expect(RATE_LIMITS["job:run"].limit).toBeGreaterThan(60);
+  });
+});
+
+describe("RATE_LIMITS", () => {
+  it("every ceiling is a positive count over a positive window", () => {
+    for (const [action, rule] of Object.entries(RATE_LIMITS)) {
+      expect(rule.limit, action).toBeGreaterThan(0);
+      expect(rule.windowSeconds, action).toBeGreaterThan(0);
+    }
+  });
+
+  it("covers the Workspace OS write paths (epic #199 hardening)", () => {
+    expect(Object.keys(RATE_LIMITS)).toEqual(
+      expect.arrayContaining([
+        "page:create",
+        "comment:create",
+        "capture:create",
+        "project:create",
+        "share:write",
+        "app:write",
+        "blueprint:write",
+        "blueprint:build",
+        "template:write",
+        "editor:save",
+      ]),
+    );
   });
 });

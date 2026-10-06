@@ -25,10 +25,13 @@ import {
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { getFormatters, getT } from "@/lib/i18n/server";
+import type { MessageKey } from "@/lib/i18n/translate";
 import type { AgendaItem, Decision, MeetingAction } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Meeting" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("meetings.detailTitle") };
+}
 export const dynamic = "force-dynamic";
 
 /**
@@ -39,13 +42,13 @@ export const dynamic = "force-dynamic";
  */
 const AGENDA_STATUS_BADGE: Record<
   string,
-  { label: string; tone: "warning" | "neutral" | "danger" | "success" }
+  { label: MessageKey; tone: "warning" | "neutral" | "danger" | "success" }
 > = {
-  proposed: { label: "Proposed", tone: "warning" },
-  deferred: { label: "Deferred", tone: "neutral" },
-  declined: { label: "Declined", tone: "danger" },
-  done: { label: "Done", tone: "success" },
-  combined: { label: "Combined", tone: "neutral" },
+  proposed: { label: "meetings.agendaStatus.proposed", tone: "warning" },
+  deferred: { label: "meetings.agendaStatus.deferred", tone: "neutral" },
+  declined: { label: "meetings.agendaStatus.declined", tone: "danger" },
+  done: { label: "meetings.agendaStatus.done", tone: "success" },
+  combined: { label: "meetings.agendaStatus.combined", tone: "neutral" },
 };
 
 type AgendaRow = AgendaItem & {
@@ -93,6 +96,7 @@ export default async function MeetingDetailPage({
 }) {
   const session = await requireSession();
   const { id } = await params;
+  const [t, format] = await Promise.all([getT(), getFormatters()]);
   const supabase = await createSupabasePageClient();
 
   const { data: meetingRow } = await supabase
@@ -221,25 +225,25 @@ export default async function MeetingDetailPage({
               .limit(30),
           ]).then(([tasks, milestones, risks, issues, projectDecisions]) => [
             ...((tasks.data ?? []) as { id: string; title: string }[]).map(
-              (r) => ({ value: `task:${r.id}`, label: `Task: ${r.title}` }),
+              (r) => ({ value: `task:${r.id}`, label: t("meetings.linkOption.task", { title: r.title }) }),
             ),
             ...((milestones.data ?? []) as { id: string; name: string }[]).map(
               (r) => ({
                 value: `milestone:${r.id}`,
-                label: `Milestone: ${r.name}`,
+                label: t("meetings.linkOption.milestone", { title: r.name }),
               }),
             ),
             ...((risks.data ?? []) as { id: string; title: string }[]).map(
-              (r) => ({ value: `risk:${r.id}`, label: `Risk: ${r.title}` }),
+              (r) => ({ value: `risk:${r.id}`, label: t("meetings.linkOption.risk", { title: r.title }) }),
             ),
             ...((issues.data ?? []) as { id: string; title: string }[]).map(
-              (r) => ({ value: `issue:${r.id}`, label: `Issue: ${r.title}` }),
+              (r) => ({ value: `issue:${r.id}`, label: t("meetings.linkOption.issue", { title: r.title }) }),
             ),
             ...(
               (projectDecisions.data ?? []) as { id: string; title: string }[]
             ).map((r) => ({
               value: `decision:${r.id}`,
-              label: `Decision: ${r.title}`,
+              label: t("meetings.linkOption.decision", { title: r.title }),
             })),
           ])
         : Promise.resolve([] as { value: string; label: string }[]),
@@ -250,7 +254,7 @@ export default async function MeetingDetailPage({
     .filter((row) => row.id !== meeting.id)
     .map((row) => ({
       id: row.id,
-      label: `${row.title} · ${formatDateTime(row.starts_at)}`,
+      label: `${row.title} · ${format.dateTime(row.starts_at)}`,
     }));
   const series = (seriesRows ?? []) as {
     id: string;
@@ -265,27 +269,27 @@ export default async function MeetingDetailPage({
   const agendaFields = (item?: AgendaRow) => [
     {
       name: "title",
-      label: "Item",
+      label: t("meetings.agendaFields.item"),
       type: "text" as const,
       required: true,
       defaultValue: item?.title,
     },
     {
       name: "kind",
-      label: "Type",
+      label: t("meetings.agendaFields.type"),
       type: "select" as const,
       required: true,
       colSpan: 1 as const,
       defaultValue: item?.kind ?? "discussion",
       options: [
-        { value: "information", label: "Information" },
-        { value: "discussion", label: "Discussion" },
-        { value: "decision", label: "Decision" },
+        { value: "information", label: t("meetings.agendaKinds.information") },
+        { value: "discussion", label: t("meetings.agendaKinds.discussion") },
+        { value: "decision", label: t("meetings.agendaKinds.decision") },
       ],
     },
     {
       name: "timeBoxMinutes",
-      label: "Time box (minutes)",
+      label: t("meetings.agendaFields.timeBox"),
       type: "number" as const,
       colSpan: 1 as const,
       defaultValue: item?.time_box_minutes
@@ -294,7 +298,7 @@ export default async function MeetingDetailPage({
     },
     {
       name: "ownerId",
-      label: "Owner",
+      label: t("meetings.agendaFields.owner"),
       type: "select" as const,
       colSpan: 1 as const,
       defaultValue: item?.owner_id ?? undefined,
@@ -302,7 +306,7 @@ export default async function MeetingDetailPage({
     },
     {
       name: "link",
-      label: "Linked record",
+      label: t("meetings.agendaFields.linkedRecord"),
       type: "select" as const,
       colSpan: 1 as const,
       defaultValue: item ? agendaLinkValue(item) : undefined,
@@ -310,7 +314,7 @@ export default async function MeetingDetailPage({
     },
     {
       name: "desiredOutcome",
-      label: "Desired outcome",
+      label: t("meetings.agendaFields.desiredOutcome"),
       type: "textarea" as const,
       defaultValue: item?.desired_outcome ?? undefined,
     },
@@ -323,7 +327,7 @@ export default async function MeetingDetailPage({
   const attendees = ((attendeeRows ?? []) as unknown as AttendeeRow[])
     .map((row) => ({
       userId: row.user_id,
-      name: row.user?.full_name ?? "Unknown person",
+      name: row.user?.full_name ?? t("meetings.detail.unknownPerson"),
       avatarUrl: row.user?.avatar_url ?? null,
       isOrganizer: row.user_id === meeting.organizer_id,
     }))
@@ -346,7 +350,7 @@ export default async function MeetingDetailPage({
     <div>
       <Breadcrumbs
         items={[
-          { label: "Meetings", href: "/meetings" },
+          { label: t("meetings.title"), href: "/meetings" },
           ...(meeting.project
             ? [
                 {
@@ -359,36 +363,36 @@ export default async function MeetingDetailPage({
         ]}
       />
       <PageHeader
-        eyebrow={formatDateTime(meeting.starts_at)}
+        eyebrow={format.dateTime(meeting.starts_at)}
         title={meeting.title}
         description={meeting.purpose ?? undefined}
         actions={
           session.isStaff && isActive ? (
             <div className="flex flex-wrap items-start gap-2">
               <EntityFormDialog
-                triggerLabel="Edit"
+                triggerLabel={t("meetings.detail.edit")}
                 triggerVariant="secondary"
-                title="Edit meeting"
-                submitLabel="Save changes"
+                title={t("meetings.detail.editTitle")}
+                submitLabel={t("meetings.detail.saveChanges")}
                 action={updateMeeting}
                 extraValues={{ meetingId: meeting.id }}
                 fields={[
                   {
                     name: "title",
-                    label: "Title",
+                    label: t("meetings.fields.title"),
                     type: "text",
                     required: true,
                     defaultValue: meeting.title,
                   },
                   {
                     name: "purpose",
-                    label: "Purpose",
+                    label: t("meetings.fields.purpose"),
                     type: "textarea",
                     defaultValue: meeting.purpose ?? "",
                   },
                   {
                     name: "startsAt",
-                    label: "Starts",
+                    label: t("meetings.fields.starts"),
                     type: "datetime-local",
                     required: true,
                     colSpan: 1,
@@ -399,7 +403,7 @@ export default async function MeetingDetailPage({
                   },
                   {
                     name: "durationMinutes",
-                    label: "Duration (minutes)",
+                    label: t("meetings.fields.duration"),
                     type: "number",
                     required: true,
                     colSpan: 1,
@@ -419,7 +423,7 @@ export default async function MeetingDetailPage({
                   },
                   {
                     name: "location",
-                    label: "Location",
+                    label: t("meetings.fields.location"),
                     type: "text",
                     defaultValue: meeting.location ?? "",
                   },
@@ -431,10 +435,11 @@ export default async function MeetingDetailPage({
           ) : isCompleted ? (
             <Badge tone="success">
               <CheckCircle2 className="size-3" aria-hidden />
-              Completed{meeting.summary_posted_at ? " · summary posted" : ""}
+              {t("meetings.completed")}
+              {meeting.summary_posted_at ? t("meetings.summaryPosted") : ""}
             </Badge>
           ) : isCancelled ? (
-            <Badge tone="danger">Cancelled</Badge>
+            <Badge tone="danger">{t("meetings.cancelled")}</Badge>
           ) : undefined
         }
       />
@@ -449,7 +454,7 @@ export default async function MeetingDetailPage({
             />
             <span>
               <span className="font-medium">{organizer.full_name}</span>
-              <span className="meta ml-1.5">Organizer</span>
+              <span className="meta ml-1.5">{t("meetings.detail.organizer")}</span>
             </span>
           </span>
         ) : null}
@@ -464,14 +469,15 @@ export default async function MeetingDetailPage({
         {meeting.location ? (
           <span className="text-[13px] text-muted">{meeting.location}</span>
         ) : null}
-        {meeting.meeting_link ? (
+        {/* Only web links: one stored before links had to be https is not offered. */}
+        {meeting.meeting_link && /^https?:\/\//i.test(meeting.meeting_link) ? (
           <a
             href={meeting.meeting_link}
             target="_blank"
             rel="noreferrer noopener"
             className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline"
           >
-            Join meeting <ExternalLink className="size-3.5" aria-hidden />
+            {t("meetings.detail.join")} <ExternalLink className="size-3.5" aria-hidden />
           </a>
         ) : null}
         {/* Shown beside the organizer's own link rather than replacing it. The
@@ -484,7 +490,7 @@ export default async function MeetingDetailPage({
             rel="noreferrer noopener"
             className="inline-flex items-center gap-1 text-[13px] text-muted hover:text-brand-fg hover:underline"
           >
-            View in Google Calendar{" "}
+            {t("meetings.detail.viewInGoogle")}{" "}
             <ExternalLink className="size-3.5" aria-hidden />
           </a>
         ) : null}
@@ -496,7 +502,7 @@ export default async function MeetingDetailPage({
           <section aria-labelledby="attendees-heading">
             <div className="mb-3 flex items-center justify-between">
               <h2 id="attendees-heading" className="section-heading">
-                Attendees
+                {t("meetings.detail.attendees")}
               </h2>
             </div>
             <AttendeeList
@@ -510,14 +516,14 @@ export default async function MeetingDetailPage({
           <section aria-labelledby="agenda-heading">
             <div className="mb-3 flex items-center justify-between">
               <h2 id="agenda-heading" className="section-heading">
-                Agenda
+                {t("meetings.detail.agenda")}
               </h2>
               {isActive ? (
                 <EntityFormDialog
-                  triggerLabel="Add item"
+                  triggerLabel={t("meetings.detail.addItem")}
                   triggerVariant="secondary"
-                  title="Add agenda item"
-                  submitLabel="Add item"
+                  title={t("meetings.detail.addAgendaItem")}
+                  submitLabel={t("meetings.detail.addItem")}
                   action={addAgendaItem}
                   extraValues={{ meetingId: meeting.id }}
                   fields={agendaFields()}
@@ -526,8 +532,7 @@ export default async function MeetingDetailPage({
             </div>
             {(agenda ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No agenda items yet. Invitees can propose items; the organizer
-                accepts and orders them.
+                {t("meetings.detail.agendaEmpty")}
               </p>
             ) : (
               <ol className="card divide-y divide-line">
@@ -544,13 +549,15 @@ export default async function MeetingDetailPage({
                         </span>
                         {item.time_box_minutes ? (
                           <span className="meta whitespace-nowrap">
-                            {item.time_box_minutes} min
+                            {t("meetings.detail.minutes", { count: item.time_box_minutes })}
                           </span>
                         ) : null}
-                        <Badge tone={KIND_TONES[item.kind]}>{item.kind}</Badge>
+                        <Badge tone={KIND_TONES[item.kind]}>
+                          {t(`meetings.agendaKindBadges.${item.kind}`)}
+                        </Badge>
                         {AGENDA_STATUS_BADGE[item.status] ? (
                           <Badge tone={AGENDA_STATUS_BADGE[item.status].tone}>
-                            {AGENDA_STATUS_BADGE[item.status].label}
+                            {t(AGENDA_STATUS_BADGE[item.status].label)}
                           </Badge>
                         ) : null}
                         {session.isStaff && isActive ? (
@@ -565,24 +572,30 @@ export default async function MeetingDetailPage({
                       </div>
                       <div className="mt-1 ml-8 space-y-0.5 text-[12.5px] text-muted">
                         {item.owner ? (
-                          <p>Owner: {item.owner.full_name}</p>
+                          <p>{t("meetings.detail.owner", { name: item.owner.full_name })}</p>
                         ) : null}
                         {item.desired_outcome ? (
                           <p className="whitespace-pre-wrap">
-                            Outcome: {item.desired_outcome}
+                            {t("meetings.detail.outcome", { text: item.desired_outcome })}
                           </p>
                         ) : null}
                         {link ? (
-                          <p>Linked: {linkLabels.get(link) ?? "a record"}</p>
+                          <p>
+                            {t("meetings.detail.linked", {
+                              label: linkLabels.get(link) ?? t("meetings.detail.aRecord"),
+                            })}
+                          </p>
                         ) : null}
                         {item.carried_from_id ? (
-                          <p>Carried forward from an earlier meeting</p>
+                          <p>{t("meetings.detail.carriedFrom")}</p>
                         ) : null}
                         {item.combined_into_id ? (
                           <p>
-                            Combined into:{" "}
-                            {agendaTitles.get(item.combined_into_id) ??
-                              "another item"}
+                            {t("meetings.detail.combinedInto", {
+                              title:
+                                agendaTitles.get(item.combined_into_id) ??
+                                t("meetings.detail.anotherItem"),
+                            })}
                           </p>
                         ) : null}
                       </div>
@@ -591,10 +604,10 @@ export default async function MeetingDetailPage({
                         item.proposed_by === session.userId) ? (
                         <div className="mt-1 ml-8 flex flex-wrap items-center gap-1">
                           <EntityFormDialog
-                            triggerLabel="Edit item"
+                            triggerLabel={t("meetings.detail.editItem")}
                             triggerVariant="secondary"
-                            title="Edit agenda item"
-                            submitLabel="Save item"
+                            title={t("meetings.detail.editAgendaItem")}
+                            submitLabel={t("meetings.detail.saveItem")}
                             action={updateAgendaItem}
                             extraValues={{ agendaItemId: item.id }}
                             fields={agendaFields(item)}
@@ -629,31 +642,33 @@ export default async function MeetingDetailPage({
           {series.length > 1 ? (
             <section aria-labelledby="series-heading">
               <h2 id="series-heading" className="section-heading mb-3">
-                Series
+                {t("meetings.detail.series")}
               </h2>
               <p className="meta mb-2">
-                Occurrence{" "}
-                {series.findIndex((row) => row.id === meeting.id) + 1} of{" "}
-                {series.length}. Editing this meeting changes only this
-                occurrence.
+                {t("meetings.detail.seriesPosition", {
+                  index: series.findIndex((row) => row.id === meeting.id) + 1,
+                  total: series.length,
+                })}
               </p>
               <ol className="card divide-y divide-line">
                 {series.map((row) => (
                   <li key={row.id} className="px-4 py-2 text-[13px]">
                     {row.id === meeting.id ? (
                       <span className="font-medium">
-                        {formatDateTime(row.starts_at)} (this one)
+                        {t("meetings.detail.thisOne", {
+                          date: format.dateTime(row.starts_at),
+                        })}
                       </span>
                     ) : (
                       <Link
                         href={`/meetings/${row.id}`}
                         className="hover:underline"
                       >
-                        {formatDateTime(row.starts_at)}
+                        {format.dateTime(row.starts_at)}
                       </Link>
                     )}
                     {row.status === "cancelled" ? (
-                      <span className="meta ml-2">cancelled</span>
+                      <span className="meta ml-2">{t("meetings.detail.seriesCancelled")}</span>
                     ) : null}
                   </li>
                 ))}
@@ -664,7 +679,7 @@ export default async function MeetingDetailPage({
           {/* Notes */}
           <section aria-labelledby="notes-heading">
             <h2 id="notes-heading" className="section-heading mb-3">
-              Notes
+              {t("meetings.detail.notes")}
             </h2>
             {session.isStaff && !isCancelled ? (
               <MeetingNotesForm
@@ -677,7 +692,7 @@ export default async function MeetingDetailPage({
               </p>
             ) : (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                No notes captured yet.
+                {t("meetings.detail.notesEmpty")}
               </p>
             )}
           </section>
@@ -692,31 +707,31 @@ export default async function MeetingDetailPage({
                 className="section-heading flex items-center gap-1.5"
               >
                 <Gavel className="size-4 text-muted" aria-hidden />
-                Decisions
+                {t("meetings.detail.decisions")}
               </h2>
               {session.isStaff && !isCancelled ? (
                 <EntityFormDialog
-                  triggerLabel="Record"
+                  triggerLabel={t("meetings.detail.record")}
                   triggerVariant="secondary"
-                  title="Record decision"
-                  submitLabel="Record decision"
+                  title={t("meetings.detail.recordDecision")}
+                  submitLabel={t("meetings.detail.recordDecision")}
                   action={recordDecision}
                   extraValues={{ meetingId: meeting.id }}
                   fields={[
                     {
                       name: "title",
-                      label: "Decision",
+                      label: t("meetings.detail.decision"),
                       type: "text",
                       required: true,
                     },
-                    { name: "detail", label: "Context", type: "textarea" },
+                    { name: "detail", label: t("meetings.detail.context"), type: "textarea" },
                   ]}
                 />
               ) : null}
             </div>
             {(decisions ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                Decisions recorded here enter the organization decision log.
+                {t("meetings.detail.decisionsEmpty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -744,26 +759,26 @@ export default async function MeetingDetailPage({
                 className="section-heading flex items-center gap-1.5"
               >
                 <ListChecks className="size-4 text-muted" aria-hidden />
-                Actions
+                {t("meetings.detail.actions")}
               </h2>
               {session.isStaff && !isCancelled ? (
                 <EntityFormDialog
-                  triggerLabel="Add action"
+                  triggerLabel={t("meetings.detail.addAction")}
                   triggerVariant="secondary"
-                  title="Add action"
-                  submitLabel="Create task"
+                  title={t("meetings.detail.addAction")}
+                  submitLabel={t("meetings.detail.createTask")}
                   action={addMeetingAction}
                   extraValues={{ meetingId: meeting.id }}
                   fields={[
                     {
                       name: "title",
-                      label: "Action",
+                      label: t("meetings.detail.action"),
                       type: "text",
                       required: true,
                     },
                     {
                       name: "ownerId",
-                      label: "Owner",
+                      label: t("meetings.detail.ownerField"),
                       type: "select",
                       colSpan: 1,
                       options: options.people.map((p) => ({
@@ -773,7 +788,7 @@ export default async function MeetingDetailPage({
                     },
                     {
                       name: "dueAt",
-                      label: "Due date",
+                      label: t("meetings.detail.dueDate"),
                       type: "date",
                       colSpan: 1,
                     },
@@ -783,7 +798,7 @@ export default async function MeetingDetailPage({
             </div>
             {(actions ?? []).length === 0 ? (
               <p className="card px-4 py-6 text-center text-[13px] text-muted">
-                Actions become assigned tasks in My Work.
+                {t("meetings.detail.actionsEmpty")}
               </p>
             ) : (
               <ul className="card divide-y divide-line">
@@ -798,7 +813,7 @@ export default async function MeetingDetailPage({
                       </span>
                       {action.due_at ? (
                         <span className="meta whitespace-nowrap">
-                          {formatDate(action.due_at)}
+                          {format.date(action.due_at)}
                         </span>
                       ) : null}
                       {action.owner ? (

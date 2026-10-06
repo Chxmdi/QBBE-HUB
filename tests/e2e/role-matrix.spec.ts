@@ -1,4 +1,5 @@
 import { expect, test } from "./fixtures";
+import { featureRoutes } from "./feature-routes";
 import { signIn, type QaAccount } from "./auth";
 import { sql } from "./db";
 
@@ -43,8 +44,11 @@ type RecordAccess = "manage" | "read" | "none";
 
 interface Row {
   account: QaAccount;
-  staffSurfaces: Access; // /crm, /reports
-  adminSurfaces: Access; // /admin, /admin/access
+  staffSurfaces: Access; // /crm, /reports, /people/me/work (their own work summary)
+  adminSurfaces: Access; // /admin, /admin/access, /people/overview, someone else's work summary
+  // Offered only to someone the database lets create one: an administrator,
+  // or a lead or manager of a program (project_scoped_insert). Other staff see
+  // why, with a link to propose the project instead (staging audit B1, M7).
   newProject: boolean;
   projects: Record<string, RecordAccess>;
   programs: Record<string, RecordAccess>;
@@ -65,7 +69,7 @@ const MATRIX: Row[] = [
     account: "staff",
     staffSurfaces: "allowed",
     adminSurfaces: "redirected",
-    newProject: true,
+    newProject: false,
     projects: { [FALL]: "none", [TUTOR]: "none" },
     programs: { [FAMILY]: "none", [TUTORING]: "none" },
   },
@@ -97,7 +101,8 @@ const MATRIX: Row[] = [
     account: "pm",
     staffSurfaces: "allowed",
     adminSurfaces: "redirected",
-    newProject: true,
+    // Manages a project, not a program.
+    newProject: false,
     projects: { [FALL]: "manage", [TUTOR]: "none" },
     programs: { [FAMILY]: "none", [TUTORING]: "none" },
   },
@@ -120,9 +125,10 @@ const MATRIX: Row[] = [
 ];
 
 // Reached by every signed-in role; what is on them is scoped by the database.
-const EVERYONE = ["/", "/my-work", "/board", "/programs", "/projects", "/people", "/channels", "/settings"];
-const STAFF_ONLY = ["/crm", "/reports"];
-const ADMIN_ONLY = ["/admin", "/admin/access"];
+// New features add their routes in tests/e2e/routes/<feature>.json, not here.
+const EVERYONE = [...featureRoutes("everyone"), "/", "/my-work", "/board", "/programs", "/projects", "/people", "/channels", "/settings", "/forms", "/signatures"];
+const STAFF_ONLY = [...featureRoutes("staffOnly"), "/crm", "/reports", "/finance/receipts", "/approvals"];
+const ADMIN_ONLY = [...featureRoutes("adminOnly"), "/admin", "/admin/access", "/admin/records", "/people/overview", "/forms/new", "/admin/approvals"];
 
 function idsByName(table: "project" | "program"): Record<string, string> {
   return Object.fromEntries(
@@ -136,6 +142,11 @@ function idsByName(table: "project" | "program"): Record<string, string> {
 test.describe("role matrix", () => {
   const projectIds = idsByName("project");
   const programIds = idsByName("program");
+  // Someone else's work summary (#136): the owner is not in the matrix, so
+  // every account here is looking at another person's page.
+  const ownerSummary = `/people/${sql(
+    "select id::text from user_profile where email = 'qa-owner@example.com'",
+  )}/work`;
 
   for (const row of MATRIX) {
     test(`${row.account}: surfaces, records and actions match the matrix`, async ({ page }) => {
@@ -159,7 +170,7 @@ test.describe("role matrix", () => {
           expect(landed, `${row.account} is sent away from ${path}`).toBe("/");
         }
       }
-      for (const path of ADMIN_ONLY) {
+      for (const path of [...ADMIN_ONLY, ownerSummary]) {
         const landed = await where(path);
         if (row.adminSurfaces === "allowed") {
           expect(landed, `${row.account} reaches ${path}`).toBe(path);
@@ -173,6 +184,12 @@ test.describe("role matrix", () => {
         page.getByRole("button", { name: "New project" }),
         `${row.account} ${row.newProject ? "is" : "is not"} offered New project`,
       ).toHaveCount(row.newProject ? 1 : 0);
+      if (row.staffSurfaces === "allowed") {
+        await expect(
+          page.getByTestId("project-create-unavailable"),
+          `${row.account} ${row.newProject ? "is not" : "is"} told why they cannot create a project`,
+        ).toHaveCount(row.newProject ? 0 : 1);
+      }
 
       for (const [name, access] of Object.entries(row.projects)) {
         await where(`/projects/${projectIds[name]}`);

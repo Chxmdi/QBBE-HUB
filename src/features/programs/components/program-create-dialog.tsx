@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import { createProgram } from "@/features/projects/services/project.commands";
+import { useT } from "@/lib/i18n/client";
 
 export function ProgramCreateDialog({
   people,
@@ -17,6 +18,7 @@ export function ProgramCreateDialog({
   defaultOpen?: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [open, setOpen] = useState(defaultOpen);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -33,7 +35,7 @@ export function ProgramCreateDialog({
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.error ?? "Something went wrong.");
+      setError(result.error ?? t("programs.create.error"));
       return;
     }
     setOpen(false);
@@ -44,22 +46,22 @@ export function ProgramCreateDialog({
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus className="size-4" aria-hidden />
-        New program
+        {t("programs.create.open")}
       </Button>
-      <Dialog open={open} onClose={() => setOpen(false)} title="Create program">
+      <Dialog open={open} onClose={() => setOpen(false)} title={t("programs.create.title")}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="program-name">Name</Label>
+            <Label htmlFor="program-name">{t("programs.create.name")}</Label>
             <Input id="program-name" name="name" required maxLength={200} autoFocus />
           </div>
           <div>
-            <Label htmlFor="program-description">Description</Label>
+            <Label htmlFor="program-description">{t("programs.create.description")}</Label>
             <Textarea id="program-description" name="description" maxLength={2000} />
           </div>
           <div>
-            <Label htmlFor="program-lead">Program lead</Label>
+            <Label htmlFor="program-lead">{t("programs.create.lead")}</Label>
             <Select id="program-lead" name="leadId" defaultValue="">
-              <option value="">Me</option>
+              <option value="">{t("programs.create.me")}</option>
               {people.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -74,10 +76,10 @@ export function ProgramCreateDialog({
           ) : null}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
+              {t("programs.create.cancel")}
             </Button>
             <Button type="submit" loading={saving}>
-              Create program
+              {t("programs.create.submit")}
             </Button>
           </div>
         </form>

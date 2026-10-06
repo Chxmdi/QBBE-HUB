@@ -1,0 +1,4 @@
+{
+  "staffOnly": ["/finance/bank"],
+  "qa": [{ "path": "/finance/bank", "name": "bank" }]
+}

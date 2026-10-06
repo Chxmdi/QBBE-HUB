@@ -7,9 +7,12 @@ import { ChannelView } from "@/features/channels/components/channel-view";
 import { CHANNEL_HISTORY_PAGE_SIZE } from "@/features/channels/history";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { getT } from "@/lib/i18n/server";
 import type { Message } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Conversation" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("messages.conversationTitle") };
+}
 export const dynamic = "force-dynamic";
 
 const MESSAGE_SELECT =
@@ -22,6 +25,7 @@ export default async function ConversationPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await requireSession();
+  const t = await getT();
   const { id } = await params;
   const supabase = await createSupabasePageClient();
 
@@ -56,7 +60,7 @@ export default async function ConversationPage({
     .map((m) => m.user_profile!);
 
   const title =
-    conversation.title ?? (others.map((o) => o.full_name).join(", ") || "Just you");
+    conversation.title ?? (others.map((o) => o.full_name).join(", ") || t("messages.justYou"));
   const initialMessages = [...((messages ?? []) as unknown as Message[])].reverse();
   const { data: saved } = initialMessages.length
     ? await supabase
@@ -70,7 +74,7 @@ export default async function ConversationPage({
     <div className="-mx-4 -my-6 flex h-[calc(100dvh-3.5rem)] flex-col md:-mx-8">
       <header className="flex items-center gap-3 border-b border-line bg-surface px-4 py-3 md:px-6">
         <Link href="/messages" className="meta hover:text-brand-fg hover:underline">
-          ← Messages
+          {t("messages.back")}
         </Link>
         <div className="flex items-center gap-2">
           {others[0] ? (
@@ -79,10 +83,13 @@ export default async function ConversationPage({
           <h1 className="text-[15px] font-semibold">{title}</h1>
         </div>
         <span className="meta ml-auto">
-          Private to {(members ?? []).length} participants
+          {t(
+            (members ?? []).length === 1 ? "messages.participantOne" : "messages.participantOther",
+            { count: (members ?? []).length },
+          )}
         </span>
       </header>
-      <Suspense fallback={<p className="px-4 py-6 text-[13px] text-muted">Loading conversation…</p>}>
+      <Suspense fallback={<p className="px-4 py-6 text-[13px] text-muted">{t("messages.loadingConversation")}</p>}>
         <ChannelView
           conversationId={id}
           currentUserId={session.userId}

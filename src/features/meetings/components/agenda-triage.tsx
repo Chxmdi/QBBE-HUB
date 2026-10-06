@@ -7,6 +7,7 @@ import {
   moveAgendaItem,
   triageAgendaItem,
 } from "@/features/meetings/services/meeting.commands";
+import { useT } from "@/lib/i18n/client";
 
 type Decision = "accepted" | "deferred" | "declined" | "done";
 
@@ -33,20 +34,21 @@ export function AgendaTriage({
   canMoveDown: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function decide(decision: Decision) {
     if (
       decision === "declined" &&
-      !window.confirm(`Decline "${title}"? It stays on the agenda marked declined.`)
+      !window.confirm(t("meetings.triage.confirmDecline", { title }))
     ) return;
     setError(null);
     setBusy(true);
     const result = await triageAgendaItem({ agendaItemId, decision });
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not update the item.");
+      setError(result.error ?? t("meetings.triage.updateError"));
       return;
     }
     router.refresh();
@@ -58,7 +60,7 @@ export function AgendaTriage({
     const result = await moveAgendaItem({ agendaItemId, direction });
     setBusy(false);
     if (!result.ok) {
-      setError(result.error ?? "Could not reorder the agenda.");
+      setError(result.error ?? t("meetings.triage.reorderError"));
       return;
     }
     router.refresh();
@@ -67,16 +69,16 @@ export function AgendaTriage({
   const decisions: { label: string; value: Decision }[] =
     status === "proposed"
       ? [
-          { label: "Accept", value: "accepted" },
-          { label: "Defer", value: "deferred" },
-          { label: "Decline", value: "declined" },
+          { label: t("meetings.triage.accept"), value: "accepted" },
+          { label: t("meetings.triage.defer"), value: "deferred" },
+          { label: t("meetings.triage.decline"), value: "declined" },
         ]
       : status === "accepted"
         ? [
-            { label: "Mark done", value: "done" },
-            { label: "Defer", value: "deferred" },
+            { label: t("meetings.triage.markDone"), value: "done" },
+            { label: t("meetings.triage.defer"), value: "deferred" },
           ]
-        : [{ label: "Accept", value: "accepted" }];
+        : [{ label: t("meetings.triage.accept"), value: "accepted" }];
 
   return (
     <div className="flex items-center gap-1">
@@ -84,7 +86,7 @@ export function AgendaTriage({
         variant="ghost"
         onClick={() => move("up")}
         disabled={!canMoveUp || busy}
-        aria-label={`Move "${title}" earlier in the agenda`}
+        aria-label={t("meetings.triage.moveUp", { title })}
       >
         ↑
       </Button>
@@ -92,7 +94,7 @@ export function AgendaTriage({
         variant="ghost"
         onClick={() => move("down")}
         disabled={!canMoveDown || busy}
-        aria-label={`Move "${title}" later in the agenda`}
+        aria-label={t("meetings.triage.moveDown", { title })}
       >
         ↓
       </Button>
@@ -102,7 +104,7 @@ export function AgendaTriage({
           variant="ghost"
           onClick={() => decide(d.value)}
           loading={busy}
-          aria-label={`${d.label} "${title}"`}
+          aria-label={t("meetings.triage.actionOn", { action: d.label, title })}
         >
           {d.label}
         </Button>

@@ -11,12 +11,15 @@ import { createNotifications, notificationDedupeKey } from "@/features/jobs/serv
 import { channelMuteAllows } from "@/features/notifications/services/mute";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
+import { recipientTranslators } from "@/features/channels/recipient-locale";
 
-const sendMessageSchema = z.object({
+const sendMessageSchema = (t: TranslateFn) => z.object({
   channelId: z.string().uuid().optional(),
   conversationId: z.string().uuid().optional(),
   threadRootId: z.string().uuid().optional(),
-  body: requiredText("Message cannot be empty.", 10000),
+  body: requiredText(t("messages.errors.empty"), 10000),
 });
 
 /**
@@ -27,16 +30,17 @@ const sendMessageSchema = z.object({
  */
 export async function sendMessage(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
 
   const limited = await enforceRateLimit("message:create", session.userId);
   if (limited) return limited;
-  const parsed = sendMessageSchema.safeParse(input);
+  const parsed = sendMessageSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("messages.errors.invalidInput") };
   }
   const { channelId, conversationId, threadRootId, body } = parsed.data;
   if (!channelId && !conversationId) {
-    return { ok: false, error: "Message needs a destination." };
+    return { ok: false, error: t("messages.errors.noDestination") };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -56,8 +60,7 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
   if (error || !message) {
     return {
       ok: false,
-      error:
-        "Your message was not sent. You may not have posting permission in this channel.",
+      error: t("messages.errors.notSent"),
     };
   }
 
@@ -102,13 +105,16 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
       }
     }
 
+    const recipientT = await recipientTranslators(supabase, mentioned);
     const mentionDrafts = mentioned
       .filter((userId) => channelMuteAllows(muteByUser.get(userId) ?? "all", "mention"))
       .map((userId) => ({
         user_id: userId,
         organization_id: session.organizationId,
         category: "mention",
-        title: `${session.profile.full_name} mentioned you`,
+        title: recipientT(userId)("messages.notifications.mentioned", {
+          name: session.profile.full_name,
+        }),
         body: body.slice(0, 140),
         source_type: "message",
         source_id: message.id as string,
@@ -149,11 +155,14 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
         level = (member?.muted_level as string | undefined) ?? "all";
       }
       if (channelMuteAllows(level, "reply")) {
+        const recipientT = await recipientTranslators(supabase, [root.author_id as string]);
         await createNotifications(supabase, [{
           user_id: root.author_id as string,
           organization_id: session.organizationId,
           category: "reply",
-          title: `${session.profile.full_name} replied to your message`,
+          title: recipientT(root.author_id as string)("messages.notifications.replied", {
+            name: session.profile.full_name,
+          }),
           body: body.slice(0, 140),
           source_type: "message",
           source_id: message.id as string,
@@ -175,8 +184,9 @@ export async function toggleReaction(
   emoji: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   if (!/^\p{Extended_Pictographic}/u.test(emoji) || emoji.length > 8) {
-    return { ok: false, error: "Invalid reaction." };
+    return { ok: false, error: t("messages.errors.invalidReaction") };
   }
   const supabase = await createSupabaseServerClient();
 
@@ -215,8 +225,9 @@ export async function toggleSavedMessage(
   messageId: string,
 ): Promise<ActionResult & { saved?: boolean }> {
   const session = await requireSession();
+  const t = await getT();
   if (!z.string().uuid().safeParse(messageId).success) {
-    return { ok: false, error: "Invalid message." };
+    return { ok: false, error: t("messages.errors.invalidMessage") };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -225,7 +236,7 @@ export async function toggleSavedMessage(
     .select("id")
     .eq("id", messageId)
     .maybeSingle();
-  if (!message) return { ok: false, error: "Message not found or not accessible." };
+  if (!message) return { ok: false, error: t("messages.errors.notAccessible") };
 
   const { data: existing } = await supabase
     .from("saved_message")
@@ -240,7 +251,7 @@ export async function toggleSavedMessage(
       .delete()
       .eq("user_id", session.userId)
       .eq("message_id", messageId);
-    if (error) return { ok: false, error: "Could not remove the saved message." };
+    if (error) return { ok: false, error: t("messages.errors.unsaveFailed") };
     revalidatePath("/saved");
     return { ok: true, saved: false };
   }
@@ -249,14 +260,14 @@ export async function toggleSavedMessage(
     user_id: session.userId,
     message_id: messageId,
   });
-  if (error) return { ok: false, error: "Could not save this message." };
+  if (error) return { ok: false, error: t("messages.errors.saveFailed") };
   revalidatePath("/saved");
   return { ok: true, saved: true };
 }
 
-const editSchema = z.object({
+const editSchema = (t: TranslateFn) => z.object({
   messageId: z.string().uuid(),
-  body: requiredText("Message cannot be empty.", 10000),
+  body: requiredText(t("messages.errors.empty"), 10000),
 });
 
 /**
@@ -265,9 +276,10 @@ const editSchema = z.object({
  */
 export async function editMessage(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  const parsed = editSchema.safeParse(input);
+  const t = await getT();
+  const parsed = editSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("messages.errors.invalidInput") };
   }
   const { messageId, body } = parsed.data;
 
@@ -278,19 +290,19 @@ export async function editMessage(input: unknown): Promise<ActionResult> {
     .eq("id", messageId)
     .maybeSingle();
 
-  if (!existing) return { ok: false, error: "Message not found." };
+  if (!existing) return { ok: false, error: t("messages.errors.notFound") };
   if (existing.author_id !== session.userId) {
-    return { ok: false, error: "You can only edit your own messages." };
+    return { ok: false, error: t("messages.errors.ownOnly") };
   }
   if (existing.deleted_at) {
-    return { ok: false, error: "This message was deleted." };
+    return { ok: false, error: t("messages.errors.deleted") };
   }
 
   const { error } = await supabase
     .from("message")
     .update({ body, edited_at: new Date().toISOString() })
     .eq("id", messageId);
-  if (error) return { ok: false, error: "Could not save the edit." };
+  if (error) return { ok: false, error: t("messages.errors.editFailed") };
 
   return { ok: true };
 }
@@ -304,6 +316,7 @@ export async function convertMessageToAgendaItem(
   meetingId: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
 
   // RLS filters this read — inaccessible messages cannot be converted.
@@ -312,7 +325,7 @@ export async function convertMessageToAgendaItem(
     .select("id, body")
     .eq("id", messageId)
     .maybeSingle();
-  if (!message) return { ok: false, error: "Message not found or not accessible." };
+  if (!message) return { ok: false, error: t("messages.errors.notAccessible") };
 
   const { count } = await supabase
     .from("agenda_item")
@@ -330,7 +343,7 @@ export async function convertMessageToAgendaItem(
     sort_key: (count ?? 0) + 1,
     status: session.isStaff ? "accepted" : "proposed",
   });
-  if (error) return { ok: false, error: "Could not add the agenda item." };
+  if (error) return { ok: false, error: t("messages.errors.agendaFailed") };
 
   revalidatePath(`/meetings/${meetingId}`);
   return { ok: true, id: meetingId };
@@ -344,7 +357,8 @@ export async function convertMessageToDecision(
   detail?: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  if (!session.isStaff) return { ok: false, error: "Staff access required." };
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("messages.errors.staffRequired") };
   const supabase = await createSupabaseServerClient();
 
   const { data: message } = await supabase
@@ -352,7 +366,7 @@ export async function convertMessageToDecision(
     .select("id, body, channel:channel_id(project_id)")
     .eq("id", messageId)
     .maybeSingle();
-  if (!message) return { ok: false, error: "Message not found or not accessible." };
+  if (!message) return { ok: false, error: t("messages.errors.notAccessible") };
 
   type ChannelRef = { project_id: string | null } | null;
   const channel = message.channel as unknown as ChannelRef;
@@ -364,13 +378,13 @@ export async function convertMessageToDecision(
       organization_id: session.organizationId,
       project_id: channel?.project_id ?? null,
       title,
-      detail: detail || `Captured from a channel conversation.`,
+      detail: detail || t("messages.decisionDetail"),
       decided_by: session.userId,
       source_message_id: messageId,
     })
     .select("id")
     .single();
-  if (error || !decision) return { ok: false, error: "Could not record the decision." };
+  if (error || !decision) return { ok: false, error: t("messages.errors.decisionFailed") };
 
   revalidatePath("/", "layout");
   return { ok: true, id: decision.id as string };
@@ -383,8 +397,9 @@ export async function pinMessage(
   title: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const trimmed = title.trim().slice(0, 200);
-  if (!trimmed) return { ok: false, error: "Give the pinned resource a title." };
+  if (!trimmed) return { ok: false, error: t("messages.errors.pinTitleRequired") };
 
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("pinned_resource").insert({
@@ -394,7 +409,7 @@ export async function pinMessage(
     pinned_by: session.userId,
   });
   if (error) {
-    return { ok: false, error: "Could not pin — channel managers and staff can pin." };
+    return { ok: false, error: t("messages.errors.pinFailed") };
   }
 
   await supabase.from("audit_event").insert({
@@ -415,25 +430,32 @@ export async function unpinResource(
   channelId: string,
 ): Promise<ActionResult> {
   await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase
     .from("pinned_resource")
     .delete()
     .eq("id", resourceId);
-  if (error) return { ok: false, error: "Could not remove the pin." };
+  if (error) return { ok: false, error: t("messages.errors.unpinFailed") };
   revalidatePath(`/channels/${channelId}`);
   return { ok: true };
 }
 
 export async function deleteMessage(messageId: string): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
   // Soft delete preserves audit evidence (MSG-004).
-  const { error } = await supabase
+  // Row-level security decides who may delete; a refusal matches no row and is
+  // not an error, so ask for the row back before writing the audit record.
+  const { data: deleted, error } = await supabase
     .from("message")
     .update({ deleted_at: new Date().toISOString() })
-    .eq("id", messageId);
-  if (error) return { ok: false, error: "Could not delete the message." };
+    .eq("id", messageId)
+    .select("id");
+  if (error || !deleted || deleted.length === 0) {
+    return { ok: false, error: t("messages.errors.deleteFailed") };
+  }
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
@@ -454,6 +476,7 @@ export async function convertMessageToTask(
   messageId: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const supabase = await createSupabaseServerClient();
 
   // RLS filters this read — an inaccessible message cannot be converted.
@@ -463,43 +486,39 @@ export async function convertMessageToTask(
     .eq("id", messageId)
     .maybeSingle();
 
-  if (!message) return { ok: false, error: "Message not found or not accessible." };
+  if (!message) return { ok: false, error: t("messages.errors.notAccessible") };
 
   type ChannelRef = { project_id: string | null; program_id: string | null } | null;
   const channel = message.channel as unknown as ChannelRef;
   const title = (message.body as string).split("\n")[0].slice(0, 200);
 
-  const { data: task, error } = await supabase
-    .from("task")
-    .insert({
-      organization_id: session.organizationId,
-      project_id: channel?.project_id ?? null,
-      program_id: channel?.program_id ?? null,
+  // Through the shared create-task action (M7a); the task records the message
+  // as its source (M7b) and keeps `source_message_id` for older readers.
+  const { createUniversalTask } = await import("@/features/universal-tasks/create-task");
+  const created = await createUniversalTask(
+    supabase,
+    {
+      userId: session.userId,
+      organizationId: session.organizationId,
+      displayName: session.profile.full_name,
+    },
+    {
       title,
-      description: `Created from a channel message:\n\n> ${message.body}`,
-      assignee_id: session.userId,
-      requester_id: session.userId,
-      source_message_id: messageId,
-      created_by: session.userId,
-    })
-    .select("id")
-    .single();
-
-  if (error || !task) return { ok: false, error: "Could not create the task." };
-
-  await supabase.from("activity_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    verb: "created",
-    source_type: "task",
-    source_id: task.id,
-    project_id: channel?.project_id ?? null,
-    program_id: channel?.program_id ?? null,
-    summary: `converted a message into task “${title}”`,
-  });
+      description: t("messages.taskDescription", { body: message.body as string }).slice(0, 5000),
+      projectId: channel?.project_id ?? undefined,
+      programId: channel?.program_id ?? undefined,
+      assigneeId: session.userId,
+      source: { type: "message", id: messageId },
+    },
+    {
+      extra: { source_message_id: messageId },
+      activitySummary: `converted a message into task “${title}”`,
+    },
+  );
+  if (!created.ok) return { ok: false, error: t("messages.errors.taskFailed") };
 
   revalidatePath("/my-work");
-  return { ok: true, id: task.id as string };
+  return { ok: true, id: created.id };
 }
 
 const startConversationSchema = z.object({
@@ -508,8 +527,9 @@ const startConversationSchema = z.object({
 
 export async function startConversation(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
+  const t = await getT();
   const parsed = startConversationSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Pick at least one person." };
+  if (!parsed.success) return { ok: false, error: t("messages.errors.pickPeople") };
   const memberIds = Array.from(
     new Set([...parsed.data.memberIds, session.userId]),
   );
@@ -528,7 +548,7 @@ export async function startConversation(input: unknown): Promise<ActionResult> {
   });
 
   if (error) {
-    return { ok: false, error: "Could not start the conversation." };
+    return { ok: false, error: t("messages.errors.startFailed") };
   }
 
   const { error: memberError } = await supabase.from("conversation_member").insert(
@@ -538,7 +558,7 @@ export async function startConversation(input: unknown): Promise<ActionResult> {
     })),
   );
   if (memberError) {
-    return { ok: false, error: "Could not add participants." };
+    return { ok: false, error: t("messages.errors.participantsFailed") };
   }
 
   revalidatePath("/messages");

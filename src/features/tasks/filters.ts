@@ -1,5 +1,10 @@
 import { TASK_STATUSES } from "@/features/tasks/schemas";
 import { addCalendarDays } from "@/lib/time";
+import {
+  createTranslator,
+  type MessageKey,
+  type TranslateFn,
+} from "@/lib/i18n/translate";
 import type { TaskStatus } from "@/types/entities";
 
 /**
@@ -24,6 +29,10 @@ export const DUE_WINDOW_LABELS: Record<DueWindow, string> = {
   month: "Due this month",
   none: "No due date",
 };
+
+export function dueWindowLabel(window: DueWindow, t: TranslateFn): string {
+  return t(`tasks.due.${window}` as MessageKey);
+}
 
 export interface TaskFilters {
   program?: string;
@@ -116,27 +125,31 @@ export function parseTaskFilters(params: RawParams): TaskFilters {
  */
 export function describeFilterConflicts(
   filters: TaskFilters,
-  options: { scopedToUserId?: string; statusLabel?: (status: TaskStatus) => string } = {},
+  options: {
+    scopedToUserId?: string;
+    statusLabel?: (status: TaskStatus) => string;
+    /** The reader's language (#141); English when omitted. */
+    t?: TranslateFn;
+  } = {},
 ): string[] {
   const conflicts: string[] = [];
   const label = options.statusLabel ?? ((status: TaskStatus) => status);
+  const t = options.t ?? createTranslator("en");
 
   if (filters.status && filters.status !== "blocked" && filters.blocked === "yes") {
     conflicts.push(
-      `No task can be both ${label(filters.status)} and blocked — a task has one status at a time.`,
+      t("tasks.conflicts.statusAndBlocked", { status: label(filters.status) }),
     );
   }
   if (filters.status === "blocked" && filters.blocked === "no") {
-    conflicts.push("No task can be blocked and not blocked at the same time.");
+    conflicts.push(t("tasks.conflicts.blockedAndNot"));
   }
   if (
     options.scopedToUserId &&
     filters.owner &&
     filters.owner !== options.scopedToUserId
   ) {
-    conflicts.push(
-      "This page shows only your own work, so filtering it by another owner can never match. Use the board to see someone else's tasks.",
-    );
+    conflicts.push(t("tasks.conflicts.otherOwner"));
   }
   return conflicts;
 }

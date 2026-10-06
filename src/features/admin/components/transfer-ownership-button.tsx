@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { transferOwnership } from "@/features/admin/services/admin.commands";
+import { useT } from "@/lib/i18n/client";
 
 export function TransferOwnershipButton({
   membershipId,
@@ -12,20 +13,19 @@ export function TransferOwnershipButton({
   name: string;
 }) {
   const router = useRouter();
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
 
   async function handleTransfer() {
     if (
-      !window.confirm(
-        `Transfer Primary Owner to ${name}? You will become a Workspace Admin.`,
-      )
+      !window.confirm(t("admin.members.transferConfirm", { name }))
     ) {
       return;
     }
     setError(null);
     const result = await transferOwnership(membershipId);
     if (!result.ok) {
-      setError(result.error ?? "Transfer failed.");
+      setError(result.error ?? t("admin.members.transferFailed"));
       return;
     }
     router.refresh();
@@ -38,7 +38,7 @@ export function TransferOwnershipButton({
         onClick={handleTransfer}
         className="text-[12.5px] font-medium text-brand-fg hover:underline"
       >
-        Make owner
+        {t("admin.members.makeOwner")}
       </button>
       {error ? (
         <p role="alert" className="mt-1 text-[12px] text-danger-fg">

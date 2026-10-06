@@ -11,11 +11,15 @@ import { PageHeader } from "@/components/shared/page-header";
 import { HealthBadge } from "@/components/shared/status-badges";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requireSession } from "@/lib/auth";
+import { getLocale, getT } from "@/lib/i18n/server";
+import { calendarDateFormats } from "@/features/calendar/components/week-view";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn } from "@/lib/utils";
 import type { Project } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Master Schedule" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("schedule.title") };
+}
 export const dynamic = "force-dynamic";
 
 const WINDOW_MONTHS = 6;
@@ -43,6 +47,8 @@ const HEALTH_BAR_TEXT_DEFAULT = "text-white dark:text-canvas";
  */
 export default async function SchedulePage() {
   await requireSession();
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
+  const formats = calendarDateFormats(locale);
   const supabase = await createSupabasePageClient();
 
   const windowStart = startOfMonth(addMonths(new Date(), -1));
@@ -73,16 +79,19 @@ export default async function SchedulePage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Portfolio timeline"
-        title="Master Schedule"
-        description={`Project timelines across the portfolio, ${format(windowStart, "MMM yyyy")} – ${format(addMonths(windowEnd, -1), "MMM yyyy")}. Health is shown on each bar.`}
+        eyebrow={t("schedule.eyebrow")}
+        title={t("schedule.title")}
+        description={t("schedule.description", {
+          start: format(windowStart, formats.shortMonthYear, formats.options),
+          end: format(addMonths(windowEnd, -1), formats.shortMonthYear, formats.options),
+        })}
       />
 
       {projectList.length === 0 ? (
         <EmptyState
           icon={<CalendarRange />}
-          title="No scheduled projects"
-          description="Projects with start and target dates appear here as portfolio timeline bars."
+          title={t("schedule.emptyTitle")}
+          description={t("schedule.emptyDescription")}
         />
       ) : (
         <div className="card overflow-x-auto">
@@ -90,7 +99,7 @@ export default async function SchedulePage() {
             {/* Month header */}
             <div className="flex border-b border-line bg-surface-soft/60">
               <div className="w-64 shrink-0 border-r border-line px-4 py-2 text-[11.5px] font-semibold tracking-wide text-muted uppercase">
-                Project
+                {t("schedule.project")}
               </div>
               <div className="relative flex flex-1">
                 {months.map((month) => (
@@ -98,7 +107,7 @@ export default async function SchedulePage() {
                     key={month.toISOString()}
                     className="flex-1 border-r border-line px-2 py-2 text-[11.5px] font-semibold tracking-wide text-muted uppercase last:border-r-0"
                   >
-                    {format(month, "MMM yyyy")}
+                    {format(month, formats.shortMonthYear, formats.options)}
                   </div>
                 ))}
               </div>
@@ -112,7 +121,7 @@ export default async function SchedulePage() {
                   aria-hidden
                   className="absolute inset-y-0 z-(--z-raised) w-0.5 bg-brand/70"
                   style={{ left: `calc(16rem + (100% - 16rem) * ${todayOffset / 100})` }}
-                  title="Today"
+                  title={t("schedule.today")}
                 />
               ) : null}
               {projectList.map((project) => {
@@ -143,8 +152,8 @@ export default async function SchedulePage() {
                         {project.name}
                       </Link>
                       <p className="meta truncate">
-                        {project.program?.name ?? "Independent"} ·{" "}
-                        {format(end, "MMM d")}
+                        {project.program?.name ?? t("schedule.independent")} ·{" "}
+                        {format(end, formats.shortDay, formats.options)}
                       </p>
                     </div>
                     <div className="relative flex-1 py-3">
@@ -168,7 +177,7 @@ export default async function SchedulePage() {
                           </span>
                         </Link>
                       ) : (
-                        <p className="meta px-2">Outside this window</p>
+                        <p className="meta px-2">{t("schedule.outsideWindow")}</p>
                       )}
                     </div>
                   </div>

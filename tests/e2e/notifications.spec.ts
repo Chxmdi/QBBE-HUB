@@ -20,8 +20,9 @@ test("inbox filters, weekly modes, mutes, and one actionable email", async ({
   await expect(
     page.getByRole("link", { name: "Due dates", exact: true }),
   ).toBeVisible();
+  // Scoped to the filters: the sidebar also has an Approvals link (#143).
   await expect(
-    page.getByRole("link", { name: "Approvals", exact: true }),
+    page.getByLabel("Inbox filters").getByRole("link", { name: "Approvals", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "Decisions", exact: true }),
@@ -92,24 +93,29 @@ test("inbox filters, weekly modes, mutes, and one actionable email", async ({
   if (!JOB_SECRET) {
     throw new Error("CRON_JOB_SECRET is not set; the drain cannot be called.");
   }
-  const drain = await request.post("/api/jobs/drain-notifications", {
-    headers: {
-      "x-job-secret": JOB_SECRET,
-      Authorization: `Bearer ${JOB_SECRET}`,
-    },
-  });
-  expect(drain.ok()).toBeTruthy();
+  // The queue is shared and first in, first out, and one drain takes at most
+  // a batch (25). Earlier tests can leave mail queued ahead of these three, so
+  // drain until this test's messages have been handled rather than assuming
+  // the queue was empty. Bounded: a real failure still fails here.
+  const status = (prefix: string) =>
+    sql(`
+      select status from email_delivery
+      where dedupe_key like 'email:${prefix}-${stamp}:%'
+      limit 1;
+    `);
+  for (let run = 0; run < 10; run += 1) {
+    const drain = await request.post("/api/jobs/drain-notifications", {
+      headers: {
+        "x-job-secret": JOB_SECRET,
+        Authorization: `Bearer ${JOB_SECRET}`,
+      },
+    });
+    expect(drain.ok()).toBeTruthy();
+    if (status("e2e-mute") && status("e2e-week") && status("e2e-not")) break;
+  }
 
-  const muted = sql(`
-    select status from email_delivery
-    where dedupe_key like 'email:e2e-mute-${stamp}:%'
-    limit 1;
-  `);
-  const weekly = sql(`
-    select status from email_delivery
-    where dedupe_key like 'email:e2e-week-${stamp}:%'
-    limit 1;
-  `);
+  const muted = status("e2e-mute");
+  const weekly = status("e2e-week");
   expect(muted).toBe("suppressed");
   expect(weekly).toBe("suppressed");
 

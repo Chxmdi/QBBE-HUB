@@ -1,6 +1,6 @@
 -- dashboard_program_task_counts returns the per-program totals the dashboard
 -- used to count with two queries per program (#115, migration
--- 20260926080000), for every member: the same filters, under the same
+-- 20261114010000), for every member: the same filters, under the same
 -- row-level security. Run after qa-users.sql and rls.sql. All mutations are
 -- rolled back.
 begin;

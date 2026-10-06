@@ -1,3 +1,6 @@
+import { DEFAULT_LOCALE, intlLocale, type Locale } from "@/lib/i18n/config";
+import { isCalendarDate } from "@/lib/schema";
+
 /**
  * Wall-clock time in a named zone, converted honestly.
  *
@@ -25,6 +28,29 @@
  * zone, which is the bug this module exists to remove.
  */
 export const DEFAULT_TIME_ZONE = "America/Toronto";
+
+/**
+ * Whether `value` is a zone this runtime can format in. `Intl` throws a
+ * RangeError for anything else, so a zone that is stored without this check
+ * takes down every screen that formats a time in it.
+ */
+export function isRealTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A person's own zone for display, or the workspace default when they have
+ * none or the stored one is not a real zone. A bad value saved before saving
+ * was checked must not leave its owner with an error page.
+ */
+export function viewerTimeZone(value: string | null | undefined): string {
+  return value && isRealTimeZone(value) ? value : DEFAULT_TIME_ZONE;
+}
 
 /** Milliseconds that `timeZone` is ahead of UTC at a given instant. */
 function offsetAt(instant: Date, timeZone: string): number {
@@ -67,7 +93,13 @@ export function wallTimeToInstant(
   wall: string,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): Date | null {
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(wall.trim())) return null;
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(wall.trim());
+  if (!match) return null;
+  // `Date.parse` rolls an impossible wall time forward rather than refusing
+  // it: 2026-02-31T09:00 became 3 March and 24:00 the next day, so a meeting,
+  // an event or a scheduled announcement was saved on a day nobody chose.
+  const [, day, hour, minute, second = "00"] = match;
+  if (!isCalendarDate(day) || Number(hour) > 23 || Number(minute) > 59 || Number(second) > 59) return null;
   const naive = Date.parse(`${wall.trim()}Z`);
   if (Number.isNaN(naive)) return null;
 
@@ -95,12 +127,24 @@ export function formatInZone(
   iso: string | null | undefined,
   timeZone: string = DEFAULT_TIME_ZONE,
   options: Intl.DateTimeFormatOptions = {},
+  locale: Locale = DEFAULT_LOCALE,
 ): string {
   if (!iso) return "—";
-  const instant = new Date(iso);
+  // A bare YYYY-MM-DD (a `date` column such as `task.due_at`) is a calendar
+  // day with no zone. `new Date("2026-10-20")` reads it as UTC midnight,
+  // which in Toronto is the evening of the 19th, so every due date showed a
+  // day early on the board, Home, the project page and meeting captures. It
+  // is formatted as that day, in UTC, so it reads back as written. Only
+  // genuine instants are converted into `timeZone` (see calendarDateInZone).
+  const bareDay = /^\d{4}-\d{2}-\d{2}$/.test(iso.trim());
+  const instant = bareDay ? new Date(`${iso.trim()}T00:00:00Z`) : new Date(iso);
   if (Number.isNaN(instant.getTime())) return "—";
   try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone, ...options }).format(instant);
+    return new Intl.DateTimeFormat(intlLocale(locale), {
+      timeZone,
+      ...options,
+      ...(bareDay ? { timeZone: "UTC" } : {}),
+    }).format(instant);
   } catch {
     return "—";
   }

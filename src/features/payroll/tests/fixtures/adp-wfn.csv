@@ -1,0 +1,3 @@
+Payroll Number,Pay Date,Period Start Date,Period End Date,Employee Name,Employee ID,Gross Pay,Federal Income Tax,QC Income Tax,QPP EE,EI EE,QPIP EE,Other Deductions,QPP ER,EI ER,QPIP ER,QC HSF,CNESST,CNT,Net Pay
+2026-21,10/16/2026,10/01/2026,10/14/2026,"Fictive, Person One",E0001,"2,000.00",180.00,220.00,120.00,26.40,9.88,10.00,120.00,36.96,13.84,33.00,25.00,1.20,"1,433.72"
+2026-21,10/16/2026,10/01/2026,10/14/2026,"Fictive, Person Two",E0002,"1,500.00",120.00,150.00,90.00,19.80,7.41,0.00,90.00,27.72,10.38,24.75,18.75,0.90,"1,112.79"

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { requireSession } from "@/lib/auth";
+import { getT } from "@/lib/i18n/server";
 import { googleScopeString, type GoogleIntegrationProvider } from "@/features/inbox/services/google-oauth";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +18,7 @@ export async function GET(request: Request) {
   const session = await requireSession();
   if (!googleConfigured()) {
     return NextResponse.json(
-      {
-        error:
-          "Gmail is not connected. An administrator must set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_OAUTH_REDIRECT_URI.",
-      },
+      { error: (await getT())("inbox.google.notConfigured") },
       { status: 503 },
     );
   }

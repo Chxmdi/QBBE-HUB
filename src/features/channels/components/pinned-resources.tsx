@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Pin, X } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { unpinResource } from "@/features/channels/services/message.commands";
+import { useT } from "@/lib/i18n/client";
 
 export interface PinnedResourceRow {
   id: string;
@@ -29,16 +30,17 @@ export function PinnedResources({
   const router = useRouter();
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
+  const t = useT();
 
   if (resources.length === 0) return null;
 
   async function remove(id: string) {
     const result = await unpinResource(id, channelId);
     if (result.ok) {
-      toast("Pin removed.");
+      toast(t("channels.pins.removed"));
       router.refresh();
     } else {
-      toast(result.error ?? "Could not remove the pin.", { tone: "error" });
+      toast(result.error ?? t("messages.errors.unpinFailed"), { tone: "error" });
     }
   }
 
@@ -48,7 +50,7 @@ export function PinnedResources({
     <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface-soft/50 px-4 py-2 md:px-6">
       <span className="flex items-center gap-1.5 text-[12px] font-semibold text-muted">
         <Pin className="size-3.5" aria-hidden />
-        Pinned
+        {t("channels.pins.label")}
       </span>
       {shown.map((resource) => (
         <span
@@ -78,7 +80,7 @@ export function PinnedResources({
             <button
               type="button"
               onClick={() => remove(resource.id)}
-              aria-label={`Remove pin: ${resource.title}`}
+              aria-label={t("channels.pins.remove", { title: resource.title })}
               className="text-muted hover:text-danger-fg"
             >
               <X className="size-3" aria-hidden />
@@ -92,7 +94,7 @@ export function PinnedResources({
           onClick={() => setExpanded(true)}
           className="text-[12.5px] font-medium text-brand-fg hover:underline"
         >
-          +{resources.length - 3} more
+          {t("channels.pins.more", { count: resources.length - 3 })}
         </button>
       ) : null}
     </div>

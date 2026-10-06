@@ -1,0 +1,226 @@
+/**
+ * Form fields (#145) and the values people give them. The database checks
+ * the same rules again (app.form_fields_problem, app.form_answers_normalized);
+ * these exist so a person gets a plain sentence before anything is sent.
+ * Money is integer cents end to end; floats never touch a stored amount.
+ */
+
+import type { Locale } from "@/lib/i18n/config";
+import { formatCurrency } from "@/lib/i18n/format";
+import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
+
+/** English by default, so callers and tests without a request read as before. */
+const EN = createTranslator("en");
+
+export const FIELD_TYPES = ["text", "number", "money", "date", "choice", "checkbox", "file"] as const;
+export type FieldType = (typeof FIELD_TYPES)[number];
+
+export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
+  text: "Text",
+  number: "Number",
+  money: "Amount of money",
+  date: "Date",
+  choice: "Choice from a list",
+  checkbox: "Checkbox",
+  file: "File (photo or PDF)",
+};
+
+export const FIELD_TYPE_KEYS: Record<FieldType, MessageKey> = {
+  text: "forms.fieldTypes.text",
+  number: "forms.fieldTypes.number",
+  money: "forms.fieldTypes.money",
+  date: "forms.fieldTypes.date",
+  choice: "forms.fieldTypes.choice",
+  checkbox: "forms.fieldTypes.checkbox",
+  file: "forms.fieldTypes.file",
+};
+
+export interface FormField {
+  key: string;
+  label: string;
+  type: FieldType;
+  required: boolean;
+  options?: string[];
+  help?: string;
+}
+
+export interface FileAnswer {
+  path: string;
+  name: string;
+}
+
+export type AnswerValue = string | number | boolean | FileAnswer;
+export type Answers = Record<string, AnswerValue>;
+
+/**
+ * The words a signer agrees to. Must match app.signature_consent_statement()
+ * exactly: the database stores its own copy with every signature, and the
+ * browser suite checks the two are the same.
+ */
+export const CONSENT_STATEMENT =
+  "I agree to sign this record electronically. Typing my name is my signature, " +
+  "and it has the same effect as signing it by hand.";
+
+export const MAX_FIELDS = 50;
+
+/** Stable keys for a list of fields: field_1, field_2, … in order. */
+export function assignFieldKeys<T extends Omit<FormField, "key">>(fields: T[]): (T & { key: string })[] {
+  return fields.map((field, index) => ({ ...field, key: `field_${index + 1}` }));
+}
+
+/** "S, M, L" or one per line → ["S", "M", "L"], trimmed, blanks and repeats dropped. */
+export function parseOptions(raw: string): string[] {
+  const seen = new Set<string>();
+  for (const part of raw.split(/[\n,]/)) {
+    const option = part.trim();
+    if (option) seen.add(option.slice(0, 200));
+  }
+  return [...seen];
+}
+
+/**
+ * "42.18", "42,18", "$1,234.56", "1 234,56 $" → cents. Returns null for
+ * anything that is not a non-negative amount with at most two decimals, so a
+ * typo is refused rather than silently rounded.
+ */
+export function parseMoneyToCents(input: string): number | null {
+  const cleaned = input.replace(/[\s  $]/g, "");
+  if (cleaned === "") return null;
+  let whole: string;
+  let fraction = "";
+  const grouped = /^(\d{1,3}(?:([.,])\d{3})+)([.,])(\d{1,2})$/.exec(cleaned);
+  if (grouped && grouped[2] !== grouped[3]) {
+    whole = grouped[1].replace(/[.,]/g, "");
+    fraction = grouped[4];
+  } else {
+    const plain = /^(\d+)(?:[.,](\d{1,2}))?$/.exec(cleaned);
+    if (!plain) return null;
+    whole = plain[1];
+    fraction = plain[2] ?? "";
+  }
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  return Number.isSafeInteger(cents) ? cents : null;
+}
+
+const moneyFormatter = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });
+
+/** `$42.18` in English (unchanged), `42,18 $` in French. */
+export function formatCents(cents: number, locale: Locale = "en"): string {
+  return locale === "en" ? moneyFormatter.format(cents / 100) : formatCurrency(cents / 100, locale);
+}
+
+/** Plain decimal for spreadsheets: 4218 → "42.18". */
+export function centsToDecimal(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(cents);
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
+function isRealDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+export type ParsedAnswers = { ok: true; answers: Answers } | { ok: false; error: string };
+
+/**
+ * Turns what the browser sent (strings, a boolean for checkboxes, an uploaded
+ * file's path and name) into the answers the database stores. Unknown keys
+ * are dropped; every refusal names the field.
+ */
+export function parseAnswers(
+  fields: FormField[],
+  raw: Record<string, unknown>,
+  t: TranslateFn = EN,
+): ParsedAnswers {
+  const answers: Answers = {};
+  for (const field of fields) {
+    const value = raw[field.key];
+    if (field.type === "checkbox") {
+      const ticked = value === true || value === "true" || value === "on";
+      if (field.required && !ticked) return { ok: false, error: t("forms.parse.tick", { label: field.label }) };
+      answers[field.key] = ticked;
+      continue;
+    }
+    if (field.type === "file") {
+      const file = value as Partial<FileAnswer> | null | undefined;
+      if (!file || typeof file.path !== "string" || typeof file.name !== "string" || !file.path) {
+        if (field.required) return { ok: false, error: t("forms.parse.attach", { label: field.label }) };
+        continue;
+      }
+      answers[field.key] = { path: file.path.slice(0, 500), name: file.name.slice(0, 200) || "file" };
+      continue;
+    }
+    const text = typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
+    if (text === "") {
+      if (field.required) return { ok: false, error: t("forms.parse.answer", { label: field.label }) };
+      continue;
+    }
+    switch (field.type) {
+      case "text":
+        if (text.length > 5000) return { ok: false, error: t("forms.parse.tooLong", { label: field.label }) };
+        answers[field.key] = text;
+        break;
+      case "number": {
+        const n = Number(text.replace(",", "."));
+        if (!Number.isFinite(n) || Math.abs(n) > 1e12) {
+          return { ok: false, error: t("forms.parse.number", { label: field.label }) };
+        }
+        answers[field.key] = n;
+        break;
+      }
+      case "money": {
+        const cents = parseMoneyToCents(text);
+        if (cents === null || cents > 100_000_000_000) {
+          return { ok: false, error: t("forms.parse.money", { label: field.label }) };
+        }
+        answers[field.key] = cents;
+        break;
+      }
+      case "date":
+        if (!isRealDate(text)) return { ok: false, error: t("forms.parse.date", { label: field.label }) };
+        answers[field.key] = text;
+        break;
+      case "choice":
+        if (!field.options?.includes(text)) {
+          return { ok: false, error: t("forms.parse.choice", { label: field.label }) };
+        }
+        answers[field.key] = text;
+        break;
+    }
+  }
+  return { ok: true, answers };
+}
+
+/** How a stored answer reads on screen and in the CSV. */
+export function answerText(
+  field: FormField,
+  value: unknown,
+  forSpreadsheet = false,
+  t: TranslateFn = EN,
+  locale: Locale = "en",
+): string {
+  if (value === undefined || value === null) return field.type === "checkbox" ? t("forms.answers.no") : "";
+  switch (field.type) {
+    case "money":
+      return typeof value === "number"
+        ? forSpreadsheet ? centsToDecimal(value) : formatCents(value, locale)
+        : "";
+    case "checkbox":
+      return value === true ? t("forms.answers.yes") : t("forms.answers.no");
+    case "file":
+      return typeof value === "object" && value && "name" in value ? String((value as FileAnswer).name) : "";
+    default:
+      return String(value);
+  }
+}
+
+/** One CSV field, quoted when it needs to be; formula-leading text is neutralised. */
+export function csvField(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "";
+  let text = String(value);
+  // A leading =, +, - or @ would be run as a formula by Excel (CSV injection).
+  if (/^[=+\-@\t\r]/.test(text) && typeof value !== "number") text = `'${text}`;
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}

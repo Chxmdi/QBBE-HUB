@@ -20,3 +20,48 @@ export function requiredText(message: string, max?: number) {
     .min(1, message);
   return max === undefined ? text : text.max(max);
 }
+
+/**
+ * A real calendar day written as YYYY-MM-DD.
+ *
+ * The pattern alone lets 2026-02-31 through, and so does `Date.parse`, which
+ * quietly rolls it over to March 3. Postgres refuses such a date, so a form or
+ * a link carrying one ended in a generic failure (or a 500 on an export)
+ * instead of a sentence saying what was wrong. Every date that arrives from a
+ * person, a link or an API call is checked with this.
+ */
+export function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  // setUTCFullYear, not Date.UTC: Date.UTC reads years 0 to 99 as 1900 to 1999.
+  const date = new Date(0);
+  date.setUTCFullYear(y, m - 1, d);
+  return y >= 1 && date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
+/**
+ * A real calendar month written as YYYY-MM (01 to 12). The pattern alone let
+ * 2026-13 and 2026-00 through, and the first day of such a month is not a day
+ * Postgres accepts.
+ */
+export function isCalendarMonth(value: string): boolean {
+  return /^\d{4}-\d{2}$/.test(value) && isCalendarDate(`${value}-01`);
+}
+
+/** A four-digit year that has days: 0000 does not, and Postgres refuses it. */
+export function isCalendarYear(value: string): boolean {
+  return /^\d{4}$/.test(value) && isCalendarDate(`${value}-01-01`);
+}
+
+/**
+ * An optional day: absent, blank (which callers store as no date), or a real
+ * YYYY-MM-DD date. Without it a mistyped or crafted date reached Postgres and
+ * came back as an unrelated message ("you don't have permission", "could not
+ * save") instead of one about the date.
+ */
+export function optionalDay(message = "Enter the date as YYYY-MM-DD.") {
+  return z
+    .string()
+    .trim()
+    .refine((value) => value === "" || isCalendarDate(value), message);
+}

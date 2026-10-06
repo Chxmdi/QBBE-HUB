@@ -6,9 +6,11 @@ import { authorizeAdminAction } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { getT } from "@/lib/i18n/server";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
-const inviteSchema = z.object({
-  email: z.string().trim().email("Enter a valid email."),
+const inviteSchema = (t: TranslateFn) => z.object({
+  email: z.string().trim().email(t("admin.errors.validEmail")),
   intendedRole: z.enum(["admin", "leadership_viewer", "staff", "volunteer", "guest"]).default("staff"),
 });
 
@@ -22,15 +24,16 @@ export interface InviteResult extends ActionResult {
 }
 
 export async function inviteUser(input: unknown): Promise<InviteResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
 
   const limited = await enforceRateLimit("invitation:create", session.userId);
   if (limited) return limited;
-  const parsed = inviteSchema.safeParse(input);
+  const parsed = inviteSchema(t).safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? t("admin.errors.invalidInput") };
   }
   const { email, intendedRole } = parsed.data;
 
@@ -45,7 +48,7 @@ export async function inviteUser(input: unknown): Promise<InviteResult> {
     })
     .select("id")
     .single();
-  if (error || !invitation) return { ok: false, error: "Could not create the invitation." };
+  if (error || !invitation) return { ok: false, error: t("admin.errors.inviteFailed") };
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
@@ -70,10 +73,11 @@ const roleSchema = z.object({
 });
 
 export async function changeMemberRole(input: unknown): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const parsed = roleSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Invalid input." };
+  if (!parsed.success) return { ok: false, error: t("admin.errors.invalidInput") };
   const { membershipId, role } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
@@ -82,9 +86,9 @@ export async function changeMemberRole(input: unknown): Promise<ActionResult> {
     .select("role, user_id")
     .eq("id", membershipId)
     .maybeSingle();
-  if (!membership) return { ok: false, error: "Membership not found." };
+  if (!membership) return { ok: false, error: t("admin.errors.membershipNotFound") };
   if (membership.role === "owner") {
-    return { ok: false, error: "The Primary Owner role can only change via ownership transfer." };
+    return { ok: false, error: t("admin.errors.ownerRoleLocked") };
   }
 
   const { data: updated, error } = await supabase
@@ -93,7 +97,7 @@ export async function changeMemberRole(input: unknown): Promise<ActionResult> {
     .eq("id", membershipId)
     .select("id")
     .maybeSingle();
-  if (error || !updated) return { ok: false, error: "Could not change the role." };
+  if (error || !updated) return { ok: false, error: t("admin.errors.roleChangeFailed") };
 
   revalidatePath("/admin");
   revalidatePath("/people");
@@ -104,6 +108,7 @@ export async function setMemberActive(
   membershipId: string,
   active: boolean,
 ): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
@@ -114,12 +119,12 @@ export async function setMemberActive(
     .select("role, user_id")
     .eq("id", membershipId)
     .maybeSingle();
-  if (!membership) return { ok: false, error: "Membership not found." };
+  if (!membership) return { ok: false, error: t("admin.errors.membershipNotFound") };
   if (membership.role === "owner") {
-    return { ok: false, error: "The Primary Owner cannot be deactivated." };
+    return { ok: false, error: t("admin.errors.ownerCannotDeactivate") };
   }
   if (membership.user_id === session.userId) {
-    return { ok: false, error: "You cannot deactivate your own account." };
+    return { ok: false, error: t("admin.errors.cannotDeactivateSelf") };
   }
 
   const { data: updated, error } = await supabase
@@ -131,7 +136,7 @@ export async function setMemberActive(
     .eq("id", membershipId)
     .select("id")
     .maybeSingle();
-  if (error || !updated) return { ok: false, error: "Could not update the account." };
+  if (error || !updated) return { ok: false, error: t("admin.errors.accountUpdateFailed") };
 
   if (!active) {
     try {
@@ -149,6 +154,7 @@ export async function setMemberActive(
 }
 
 export async function revokeInvitation(invitationId: string): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction();
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const supabase = await createSupabaseServerClient();
@@ -159,12 +165,13 @@ export async function revokeInvitation(invitationId: string): Promise<ActionResu
     .is("accepted_at", null)
     .select("id")
     .maybeSingle();
-  if (error || !revoked) return { ok: false, error: "Could not revoke the invitation." };
+  if (error || !revoked) return { ok: false, error: t("admin.errors.revokeFailed") };
   revalidatePath("/admin");
   return { ok: true };
 }
 
 export async function transferOwnership(targetMembershipId: string): Promise<ActionResult> {
+  const t = await getT();
   const authorization = await authorizeAdminAction({ ownerOnly: true });
   if (!authorization.ok) return { ok: false, error: authorization.error };
   const session = authorization.session;
@@ -174,18 +181,18 @@ export async function transferOwnership(targetMembershipId: string): Promise<Act
     .select("id, user_id, role, status")
     .eq("id", targetMembershipId)
     .maybeSingle();
-  if (!target) return { ok: false, error: "Membership not found." };
+  if (!target) return { ok: false, error: t("admin.errors.membershipNotFound") };
   if (target.status !== "active") {
-    return { ok: false, error: "Cannot transfer ownership to a deactivated account." };
+    return { ok: false, error: t("admin.errors.transferToDeactivated") };
   }
   if (target.user_id === session.userId) {
-    return { ok: false, error: "You already hold Primary Owner." };
+    return { ok: false, error: t("admin.errors.alreadyOwner") };
   }
 
   const { error } = await supabase.rpc("transfer_organization_ownership", {
     p_target_membership: targetMembershipId,
   });
-  if (error) return { ok: false, error: "Could not transfer ownership." };
+  if (error) return { ok: false, error: t("admin.errors.transferFailed") };
 
   revalidatePath("/admin");
   revalidatePath("/people");

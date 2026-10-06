@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { requiredText } from "@/lib/schema";
+import { isCalendarDate, optionalDay, requiredText } from "@/lib/schema";
+import type { TranslateFn } from "@/lib/i18n/translate";
 
 /**
  * The risk and issue log.
@@ -59,6 +60,39 @@ export const RISK_BAND_LABELS: Record<RiskBand, string> = {
   severe: "Severe",
 };
 
+/** A risk band in the reader's language (#141). */
+export function riskBandLabel(band: RiskBand, t: TranslateFn): string {
+  return t(`risks.bands.${band}`);
+}
+
+/** A risk's status as a person reads it, lower case like the stored code. */
+export function riskStatusLabel(status: RiskStatus, t: TranslateFn): string {
+  return t(`risks.riskStatus.${status}`);
+}
+
+/** An issue's status as a person reads it, lower case like the stored code. */
+export function issueStatusLabel(status: IssueStatus, t: TranslateFn): string {
+  return t(`risks.issueStatus.${status}`);
+}
+
+/** An issue's severity as a person reads it, lower case like the stored code. */
+export function issueSeverityLabel(severity: IssueSeverity, t: TranslateFn): string {
+  return t(`risks.severity.${severity}`);
+}
+
+/**
+ * A likelihood, impact or severity level as a capitalised choice in a form.
+ * French agrees the adjective with the noun it qualifies (« probabilité » and
+ * « gravité » are feminine, « impact » masculine), hence the kind.
+ */
+export function riskLevelLabel(
+  level: RiskLikelihood | RiskImpact | IssueSeverity,
+  kind: "likelihood" | "impact" | "severity",
+  t: TranslateFn,
+): string {
+  return kind === "impact" ? t(`risks.levels.${level}`) : t(`risks.levelsFeminine.${level}`);
+}
+
 /** A risk needing review, by its own review date. */
 export function riskNeedsReview(
   risk: { status: RiskStatus; review_at: string | null },
@@ -82,7 +116,7 @@ export const createRiskSchema = z.object({
   mitigation: z.string().trim().max(5000).optional(),
   trigger: z.string().trim().max(2000).optional(),
   ownerId: z.string().uuid().optional(),
-  reviewAt: z.string().optional(),
+  reviewAt: optionalDay().optional(),
 });
 
 export const updateRiskSchema = z
@@ -96,7 +130,7 @@ export const updateRiskSchema = z
     mitigation: z.string().trim().max(5000).optional(),
     trigger: z.string().trim().max(2000).optional(),
     ownerId: z.string().uuid().nullable().optional(),
-    reviewAt: z.string().nullable().optional(),
+    reviewAt: optionalDay().nullable().optional(),
   })
   // Mirrors the database constraint, so the person sees a sentence rather than
   // a constraint name.
@@ -117,7 +151,7 @@ export const createIssueSchema = z.object({
   resolutionPlan: z.string().trim().max(5000).optional(),
   severity: z.enum(ISSUE_SEVERITIES).default("medium"),
   ownerId: z.string().uuid().optional(),
-  dueAt: z.string().optional(),
+  dueAt: optionalDay().optional(),
 });
 
 export const updateIssueSchema = z
@@ -131,7 +165,7 @@ export const updateIssueSchema = z
     status: z.enum(ISSUE_STATUSES).optional(),
     resolution: z.string().trim().max(5000).optional(),
     ownerId: z.string().uuid().nullable().optional(),
-    dueAt: z.string().nullable().optional(),
+    dueAt: optionalDay().nullable().optional(),
   })
   .refine(
     (value) =>
@@ -167,7 +201,10 @@ export const reopenDecisionSchema = z.object({
 export const createDecisionRequestSchema = z.object({
   projectId: z.string().uuid(),
   assigneeId: z.string().uuid(),
-  dueAt: requiredText("A decision request needs a due date."),
+  dueAt: requiredText("A decision request needs a due date.").refine(
+    isCalendarDate,
+    "A decision request needs a due date.",
+  ),
   context: requiredText("Say what needs deciding.", 5000),
 });
 

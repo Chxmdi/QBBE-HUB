@@ -9,9 +9,12 @@ import { ChannelCreateDialog } from "@/features/channels/components/channel-crea
 import { JoinChannelButton } from "@/features/channels/components/join-channel-button";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { getT } from "@/lib/i18n/server";
 import type { Channel } from "@/types/entities";
 
-export const metadata: Metadata = { title: "Channels" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("channels.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function ChannelsPage({
@@ -20,6 +23,7 @@ export default async function ChannelsPage({
   searchParams: Promise<{ create?: string }>;
 }) {
   const session = await requireSession();
+  const t = await getT();
   const params = await searchParams;
   const supabase = await createSupabasePageClient();
 
@@ -66,10 +70,10 @@ export default async function ChannelsPage({
             <p className="meta truncate">{channel.purpose}</p>
           ) : null}
         </div>
-        {channel.is_mandatory ? <Badge tone="brand">Mandatory</Badge> : null}
-        {channel.privacy === "private" ? <Badge tone="neutral">Private</Badge> : null}
+        {channel.is_mandatory ? <Badge tone="brand">{t("channels.badges.mandatory")}</Badge> : null}
+        {channel.privacy === "private" ? <Badge tone="neutral">{t("channels.badges.private")}</Badge> : null}
         {channel.posting_policy !== "everyone" ? (
-          <Badge tone="accent">Restricted posting</Badge>
+          <Badge tone="accent">{t("channels.badges.restrictedPosting")}</Badge>
         ) : null}
         {!joined ? <JoinChannelButton channelId={channel.id} /> : null}
       </li>
@@ -79,9 +83,9 @@ export default async function ChannelsPage({
   return (
     <div>
       <PageHeader
-        eyebrow="Communication"
-        title="Channels"
-        description="Team communication that stays close to the work. Public channels are open to every member; private channels are membership-only."
+        eyebrow={t("channels.eyebrow")}
+        title={t("channels.title")}
+        description={t("channels.description")}
         actions={
           <>
             {session.isAdmin ? <AnnouncementComposeDialog defaultOpen={params.create === "announcement"} /> : null}
@@ -95,13 +99,13 @@ export default async function ChannelsPage({
       <div className="space-y-8">
         <section aria-labelledby="my-channels">
           <h2 id="my-channels" className="section-heading mb-3">
-            Your channels
+            {t("channels.yourChannels")}
           </h2>
           {mine.length === 0 ? (
             <EmptyState
               icon={<MessagesSquare />}
-              title="You haven't joined any channels"
-              description="Browse the directory below and join the conversations relevant to your work."
+              title={t("channels.noneJoinedTitle")}
+              description={t("channels.noneJoinedBody")}
             />
           ) : (
             <ul className="card divide-y divide-line">
@@ -115,7 +119,7 @@ export default async function ChannelsPage({
         {discoverable.length > 0 ? (
           <section aria-labelledby="directory">
             <h2 id="directory" className="section-heading mb-3">
-              Channel directory
+              {t("channels.directory")}
             </h2>
             <ul className="card divide-y divide-line">
               {discoverable.map((channel) => (
