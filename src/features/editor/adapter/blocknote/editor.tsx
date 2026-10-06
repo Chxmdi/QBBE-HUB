@@ -513,7 +513,7 @@ export default function BlockNoteEditorImpl({
   }, [editor]);
   useKeyboardConditions(containerRef, openBlockMenu);
 
-  const handleChange = React.useCallback(() => {
+  const deliverChange = React.useCallback(() => {
     const blocks = editor.document;
     // F5: keep a way out below a final table.
     const last = blocks[blocks.length - 1];
@@ -524,6 +524,50 @@ export default function BlockNoteEditorImpl({
     setVersion((n) => n + 1);
     onChange?.(toContent(blocks), () => bytesToBase64(Y.encodeStateAsUpdate(doc)));
   }, [editor, editable, onChange, doc]);
+
+  // Copying the whole document out and re-rendering what depends on it is
+  // the expensive part of an edit, and on a long page it ran inside every key
+  // press, before the key's own paint (WebKit took over 100 ms). It now runs
+  // once the key has been painted, once for however many edits came first.
+  // Leaving the page or unmounting delivers what is waiting, so nothing is lost.
+  const deliverRef = React.useRef(deliverChange);
+  React.useEffect(() => {
+    deliverRef.current = deliverChange;
+  }, [deliverChange]);
+  const pendingChange = React.useRef<{ frame: number; timer: ReturnType<typeof setTimeout> | null } | null>(null);
+  const flushChange = React.useCallback(() => {
+    const pending = pendingChange.current;
+    if (!pending) return;
+    pendingChange.current = null;
+    cancelAnimationFrame(pending.frame);
+    if (pending.timer) clearTimeout(pending.timer);
+    deliverRef.current();
+  }, []);
+  const handleChange = React.useCallback(() => {
+    if (pendingChange.current) return;
+    const pending: { frame: number; timer: ReturnType<typeof setTimeout> | null } = { frame: 0, timer: null };
+    pending.frame = requestAnimationFrame(() => {
+      pending.timer = setTimeout(flushChange, 0);
+    });
+    pendingChange.current = pending;
+  }, [flushChange]);
+  React.useEffect(() => {
+    const onHide = () => flushChange();
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flushChange();
+    };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+      try {
+        flushChange();
+      } catch {
+        // The editor was torn down first and can no longer be read.
+      }
+    };
+  }, [flushChange]);
 
   const getItems = React.useCallback(
     async (query: string) =>

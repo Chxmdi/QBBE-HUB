@@ -35,9 +35,13 @@ export function supabaseBroadcastTransport(client: SupabaseClient, topic: string
       statusHandler = handler;
     },
     send(event, payload) {
-      // Only called while joined. The client would otherwise fall back to the
-      // REST endpoint, which the handshake on reconnect makes unnecessary.
-      void channel?.send({ type: "broadcast", event, payload });
+      // Sent only while joined. Otherwise the client falls back to the REST
+      // endpoint, which the handshake on reconnect makes unnecessary, and a
+      // REST send cut off by leaving the page rejected with nothing to catch
+      // it (WebKit reports that as a page error). A send that fails anyway is
+      // dropped for the same reason: the next handshake carries the state.
+      if (!channel || !joined) return;
+      channel.send({ type: "broadcast", event, payload }).catch(() => {});
     },
     connect() {
       if (channel) return;

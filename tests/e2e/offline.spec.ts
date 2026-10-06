@@ -22,7 +22,7 @@ const setSwitch = (on: boolean) =>
  * sent when it returns; a field someone else changed later keeps their value
  * and shows yours for review; a page opened earlier can be read offline.
  */
-test("offline changes sync when back online, with the overwritten value shown for review", async ({ page, context }) => {
+test("offline changes sync when back online, with the overwritten value shown for review", async ({ page, context, browserName }) => {
   test.setTimeout(180_000);
   const stamp = Date.now();
   const contested = `Offline contested ${stamp}`;
@@ -60,10 +60,20 @@ test("offline changes sync when back online, with the overwritten value shown fo
     // Someone else finishes the contested task after the offline edit.
     sql(`update task set status = 'completed', completed_at = now(), updated_at = now() + interval '1 minute' where title = '${contested}'`);
 
-    // A page opened earlier still reads offline.
-    await page.goto("/my-work");
-    await expect(page.locator("main")).toBeVisible();
-    await page.goBack();
+    // A page opened earlier still reads offline. Playwright's WebKit refuses
+    // every navigation while emulating offline, before the service worker is
+    // asked ("WebKit encountered an internal error"), so there the check is
+    // that the worker kept the page it would serve.
+    if (browserName === "webkit") {
+      expect(
+        await page.evaluate(async () => Boolean(await caches.match(new URL("/my-work", location.href).href))),
+        "My Work is kept for offline reading",
+      ).toBe(true);
+    } else {
+      await page.goto("/my-work");
+      await expect(page.locator("main")).toBeVisible();
+      await page.goBack();
+    }
     await expect(page.getByText("3 changes waiting to be sent.")).toBeVisible();
 
     // The first send after reconnecting fails, as it can while a connection

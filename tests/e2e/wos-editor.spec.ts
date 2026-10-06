@@ -212,6 +212,13 @@ test("the W0-5 conditions hold with each editor menu open, in both themes", asyn
       localStorage.setItem("qbbe-theme", t);
       document.documentElement.classList.toggle("dark", t === "dark");
     }, theme);
+    // The colours ease from one theme to the other; measuring contrast
+    // before that ends samples blended colours (seen in WebKit).
+    await page.evaluate(async () => {
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+      const fading = document.getAnimations().filter((a) => a instanceof CSSTransition);
+      await Promise.all(fading.map((a) => a.finished.catch(() => undefined)));
+    });
     await page.evaluate(() => window.scrollTo(0, 0));
 
     // F4: a visible focus ring on the editor itself.

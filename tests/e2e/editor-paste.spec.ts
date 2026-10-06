@@ -126,6 +126,13 @@ async function inBothThemes(page: Page, check: (theme: string) => Promise<void>)
       localStorage.setItem("qbbe-theme", t);
       document.documentElement.classList.toggle("dark", t === "dark");
     }, theme);
+    // The colours ease from one theme to the other; measuring contrast
+    // before that ends samples blended colours (seen in WebKit).
+    await page.evaluate(async () => {
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+      const fading = document.getAnimations().filter((a) => a instanceof CSSTransition);
+      await Promise.all(fading.map((a) => a.finished.catch(() => undefined)));
+    });
     await check(theme);
   }
   await page.evaluate(() => document.documentElement.classList.remove("dark"));

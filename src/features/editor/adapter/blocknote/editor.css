@@ -334,3 +334,12 @@
 .qbbe-editor [data-content-type="heading"][data-level="3"] {
   --level: 1.2em;
 }
+
+/* A line's text fills its block, so a click in the empty space to the right
+   of a short line lands in that line and puts the caret at its end. Before,
+   Firefox put the caret at the start of a heading clicked there, and typing
+   went in front of its text. Alignment still applies through text-align. */
+.qbbe-editor .bn-block-content > .bn-inline-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}

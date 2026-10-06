@@ -21,6 +21,7 @@ export const x1PagesFrCA: typeof x1PagesEn = {
     workspaceArea: "La page est ajoutée à l’espace de travail, où votre équipe peut la lire.",
     privateArea: "La page est ajoutée à vos pages privées, où personne d’autre que vous ne peut la lire.",
     file: "Fichier à importer",
+    noFile: "Aucun fichier choisi",
     submit: "Importer le fichier",
     working: "Importation en cours…",
     errors: {
