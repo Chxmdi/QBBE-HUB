@@ -100,18 +100,41 @@ jobs:
 
       # The site's public address and keys, as the deploy workflow reads them;
       # the service role key from the project's own key list. All masked.
+      # The site's public address and keys, as the deploy workflow reads them.
+      # Netlify is asked up to three times per value, with its error shown
+      # (never the value); the project's key list through the Management API
+      # is the fallback for the service role key. All masked.
       - name: Read the site's Supabase address and keys
+        shell: bash
         run: |
-          get() { npx --yes netlify-cli@27.5.0 env:get "$1" --context production --site "$NETLIFY_SITE_ID" 2>/dev/null | tail -n 1 | tr -d '[:space:]'; }
-          url=$(get NEXT_PUBLIC_SUPABASE_URL)
-          anon=$(get NEXT_PUBLIC_SUPABASE_ANON_KEY)
-          service=$(get SUPABASE_SERVICE_ROLE_KEY)
+          set -uo pipefail
+          get() {
+            local name="$1" out attempt
+            for attempt in 1 2 3; do
+              out=$(npx --yes netlify-cli@27.5.0 env:get "$name" --context production --site "$NETLIFY_SITE_ID" 2> "$RUNNER_TEMP/netlify-err" | tail -n 1 | tr -d '[:space:]')
+              if [ -n "$out" ]; then printf '%s' "$out"; return 0; fi
+              echo "Netlify returned no value for ${name} (attempt ${attempt}): $(tail -n 1 "$RUNNER_TEMP/netlify-err" 2>/dev/null)" >&2
+              sleep 5
+            done
+            return 1
+          }
+          url=$(get NEXT_PUBLIC_SUPABASE_URL) || true
+          anon=$(get NEXT_PUBLIC_SUPABASE_ANON_KEY) || true
+          service=$(get SUPABASE_SERVICE_ROLE_KEY) || true
           if [ -z "$service" ]; then
-            service=$(curl -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-              "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/api-keys?reveal=true" \
-              | python3 -c "import json,sys; print(next((k.get('api_key','') for k in json.load(sys.stdin) if k.get('name')=='service_role'), ''))")
+            code=$(curl -sS -o "$RUNNER_TEMP/api-keys.json" -w '%{http_code}' \
+              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/api-keys?reveal=true" || echo 000)
+            if [ "$code" = 200 ]; then
+              service=$(python3 -c "import json,sys; print(next((k.get('api_key','') for k in json.load(open(sys.argv[1])) if k.get('name')=='service_role'), ''))" "$RUNNER_TEMP/api-keys.json")
+            else
+              echo "::warning::The Supabase Management API answered ${code} to the staging environment's SUPABASE_ACCESS_TOKEN. If this is 401, the token was revoked or expired; replace it (the next staging deploy needs it too)."
+            fi
+            rm -f "$RUNNER_TEMP/api-keys.json"
           fi
-          [ -n "$url" ] && [ -n "$anon" ] && [ -n "$service" ] || { echo "::error::Could not read the site's Supabase address, anon key or service role key."; exit 1; }
+          for pair in "NEXT_PUBLIC_SUPABASE_URL:$url" "NEXT_PUBLIC_SUPABASE_ANON_KEY:$anon" "SUPABASE_SERVICE_ROLE_KEY:$service"; do
+            [ -n "${pair#*:}" ] || { echo "::error::Could not read ${pair%%:*} for the staging site."; exit 1; }
+          done
           echo "::add-mask::$anon"
           echo "::add-mask::$service"
           {
@@ -121,11 +144,11 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "Site ${NETLIFY_SITE_ID} reads ${url}."
 
-      # The fixture is written over a direct database connection, the same
-      # way the deploy job applies migrations: `supabase link` with the
-      # environment's database password, which also records the project's
-      # connection pooler address. (The Management API's SQL endpoint answered
-      # 401 to this environment's access token, so it is only a fallback.)
+      # The fixture is written over a direct database connection with the
+      # environment's database password. The pooler address comes from
+      # `supabase link` (which needs SUPABASE_ACCESS_TOKEN); when the token is
+      # refused, the shared pooler is found by trying each region, which needs
+      # only the password. The connection is checked before anything is written.
       - uses: supabase/setup-cli@v3
         with:
           version: 2.114.0
@@ -134,21 +157,34 @@ jobs:
         run: scripts/local-signing-key.sh
 
       - name: Connect to the staging database
+        shell: bash
         run: |
-          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" > /dev/null
-          template=$(cat supabase/.temp/pooler-url 2>/dev/null || true)
-          if [ -z "$template" ]; then
-            template=$(curl -fsS -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-              "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/config/database/pooler" \
-              | python3 -c "import json,sys; print(next((p.get('connection_string','') for p in json.load(sys.stdin) if p.get('pool_mode')=='session'), ''))")
+          set -uo pipefail
+          enc=$(PW="$SUPABASE_DB_PASSWORD" python3 -c "import os,urllib.parse; print(urllib.parse.quote(os.environ['PW'], safe=''))")
+          echo "::add-mask::$enc"
+          url=""
+          if supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" > /dev/null 2> "$RUNNER_TEMP/link-err"; then
+            template=$(cat supabase/.temp/pooler-url 2>/dev/null || true)
+            # Session mode (port 5432): the seeding runs in one connection.
+            [ -n "$template" ] && url=$(printf '%s' "$template" | sed -e "s|\[YOUR-PASSWORD\]|${enc}|" -e 's|:6543/|:5432/|')
+          else
+            echo "supabase link was refused: $(tail -n 1 "$RUNNER_TEMP/link-err")"
           fi
-          [ -n "$template" ] || { echo "::error::Could not find the staging database's pooler address."; exit 1; }
-          # Session mode (port 5432): the seeding runs in one connection.
-          url=$(PW="$SUPABASE_DB_PASSWORD" python3 -c "import os,sys,urllib.parse; print(sys.argv[1].replace('[YOUR-PASSWORD]', urllib.parse.quote(os.environ['PW'], safe='')).replace(':6543/', ':5432/'))" "$template")
+          if [ -z "$url" ] || ! PGCONNECT_TIMEOUT=10 psql -X -q -t -A "$url" -c "select 1" > /dev/null 2>&1; then
+            url=""
+            echo "Looking for the project's pooler by region."
+            for region in ca-central-1 us-east-1 us-east-2 us-west-1 us-west-2 eu-west-1 eu-west-2 eu-west-3 eu-central-1 eu-central-2 eu-north-1 ap-south-1 ap-southeast-1 ap-southeast-2 ap-northeast-1 ap-northeast-2 sa-east-1; do
+              for prefix in aws-0 aws-1; do
+                candidate="postgresql://postgres.${SUPABASE_PROJECT_REF}:${enc}@${prefix}-${region}.pooler.supabase.com:5432/postgres"
+                if PGCONNECT_TIMEOUT=8 psql -X -q -t -A "$candidate" -c "select 1" > /dev/null 2>&1; then
+                  url="$candidate"; echo "Found it: ${prefix}-${region}."; break 2
+                fi
+              done
+            done
+          fi
+          [ -n "$url" ] || { echo "::error::Could not connect to the staging database through its pooler with SUPABASE_DB_PASSWORD."; exit 1; }
           echo "::add-mask::$url"
           echo "PERF_DB_URL=$url" >> "$GITHUB_ENV"
-          psql -X -v ON_ERROR_STOP=1 -q -t -A "$url" -c "select 1" > /dev/null \
-            || { echo "::error::Could not connect to the staging database with SUPABASE_DB_PASSWORD."; exit 1; }
           echo "Connected to the staging database through its pooler."
 
       - name: Put the fixture in place and sign in the 50 people
