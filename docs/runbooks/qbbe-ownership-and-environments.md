@@ -1,5 +1,10 @@
 # Runbook: QBBE ownership and isolated environments (#52)
 
+> **Hosting changed in October 2026.** The app no longer runs on Netlify; it
+> runs on the QBBE server ([`hosting.md`](hosting.md)). Netlify rows in the
+> measured state below are historical. Its credentials are replaced by
+> `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` and `APP_ENV`.
+
 Moves production-critical resources out of the personal `Chxmdi` account into
 QBBE-controlled accounts, and separates staging from production.
 
@@ -14,7 +19,7 @@ account reported on that date.
 | Repository variables | none set (2026-09-23) |
 | Secrets the deploy reads | `NETLIFY_AUTH_TOKEN`; since #128 also `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` per environment |
 | Deploy gate | `vars.RELEASE_ENABLED` must equal `true`; see `scripts/check-deploy-environment.sh` |
-| Netlify site IDs | registered in `scripts/check-deploy-environment.sh` and `rollback-netlify.yml`: staging `2169b17a-8dc3-49de-a466-4281e1285de2`, production `a34499c8-0d84-47d5-bfb2-502c2b9b9071` |
+| Netlify site IDs (retired) | were registered in the deploy check: staging `2169b17a-8dc3-49de-a466-4281e1285de2`, production `a34499c8-0d84-47d5-bfb2-502c2b9b9071` |
 | Supabase | **one** project, `qbbe-hub` (ref `xvxahcbwydsnllqbjnlr`, ca-central-1, healthy), in the Supabase organization **"BMF"**, not a QBBE organization. There is no second project, so staging and production cannot yet be isolated. |
 | Hosted schema | 60 migrations applied, newest `20260905062624`. **43 repository migrations are not applied.** No drift: every applied version exists in the repository. |
 
@@ -65,11 +70,6 @@ boundary, at the cost of reconfiguration.
 Recommended: **transfer** GitHub and Supabase; **recreate** anything holding an
 OAuth client or an API key, because otherwise the old credential stays valid in
 somebody's personal account.
-
-**If you recreate the Netlify sites their IDs change**, and
-`.github/workflows/deploy-netlify.yml` hardcodes both. Deployment will then
-refuse with "bound to the wrong Netlify site ID". That guard is doing its job —
-update the two values, do not remove it.
 
 ---
 
@@ -171,10 +171,10 @@ For **each** of `staging` and `production`, separately:
 
 | Kind | Name |
 |---|---|
-| Variable | `NETLIFY_SITE_ID` — that environment's site, matching the workflow's expected ID |
+| Variable | `DEPLOY_HOST`, `SITE_URL` — the QBBE server and that environment's address (hosting.md) |
 | Variable | `RELEASE_ENABLED` — **`false` for production until #21 certifies staging** |
-| Secret | `NETLIFY_AUTH_TOKEN` — a QBBE-owned token |
-| Secret | every runtime value from the provider table |
+| Secret | `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` — the server's deploy key and host key |
+| Secret | `APP_ENV` — every runtime value from the provider table |
 
 **The two environments must not share a Supabase project, a storage bucket, a
 database or an email sender.** That separation is the requirement itself, not a
@@ -186,7 +186,7 @@ refinement of it.
 still holding the old one — local `.env.local`, any running test server, CI.
 Do it when you can update every holder in the same sitting.**
 
-Rotate: the Supabase service-role and anon keys, `NETLIFY_AUTH_TOKEN`, the
+Rotate: the Supabase service-role and anon keys, the server deploy key, the
 Google OAuth client secret, the email provider key, `CRON_JOB_SECRET` and
 `VMS_API_KEY`.
 
@@ -204,7 +204,7 @@ until it is rotated. Transferring the resource does not rotate its keys.
 This is the acceptance criterion, so it needs a demonstration rather than an
 assertion.
 
-1. Deploy to staging: Actions → Deploy Netlify → Run workflow → `staging`.
+1. Deploy to staging: Actions → Deploy → Run workflow → `staging`.
 2. Create a recognisable record in staging — a program named
    `ISOLATION-TEST-<date>`.
 3. Open production and confirm the record is absent.

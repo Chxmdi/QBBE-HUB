@@ -144,6 +144,49 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+  image:
+    # The container the QBBE server runs (docs/runbooks/hosting.md). Built
+    # here, for this runner's processor, so a broken Dockerfile fails a pull
+    # request instead of a deploy. Placeholder public values only.
+    name: Container image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: qbbe-hub:ci-${{ github.sha }}
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder-anon-key
+            NEXT_PUBLIC_APP_URL=https://hub.example.org
+            APP_COMMIT=${{ github.sha }}
+          cache-from: type=gha,scope=ci-image
+          cache-to: type=gha,mode=max,scope=ci-image
+
+      - name: The container starts healthy, read-only, and reports its commit
+        run: |
+          docker run -d --name app --read-only --tmpfs /tmp --tmpfs /app/.next/cache \
+            --cap-drop ALL --security-opt no-new-privileges:true -p 3000:3000 \
+            -e SUPABASE_SERVICE_ROLE_KEY=placeholder qbbe-hub:ci-${GITHUB_SHA}
+          for i in $(seq 1 30); do
+            state=$(docker inspect -f '{{.State.Health.Status}}' app)
+            [ "$state" = healthy ] && break
+            [ "$state" = unhealthy ] && break
+            sleep 3
+          done
+          docker logs app | tail -n 20
+          [ "$state" = healthy ] || { echo "::error::The container did not become healthy (${state})."; exit 1; }
+          commit=$(curl -fsS http://127.0.0.1:3000/api/health/version | python3 -c "import json,sys; print(json.load(sys.stdin)['commit'])")
+          [ "$commit" = "$GITHUB_SHA" ] || { echo "::error::The image reports commit '${commit}', not ${GITHUB_SHA}."; exit 1; }
+          echo "The image starts healthy and reports ${commit}."
+
   # The database and signed-in browser checks used to run as one job that
   # took 40 minutes and gated every merge. They now run as parallel jobs, each
   # with its own throwaway local Supabase, and one final job keeps the

@@ -1,0 +1,93 @@
+name: Rollback
+
+# Puts an earlier image back live on one QBBE environment (#51;
+# docs/runbooks/hosting.md).
+#
+# This restores the website only. Database migrations are append-only and
+# are not reversed here: fix forward with a new migration, or follow the
+# schema rollback section of docs/runbooks/release-procedure.md.
+#
+# The commit to restore is in the Deploy run's Release summary ("Rollback
+# target", the image <environment>-<commit>), and in
+# /opt/qbbe/<environment>/releases.log on the server. The server keeps each
+# environment's five newest images; older ones are pulled again from the
+# registry. The app settings are the environment's current ones.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: QBBE environment to roll back
+        required: true
+        type: choice
+        options: [staging, production]
+      commit:
+        description: Full commit SHA of the release to restore (from the Deploy run's Release summary)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Restore an earlier release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    env:
+      TARGET_ENVIRONMENT: ${{ inputs.environment }}
+      COMMIT: ${{ inputs.commit }}
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - name: Check the commit
+        run: |
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::'${COMMIT}' is not a full 40-character commit SHA."; exit 1; }
+          test -n "$SITE_URL" || { echo "::error::SITE_URL is not set for this environment."; exit 1; }
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}:${TARGET_ENVIRONMENT}-${COMMIT}" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/qbbe-ssh
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          user: ${{ vars.DEPLOY_USER || 'ubuntu' }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+
+      - name: Restore it
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+        shell: bash
+        run: |
+          set -o pipefail
+          host="${SITE_URL#https://}"; host="${host%%/*}"
+          dir="/opt/qbbe/${TARGET_ENVIRONMENT}"
+          ssh qbbe "test -f '${dir}/app.env'" || { echo "::error::${TARGET_ENVIRONMENT} has never been deployed on this server."; exit 1; }
+          scp -q deploy/server/compose.app.yaml deploy/server/site.caddy.template deploy/server/release.sh "qbbe:${dir}/"
+          printf '%s' "$REGISTRY_TOKEN" | ssh qbbe "
+            export DOCKER_CONFIG='${dir}/.docker'
+            docker login ghcr.io -u '${REGISTRY_USER}' --password-stdin >/dev/null || exit 1
+            bash '${dir}/release.sh' '${TARGET_ENVIRONMENT}' '${IMAGE}' '${host}'; status=\$?
+            docker logout ghcr.io >/dev/null 2>&1
+            exit \$status" | tee release.log
+          echo "Restored \`${IMAGE}\` on ${TARGET_ENVIRONMENT}." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: The restored site answers and runs that commit
+        run: |
+          code=none
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${SITE_URL%/}/sign-in")
+            [ "$code" = 200 ] && break
+            sleep 6
+          done
+          [ "$code" = 200 ] || { echo "::error::${SITE_URL%/}/sign-in did not answer 200 after the restore (last: ${code})."; exit 1; }
+          commit=$(curl -s "${SITE_URL%/}/api/health/version" | python3 -c "import json,sys; print(json.load(sys.stdin).get('commit',''))" 2>/dev/null || true)
+          [ "$commit" = "$COMMIT" ] || { echo "::error::${SITE_URL%/} reports commit '${commit:-<none>}', not ${COMMIT}."; exit 1; }
+          echo "${SITE_URL%/} answers and runs ${COMMIT}."

@@ -5,10 +5,10 @@
 | Environment | Web | Data | Notes |
 |---|---|---|---|
 | local | `npm run dev` | local Supabase (`supabase start`) or dev project | synthetic data only |
-| staging / preview | separate Netlify site / PR preview | staging Supabase project | synthetic data only |
-| production | separate Netlify site | production Supabase project | release gates and restore evidence required |
+| staging | `qbbe-app-staging` container on the QBBE server ([`hosting.md`](hosting.md)) | staging Supabase project | synthetic data only |
+| production | `qbbe-app-production` container on the QBBE server | production Supabase project | release gates and restore evidence required |
 
-All accounts (GitHub org/repo, Netlify, Supabase, domain/DNS, email provider)
+All accounts (GitHub org/repo, Oracle Cloud, Supabase, domain/DNS, email provider)
 must be **QBBE-owned**. Use two named administrators where the free plan
 supports them; otherwise name a separate recovery custodian. Document recovery
 without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
@@ -33,12 +33,12 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
      **staff** account. Anyone could obtain one with a single API call using the
      publishable key. Provider-side signup restriction is still worth setting;
      it is defence in depth rather than the only line.
-4. Create separate Netlify staging and production sites. Keep production Git
-   auto-publishing disabled; use the gated workflow below. Configure each
-   site’s production context with its own build and runtime variables:
-   `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`,
-   `NEXT_PUBLIC_SUPABASE_ANON_KEY` (plus optional integrations per
-   `.env.example`). Never set `SUPABASE_SERVICE_ROLE_KEY` as a public var.
+4. Set up the QBBE server and each environment's settings as
+   [`hosting.md`](hosting.md) describes: the server, its open ports, the
+   GitHub environment variables and secrets (`APP_ENV` holds the app's
+   runtime settings), and the **Server setup** workflow. Deploys go only
+   through the gated workflow below. Never put `SUPABASE_SERVICE_ROLE_KEY`
+   in a `NEXT_PUBLIC_*` variable.
 5. Deploy. Sign up the Primary Owner account **first** — the bootstrap
    trigger provisions the organization and mandatory channels.
 6. Complete encrypted daily database **and uploaded-file** backups to QBBE
@@ -165,8 +165,9 @@ Two gates exist specifically to catch drift that only shows up at runtime:
 
 ## Rollback
 
-- App: restore the previous verified Netlify deployment. Record its commit and
-  check schema compatibility before rollback; rehearse on staging.
+- App: run the **Rollback** workflow with the previous release's commit
+  (release-procedure.md). Check schema compatibility before rollback;
+  rehearse on staging.
 - Schema: write an inverse migration; for risky changes use
   expand → migrate → contract so old app versions keep working (CICD-002).
 
@@ -200,7 +201,7 @@ URL-shareable filters, empty/permission states, and volunteer-vs-staff
 authorization boundaries. Run it against a preview deployment or locally:
 
 ```bash
-QA_BASE_URL=https://<preview>.netlify.app npm run test:qa
+QA_BASE_URL=https://<staging host> npm run test:qa
 ```
 
 It needs a seeded QA database and the five role accounts. `npm run db:seed`
@@ -213,39 +214,49 @@ Colour-contrast regressions are additionally guarded by
 browser.
 
 
-## Gated Netlify workflow
+## Gated deploy workflow
 
-`.github/workflows/deploy-netlify.yml` is manual and defaults to staging.
+`.github/workflows/deploy.yml` (**Deploy**) is manual and defaults to staging.
 The full step-by-step procedure, including rollback, is
-[`release-procedure.md`](release-procedure.md). Each run:
+[`release-procedure.md`](release-procedure.md); the server it deploys to is
+[`hosting.md`](hosting.md). Each run:
 
 1. Re-runs the complete CI workflow on the exact commit, and publishes only
    from `main`.
 2. For **production**, requires a green **Release candidate** run on the same
    commit (all browsers, security scans, the 50-user test).
 3. Checks the environment fail-closed (`scripts/check-deploy-environment.sh`):
-   release enabled, credentials present, Netlify site and Supabase project are
-   the ones registered for that environment, and staging and production are
-   different Supabase projects. It also reads the site's
-   `NEXT_PUBLIC_SUPABASE_URL` from Netlify and refuses if it is another
-   environment's database.
+   release enabled, credentials present, the Supabase project is the one
+   registered for that environment, and staging and production are different
+   projects. It also reads the app settings (`APP_ENV`) and refuses if they
+   point at another environment's database or address, lack the keys the app
+   needs, or set `WORKSPACE_OS_FLAGS` on production.
 4. Shows the migrations it will apply (dry run, in the run summary), applies
    them, and confirms none are left. `supabase db push` stops the deploy if
    the database holds a migration this commit does not have.
-5. Records the currently published deploy as the rollback target, then
-   publishes.
-6. Smoke-checks `SITE_URL/sign-in`.
+5. Builds the environment's container image of the commit on an ARM runner
+   and stores it as `ghcr.io/chxmdi/qbbe-hub:<environment>-<commit>`.
+6. Releases it on the server (`deploy/server/release.sh`): the new container
+   must report healthy within 3 minutes, or the previous image and settings
+   are put back and the run fails. The replaced image is the rollback target.
+7. Smoke-checks `SITE_URL/sign-in`, that the site reports this commit
+   (`/api/health/version`), and that the background jobs reach it.
+
+`ci.yml` also builds the image and starts it on every pull request
+(**Container image**), so a broken Dockerfile fails there first.
 
 Create GitHub environments named `staging` and `production`. In each, configure:
 
 | Setting | Location | Purpose |
 |---|---|---|
-| `NETLIFY_SITE_ID` | environment variable | distinct QBBE site for this environment |
-| `NETLIFY_AUTH_TOKEN` | environment secret | deployment credential; never commit it |
+| `DEPLOY_HOST` | environment variable | the QBBE server's public IP |
+| `DEPLOY_SSH_KEY` | environment secret | the server's deploy key; never commit it |
+| `DEPLOY_KNOWN_HOSTS` | environment secret | the server's pinned SSH host key (from **Server setup**) |
+| `APP_ENV` | environment secret | the app's runtime settings, one `NAME=value` per line ([`hosting.md`](hosting.md#the-app_env-secret)) |
 | `SUPABASE_PROJECT_REF` | environment variable | this environment's Supabase project ref |
 | `SUPABASE_ACCESS_TOKEN` | environment secret | Supabase personal access token of a QBBE account, for migrations |
 | `SUPABASE_DB_PASSWORD` | environment secret | this environment's database password, for migrations |
-| `SITE_URL` | environment variable | the environment's public URL, for the smoke check |
+| `SITE_URL` | environment variable | the environment's public address, `https://<host>` |
 | `RELEASE_ENABLED` | environment variable | literal `true` only after readiness review |
 
 And at repository level (Settings, Secrets and variables, Actions, Variables):
@@ -255,25 +266,15 @@ And at repository level (Settings, Secrets and variables, Actions, Variables):
 | `STAGING_SUPABASE_PROJECT_REF` | registered staging project; deploys refuse any other |
 | `PRODUCTION_SUPABASE_PROJECT_REF` | registered production project; deploys refuse any other |
 
-Keep `RELEASE_ENABLED` absent/false until migrations are applied, the site’s
-production build/runtime variables are verified, and that environment’s release
+Keep `RELEASE_ENABLED` absent/false until migrations are applied, the
+environment's settings are verified, and that environment's release
 checklist is met. Production additionally requires P0 acceptance, verified email,
 backup/restore rehearsal, operational owners and disabled-integration disclosure.
 Apply GitHub environment branch restrictions and reviewers where available on
 the free plan. The workflow itself refuses publishing from other branches.
+Nothing else publishes to the server: it has no Git hook, and the deploy key
+lives only in the two GitHub environments.
 
-Configure production so pushes, build hooks and other integrations cannot
-publish around this workflow. Use a separate staging site for Git previews.
-Record the live settings and test a deliberately failing workflow before
-accepting the gate. None of these hosted settings has been applied by merely
-adding the workflow file. Netlify CLI 27.5.0 is pinned in the workflow and builds
-using the selected site's production context; hosting smoke tests are pending.
-
-Next.js needs Netlify's framework adapter: do not upload `.next` as a plain
-static site. Verify cookies, server actions, middleware, uploads, reports and
-scheduled routes on staging. Begin with the free provider hostname. Configure
-Resend with an existing QBBE-controlled sender domain before pilot use.
-
-References: [Netlify Next.js support](https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/),
-[Netlify CLI deployment](https://cli.netlify.com/commands/deploy/),
+References: [Next.js self-hosting](https://nextjs.org/docs/app/guides/self-hosting),
+[Caddy reverse proxy](https://caddyserver.com/docs/quick-starts/reverse-proxy),
 [GitHub reusable workflows](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).

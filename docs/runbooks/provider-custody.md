@@ -23,13 +23,13 @@ read a name and phone them.
 - **MFA** — `enforced` only if the provider refuses a sign-in without it.
   "Enabled for my account" is not enforcement.
 - **Secret location** — the store and key name, e.g.
-  `GitHub Environment "staging" → NETLIFY_AUTH_TOKEN`.
+  `GitHub Environment "staging" → DEPLOY_SSH_KEY`.
 - **Rotated** — the date it was last rotated, and the interval it is due on.
 
 | Provider | QBBE owner | Primary custodian | Backup custodian | Recovery contact | MFA | Staging resource | Production resource | Secret location | Rotated |
 |---|---|---|---|---|---|---|---|---|---|
 | GitHub | | | | | | | | | |
-| Netlify | | | | | `qbbe-hub-staging` `2169b17a-8dc3-49de-a466-4281e1285de2` | `qbbe-hub-production` `a34499c8-0d84-47d5-bfb2-502c2b9b9071` | | |
+| Oracle Cloud (QBBE server, hosting.md) | | | | | container `qbbe-app-staging` | container `qbbe-app-production` (same server) | GitHub Environments → `DEPLOY_SSH_KEY`, `APP_ENV` | |
 | Supabase | | | | | | | | | |
 | Google Workspace / OAuth | | | | | | | | | |
 | Transactional email | | | | | | | | | |

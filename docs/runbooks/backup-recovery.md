@@ -14,7 +14,8 @@
 - The Git repository is the backup for schema (migrations) and application
   code. Keep `main` protected.
 - Environment variables are documented in `.env.example`; real values live
-  in Netlify/Supabase/GitHub secret managers and the QBBE password manager.
+  in the GitHub environments (`APP_ENV` and the deploy secrets), Supabase and
+  the QBBE password manager.
 
 ## Restore drill (run before pilot data is accepted)
 
@@ -36,9 +37,11 @@
 
 ## Losing access scenarios
 
-- **Netlify down / bad deploy**: restore a previously verified deployment when
-  the provider is available; verify schema compatibility. A quota pause needs
-  an operational decision, not an automatic paid upgrade.
+- **Bad deploy**: run the **Rollback** workflow with the previous release's
+  commit; verify schema compatibility.
+- **QBBE server lost** (Oracle reclaim, outage, deleted instance): rebuild it
+  as hosting.md "Rebuilding the server" describes and deploy both
+  environments again. The server holds no data, so nothing is restored.
 - **Supabase project unavailable**: restore latest backup to a new project,
   update the two `NEXT_PUBLIC_SUPABASE_*` env vars, redeploy.
 - **Admin lockout**: a second Workspace Admin or the Primary Owner restores

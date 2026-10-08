@@ -1,0 +1,22 @@
+# Only what `npm ci` and `npm run build` need goes into the image build.
+# tests/ stays: `next build` type-checks src, whose unit tests import tests/support.
+.git
+.github
+.claude
+.next
+node_modules
+coverage
+playwright
+playwright-report
+test-results
+docs
+supabase
+deploy
+public/ocr
+public/pdf
+*.log
+.env
+.env.*
+!.env.example
+Dockerfile
+.dockerignore

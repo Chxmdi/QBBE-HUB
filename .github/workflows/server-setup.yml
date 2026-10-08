@@ -1,0 +1,93 @@
+name: Server setup
+
+# Prepares the QBBE server, or brings it up to date (docs/runbooks/hosting.md).
+# Safe to run again. It installs Docker, automatic security updates, the host
+# firewall rules for ports 80 and 443, swap, and the shared services (the
+# HTTPS front door and the virus scanner). It does not touch either
+# environment's app; the Deploy workflow does that.
+#
+# First run: tick "show the host key". The run prints the server's SSH host
+# key line and changes nothing; save that line as the DEPLOY_KNOWN_HOSTS
+# secret, then run this again without the tick.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Whose server credentials to use (both environments hold the same ones)
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+      show_host_key:
+        description: Only print the server's SSH host key (first run)
+        type: boolean
+        default: false
+      acme_email:
+        description: Address Let's Encrypt writes to about certificates (optional)
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-setup
+  cancel-in-progress: false
+
+jobs:
+  host-key:
+    name: Show the server's host key
+    if: inputs.show_host_key
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Read the host key
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+        run: |
+          [[ "$DEPLOY_HOST" =~ ^[A-Za-z0-9.:-]+$ ]] || { echo "::error::Set the DEPLOY_HOST variable on the ${{ inputs.environment }} environment to the server's public IP address."; exit 1; }
+          line=$(ssh-keyscan -T 20 -t ed25519 "$DEPLOY_HOST" 2>/dev/null | grep -v '^#' | head -n 1)
+          [ -n "$line" ] || { echo "::error::No SSH answer from ${DEPLOY_HOST} on port 22. Check the address and that the server is running."; exit 1; }
+          fingerprint=$(printf '%s\n' "$line" | ssh-keygen -lf - | awk '{print $2}')
+          {
+            echo "### Server host key"
+            echo
+            echo "Save this whole line as the **DEPLOY_KNOWN_HOSTS** secret on both environments:"
+            echo
+            echo '```'
+            echo "$line"
+            echo '```'
+            echo
+            echo "Fingerprint: \`${fingerprint}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$line"
+
+  setup:
+    name: Prepare the server
+    if: ${{ !inputs.show_host_key }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/qbbe-ssh
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          user: ${{ vars.DEPLOY_USER || 'ubuntu' }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+
+      - name: Install and start the shared services
+        env:
+          ACME_EMAIL: ${{ inputs.acme_email }}
+        run: |
+          [[ -z "$ACME_EMAIL" || "$ACME_EMAIL" =~ ^[^[:space:]\'\"]+@[^[:space:]\'\"]+$ ]] || { echo "::error::'${ACME_EMAIL}' is not an email address."; exit 1; }
+          dir="/tmp/qbbe-setup-${GITHUB_RUN_ID}"
+          ssh qbbe "mkdir -p '$dir'"
+          scp -q deploy/server/setup.sh deploy/server/compose.base.yaml deploy/server/Caddyfile "qbbe:${dir}/"
+          ssh qbbe "sudo ACME_EMAIL='${ACME_EMAIL}' bash '${dir}/setup.sh' '${dir}'; status=\$?; rm -rf '${dir}'; exit \$status"
+          echo "Server prepared. Next: run the Deploy workflow for staging." >> "$GITHUB_STEP_SUMMARY"

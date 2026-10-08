@@ -5,6 +5,12 @@ ClamAV verdicts, and leaves files pending when Storage or scanning fails.
 The existing job runner records failures in Admin → Jobs. Configure and verify
 alerts before enabling uploads for users.
 
+On the QBBE server ([`hosting.md`](hosting.md)) this is already done: the
+`qbbe-clamav` container runs next to the apps, reachable only from them, with
+the size limits and alerts below set in `deploy/server/compose.base.yaml`, and
+every app container is pointed at it whatever its settings say. The rest of
+this section is for running clamd anywhere else.
+
 The job reaches clamd one of two ways:
 
 - `CLAMAV_SOCKET`: clamd's private Unix socket, when the job route and clamd
