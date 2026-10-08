@@ -75,23 +75,27 @@ provisions the organization.
 to `auth.users` with a known fixture password, which is acceptable on a local
 container and is not acceptable on a hosted environment.
 
-## 4. Bind the GitHub environment and the Netlify site
+## 4. Bind the GitHub environment and the QBBE server
 
-The deploy workflow reads two kinds of setting from two places. Put each one
-where the workflow looks, or `scripts/check-deploy-environment.sh` stops the
-run with the name of what is missing.
+The app runs on the QBBE server ([`hosting.md`](hosting.md)); set that up
+first (its steps 1 to 6). The deploy workflow then reads every setting from
+GitHub. Put each one where the workflow looks, or
+`scripts/check-deploy-environment.sh` stops the run with the name of what is
+missing.
 
 **a. GitHub, per environment.** Settings → Environments → **staging** (create
 it if absent):
 
 | Name | Kind | Value |
 |---|---|---|
-| `NETLIFY_SITE_ID` | variable | `2169b17a-8dc3-49de-a466-4281e1285de2` (the check script refuses any other) |
-| `NETLIFY_AUTH_TOKEN` | secret | a Netlify personal access token of the QBBE account that owns the staging site |
+| `DEPLOY_HOST` | variable | the QBBE server's public IP |
+| `DEPLOY_SSH_KEY` | secret | the server's deploy key (hosting.md step 2) |
+| `DEPLOY_KNOWN_HOSTS` | secret | the server's host key line (hosting.md step 6) |
 | `SUPABASE_PROJECT_REF` | variable | the **staging** project ref |
 | `SUPABASE_ACCESS_TOKEN` | secret | a Supabase personal access token of a QBBE account, used for migrations |
 | `SUPABASE_DB_PASSWORD` | secret | the **staging** database password |
-| `SITE_URL` | variable | the staging site's address, e.g. `https://qbbe-hub-staging.netlify.app` |
+| `SITE_URL` | variable | the staging address, `https://<staging host>` |
+| `APP_ENV` | secret | staging's app settings, below (c) |
 | `RELEASE_ENABLED` | variable | `true` once a–c are set. The workflow publishes nothing while it is anything else, so staging cannot be deployed with it `false`. Production keeps it `false` until #21. |
 
 **b. GitHub, repository level.** Settings → Secrets and variables → Actions →
@@ -102,19 +106,19 @@ it if absent):
 | `STAGING_SUPABASE_PROJECT_REF` | the staging project ref |
 | `PRODUCTION_SUPABASE_PROJECT_REF` | the production project ref. Required even for a staging-only deploy: the check refuses unless both are registered and differ. |
 
-**c. Netlify, on the staging site.** Site configuration → Environment
-variables. The app reads these at build and run time; GitHub does not pass
-them:
+**c. The app's settings: the `APP_ENV` secret.** One `NAME=value` per line;
+the deploy writes it to the server as the app's environment. The
+`NEXT_PUBLIC_*` values are also built into staging's image.
 
 | Name | Value |
 |---|---|
-| `NEXT_PUBLIC_APP_URL` | same as `SITE_URL` above |
-| `NEXT_PUBLIC_SUPABASE_URL` | the **staging** project URL (the workflow reads it back and refuses a production URL) |
+| `NEXT_PUBLIC_APP_URL` | same as `SITE_URL` above (the deploy refuses anything else) |
+| `NEXT_PUBLIC_SUPABASE_URL` | the **staging** project URL (the deploy refuses another project's) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the **staging** anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | the **staging** service-role key; mark it secret |
+| `SUPABASE_SERVICE_ROLE_KEY` | the **staging** service-role key |
 | `CRON_JOB_SECRET` | 32+ random characters (`openssl rand -base64 48`); the same value goes into step 5b |
 | `EMAIL_RECIPIENT_ALLOWLIST` | QBBE test addresses, e.g. `@qbbe.org`; never blank on staging |
-| `WORKSPACE_OS_FLAGS` | Workspace OS modules to switch on for staging: `all`, or a comma-separated list such as `wos_objects,wos_lenses`. **Staging only; never set it on production** (see 4d) |
+| `WORKSPACE_OS_FLAGS` | Workspace OS modules to switch on for staging: `all`, or a comma-separated list such as `wos_objects,wos_lenses`. **Staging only; a production deploy refuses it** (see 4d) |
 
 **Check every value against production before saving.** A production
 service-role key pasted into staging means a staging deploy can rewrite
@@ -125,18 +129,19 @@ merged unfinished behind a switch in the `feature_flag` table, all off
 (`wos_objects`, `wos_spaces`, `wos_pages`, `wos_editor`, `wos_lenses`,
 `wos_home`, `wos_capture`, `wos_workflows_v2`, `wos_forms_v2`,
 `wos_public_pages`, `wos_offline`). Staging shows them through the
-`WORKSPACE_OS_FLAGS` variable in 4c instead of changing the table, so the
+`WORKSPACE_OS_FLAGS` line in 4c instead of changing the table, so the
 staging database keeps the same switch values as production.
 
 - The variable can only switch a module **on**. Names it does not recognise
   are ignored, so a typo leaves that module off rather than breaking the build.
 - It covers Workspace OS switches only. `gmail_inbox` and the other older
   switches are still changed in the table.
-- After saving it, trigger a new deploy: Netlify reads the variable at build
-  and run time. **You should see** the switched-on module's screens on
+- After changing it, run the **Deploy** workflow for staging: the app reads
+  its settings when it starts. **You should see** the switched-on module's screens on
   staging. If they are missing, check the spelling against the list above.
 
-On **production**, never set `WORKSPACE_OS_FLAGS`. A module is switched on
+On **production**, never set `WORKSPACE_OS_FLAGS`; the deploy refuses a
+production `APP_ENV` that has the line at all. A module is switched on
 there after its wave's sign-off, in the production project's SQL editor:
 
 ```sql
@@ -166,7 +171,7 @@ deployed is whatever `main` points at the moment you dispatch.
    that ran.
 2. Dispatch it:
    ```bash
-   gh workflow run deploy-netlify.yml -f environment=staging --ref main
+   gh workflow run deploy.yml -f environment=staging --ref main
    ```
 3. **You should see** the workflow call the full CI workflow from that same
    commit first, then publish. If it publishes without running CI, the gate is
@@ -174,8 +179,8 @@ deployed is whatever `main` points at the moment you dispatch.
 4. Re-check `git rev-parse origin/main` once the run starts, and confirm it is
    still the recorded SHA. If somebody merged between steps 1 and 2, the run is
    certifying a different commit than your evidence claims. Cancel it.
-5. Record the resulting deploy URL, the workflow run URL and the Netlify deploy
-   ID.
+5. Record the workflow run URL and the image it released (the Release job's
+   summary, `ghcr.io/chxmdi/qbbe-hub:staging-<commit>`).
 
 **5b. Wire background jobs.** In the staging project's SQL editor, once:
 
@@ -185,20 +190,22 @@ select app.configure_job_runner('<SITE_URL>', '<CRON_JOB_SECRET>');
 
 Then re-run the workflow, or open `<SITE_URL>/api/health/jobs`. **You should
 see** `{"jobRunner":"ready"}`. Until then the deploy's last check fails with
-the fix, and Admin → Jobs shows a red banner. Uploaded files stay "Security
-check pending" on staging regardless until a ClamAV host exists
+the fix, and Admin → Jobs shows a red banner. The virus scanner runs on the
+same server, so uploads are scanned from the first deploy
 (`document-scanning.md`).
 
 **Known gap, worth fixing before this is done often.** Tagging the commit and
 dispatching with `--ref <tag>` would remove the race, but the publish job's
 `github.ref == 'refs/heads/main'` condition would then skip publishing. Making
 exact-commit deployment a property of the workflow rather than of the operator's
-timing is a change to `deploy-netlify.yml`, and belongs with the release gates
+timing is a change to `deploy.yml`, and belongs with the release gates
 in #51.
 
-**If it fails at publish:** the token is the usual cause. Confirm the token
-belongs to the QBBE Netlify team and has deploy rights on the staging site
-specifically, not merely on the team.
+**If it fails at release:** the run says why. "Could not sign in" means
+`DEPLOY_SSH_KEY`, `DEPLOY_HOST` or `DEPLOY_KNOWN_HOSTS` is wrong
+(hosting.md step 6). "did not become healthy" means the new container would
+not start; the previous one was put back, and the run shows the new one's last
+log lines.
 
 ## 6. Smoke-check the deployment
 

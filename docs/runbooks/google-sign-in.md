@@ -17,7 +17,7 @@ the sign-in page only when the site sets `NEXT_PUBLIC_GOOGLE_SIGN_IN=on`.
 - An owner of QBBE's Google account (Google Workspace admin if QBBE uses
   Google Workspace) who can open https://console.cloud.google.com.
 - Owner access to the Supabase project (staging, then production).
-- Access to the Netlify site's environment variables.
+- Access to the GitHub environment's `APP_ENV` secret (Settings → Environments).
 - The Supabase project reference: in the Supabase dashboard, **Project
   Settings → General → Reference ID** (a string like `abcd1234efgh5678`).
 
@@ -63,11 +63,11 @@ the sign-in page only when the site sets `NEXT_PUBLIC_GOOGLE_SIGN_IN=on`.
    `https://staging.<qbbe domain>/auth/callback`) → **Save**.
    *Worked if:* the address is listed.
 
-6. **Show the button on the site.** Netlify → the environment's site →
-   **Site configuration → Environment variables → Add a variable** →
-   Key `NEXT_PUBLIC_GOOGLE_SIGN_IN`, Value `on` → **Create variable**. Then
-   **Deploys → Trigger deploy → Deploy site** (the value is built into the
-   page, so it needs a new deploy).
+6. **Show the button on the site.** GitHub → **Settings → Environments** →
+   the environment → **APP_ENV** → **Update secret**: add the line
+   `NEXT_PUBLIC_GOOGLE_SIGN_IN=on` to the existing lines → **Update secret**.
+   Then **Actions → Deploy → Run workflow** for that environment (the value
+   is built into the page, so it needs a new deploy).
    *Worked if:* after the deploy, the sign-in page shows "Continue with
    Google". (Until integration places the button on the sign-in page, this
    step has no visible effect; steps 1–5 can still be done ahead of time.)
@@ -82,6 +82,7 @@ the sign-in page only when the site sets `NEXT_PUBLIC_GOOGLE_SIGN_IN=on`.
 ## Turning it off
 
 Supabase → **Authentication → Sign In / Providers → Google** → off → Save;
-then remove `NEXT_PUBLIC_GOOGLE_SIGN_IN` in Netlify and redeploy. People who
+then remove the `NEXT_PUBLIC_GOOGLE_SIGN_IN` line from the environment's
+`APP_ENV` secret and run **Deploy** again. People who
 signed in with Google can still sign in with a password once they set one
 with **Forgot password** on the sign-in page.

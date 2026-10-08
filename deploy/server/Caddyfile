@@ -1,0 +1,6 @@
+# The HTTPS front door (docs/runbooks/hosting.md). Each environment's release
+# writes sites/<environment>.caddy with its own address; Caddy obtains and
+# renews the certificates itself. setup.sh adds a global { email ... } block
+# above this when the Server setup run is given an address.
+
+import /etc/caddy/sites/*.caddy

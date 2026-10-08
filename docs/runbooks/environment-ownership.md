@@ -2,33 +2,29 @@
 
 Issue: #52
 
-## Verified hosting inventory
+## Hosting inventory
 
-- Staging Netlify site: `qbbe-hub-staging`
-  - Site ID: `2169b17a-8dc3-49de-a466-4281e1285de2`
-  - SSO team login required for all project access.
-- Production Netlify site: `qbbe-hub-production`
-  - Site ID: `a34499c8-0d84-47d5-bfb2-502c2b9b9071`
-  - SSO team login required for all project access.
-- Legacy/review site: `qbbe-hub-review`
-  - Site ID: `7d5806f5-e16c-48a6-a5af-605504f02159`
-  - Treat as review-only. It is not the canonical staging or production target.
+Since October 2026 both environments run on the QBBE server, one Oracle Cloud
+Always Free machine in Montreal ([`hosting.md`](hosting.md)), as containers
+`qbbe-app-staging` and `qbbe-app-production`. The Netlify sites
+(`qbbe-hub-staging`, `qbbe-hub-production`, the review site `qbbe-hub-review`)
+are retired and are to be deleted once both environments run on the server.
 
-The deployment workflow already selects a GitHub Environment (`staging` or `production`) and reads `NETLIFY_SITE_ID`, `NETLIFY_AUTH_TOKEN`, and `RELEASE_ENABLED` from that environment. Each GitHub Environment must therefore point only at its matching Netlify site.
+The deployment workflow selects a GitHub Environment (`staging` or
+`production`) and reads the server credentials, the app settings (`APP_ENV`)
+and `RELEASE_ENABLED` from that environment only.
 
 ## Required GitHub Environment bindings
 
 ### staging
-- `NETLIFY_SITE_ID=2169b17a-8dc3-49de-a466-4281e1285de2`
-- secret `NETLIFY_AUTH_TOKEN`: staging-capable deploy token
+- `DEPLOY_HOST`, secrets `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`: the QBBE server
+- secret `APP_ENV`: staging-only Supabase URL/keys and all staging integration credentials
 - `RELEASE_ENABLED=false` until #55 is ready to certify staging
-- staging-only Supabase URL/key and all staging integration credentials
 
 ### production
-- `NETLIFY_SITE_ID=a34499c8-0d84-47d5-bfb2-502c2b9b9071`
-- secret `NETLIFY_AUTH_TOKEN`: production-capable deploy token
+- the same three server settings
+- secret `APP_ENV`: production-only values; never `WORKSPACE_OS_FLAGS`
 - `RELEASE_ENABLED=false` until #21 staging certification has passed
-- production-only Supabase URL/key and production integration credentials
 
 ## Supabase isolation requirement
 
@@ -56,13 +52,12 @@ fill in. For every production-critical provider record:
 - secret location (never the secret value)
 - rotation date / policy
 
-Providers in scope: GitHub, Netlify, Supabase, Google Workspace/OAuth, transactional email, malware scanning, monitoring/alerting, backup storage.
+Providers in scope: GitHub, Oracle Cloud (the QBBE server), Supabase, Google Workspace/OAuth, transactional email, malware scanning, monitoring/alerting, backup storage.
 
 ## Isolation verification
 
 Before release, prove all of the following:
-- staging deploy uses the staging Netlify site ID
-- production deploy uses the production Netlify site ID
+- staging's `APP_ENV` points at the staging Supabase project and address, production's at production's (the deploy check refuses otherwise)
 - staging and production Supabase refs differ
 - no staging/preview environment contains production service-role/OAuth/email secrets
 - production publishing remains disabled until #21 passes

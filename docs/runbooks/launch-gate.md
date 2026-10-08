@@ -18,7 +18,7 @@ Required gates: lint, types, unit/build/dependency checks; migrated RLS/Auth tes
 complete authenticated browser workflows across scoped roles; Chromium, Firefox,
 WebKit and actual Safari/mobile; keyboard, themes, zoom and screen-reader checks;
 concurrency/reconnect/retry; measured performance; live Google/VMS/email;
-Netlify staging compatibility and protected deployment; encrypted database/file
+staging hosting compatibility and protected deployment; encrypted database/file
 backups, isolated restore, independent alerts and named operational sign-off.
 
 Verified transactional email is mandatory for pilot use under the approved plan.

@@ -16,13 +16,14 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname;
   // Cron/job routes authenticate with CRON_JOB_SECRET, not a user session;
   // provider webhooks authenticate with their own signatures. The job-runner
-  // health check is read by the deploy smoke test before anyone signs in and
-  // answers a single status word. The private API (/api/v1) authenticates
+  // and version health checks are read by the deploy smoke test before anyone
+  // signs in; each answers a single word (a status, or the running commit). The private API (/api/v1) authenticates
   // every call with its own access token (src/features/api-tokens).
   if (
     path.startsWith("/api/jobs/") ||
     path.startsWith("/api/v1/") ||
     path === "/api/health/jobs" ||
+    path === "/api/health/version" ||
     path === "/api/integrations/gmail/push" ||
     path === "/api/integrations/email/webhook"
   ) {

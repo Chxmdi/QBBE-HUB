@@ -50,7 +50,8 @@ Follow `docs/runbooks/staging-provisioning.md`. In short:
   `STAGING_SUPABASE_PROJECT_REF` and `PRODUCTION_SUPABASE_PROJECT_REF` (step 4b).
 - [ ] Netlify staging site → Site configuration → Environment variables: the
   app settings in step 4c, including a 32+ character `CRON_JOB_SECRET`.
-- [ ] Run the deploy (Actions → Deploy Netlify → `staging`), or ask Claude to.
+- [ ] Run the deploy (Actions → Deploy → `staging`), or ask Claude to. The server it
+  deploys to is set up first: docs/runbooks/hosting.md.
 - [ ] In the staging project's SQL editor, wire background jobs (step 5b).
   `<site>/api/health/jobs` should answer `{"jobRunner":"ready"}`.
 - [ ] Switch the staging project, then production, to JWT signing keys

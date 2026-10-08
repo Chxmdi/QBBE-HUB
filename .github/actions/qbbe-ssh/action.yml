@@ -1,0 +1,54 @@
+name: Connect to the QBBE server
+description: >
+  Sets up SSH as host alias "qbbe" for the server in DEPLOY_HOST, with the
+  environment's deploy key and its pinned host key (DEPLOY_KNOWN_HOSTS).
+  Refuses to connect to a server whose host key does not match.
+  See docs/runbooks/hosting.md.
+
+inputs:
+  host:
+    description: Server address (the environment's DEPLOY_HOST variable)
+    required: true
+  user:
+    description: SSH user on the server
+    required: false
+    default: ubuntu
+  key:
+    description: Private key (the environment's DEPLOY_SSH_KEY secret)
+    required: true
+  known-hosts:
+    description: Pinned host key line(s) (the environment's DEPLOY_KNOWN_HOSTS secret)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Write the SSH configuration
+      shell: bash
+      env:
+        HOST: ${{ inputs.host }}
+        SSH_USER: ${{ inputs.user }}
+        KEY: ${{ inputs.key }}
+        KNOWN_HOSTS: ${{ inputs.known-hosts }}
+      run: |
+        set -euo pipefail
+        [ -n "$HOST" ] && [ -n "$KEY" ] && [ -n "$KNOWN_HOSTS" ] \
+          || { echo "::error::DEPLOY_HOST, DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS must all be set for this environment (docs/runbooks/hosting.md)."; exit 1; }
+        [[ "$HOST" =~ ^[A-Za-z0-9.:-]+$ ]] || { echo "::error::DEPLOY_HOST is not an address."; exit 1; }
+        install -d -m 700 ~/.ssh
+        printf '%s\n' "$KEY" | tr -d '\r' > ~/.ssh/qbbe
+        chmod 600 ~/.ssh/qbbe
+        printf '%s\n' "$KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
+        cat > ~/.ssh/config <<CONF
+        Host qbbe
+          HostName ${HOST}
+          User ${SSH_USER:-ubuntu}
+          IdentityFile ~/.ssh/qbbe
+          IdentitiesOnly yes
+          StrictHostKeyChecking yes
+          UserKnownHostsFile ~/.ssh/known_hosts
+          ServerAliveInterval 30
+          ConnectTimeout 20
+        CONF
+        ssh qbbe true || { echo "::error::Could not sign in to ${HOST} as ${SSH_USER:-ubuntu} with DEPLOY_SSH_KEY and the pinned host key."; exit 1; }
+        echo "Connected to ${HOST}."

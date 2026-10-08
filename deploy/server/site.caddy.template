@@ -1,0 +1,8 @@
+# Written by release.sh for the __ENV__ environment. Do not edit by hand.
+__HOST__ {
+	encode zstd gzip
+	request_body {
+		max_size 30MB
+	}
+	reverse_proxy app-__ENV__:3000
+}

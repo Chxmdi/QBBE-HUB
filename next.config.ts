@@ -22,6 +22,10 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The container image (Dockerfile) runs the self-contained server Next.js
+  // writes to .next/standalone. Only that build asks for it: `next start`,
+  // which CI and local runs use, does not serve a standalone build.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   async headers() {
     return [
       {

@@ -1,0 +1,63 @@
+# Shared services on the QBBE server (docs/runbooks/hosting.md): the HTTPS
+# front door and the virus scanner. Installed by setup.sh, project "qbbe-base".
+# Each environment's app runs in its own project from compose.app.yaml and
+# joins the two networks below by name.
+
+services:
+  caddy:
+    # The official image, from its Amazon ECR Public copy: no Docker Hub
+    # anonymous pull limit on the server.
+    image: public.ecr.aws/docker/library/caddy:2
+    container_name: qbbe-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge]
+    logging: &logging
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  # clamd for the scan-documents jobs. No port is published: only containers
+  # on the internal "scan" network can reach it. It needs about 3-4 GB
+  # (ClamAV's own sizing) and the "egress" network to fetch signatures.
+  clamav:
+    image: clamav/clamav-debian:stable
+    container_name: qbbe-clamav
+    restart: unless-stopped
+    mem_limit: 4g
+    cpu_shares: 256
+    environment:
+      # The image writes CLAMD_CONF_<Key> into clamd.conf at start-up.
+      # Uploads are capped at 25 MB, so a stream up to 30 MB is scanned whole,
+      # and a file the scanner cannot fully read never comes back clean
+      # (docs/runbooks/document-scanning.md).
+      CLAMD_CONF_StreamMaxLength: 30M
+      CLAMD_CONF_MaxFileSize: 30M
+      CLAMD_CONF_MaxScanSize: 120M
+      CLAMD_CONF_AlertExceedsMax: "yes"
+      CLAMD_CONF_AlertEncrypted: "yes"
+      CLAMD_CONF_AlertBrokenExecutables: "yes"
+    volumes:
+      - clamav-db:/var/lib/clamav
+    networks: [scan, egress]
+    logging: *logging
+
+networks:
+  edge:
+    name: qbbe-edge
+  scan:
+    name: qbbe-scan
+    internal: true
+  egress:
+    name: qbbe-egress
+
+volumes:
+  caddy-data:
+  caddy-config:
+  clamav-db:

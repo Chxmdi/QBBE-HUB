@@ -7,7 +7,7 @@ Every release names its commit and keeps its evidence.
 
 - The commit is on `main` and CI (Verify, Database security, Security) is green on it.
 - The target environment's settings exist. See the tables in
-  [`deployment.md`](deployment.md#gated-netlify-workflow).
+  [`deployment.md`](deployment.md#gated-deploy-workflow) and [`hosting.md`](hosting.md).
 - You know which migrations are new since the last release:
   `git diff --name-only <last-release-sha> <sha> -- supabase/migrations`.
 
@@ -16,7 +16,7 @@ Every release names its commit and keeps its evidence.
 Staging comes first: the Release candidate's performance gate measures the
 staging site, which must be running the commit being certified.
 
-1. **Actions**, **Deploy Netlify**, **Run workflow**, branch `main`,
+1. **Actions**, **Deploy**, **Run workflow**, branch `main`,
    environment `staging`.
 2. Read the run summary: the migration plan, and the **rollback target**
    (the deploy this one replaced).
@@ -55,18 +55,20 @@ Add to the release's GitHub issue or the execution journal:
 | Staging deploy run | link |
 | Production deploy run | link |
 | Migrations applied | from each run's summary |
-| Rollback target | deploy ID from the production run's Publish summary |
+| Rollback target | the image named in the production run's Release summary |
 
 ## Rollback
 
 ### Website
 
-1. **Actions**, **Rollback Netlify**, **Run workflow**.
-2. Environment: the one to roll back. Deploy ID: the **rollback target** from
-   the bad deploy's Publish summary (or any earlier deploy on that site's
-   Netlify **Deploys** page).
-3. The workflow checks the deploy belongs to that environment's site,
-   restores it, and confirms `/sign-in` answers.
+1. **Actions**, **Rollback**, **Run workflow**.
+2. Environment: the one to roll back. Commit: the full SHA of the release to
+   restore. The bad deploy's **Release** summary names the image it replaced
+   (`<environment>-<commit>`); `/opt/qbbe/<environment>/releases.log` on the
+   server lists every release.
+3. The workflow puts that image back with the environment's current settings,
+   and confirms `/sign-in` answers and `/api/health/version` reports that
+   commit.
 
 ### Database
 

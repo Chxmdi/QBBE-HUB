@@ -1,0 +1,43 @@
+# One QBBE environment's app (docs/runbooks/hosting.md). release.sh runs it as
+# project "qbbe-<environment>" with that environment's .env file, so a staging
+# release never touches the production container and the reverse.
+
+services:
+  app:
+    image: ${QBBE_IMAGE:?QBBE_IMAGE is required}
+    container_name: qbbe-app-${QBBE_ENV:?QBBE_ENV is required}
+    restart: unless-stopped
+    env_file:
+      - ${QBBE_APP_ENV_FILE:?QBBE_APP_ENV_FILE is required}
+    environment:
+      # The scanner is the shared one on this server, whatever app.env says.
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+      CLAMAV_SOCKET: ""
+      NODE_OPTIONS: --max-old-space-size=${QBBE_NODE_HEAP_MB:-1536}
+    # Production gets twice staging's share of the processors when both are
+    # busy (a staging load test cannot starve production).
+    cpu_shares: ${QBBE_CPU_SHARES:-1024}
+    mem_limit: ${QBBE_MEM_LIMIT:-3g}
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.next/cache
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks:
+      edge:
+        aliases: ["app-${QBBE_ENV}"]
+      scan: {}
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+networks:
+  edge:
+    external: true
+    name: qbbe-edge
+  scan:
+    external: true
+    name: qbbe-scan

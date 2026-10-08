@@ -6,8 +6,8 @@ name: Performance (staging)
 # acceptance figure; perf.yml stays as a regression signal.
 #
 # It runs under the `staging` GitHub environment, so its secrets and any
-# approval rule apply, and it refuses any site or project that is not the
-# registered staging pair. The fixture (50 people, 10 projects, 2,000 tasks,
+# approval rule apply, and it refuses any project that is not the registered
+# staging project. The fixture (50 people, 10 projects, 2,000 tasks,
 # a channel with 1,000 messages) is created on staging once and kept; each run
 # gives the 50 people a password of its own, which is never written down.
 # `teardown` removes the fixture.
@@ -55,8 +55,7 @@ jobs:
       group: perf-staging
       cancel-in-progress: false
     env:
-      NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
-      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      APP_ENV: ${{ secrets.APP_ENV }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -74,75 +73,50 @@ jobs:
         run: npm ci
 
       # The same registrations scripts/check-deploy-environment.sh enforces
-      # for deploys: this job can only ever reach the staging pair.
-      - name: Refuse anything but the registered staging site and project
+      # for deploys: this job can only ever reach the staging project, and the
+      # app settings it reads the keys from must be staging's.
+      - name: Refuse anything but the registered staging project
         run: |
-          for name in NETLIFY_SITE_ID NETLIFY_AUTH_TOKEN SUPABASE_PROJECT_REF STAGING_SUPABASE_PROJECT_REF SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD SITE_URL; do
+          for name in APP_ENV SUPABASE_PROJECT_REF STAGING_SUPABASE_PROJECT_REF SUPABASE_DB_PASSWORD SITE_URL; do
             [ -n "${!name:-}" ] || { echo "::error::Missing ${name} on the staging environment."; exit 1; }
           done
-          [ "$NETLIFY_SITE_ID" = "2169b17a-8dc3-49de-a466-4281e1285de2" ] \
-            || { echo "::error::Refusing: NETLIFY_SITE_ID is not the registered staging site."; exit 1; }
           [ "$SUPABASE_PROJECT_REF" = "$STAGING_SUPABASE_PROJECT_REF" ] \
             || { echo "::error::Refusing: SUPABASE_PROJECT_REF is not the registered staging project."; exit 1; }
-          echo "Staging site and project match their registrations."
+          echo "Staging project matches its registration."
 
       - name: Staging must be running this commit
         if: inputs.expect_commit
         run: |
-          deployed=$(curl -fsS -H "Authorization: Bearer ${NETLIFY_AUTH_TOKEN}" \
-            "https://api.netlify.com/api/v1/sites/${NETLIFY_SITE_ID}" \
-            | python3 -c "import json,sys; d=(json.load(sys.stdin).get('published_deploy') or {}); print(d.get('title') or '')")
+          deployed=$(curl -s "${SITE_URL%/}/api/health/version" | python3 -c "import json,sys; print(json.load(sys.stdin).get('commit',''))" 2>/dev/null || true)
           if [ "$deployed" != "$GITHUB_SHA" ]; then
-            echo "::error::Staging is running '${deployed:-<unknown>}', not ${GITHUB_SHA}. Deploy this commit to staging first (Deploy Netlify, environment staging), then run this again."
+            echo "::error::Staging is running '${deployed:-<unknown>}', not ${GITHUB_SHA}. Deploy this commit to staging first (Deploy, environment staging), then run this again."
             exit 1
           fi
           echo "Staging is running ${GITHUB_SHA}."
 
-      # The site's public address and keys, as the deploy workflow reads them;
-      # the service role key from the project's own key list. All masked.
-      # The site's public address and keys, as the deploy workflow reads them.
-      # Netlify is asked up to three times per value, with its error shown
-      # (never the value); the project's key list through the Management API
-      # is the fallback for the service role key. All masked.
+      # The site's Supabase address and keys, from the same APP_ENV secret the
+      # Deploy workflow writes to the server. All masked.
       - name: Read the site's Supabase address and keys
         shell: bash
         run: |
           set -uo pipefail
-          get() {
-            local name="$1" out attempt
-            for attempt in 1 2 3; do
-              out=$(npx --yes netlify-cli@27.5.0 env:get "$name" --context production --site "$NETLIFY_SITE_ID" 2> "$RUNNER_TEMP/netlify-err" | tail -n 1 | tr -d '[:space:]')
-              if [ -n "$out" ]; then printf '%s' "$out"; return 0; fi
-              echo "Netlify returned no value for ${name} (attempt ${attempt}): $(tail -n 1 "$RUNNER_TEMP/netlify-err" 2>/dev/null)" >&2
-              sleep 5
-            done
-            return 1
-          }
-          url=$(get NEXT_PUBLIC_SUPABASE_URL) || true
-          anon=$(get NEXT_PUBLIC_SUPABASE_ANON_KEY) || true
-          service=$(get SUPABASE_SERVICE_ROLE_KEY) || true
-          if [ -z "$service" ]; then
-            code=$(curl -sS -o "$RUNNER_TEMP/api-keys.json" -w '%{http_code}' \
-              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
-              "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/api-keys?reveal=true" || echo 000)
-            if [ "$code" = 200 ]; then
-              service=$(python3 -c "import json,sys; print(next((k.get('api_key','') for k in json.load(open(sys.argv[1])) if k.get('name')=='service_role'), ''))" "$RUNNER_TEMP/api-keys.json")
-            else
-              echo "::warning::The Supabase Management API answered ${code} to the staging environment's SUPABASE_ACCESS_TOKEN. If this is 401, the token was revoked or expired; replace it (the next staging deploy needs it too)."
-            fi
-            rm -f "$RUNNER_TEMP/api-keys.json"
-          fi
+          get() { printf '%s\n' "$APP_ENV" | tr -d '\r' | grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" | tail -n 1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+          url=$(get NEXT_PUBLIC_SUPABASE_URL)
+          anon=$(get NEXT_PUBLIC_SUPABASE_ANON_KEY)
+          service=$(get SUPABASE_SERVICE_ROLE_KEY)
           for pair in "NEXT_PUBLIC_SUPABASE_URL:$url" "NEXT_PUBLIC_SUPABASE_ANON_KEY:$anon" "SUPABASE_SERVICE_ROLE_KEY:$service"; do
-            [ -n "${pair#*:}" ] || { echo "::error::Could not read ${pair%%:*} for the staging site."; exit 1; }
+            [ -n "${pair#*:}" ] || { echo "::error::The staging APP_ENV secret has no ${pair%%:*}."; exit 1; }
           done
+          [ "${url%/}" = "https://${STAGING_SUPABASE_PROJECT_REF}.supabase.co" ] \
+            || { echo "::error::Refusing: the staging APP_ENV points at ${url}, not the registered staging project."; exit 1; }
           echo "::add-mask::$anon"
           echo "::add-mask::$service"
           {
-            echo "NEXT_PUBLIC_SUPABASE_URL=$url"
+            echo "NEXT_PUBLIC_SUPABASE_URL=${url%/}"
             echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$anon"
             echo "SUPABASE_SERVICE_ROLE_KEY=$service"
           } >> "$GITHUB_ENV"
-          echo "Site ${NETLIFY_SITE_ID} reads ${url}."
+          echo "Staging reads ${url%/}."
 
       # The fixture is written over a direct database connection with the
       # environment's database password. The pooler address comes from

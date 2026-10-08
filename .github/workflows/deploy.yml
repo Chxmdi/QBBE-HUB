@@ -1,0 +1,322 @@
+name: Deploy
+
+# Publishes one exact commit of `main` to one QBBE environment on the QBBE
+# server (#51, #52; docs/runbooks/hosting.md).
+#
+# Order, each step gating the next:
+#   1. verify    every CI gate, re-run against this workflow's exact commit
+#   2. evidence  production only: a green Release candidate run for the same
+#                commit must exist, so production never gets a commit that was
+#                not certified as a whole (all browsers, security, 50 users)
+#   3. migrate   environment and isolation checks, then database migrations
+#   4. build     the environment's container image of this commit (the
+#                server is ARM, so it is built on an ARM runner)
+#   5. release   the server swaps to the new image; a new container that does
+#                not report healthy is replaced by the previous one again
+#   6. smoke     the site answers, runs this commit, and its jobs are wired
+#
+# Rollback: .github/workflows/rollback.yml and
+# docs/runbooks/release-procedure.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: QBBE environment to publish
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+
+permissions:
+  contents: read
+  # The verify job calls ci.yml, which pulls the Supabase images from ghcr.io.
+  # A called workflow cannot hold more than its caller grants, so without this
+  # GitHub refuses to start the run at all (startup_failure).
+  packages: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    # Re-run every gate against this workflow's exact commit, with no hosted secrets.
+    uses: ./.github/workflows/ci.yml
+
+  evidence:
+    name: Release candidate evidence
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Require a green Release candidate run for this commit (production)
+        if: inputs.environment == 'production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          runs=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-candidate.yml/runs?head_sha=${GITHUB_SHA}&status=success&per_page=1" \
+            --jq '.total_count')
+          if [ "${runs:-0}" -lt 1 ]; then
+            echo "::error::No successful Release candidate run exists for ${GITHUB_SHA}."
+            echo "Run the 'Release candidate' workflow on this commit, confirm it is green, then deploy again."
+            exit 1
+          fi
+          echo "Release candidate evidence found for ${GITHUB_SHA}."
+      - name: Staging needs only the gates above
+        if: inputs.environment != 'production'
+        run: echo "Staging deploys are gated by CI on ${GITHUB_SHA}."
+
+  migrate:
+    name: Environment checks and migrations
+    needs: evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      # Also checks the app settings (APP_ENV): this environment's database,
+      # its own address, the keys the app needs, and no Workspace OS switch
+      # override on production.
+      - name: Check environment readiness and isolation
+        env:
+          RELEASE_ENABLED: ${{ vars.RELEASE_ENABLED }}
+          # Repository-level variables, so each environment can check it is
+          # not pointed at the other one's database.
+          STAGING_SUPABASE_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          PRODUCTION_SUPABASE_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          APP_ENV: ${{ secrets.APP_ENV }}
+        run: scripts/check-deploy-environment.sh
+
+      - uses: supabase/setup-cli@v3
+        with:
+          version: 2.114.0
+
+      # supabase/config.toml names a local-only signing key file (#138), and
+      # `db push` refuses to run while that file is missing. This creates a
+      # throwaway one on the runner so the config reads; `db push` only
+      # applies migrations and sends nothing from this file to the project.
+      - name: Local config's signing key
+        run: scripts/local-signing-key.sh
+
+      - name: Link the environment's database
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      # `db push` refuses to run when the database holds a migration version
+      # this commit does not have (drift), so an out-of-band change stops the
+      # deploy here rather than being silently built on.
+      - name: Migrations this deploy will apply (dry run)
+        # Explicit bash adds pipefail, so a failed dry run fails this step
+        # instead of being hidden by `tee`.
+        shell: bash
+        run: |
+          supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD" | tee migration-plan.txt
+          {
+            echo "### Migrations for ${{ inputs.environment }} at ${GITHUB_SHA}"
+            echo '```'
+            cat migration-plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply migrations
+        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Confirm nothing is left to apply
+        run: |
+          supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD" | tee after.txt
+          grep -qi "up to date" after.txt || { echo "::error::Migrations still pending after push."; exit 1; }
+
+  build:
+    name: Build the image
+    needs: evidence
+    # The QBBE server is an ARM (Ampere) machine; build natively for it.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.name.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Image name
+        id: name
+        env:
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}:${TARGET_ENVIRONMENT}-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      # Next.js writes NEXT_PUBLIC_* into the browser code at build time, so
+      # they come from this environment's APP_ENV. They are public by design
+      # (they ship to every browser); no server secret is a build argument.
+      - name: Public build settings
+        id: public
+        env:
+          APP_ENV: ${{ secrets.APP_ENV }}
+        run: |
+          get() { printf '%s\n' "$APP_ENV" | tr -d '\r' | grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" | tail -n 1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+          {
+            echo "args<<QBBE_ARGS"
+            for name in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY NEXT_PUBLIC_APP_URL NEXT_PUBLIC_GOOGLE_SIGN_IN; do
+              echo "${name}=$(get "$name")"
+            done
+            echo "APP_COMMIT=${GITHUB_SHA}"
+            echo "QBBE_ARGS"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.name.outputs.image }}
+          build-args: ${{ steps.public.outputs.args }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=app-${{ inputs.environment }}
+          cache-to: type=gha,mode=max,scope=app-${{ inputs.environment }}
+
+  release:
+    name: Release on the server
+    needs: [migrate, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      previous: ${{ steps.release.outputs.previous }}
+      site: ${{ steps.release.outputs.site }}
+    env:
+      TARGET_ENVIRONMENT: ${{ inputs.environment }}
+      IMAGE: ${{ needs.build.outputs.image }}
+      SITE_URL: ${{ vars.SITE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: ./.github/actions/qbbe-ssh
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          user: ${{ vars.DEPLOY_USER || 'ubuntu' }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+
+      # This environment's files only: the other environment's folder, its
+      # container and its address are never written by this job.
+      - name: Upload this release's files and settings
+        env:
+          APP_ENV: ${{ secrets.APP_ENV }}
+        run: |
+          dir="/opt/qbbe/${TARGET_ENVIRONMENT}"
+          ssh qbbe "test -d '$dir'" || { echo "::error::${dir} does not exist on the server. Run the 'Server setup' workflow first."; exit 1; }
+          scp -q deploy/server/compose.app.yaml deploy/server/site.caddy.template deploy/server/release.sh "qbbe:${dir}/"
+          printf '%s\n' "$APP_ENV" | tr -d '\r' | ssh qbbe "umask 077 && cat > '${dir}/app.env.new'"
+
+      - name: Swap to the new image
+        id: release
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          REGISTRY_USER: ${{ github.actor }}
+        shell: bash
+        run: |
+          set -o pipefail
+          host="${SITE_URL#https://}"; host="${host%%/*}"
+          dir="/opt/qbbe/${TARGET_ENVIRONMENT}"
+          # The registry login lasts for this release only, in this
+          # environment's own Docker config, and is removed afterwards.
+          printf '%s' "$REGISTRY_TOKEN" | ssh qbbe "
+            export DOCKER_CONFIG='${dir}/.docker'
+            docker login ghcr.io -u '${REGISTRY_USER}' --password-stdin >/dev/null || exit 1
+            bash '${dir}/release.sh' '${TARGET_ENVIRONMENT}' '${IMAGE}' '${host}'; status=\$?
+            docker logout ghcr.io >/dev/null 2>&1
+            exit \$status" | tee release.log
+          previous=$(sed -n 's/^ROLLBACK_TARGET=//p' release.log | tail -n 1)
+          echo "previous=${previous}" >> "$GITHUB_OUTPUT"
+          echo "site=${SITE_URL%/}" >> "$GITHUB_OUTPUT"
+          {
+            echo "Released \`${IMAGE}\` to ${TARGET_ENVIRONMENT} at ${SITE_URL}."
+            echo
+            echo "Rollback target (the image this replaced): \`${previous:-none}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  smoke:
+    name: Smoke check
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Reads only the public address, so it needs no environment (and no
+    # second approval where the environment requires one).
+    env:
+      SITE_URL: ${{ needs.release.outputs.site }}
+      PREVIOUS: ${{ needs.release.outputs.previous }}
+    steps:
+      - name: The published site answers
+        run: |
+          test -n "$SITE_URL" || { echo "::error::SITE_URL is not set for this environment."; exit 1; }
+          code=none
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${SITE_URL%/}/sign-in")
+            [ "$code" = 200 ] && { echo "${SITE_URL%/}/sign-in answered 200."; exit 0; }
+            sleep 6
+          done
+          echo "::error::${SITE_URL%/}/sign-in did not answer 200 (last: ${code}). Roll back with the 'Rollback' workflow to ${PREVIOUS:-<see the Release summary>}."
+          exit 1
+
+      - name: The site runs this commit
+        run: |
+          commit=$(curl -s "${SITE_URL%/}/api/health/version" | python3 -c "import json,sys; print(json.load(sys.stdin).get('commit',''))" 2>/dev/null || true)
+          [ "$commit" = "$GITHUB_SHA" ] || { echo "::error::${SITE_URL%/} reports commit '${commit:-<none>}', not ${GITHUB_SHA}."; exit 1; }
+          echo "${SITE_URL%/} runs ${GITHUB_SHA}."
+
+      # A site whose background jobs are not wired looks healthy but never
+      # scans an upload (so no file ever opens) and never sends a notification.
+      # app.configure_job_runner is a one-time step per environment; this is
+      # the check that it was done, for this site, with this site's secret.
+      - name: Background jobs reach this site
+        run: |
+          body=$(curl -s "${SITE_URL%/}/api/health/jobs" || true)
+          status=$(printf '%s' "$body" | python3 -c "import json,sys; print(json.load(sys.stdin).get('jobRunner','unknown'))" 2>/dev/null || echo unknown)
+          echo "Job runner: ${status}"
+          case "$status" in
+            ready) ;;
+            not_configured|other_site|secret_mismatch)
+              echo "::error::Background jobs are not wired to ${SITE_URL%/} (${status}). In this environment's Supabase SQL editor run: select app.configure_job_runner('${SITE_URL%/}', '<this environment's CRON_JOB_SECRET>'); then re-run this job. See docs/runbooks/jobs.md."
+              exit 1 ;;
+            app_secret_missing)
+              echo "::error::The site has no CRON_JOB_SECRET. Add it to this environment's APP_ENV secret (32+ characters), deploy again, then run app.configure_job_runner with the same value."
+              exit 1 ;;
+            *)
+              echo "::error::Could not read the job runner status from ${SITE_URL%/}/api/health/jobs (got: ${body:0:200})."
+              exit 1 ;;
+          esac
