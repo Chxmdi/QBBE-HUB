@@ -175,6 +175,7 @@ export const adminEn = {
           project_health_changed: "project health changed",
           meeting_completed: "meeting completed",
           event_assignment_created: "event assignment created",
+          object_event: "record changed",
         },
         actions: {
           notify_assignee: "Notify assignee",

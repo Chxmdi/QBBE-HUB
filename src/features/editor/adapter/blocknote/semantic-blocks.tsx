@@ -111,7 +111,17 @@ function Picker({
   allowCreate?: boolean;
 }) {
   const [query, setQuery] = React.useState("");
-  const [results, setResults] = React.useState<SemanticSummary[] | null>(null);
+  // Kept with the query they answer: until the search for a new query comes
+  // back, the earlier rows are narrowed to the new text at once, so the list
+  // does not shrink a moment later under a pointer already on its way to
+  // "Create task" (the click then landed on nothing).
+  const [found, setFound] = React.useState<{ query: string; rows: SemanticSummary[] } | null>(null);
+  const results = React.useMemo(() => {
+    if (!found) return null;
+    const needle = query.trim().toLowerCase();
+    if (found.query === query || !needle) return found.rows;
+    return found.rows.filter((row) => row.title.toLowerCase().includes(needle));
+  }, [found, query]);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [projects, setProjects] = React.useState<{ id: string; name: string }[]>([]);
@@ -154,8 +164,8 @@ function Picker({
     const timer = setTimeout(() => {
       void api
         .search(kind, query)
-        .then((rows) => active && setResults(rows))
-        .catch(() => active && setResults([]));
+        .then((rows) => active && setFound({ query, rows }))
+        .catch(() => active && setFound({ query, rows: [] }));
     }, 200);
     return () => {
       active = false;

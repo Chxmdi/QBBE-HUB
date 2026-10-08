@@ -174,11 +174,27 @@ export const C1Outside: (props: EditorUnitProps) => React.ReactNode = ({ editor,
 
     const readPeers = () => {
       const ids = new Set<string>();
+      // One cursor per person: when someone's editor starts again (a reload,
+      // or the page switching to its live copy) its new copy joins before the
+      // old one's goodbye arrives, if it ever does, and the old cursor stayed
+      // for up to 30 seconds with the same name. The copy heard from last
+      // is kept.
+      const newest = new Map<string, { clientId: number; at: number }>();
+      const stale: number[] = [];
       awareness.getStates().forEach((state, clientId) => {
         if (clientId === doc.clientID) return;
         const id = (state as { user?: { userId?: unknown } }).user?.userId;
-        if (typeof id === "string" && id !== userId) ids.add(id);
+        if (typeof id !== "string") return;
+        if (id !== userId) ids.add(id);
+        const at = awareness.meta.get(clientId)?.lastUpdated ?? 0;
+        const kept = newest.get(id);
+        if (!kept) newest.set(id, { clientId, at });
+        else if (at > kept.at) {
+          stale.push(kept.clientId);
+          newest.set(id, { clientId, at });
+        } else stale.push(clientId);
       });
+      if (stale.length > 0) removeAwarenessStates(awareness, stale, "c1-presence");
       updatePageLive(pageId, { livePeers: [...ids].sort() });
     };
     awareness.on("change", readPeers);

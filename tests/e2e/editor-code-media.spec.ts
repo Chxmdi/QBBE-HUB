@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "./fixtures";
+import { useClipboard } from "./clipboard";
 import { signIn } from "./auth";
 import { sql } from "./db";
 
@@ -118,14 +119,14 @@ test("code blocks have a named language picker and a copy button that copies the
   await expect(code).toHaveAttribute("data-language", "python");
 
   // Copy puts the exact code on the clipboard (tabs, spaces, quotes, the final newline), from the keyboard too.
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const clipboard = await useClipboard(page);
   await page.evaluate(() => navigator.clipboard.writeText(""));
   await picker.focus();
   await page.keyboard.press("Tab");
   await expect(code.getByRole("button", { name: "Copy code" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator("#qbbe-editor-live")).toHaveText("Code copied.");
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(CODE);
+  expect(await clipboard.read()).toBe(CODE);
 
   // A code block typed with the ``` shortcut gets the same controls; copy gives what was typed.
   await caretAtEnd(editor.locator("[data-content-type='paragraph']", { hasText: `After ${stamp}` }));
@@ -139,7 +140,7 @@ test("code blocks have a named language picker and a copy button that copies the
   await page.keyboard.type("select 2;");
   await expect(typed).not.toContainText("Type or paste code here.");
   await typed.getByRole("button", { name: "Copy code" }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("select 1;\nselect 2;");
+  expect(await clipboard.read()).toBe("select 1;\nselect 2;");
   await saved(page);
 
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -152,7 +153,7 @@ test("code blocks have a named language picker and a copy button that copies the
   await expect(readOnly).toContainText("Python", { timeout: 30_000 });
   await expect(readOnly.getByRole("combobox")).toHaveCount(0);
   await readOnly.getByRole("button", { name: "Copy code" }).click();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(CODE);
+  expect(await clipboard.read()).toBe(CODE);
 });
 
 test("media blocks have a caption and a name, and an image without alt text asks for it [switches on]", async ({ page }) => {
@@ -259,7 +260,7 @@ test("video and audio actually play: https links, and a file added in the editor
   await editor.evaluate((el, { name, base64 }) => {
     const transfer = new DataTransfer();
     transfer.items.add(new File([Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))], name, { type: "video/webm" }));
-    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+    el.dispatchEvent(Object.defineProperty(new ClipboardEvent("paste", { bubbles: true, cancelable: true }), "clipboardData", { value: transfer }));
   }, { name, base64: CLIP.toString("base64") });
   await expect(editor.locator("[data-upload-state='pending']")).toContainText(name, { timeout: 30_000 });
   const documentId = sql(`select id from public.document where title = '${name}'`);

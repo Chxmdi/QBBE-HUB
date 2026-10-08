@@ -26,12 +26,24 @@ export interface OfflineTask {
 const SW_URL = "/wos-offline-sw.js";
 const RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 30_000];
 
+// How often the connection state is read again, in case its event was missed.
+const ONLINE_RECHECK_MS = 3_000;
+
 function subscribeOnline(onChange: () => void) {
   window.addEventListener("online", onChange);
   window.addEventListener("offline", onChange);
+  // A page restored from the back/forward cache, or one whose "online" event
+  // never arrived (seen in Firefox after going back while offline), would
+  // otherwise say "offline" and hold its queued changes until the next event.
+  // Reading navigator.onLine again is cheap, and React re-renders only when
+  // the value changed.
+  window.addEventListener("pageshow", onChange);
+  const recheck = setInterval(onChange, ONLINE_RECHECK_MS);
   return () => {
     window.removeEventListener("online", onChange);
     window.removeEventListener("offline", onChange);
+    window.removeEventListener("pageshow", onChange);
+    clearInterval(recheck);
   };
 }
 
@@ -78,9 +90,14 @@ export function OfflineWorkspace({ userId, tasks, text }: { userId: string; task
     if (!s || syncing.current || !navigator.onLine) return;
     if (retry.current.timer) clearTimeout(retry.current.timer);
     retry.current.timer = null;
-    const queued = await s.all();
-    if (queued.length === 0) return;
+    // Claimed before the first await, so two callers (the "online" event and
+    // the online state changing) never send the same queue twice.
     syncing.current = true;
+    const queued = await s.all();
+    if (queued.length === 0) {
+      syncing.current = false;
+      return;
+    }
     setState("syncing");
     try {
       const result = await syncOfflineOperations(queued);
@@ -126,6 +143,14 @@ export function OfflineWorkspace({ userId, tasks, text }: { userId: string; task
       if (pending.timer) clearTimeout(pending.timer);
     };
   }, [userId, refresh, sync]);
+
+  // Back online however it was noticed (the event above, or the recheck in
+  // subscribeOnline when the event was missed): send what is waiting.
+  useEffect(() => {
+    if (!online) return;
+    retry.current.attempt = 0;
+    void syncRef.current();
+  }, [online]);
 
   // What the person sees: the server's values with their queued edits on top.
   const shown = useMemo(() => {
