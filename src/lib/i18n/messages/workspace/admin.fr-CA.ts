@@ -112,6 +112,11 @@ export const adminFrCA: typeof adminEn = {
           description:
             "Références d’identité et de disponibilité des bénévoles. Intégration de serveur à serveur.",
         },
+        zeffy: {
+          name: "Zeffy",
+          description:
+            "Dons, billets et adhésions de Zeffy, en lecture seule. Les sympathisants apparaissent dans Relations; les montants, seulement pour les lecteurs des finances.",
+        },
         email: {
           name: "Courriel transactionnel",
           description:
@@ -139,6 +144,16 @@ export const adminFrCA: typeof adminEn = {
             "Les identifiants OAuth Google ne sont pas définis. La connexion reste indisponible tant que GOOGLE_CLIENT_ID / SECRET / URI de redirection n’existent pas.",
           vmsNotConfigured:
             "Définissez VMS_API_URL pour activer la connexion. Le Hub ne conserve pas de deuxième base de données de bénévoles.",
+          zeffyNotConfigured:
+            "Définissez ZEFFY_API_KEY dans les paramètres de cet environnement pour activer la connexion. Le Hub ne fait que lire Zeffy.",
+          syncNow: "Synchroniser maintenant",
+          syncStarted: "Synchronisation lancée. Les nouveaux sympathisants apparaissent d’ici quelques minutes.",
+          syncFailed: "Impossible de lancer la synchronisation.",
+          zeffyWebhookLast: "Dernier webhook {when}",
+          zeffyWebhookNone: "Aucun webhook reçu pour l’instant",
+          zeffyWebhookMissing:
+            "Webhook non configuré (ZEFFY_WEBHOOK_SECRET). Les changements arrivent avec la synchronisation aux 15 minutes plutôt qu’immédiatement.",
+          zeffyFirstCopy: "Première copie depuis Zeffy en cours; un grand compte demande plusieurs passages.",
         },
       },
       teams: {
@@ -258,6 +273,8 @@ export const adminFrCA: typeof adminEn = {
           suppress: "envoi bloqué",
           user_invited: "personne invitée",
           vms_connected: "VMS connecté",
+          zeffy_connected: "Zeffy connecté",
+          zeffy_sync_requested: "Synchronisation Zeffy demandée",
           mfa_enrollment_completed: "inscription à l’AMF terminée",
           gift_list_viewed: "liste des dons consultée",
           user_provisioned: "compte provisionné",
@@ -769,6 +786,16 @@ export const adminFrCA: typeof adminEn = {
       vmsUnreachable:
         "Impossible de joindre le système de gestion des bénévoles. La connexion n’a pas été enregistrée.",
       vmsRecordFailed: "Impossible d’enregistrer la connexion au VMS.",
+      zeffyNotConfigured:
+        "Zeffy n’est pas configuré dans cet environnement. Ajoutez d’abord ZEFFY_API_KEY à ses paramètres.",
+      zeffyKeyRejected: "Zeffy n’a pas accepté la clé d’API ({status}). Créez une nouvelle clé dans Zeffy et mettez à jour ZEFFY_API_KEY.",
+      zeffyResponded: "Zeffy a répondu {status}. La connexion n’a pas été enregistrée.",
+      zeffyBusy: "Zeffy demande de ralentir. Réessayez dans une minute.",
+      zeffyUnreachable: "Impossible de joindre Zeffy. Vérifiez le réseau et réessayez.",
+      zeffyOtherOrganization:
+        "Une autre organisation de ce Hub est déjà connectée à Zeffy. Un compte Zeffy appartient à une seule organisation.",
+      zeffyRecordFailed: "Impossible d’enregistrer la connexion à Zeffy.",
+      zeffyNotConnected: "Connectez d’abord Zeffy.",
       vmsIdTooLong: "L’identifiant VMS est trop long.",
       vmsOnlyActive:
         "Seuls les membres actifs de cette organisation peuvent être liés à une identité VMS.",

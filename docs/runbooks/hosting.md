@@ -212,7 +212,7 @@ WORKSPACE_OS_FLAGS=all
 
 - `WORKSPACE_OS_FLAGS` is for **staging only**. A production deploy refuses
   to run while its `APP_ENV` has that line at all.
-- Optional integrations (`GOOGLE_*`, `VMS_*`, `ERROR_MONITORING_DSN`,
+- Optional integrations (`GOOGLE_*`, `VMS_*`, `ZEFFY_API_KEY`, `ZEFFY_WEBHOOK_SECRET`, `ERROR_MONITORING_DSN`,
   `NEXT_PUBLIC_GOOGLE_SIGN_IN`) go here too, as `.env.example` lists them.
 - Leave out `CLAMAV_HOST`, `CLAMAV_PORT` and `CLAMAV_SOCKET`: the server
   always points the app at its own scanner.

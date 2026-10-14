@@ -21,6 +21,8 @@ import { scheduledAnnouncements } from "./scheduled-announcements";
 import { staleProjectSweep } from "./stale-project-sweep";
 import { teamSignalDigest, teamSignalReminders } from "./team-signals";
 import { vmsSync } from "./vms-sync";
+import { zeffyEvents } from "./zeffy-events";
+import { zeffySync } from "./zeffy-sync";
 import { workflowEvents } from "@/features/workflows/services/event-runner";
 import { decisionRevisitReminders } from "@/features/decisions/jobs/revisit-reminders";
 import { workflowResume } from "@/features/workflows/services/resume-runner";
@@ -61,6 +63,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   "gmail-push-sync": gmailPushSync,
   "gmail-watch-renew": gmailWatchRenew,
   "vms-sync": vmsSync,
+  "zeffy-sync": zeffySync,
+  "zeffy-events": zeffyEvents,
 
   // Data exports
   "run-exports": runExports,

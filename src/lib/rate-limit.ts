@@ -86,6 +86,11 @@ export const RATE_LIMITS = {
   "property:write": { limit: 240, windowSeconds: 60 },
   // Autosave is debounced on the device; this only catches a loop.
   "editor:save": { limit: 600, windowSeconds: 60 },
+  // Zeffy webhook deliveries, counted only once their signature checks out:
+  // far above Zeffy's own pace, low enough to stop a replay storm.
+  "zeffy:webhook": { limit: 600, windowSeconds: 60 },
+  // "Sync now" in Admin; each run spends Zeffy's shared request quota.
+  "zeffy:sync": { limit: 12, windowSeconds: 3600 },
 } as const;
 
 export type RateLimitedAction = keyof typeof RATE_LIMITS;
