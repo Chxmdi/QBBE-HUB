@@ -79,3 +79,14 @@ Record command results and limitations in `IMPLEMENTATION-STATUS.md`.
 - [ ] Verify browser login, real authorized read/write flows, callbacks and scanner behavior.
 
 Deployment: `appgdep_6acf985d72808191936429875da514b0`; deployed source: `683ca4802b2d30919e1e41f1e542c452c2e16b57`; environment revision 1. Publication is not full feature certification. No database, production configuration or job schedules were changed.
+
+## Configuration follow-up — 14 October, 16:06 Toronto
+- [x] `SUPABASE_SERVICE_ROLE_KEY` is present and marked secret in Sites.
+- [x] Redeployed saved version 2 with environment revision 2; deployment succeeded (`appgdep_6acfe09b75d88191b0010fff2ba675a1`).
+- [x] Live `/api/v1/me` now returns expected unauthenticated JSON 401, replacing configuration-related 503.
+- [x] User reports successful staging sign-in (user-confirmed; not automated end-to-end verification).
+- [x] Confirmed Oracle server was planned only; no scanner server exists there.
+- [ ] Migrate background-job routing: health reports `other_site`; configured endpoint is `https://qbbe-hub-staging.netlify.app`. All 27 registered jobs are enabled, including retention and notifications. No routing or schedule was changed during this check.
+- [ ] Provision compatible scanner execution and validate quarantine/retry behavior.
+
+Next job migration must review enabled handlers and pending work before switching the endpoint; do not inadvertently run destructive retention or send queued communications during staging verification.
