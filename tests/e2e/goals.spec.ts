@@ -26,7 +26,22 @@ function setSwitch(on: boolean) {
   sql(`update public.feature_flag set enabled = ${on} where key = any (array['wos_goals']);`);
 }
 
-test.afterAll(() => setSwitch(false));
+// The lead grant below makes qa-staff a program manager, and a program
+// manager may create projects. Left in place, it leaks into every later spec
+// on the same database: the role matrix, which asserts that an ungranted
+// staff member is not offered New project, failed whenever it ran after this
+// file. The programs, metrics and projects stay; only the grant goes.
+function revokeStaffLead() {
+  sql(`delete from public.program_access_grant g
+       using auth.users u, public.program p
+       where u.id = g.user_id and u.email = 'qa-staff@example.com'
+         and p.id = g.program_id and p.slug like 'goals-%'`);
+}
+
+test.afterAll(() => {
+  setSwitch(false);
+  revokeStaffLead();
+});
 
 test("goals are hidden while the switch is off [switch off]", async ({ page }) => {
   setSwitch(false);
