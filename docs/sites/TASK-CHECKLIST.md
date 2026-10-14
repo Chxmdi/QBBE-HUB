@@ -22,8 +22,8 @@ Staging first. Preserve the existing product and original deployment.
 - [ ] Prove hosted rendering, cookies, CSP, server action, editor persistence and export.
 
 ## S03 — Staging setup
-- [ ] Select staging Supabase project and matching configuration.
-- [ ] Register one private Site; persist its returned identity.
+- [x] Select staging Supabase project and matching public client configuration.
+- [x] Register one private Site; persist its returned identity.
 - [ ] Configure runtime secrets and build-time public settings.
 - [ ] Check browser bundles for privileged secrets.
 
@@ -69,5 +69,13 @@ Staging first. Preserve the existing product and original deployment.
 
 ## Evidence and blockers
 Check items only after their stated outcome has evidence. A build does not prove hosted behavior.
-Staging configuration and scanner hosting remain unresolved. No Site has been created or deployed.
+Staging public client configuration is resolved. Scanner hosting, privileged operation secrets and end-to-end verification remain unresolved.
 Record command results and limitations in `IMPLEMENTATION-STATUS.md`.
+
+## 14 October staging publication
+- [x] Private Sites publication succeeded: https://qbbe-hub-staging.lexgency.chatgpt.site
+- [x] Rebuilt against QBBE-HUB-staging (`agddtahflrxaywkioaeh`) using public client configuration.
+- [x] Read-only catalog check: RLS enabled on 228/228 public and 3/3 app tables. Policy correctness remains unverified.
+- [ ] Verify browser login, real authorized read/write flows, callbacks and scanner behavior.
+
+Deployment: `appgdep_6acf985d72808191936429875da514b0`; deployed source: `683ca4802b2d30919e1e41f1e542c452c2e16b57`; environment revision 1. Publication is not full feature certification. No database, production configuration or job schedules were changed.
