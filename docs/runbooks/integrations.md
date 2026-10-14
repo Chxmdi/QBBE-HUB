@@ -170,6 +170,31 @@ Zeffy organization, and the real QBBE account to production only.
 - **Disconnect** stops both jobs and keeps what was copied. **Sync now**
   runs the sync at once (12 an hour).
 
+**CRM screens** (Relationships, staff only; volunteers are turned away):
+
+- **Supporters** (`/crm/supporters`) lists every CRM contact, from Zeffy or
+  entered in the Hub, with search and filters by activity (donor, ticket
+  buyer, member, ...) and source. Finance readers also see each supporter's
+  net giving and an **Export giving (CSV)** link.
+- **A supporter** (`/crm/contacts/<id>`) shows their Zeffy activity
+  (campaign, date, what they did, refunds and disputes), the CRM
+  interactions recorded with them, and a link to a CRM organization. Finance
+  readers also see each amount, the Zeffy tax receipt and a giving summary.
+- **Zeffy** (`/crm/zeffy`) shows the connection and last copy, campaigns
+  against their goals with a link to each in Zeffy, ticket counts per event
+  for 30 days, 90 days or 12 months, and **Needs matching**: Zeffy supporters
+  whose email several contacts share, for staff to place (one of those
+  contacts, or a new one). Finance readers also see money raised in the
+  period and this year, by kind of campaign, active recurring donors and
+  their monthly total, lapsed donors (last gift 12 to 24 months ago),
+  refunds, and disputes waiting for a response.
+- Amounts come only through the database functions
+  `zeffy_supporter_totals`, `zeffy_supporter_activity` and `zeffy_overview`,
+  which return them to finance readers only. Every view of a supporter's
+  giving and every export is recorded in the audit log
+  (`supporter_list_viewed`, `supporter_giving_viewed`,
+  `supporter_list_exported`), and so is each placement (`supporter_matched`).
+
 **Trying it locally** without a Zeffy account: `node scripts/qa/zeffy-mock.mjs
 serve`, run the Hub with `ZEFFY_API_KEY=mock-key
 ZEFFY_API_BASE_URL=http://127.0.0.1:4010`, connect in Admin, and send signed

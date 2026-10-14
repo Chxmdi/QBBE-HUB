@@ -31,6 +31,21 @@ export const stageLabel = (code: string, t: TranslateFn) =>
 export const kindLabel = (code: string, t: TranslateFn) =>
   label(crm.pipeline.kinds, "crm.pipeline.kinds", code, t);
 
+/** What a supporter did through Zeffy (donor, ticket, member, ...). */
+export const zeffyKindLabel = (code: string, t: TranslateFn) =>
+  label(crm.zeffyKinds, "crm.zeffyKinds", code, t);
+
+/** Zeffy's campaign category (donation, event, membership, ...). */
+export const zeffyCategoryLabel = (code: string, t: TranslateFn) =>
+  label(crm.zeffy.categories, "crm.zeffy.categories", code, t);
+
+/** A recurring donation's interval (monthly, yearly, ...). */
+export const zeffyIntervalLabel = (code: string, t: TranslateFn) =>
+  label(crm.supporter.intervals, "crm.supporter.intervals", code, t);
+
+export const contactSourceLabel = (code: string, t: TranslateFn) =>
+  label(crm.sources, "crm.sources", code, t);
+
 /**
  * Translates a message a schema or action produced in English. Schemas keep
  * English text (their tests read it) taken from the catalogue, so the English

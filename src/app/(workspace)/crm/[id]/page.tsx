@@ -351,7 +351,11 @@ export default async function CrmDetailPage({
                     id={`contact-${contact.id}`}
                     className={contact.id === highlightContact ? "bg-accent/15 px-4 py-2.5" : "px-4 py-2.5"}
                   >
-                    <p className="text-[13.5px] font-medium">{contact.full_name}</p>
+                    <p className="text-[13.5px] font-medium">
+                      <Link href={`/crm/contacts/${contact.id}`} className="hover:text-brand-fg hover:underline">
+                        {contact.full_name}
+                      </Link>
+                    </p>
                     <p className="meta">
                       {[contact.role_title, contact.email, contact.phone]
                         .filter(Boolean)

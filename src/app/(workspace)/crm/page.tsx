@@ -7,6 +7,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
+import { CrmTabs } from "@/features/crm/components/crm-tabs";
 import { CompleteFollowUpButton } from "@/features/crm/components/complete-follow-up-button";
 import { FollowUpTaskButton } from "@/features/crm/components/follow-up-task-button";
 import { CrmOrganizationDialog } from "@/features/crm/components/crm-organization-dialog";
@@ -131,6 +132,8 @@ export default async function CrmPage({
           {t("crm.createOrgFirst")}
         </p>
       ) : null}
+
+      <CrmTabs active="organizations" />
 
       <PipelineTotals pipeline={pipeline} />
 
