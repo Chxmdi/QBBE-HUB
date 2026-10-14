@@ -58,6 +58,9 @@ export interface Operation {
 const UNIQUE_INDEXES: Record<string, string[][]> = {
   email_delivery: [["dedupe_key"]],
   notification: [["user_id", "dedupe_key"]],
+  // Partial in Postgres (zeffy_contact_id is not null); a null never collides here either.
+  crm_contact: [["organization_id", "zeffy_contact_id"]],
+  zeffy_webhook_event: [["event_id"]],
 };
 
 function uniqueViolation(table: string): PostgrestError {
@@ -343,6 +346,11 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
 
   eq(column: string, value: unknown) {
     this.filters.push((row) => row[column] === value);
+    return this;
+  }
+
+  neq(column: string, value: unknown) {
+    this.filters.push((row) => row[column] !== value);
     return this;
   }
 

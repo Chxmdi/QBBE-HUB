@@ -25,7 +25,8 @@ export async function updateSession(request: NextRequest) {
     path === "/api/health/jobs" ||
     path === "/api/health/version" ||
     path === "/api/integrations/gmail/push" ||
-    path === "/api/integrations/email/webhook"
+    path === "/api/integrations/email/webhook" ||
+    path === "/api/integrations/zeffy/webhook"
   ) {
     return NextResponse.next({ request });
   }

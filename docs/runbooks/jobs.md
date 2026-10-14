@@ -86,6 +86,8 @@ All times are UTC, because pg_cron evaluates in UTC.
 | `google-sync` | every 15 min | Pulls Gmail metadata, Calendar overlay and Drive links for every connected account. |
 | `gmail-watch-renew` | 07:00 | Renews Gmail push subscriptions a day before they lapse. |
 | `vms-sync` | 08:00 | Refreshes volunteer availability from the Volunteer Management System. |
+| `zeffy-sync` | every 15 min | Pulls payments, supporters and campaigns from Zeffy into the CRM; skipped without `ZEFFY_API_KEY`. |
+| `zeffy-events` | every minute | Applies the payment and supporter changes Zeffy reported by webhook. |
 | `scan-documents` | every minute | Scans pending private uploads; only a clean ClamAV verdict releases a download. |
 | `purge-job-history` | 06:00 | Trims `job_run` and `email_delivery` past retention. |
 | `team-signal-reminders` | 13:20 | Where Admin, Team signals has reminders on: records each person's open work signals and sends one gentle notification per new signal (#136). |
@@ -133,7 +135,7 @@ never be mistaken for a real one: the ledger says which transport ran, and Admin
 
 ## Integration jobs
 
-`google-sync`, `gmail-watch-renew` and `vms-sync` reach outside the Hub. Two
+`google-sync`, `gmail-watch-renew`, `vms-sync`, `zeffy-sync` and `zeffy-events` reach outside the Hub. Two
 behaviours are worth knowing:
 
 - **Cursors.** Each connection stores its own cursor — a Gmail history id, a

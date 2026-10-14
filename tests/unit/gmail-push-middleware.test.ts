@@ -20,6 +20,15 @@ describe("service-authenticated routes", () => {
     expect(result.headers.get("location")).toBeNull();
     expect(result.headers.get("x-middleware-next")).toBe("1");
   });
+  it("lets the signed Zeffy webhook reach its own verifier", async () => {
+    const result = await updateSession(new NextRequest("https://hub.example/api/integrations/zeffy/webhook"));
+    expect(result.headers.get("location")).toBeNull();
+    expect(result.headers.get("x-middleware-next")).toBe("1");
+  });
+  it("does not exempt other Zeffy paths", async () => {
+    const result = await updateSession(new NextRequest("https://hub.example/api/integrations/zeffy/webhook/extra"));
+    expect(result.headers.get("location")).toContain("/sign-in");
+  });
   it("does not exempt unrelated integration paths", async () => {
     const result = await updateSession(new NextRequest("https://hub.example/api/integrations/google/start"));
     expect(result.headers.get("location")).toContain("/sign-in");

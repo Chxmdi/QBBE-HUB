@@ -101,6 +101,8 @@ export const opsEn = {
         "Pulls Gmail metadata, Calendar overlay and Drive links for every connected account.",
       "gmail-watch-renew": "Renews Gmail push subscriptions a day before they lapse.",
       "vms-sync": "Refreshes volunteer availability from the Volunteer Management System.",
+      "zeffy-sync": "Pulls payments, supporters and campaigns from Zeffy into the CRM.",
+      "zeffy-events": "Applies the payment and supporter changes Zeffy reported by webhook.",
       "run-exports":
         "Builds queued data exports and writes them to the private exports bucket.",
       "expire-exports": "Expires exports past their date and deletes the files behind them.",

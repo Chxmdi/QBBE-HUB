@@ -12,6 +12,7 @@ service-user/case records (those are P2 / out of first release).
 | Frozen report snapshots | Keep the approved bytes; live data must not rewrite them | PDF/CSV export is audited |
 | Gmail metadata | Only while `integration_connection` is connected | Disconnect drops Hub’s mail rows, not Hub tasks |
 | VMS ids on `user_profile` | Optional link; disconnect clears sourced fields only | Hub does not copy the volunteer DB |
+| Zeffy supporters and payments (`crm_contact` with `source = 'zeffy'`, `zeffy_payment`, `zeffy_campaign`) | Kept after Zeffy is disconnected: payments are donor financial records (six years, as gifts), supporters are CRM contacts | Read only from Zeffy. Payments readable by finance readers only (`can_read_ledger`). Not kept: postal addresses, checkout and ticket answers, card details, discount codes, tribute ("in memory of") names |
 | Notification delivery rows | Needed for job idempotency | Dedupe keys prevent double-send |
 | Audit events | Keep; do not prune from the app | Access changes, exports, ownership transfer |
 
