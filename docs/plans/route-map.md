@@ -191,6 +191,9 @@ Not migration, on purpose:
 | `/people/[id]/work` | production |  |  | One person's work (#136) |
 | `/crm` | production |  |  | Relationships (CRM) |
 | `/crm/[id]` | production |  |  | One contact or organization |
+| `/crm/supporters` | production |  |  | Supporters, with Zeffy activity |
+| `/crm/contacts/[id]` | production |  |  | One supporter |
+| `/crm/zeffy` | production |  |  | Zeffy overview and needs matching |
 | `/reports` | production |  |  | Reports |
 | `/reports/[id]` | production |  |  | One report |
 | `/insight/dashboards` | beta | `wos_lenses` |  | Dashboards per role (V2-5) |

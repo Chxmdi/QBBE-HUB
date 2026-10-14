@@ -178,6 +178,9 @@ export const ROUTE_MAP: ReadonlyArray<RouteMapEntry> = [
   { pattern: "/people/[id]/work", status: "production", task: "One person's work (#136)" },
   { pattern: "/crm", status: "production", task: "Relationships (CRM)" },
   { pattern: "/crm/[id]", status: "production", task: "One contact or organization" },
+  { pattern: "/crm/supporters", status: "production", task: "Supporters, with Zeffy activity" },
+  { pattern: "/crm/contacts/[id]", status: "production", task: "One supporter" },
+  { pattern: "/crm/zeffy", status: "production", task: "Zeffy overview and needs matching" },
 
   // --- Reports and insight ----------------------------------------------------
   { pattern: "/reports", status: "production", task: "Reports" },

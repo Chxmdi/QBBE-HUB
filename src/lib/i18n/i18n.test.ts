@@ -182,7 +182,7 @@ describe("workspace catalogues", () => {
 const SAME_OUTSIDE_FINANCE = new Set([
   "communication", "document", "documents", "invitation", "mention", "notification",
   "signature",
-  " · Version {number}", ".", "Action", "Actions", "Active", "Administration",
+  " · Version {number}", ".", "—", "Action", "Actions", "Active", "Administration",
   "Budgets", "CSV", "Communication", "Contact", "Contacts", "Conversation",
   "Date", "Description", "Direct", "Discussion", "Document", "Documents",
   "English", "Français", "Gmail", "Google", "Google Drive", "Impact",
