@@ -100,6 +100,8 @@ export const spacesEn = {
       from: "From",
       to: "To",
       download: "Download CSV",
+      failed: "The audit log could not be downloaded. Check the dates and try again.",
+      downloaded: "Audit log downloaded.",
     },
     report: {
       heading: "What can this role see",

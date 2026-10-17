@@ -134,7 +134,7 @@ test("staff write a page with the block editor, from the keyboard", async ({ pag
     const data = new DataTransfer();
     data.setData("text/html", html);
     data.setData("text/plain", "Pasted title\nWord item one\nWord item two\nBold words and plain");
-    el.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    el.dispatchEvent(Object.defineProperty(new ClipboardEvent("paste", { bubbles: true, cancelable: true }), "clipboardData", { value: data }));
   });
   await expect(editor.locator("h1", { hasText: "Pasted title" })).toBeVisible();
   await expect(editor.locator("[data-content-type='bulletListItem']", { hasText: "Word item two" })).toBeVisible();
@@ -212,6 +212,13 @@ test("the W0-5 conditions hold with each editor menu open, in both themes", asyn
       localStorage.setItem("qbbe-theme", t);
       document.documentElement.classList.toggle("dark", t === "dark");
     }, theme);
+    // The colours ease from one theme to the other; measuring contrast
+    // before that ends samples blended colours (seen in WebKit).
+    await page.evaluate(async () => {
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+      const fading = document.getAnimations().filter((a) => a instanceof CSSTransition);
+      await Promise.all(fading.map((a) => a.finished.catch(() => undefined)));
+    });
     await page.evaluate(() => window.scrollTo(0, 0));
 
     // F4: a visible focus ring on the editor itself.

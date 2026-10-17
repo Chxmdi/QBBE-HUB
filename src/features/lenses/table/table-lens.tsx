@@ -447,18 +447,25 @@ export function TableLens({
     if (editing) return;
     const target = event.target as HTMLElement;
     if (!target.dataset.cell) return;
-    const header = focus.row === 0;
-    const p = property(focus.col);
+    // A header cell says which column it is. The remembered position can be
+    // stale: after a column moves, focusing its header again does not fire
+    // focus when it already had it (Firefox kept it through the menu), and
+    // Alt+Arrow then resized the column that used to be there.
+    const [cellRow, cellCol] = target.dataset.cell.split(":").map(Number);
+    const at = cellRow === 0 && Number.isInteger(cellCol) ? { row: 0, col: cellCol } : focus;
+    if (at !== focus && (at.row !== focus.row || at.col !== focus.col)) setFocus(at);
+    const header = at.row === 0;
+    const p = property(at.col);
 
     if (header && p && event.altKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
       event.preventDefault();
-      const width = shown[focus.col].width + (event.key === "ArrowRight" ? WIDTH_STEP : -WIDTH_STEP);
+      const width = shown[at.col].width + (event.key === "ArrowRight" ? WIDTH_STEP : -WIDTH_STEP);
       update((s) => ({ ...s, columns: resizeColumn(s.columns, p.key, width) }));
       return;
     }
     if (event.key === " " && !header) {
       // Space selects or clears the focused row for a bulk edit.
-      const item = display[focus.row - 1];
+      const item = display[at.row - 1];
       if (item?.kind === "record") {
         event.preventDefault();
         toggleSelected(item.row.id);
@@ -469,13 +476,13 @@ export function TableLens({
       event.preventDefault();
       if (header && p) setMenuFor(p.key);
       else {
-        const item = display[focus.row - 1];
+        const item = display[at.row - 1];
         if (item?.kind === "group") toggleGroup(item.key);
-        else if (item) startEdit(focus);
+        else if (item) startEdit(at);
       }
       return;
     }
-    const next = moveFocus(focus, event.key, { ctrl: event.ctrlKey || event.metaKey }, { rows: gridRows, cols: colCount, pageRows });
+    const next = moveFocus(at, event.key, { ctrl: event.ctrlKey || event.metaKey }, { rows: gridRows, cols: colCount, pageRows });
     if (next) {
       event.preventDefault();
       moveTo(next);

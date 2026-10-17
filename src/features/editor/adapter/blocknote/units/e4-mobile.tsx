@@ -162,7 +162,19 @@ function watchBottomInset(): () => void {
   const root = document.documentElement;
   const viewport = window.visualViewport;
   let observed: Element[] = [];
-  const resize = new ResizeObserver(() => measure());
+  let written = "";
+  let frame = 0;
+  // Measured at most once a frame, and written only when it changes: the
+  // inset can change the navigation's own size, which would otherwise call
+  // this again at once, every frame (a resize in Firefox never settled).
+  const schedule = () => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      measure();
+    });
+  };
+  const resize = new ResizeObserver(schedule);
   function measure() {
     const fixed = [...document.querySelectorAll<HTMLElement>("body nav")].filter((el) => {
       if (getComputedStyle(el).position !== "fixed" || el.getClientRects().length === 0) return false;
@@ -170,7 +182,11 @@ function watchBottomInset(): () => void {
     });
     const navTop = fixed.length ? Math.min(...fixed.map((el) => el.getBoundingClientRect().top)) : undefined;
     const visibleBottom = viewport ? viewport.offsetTop + viewport.height : undefined;
-    root.style.setProperty(BOTTOM_INSET, `${bottomInset({ innerHeight: window.innerHeight, navTop, visibleBottom })}px`);
+    const value = `${bottomInset({ innerHeight: window.innerHeight, navTop, visibleBottom })}px`;
+    if (value !== written) {
+      written = value;
+      root.style.setProperty(BOTTOM_INSET, value);
+    }
     if (fixed.length !== observed.length || fixed.some((el, i) => el !== observed[i])) {
       resize.disconnect();
       fixed.forEach((el) => resize.observe(el));
@@ -178,13 +194,14 @@ function watchBottomInset(): () => void {
     }
   }
   measure();
-  window.addEventListener("resize", measure);
-  viewport?.addEventListener("resize", measure);
-  viewport?.addEventListener("scroll", measure);
+  window.addEventListener("resize", schedule);
+  viewport?.addEventListener("resize", schedule);
+  viewport?.addEventListener("scroll", schedule);
   return () => {
-    window.removeEventListener("resize", measure);
-    viewport?.removeEventListener("resize", measure);
-    viewport?.removeEventListener("scroll", measure);
+    window.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("scroll", schedule);
+    cancelAnimationFrame(frame);
     resize.disconnect();
     root.style.removeProperty(BOTTOM_INSET);
   };

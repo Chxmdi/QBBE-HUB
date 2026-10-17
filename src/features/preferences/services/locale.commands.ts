@@ -1,6 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { cookieShouldBeSecure } from "@/lib/secure-cookie";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSessionContext } from "@/lib/auth";
@@ -55,7 +56,7 @@ async function writeLocaleCookie(locale: Locale | null) {
     maxAge: ONE_YEAR,
     sameSite: "lax",
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: await cookieShouldBeSecure(),
   });
 }
 

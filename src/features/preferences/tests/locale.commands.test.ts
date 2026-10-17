@@ -9,7 +9,11 @@ let answer: () => Answer = () => ({ data: null, error: null });
 const jar = { set: vi.fn(), delete: vi.fn() };
 
 vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
-vi.mock("next/headers", () => ({ cookies: async () => jar }));
+vi.mock("next/headers", () => ({
+  cookies: async () => jar,
+  // The served address decides whether the cookie is Secure (src/lib/secure-cookie.ts).
+  headers: async () => new Headers({ host: "hub.example.org", "x-forwarded-proto": "https" }),
+}));
 vi.mock("@/lib/auth", () => ({
   getSessionContext: async () => {
     if (!signedIn) throw new Error("signed out");

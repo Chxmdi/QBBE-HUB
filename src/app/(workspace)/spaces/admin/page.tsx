@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/input";
+import { Select } from "@/components/ui/input";
+import { AuditExportForm } from "@/features/spaces/admin/audit-export-form";
 import { SignInRuleForm } from "@/features/spaces/admin/rule-form";
 import { defaultAuditRange, isOrgRole, ORG_ROLES, type OrgRoleKey } from "@/features/spaces/admin/sign-in-rules";
 import { getSpacesT } from "@/features/spaces/i18n";
@@ -83,23 +84,7 @@ export default async function AccessAdminPage({ searchParams }: { searchParams: 
           {t("admin.audit.heading")}
         </h2>
         <p className="text-[13px] text-muted">{t("admin.audit.help")}</p>
-        <form method="get" action="/spaces/admin/audit-export" className="flex flex-wrap items-end gap-3">
-          <div className="grid gap-1">
-            <label htmlFor="audit-from" className="text-[13px] font-medium text-ink">
-              {t("admin.audit.from")}
-            </label>
-            <Input id="audit-from" name="from" type="date" required defaultValue={range.from} />
-          </div>
-          <div className="grid gap-1">
-            <label htmlFor="audit-to" className="text-[13px] font-medium text-ink">
-              {t("admin.audit.to")}
-            </label>
-            <Input id="audit-to" name="to" type="date" required defaultValue={range.to} />
-          </div>
-          <Button type="submit" variant="secondary">
-            {t("admin.audit.download")}
-          </Button>
-        </form>
+        <AuditExportForm from={range.from} to={range.to} />
       </section>
 
       <section aria-labelledby="admin-report" className="mb-10">

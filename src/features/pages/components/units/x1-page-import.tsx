@@ -29,6 +29,7 @@ export function X1PageImport({ visibility }: { visibility: "workspace" | "privat
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [problem, setProblem] = React.useState<{ text: string } | null>(null);
+  const [chosen, setChosen] = React.useState("");
   const label = t(visibility === "workspace" ? "units.x1.import.workspaceLabel" : "units.x1.import.privateLabel");
 
   const say = (key: Problem) => setProblem({ text: t(`units.x1.import.errors.${key}`) });
@@ -94,9 +95,18 @@ export function X1PageImport({ visibility }: { visibility: "workspace" | "privat
               accept={IMPORT_ACCEPT}
               aria-describedby={problem ? `${id}-problem` : undefined}
               aria-invalid={problem ? true : undefined}
-              onChange={() => setProblem(null)}
-              className="block w-full max-w-full text-sm text-ink file:mr-3 file:rounded-(--radius-sm) file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-ink"
+              onChange={(event) => {
+                setProblem(null);
+                setChosen(event.currentTarget.files?.[0]?.name ?? "");
+              }}
+              // The browser's own "no file selected" text does not wrap and
+              // pushed the field past a 320 px screen (Firefox); the chosen
+              // name is shown below instead, where it can wrap.
+              className="block w-full max-w-full text-[0px] text-ink file:rounded-(--radius-sm) file:border file:border-line file:bg-surface file:px-3 file:py-1.5 file:text-sm file:text-ink"
             />
+            <p className="text-[13px] break-all text-muted" aria-hidden>
+              {chosen || t("units.x1.import.noFile")}
+            </p>
           </div>
           {problem ? (
             <p id={`${id}-problem`} role="alert" className="text-sm text-danger-fg">

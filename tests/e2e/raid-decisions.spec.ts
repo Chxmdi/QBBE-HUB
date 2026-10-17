@@ -41,6 +41,9 @@ test("a project records a risk trigger, an issue plan, a decision, and a request
     .fill("Notice inside two weeks");
   await risk.getByRole("button", { name: "Log risk" }).click();
   await expect(risk).not.toBeVisible({ timeout: 30_000 });
+  // The list refreshes after the dialog closes and the page below it moves
+  // down; a click started before that lands on whatever moved under it.
+  await expect(page.getByText("The hall cancels").filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole("button", { name: "Raise an issue" }).click();
   const issue = page.getByRole("dialog", { name: "Raise an issue" });
@@ -55,6 +58,7 @@ test("a project records a risk trigger, an issue plan, a decision, and a request
     .fill("Borrow the school copier");
   await issue.getByRole("button", { name: "Raise issue" }).click();
   await expect(issue).not.toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("The printer failed").filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
 
   await page.getByRole("button", { name: "Record a decision" }).click();
   const decision = page.getByRole("dialog", { name: "Record a decision" });
@@ -75,6 +79,7 @@ test("a project records a risk trigger, an issue plan, a decision, and a request
     .fill("A dry forecast by Thursday");
   await decision.getByRole("button", { name: "Record decision" }).click();
   await expect(decision).not.toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Hold the event indoors").filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
 
   // The person asked must be able to read the project; the owner reads every
   // project in the organization, a staff member only the ones they belong to.

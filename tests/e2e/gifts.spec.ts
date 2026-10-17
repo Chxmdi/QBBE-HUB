@@ -19,13 +19,17 @@ test("the owner records a gift, posts it and issues a bilingual not-a-receipt ac
   sql(`delete from ledger_reader where user_id = '${staffId}'`);
 
   // The books must be open for the gift's date: the accountant's approval and
-  // a period covering 15 September 2026 (the fiscal year starts in October).
+  // periods covering 15 September 2026. The fiscal year starts in October,
+  // so this is the whole year ending that month: fiscal years are counted
+  // from the earliest period, and a lone September period would move every
+  // year the other ledger specs use (2026-10-01 to 2027-09-30) to September.
   sql(`update ledger_settings set chart_approved_on = '2026-09-20', chart_approved_by_name = 'QA Accountant, CPA',
          chart_approval_recorded_at = now() where organization_id = '${orgId}' and chart_approved_on is null`);
   sql(`insert into ledger_period (organization_id, name, starts_on, ends_on)
-       select '${orgId}', '2026-09', '2026-09-01', '2026-09-30'
-       where not exists (select 1 from ledger_period where organization_id = '${orgId}'
-                          and date '2026-09-15' between starts_on and ends_on)`);
+       select '${orgId}', to_char(m, 'YYYY-MM'), m::date, (m + interval '1 month' - interval '1 day')::date
+       from generate_series(date '2025-10-01', date '2026-09-01', interval '1 month') as m
+       where not exists (select 1 from ledger_period p where p.organization_id = '${orgId}'
+                          and p.starts_on <= (m + interval '1 month' - interval '1 day')::date and m::date <= p.ends_on)`);
   sql(`insert into crm_contact (organization_id, full_name, email) values ('${orgId}', '${donor}', 'gift-donor@example.com')`);
 
   await signIn(page, "owner");

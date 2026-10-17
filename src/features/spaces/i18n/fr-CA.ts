@@ -103,6 +103,8 @@ export const spacesFr: Catalogue<typeof spacesEn> = {
       from: "Du",
       to: "Au",
       download: "Télécharger le CSV",
+      failed: "Le journal d’audit n’a pas pu être téléchargé. Vérifiez les dates et réessayez.",
+      downloaded: "Journal d’audit téléchargé.",
     },
     report: {
       heading: "Ce que ce rôle peut voir",

@@ -27,7 +27,14 @@ test.afterAll(() => {
 const pageErrors: string[] = [];
 test.beforeEach(({ page }) => {
   pageErrors.length = 0;
-  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("pageerror", (error) => {
+    // WebKit reports a link prefetch (`_rsc=`) that the app's own navigation
+    // cancelled as "Fetch API cannot load … due to access control checks";
+    // Chromium and Firefox treat the cancellation as normal. Nothing reaches
+    // the person, so only that exact message is set aside.
+    if (/_rsc=\S* due to access control checks/.test(error.message)) return;
+    pageErrors.push(error.message);
+  });
 });
 test.afterEach(() => {
   expect(pageErrors).toEqual([]);

@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page } from "./fixtures";
+import { useClipboard } from "./clipboard";
 import { signIn } from "./auth";
 import { sql } from "./db";
 
@@ -228,7 +229,7 @@ test("the owner edits every kind in place, moves like a spreadsheet and undoes c
 test("values that do not fit are refused with a message and nothing is saved [switches on]", async ({ page }) => {
   test.setTimeout(120_000);
   setFlag("wos_objects", true);
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const clipboard = await useClipboard(page);
   await signIn(page, "owner");
   const grid = await openTable(page);
   const beta = ids.beta;
@@ -253,8 +254,7 @@ test("values that do not fit are refused with a message and nothing is saved [sw
 
   // A date that does not exist, pasted.
   await (await cell(grid, 2, "Due")).focus();
-  await page.evaluate(() => navigator.clipboard.writeText("2026-02-30"));
-  await page.keyboard.press("Control+v");
+  await clipboard.paste("2026-02-30");
   await expect(said(page, "Pasted 0 cells. Skipped 1 with values that do not fit.")).toBeVisible({ timeout: 15_000 });
   expect(sql(`select coalesce(due_at::text, 'none') from public.task where id = '${beta}'`)).toBe("none");
 
@@ -273,7 +273,7 @@ test("values that do not fit are refused with a message and nothing is saved [sw
 test("in French, a range copies as tab-separated text and a paste fills only what the person can edit [switches on]", async ({ page }) => {
   test.setTimeout(150_000);
   setFlag("wos_objects", true);
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const clipboard = await useClipboard(page);
   await signIn(page, "readonly");
   await page.context().addCookies([{ name: "qbbe-locale", value: "fr-CA", url: "http://127.0.0.1:3000" }]);
   const grid = await openTable(page, "Tableau : Tâches", "Rechercher dans les titres");
@@ -298,15 +298,14 @@ test("in French, a range copies as tab-separated text and a paste fills only wha
   await expect(grid.locator('[role="gridcell"][aria-selected="true"]')).toHaveCount(6);
   await page.keyboard.press("Control+c");
   await expect(said(page, "6 cellules copiées.")).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Prête\tHaute\nPrête\tBasse\nPrête\tMoyenne");
+  expect(await clipboard.read()).toBe("Prête\tHaute\nPrête\tBasse\nPrête\tMoyenne");
   // Escape ends the selection.
   await page.keyboard.press("Escape");
   await expect(grid.locator('[role="gridcell"][aria-selected="true"]')).toHaveCount(0);
 
   // Paste a range over all three rows: only gamma's two cells change.
   await (await cell(grid, 1, "Statut")).focus();
-  await page.evaluate(() => navigator.clipboard.writeText("En révision\tCritique\nEn révision\tCritique\nEn révision\tCritique\n"));
-  await page.keyboard.press("Control+v");
+  await clipboard.paste("En révision\tCritique\nEn révision\tCritique\nEn révision\tCritique\n");
   await expect(said(page, "2 cellules collées. 4 ignorées parce que vous ne pouvez pas les modifier.")).toBeVisible({ timeout: 20_000 });
   await expect.poll(() => sql(`select status || ',' || priority from public.task where id = '${gamma}'`), { timeout: 15_000 }).toBe("in_review,critical");
   expect(sql(`select string_agg(status || ',' || priority, ';' order by title) from public.task where id in ('${alpha}', '${beta}')`)).toBe(
@@ -341,7 +340,7 @@ test("in French, a range copies as tab-separated text and a paste fills only wha
 
 test("with the object switch off the table edits only its earlier cells [switch off]", async ({ page }) => {
   setFlag("wos_objects", false);
-  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const clipboard = await useClipboard(page);
   await signIn(page, "owner");
   const grid = await openTable(page);
   const beta = ids.beta;
@@ -355,8 +354,7 @@ test("with the object switch off the table edits only its earlier cells [switch 
 
   // Pasting does nothing, and Shift+arrow selects no range.
   await (await cell(grid, 2, "Priority")).focus();
-  await page.evaluate(() => navigator.clipboard.writeText("Critical"));
-  await page.keyboard.press("Control+v");
+  await clipboard.paste("Critical");
   await page.keyboard.press("Shift+ArrowDown");
   await expect(grid.locator('[role="gridcell"][aria-selected="true"]')).toHaveCount(0);
   await page.waitForTimeout(1000);

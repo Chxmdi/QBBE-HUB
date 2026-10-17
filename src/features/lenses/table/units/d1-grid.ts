@@ -406,6 +406,8 @@ export function useD1Grid(ctx: GridUnitContext): GridUnitHandlers {
   };
 
   const undoing = React.useRef(false);
+  // Set while a copy shortcut runs the copy command (see onKeyDown).
+  const copyingFromKey = React.useRef(false);
   const undo = React.useCallback(async () => {
     if (undoing.current) return;
     const last = undoStack[undoStack.length - 1];
@@ -449,6 +451,41 @@ export function useD1Grid(ctx: GridUnitContext): GridUnitHandlers {
       void undo();
       return true;
     }
+    // Safari fires no copy event for a shortcut pressed on a focused cell when
+    // no text is selected, so the range was never copied there. Copying from
+    // the key press works in every browser: the copy command, with the cells
+    // put on the clipboard by a one-time listener, or the Clipboard API when
+    // the command is refused.
+    if (mod && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "c" && window.getSelection()?.isCollapsed !== false) {
+      const copied = copiedRange();
+      if (!copied) return false;
+      event.preventDefault();
+      let written = false;
+      const put = (e: ClipboardEvent) => {
+        if (!e.clipboardData) return;
+        e.preventDefault();
+        e.clipboardData.setData("text/plain", copied.text);
+        written = true;
+      };
+      document.addEventListener("copy", put, { capture: true, once: true });
+      copyingFromKey.current = true;
+      try {
+        document.execCommand("copy");
+      } catch {
+        // Refused: the Clipboard API below.
+      } finally {
+        copyingFromKey.current = false;
+        document.removeEventListener("copy", put, { capture: true });
+      }
+      if (written) say(copied.message);
+      else {
+        void navigator.clipboard?.writeText(copied.text).then(
+          () => say(copied.message),
+          () => undefined,
+        );
+      }
+      return true;
+    }
     if (event.key === "Tab") {
       const item = focus.row >= 1 ? display[focus.row - 1] : undefined;
       const next = tabTarget(focus, event.shiftKey, shown.length, item?.kind === "group");
@@ -490,15 +527,24 @@ export function useD1Grid(ctx: GridUnitContext): GridUnitHandlers {
     return false;
   };
 
-  const onCopy = (event: React.ClipboardEvent) => {
-    gridRef.current = event.currentTarget as HTMLElement;
-    if (editing || focus.row < 1) return;
+  /** The selected cells as tab-separated text, and what to announce; null when there is nothing to copy. */
+  const copiedRange = (): { text: string; message: string } | null => {
+    if (editing || focus.row < 1) return null;
     const matrix = copyMatrix(range, display, shown, properties, locale);
     const count = matrix.reduce((sum, line) => sum + line.length, 0);
-    if (count === 0) return;
+    if (count === 0) return null;
+    return { text: toTsv(matrix), message: count === 1 ? t("units.d1.copiedOne") : t("units.d1.copied", { count }) };
+  };
+
+  const onCopy = (event: React.ClipboardEvent) => {
+    gridRef.current = event.currentTarget as HTMLElement;
+    // The key press already put the cells on the clipboard and said so.
+    if (copyingFromKey.current) return;
+    const copied = copiedRange();
+    if (!copied) return;
     event.preventDefault();
-    event.clipboardData.setData("text/plain", toTsv(matrix));
-    say(count === 1 ? t("units.d1.copiedOne") : t("units.d1.copied", { count }));
+    event.clipboardData.setData("text/plain", copied.text);
+    say(copied.message);
   };
 
   const onPaste = (event: React.ClipboardEvent) => {

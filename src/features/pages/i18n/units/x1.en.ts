@@ -22,6 +22,7 @@ export const x1PagesEn = {
     workspaceArea: "The page is added to the workspace, where your team can read it.",
     privateArea: "The page is added to your private pages, where only you can read it.",
     file: "File to import",
+    noFile: "No file chosen",
     submit: "Import the file",
     working: "Importing…",
     errors: {

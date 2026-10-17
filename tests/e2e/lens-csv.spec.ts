@@ -72,15 +72,17 @@ test("a lens exports exactly what the viewer can see [switches on]", async ({ pa
   expect(volunteerSees).toBe(1);
 
   await signIn(page, "staff");
-  const before = Number(sql(`select count(*) from public.audit_event where action = 'lens_exported' and actor_id = '${STAFF}'`));
+  // Counted the same way before and after: earlier runs on this database
+  // (other browsers, the table button below) left exports of other sizes.
+  const exportsOfThisSize = () =>
+    Number(sql(`select count(*) from public.audit_event where action = 'lens_exported' and actor_id = '${STAFF}' and event_type = 'data_export' and (metadata->>'rows')::int = ${staffSees}`));
+  const before = exportsOfThisSize();
   const staff = await exportAs(page);
   expect(staff.headers).toEqual(["Title", "Status", "Assignee", "Due"]);
   expect(staff.rows).toHaveLength(staffSees);
   expect(staff.rows.map((r) => r[0]).sort()).toEqual([`${RUN} staff one`, `${RUN} staff two`]);
   expect(staff.rows.every((r) => r[1] === "Ready" && r[2] !== "")).toBe(true);
-  await expect
-    .poll(() => Number(sql(`select count(*) from public.audit_event where action = 'lens_exported' and actor_id = '${STAFF}' and event_type = 'data_export' and (metadata->>'rows')::int = ${staffSees}`)))
-    .toBe(before + 1);
+  await expect.poll(exportsOfThisSize).toBe(before + 1);
 
   // The button on the table lens downloads the same rows.
   await page.goto(`/lenses/table?type=task`);

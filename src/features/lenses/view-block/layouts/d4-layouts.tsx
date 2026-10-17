@@ -98,6 +98,28 @@ function TimelineLayout({ ctx }: { ctx: LayoutRenderContext }) {
   const fmt = React.useMemo(() => dayFormatter(locale), [locale]);
   const today = calendarDateInZone(new Date(), data.timeZone);
   const current = Math.min(focus, Math.max(0, items.length - 1));
+  // Listened for on the list itself, not through React: inside a page the
+  // editor's own key handler sits between this list and React's, and in
+  // Firefox it took the arrow keys first and kept focus in the text. Keys the
+  // list uses stop here; the rest go on to the editor as before.
+  const keyState = React.useRef({ current, count: items.length });
+  React.useEffect(() => {
+    keyState.current = { current, count: items.length };
+  });
+  const listRef = React.useCallback((list: HTMLUListElement | null) => {
+    if (!list) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const { current: at, count } = keyState.current;
+      const next = nextIndex(event.key, at, count);
+      if (next === null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setFocus(next);
+      links.current[next]?.focus();
+    };
+    list.addEventListener("keydown", onKeyDown);
+    return () => list.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   if (!start.key) return <Empty text={t("units.d4.timeline.noDateProperty")} />;
   if (rows.length === 0) return <Empty text={t("view.empty")} />;
@@ -118,13 +140,6 @@ function TimelineLayout({ ctx }: { ctx: LayoutRenderContext }) {
     return range;
   };
 
-  const onKeyDown = (event: React.KeyboardEvent) => {
-    const next = nextIndex(event.key, current, items.length);
-    if (next === null) return;
-    event.preventDefault();
-    setFocus(next);
-    links.current[next]?.focus();
-  };
 
   const todayLeft = span && today && inSpan(span, today) ? placeBar(span, today, today).left : null;
 
@@ -156,7 +171,7 @@ function TimelineLayout({ ctx }: { ctx: LayoutRenderContext }) {
       ) : (
         <p className="px-4 text-[12.5px] text-muted">{t("units.d4.timeline.allUndated")}</p>
       )}
-      <ul aria-label={t("units.d4.timeline.label", { heading })} aria-describedby={hintId} onKeyDown={onKeyDown} className="divide-y divide-line">
+      <ul ref={listRef} aria-label={t("units.d4.timeline.label", { heading })} aria-describedby={hintId} className="divide-y divide-line">
         {items.map((item, index) => {
           const bar = span && item.start && item.end ? placeBar(span, item.start, item.end) : null;
           return (

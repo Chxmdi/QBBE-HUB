@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "./fixtures";
 import { signIn, signOut } from "./auth";
+import { sql } from "./db";
 
 /**
  * Acceptance evidence for #30 (P0-TSK-06/07/08) and the parts of #29 that can
@@ -162,11 +163,20 @@ test("a task records who changed what", async ({ page }) => {
   const title = `History ${Date.now()}`;
   await createTask(page, { title, priority: "low" });
 
-  await page.goto("/my-work");
+  // Searched for by title: after many runs on one database the open list
+  // folds older rows behind "Show more", and this one can be among them.
+  await page.goto(`/my-work?q=${encodeURIComponent(title)}`);
   await page.getByText(title, { exact: true }).click();
   const drawer = page.getByRole("dialog");
   await expect(drawer).toBeVisible({ timeout: 30_000 });
+  await expect(page).toHaveURL(/task=[0-9a-f-]{36}/, { timeout: 30_000 });
   await drawer.getByLabel("Priority", { exact: true }).selectOption("critical");
+  // Saved before the reload: a reload that races the save (and the refresh
+  // that follows it) is aborted by it in Firefox.
+  await expect
+    .poll(() => sql(`select priority::text from task where title = '${title}'`), { timeout: 30_000 })
+    .toBe("critical");
+  await page.waitForLoadState("networkidle");
 
   // The address carries the task, so the reload re-opens the drawer from the
   // server without another click.

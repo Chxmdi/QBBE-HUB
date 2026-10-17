@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cookieShouldBeSecure } from "@/lib/secure-cookie";
 import { cookies } from "next/headers";
 import { requireSession } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
   cookieStore.set("qbbe_oauth_state", state, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: await cookieShouldBeSecure(),
     path: "/",
     maxAge: 600,
   });

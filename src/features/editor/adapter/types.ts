@@ -135,6 +135,12 @@ export interface BlockEditorProps {
    * edit), not on every key press.
    */
   onChange?: (content: EditorContent, encodeState: () => string) => void;
+  /**
+   * Called at once on every edit. onChange may follow a frame later (the
+   * document is copied after the key press is painted), so a save indicator
+   * that waited for it would still say "Saved" in between.
+   */
+  onEditPending?: () => void;
   files?: EditorFileHandlers;
   /** Enables the semantic blocks (task, decision, person, status, query, library file). */
   semantic?: EditorSemanticHandlers;
