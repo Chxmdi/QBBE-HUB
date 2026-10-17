@@ -5,7 +5,7 @@
   "engines": {
     "node": ">=22.13.0"
   },
-  "description": "QBBE Hub — the Quebec Board of Black Educators' internal operating and communication system.",
+  "description": "QBBE Hub \u2014 the Quebec Board of Black Educators' internal operating and communication system.",
   "scripts": {
     "predev": "node scripts/copy-ocr-assets.mjs",
     "dev": "next dev",
@@ -26,7 +26,10 @@
     "jobs:run": "node scripts/run-job.mjs",
     "db:types": "supabase gen types typescript --local > src/types/database.ts",
     "qa:perf-sessions": "node scripts/qa/perf-sessions.mjs",
-    "qa:realtime-latency": "node scripts/qa/realtime-latency.mjs"
+    "qa:realtime-latency": "node scripts/qa/realtime-latency.mjs",
+    "build:sites": "node scripts/copy-ocr-assets.mjs && node scripts/run-framework.mjs build",
+    "dev:sites": "node scripts/copy-ocr-assets.mjs && node scripts/run-framework.mjs dev",
+    "install:ci": "node scripts/install-ci.mjs"
   },
   "dependencies": {
     "@blocknote/ariakit": "0.55.0",
@@ -69,6 +72,17 @@
     "tailwindcss": "^4.1.5",
     "typescript": "^5.8.3",
     "vitest": "^4.1.11",
-    "wait-on": "^9.1.0"
-  }
+    "wait-on": "^9.1.0",
+    "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/workers-types": "4.20260515.1",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.26",
+    "json-rpc-2.0": "1.7.1",
+    "raw-body": "3.0.2",
+    "react-server-dom-webpack": "19.2.8",
+    "vinext": "1.0.0-beta.5",
+    "vite": "8.0.13",
+    "wrangler": "4.92.0"
+  },
+  "type": "module"
 }

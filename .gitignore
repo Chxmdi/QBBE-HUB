@@ -68,3 +68,10 @@ supabase/signing_keys.json
 # Scratch scripts the lead session runs from the repo root (never committed)
 /.scratch/
 /.*.mjs
+
+# Sites runtime and generated output
+!build/
+/dist/
+/.sites-runtime/
+/.wrangler/
+/.vinext/

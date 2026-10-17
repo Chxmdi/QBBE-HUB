@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { isEnabled } from "@/lib/feature-flags";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { MissingEnvError } from "@/lib/env";
 import { bearerToken, hashToken, type ApiScope } from "../token";
 
 /**
@@ -82,7 +83,19 @@ type Handler<P> = (context: ApiContext, params: P) => Promise<Response>;
 export function apiRoute<P = Record<string, never>>(scope: ApiScope | null, handler: Handler<P>) {
   return async (request: Request, route: { params: Promise<P> }): Promise<Response> => {
     const started = Date.now();
-    const db = createSupabaseServiceClient();
+    let db: SupabaseClient;
+    try {
+      db = createSupabaseServiceClient();
+    } catch (error) {
+      // A new deployment may not yet have privileged API credentials. Keep
+      // the API closed, with its JSON contract intact and no secret details.
+      const unavailable = error instanceof MissingEnvError;
+      console.error(JSON.stringify({ event: "api.v1.initialization_failed", configurationMissing: unavailable }));
+      return apiJson({ error: {
+        code: unavailable ? "service_unavailable" : "internal",
+        message: unavailable ? "The API is temporarily unavailable." : "Something went wrong.",
+      } }, unavailable ? 503 : 500);
+    }
     const url = new URL(request.url);
     let identity: ApiIdentity | null = null;
     let response: Response;

@@ -1,0 +1,1145 @@
+{
+  "source_commit": "6a55e996d18190247662c4d6b68d946c3fe7b677",
+  "routes": [
+    {
+      "path": "src/app/(auth)/forgot-password/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(auth)/mfa/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(auth)/reset-password/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(auth)/sign-in/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(auth)/sign-up/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/access/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/approvals/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/design-system/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/email/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/exports/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/jobs/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/records/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/retention/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/team-signals/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/admin/templates/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/announcements/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/api-tokens/docs/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/api-tokens/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/approvals/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/apps/[slug]/[screen]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/apps/[slug]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/apps/manage/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/apps/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/board/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/builder/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/builder/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/calendar/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/capture/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/channels/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/channels/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/collab/layouts/[typeKey]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/collab/layouts/[typeKey]/preview/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/collab/layouts/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/collab/live/[objectId]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/collab/objects/[objectId]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/collab/trash/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/collab/versions/[objectId]/compare/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/collab/versions/[objectId]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/crm/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/crm/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/decisions/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/decisions/trail/[projectId]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/documents/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/documents/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/documents/templates/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/events/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/events/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/bank/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/bank/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/bank/reconciliations/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/budgets/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/budgets/[id]/report/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/budgets/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/budgets/programs/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/gifts/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/gifts/donors/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/gifts/grants/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/gifts/grants/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/gifts/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/gifts/statement/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/accountant/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/accounts/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/funds/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/funds/release/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/general-ledger/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/journal/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/journal/new/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/journal/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/periods/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/receipts/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/returns/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/statements/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/trial-balance/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/ledger/year-end/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/payables/aging/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/payables/bills/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/payables/bills/new/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/payables/contacts/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/payables/invoices/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/payables/invoices/new/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/payables/invoices/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/payables/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/payroll/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/payroll/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/receipts/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/sales-tax/lines/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/sales-tax/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/finance/sales-tax/worksheet/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/following/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/forms/[id]/edit/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/forms/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/forms/[id]/submissions/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/forms/new/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/forms/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/forms/submissions/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/forms-v2/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/forms-v2/[id]/responses/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/forms-v2/new/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/forms-v2/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/goals/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/goals/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/google/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/google/search/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/home/commands/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/home/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/home/projects/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/home/world/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/inbox/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/insight/dashboards/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/insight/graph/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/insight/map/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/insight/operations/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/insight/process/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/insight/what-if/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/board/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/calendar/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/dashboard/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/embed/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/feed/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/find/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/gallery/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/import/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/my-work/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/table/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/lenses/timeline/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/m/approvals/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/m/capture/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/m/inbox/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/m/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/m/search/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/m/tasks/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/m/today/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/meetings/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/meetings/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/meetings-v2/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/meetings-v2/[id]/review/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/meetings-v2/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/messages/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/messages/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/my-work/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/object-approvals/[type]/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/objects/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/offline/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/pages/[pageId]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/pages/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/people/[id]/work/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/people/overview/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/people/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/programs/(list)/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/programs/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/projects/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/projects/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/reports/[id]/csv/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/reports/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/reports/[id]/pdf/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/reports/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/requests/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/saved/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/schedule/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/search/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/settings/notifications/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/settings/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/signatures/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/signatures/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/spaces/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/spaces/admin/audit-export/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/spaces/admin/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/spaces/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/spaces/publish/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/spaces/roles/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/templates-v2/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/templates-v2/new/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/templates-v2/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/upkeep/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/workflows/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/workflows/[id]/runs/[runId]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/workflows/new/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/workflows/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/(workspace)/workflows/reviews/[id]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/account-inactive/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/editor/mobile/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/exports/[id]/download/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/aging/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/bank/reconciliations/[id]/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/budgets/[id]/report/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/gifts/acknowledgements/[id]/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/gifts/donors/export/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/ledger/export/journal/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/ledger/export/receipts/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/ledger/export/trial-balance/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/ledger/general-ledger/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/ledger/receipts/[id]/file/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/ledger/statements/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/ledger/trial-balance/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/receipts/export/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/finance/sales-tax/worksheet/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/forms/[id]/export/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/health/jobs/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/health/version/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/integrations/email/webhook/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/integrations/gmail/push/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/integrations/google/callback/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/integrations/google/start/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/jobs/[job]/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/lenses/export/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/objects/bulk-edit/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/objects/change-sets/[id]/undo/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/objects/import/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/offline/status/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/pages/[pageId]/export/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/pages/[pageId]/presence/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/pages/import/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/v1/actions/[key]/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/v1/actions/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/v1/me/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/v1/objects/[id]/properties/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/v1/objects/[id]/relations/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/v1/objects/[id]/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/api/v1/objects/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/auth/callback/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/auth/sign-out/route.ts",
+      "kind": "handler",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/dev/editor-spike/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/p/[slug]/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    },
+    {
+      "path": "src/app/welcome/page.tsx",
+      "kind": "page",
+      "verification": "not_run"
+    }
+  ]
+}
