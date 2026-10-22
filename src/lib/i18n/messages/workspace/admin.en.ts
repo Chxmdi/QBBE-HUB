@@ -285,6 +285,7 @@ export const adminEn = {
           zeffy_sync_requested: "Zeffy sync requested",
           mfa_enrollment_completed: "mfa enrollment completed",
           mfa_break_glass_reset: "authenticators reset by an operator (break-glass)",
+          failed_emails_requeued: "failed email sent again",
           gift_list_viewed: "gift list viewed",
           user_provisioned: "user provisioned",
           account_created: "account created",

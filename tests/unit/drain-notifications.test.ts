@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { drainNotifications } from "@/features/jobs/services/handlers/drain-notifications";
+import { drainNotifications, emailRetryDelaySeconds } from "@/features/jobs/services/handlers/drain-notifications";
 import { PartialJobFailure, type JobDefinition } from "@/features/jobs/services/runner";
 import { FakeSupabase, asClient, type Row } from "../support/fake-supabase";
 
@@ -242,7 +242,11 @@ describe("a message that cannot be delivered ends up in the archive", () => {
       if (attempt < DEFINITION.max_attempts) {
         expect(db.queue("notifications")).toHaveLength(1);
         expect(db.archive("notifications")).toHaveLength(0);
-        db.advance(121);
+        // It waits out the whole delay; a run inside it does not try again.
+        db.advance(emailRetryDelaySeconds(attempt) - 5);
+        await run(db);
+        expect(deliveries(db)[0].attempt).toBe(attempt);
+        db.advance(10);
       }
     }
 
@@ -254,6 +258,74 @@ describe("a message that cannot be delivered ends up in the archive", () => {
     expect(row.status).toBe("failed");
     expect(row.attempt).toBe(DEFINITION.max_attempts);
     expect(String(row.last_error)).toContain("503");
+  });
+
+  it("waits longer after each failure, so the attempts outlast a provider outage of hours", async () => {
+    const delays = [1, 2, 3, 4, 5, 6, 7].map(emailRetryDelaySeconds);
+    expect(delays.slice(0, 4)).toEqual([60, 240, 960, 3600]);
+    expect(Math.max(...delays)).toBe(3600);
+    // Eight attempts (the job's limit) leave seven waits between them.
+    expect(delays.reduce((sum, d) => sum + d, 0)).toBeGreaterThanOrEqual(4 * 3600);
+  });
+
+  it("records when a waiting email is due, so the stuck-email sweep leaves it alone", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db);
+    stubProvider(() => ({ ok: false, status: 503 }));
+    await run(db);
+    const [row] = deliveries(db);
+    expect(row.status).toBe("queued");
+    expect(row.scheduled_for).toBe(new Date(START.getTime() + 60_000).toISOString());
+    expect(db.queue("notifications")[0].message).toMatchObject({ kind: "retry", delivery_id: row.id });
+  });
+
+  it("re-checks quiet hours when a retry comes due", async () => {
+    // 21:59 in Toronto: the first attempt fails, the retry lands at 22:00.
+    const db = new FakeSupabase(new Date("2026-08-20T01:59:00Z"));
+    seedWorkspace(db, { quiet_hours_start: 22, quiet_hours_end: 7, email_critical: false });
+    raiseNotification(db);
+    stubProvider(() => ({ ok: false, status: 503 }));
+    await run(db);
+    stubProvider(() => ({ ok: true }));
+    db.advance(61);
+    const retried = await run(db);
+
+    expect(sends).toHaveLength(0);
+    expect(retried.metadata?.deferred).toBe(1);
+    expect(deliveries(db)[0].status).toBe("queued");
+  });
+
+  it("does not resend a notification that was deleted before its retry", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db);
+    stubProvider(() => ({ ok: false, status: 503 }));
+    await run(db);
+    // Deleting the notification clears the link (ON DELETE SET NULL).
+    db.rows("notification").length = 0;
+    deliveries(db)[0].notification_id = null;
+    stubProvider(() => ({ ok: true }));
+    db.advance(61);
+    await run(db);
+
+    expect(sends).toHaveLength(0);
+    expect(deliveries(db)[0]).toMatchObject({ status: "suppressed", suppressed_reason: "notification_deleted" });
+    expect(db.queue("notifications")).toHaveLength(0);
+  });
+
+  it("queues no retry when the failure itself cannot be recorded", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    raiseNotification(db);
+    stubProvider(() => ({ ok: false, status: 503 }));
+    db.fail((op) => op.name === "email_delivery" && op.kind === "update" && op.args.status === "queued");
+    const result = await run(db);
+
+    expect(result.failed).toBe(1);
+    // Only the original message, left for the visibility timeout.
+    expect(db.queue("notifications")).toHaveLength(1);
+    expect(db.queue("notifications")[0].message.kind).toBe("notification");
   });
 
   it("does not waste attempts on a permanent rejection", async () => {
