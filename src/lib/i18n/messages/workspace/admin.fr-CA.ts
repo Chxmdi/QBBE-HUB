@@ -286,6 +286,7 @@ export const adminFrCA: typeof adminEn = {
           zeffy_connected: "Zeffy connecté",
           zeffy_sync_requested: "Synchronisation Zeffy demandée",
           mfa_enrollment_completed: "inscription à l’AMF terminée",
+          mfa_break_glass_reset: "authentificateurs réinitialisés par un opérateur (procédure d’urgence)",
           gift_list_viewed: "liste des dons consultée",
           user_provisioned: "compte provisionné",
           account_created: "compte créé",

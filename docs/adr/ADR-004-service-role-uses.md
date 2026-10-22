@@ -40,6 +40,16 @@ like a policy change.
 | `src/features/admin/services/admin.commands.ts` | Ending a deactivated person's sessions needs the Auth admin API. | Runs only after an RLS-checked admin update of the membership; signs out that one user. |
 | `src/features/workflows/services/workflow.commands.ts` | A workflow test run and its signing secret act as the workflow, which may touch records the admin cannot see directly. | Behind the workflow admin guard; the rule is first read through the admin's session (RLS); the run is recorded as a test. |
 
+Operator scripts outside `src/` read the key from the operator's own
+terminal, never from the app:
+
+- `scripts/ops/reset-admin-mfa.mjs`: break-glass removal of an owner's or
+  admin's authenticators. Stand-in checks: an identity check and two approvers
+  who are different owners or admins, matched by sign-in account; an audit row
+  before and after ([account-recovery.md](../runbooks/account-recovery.md)).
+- `scripts/backup/*`: the nightly backup and restore, with their own key
+  ([backup-recovery.md](../runbooks/backup-recovery.md)).
+
 ## Consequences
 
 - RLS stays the boundary for everything a person does through their own

@@ -16,13 +16,14 @@ authentication**. Then losing one device is not an incident.
 - The **operator**: a person listed in the Supabase row of
   [provider-custody.md](provider-custody.md) who holds the production
   service role key in the password manager.
-- Two **approvers**: active owners or admins of the organization, other than
-  the person being reset. Their names go in the audit record.
+- Two **approvers**: two different people who are active owners or admins of
+  the organization, other than the person being reset. The audit record names
+  them and the operator.
 
-If the person locked out is the only owner and there are no other admins, the
-two approvers are the operator and the second Supabase custodian, and the
-script cannot be used (it requires approvers who are owners or admins): use
-the dashboard path at the end of this page.
+The workspace has exactly one owner, so resetting an admin needs the owner and
+one other admin, and resetting the owner needs two other admins. With fewer
+(for example one owner and one admin), the script refuses: use the dashboard
+path at the end of this page.
 
 ## Forgotten password (but authenticator still works)
 
@@ -53,20 +54,27 @@ bounce or suppression.
    ```sh
    node scripts/ops/reset-admin-mfa.mjs --email <person> \
      --approved-by <approver 1> --approved-by <approver 2> \
+     --operator <your own address> \
      --reason "<why, and how identity was checked>" --dry-run
    ```
    You should see `Dry run: <person> has N factor(s). Nothing was changed.`
+   Every address is the one the person signs in with, typed in full.
    A line starting `Refused:` names what is wrong (the person is not an owner
-   or admin, an approver is not one, the approvers are the same person, or the
-   reason is missing). Fix it and repeat; nothing has been changed.
+   or admin, an approver is not one, the approvers are the same person, an
+   address is not a plain address, or the reason is missing). Fix it and
+   repeat; nothing has been changed. `Could not read the sign-in accounts`
+   means the key or `SUPABASE_URL` is wrong: load them again (step 3).
 5. **Run it** with the same command without `--dry-run`. You should see
    `Removed N factor(s) for <person> and recorded the reset in the audit log.`
    If it says `Stopped before removing anything`, the audit record could not
-   be written: nothing was removed; check the key and try again.
+   be written: nothing was removed; try again. If it says `Removed 1 of 2
+   factors, then failed`, run the same command again.
 6. **The person signs in** with their password. You should see them sent to
    set up a new authenticator. Ask them to add a second one straight away.
-7. **Check the record:** **Admin**, **Audit history** shows
-   `mfa.break_glass_reset` for the person, naming the first approver.
+7. **Check the record:** **Admin**, **Audit history** shows two entries
+   "authenticators reset by an operator (break-glass)": one when it started,
+   one with the outcome. The person, the approvers and the operator are in
+   the record's details (`audit_event.metadata` in the database).
 8. **Clean up:** `unset SUPABASE_SERVICE_ROLE_KEY`, close the terminal, and
    record the reset (date, person, approvers, identity check) in the incident
    register ([incident-response.md](incident-response.md)).
