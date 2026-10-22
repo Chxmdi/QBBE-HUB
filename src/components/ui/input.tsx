@@ -36,7 +36,7 @@ export function Select({
   className,
   children,
   ...props
-}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+}: React.ComponentProps<"select">) {
   return (
     <select className={cn(fieldClasses, "h-9.5", className)} {...props}>
       {children}

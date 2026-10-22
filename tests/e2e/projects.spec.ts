@@ -315,6 +315,8 @@ test("a project built from a template carries its work and none of its history",
   await page
     .getByLabel("Create from template")
     .selectOption({ label: templateName });
+  // Choosing only selects the template; the button makes the project.
+  await page.getByRole("button", { name: "Create project from template", exact: true }).click();
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/, { timeout: 60_000 });
   const projectId = page.url().split("/").pop() as string;
 
