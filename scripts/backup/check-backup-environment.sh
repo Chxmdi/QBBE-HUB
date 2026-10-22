@@ -101,18 +101,25 @@ for recipient in "${recipients[@]}"; do
 done
 (( count > 0 )) || fail "BACKUP_AGE_RECIPIENT has no age public key."
 
-# Decoded locally; only the number of bytes is ever printed.
+# Decoded locally; only the number of bytes (and of different byte values)
+# is ever printed.
+# shellcheck disable=SC2016 # JavaScript, not shell, expands ${…} here.
 index_key_bytes=$(node -e '
   const v = (process.env.BACKUP_INDEX_KEY || "").trim();
   let b = null;
   if (/^[0-9a-fA-F]+$/.test(v) && v.length % 2 === 0) b = Buffer.from(v, "hex");
   else if (/^[A-Za-z0-9+/_-]+={0,2}$/.test(v)) b = Buffer.from(v, "base64");
-  console.log(b === null ? "not-encoded" : b.length);
+  console.log(b === null ? "not-encoded" : `${b.length} ${new Set(b).size}`);
 ')
+read -r index_key_bytes index_key_distinct <<< "$index_key_bytes"
 [[ "$index_key_bytes" != not-encoded ]] \
   || fail "${github_environment}'s BACKUP_INDEX_KEY is neither hex nor base64. Make one with: openssl rand -base64 32"
 (( index_key_bytes >= 32 )) \
   || fail "${github_environment}'s BACKUP_INDEX_KEY holds ${index_key_bytes} bytes; it must hold at least 32 random bytes. Make one with: openssl rand -base64 32"
+# 32 random bytes hold about 30 different values; all zero bytes, or a
+# pattern typed by hand, hold a few (lib.mjs parseIndexKey refuses them too).
+(( index_key_distinct >= 16 )) \
+  || fail "${github_environment}'s BACKUP_INDEX_KEY does not look random (it repeats the same few byte values). Make one with: openssl rand -base64 32"
 
 [[ "$BACKUP_S3_ENDPOINT" =~ ^https://[^/]+/?$ ]] \
   || fail "BACKUP_S3_ENDPOINT must be https://<host> with no path."

@@ -12,8 +12,8 @@ const script = join(process.cwd(), "scripts/backup/check-backup-environment.sh")
 const STAGING_REF = "stagingrefaaaaaaaaaa";
 const PRODUCTION_REF = "productionrefbbbbbbb";
 const RECIPIENT = "age1lqqlewea2m8y897m8ncrk58acexr2wqmky3yey706xh6z6uwlyjs5l7dge";
-/** A test index key: 32 bytes as base64 (never a real secret). */
-const INDEX_KEY = Buffer.alloc(32, 9).toString("base64");
+/** A test index key: 32 different bytes as base64 (never a real secret). */
+const INDEX_KEY = Buffer.from(Array.from({ length: 32 }, (_, i) => (i * 37 + 11) % 256)).toString("base64");
 
 /** A legacy Supabase service_role key's shape: a JWT naming its project. */
 function legacyKey(ref: string, role = "service_role") {
@@ -80,7 +80,17 @@ describe("check-backup-environment.sh", () => {
     const odd = run({ BACKUP_INDEX_KEY: "not a key!" });
     expect(odd.ok).toBe(false);
     expect(odd.output).toContain("neither hex nor base64");
-    expect(run({ BACKUP_INDEX_KEY: "cd".repeat(32) }).output).toContain("an index key of 32 bytes");
+    expect(run({ BACKUP_INDEX_KEY: Buffer.from(Array.from({ length: 32 }, (_, i) => (i * 53 + 5) % 256)).toString("hex") }).output).toContain("an index key of 32 bytes");
+  });
+
+  it("refuses an index key of the right length that is not random (all zero bytes, or a few repeated)", () => {
+    for (const weak of [Buffer.alloc(32).toString("hex"), Buffer.alloc(48, 9).toString("base64"), "0102".repeat(32)]) {
+      const result = run({ BACKUP_INDEX_KEY: weak });
+      expect(result.ok, weak).toBe(false);
+      expect(result.output).toContain("does not look random");
+      expect(result.output).toContain("openssl rand -base64 32");
+      expect(result.output).not.toContain(weak);
+    }
   });
 
   it("refuses an environment pointed at the other environment's project", () => {

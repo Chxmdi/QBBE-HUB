@@ -642,8 +642,46 @@ export function parseBlobPrefix(prefix) {
 }
 
 /**
+ * A blob's object name in its folder: <sha256>.age, or <sha256>.<n>.age
+ * (n from 2) when a run found <sha256>.age already taken by an object no
+ * signed index vouches for (left by a failed run, or planted by someone
+ * holding the bucket key, which can add objects but not replace them).
+ */
+const BLOB_NAME = /^([0-9a-f]{64})(?:\.([2-9]|[1-9]\d+))?\.age$/;
+
+/**
+ * The sha256 a blob name belongs to, or null when it is not a blob name.
+ * @param {string} name
+ */
+export function blobNameSha(name) {
+  return BLOB_NAME.exec(name)?.[1] ?? null;
+}
+
+/**
+ * The object name a blob record points at in its folder.
+ * @param {{ sha256: string, name?: string, encSize?: number, encSha256?: string | null }} record
+ */
+export function blobFileName(record) {
+  return record.name ?? `${record.sha256}.age`;
+}
+
+/**
+ * The first name for a new blob of `sha256` that nothing in the folder
+ * holds yet: <sha256>.age, else <sha256>.2.age, <sha256>.3.age, ….
+ * @param {string} sha256
+ * @param {Map<string, number>} listing the folder, name → size
+ */
+export function freeBlobName(sha256, listing) {
+  if (!listing.has(`${sha256}.age`)) return `${sha256}.age`;
+  for (let n = 2; ; n += 1) {
+    if (!listing.has(`${sha256}.${n}.age`)) return `${sha256}.${n}.age`;
+  }
+}
+
+/**
  * The blobs under one prefix, from `key<TAB>size` lines (the bucket
- * listing), as sha256 → encrypted size.
+ * listing), as blob name → encrypted size. Anything that is not a blob name
+ * is left out.
  * @param {string} text
  * @param {string} prefix
  * @returns {Map<string, number>}
@@ -656,10 +694,36 @@ export function parseBlobListing(text, prefix) {
     if (!line || line === "None") continue;
     const [key, size] = line.split("\t");
     if (!key.startsWith(prefix)) continue;
-    const match = /^([0-9a-f]{64})\.age$/.exec(key.slice(prefix.length));
-    if (match && Number.isInteger(Number(size))) blobs.set(match[1], Number(size));
+    const name = key.slice(prefix.length);
+    if (BLOB_NAME.test(name) && Number.isInteger(Number(size))) blobs.set(name, Number(size));
   }
   return blobs;
+}
+
+/**
+ * Every blob folder of one environment and one set of keys in a listing of
+ * blobs/<environment>/, as folder → (blob name → size).
+ * @param {string} text `key<TAB>size` lines
+ * @param {string} environment
+ * @param {string} tag recipientTag of the keys
+ * @returns {Map<string, Map<string, number>>}
+ */
+export function parseBlobFolders(text, environment, tag) {
+  /** @type {Map<string, Map<string, number>>} */
+  const folders = new Map();
+  for (const raw of text.split("\n")) {
+    const [key, size] = raw.trim().split("\t");
+    if (!key || size === undefined) continue;
+    const at = key.lastIndexOf("/");
+    const folder = key.slice(0, at + 1);
+    const where = parseBlobPrefix(folder);
+    if (!where || where.environment !== environment || where.tag !== tag) continue;
+    const name = key.slice(at + 1);
+    if (!BLOB_NAME.test(name) || !Number.isInteger(Number(size))) continue;
+    if (!folders.has(folder)) folders.set(folder, new Map());
+    /** @type {Map<string, number>} */ (folders.get(folder)).set(name, Number(size));
+  }
+  return folders;
 }
 
 // ---------------------------------------------------------------------------
@@ -684,9 +748,14 @@ export function canonicalJson(value) {
   return JSON.stringify(value) ?? "null";
 }
 
+/** Fewer different byte values than this in 32 or more bytes: not random. */
+const MIN_DISTINCT_KEY_BYTES = 16;
+
 /**
  * BACKUP_INDEX_KEY as bytes: at least 32 random bytes, written as hex or
- * base64 (`openssl rand -base64 32`). The message never repeats the value.
+ * base64 (`openssl rand -base64 32`). A key that repeats a few values (all
+ * zero bytes, a pattern typed by hand) is refused: 32 random bytes hold
+ * about 30 different values. The message never repeats the value.
  * @param {string | undefined} text
  */
 export function parseIndexKey(text) {
@@ -698,6 +767,9 @@ export function parseIndexKey(text) {
   else throw new Error("BACKUP_INDEX_KEY is neither hex nor base64.");
   if (bytes.length < 32) {
     throw new Error(`BACKUP_INDEX_KEY holds ${bytes.length} bytes; it must hold at least 32 random bytes (make one with: openssl rand -base64 32).`);
+  }
+  if (new Set(bytes).size < MIN_DISTINCT_KEY_BYTES) {
+    throw new Error("BACKUP_INDEX_KEY does not look random (it repeats the same few byte values); make one with: openssl rand -base64 32");
   }
   return bytes;
 }
@@ -714,9 +786,10 @@ export function indexMac(index, key) {
 }
 
 /**
- * @typedef {{ sha256: string, encSize: number, encSha256: string | null }} BlobRecord
- *   a blob as first stored: the sha256 of the plain file (its name), and the
- *   size and sha256 of its encrypted bytes (null when not known)
+ * @typedef {{ sha256: string, encSize: number, encSha256: string | null, name?: string }} BlobRecord
+ *   a blob as first stored: the sha256 of the plain file, the size and
+ *   sha256 of its encrypted bytes (null when not known: such a blob is never
+ *   trusted), and its object name when that is not <sha256>.age
  */
 
 /**
@@ -784,20 +857,47 @@ function blobRecordOf(entry) {
   if (typeof e.sha256 !== "string" || !HEX64.test(e.sha256)) return null;
   if (typeof e.encSize !== "number" || !Number.isInteger(e.encSize) || e.encSize < 0) return null;
   if (e.encSha256 !== null && (typeof e.encSha256 !== "string" || !HEX64.test(e.encSha256))) return null;
-  return { sha256: e.sha256, encSize: e.encSize, encSha256: e.encSha256 };
+  const n = /** @type {{ name?: unknown }} */ (entry).name;
+  if (n === undefined || n === null) return { sha256: e.sha256, encSize: e.encSize, encSha256: e.encSha256 };
+  if (typeof n !== "string" || blobNameSha(n) !== e.sha256) return null;
+  return n === `${e.sha256}.age` ? { sha256: e.sha256, encSize: e.encSize, encSha256: e.encSha256 } : { sha256: e.sha256, encSize: e.encSize, encSha256: e.encSha256, name: n };
 }
 
 /**
- * What the first night of a month copies from the folder the previous index
- * points at into this month's folder: every blob it recorded that is not
- * here yet, if it is the same environment and keys and an earlier month.
- * A blob whose encrypted sha256 was never recorded cannot be checked, so it
- * is not copied (its file is downloaded again instead).
+ * The record to keep when a blob is met twice in one night: never one
+ * without the encrypted sha256 over one with it.
+ * @param {BlobRecord | undefined} kept
+ * @param {BlobRecord} next
+ * @returns {BlobRecord}
+ */
+export function mergeBlobRecord(kept, next) {
+  if (kept && kept.encSha256 !== null && next.encSha256 === null) return kept;
+  return next;
+}
+
+/**
+ * @typedef {BlobRecord & { from: string, check: string[], to: string }} CarryItem
+ *   one blob to bring into this month's folder: copied from `from` in the
+ *   previous folder to `to`, unless one of the objects already at the names
+ *   in `check` (same size as recorded) turns out to hold exactly the
+ *   recorded bytes
+ */
+
+/**
+ * What the first night of a month (or the next night, when that one failed
+ * after copying) brings from the folder the previous index points at into
+ * this month's folder: every blob it recorded, if it is the same
+ * environment and keys and an earlier month. Something already listed at a
+ * blob's name proves nothing (a copy left by a failed night, or an object
+ * planted there), so it is checked against the recorded size and sha256
+ * (`check`); if none matches, the blob is copied to the first free name
+ * (`to`). A blob whose encrypted sha256 was never recorded cannot be
+ * checked, so it is not copied (its file is downloaded again instead).
  * @param {PreviousIndex} previous
- * @param {{ prefix: string, generation: string, tag: string, listing: Map<string, number> }} current
+ * @param {{ prefix: string, generation: string, tag: string, listing: Map<string, number> }} current listing: name → size
  */
 export function carryPlan(previous, current) {
-  /** @type {BlobRecord[]} */
+  /** @type {CarryItem[]} */
   const carry = [];
   let unverifiable = 0;
   if (
@@ -809,22 +909,37 @@ export function carryPlan(previous, current) {
     return { from: null, carry, unverifiable };
   }
   for (const record of previous.blobs.values()) {
-    if (current.listing.has(record.sha256)) continue;
-    if (record.encSha256 === null) unverifiable += 1;
-    else carry.push(record);
+    if (record.encSha256 === null) {
+      unverifiable += 1;
+      continue;
+    }
+    const check = [...current.listing]
+      .filter(([name, size]) => blobNameSha(name) === record.sha256 && size === record.encSize)
+      .map(([name]) => name)
+      .sort(compareBlobNames);
+    carry.push({ ...record, from: blobFileName(record), check, to: freeBlobName(record.sha256, current.listing) });
   }
   carry.sort((a, b) => (a.sha256 < b.sha256 ? -1 : a.sha256 > b.sha256 ? 1 : 0));
   return { from: previous.blobPrefix, carry, unverifiable };
 }
 
+/** <sha256>.age before <sha256>.2.age before <sha256>.10.age. @param {string} a @param {string} b */
+function compareBlobNames(a, b) {
+  const n = (/** @type {string} */ name) => Number(BLOB_NAME.exec(name)?.[2] ?? 1);
+  return a.slice(0, 64) === b.slice(0, 64) ? n(a) - n(b) : a < b ? -1 : 1;
+}
+
 /**
- * The blobs in this month's folder whose encrypted bytes are known: those
- * the previous index recorded for this same folder, and those carried into
- * it tonight from the folder it recorded.
+ * The blobs in this month's folder the night may rely on: those a signed
+ * index recorded with their encrypted size and sha256 and that are listed
+ * under their recorded name at that size, either in the previous index of
+ * this same folder, or carried (checked) into it tonight, under the name
+ * `carried` gives. Any other object in the folder, whatever its name, is
+ * never relied on.
  * @param {PreviousIndex} previous
  * @param {string} prefix this month's folder
- * @param {Map<string, number>} listing this month's folder, sha256 → size
- * @param {Set<string>} carried sha256s copied in tonight
+ * @param {Map<string, number>} listing this month's folder, name → size
+ * @param {Map<string, string>} carried sha256 → the name it was carried to tonight
  * @returns {Map<string, BlobRecord>}
  */
 export function knownBlobs(previous, prefix, listing, carried) {
@@ -832,21 +947,30 @@ export function knownBlobs(previous, prefix, listing, carried) {
   const known = new Map();
   if (!previous.usable) return known;
   for (const record of previous.blobs.values()) {
-    if (!listing.has(record.sha256)) continue;
-    if (previous.blobPrefix === prefix || carried.has(record.sha256)) known.set(record.sha256, record);
+    if (record.encSha256 === null) continue;
+    /** @type {BlobRecord} */
+    let here;
+    if (previous.blobPrefix === prefix) here = record;
+    else if (carried.has(record.sha256)) {
+      const name = /** @type {string} */ (carried.get(record.sha256));
+      const plain = { sha256: record.sha256, encSize: record.encSize, encSha256: record.encSha256 };
+      here = name === `${record.sha256}.age` ? plain : { ...plain, name };
+    } else continue;
+    if (listing.get(blobFileName(here)) === here.encSize) known.set(record.sha256, here);
   }
   return known;
 }
 
 /**
  * For each stored file: is it the same as last night (fingerprint in the
- * previous index), and is its blob in this month's folder? Only then can
- * the download be skipped (`keep`); everything else is downloaded from
- * Supabase. (Last month's blobs are copied into this month's folder before
- * this runs: bucket.sh state.)
+ * previous index), and is its blob in this month's folder under a record
+ * the night can rely on (knownBlobs)? Only then can the download be skipped
+ * (`keep`); everything else is downloaded from Supabase. (Last month's
+ * blobs are copied into this month's folder before this runs: bucket.sh
+ * state.)
  * @param {StoredObject[]} objects
  * @param {Map<string, { sha256: string, size: number }>} previousFiles PreviousIndex.files
- * @param {Map<string, number>} current this month's folder, sha256 → size
+ * @param {Map<string, unknown>} current the blobs relied on, by sha256 (knownBlobs)
  */
 export function planObjects(objects, previousFiles, current) {
   return objects.map((object) => {
@@ -861,9 +985,9 @@ export function planObjects(objects, previousFiles, current) {
 
 /**
  * What to do with a freshly downloaded file's blob: already in this month's
- * folder (`keep`; the bucket cannot overwrite) or new (`upload`).
+ * folder under a record the night relies on (`keep`), or new (`upload`).
  * @param {string} sha256
- * @param {Map<string, number>} current
+ * @param {Map<string, unknown>} current the blobs relied on, by sha256
  * @returns {"keep" | "upload"}
  */
 export function blobAction(sha256, current) {
@@ -871,20 +995,84 @@ export function blobAction(sha256, current) {
 }
 
 /**
+ * Where each downloaded file's blob goes, decided once per content even
+ * when several files with the same content finish downloading at the same
+ * moment. The first file that needs a new blob owns its storing (`seal`:
+ * hash the encrypted file and move it to `name`); every other file with
+ * that content waits for the same promise and gets the same record, and
+ * its own encrypted copy is discarded. A blob already relied on (`known`)
+ * is kept. A new blob goes under the first free name (freeBlobName): an
+ * object already at <sha256>.age that no signed index vouches for is never
+ * used. If storing fails, the next file with that content tries again.
+ * @param {{
+ *   listing: Map<string, number>,
+ *   known: Map<string, BlobRecord>,
+ *   seal: (tmp: string, name: string) => Promise<{ size: number, sha256: string }>,
+ *   discard: (tmp: string) => Promise<void>,
+ * }} io
+ */
+export function createBlobStore({ listing, known, seal, discard }) {
+  /** @type {Map<string, Promise<BlobRecord>>} */
+  const pending = new Map();
+  let renamed = 0;
+  return {
+    /**
+     * @param {string} sha256 the plain file's sha256
+     * @param {string} tmp its freshly encrypted copy
+     * @returns {Promise<{ record: BlobRecord, stored: boolean }>}
+     */
+    async store(sha256, tmp) {
+      const kept = known.get(sha256);
+      if (kept) {
+        await discard(tmp);
+        return { record: kept, stored: false };
+      }
+      const waiting = pending.get(sha256);
+      if (waiting) {
+        await discard(tmp);
+        return { record: await waiting, stored: false };
+      }
+      // No await between the check above and this set: the first file
+      // claims the content before any other can look.
+      const name = freeBlobName(sha256, listing);
+      const sealing = seal(tmp, name).then((encrypted) =>
+        name === `${sha256}.age`
+          ? { sha256, encSize: encrypted.size, encSha256: encrypted.sha256 }
+          : { sha256, encSize: encrypted.size, encSha256: encrypted.sha256, name },
+      );
+      pending.set(sha256, sealing);
+      try {
+        const record = await sealing;
+        if (name !== `${sha256}.age`) renamed += 1;
+        return { record, stored: true };
+      } catch (error) {
+        if (pending.get(sha256) === sealing) pending.delete(sha256);
+        throw error;
+      }
+    },
+    /** How many new blobs went under another name than <sha256>.age. */
+    renamed: () => renamed,
+  };
+}
+
+/**
  * Every blob a backup needs against this month's folder after the upload:
- * present, and at the encrypted size recorded when it was first stored.
- * @param {{ sha256: string, encSize: number }[]} blobs
- * @param {Map<string, number>} listing
+ * present under its recorded name, and at the encrypted size recorded when
+ * it was first stored. Names, not sha256s, are returned: a blob may be
+ * stored under <sha256>.<n>.age.
+ * @param {BlobRecord[]} blobs
+ * @param {Map<string, number>} listing name → size
  */
 export function checkBlobListing(blobs, listing) {
   /** @type {string[]} */
   const missing = [];
-  /** @type {{ sha256: string, expected: number, actual: number }[]} */
+  /** @type {{ sha256: string, name: string, expected: number, actual: number }[]} */
   const wrong = [];
   for (const blob of blobs) {
-    const size = listing.get(blob.sha256);
-    if (size === undefined) missing.push(blob.sha256);
-    else if (size !== blob.encSize) wrong.push({ sha256: blob.sha256, expected: blob.encSize, actual: size });
+    const name = blobFileName(blob);
+    const size = listing.get(name);
+    if (size === undefined) missing.push(name);
+    else if (size !== blob.encSize) wrong.push({ sha256: blob.sha256, name, expected: blob.encSize, actual: size });
   }
   return { ok: missing.length === 0 && wrong.length === 0, missing: missing.sort(), wrong };
 }
@@ -1033,7 +1221,9 @@ export const TRAFFIC_WARN_BYTES = 2 * 1024 ** 3;
  */
 export function trafficEstimate(read) {
   const database = read.databaseBytes + (read.extraDatabaseBytes ?? 0);
-  const catalog = read.catalogBytesEstimate ?? CATALOG_READ_BYTES;
+  // A dump redone because a migration landed meanwhile (extraDatabaseBytes)
+  // read the catalog twice.
+  const catalog = (read.catalogBytesEstimate ?? CATALOG_READ_BYTES) * ((read.extraDatabaseBytes ?? 0) > 0 ? 2 : 1);
   const night = database + catalog + read.storageBytes;
   return { database, catalog, files: read.storageBytes, night, month: night * 30, warn: night * 30 > TRAFFIC_WARN_BYTES };
 }
@@ -1114,7 +1304,10 @@ export function buildIndex(input, key) {
   const blobs = [...new Set(files.map((f) => f.sha256))].sort().map((sha256) => {
     const record = records.get(sha256);
     if (!record) throw new Error(`No blob record for ${sha256}.`);
-    return { sha256, encSize: record.encSize, encSha256: record.encSha256 ?? null };
+    const name = blobFileName(record);
+    return name === `${sha256}.age`
+      ? { sha256, encSize: record.encSize, encSha256: record.encSha256 ?? null }
+      : { sha256, encSize: record.encSize, encSha256: record.encSha256 ?? null, name };
   });
   const value = {
     format: INDEX_FORMAT,
@@ -1173,6 +1366,86 @@ export function newestIndexKey(keys, environment, now = new Date()) {
     return time !== null && time.getTime() <= limit;
   });
   return good.sort().at(-1) ?? null;
+}
+
+/**
+ * The index keys a night (or `fetch latest`) considers, newest first: well
+ * formed, dated no more than an hour ahead (a planted name sorting last),
+ * and, unless `days` is null, from the last `days` days (default 40: every
+ * archive is kept 35). `future` counts the keys dated further ahead.
+ * @param {string[]} keys
+ * @param {string} environment
+ * @param {Date} [now]
+ * @param {{ days?: number | null }} [options]
+ */
+export function indexCandidates(keys, environment, now = new Date(), options = {}) {
+  const days = options.days === undefined ? 40 : options.days;
+  const latest = now.getTime() + 3600_000;
+  const earliest = days === null ? -Infinity : now.getTime() - days * 86_400_000;
+  let future = 0;
+  /** @type {string[]} */
+  const good = [];
+  for (const key of new Set(keys)) {
+    const time = indexKeyTime(key, environment);
+    if (time === null) continue;
+    if (time.getTime() > latest) future += 1;
+    else if (time.getTime() >= earliest) good.push(key);
+  }
+  good.sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+  return { keys: good, future };
+}
+
+/** At most this many copies a restore cannot check are fetched for one blob. */
+const MAX_UNCHECKED_COPIES = 3;
+
+/**
+ * @typedef {{ key: string, size: number | null, sha256: string | null, local: string,
+ *   kind: "primary" | "copy" | "unchecked" }} FetchCandidate
+ *   one object to try for a blob: its bucket key, the size and sha256 it must
+ *   have (null: cannot be checked here; the restore checks the file it
+ *   decrypts to), and the name to save it under
+ */
+
+/**
+ * For each blob a restore needs, the objects to try, in order: the name its
+ * index recorded in its own folder; then identical copies (same name's sha256,
+ * the recorded size) in any month folder of the same environment and keys
+ * (the copy a new month made of it, or the one it was made from), which must
+ * match the recorded sha256; then up to three copies that cannot be checked
+ * here (another size: stored again from Supabase; or no sha256 recorded),
+ * saved under their own names for unpack-blobs, which keeps the one that
+ * decrypts to the file's sha256.
+ * @param {BlobRecord[]} blobs
+ * @param {string} primary the index's folder
+ * @param {Map<string, Map<string, number>>} folders every folder of the same environment and keys, name → size
+ * @returns {{ sha256: string, candidates: FetchCandidate[] }[]}
+ */
+export function fetchPlan(blobs, primary, folders) {
+  const others = [...folders.keys()].filter((f) => f !== primary).sort();
+  const order = [primary, ...others];
+  return blobs.map((record) => {
+    const name = blobFileName(record);
+    const checked = record.encSha256 !== null;
+    /** @type {FetchCandidate[]} */
+    const candidates = [{ key: `${primary}${name}`, size: record.encSize, sha256: record.encSha256, local: name, kind: checked ? "primary" : "unchecked" }];
+    /** @type {string[]} */
+    const unchecked = [];
+    for (const folder of order) {
+      const listing = folders.get(folder) ?? new Map();
+      const names = [...listing.keys()].filter((n) => blobNameSha(n) === record.sha256).sort(compareBlobNames);
+      for (const other of names) {
+        const key = `${folder}${other}`;
+        if (key === candidates[0].key) continue;
+        if (checked && listing.get(other) === record.encSize) {
+          candidates.push({ key, size: record.encSize, sha256: record.encSha256, local: name, kind: "copy" });
+        } else unchecked.push(key);
+      }
+    }
+    unchecked.slice(0, MAX_UNCHECKED_COPIES).forEach((key, i) => {
+      candidates.push({ key, size: null, sha256: null, local: `${record.sha256}.fallback-${i + 1}.age`, kind: "unchecked" });
+    });
+    return { sha256: record.sha256, candidates };
+  });
 }
 
 /**
@@ -1343,11 +1616,49 @@ function normalizeAddress(url) {
  * @param {string} url
  */
 export function urlHasPassword(url) {
+  const text = String(url ?? "");
   try {
-    return new URL(url).password !== "";
+    const parsed = new URL(text);
+    if (parsed.password !== "") return true;
+    if ([...parsed.searchParams.keys()].some((k) => k.toLowerCase() === "password")) return true;
   } catch {
-    return /^[a-z]+:\/\/[^/@]*:[^/@]*@/i.test(url);
+    // libpq's keyword form (host=… user=… password=…), or not an address
+    if (/^[a-z]+:\/\/[^/@]*:[^/@]*@/i.test(text)) return true;
   }
+  return /(^|\s)password\s*=/i.test(text);
+}
+
+const STRONG_SSLMODES = new Set(["require", "verify-ca", "verify-full"]);
+
+/**
+ * TLS for a database connection: required for any database that is not on
+ * this computer, so nobody on the network path can read the dump (or the
+ * password) in plain text. Only 127.x, localhost and ::1 (the local stack,
+ * which has no TLS) are exempt. Returns the PGSSLMODE to set (`require`), or
+ * null when the URL or PGSSLMODE already asks for TLS, or the database is
+ * local. Throws when either asks for less.
+ * @param {string} url a postgresql:// URL (no password)
+ * @param {string | undefined} pgsslmode the PGSSLMODE in the environment
+ * @returns {{ mode: "require" | null }}
+ */
+export function databaseTls(url, pgsslmode) {
+  let parsed;
+  try {
+    parsed = new URL(String(url));
+  } catch {
+    throw new Error("The database address must be a postgresql:// URL.");
+  }
+  if (!/^postgres(ql)?:$/.test(parsed.protocol)) throw new Error("The database address must be a postgresql:// URL.");
+  if (isLocalHost(parsed.hostname.toLowerCase().replace(/^\[|\]$/g, ""))) return { mode: null };
+  const inUrl = parsed.searchParams.get("sslmode");
+  if (inUrl !== null) {
+    if (STRONG_SSLMODES.has(inUrl)) return { mode: null };
+    throw new Error(`The database address asks for sslmode=${inUrl}; a database that is not on this computer is reached over TLS only: use sslmode=require (or verify-full).`);
+  }
+  const fromEnv = (pgsslmode ?? "").trim();
+  if (fromEnv === "") return { mode: "require" };
+  if (STRONG_SSLMODES.has(fromEnv)) return { mode: null };
+  throw new Error(`PGSSLMODE is ${fromEnv}; a database that is not on this computer is reached over TLS only: unset PGSSLMODE or set it to require (or verify-full).`);
 }
 
 /**

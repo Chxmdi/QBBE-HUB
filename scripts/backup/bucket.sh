@@ -10,26 +10,44 @@
 #     scripts/backup/bucket.sh fetch <environment> <which> <dest-dir>
 #
 # state  before a backup: what this month's blob folder holds, and the
-#        newest index. On the first night of a month (or after a gap), it
-#        copies the blobs the previous index recorded into this month's
-#        folder: each one through a private temporary file, checked against
-#        the encrypted size and sha256 recorded when it was first stored,
-#        then uploaded from that file. A blob that fails the check is not
-#        copied; its file is downloaded again from Supabase instead. Needs
-#        BACKUP_AGE_RECIPIENT (the folder is named after the keys) and
-#        BACKUP_INDEX_KEY (an index with a bad signature is not used).
+#        newest index whose signature verifies (BACKUP_INDEX_KEY), among
+#        those of the last 40 days dated no more than an hour ahead. Newer
+#        ones that fail (planted, or signed with an old key) are skipped
+#        with one warning giving their number; their keys are listed in
+#        <state-dir>/ignored-indexes.txt. On the first night of a month (or
+#        after a gap, or after a first night that failed), it brings the
+#        blobs that index recorded into this month's folder: an object
+#        already at a blob's name is downloaded and kept only if it has the
+#        recorded encrypted size and sha256; otherwise the blob is copied
+#        from last month's folder, through a private temporary file, checked
+#        the same way, to the first free name (<sha256>.age, else
+#        <sha256>.<n>.age). <state-dir>/carried.txt lists each one's sha256
+#        and name. A blob that fails the check is not copied; its file is
+#        downloaded again from Supabase instead. Needs BACKUP_AGE_RECIPIENT
+#        (the folder is named after the keys) and BACKUP_INDEX_KEY.
 # push   after create-backup.sh: uploads the new blobs, checks that every
-#        blob the archive needs is in this month's folder at the encrypted
-#        size its index records, then uploads the archive and its index and
-#        reads each one back in full: the downloaded bytes must have the
-#        local file's sha256. If the blobs fail, the archive (the database)
-#        is still uploaded, without its index, and the run fails.
+#        blob the archive needs is in this month's folder, under its
+#        recorded name, at the encrypted size its index records, then
+#        uploads the archive and its index and reads each one back in full:
+#        the downloaded bytes must have the local file's sha256. If the
+#        blobs fail, the archive (the database) is still uploaded, without
+#        its index, and the run fails; the blob names go to
+#        <out-dir>/blob-check.txt, never to the log.
 # fetch  for a restore: downloads one backup's archive, its index and every
 #        blob it needs into a new <dest-dir>, and prints the archive's sha256
-#        to compare with the Backup run's summary. <which> is `latest`, a
-#        date (YYYY-MM-DD: the newest run of that day; the others are
-#        listed), or one run: its time (YYYYMMDDTHHMMSSZ), its archive name
-#        or its key from the Backup run's summary. Needs no index key.
+#        to compare with the Backup run's summary (or the outside monitor's
+#        check-in log). <which> is `latest`, a date (YYYY-MM-DD: the newest
+#        run of that day), or one run: its time (YYYYMMDDTHHMMSSZ), its
+#        archive name or its key from the Backup run's summary. For `latest`
+#        and a date, runs dated more than an hour ahead are ignored, and the
+#        runs considered are listed with their archive's sha256, so a
+#        custodian can pick another. Each blob is taken from its recorded
+#        name, else from an identical copy in any month folder of the same
+#        keys (both checked against the recorded size and sha256), else
+#        every copy found is saved for unpack-blobs, which keeps the one
+#        that decrypts to the file's sha256. Needs no index key, so it cannot
+#        check an index's signature: EXPECTED_SHA256 in the restore is the
+#        guard.
 #
 # Layout in the bucket:
 #   <environment>/<YYYY-MM-DD>/qbbe-<environment>-<time>.tar.gz.age   archive
@@ -38,7 +56,9 @@
 # <tag> names the custodians' keys the blobs are encrypted to
 # (lib.mjs recipientTag): a change of keys starts new folders. The lifecycle
 # rules (runbook, setup step 4) delete archives after 35 days and blob
-# folders after 70, so every kept archive still finds its blobs.
+# folders after 70, so every kept archive still finds its blobs. A blob is
+# <sha256>.age, or <sha256>.<n>.age when a run found that name taken by an
+# object no signed index vouches for; the index records which.
 #
 # Any S3-compatible store works: Oracle Object Storage, Backblaze B2,
 # Cloudflare R2, AWS S3. Uses the AWS CLI (installed on GitHub's runners),
@@ -131,26 +151,66 @@ put_checked() {
   echo "Uploaded s3://${BUCKET}/${key}: $(size_of "$file") bytes, sha256 ${want}, read back in full and matching."
 }
 
-# One blob from one folder to another through a private temporary file:
-# downloaded in full, checked against its recorded encrypted size and
-# sha256, then uploaded from the file. Prints "carried", "rejected" or
-# "failed" and the sha256; never a file name (blobs are named by content).
+# One blob into this month's folder (a line of carry-plan.txt: sha256,
+# recorded size and sha256, its name in the old folder, the free name here,
+# and the names here to check first). An object already here at the blob's
+# name is downloaded and kept only if it has the recorded size and sha256
+# (a copy a failed night left); otherwise the blob is downloaded from the
+# old folder through a private temporary file, checked the same way, and
+# uploaded under the free name. Prints "carried <sha256> <name> copied|
+# checked", "occupied" (an object here that does not match), "rejected" or
+# "failed", for counting; the log itself only ever shows the counts.
 # shellcheck disable=SC2016 # expanded by the inner bash
 carry_one='
-  sha="$1" size="$2" want="$3"
+  sha="$1" size="$2" want="$3" from="$4" to="$5" checks="$6"
   tmp=$(mktemp "${PRIVATE}/carry.XXXXXX") || { echo "failed $sha"; exit 0; }
   trap "rm -f \"$tmp\"" EXIT
-  if ! s3 s3 cp "s3://${BUCKET}/${FROM}${sha}.age" "$tmp" --only-show-errors --no-progress > /dev/null 2>&1; then
+  matches() { [[ "$(size_of "$tmp")" == "$size" && "$(sha256_of "$tmp")" == "$want" ]]; }
+  if [[ "$checks" != - ]]; then
+    IFS=, read -r -a names <<< "$checks"
+    for name in "${names[@]}"; do
+      s3 s3 cp "s3://${BUCKET}/${CURRENT}${name}" "$tmp" --only-show-errors --no-progress > /dev/null 2>&1 || continue
+      if matches; then echo "carried $sha $name checked"; exit 0; fi
+      echo "occupied $sha"
+    done
+  fi
+  if ! s3 s3 cp "s3://${BUCKET}/${FROM}${from}" "$tmp" --only-show-errors --no-progress > /dev/null 2>&1; then
     echo "failed $sha"; exit 0
   fi
-  if [[ "$(size_of "$tmp")" != "$size" || "$(sha256_of "$tmp")" != "$want" ]]; then
-    echo "rejected $sha"; exit 0
-  fi
-  if s3 s3 cp "$tmp" "s3://${BUCKET}/${CURRENT}${sha}.age" --only-show-errors --no-progress --content-type application/octet-stream > /dev/null 2>&1; then
-    echo "carried $sha"
+  matches || { echo "rejected $sha"; exit 0; }
+  if s3 s3 cp "$tmp" "s3://${BUCKET}/${CURRENT}${to}" --only-show-errors --no-progress --content-type application/octet-stream > /dev/null 2>&1; then
+    echo "carried $sha $to copied"
   else
     echo "failed $sha"
   fi
+'
+
+# One blob for a restore (a line of the fetch plan: sha256, then its
+# candidates key|size|sha256|local name|kind separated by ";"). The first
+# candidate with the recorded size and sha256 is saved and ends the search;
+# a candidate that cannot be checked here ("-") is saved under its own
+# local name and the search goes on. Prints "primary", "copy", "unchecked"
+# or "missing" and the sha256.
+# shellcheck disable=SC2016 # expanded by the inner bash
+fetch_one='
+  sha="$1" kept=0
+  IFS=";" read -r -a candidates <<< "$2"
+  for candidate in "${candidates[@]}"; do
+    IFS="|" read -r key size want local kind <<< "$candidate"
+    part="${DEST}/blobs/${local}.part"
+    if ! s3 s3 cp "s3://${BUCKET}/${key}" "$part" --only-show-errors --no-progress > /dev/null 2>&1; then
+      rm -f "$part"; continue
+    fi
+    if [[ "$want" != - ]]; then
+      if [[ "$(size_of "$part")" == "$size" && "$(sha256_of "$part")" == "$want" ]]; then
+        mv "$part" "${DEST}/blobs/${local}"; echo "$kind $sha"; exit 0
+      fi
+      rm -f "$part"; continue
+    fi
+    if [[ "$size" != - && "$(size_of "$part")" != "$size" ]]; then rm -f "$part"; continue; fi
+    mv "$part" "${DEST}/blobs/${local}"; kept=$(( kept + 1 ))
+  done
+  if (( kept > 0 )); then echo "unchecked $sha"; else echo "missing $sha"; fi
 '
 
 case "$command" in
@@ -164,45 +224,83 @@ case "$command" in
     current=$(lib 'console.log(lib.blobPrefix(process.argv[1], process.argv[2], lib.recipientTag(lib.parseRecipients(process.env.BACKUP_AGE_RECIPIENT))))' "$environment" "$generation") \
       || fail "BACKUP_AGE_RECIPIENT is not a list of age public keys, or ${environment} / ${generation} is not an environment and a YYYY-MM month."
     list "$current" > "$dir/blobs-current.txt" || fail "Cannot list the backup bucket. Check BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_REGION and the access key."
-    list "${environment}/" | cut -f1 > "$private/keys.txt"
-    newest=$(lib 'const fs = await import("node:fs"); console.log(lib.newestIndexKey(fs.readFileSync(process.argv[1], "utf8").split("\n"), process.argv[2]) ?? "")' "$private/keys.txt" "$environment")
-    rm -f "$dir/previous-index.json" "$dir/carried.txt"
+    list "${environment}/" | cut -f1 > "$private/keys.txt" || fail "Cannot list the backup bucket. Check BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_REGION and the access key."
+    rm -f "$dir/previous-index.json" "$dir/carried.txt" "$dir/ignored-indexes.txt"
     : > "$dir/carried.txt"
-    if [[ -n "$newest" ]]; then
-      s3 s3 cp "s3://${BUCKET}/${newest}" "$dir/previous-index.json" --only-show-errors > /dev/null \
-        || fail "Cannot download the previous index ${newest}."
+    : > "$dir/ignored-indexes.txt"
+    # The index keys of the last 40 days, newest first, none dated more than
+    # an hour ahead (those are listed as ignored).
+    # shellcheck disable=SC2016 # JavaScript, not shell, expands ${…} here.
+    future=$(lib '
+      const fs = await import("node:fs");
+      const [keysFile, environment, candidatesFile, ignoredFile] = process.argv.slice(1);
+      const keys = fs.readFileSync(keysFile, "utf8").split("\n");
+      const found = lib.indexCandidates(keys, environment);
+      const later = Date.now() + 3600_000;
+      const ahead = keys.filter((k) => (lib.indexKeyTime(k, environment)?.getTime() ?? 0) > later);
+      fs.writeFileSync(candidatesFile, found.keys.map((k) => `${k}\n`).join(""));
+      fs.appendFileSync(ignoredFile, ahead.map((k) => `${k} dated more than an hour ahead\n`).join(""));
+      console.log(found.future);
+    ' "$private/keys.txt" "$environment" "$private/candidates.txt" "$dir/ignored-indexes.txt") \
+      || fail "Cannot read the bucket's list of backups."
+    # The newest whose signature verifies; the ones before it are counted.
+    newest="" untrusted=0
+    while read -r key; do
+      s3 s3 cp "s3://${BUCKET}/${key}" "$private/candidate.json" --only-show-errors > /dev/null \
+        || fail "Cannot download the index ${key} from the backup bucket."
+      verdict=$(lib '
+        const fs = await import("node:fs");
+        let parsed;
+        try { parsed = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { parsed = { unreadable: true }; }
+        console.log(lib.readPreviousIndex(parsed, process.argv[2], lib.parseIndexKey(process.env.BACKUP_INDEX_KEY)).reason ?? "trusted");
+      ' "$private/candidate.json" "$environment") \
+        || fail "BACKUP_INDEX_KEY is not usable (the line above says why). Make one with: openssl rand -base64 32"
+      if [[ "$verdict" == trusted ]]; then
+        mv "$private/candidate.json" "$dir/previous-index.json"
+        newest="$key"
+        break
+      fi
+      untrusted=$(( untrusted + 1 ))
+      echo "${key} ${verdict}" >> "$dir/ignored-indexes.txt"
+    done < "$private/candidates.txt"
+    if (( untrusted > 0 || future > 0 )); then
+      parts=()
+      (( untrusted > 0 )) && parts+=("${untrusted} backup index(es) ${newest:+newer than the one used }failed their signature or format check")
+      (( future > 0 )) && parts+=("${future} dated more than an hour ahead")
+      joined=$(printf '%s; ' "${parts[@]}")
+      echo "::warning::${joined%; } were ignored. They were signed with another BACKUP_INDEX_KEY, or put there by someone holding the bucket key; their keys are in the state folder's ignored-indexes.txt (runbook, \"Objects the backup did not make\")."
     fi
-    # What to copy from the folder the previous index recorded (only when it
-    # verifies, is for the same keys and an earlier month).
+    # What to bring from the folder the trusted index recorded (only for the
+    # same keys and an earlier month).
     # shellcheck disable=SC2016 # JavaScript, not shell, expands ${…} here.
     lib '
       const fs = await import("node:fs");
       const [indexFile, listingFile, environment, generation, prefix, planFile] = process.argv.slice(1);
-      let parsed = null;
-      try { parsed = fs.existsSync(indexFile) ? JSON.parse(fs.readFileSync(indexFile, "utf8")) : null; } catch { parsed = { unreadable: true }; }
+      const parsed = fs.existsSync(indexFile) ? JSON.parse(fs.readFileSync(indexFile, "utf8")) : null;
       const previous = lib.readPreviousIndex(parsed, environment, lib.parseIndexKey(process.env.BACKUP_INDEX_KEY));
       const tag = lib.parseBlobPrefix(prefix).tag;
       const listing = lib.parseBlobListing(fs.readFileSync(listingFile, "utf8"), prefix);
       const plan = lib.carryPlan(previous, { prefix, generation, tag, listing });
-      fs.writeFileSync(planFile, plan.carry.map((b) => `${b.sha256} ${b.encSize} ${b.encSha256}\n`).join(""));
-      console.log(JSON.stringify({ reason: previous.reason, from: plan.from, unverifiable: plan.unverifiable }));
+      fs.writeFileSync(planFile, plan.carry.map((b) => `${b.sha256} ${b.encSize} ${b.encSha256} ${b.from} ${b.to} ${b.check.join(",") || "-"}\n`).join(""));
+      console.log(JSON.stringify({ from: plan.from, unverifiable: plan.unverifiable }));
     ' "$dir/previous-index.json" "$dir/blobs-current.txt" "$environment" "$generation" "$current" "$private/carry-plan.txt" > "$private/carry.json" \
-      || fail "BACKUP_INDEX_KEY is not usable (it must hold at least 32 random bytes, as hex or base64)."
-    reason=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).reason ?? "")' "$private/carry.json")
+      || fail "Cannot plan the monthly copy (the line above says why)."
     from=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).from ?? "")' "$private/carry.json")
     unverifiable=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).unverifiable)' "$private/carry.json")
-    if [[ "$reason" == signature ]]; then
-      echo "::warning::The previous index (${newest}) failed its signature check (BACKUP_INDEX_KEY), so it is not used: nothing is copied from last month and every file is downloaded again tonight."
-    fi
     if [[ -n "$from" && -s "$private/carry-plan.txt" ]]; then
       export FROM="$from" CURRENT="$current"
       xargs -P 4 -L 1 bash -c "$carry_one" _ < "$private/carry-plan.txt" > "$private/carry-results.txt" \
         || fail "Copying blobs from ${from} stopped unexpectedly."
-      awk '$1 == "carried" { print $2 }' "$private/carry-results.txt" | sort > "$dir/carried.txt"
+      awk '$1 == "carried" { print $2, $3 }' "$private/carry-results.txt" | sort > "$dir/carried.txt"
       carried=$(wc -l < "$dir/carried.txt" | tr -d ' ')
+      checked=$(awk '$1 == "carried" && $4 == "checked"' "$private/carry-results.txt" | wc -l | tr -d ' ')
+      occupied=$(awk '$1 == "occupied"' "$private/carry-results.txt" | wc -l | tr -d ' ')
       rejected=$(awk '$1 == "rejected"' "$private/carry-results.txt" | wc -l | tr -d ' ')
       failed=$(awk '$1 == "failed"' "$private/carry-results.txt" | wc -l | tr -d ' ')
-      echo "Carried ${carried} blob(s) from ${from} into ${current}, each checked against its recorded size and sha256."
+      echo "Carried ${carried} blob(s) from ${from} into ${current} (${checked} already there from an earlier attempt), each checked against its recorded size and sha256."
+      if (( occupied > 0 )); then
+        echo "::warning::${occupied} blob name(s) in ${current} hold an object that does not match the record of the blob it is named after (left by a run that failed, or put there by someone holding the bucket key); those blobs were copied under another name (<sha256>.<n>.age). Nothing is lost; see the runbook, \"Objects the backup did not make\"."
+      fi
       if (( rejected > 0 )); then
         echo "::warning::${rejected} blob(s) in ${from} do not have the size or sha256 recorded when they were stored, so they were not copied; their files are downloaded again from Supabase tonight."
       fi
@@ -215,7 +313,7 @@ case "$command" in
     if (( unverifiable > 0 )); then
       echo "Note: ${unverifiable} blob(s) in ${from} have no recorded sha256, so they are not copied; their files are downloaded again from Supabase tonight."
     fi
-    echo "Bucket: $(wc -l < "$dir/blobs-current.txt" | tr -d ' ') blob(s) in ${current}; previous index: ${newest:-none (every file will be downloaded)}${reason:+ (not used: ${reason})}."
+    echo "Bucket: $(wc -l < "$dir/blobs-current.txt" | tr -d ' ') blob(s) in ${current}; previous index: ${newest:-none trusted (every file will be downloaded)}."
     ;;
 
   push)
@@ -245,20 +343,27 @@ case "$command" in
     if (( blobs_ok == 1 )); then
       list "$current" > "$private/blobs-after.txt" || fail "Cannot list ${current} after the upload."
       # shellcheck disable=SC2016 # JavaScript, not shell, expands ${…} here.
+      # Counts only in the log (it is public); the names, which carry the
+      # files' sha256s, go to a file on this machine.
       lib '
         const fs = await import("node:fs");
-        const [indexFile, listing, prefix] = process.argv.slice(1);
+        const [indexFile, listing, prefix, detailsFile] = process.argv.slice(1);
         const index = JSON.parse(fs.readFileSync(indexFile, "utf8"));
         const result = lib.checkBlobListing(index.blobs, lib.parseBlobListing(fs.readFileSync(listing, "utf8"), prefix));
         console.log(`Blobs: ${index.blobs.length} needed by this backup, ${result.missing.length} missing, ${result.wrong.length} with the wrong size.`);
+        const details = [
+          ...result.missing.map((name) => `missing: ${name}`),
+          ...result.wrong.map((w) => `wrong size: ${w.name} (${w.actual} bytes, expected ${w.expected})`),
+        ];
+        if (details.length > 0) fs.writeFileSync(detailsFile, `${details.join("\n")}\n`, { mode: 0o600 });
         if (result.missing.length > 0) {
-          console.log(`::error::${result.missing.length} blob(s) this backup needs are not in ${prefix}. Their sha256s (content hashes, not file names): ${result.missing.join(" ")}`);
+          console.log(`::error::${result.missing.length} blob(s) this backup needs are not in ${prefix}. Their names are in ${detailsFile}, on the machine that ran this.`);
         }
         if (result.wrong.length > 0) {
-          console.log(`::error::${result.wrong.length} blob(s) in ${prefix} do not have the encrypted size recorded when they were stored (damaged copies). The backup key cannot replace them: an administrator of the bucket must delete these objects in ${prefix}, then run Backup again, which stores them anew: ${result.wrong.map((w) => `${w.sha256}.age (${w.actual} bytes, expected ${w.expected})`).join(", ")}`);
+          console.log(`::error::${result.wrong.length} blob(s) in ${prefix} do not have the encrypted size recorded when they were stored (damaged copies). The next run stores those files again under another name; nothing needs deleting. Their names are in ${detailsFile}, on the machine that ran this.`);
         }
         process.exit(result.ok ? 0 : 1);
-      ' "$BACKUP_INDEX_FILE" "$private/blobs-after.txt" "$current" || blobs_ok=0
+      ' "$BACKUP_INDEX_FILE" "$private/blobs-after.txt" "$current" "$out/blob-check.txt" || blobs_ok=0
     fi
     echo "Blobs: ${uploaded} new uploaded into ${current}."
 
@@ -289,74 +394,91 @@ case "$command" in
     prefix=$(cut -f1 <<< "$target")
     wanted=$(cut -f2 <<< "$target")
     list "$prefix" | cut -f1 > "$private/keys.txt" || fail "Cannot list the backup bucket. Check BACKUP_S3_ENDPOINT, BACKUP_S3_BUCKET, BACKUP_S3_REGION and the access key."
-    # Only well-formed index keys; a run named by its time must be there.
-    # shellcheck disable=SC2016 # JavaScript, not shell, expands ${…} here.
-    lib '
-      const fs = await import("node:fs");
-      const keys = fs.readFileSync(process.argv[1], "utf8").split("\n").filter((k) => lib.indexKeyTime(k, process.argv[2]) !== null).sort();
-      fs.writeFileSync(process.argv[1], keys.map((k) => `${k}\n`).join(""));
-    ' "$private/keys.txt" "$environment"
+    run_time() { sed -E 's#^.*/qbbe-[a-z-]+-([0-9]{8}T[0-9]{6}Z)\.index\.json$#\1#' <<< "$1"; }
     if [[ -n "$wanted" ]]; then
       grep -qxF "$wanted" "$private/keys.txt" || fail "No backup ${wanted} in the bucket."
-      index_key="$wanted"
+      printf '%s\n' "$wanted" > "$private/candidates.txt"
     else
-      index_key=$(tail -n 1 "$private/keys.txt")
-      [[ -n "$index_key" ]] || fail "No backup of ${environment} under ${prefix} in the bucket."
-      if [[ "$prefix" != "${environment}/" ]] && (( $(wc -l < "$private/keys.txt") > 1 )); then
-        echo "That day has $(wc -l < "$private/keys.txt" | tr -d ' ') backup runs; fetching the newest. To fetch another, give its time instead of the date:"
-        sed -E 's#^.*/qbbe-[a-z-]+-([0-9]{8}T[0-9]{6}Z)\.index\.json$#  \1#' "$private/keys.txt"
-      fi
+      # Well-formed index keys, newest first, none dated more than an hour
+      # ahead (a planted name sorting last). The index's signature cannot be
+      # checked here (custodians do not hold BACKUP_INDEX_KEY), so the runs
+      # are listed with their archive's sha256: EXPECTED_SHA256 decides.
+      # shellcheck disable=SC2016 # JavaScript, not shell, expands ${…} here.
+      future=$(lib '
+        const fs = await import("node:fs");
+        const found = lib.indexCandidates(fs.readFileSync(process.argv[1], "utf8").split("\n"), process.argv[2], new Date(), { days: null });
+        fs.writeFileSync(process.argv[3], found.keys.map((k) => `${k}\n`).join(""));
+        console.log(found.future);
+      ' "$private/keys.txt" "$environment" "$private/candidates.txt") || fail "Cannot read the bucket's list of backups."
+      [[ -s "$private/candidates.txt" ]] \
+        || fail "No backup of ${environment} under ${prefix} in the bucket$( (( future > 0 )) && echo " (${future} dated more than an hour ahead were ignored)")."
+      total=$(wc -l < "$private/candidates.txt" | tr -d ' ')
+      echo "Runs of ${environment} considered for ${which}, newest first: ${total}$( (( future > 0 )) && echo "; ${future} dated more than an hour ahead were ignored")."
+      head -n 10 "$private/candidates.txt" | while read -r key; do
+        label="not a valid backup index"
+        if s3 s3api get-object --bucket "$BUCKET" --key "$key" --range bytes=0-4095 "$private/head.json" > /dev/null 2>&1; then
+          # shellcheck disable=SC2016 # JavaScript, not shell, expands ${…} here.
+          label=$(node -e '
+            const text = require("fs").readFileSync(process.argv[1], "utf8");
+            const sha = /^\{"format":"qbbe-backup-index\/2",[^]*?"archiveSha256":"([0-9a-f]{64})"/.exec(text)?.[1];
+            console.log(sha ? `archive sha256 ${sha}` : "not a valid backup index");
+          ' "$private/head.json")
+        fi
+        echo "  $(run_time "$key")  ${label}"
+      done
+      if (( total > 10 )); then echo "  (and $(( total - 10 )) older)"; fi
     fi
     mkdir -p "$dest/blobs"
     chmod 700 "$dest" "$dest/blobs"
     # A download that does not finish leaves no file behind.
     trap 'find "$dest" -name "*.part" -type f -delete 2> /dev/null; cleanup' EXIT
+    list "blobs/${environment}/" > "$private/blob-listing.txt" || fail "Cannot list the blob folders of ${environment}."
+    # The newest considered run whose index is a valid backup index. Every
+    # value of the index that becomes part of a path is checked first.
+    index_key=""
+    while read -r key; do
+      s3 s3 cp "s3://${BUCKET}/${key}" "$private/index.json" --only-show-errors > /dev/null || fail "Cannot download ${key}."
+      # shellcheck disable=SC2016 # JavaScript, not shell, expands ${…} here.
+      if lib '
+        const fs = await import("node:fs");
+        const [indexFile, environment, indexKey, listingFile, infoFile, planFile] = process.argv.slice(1);
+        const checked = lib.checkFetchIndex(JSON.parse(fs.readFileSync(indexFile, "utf8")), environment, indexKey);
+        const folders = lib.parseBlobFolders(fs.readFileSync(listingFile, "utf8"), environment, checked.tag);
+        const plan = lib.fetchPlan(checked.blobs, checked.blobPrefix, folders);
+        fs.writeFileSync(infoFile, [checked.archive, checked.archiveSha256, checked.blobPrefix].join("\n") + "\n");
+        fs.writeFileSync(planFile, plan.map((p) => `${p.sha256} ${p.candidates.map((c) => [c.key, c.size ?? "-", c.sha256 ?? "-", c.local, c.kind].join("|")).join(";")}\n`).join(""));
+      ' "$private/index.json" "$environment" "$key" "$private/blob-listing.txt" "$private/index.txt" "$private/blobs.txt"; then
+        index_key="$key"
+        break
+      fi
+      echo "Skipping $(run_time "$key"): not a valid backup index (the line above says why)."
+    done < "$private/candidates.txt"
+    [[ -n "$index_key" ]] || fail "No valid backup index among the runs considered; nothing was fetched. Fetch one run by its time from the Backup run's summary instead."
+    echo "Fetching $(run_time "$index_key")."
     index="$dest/$(basename "$index_key")"
-    s3 s3 cp "s3://${BUCKET}/${index_key}" "${index}.part" --only-show-errors > /dev/null || fail "Cannot download ${index_key}."
-    mv "${index}.part" "$index"
-    # Every value of the index that becomes part of a path is checked first.
-    # shellcheck disable=SC2016 # JavaScript, not shell, expands ${…} here.
-    lib '
-      const fs = await import("node:fs");
-      const checked = lib.checkFetchIndex(JSON.parse(fs.readFileSync(process.argv[1], "utf8")), process.argv[2], process.argv[3]);
-      const previous = lib.blobPrefix(process.argv[2], lib.previousGeneration(checked.generation), checked.tag);
-      fs.writeFileSync(process.argv[4], [checked.archive, checked.archiveSha256, checked.blobPrefix, previous].join("\n") + "\n");
-      fs.writeFileSync(process.argv[5], checked.blobs.map((b) => `${b.sha256} ${b.encSize} ${b.encSha256 ?? "-"}\n`).join(""));
-    ' "$index" "$environment" "$index_key" "$private/index.txt" "$private/blobs.txt" \
-      || { rm -f "$index"; fail "The index ${index_key} is not a valid backup index (the line above says why); nothing was fetched. Fetch one run by its time from the Backup run's summary instead."; }
-    { read -r archive; read -r expected; read -r blob_prefix; read -r older_prefix; } < "$private/index.txt"
+    mv "$private/index.json" "$index"
+    { read -r archive; read -r expected; } < "$private/index.txt"
     s3 s3 cp "s3://${BUCKET}/$(dirname "$index_key")/${archive}" "$dest/${archive}.part" --only-show-errors --no-progress > /dev/null \
       || fail "Cannot download ${archive}."
     mv "$dest/${archive}.part" "$dest/${archive}"
-    export BLOB_PREFIX="$blob_prefix" OLDER_PREFIX="$older_prefix" DEST="$dest"
-    # Each blob: from its folder, checked against the encrypted size and
-    # sha256 its index records; failing that, last month's copy (which the
-    # restore checks by the file's own sha256 after decrypting).
-    # shellcheck disable=SC2016 # expanded by the inner bash
-    xargs -P 8 -L 1 bash -c '
-      sha="$1" size="$2" want="$3" part="${DEST}/blobs/$1.age.part"
-      if s3 s3 cp "s3://${BUCKET}/${BLOB_PREFIX}${sha}.age" "$part" --only-show-errors --no-progress > /dev/null 2>&1 \
-        && [[ "$(size_of "$part")" == "$size" ]] && { [[ "$want" == "-" ]] || [[ "$(sha256_of "$part")" == "$want" ]]; }; then
-        mv "$part" "${DEST}/blobs/${sha}.age"; echo "ok $sha"; exit 0
-      fi
-      rm -f "$part"
-      if s3 s3 cp "s3://${BUCKET}/${OLDER_PREFIX}${sha}.age" "$part" --only-show-errors --no-progress > /dev/null 2>&1; then
-        mv "$part" "${DEST}/blobs/${sha}.age"; echo "older $sha"; exit 0
-      fi
-      rm -f "$part"; echo "missing $sha"
-    ' _ < "$private/blobs.txt" > "$private/fetched.txt" || fail "Fetching the blobs stopped unexpectedly."
+    export DEST="$dest"
+    xargs -P 8 -L 1 bash -c "$fetch_one" _ < "$private/blobs.txt" > "$private/fetched.txt" || fail "Fetching the blobs stopped unexpectedly."
     find "$dest" -type f -exec chmod 600 {} +
-    count=$(awk '$1 == "ok" || $1 == "older"' "$private/fetched.txt" | wc -l | tr -d ' ')
-    older=$(awk '$1 == "older"' "$private/fetched.txt" | wc -l | tr -d ' ')
+    count=$(awk '$1 == "primary" || $1 == "copy"' "$private/fetched.txt" | wc -l | tr -d ' ')
+    copies=$(awk '$1 == "copy"' "$private/fetched.txt" | wc -l | tr -d ' ')
+    unchecked=$(awk '$1 == "unchecked"' "$private/fetched.txt" | wc -l | tr -d ' ')
     missing=$(awk '$1 == "missing" { print $2 }' "$private/fetched.txt")
     sha=$(sha256_of "$dest/${archive}")
     [[ "$sha" == "$expected" ]] || fail "The downloaded archive's sha256 (${sha}) is not the one its index records (${expected}). Do not restore it."
-    echo "Fetched ${dest}/${archive} and ${count} blob(s) into ${dest}/blobs$( (( older > 0 )) && echo " (${older} from ${older_prefix}, checked when restored)")."
+    echo "Fetched ${dest}/${archive} and ${count} blob(s) into ${dest}/blobs, each with its recorded size and sha256$( (( copies > 0 )) && echo " (${copies} from an identical copy in another month folder of the same keys)")."
+    if (( unchecked > 0 )); then
+      echo "${unchecked} blob(s) have no recorded encrypted sha256 that any copy matched (an index without one, or every checkable copy damaged): every copy found was fetched, and unpack-blobs keeps the one that decrypts to the file's own sha256."
+    fi
     echo "Archive sha256: ${sha}"
-    echo "Compare it with the sha256 in the summary of the Backup run that made it (GitHub, Actions, Backup). They must be the same; restore-drill.sh takes it as EXPECTED_SHA256."
+    echo "Compare it with the sha256 in the summary of the Backup run that made it (GitHub, Actions, Backup), or in the outside monitor's log of that night's check-in. They must be the same; restore-drill.sh takes it as EXPECTED_SHA256."
     if [[ -n "$missing" ]]; then
       printf '%s\n' "$missing" > "$dest/blobs-missing.txt"
-      fail "$(wc -l < "$dest/blobs-missing.txt" | tr -d ' ') blob(s) could not be fetched, or did not have their recorded size and sha256 (listed by content hash in ${dest}/blobs-missing.txt). Try a backup from the month before, or restore the database and the other files with ALLOW_MISSING_FILES=1 (runbook, Restore)."
+      fail "$(wc -l < "$dest/blobs-missing.txt" | tr -d ' ') blob(s) were found in no month folder of these keys (listed by content hash in ${dest}/blobs-missing.txt). Restore the database and the other files with ALLOW_MISSING_FILES=1, or try another night (runbook, Restore)."
     fi
     ;;
 

@@ -36,7 +36,7 @@ read a name and phone them.
 | Malware scanning | | | | | | | | | |
 | Monitoring / alerting | | | | | | | | | |
 | Backup storage ([backup-recovery.md](backup-recovery.md)) | _to record: the QBBE account that owns the bucket (the Oracle tenancy, if Oracle is used)_ | _to record: name; holds backup key 1 (age private key)_ | _to record: name; holds backup key 2 (age private key)_ | _to record: the bucket account's recovery mailbox_ | _to record_ | the bucket named in `BACKUP_S3_BUCKET`: archives under `staging/`, files under `blobs/staging/<YYYY-MM>-<key tag>/` | the same bucket: `production/` and `blobs/production/<YYYY-MM>-<key tag>/` | GitHub Environments `backup-staging` and `backup-production` → `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY`, `BACKUP_AGE_RECIPIENT` (public keys only), `BACKUP_INDEX_KEY` (a different one per environment, kept nowhere else: losing it costs one full re-download of the files), `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_PASSWORD`, `BACKUP_HEALTHCHECK_URL`; the bucket key also in the password-manager entry "QBBE backup bucket key", shared with both custodians for restores; each age private key: that custodian's own password-manager entry plus one offline copy, never GitHub, the server, email or a shared drive | _to record: date the bucket key was made; rotate it yearly and when a custodian leaves. Rotate `BACKUP_INDEX_KEY` when someone who could read these environments' secrets leaves_ |
-| Backup check-in monitor (healthchecks.io or similar; [backup-recovery.md](backup-recovery.md) setup step 6) | _to record: the QBBE mailbox the account is registered to_ | _to record: name (one of the backup custodians)_ | _to record: name (the other backup custodian)_ | _to record_ | _to record_ | check "QBBE backup staging" | check "QBBE backup production" | each check's ping address: GitHub Environment `backup-staging` / `backup-production` → `BACKUP_HEALTHCHECK_URL` | _to record: rotate a ping address if it leaks (anyone holding it can report a backup that never happened)_ |
+| Backup check-in monitor (healthchecks.io or similar; [backup-recovery.md](backup-recovery.md) setup step 6) | _to record: the QBBE mailbox the account is registered to_ | _to record: name (one of the backup custodians)_ | _to record: name (the other backup custodian)_ | _to record_ | _to record_ | check "QBBE backup staging" | check "QBBE backup production" | each check's ping address: GitHub Environment `backup-staging` / `backup-production` → `BACKUP_HEALTHCHECK_URL`. Each check's log also holds every night's archive name and sha256 (the body of each successful check-in): the source of `EXPECTED_SHA256` for a restore when GitHub is unavailable, so both custodians must be able to sign in to this account | _to record: rotate a ping address if it leaks (anyone holding it can report a backup that never happened, or add a false sha256 to the log)_ |
 
 **Backup storage** has two kinds of custody. The bucket account is like any
 other row. The two custodians are the people who each hold one of the age
@@ -45,7 +45,9 @@ backup is unreadable, so they must be two different, named people, and the
 keys never sit in GitHub or on the QBBE server. When a custodian changes,
 follow "Backup custodian unavailable or key lost" in backup-recovery.md.
 The check-in monitor is what notices when the nightly backup stops running
-altogether; its alerts go to both custodians.
+altogether; its alerts go to both custodians. Its log is also the second
+record, besides GitHub's run summaries, of each night's archive sha256,
+which a restore needs (backup-recovery.md, Restore step 1).
 
 **`backup-production` is a production credential store.** It holds
 production's database password and a Supabase secret key that bypasses

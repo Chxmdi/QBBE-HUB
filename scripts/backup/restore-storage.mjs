@@ -22,7 +22,11 @@
 // id (so a run interrupted earlier, which left them lifted, is repaired),
 // and the target's settings for a different bucket named with --bucket a=b.
 // They are put back whatever happens: also when the upload or a later lift
-// fails, and on Ctrl-C (SIGINT) or SIGTERM. A bucket missing from the
+// fails, and on Ctrl-C (SIGINT) or SIGTERM. On a signal, no further bucket
+// is lifted, a lift already on its way to Storage is waited for (so it
+// cannot land after the put-back), the settings are put back and checked,
+// and only then does the script stop; a second Ctrl-C meanwhile is ignored
+// with a message rather than cutting the put-back short. A bucket missing from the
 // target is created, and given the backed-up settings at the end. Every
 // bucket's settings are then read again to check they took. The project's
 // own upload limit (Storage settings in the dashboard) must still be at
@@ -115,6 +119,11 @@ const failures = [];
 const putBack = [];
 /** @type {Promise<void> | null} */
 let puttingBack = null;
+/** @type {Promise<void> | null} the lift (or bucket creation) on its way to Storage, if any */
+let liftInFlight = null;
+let stopping = false;
+/** @param {number} ms */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref());
 /** Puts every lifted bucket's settings back, once, and checks they took. */
 function restoreSettings() {
   puttingBack ??= (async () => {
@@ -136,11 +145,24 @@ function restoreSettings() {
   return puttingBack;
 }
 for (const signal of /** @type {const} */ (["SIGINT", "SIGTERM"])) {
-  process.once(signal, async () => {
+  process.on(signal, () => {
+    if (stopping) {
+      console.error(`${signal}: already putting the bucket settings back; this stops by itself once they are back. Do not stop it again.`);
+      return;
+    }
+    stopping = true;
     console.error(`${signal}: putting the bucket settings back before stopping…`);
-    await restoreSettings();
-    for (const f of failures.filter((x) => x.startsWith("settings"))) console.error(`      failed: ${f}`);
-    process.exit(signal === "SIGINT" ? 130 : 143);
+    void (async () => {
+      // A lift still on its way could land after the put-back: wait for it
+      // (at most 60 s), then put everything back and check it.
+      if (liftInFlight) await Promise.race([liftInFlight.catch(() => {}), sleep(60_000)]);
+      await restoreSettings();
+      const settingsFailures = failures.filter((x) => x.startsWith("settings"));
+      for (const f of settingsFailures) console.error(`      failed: ${f}`);
+      if (putBack.length === 0) console.error("No bucket settings had been changed.");
+      else if (settingsFailures.length === 0) console.error(`Bucket settings of ${putBack.length} bucket(s) put back and checked.`);
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    })();
   });
 }
 
@@ -149,20 +171,29 @@ try {
   //    what to put back: the backup's settings for its own bucket, the
   //    target's for a different bucket that already exists.
   for (const bucket of buckets) {
+    if (stopping) break;
     const id = /** @type {string} */ (targetOf(bucket.id));
-    const existing = await client.getBucket(id);
-    const backedUp = { id, public: bucket.public, file_size_limit: bucket.file_size_limit ?? null, allowed_mime_types: bucket.allowed_mime_types ?? null };
-    if (existing) {
-      putBack.push(
-        id === bucket.id
-          ? backedUp
-          : { id, public: existing.public, file_size_limit: existing.file_size_limit ?? null, allowed_mime_types: existing.allowed_mime_types ?? null },
-      );
-      await client.updateBucket({ id, public: existing.public, file_size_limit: null, allowed_mime_types: null });
-    } else {
-      putBack.push(backedUp);
-      await client.createBucket({ id, public: bucket.public, file_size_limit: null, allowed_mime_types: null });
-      console.log(`Created bucket ${id}.`);
+    liftInFlight = (async () => {
+      const existing = await client.getBucket(id);
+      if (stopping) return;
+      const backedUp = { id, public: bucket.public, file_size_limit: bucket.file_size_limit ?? null, allowed_mime_types: bucket.allowed_mime_types ?? null };
+      if (existing) {
+        putBack.push(
+          id === bucket.id
+            ? backedUp
+            : { id, public: existing.public, file_size_limit: existing.file_size_limit ?? null, allowed_mime_types: existing.allowed_mime_types ?? null },
+        );
+        await client.updateBucket({ id, public: existing.public, file_size_limit: null, allowed_mime_types: null });
+      } else {
+        putBack.push(backedUp);
+        await client.createBucket({ id, public: bucket.public, file_size_limit: null, allowed_mime_types: null });
+        console.log(`Created bucket ${id}.`);
+      }
+    })();
+    try {
+      await liftInFlight;
+    } finally {
+      liftInFlight = null;
     }
   }
   console.log(`Lifted the size limit and file types of ${putBack.length} bucket(s) for the upload; the largest file is ${formatBytes(manifest.storage.largestBytes ?? 0)}.`);
@@ -192,7 +223,7 @@ const settingsFailed = failures.some((f) => f.startsWith("settings"));
 const setUpFailed = failures.some((f) => f.startsWith("bucket set-up"));
 console.log(
   `${setUpFailed ? "Nothing uploaded: the bucket set-up failed" : `Uploaded ${objects.length - failures.filter((f) => !f.startsWith("settings")).length} of ${objects.length} files in ${uploadSeconds}s`}; ` +
-    `${settingsFailed ? "bucket settings NOT all put back (see below)" : "bucket settings put back and checked"}.`,
+    `${putBack.length === 0 ? "no bucket settings were changed" : settingsFailed ? "bucket settings NOT all put back (see below)" : "bucket settings put back and checked"}.`,
 );
 if (skipped > 0) console.log(`Skipped ${skipped} file(s) the backup could not give back (ALLOW_MISSING_FILES=1).`);
 for (const f of failures) console.log(`      failed: ${f}`);
@@ -212,7 +243,7 @@ await eachLimited(objects, concurrency, async (o) => {
 const result = compareObjects(objects, actual);
 const bytes = actual.reduce((sum, o) => sum + o.size, 0);
 console.log(
-  `${result.ok ? "ok  " : "FAIL"}  restored files: ${result.checked} downloaded again and compared (${formatBytes(bytes)}), ` +
+  `${result.ok ? "ok  " : "FAIL"}  restored files: ${actual.length} of ${result.checked} downloaded again and compared (${formatBytes(bytes)}), ` +
     `${result.missing.length} missing, ${result.changed.length} different`,
 );
 const seconds = ((Date.now() - started) / 1000).toFixed(1);

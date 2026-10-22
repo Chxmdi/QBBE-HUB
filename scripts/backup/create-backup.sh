@@ -12,7 +12,10 @@
 # The database address holds no password: psql, pg_dump and the Supabase
 # CLI read it from PGPASSWORD (or a private pgpass file named by
 # PGPASSFILE), so it is never on a command line. An address with a password
-# is refused.
+# is refused. A database that is not on this computer is reached over TLS
+# only: PGSSLMODE=require is set unless the address (sslmode=require or
+# verify-full) or PGSSLMODE already asks for it, and anything weaker is
+# refused (lib.mjs databaseTls).
 #
 # Called by .github/workflows/backup.yml every night, and by hand for the
 # local rehearsal (SUPABASE_BIN="npx supabase" when the CLI is not on PATH).
@@ -84,6 +87,12 @@ node --input-type=module -e '
   if (urlHasPassword(process.env.BACKUP_DB_URL)) { console.error("BACKUP_DB_URL holds a password: give it in PGPASSWORD instead."); process.exit(1); }
   try { parseIndexKey(process.env.BACKUP_INDEX_KEY); } catch (error) { console.error(error.message); process.exit(1); }
 ' || fail "A backup setting is not usable (see the line above)."
+tls=$(node --input-type=module -e '
+  import { databaseTls } from "./scripts/backup/lib.mjs";
+  try { console.log(databaseTls(process.env.BACKUP_DB_URL, process.env.PGSSLMODE).mode ?? ""); }
+  catch (error) { console.error(error.message); process.exit(1); }
+') || fail "BACKUP_DB_URL: see the line above."
+if [[ -n "$tls" ]]; then export PGSSLMODE="$tls"; fi
 recipients=$(node --input-type=module -e '
   import { parseRecipients } from "./scripts/backup/lib.mjs";
   try { console.log(parseRecipients(process.env.BACKUP_AGE_RECIPIENT).join("\n")); }
@@ -212,8 +221,10 @@ total=$(( SECONDS - started ))
 echo "Backup: ${file} (${size} bytes, sha256 ${sha})"
 echo "New file blobs to upload to ${blob_prefix}: ${blob_count} (${blob_bytes} bytes)."
 # What this run read from Supabase, and a ::warning:: when the month at
-# this rate passes 2 GB for this environment.
-node scripts/backup/manifest.mjs traffic "$work"
+# this rate passes 2 GB for this environment; the figure in bytes goes to
+# the workflow, whose alert job adds the environments together.
+node scripts/backup/manifest.mjs traffic "$work" "$work/traffic-month.txt"
+traffic_month=$(cat "$work/traffic-month.txt")
 echo "Took ${total}s (database ${db_seconds}s, files ${files_seconds}s)."
 {
   echo "BACKUP_FILE=${file}"
@@ -223,6 +234,7 @@ echo "Took ${total}s (database ${db_seconds}s, files ${files_seconds}s)."
   echo "BACKUP_SECONDS=${total}"
   echo "BACKUP_GENERATION=${generation}"
   echo "BACKUP_BLOB_PREFIX=${blob_prefix}"
+  echo "BACKUP_TRAFFIC_MONTH_BYTES=${traffic_month}"
 } > "${out}/backup.env"
 
 exit "$status"

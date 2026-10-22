@@ -24,7 +24,11 @@
 //   node scripts/backup/manifest.mjs unpack-blobs <work-dir> <blob-dir>
 //       decrypts each file's blob (AGE_IDENTITY_FILE) into
 //       <work-dir>/storage/objects/<bucket>/<path>, for check-files and the
-//       file restore.
+//       file restore. Tries the blob's recorded name first, then any other
+//       copy of it in <blob-dir> (<sha256>.<anything>.age, as bucket.sh fetch
+//       saves copies it could not check), and keeps the first that decrypts
+//       to bytes with the file's sha256. An empty file comes back empty with
+//       every age version (age's own output is read from its stdout).
 //   node scripts/backup/manifest.mjs count-sql <work-dir>
 //       the query that counts the same tables in a restored database.
 //   node scripts/backup/manifest.mjs compare-rows <work-dir> <counts-file> [--skip-schema a,b]
@@ -46,18 +50,20 @@
 //       file names (they can carry people's names), and no count of
 //       sign-in accounts or MFA factors (the summary of a public
 //       repository's run is public).
-//   node scripts/backup/manifest.mjs traffic <work-dir>
+//   node scripts/backup/manifest.mjs traffic <work-dir> [<month-bytes-file>]
 //       what this run read from Supabase and the month at that rate, with a
-//       ::warning:: above 2 GB a month for this environment.
+//       ::warning:: above 2 GB a month for this environment; writes the
+//       month's figure in bytes to <month-bytes-file> (the workflow's alert
+//       job adds the environments together).
 //
 // Row counts come from data.sql itself, not from the live database, so they
 // are exactly what a restore inserts even when people kept working while the
 // dump ran.
 
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
+import { copyFile, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { createInterface } from "node:readline";
 import {
@@ -66,6 +72,7 @@ import {
   MANIFEST_FORMAT,
   TRAFFIC_WARN_BYTES,
   buildIndex,
+  blobNameSha,
   buildManifest,
   checkRestoreTarget,
   compareBuckets,
@@ -362,18 +369,59 @@ async function checkFiles() {
 }
 
 /**
+ * Decrypts `from` into `to` through age's stdout, into a file this script
+ * creates: age 1.1.1 with -o creates its output only when it writes
+ * something, so an empty file would never appear. Returns the sha256 of
+ * the bytes written.
  * @param {string} identity
  * @param {string} from
  * @param {string} to
+ * @returns {Promise<string>}
  */
 function decrypt(identity, from, to) {
   return new Promise((resolve, reject) => {
-    const age = spawn(process.env.AGE_BIN || "age", ["-d", "-i", identity, "-o", to, from], { stdio: ["ignore", "ignore", "pipe"] });
+    const hash = createHash("sha256");
+    const out = createWriteStream(to, { mode: 0o600 });
+    const age = spawn(process.env.AGE_BIN || "age", ["-d", "-i", identity, from], { stdio: ["ignore", "pipe", "pipe"] });
     let stderr = "";
+    let code = /** @type {number | null | undefined} */ (undefined);
+    let flushed = false;
+    const finish = () => {
+      if (code === undefined || !flushed) return;
+      if (code === 0) resolve(hash.digest("hex"));
+      else reject(new Error(stderr.trim().slice(0, 200) || `age exited ${code}`));
+    };
     age.stderr.on("data", (c) => (stderr += c));
-    age.on("error", reject);
-    age.on("close", (code) => (code === 0 ? resolve(undefined) : reject(new Error(stderr.trim().slice(0, 200) || `age exited ${code}`))));
+    age.stdout.on("data", (c) => hash.update(c));
+    age.stdout.pipe(out);
+    out.on("finish", () => {
+      flushed = true;
+      finish();
+    });
+    out.on("error", reject);
+    age.on("error", (error) => {
+      out.destroy();
+      reject(error);
+    });
+    age.on("close", (status) => {
+      code = status;
+      finish();
+    });
   });
+}
+
+/**
+ * The blob files to try for one file's content, in order: the name its
+ * manifest entry records, then <sha256>.age, then every other copy of that
+ * content in the folder.
+ * @param {string} sha256
+ * @param {string | undefined} recorded the basename of the manifest's `blob`
+ * @param {string[]} present the folder's file names
+ */
+function blobCandidates(sha256, recorded, present) {
+  const own = recorded && blobNameSha(recorded) === sha256 ? [recorded] : [];
+  const others = present.filter((name) => name.startsWith(`${sha256}.`) && name.endsWith(".age") && !name.includes("/")).sort();
+  return [...new Set([...own, `${sha256}.age`, ...others])].filter((name) => present.includes(name));
 }
 
 async function unpackBlobs() {
@@ -385,15 +433,22 @@ async function unpackBlobs() {
   /** @type {Map<string, import("./lib.mjs").ManifestObject[]>} */
   const bySha = new Map();
   for (const o of manifest.storage.objects) bySha.set(o.sha256, [...(bySha.get(o.sha256) ?? []), o]);
+  /** @type {string[]} */
+  let present = [];
+  try {
+    present = await readdir(blobDir);
+  } catch {
+    // no folder: every blob is missing
+  }
   let missing = 0;
   let failed = 0;
   let unwritable = 0;
   let written = 0;
+  let others = 0;
   for (const [sha256, list] of bySha) {
-    const blob = join(blobDir, `${sha256}.age`);
-    try {
-      await stat(blob);
-    } catch {
+    const recorded = String(list[0].blob ?? "").split("/").at(-1);
+    const candidates = blobCandidates(sha256, recorded, present);
+    if (candidates.length === 0) {
       missing += 1;
       continue;
     }
@@ -404,9 +459,25 @@ async function unpackBlobs() {
     const files = /** @type {string[]} */ (targets.filter((t) => t !== null));
     if (files.length === 0) continue;
     await mkdir(dirname(files[0]), { recursive: true, mode: 0o700 });
-    try {
-      await decrypt(identity, blob, files[0]);
-    } catch {
+    // Each candidate is decrypted beside the target and kept only if its
+    // bytes are the file's: a planted or damaged copy is never unpacked.
+    let done = false;
+    for (const name of candidates) {
+      const part = join(dirname(files[0]), `.${randomUUID()}.part`);
+      try {
+        const got = await decrypt(identity, join(blobDir, name), part);
+        if (got === sha256) {
+          await rename(part, files[0]);
+          done = true;
+          if (name !== candidates[0]) others += 1;
+          break;
+        }
+      } catch {
+        // not decryptable with this key: try the next copy
+      }
+      await rm(part, { force: true });
+    }
+    if (!done) {
       failed += 1;
       continue;
     }
@@ -419,7 +490,8 @@ async function unpackBlobs() {
   }
   console.log(
     `Files: ${written} of ${manifest.storage.objects.length} unpacked from ${bySha.size} blob(s); ` +
-      `${missing} blob(s) missing from ${blobDir}, ${failed} could not be decrypted` +
+      `${missing} blob(s) missing from ${blobDir}, ${failed} could not be decrypted to the file's sha256` +
+      `${others > 0 ? `, ${others} taken from another copy than the recorded one` : ""}` +
       `${unwritable > 0 ? `, ${unwritable} file(s) with a name a disk cannot hold` : ""}.`,
   );
   process.exit(missing === 0 && failed === 0 && unwritable === 0 ? 0 : 1);
@@ -546,11 +618,12 @@ async function summary() {
 }
 
 async function traffic() {
-  const [work] = args;
+  const [work, monthFile] = args;
   if (!work) usage();
   const m = await readManifest(work);
   const t = trafficEstimate(m.read);
   console.log(`Read from Supabase: ${trafficLine(m)}.`);
+  if (monthFile) await writeFile(monthFile, `${t.month}\n`, { mode: 0o600 });
   if (t.warn) {
     console.log(
       `::warning title=Supabase traffic::${m.environment}: about ${formatBytes(t.month)} a month if every night read what this one did, ` +

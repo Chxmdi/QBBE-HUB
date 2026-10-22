@@ -88,7 +88,8 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
      row-level security, with no approval step; its only protection is that
      it accepts runs from `main`.
    - Each of `backup-staging` and `backup-production` needs its own
-     `BACKUP_INDEX_KEY` (make it with `openssl rand -base64 48`).
+     `BACKUP_INDEX_KEY` (make it with `openssl rand -base64 32`: one line
+     of 44 characters; a key typed by hand is refused).
    - The nightly run backs up production only. Staging is backed up every
      night only when the repository variable `BACKUP_STAGING_NIGHTLY` is
      `on`, to stay inside Supabase's free 5 GB of monthly traffic; otherwise

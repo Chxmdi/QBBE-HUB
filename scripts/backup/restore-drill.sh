@@ -16,7 +16,9 @@
 # puts the blobs in <fetched-dir>/blobs (BACKUP_BLOB_DIR to use another).
 # Database addresses never hold the password: it goes in PGPASSWORD (read it
 # without echo: `read -rs PGPASSWORD; export PGPASSWORD`), so it shows in
-# no process list. An address with a password is refused.
+# no process list. An address with a password is refused. A target that is
+# not on this computer is reached over TLS only (PGSSLMODE=require is set
+# unless the address or PGSSLMODE already asks for it; weaker is refused).
 #
 # EXPECTED_SHA256 is required: the archive's sha256 as the summary of the
 # green Backup run that made it shows (GitHub, Actions, Backup). The drill
@@ -46,7 +48,11 @@
 #      file to the target project, downloads it again to compare, and puts
 #      back who owns each file;
 #   5. applies platform.sql (storage policies, auth and storage triggers,
-#      queues, the job schedule) last, as pg_dump puts triggers after data;
+#      queues, the job schedule) last, as pg_dump puts triggers after data.
+#      Every scheduled job is restored paused, so none runs in the target
+#      (a drill leaves them so); the report ends with the statement that
+#      starts the ones that ran in the backup, for a real restore once its
+#      job runner is wired (runbook, Restore);
 #   6. checks the load is complete (rows per table, the migration history
 #      included; policies, triggers, queues and schedules; each bucket's
 #      settings; and every file row has its file) and prints a report with
@@ -108,6 +114,12 @@ done
 if node --input-type=module -e 'import { urlHasPassword } from "./scripts/backup/lib.mjs"; process.exit(urlHasPassword(process.env.TARGET_DB_URL) ? 0 : 1);'; then
   fail "TARGET_DB_URL holds a password. Give the address without it, and the password in PGPASSWORD (read -rs PGPASSWORD; export PGPASSWORD), so it never shows in the process list."
 fi
+tls=$(node --input-type=module -e '
+  import { databaseTls } from "./scripts/backup/lib.mjs";
+  try { console.log(databaseTls(process.env.TARGET_DB_URL, process.env.PGSSLMODE).mode ?? ""); }
+  catch (error) { console.error(error.message); process.exit(1); }
+') || fail "TARGET_DB_URL: see the line above."
+if [[ -n "$tls" ]]; then export PGSSLMODE="$tls"; fi
 if [[ -n "${TARGET_SUPABASE_URL:-}" && -z "${TARGET_SERVICE_ROLE_KEY:-}" ]]; then
   fail "TARGET_SUPABASE_URL is set without TARGET_SERVICE_ROLE_KEY."
 fi
@@ -364,6 +376,11 @@ total_s=$(seconds_since "$started")
 report
 echo "These checks show the restore loaded everything the backup holds. Whether the backup captured everything is checked every night when it is made (tables with rows against the dump, files against the database)."
 echo "Times: decrypt ${decrypt_s}s, database ${db_s}s, files ${storage_s}s, checks ${verify_s}s, total ${total_s}s."
+start_schedule=$(sed -n 's/^-- start-schedule: //p' "$db/platform.sql" | head -n 1)
+if [[ "$local_cluster" != "1" && -n "$start_schedule" ]]; then
+  echo "Scheduled jobs: restored paused, so none of them runs in the target. A drill leaves them paused. In a real restore, once the job runner is wired (runbook, Restore), start the ones that ran in the backup with:"
+  echo "  psql \"\$TARGET_DB_URL\" -X -v ON_ERROR_STOP=1 -c \"${start_schedule}\""
+fi
 if printf '%s\n' "${results[@]}" | grep -q '^FAIL'; then
   echo "RESULT: FAIL"
   exit 1

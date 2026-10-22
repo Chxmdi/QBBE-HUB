@@ -21,16 +21,25 @@
 // Why only the changes: Supabase's free plan allows 5 GB of outgoing traffic
 // a month for every project together, and copying every file every night
 // would use it up. BACKUP_STATE_DIR (made by `bucket.sh state`) holds the
-// previous night's index (which version of which file has which sha256, and
-// each blob's encrypted size and sha256), the list of blobs in this month's
-// folder, and the blobs `state` copied in from last month's folder. A file
-// whose version is in the index and whose blob is in this month's folder is
-// not downloaded. The index must carry a valid signature (BACKUP_INDEX_KEY);
-// without one, or without BACKUP_STATE_DIR, every file is downloaded.
+// newest index whose signature verifies (which version of which file has
+// which sha256, and each blob's encrypted size, sha256 and name), the list
+// of blobs in this month's folder, and the blobs `state` brought into it
+// from last month's folder (carried.txt: each one's sha256 and the name it
+// was checked under). A file whose version is in the index and whose blob
+// is in this month's folder under a record a signed index made (lib.mjs
+// knownBlobs) is not downloaded. Nothing else in the folder is ever relied
+// on: an object at a blob's name that no signed index records (left by a
+// failed run, or planted by someone holding the bucket key) is passed over,
+// and the new blob goes under <sha256>.<n>.age instead. The index must
+// carry a valid signature (BACKUP_INDEX_KEY); without one, or without
+// BACKUP_STATE_DIR, every file is downloaded.
 //
 // Each downloaded file is streamed through sha256, MD5 and age, so its
-// plain bytes never touch the disk. Writes:
-//   <out-dir>/blobs/<sha256>.age     new blobs, for bucket.sh to upload
+// plain bytes never touch the disk. Files with the same content share one
+// blob, stored once even when they finish downloading together (lib.mjs
+// createBlobStore). Writes:
+//   <out-dir>/blobs/<name>           new blobs (<sha256>.age, or
+//                                    <sha256>.<n>.age), for bucket.sh
 //   <out-dir>/index-files.json       fingerprints and blob records, for the
 //                                    index (manifest.mjs index)
 //   <work-dir>/storage/index.json    buckets, files and blobs, for the manifest
@@ -54,11 +63,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
-  blobAction,
+  blobFileName,
   blobPrefix,
+  createBlobStore,
   createRowCounter,
   formatBytes,
   knownBlobs,
+  mergeBlobRecord,
   objectNameProblem,
   parseBlobListing,
   parseConcurrency,
@@ -96,11 +107,10 @@ let buckets = [];
 let skippedVersions = 0;
 let bytesRead = 0;
 let filesRead = 0;
-/** @type {Set<string>} blobs in this month's folder whose encrypted sha256 is not known */
-const unknownBlobs = new Set();
+let newBlobs = 0;
+let renamedBlobs = 0;
 let prefix = "";
 let tag = "";
-const uploads = new Set();
 const started = Date.now();
 
 /**
@@ -232,10 +242,15 @@ async function run() {
   skippedVersions = listed.skipped;
 
   // 2. What this month's folder holds (after `bucket.sh state` copied last
-  //    month's blobs in), and last night's index.
+  //    month's blobs in), and the newest trusted index.
   const state = process.env.BACKUP_STATE_DIR;
   const current = parseBlobListing((state && (await readOptional(join(state, "blobs-current.txt")))) || "", prefix);
-  const carried = new Set(((state && (await readOptional(join(state, "carried.txt")))) || "").split("\n").filter(Boolean));
+  /** @type {Map<string, string>} sha256 → the name it was carried to tonight */
+  const carried = new Map();
+  for (const line of ((state && (await readOptional(join(state, "carried.txt")))) || "").split("\n")) {
+    const [sha, name] = line.trim().split(/\s+/);
+    if (sha && name) carried.set(sha, name);
+  }
   const previousText = state ? await readOptional(join(state, "previous-index.json")) : null;
   let parsed = null;
   try {
@@ -244,27 +259,29 @@ async function run() {
     parsed = { unreadable: true };
   }
   const previous = readPreviousIndex(parsed, environment, indexKey);
+  // `bucket.sh state` only keeps an index that verifies, and warns about
+  // the others; this is for a run without it.
   if (!state) console.log("No bucket state given (BACKUP_STATE_DIR); every file is downloaded.");
-  else if (previous.reason === "none") console.log("No previous index; every file is downloaded.");
-  else if (previous.reason === "signature") {
-    console.log("::warning::The previous index failed its signature check (BACKUP_INDEX_KEY), so it is not used: every file is downloaded again tonight.");
-  } else if (previous.reason !== null) console.log(`The previous index cannot be used (${previous.reason}); every file is downloaded again.`);
-  else if (previous.tag !== tag) {
-    console.log(
-      "::warning::The custodians' keys (BACKUP_AGE_RECIPIENT) changed since the previous backup: tonight every file is downloaded again and encrypted to the new keys, once (Supabase traffic about the size of all stored files).",
-    );
-  }
+  else if (previous.reason === "none") console.log("No trusted previous index; every file is downloaded.");
+  else if (previous.reason !== null) console.log(`The previous index cannot be used (${previous.reason}); every file is downloaded again.`);
   if (previous.usable && previous.blobPrefix === prefix) {
-    const gone = [...previous.blobs.keys()].filter((sha) => !current.has(sha)).length;
+    const records = [...previous.blobs.values()];
+    const gone = records.filter((r) => !current.has(blobFileName(r))).length;
+    const resized = records.filter((r) => current.has(blobFileName(r)) && current.get(blobFileName(r)) !== r.encSize).length;
     if (gone > 0) {
       console.log(
         `::warning::${gone} blob(s) the previous backup stored in ${prefix} are no longer there; their files are downloaded again. Check the bucket's lifecycle rules and who can delete objects.`,
       );
     }
+    if (resized > 0) {
+      console.log(
+        `::warning::${resized} blob(s) in ${prefix} no longer have the encrypted size recorded when they were stored (damaged copies); their files are downloaded again and stored under another name.`,
+      );
+    }
   }
   const known = knownBlobs(previous, prefix, current, carried);
 
-  const plan = planObjects(listed.objects, previous.files, current);
+  const plan = planObjects(listed.objects, previous.files, known);
   const blobs = join(out, "blobs");
   await mkdir(blobs, { recursive: true, mode: 0o700 });
 
@@ -276,22 +293,15 @@ async function run() {
    * @param {import("./lib.mjs").BlobRecord} record
    */
   const keep = (o, sha256, size, fp, record) => {
-    objects.push({ bucket: o.bucket, path: o.path, size, sha256, contentType: o.contentType, cacheControl: o.cacheControl ?? null, blob: `${prefix}${sha256}.age` });
+    objects.push({ bucket: o.bucket, path: o.path, size, sha256, contentType: o.contentType, cacheControl: o.cacheControl ?? null, blob: `${prefix}${blobFileName(record)}` });
     indexFiles.push({ fp, sha256, size });
-    blobRecords.set(sha256, record);
-  };
-  /** A blob already in this month's folder: its record, or what the listing says. @param {string} sha256 */
-  const existing = (sha256) => {
-    const record = known.get(sha256);
-    if (record) return record;
-    unknownBlobs.add(sha256);
-    return { sha256, encSize: /** @type {number} */ (current.get(sha256)), encSha256: null };
+    blobRecords.set(sha256, mergeBlobRecord(blobRecords.get(sha256), record));
   };
 
   // 3. Unchanged files: nothing to download.
   for (const item of plan) {
     if (item.action !== "keep" || item.sha256 === null) continue;
-    keep(item.object, item.sha256, /** @type {number} */ (item.size), item.fp, existing(item.sha256));
+    keep(item.object, item.sha256, /** @type {number} */ (item.size), item.fp, /** @type {import("./lib.mjs").BlobRecord} */ (known.get(item.sha256)));
   }
 
   // 4. New or changed files: download, hash and encrypt, then decide. A
@@ -308,6 +318,22 @@ async function run() {
     if (problem) errors.push({ bucket: item.object.bucket, path: item.object.path, error: `not copied: ${problem}` });
     else toDownload.push(item);
   }
+  if (previous.usable && previous.tag !== tag && toDownload.length > 0) {
+    console.log(
+      `::warning::The custodians' keys (BACKUP_AGE_RECIPIENT) changed since the previous backup: tonight ${toDownload.length} file(s) are downloaded again and encrypted to the new keys, once (Supabase traffic about the size of those files).`,
+    );
+  }
+  const store = createBlobStore({
+    listing: current,
+    known,
+    // The first file of a content: its encrypted copy becomes the blob.
+    seal: async (tmp, name) => {
+      const encrypted = await hashFile(tmp);
+      await rename(tmp, join(blobs, name));
+      return encrypted;
+    },
+    discard: (tmp) => rm(tmp, { force: true }),
+  });
   await eachLimited(toDownload, concurrency, async (item) => {
     const o = item.object;
     const tmp = join(blobs, `.${randomUUID()}.tmp`);
@@ -322,18 +348,8 @@ async function run() {
         filesRead += 1;
         const wantMd5 = md5OfETag(o.eTag);
         if ((o.size !== null && got.size !== o.size) || (wantMd5 !== null && got.md5 !== wantMd5)) suspect.push({ o, got });
-        const action = uploads.has(got.sha256) ? "keep" : blobAction(got.sha256, current);
-        /** @type {import("./lib.mjs").BlobRecord} */
-        let record;
-        if (action === "upload") {
-          uploads.add(got.sha256);
-          const encrypted = await hashFile(tmp);
-          record = { sha256: got.sha256, encSize: encrypted.size, encSha256: encrypted.sha256 };
-          await rename(tmp, join(blobs, `${got.sha256}.age`));
-        } else {
-          record = blobRecords.get(got.sha256) ?? existing(got.sha256);
-          await rm(tmp, { force: true });
-        }
+        const { record, stored } = await store.store(got.sha256, tmp);
+        if (stored) newBlobs += 1;
         keep(o, got.sha256, got.size, item.fp, record);
         return;
       } catch (error) {
@@ -389,6 +405,7 @@ async function run() {
   for (const [id, entry] of perBucket) {
     console.log(`${id}: ${entry.files} files, ${entry.downloaded} new or changed.`);
   }
+  renamedBlobs = store.renamed();
 }
 
 let crashed = null;
@@ -435,11 +452,12 @@ console.log(
   `Storage: ${objects.length} files (${formatBytes(total)}) in this backup. ` +
     `Read from Supabase: ${filesRead} files, ${formatBytes(bytesRead)} (${bytesRead} bytes); ` +
     `${objects.length - filesRead} unchanged since the last backup, not downloaded. ` +
-    `Blobs: ${uploads.size} new. ${seconds}s.`,
+    `Blobs: ${newBlobs} new. ${seconds}s.`,
 );
-if (unknownBlobs.size > 0) {
+if (renamedBlobs > 0) {
+  // Counts only: the log is public, and names and hashes stay out of it.
   console.log(
-    `Note: ${unknownBlobs.size} blob(s) in ${prefix} have no recorded checksum (stored by a run that did not finish, or before the index was lost); next month their files are downloaded again rather than copied.`,
+    `::warning::${renamedBlobs} new blob(s) stored under another name (<sha256>.<n>.age), because their usual name in ${prefix} holds an object no signed index vouches for (left by a run that failed, or put there by someone holding the bucket key). Nothing is lost; see the runbook, "Objects the backup did not make".`,
   );
 }
 if (deletedDuringBackup.length > 0) console.log(`${deletedDuringBackup.length} file(s) were deleted while the backup ran (recorded, not an error).`);

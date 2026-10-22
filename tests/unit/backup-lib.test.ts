@@ -9,6 +9,7 @@ import {
   SCHEMA_PATTERNS_NOT_DUMPED,
   TABLES_WITH_ROWS_QUERY,
   blobAction,
+  blobFileName,
   blobPrefix,
   buildIndex,
   buildManifest,
@@ -22,14 +23,20 @@ import {
   compareObjects,
   copyTarget,
   countQuery,
+  createBlobStore,
+  databaseTls,
   countRows,
   createRowCounter,
   databaseIdentity,
   decodeCopyField,
+  fetchPlan,
   fingerprint,
+  freeBlobName,
   generationOf,
+  indexCandidates,
   indexKeyTime,
   knownBlobs,
+  mergeBlobRecord,
   newestIndexKey,
   objectFilePath,
   objectNameProblem,
@@ -76,9 +83,9 @@ const ENC_A = "e".repeat(64);
 const ENC_B = "d".repeat(64);
 const TAG = recipientTag([RECIPIENT_A]);
 const TAG_AB = recipientTag([RECIPIENT_A, RECIPIENT_B]);
-/** A test index key: 32 bytes, as hex (never a real secret). */
-const INDEX_KEY = parseIndexKey("11".repeat(32));
-const OTHER_KEY = parseIndexKey("22".repeat(32));
+/** Test index keys: 32 different bytes each, as hex (never real secrets). */
+const INDEX_KEY = parseIndexKey(Buffer.from(Array.from({ length: 32 }, (_, i) => (i * 37 + 11) % 256)).toString("hex"));
+const OTHER_KEY = parseIndexKey(Buffer.from(Array.from({ length: 32 }, (_, i) => (i * 53 + 5) % 256)).toString("hex"));
 
 /**
  * A database URL with a password, built from its parts at run time, so no
@@ -414,13 +421,39 @@ describe("downloading only what changed", () => {
     expect(() => previousGeneration("2026-13")).toThrow(/YYYY-MM/);
   });
 
-  it("reads a bucket listing of one folder into sha256 → size", () => {
+  it("reads a bucket listing of one folder into blob name → size, alternate names included", () => {
     const prefix = blobPrefix("staging", "2026-10", TAG);
-    const listing = [`${prefix}${SHA_A}.age\t120`, `${prefix}${SHA_B}.age\t300`, `${prefix}not-a-blob.txt\t1`, `blobs/staging/2026-09-${TAG}/${SHA_C}.age\t5`, "None"].join("\n");
+    const listing = [
+      `${prefix}${SHA_A}.age\t120`,
+      `${prefix}${SHA_B}.age\t300`,
+      `${prefix}${SHA_B}.2.age\t301`,
+      `${prefix}${SHA_B}.1.age\t1`,
+      `${prefix}${SHA_B}.02.age\t1`,
+      `${prefix}not-a-blob.txt\t1`,
+      `blobs/staging/2026-09-${TAG}/${SHA_C}.age\t5`,
+      "None",
+    ].join("\n");
     expect([...parseBlobListing(listing, prefix)]).toEqual([
-      [SHA_A, 120],
-      [SHA_B, 300],
+      [`${SHA_A}.age`, 120],
+      [`${SHA_B}.age`, 300],
+      [`${SHA_B}.2.age`, 301],
     ]);
+  });
+
+  it("names a blob <sha256>.age, or <sha256>.<n>.age (n from 2) when that name is taken", () => {
+    expect(blobFileName({ sha256: SHA_A, encSize: 1, encSha256: ENC_A })).toBe(`${SHA_A}.age`);
+    expect(blobFileName({ sha256: SHA_A, encSize: 1, encSha256: ENC_A, name: `${SHA_A}.3.age` })).toBe(`${SHA_A}.3.age`);
+    expect(freeBlobName(SHA_A, new Map())).toBe(`${SHA_A}.age`);
+    expect(freeBlobName(SHA_A, new Map([[`${SHA_A}.age`, 1]]))).toBe(`${SHA_A}.2.age`);
+    expect(freeBlobName(SHA_A, new Map([[`${SHA_A}.age`, 1], [`${SHA_A}.2.age`, 1], [`${SHA_B}.3.age`, 1]]))).toBe(`${SHA_A}.3.age`);
+  });
+
+  it("refuses a recorded blob name that is not its own sha256's", () => {
+    const record = (name: string) => signedIndex({ blobs: [{ sha256: SHA_A, encSize: 200, encSha256: ENC_A, name }] });
+    expect(readPreviousIndex(record(`${SHA_A}.2.age`), "staging", INDEX_KEY).blobs.get(SHA_A)).toEqual({ sha256: SHA_A, encSize: 200, encSha256: ENC_A, name: `${SHA_A}.2.age` });
+    for (const name of [`${SHA_B}.age`, `${SHA_A}.1.age`, `../${SHA_A}.age`, `${SHA_A}.2.age/x`]) {
+      expect(readPreviousIndex(record(name), "staging", INDEX_KEY).blobs.has(SHA_A), name).toBe(false);
+    }
   });
 
   it("trusts the previous index only when it is signed with the index key, for its own environment and format", () => {
@@ -460,12 +493,17 @@ describe("downloading only what changed", () => {
   });
 
   it("reads the index key as hex or base64 of at least 32 bytes, without repeating it", () => {
-    expect(parseIndexKey("ab".repeat(32))).toHaveLength(32);
-    expect(parseIndexKey(Buffer.alloc(32, 7).toString("base64"))).toHaveLength(32);
-    expect(parseIndexKey(Buffer.alloc(48, 7).toString("base64url"))).toHaveLength(48);
+    expect(parseIndexKey(Buffer.from(Array.from({ length: 32 }, (_, i) => i)).toString("hex"))).toHaveLength(32);
+    const random = (n: number) => Buffer.from(Array.from({ length: n }, (_, i) => (i * 29 + 3) % 256));
+    expect(parseIndexKey(random(32).toString("base64"))).toHaveLength(32);
+    expect(parseIndexKey(random(48).toString("base64url"))).toHaveLength(48);
     expect(() => parseIndexKey("ab".repeat(31))).toThrow(/31 bytes/);
     expect(() => parseIndexKey(undefined)).toThrow(/not set/);
     expect(() => parseIndexKey("not a key!")).toThrow(/neither hex nor base64/);
+    // Long enough, but not random: all zero bytes, or a few values repeated.
+    for (const weak of [Buffer.alloc(32).toString("hex"), "11".repeat(32), Buffer.alloc(32, 9).toString("base64"), "0102".repeat(32)]) {
+      expect(() => parseIndexKey(weak), weak).toThrow(/does not look random.*openssl rand -base64 32/);
+    }
     try {
       parseIndexKey("cd".repeat(10));
     } catch (error) {
@@ -530,34 +568,147 @@ describe("downloading only what changed", () => {
     });
     const previous = readPreviousIndex(index, "staging", INDEX_KEY);
     const prefix = blobPrefix("staging", "2026-10", TAG);
-    const plan = carryPlan(previous, { prefix, generation: "2026-10", tag: TAG, listing: new Map([[SHA_C, 400]]) });
+    // Something is already at C's name (a copy left by a failed night, or a
+    // planted object): it is checked, never just trusted, and if it does not
+    // match, C goes under the next free name.
+    const plan = carryPlan(previous, { prefix, generation: "2026-10", tag: TAG, listing: new Map([[`${SHA_C}.age`, 400], [`${SHA_C}.2.age`, 7]]) });
     expect(plan.from).toBe(`blobs/staging/2026-09-${TAG}/`);
-    expect(plan.carry).toEqual([{ sha256: SHA_A, encSize: 200, encSha256: ENC_A }]);
+    expect(plan.carry).toEqual([
+      { sha256: SHA_A, encSize: 200, encSha256: ENC_A, from: `${SHA_A}.age`, check: [], to: `${SHA_A}.age` },
+      { sha256: SHA_C, encSize: 400, encSha256: ENC_B, from: `${SHA_C}.age`, check: [`${SHA_C}.age`], to: `${SHA_C}.3.age` },
+    ]);
     expect(plan.unverifiable).toBe(1);
+    // A blob recorded under another name is copied from that name.
+    const renamed = readPreviousIndex(signedIndex({ generation: "2026-09", blobs: [{ sha256: SHA_A, encSize: 200, encSha256: ENC_A, name: `${SHA_A}.2.age` }] }), "staging", INDEX_KEY);
+    expect(carryPlan(renamed, { prefix, generation: "2026-10", tag: TAG, listing: new Map() }).carry).toEqual([
+      { sha256: SHA_A, encSize: 200, encSha256: ENC_A, name: `${SHA_A}.2.age`, from: `${SHA_A}.2.age`, check: [], to: `${SHA_A}.age` },
+    ]);
     // Same month: nothing to copy.
     expect(carryPlan(previous, { prefix: blobPrefix("staging", "2026-09", TAG), generation: "2026-09", tag: TAG, listing: new Map() }).from).toBeNull();
     // An unsigned index: nothing.
     expect(carryPlan(readPreviousIndex(index, "staging", OTHER_KEY), { prefix, generation: "2026-10", tag: TAG, listing: new Map() }).carry).toEqual([]);
-    // The records that hold for this month's folder: the carried ones only.
+    // The records that hold for this month's folder: the carried ones only,
+    // under the name each was carried to.
     const after = new Map([
-      [SHA_A, 200],
-      [SHA_C, 400],
+      [`${SHA_A}.age`, 200],
+      [`${SHA_C}.age`, 400],
+      [`${SHA_C}.3.age`, 400],
     ]);
-    expect([...knownBlobs(previous, prefix, after, new Set([SHA_A])).keys()]).toEqual([SHA_A]);
+    expect([...knownBlobs(previous, prefix, after, new Map([[SHA_A, `${SHA_A}.age`], [SHA_C, `${SHA_C}.3.age`]])).values()]).toEqual([
+      { sha256: SHA_A, encSize: 200, encSha256: ENC_A },
+      { sha256: SHA_C, encSize: 400, encSha256: ENC_B, name: `${SHA_C}.3.age` },
+    ]);
   });
 
-  it("checks every needed blob against the encrypted size recorded when it was stored, not last month's listing", () => {
+  it("checks every needed blob, under its recorded name, against the encrypted size recorded when it was stored", () => {
     const blobs = [
-      { sha256: SHA_A, encSize: 200 },
-      { sha256: SHA_B, encSize: 300 },
-      { sha256: SHA_C, encSize: 400 },
+      { sha256: SHA_A, encSize: 200, encSha256: ENC_A, name: `${SHA_A}.2.age` },
+      { sha256: SHA_B, encSize: 300, encSha256: ENC_B },
+      { sha256: SHA_C, encSize: 400, encSha256: ENC_B },
     ];
     const result = checkBlobListing(blobs, new Map([
-      [SHA_A, 200],
-      [SHA_B, 150],
+      [`${SHA_A}.age`, 999],
+      [`${SHA_A}.2.age`, 200],
+      [`${SHA_B}.age`, 150],
+      [`${SHA_C}.2.age`, 400],
     ]));
-    expect(result).toEqual({ ok: false, missing: [SHA_C], wrong: [{ sha256: SHA_B, expected: 300, actual: 150 }] });
-    expect(checkBlobListing(blobs.slice(0, 1), new Map([[SHA_A, 200]])).ok).toBe(true);
+    expect(result).toEqual({ ok: false, missing: [`${SHA_C}.age`], wrong: [{ sha256: SHA_B, name: `${SHA_B}.age`, expected: 300, actual: 150 }] });
+    expect(checkBlobListing(blobs.slice(0, 1), new Map([[`${SHA_A}.2.age`, 200]])).ok).toBe(true);
+  });
+
+  it("trusts a blob in this month's folder only when a signed index records it with its encrypted size and sha256", () => {
+    const prefix = blobPrefix("staging", "2026-10", TAG);
+    const previous = readPreviousIndex(
+      signedIndex({
+        files: [
+          { fp, sha256: SHA_A, size: 10 },
+          { fp: "e".repeat(64), sha256: SHA_B, size: 10 },
+          { fp: "d".repeat(64), sha256: SHA_C, size: 10 },
+        ],
+        blobs: [
+          { sha256: SHA_A, encSize: 200, encSha256: ENC_A, name: `${SHA_A}.2.age` },
+          { sha256: SHA_B, encSize: 300, encSha256: null },
+          { sha256: SHA_C, encSize: 400, encSha256: ENC_B },
+        ],
+      }),
+      "staging",
+      INDEX_KEY,
+    );
+    // A under its recorded name; B never had its sha256 recorded; C's object
+    // has another size than recorded (damaged, or planted after a delete).
+    const listing = new Map([
+      [`${SHA_A}.age`, 200],
+      [`${SHA_A}.2.age`, 200],
+      [`${SHA_B}.age`, 300],
+      [`${SHA_C}.age`, 999],
+    ]);
+    expect([...knownBlobs(previous, prefix, listing, new Map()).keys()]).toEqual([SHA_A]);
+    // planObjects keeps an unchanged file only when its blob is trusted.
+    const plan = planObjects([object("a"), object("b")], new Map([
+      [fingerprint(object("a")), { sha256: SHA_A, size: 10 }],
+      [fingerprint(object("b")), { sha256: SHA_B, size: 10 }],
+    ]), knownBlobs(previous, prefix, listing, new Map()));
+    expect(plan.map((p) => p.action)).toEqual(["keep", "download"]);
+  });
+
+  it("never lets a record without the encrypted sha256 replace one with it", () => {
+    const good = { sha256: SHA_A, encSize: 200, encSha256: ENC_A };
+    const weak = { sha256: SHA_A, encSize: 200, encSha256: null };
+    expect(mergeBlobRecord(undefined, weak)).toEqual(weak);
+    expect(mergeBlobRecord(weak, good)).toEqual(good);
+    expect(mergeBlobRecord(good, weak)).toEqual(good);
+    expect(mergeBlobRecord(good, { ...good })).toEqual(good);
+  });
+
+  it("stores each content once a night, however many files share it and however their downloads interleave", async () => {
+    const delay = () => new Promise((resolve) => setTimeout(resolve, Math.floor(Math.random() * 4)));
+    for (let round = 0; round < 40; round += 1) {
+      let sealed = 0;
+      const discarded: string[] = [];
+      const store = createBlobStore({
+        listing: new Map(round % 2 === 0 ? [] : [[`${SHA_A}.age`, 5]]),
+        known: new Map(),
+        seal: async (_tmp: string, name: string) => {
+          sealed += 1;
+          await delay();
+          return { size: 200, sha256: ENC_A, name };
+        },
+        discard: async (tmp: string) => {
+          await delay();
+          discarded.push(tmp);
+        },
+      });
+      const results = await Promise.all(
+        Array.from({ length: 20 }, async (_, i) => {
+          await delay();
+          return store.store(SHA_A, `tmp-${i}`);
+        }),
+      );
+      const name = round % 2 === 0 ? undefined : `${SHA_A}.2.age`;
+      expect(sealed).toBe(1);
+      expect(results.filter((r) => r.stored)).toHaveLength(1);
+      expect(discarded).toHaveLength(19);
+      for (const r of results) expect(r.record).toEqual({ sha256: SHA_A, encSize: 200, encSha256: ENC_A, ...(name ? { name } : {}) });
+      expect(store.renamed()).toBe(round % 2 === 0 ? 0 : 1);
+    }
+    // A blob this month's folder already holds, under a trusted record: kept.
+    const known = { sha256: SHA_B, encSize: 300, encSha256: ENC_B };
+    const keepStore = createBlobStore({ listing: new Map([[`${SHA_B}.age`, 300]]), known: new Map([[SHA_B, known]]), seal: async () => { throw new Error("must not seal"); }, discard: async () => {} });
+    expect(await keepStore.store(SHA_B, "tmp")).toEqual({ record: known, stored: false });
+    // A failed seal is retried by the next file with that content.
+    let attempts = 0;
+    const flaky = createBlobStore({
+      listing: new Map(),
+      known: new Map(),
+      seal: async (_tmp: string, name: string) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("disk full");
+        return { size: 1, sha256: ENC_A, name };
+      },
+      discard: async () => {},
+    });
+    await expect(flaky.store(SHA_C, "a")).rejects.toThrow(/disk full/);
+    expect((await flaky.store(SHA_C, "b")).stored).toBe(true);
   });
 
   it("notices a file the export neither copied nor recorded", () => {
@@ -656,6 +807,22 @@ describe("the manifest and the index", () => {
     );
     expect(index.blobs).toEqual([{ sha256: SHA_A, encSize: 200, encSha256: ENC_A }]);
     expect(index.blobPrefix).toBe(`blobs/staging/2026-10-${TAG}/`);
+    const renamed = buildIndex(
+      {
+        environment: "staging",
+        generation: "2026-10",
+        recipients: TAG,
+        createdAt: "2026-10-22T07:17:00.000Z",
+        archive: "qbbe-staging-20261022T071700Z.tar.gz.age",
+        archiveSize: 10,
+        archiveSha256: SHA_C,
+        files: [{ fp: "1".repeat(64), sha256: SHA_A, size: 3 }],
+        blobs: [{ sha256: SHA_A, encSize: 200, encSha256: ENC_A, name: `${SHA_A}.2.age` }],
+      },
+      INDEX_KEY,
+    );
+    expect(renamed.blobs).toEqual([{ sha256: SHA_A, encSize: 200, encSha256: ENC_A, name: `${SHA_A}.2.age` }]);
+    expect(readPreviousIndex(renamed, "staging", INDEX_KEY).usable).toBe(true);
     expect(index.files.map((f) => f.fp[0])).toEqual(["1", "2"]);
     expect(index.mac).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(index)).not.toMatch(/\.pdf|documents/);
@@ -693,7 +860,9 @@ describe("the manifest and the index", () => {
     expect(small.month).toBe(small.night * 30);
     expect(small.warn).toBe(false);
     expect(trafficEstimate({ databaseBytes: 80_000_000, storageBytes: 0 }).warn).toBe(true);
-    expect(trafficEstimate({ databaseBytes: 1, extraDatabaseBytes: 2, catalogBytesEstimate: 3, storageBytes: 4 }).night).toBe(10);
+    // A dump redone because a migration landed read the catalog twice.
+    expect(trafficEstimate({ databaseBytes: 1, extraDatabaseBytes: 2, catalogBytesEstimate: 3, storageBytes: 4 }).night).toBe(13);
+    expect(trafficEstimate({ databaseBytes: 1, extraDatabaseBytes: 0, catalogBytesEstimate: 3, storageBytes: 4 }).night).toBe(8);
   });
 
   it("writes a run summary with no sign-in or MFA counts, and a traffic line with the estimate and the month", () => {
@@ -763,6 +932,68 @@ describe("fetching one backup for a restore", () => {
     ];
     expect(newestIndexKey(keys, "production", new Date("2026-10-22T12:00:00Z"))).toBe(keys[1]);
     expect(newestIndexKey([], "production")).toBeNull();
+  });
+
+  it("considers the runs of the last 40 days, newest first, and none dated more than an hour ahead", () => {
+    const at = (iso: string) => `production/${iso.slice(0, 10)}/qbbe-production-${iso.replace(/[-:]/g, "").replace(/\.\d+/, "")}.index.json`;
+    const now = new Date("2026-10-22T12:00:00Z");
+    const keys = [
+      at("2026-09-11T07:17:00Z"), // 41 days old
+      at("2026-09-13T07:17:00Z"),
+      at("2026-10-22T11:00:00Z"),
+      at("2026-10-22T12:30:00Z"), // within the hour
+      at("2026-10-22T14:00:00Z"), // more than an hour ahead
+      "production/2026-10-22/zzz.index.json",
+      "production/2026-10-22/qbbe-production-20261022T110000Z.tar.gz.age",
+    ];
+    expect(indexCandidates(keys, "production", now)).toEqual({ keys: [keys[3], keys[2], keys[1]], future: 1 });
+    expect(indexCandidates(keys, "production", now, { days: null })).toEqual({ keys: [keys[3], keys[2], keys[1], keys[0]], future: 1 });
+  });
+
+  it("plans each blob's download: its recorded name first, then identical copies in the other month folders of the same keys, then copies it cannot check", () => {
+    const here = `blobs/production/2026-10-${TAG}/`;
+    const next = `blobs/production/2026-11-${TAG}/`;
+    const before = `blobs/production/2026-09-${TAG}/`;
+    const folders = new Map([
+      [here, new Map([[`${SHA_A}.age`, 999], [`${SHA_A}.2.age`, 200], [`${SHA_B}.age`, 300]])],
+      [next, new Map([[`${SHA_B}.age`, 300], [`${SHA_C}.age`, 50]])],
+      [before, new Map([[`${SHA_B}.age`, 310], [`${SHA_C}.age`, 40]])],
+    ]);
+    const plan = fetchPlan(
+      [
+        { sha256: SHA_A, encSize: 200, encSha256: ENC_A, name: `${SHA_A}.2.age` },
+        { sha256: SHA_B, encSize: 300, encSha256: ENC_B },
+        { sha256: SHA_C, encSize: 40, encSha256: null },
+      ],
+      here,
+      folders,
+    );
+    expect(plan).toEqual([
+      {
+        sha256: SHA_A,
+        candidates: [
+          { key: `${here}${SHA_A}.2.age`, size: 200, sha256: ENC_A, local: `${SHA_A}.2.age`, kind: "primary" },
+          // The object at the usual name, which was not trusted: tried last, and only kept if it decrypts to the file.
+          { key: `${here}${SHA_A}.age`, size: null, sha256: null, local: `${SHA_A}.fallback-1.age`, kind: "unchecked" },
+        ],
+      },
+      {
+        sha256: SHA_B,
+        candidates: [
+          { key: `${here}${SHA_B}.age`, size: 300, sha256: ENC_B, local: `${SHA_B}.age`, kind: "primary" },
+          { key: `${next}${SHA_B}.age`, size: 300, sha256: ENC_B, local: `${SHA_B}.age`, kind: "copy" },
+          { key: `${before}${SHA_B}.age`, size: null, sha256: null, local: `${SHA_B}.fallback-1.age`, kind: "unchecked" },
+        ],
+      },
+      {
+        sha256: SHA_C,
+        candidates: [
+          { key: `${here}${SHA_C}.age`, size: 40, sha256: null, local: `${SHA_C}.age`, kind: "unchecked" },
+          { key: `${before}${SHA_C}.age`, size: null, sha256: null, local: `${SHA_C}.fallback-1.age`, kind: "unchecked" },
+          { key: `${next}${SHA_C}.age`, size: null, sha256: null, local: `${SHA_C}.fallback-2.age`, kind: "unchecked" },
+        ],
+      },
+    ]);
   });
 
   it("refuses an index whose names would reach outside the restore folder", () => {
@@ -878,6 +1109,30 @@ describe("the restore drill's refusal to touch production", () => {
     expect(urlHasPassword(scratchPooler)).toBe(false);
     expect(urlHasPassword(withPassword(scratchPooler, "pw"))).toBe(true);
     expect(urlHasPassword("not a url")).toBe(false);
+    // The password as a parameter, or in libpq's keyword form.
+    expect(urlHasPassword(`${scratchPooler}?password=pw`)).toBe(true);
+    expect(urlHasPassword(`${scratchPooler}?sslmode=require&PASSWORD=pw`)).toBe(true);
+    expect(urlHasPassword("host=db.example.com user=postgres password=pw")).toBe(true);
+    expect(urlHasPassword("host=db.example.com user=postgres password = pw")).toBe(true);
+    expect(urlHasPassword(`${scratchPooler}?passfile=/home/me/.pgpass`)).toBe(false);
+    expect(urlHasPassword("host=db.example.com user=postgres")).toBe(false);
+  });
+
+  it("requires TLS to any database that is not on this computer", () => {
+    expect(databaseTls(scratchPooler, undefined)).toEqual({ mode: "require" });
+    expect(databaseTls(`${scratchPooler}?sslmode=require`, undefined)).toEqual({ mode: null });
+    expect(databaseTls(`${scratchPooler}?sslmode=verify-full`, undefined)).toEqual({ mode: null });
+    expect(databaseTls(scratchPooler, "require")).toEqual({ mode: null });
+    expect(databaseTls(scratchPooler, "verify-ca")).toEqual({ mode: null });
+    for (const weak of ["disable", "allow", "prefer"]) {
+      expect(() => databaseTls(`${scratchPooler}?sslmode=${weak}`, undefined), weak).toThrow(/TLS.*sslmode=require/);
+      expect(() => databaseTls(scratchPooler, weak), weak).toThrow(/TLS.*PGSSLMODE/);
+    }
+    // The local stack has no TLS: not required on this computer only.
+    expect(databaseTls("postgresql://postgres@127.0.0.1:54322/postgres", undefined)).toEqual({ mode: null });
+    expect(databaseTls("postgresql://postgres@localhost:54322/postgres", "disable")).toEqual({ mode: null });
+    expect(() => databaseTls("postgresql://postgres@172.18.0.1:54322/postgres", "disable")).toThrow(/TLS/);
+    expect(() => databaseTls("host=db.example.com user=postgres", undefined)).toThrow(/postgresql:\/\//);
   });
 
   it("is what `manifest.mjs guard` runs, exiting 1 with the reason", () => {
@@ -928,8 +1183,38 @@ describe("restore-drill.sh's roles.sql filter", () => {
   });
 });
 
+describe("what a restore loads besides the dump", () => {
+  const platform = readFileSync(join(process.cwd(), "scripts/backup/platform-extras.sql"), "utf8");
+  const history = readFileSync(join(process.cwd(), "scripts/backup/migration-history.sql"), "utf8");
+
+  it("restores every scheduled job paused, and writes the statement that starts the ones that ran", () => {
+    // Every cron.schedule is followed by alter_job(active := false), not only
+    // for jobs that were paused in the backup.
+    expect(platform).toMatch(/format\('SELECT cron\.schedule\(%L, %L, %L\);', j\.jobname, j\.schedule, j\.command\)\s*\|\| format\(E'\\nSELECT cron\.alter_job\(\(SELECT jobid FROM cron\.job WHERE jobname = %L\), active := false\);', j\.jobname\)/);
+    expect(platform).not.toMatch(/case when not j\.active/);
+    expect(platform).toContain("-- start-schedule: ");
+  });
+
+  it("adds the migration history's keys and indexes only when the target lacks them", () => {
+    expect(history).not.toMatch(/select format\('ALTER TABLE ONLY/);
+    expect(history).toMatch(/IF NOT EXISTS \(SELECT 1 FROM pg_catalog\.pg_constraint/);
+    expect(history).toMatch(/INDEX IF NOT EXISTS/);
+  });
+});
+
 describe(".github/workflows/backup.yml", () => {
   const workflow = readFileSync(join(process.cwd(), ".github/workflows/backup.yml"), "utf8");
+
+  it("connects to the database over TLS only", () => {
+    expect(workflow).toMatch(/candidate="postgresql:\/\/postgres\.\$\{SUPABASE_PROJECT_REF\}@\$\{prefix\}-\$\{region\}\.pooler\.supabase\.com:5432\/postgres\?sslmode=require"/);
+  });
+
+  it("gives each environment's projected monthly traffic to the alert job, which runs after every backup", () => {
+    expect(workflow).toMatch(/outputs:\n {6}traffic_staging: \$\{\{ steps\.dump\.outputs\.traffic_staging \}\}\n {6}traffic_production: \$\{\{ steps\.dump\.outputs\.traffic_production \}\}/);
+    expect(workflow).toMatch(/echo "traffic_\$\{TARGET_ENVIRONMENT\}=/);
+    expect(workflow).toMatch(/ {2}alert:\n(?: {4}.*\n)*? {4}if: always\(\)\n/);
+    expect(workflow).toMatch(/- name: Open or update "Backup failed" issues\n\s+if: needs\.backup\.result != 'success'/);
+  });
 
   it("pins every action to a full commit SHA, and age to its release's sha256", () => {
     const uses = [...workflow.matchAll(/^\s*-?\s*uses:\s*(\S+)/gm)].map((m) => m[1]);

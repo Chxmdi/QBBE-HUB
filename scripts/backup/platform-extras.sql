@@ -13,7 +13,14 @@
 --      their membership, registered files staying immutable);
 --   3. the pgmq queues the background jobs use (their tables live in the
 --      pgmq schema; messages waiting in them are not kept);
---   4. the pg_cron schedule that runs the background jobs.
+--   4. the pg_cron schedule that runs the background jobs. Every job is
+--      restored paused (active = false), whatever it was in the backup, so
+--      nothing runs in a restored project before its job runner is wired
+--      (and a drill's scratch project never runs them at all), and the
+--      drill's row checks stay exact. The last line, a comment starting
+--      "-- start-schedule: ", is the statement that starts again the jobs
+--      that were running in the backup; restore-drill.sh prints it, and the
+--      runbook's restore runs it once the job runner is wired.
 --
 -- Supabase documents (1) and (2) as "restore them separately"
 -- (docs/runbooks/backup-recovery.md). Names are written fully qualified
@@ -69,15 +76,23 @@ select format('SELECT pgmq.%s(%L);', case when m.is_unlogged then 'create_unlogg
  order by m.queue_name;
 \endif
 
--- 4. The schedule. cron.schedule with a job name replaces a job of that name.
+-- 4. The schedule, every job paused. cron.schedule with a job name
+-- replaces a job of that name; both statements run in the restore's one
+-- transaction, so pg_cron never sees the job active.
 select to_regclass('cron.job') is not null as has_cron \gset
 \if :has_cron
 select format('SELECT cron.schedule(%L, %L, %L);', j.jobname, j.schedule, j.command)
-       || case when not j.active
-            then format(E'\nSELECT cron.alter_job((SELECT jobid FROM cron.job WHERE jobname = %L), active := false);', j.jobname)
-            else ''
-          end
+       || format(E'\nSELECT cron.alter_job((SELECT jobid FROM cron.job WHERE jobname = %L), active := false);', j.jobname)
   from cron.job j
  where j.jobname is not null
  order by j.jobname;
+-- The jobs that were running in the backup, as one statement to start them
+-- again (a comment here: nothing runs it during the restore). A name with a
+-- line break could end the comment, so such a job is left out of it.
+select '-- start-schedule: '
+       || format('SELECT cron.alter_job(jobid, active := true) FROM cron.job WHERE jobname IN (%s);',
+                 string_agg(quote_literal(j.jobname), ', ' order by j.jobname))
+  from cron.job j
+ where j.jobname is not null and j.active and j.jobname !~ E'[\\r\\n]'
+having count(*) > 0;
 \endif

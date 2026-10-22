@@ -6,7 +6,8 @@
 --     -f scripts/backup/migration-history.sql
 --
 -- history_schema.sql  the schema and each table's definition (columns,
---                     defaults, constraints, indexes), as pg_dump writes them
+--                     defaults, constraints, indexes), each created only
+--                     when the target does not have it yet
 -- history_data.sql    each table's rows as COPY ... FROM stdin blocks, in the
 --                     same text format pg_dump uses
 --
@@ -39,13 +40,20 @@ select format(E'\nCREATE TABLE IF NOT EXISTS %I.%I (\n%s\n);', n.nspname, c.reln
  where n.nspname = 'supabase_migrations' and c.relkind = 'r'
  group by n.nspname, c.relname
  order by c.relname;
-select format('ALTER TABLE ONLY %I.%I ADD CONSTRAINT %I %s;', n.nspname, c.relname, k.conname, pg_get_constraintdef(k.oid))
+-- Constraints and indexes only when the target lacks them: a project that
+-- already has supabase_migrations.schema_migrations (with its primary key)
+-- must not make the restore's one transaction roll back. A primary key is
+-- also skipped when the table already has one under another name.
+select format(E'DO $history$ BEGIN\n  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = %L::regclass AND (conname = %L%s)) THEN\n    ALTER TABLE ONLY %I.%I ADD CONSTRAINT %I %s;\n  END IF;\nEND $history$;',
+              format('%I.%I', n.nspname, c.relname), k.conname,
+              case when k.contype = 'p' then ' OR contype = ''p''' else '' end,
+              n.nspname, c.relname, k.conname, pg_get_constraintdef(k.oid))
   from pg_constraint k
   join pg_class c on c.oid = k.conrelid
   join pg_namespace n on n.oid = c.relnamespace
  where n.nspname = 'supabase_migrations' and c.relkind = 'r'
  order by c.relname, k.contype = 'f', k.conname;
-select pg_get_indexdef(i.indexrelid) || ';'
+select regexp_replace(pg_get_indexdef(i.indexrelid), '^CREATE (UNIQUE )?INDEX ', 'CREATE \1INDEX IF NOT EXISTS ') || ';'
   from pg_index i
   join pg_class c on c.oid = i.indrelid
   join pg_namespace n on n.oid = c.relnamespace
