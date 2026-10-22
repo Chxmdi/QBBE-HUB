@@ -371,7 +371,11 @@ describe("deploy workflows run from main only and prove signed-in reads", () => 
   it("Deploy publishes from main only: every job after the gates waits for the main-only evidence job", () => {
     const all = jobs(".github/workflows/deploy.yml");
     expect(condition(all.get("evidence")!)).toBe(main);
-    for (const id of ["migrate", "build"]) expect(all.get(id), id).toMatch(/^ {4}needs: evidence$/m);
+    // `needs: evidence` or a list that includes it (migrate also waits for
+    // build, so the image exists before the database changes).
+    for (const id of ["migrate", "build"]) {
+      expect(all.get(id), id).toMatch(/^ {4}needs: (?:evidence|\[(?:[\w-]+, )*evidence(?:, [\w-]+)*\])$/m);
+    }
     expect(all.get("release")).toMatch(/^ {4}needs: \[migrate, build\]$/m);
   });
 
