@@ -7,6 +7,7 @@ import { classifyIntegrationFailure } from "@/features/admin/services/integratio
 import { reconcileGoogleDrive } from "@/features/documents/services/google-drive-reconcile";
 import { recordJobRun } from "@/lib/job-observability";
 import type { JobContext, JobResult } from "../runner";
+import { logEvent } from "@/lib/server-log";
 
 /**
  * Pulls changes from the connected Google services — Gmail metadata, Calendar
@@ -167,7 +168,7 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
       synced += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "sync failed";
-      console.error("Google integration synchronization failed", { connectionId: connection.id, provider: connection.provider, error: message });
+      logEvent("integration.sync_failed", { connectionId: connection.id, provider: connection.provider, error: message }, "error");
       await db
         .from("integration_connection")
         .update({ status: classifyIntegrationFailure(message), last_error: message })

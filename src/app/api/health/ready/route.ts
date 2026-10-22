@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getJobRunnerStatus } from "@/features/jobs/services/runner-status";
 import { serverEnvProblems } from "@/lib/env";
+import { logEvent } from "@/lib/server-log";
 
 /**
  * GET /api/health/ready: can this server do its work?
@@ -25,7 +26,7 @@ type Check = () => Promise<boolean>;
 const CHECKS: Record<string, Check> = {
   settings: async () => {
     const problems = serverEnvProblems();
-    if (problems.length) console.error(JSON.stringify({ event: "health.settings_invalid", problems }));
+    if (problems.length) logEvent("health.settings_invalid", { problems }, "error");
     return problems.length === 0;
   },
   database: async () => (await getJobRunnerStatus()) !== "unknown",

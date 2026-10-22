@@ -8,6 +8,7 @@ import { eventScope } from "../scope";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import { recipientIsAllowed, sendEmail } from "@/features/notifications/services/email-provider";
 import { checkWebhookUrl, newWebhookSecret, signWebhook, SIGNATURE_HEADER, WEBHOOK_TIMEOUT_MS } from "../webhook";
+import { logEvent } from "@/lib/server-log";
 
 /**
  * Starts, resumes, retries and records workflow runs (M14a/b, V1-12).
@@ -111,11 +112,10 @@ export function createRunPorts(
             changeSetId: result.changeSet.id,
             summary: `Workflow "${rule.name}" changed ${change.property}.`,
           }).catch((error: unknown) => {
-            console.error(JSON.stringify({
-              event: "workflow.event_write_failed",
+            logEvent("workflow.event_write_failed", {
               workflow: rule.id,
               error: error instanceof Error ? error.message : String(error),
-            }));
+            }, "error");
           });
         }
       }
@@ -377,11 +377,10 @@ async function continueRun(db: SupabaseClient, run: Continuation): Promise<RunRe
     })
     .eq("id", run.executionId);
   if (stepsError || finishError) {
-    console.error(JSON.stringify({
-      event: "workflow.history_write_failed",
+    logEvent("workflow.history_write_failed", {
       execution: run.executionId,
       error: (stepsError ?? finishError)?.message,
-    }));
+    }, "error");
   }
   return result;
 }
