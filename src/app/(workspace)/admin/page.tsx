@@ -121,7 +121,7 @@ export default async function AdminPage({
   const [
     { data: members },
     { data: invitations },
-    { data: audit, count: auditCount },
+    { data: audit },
     { data: integrations },
     { data: teams },
     { data: teamMembers },
@@ -151,10 +151,11 @@ export default async function AdminPage({
           // so PostgREST cannot join it and the whole query fails — which
           // showed an empty history. Names come from the member list below.
           "id, actor_id, event_type, action, object_type, created_at",
-          { count: "exact" },
         )
         .order("created_at", { ascending: false })
-        .range((auditPage - 1) * 30, auditPage * 30 - 1);
+        // One more than a page, so "Older events" shows only when there are
+        // some, without counting the whole log.
+        .range((auditPage - 1) * 30, auditPage * 30);
       if (auditFilter) auditQuery = auditQuery.eq("event_type", auditFilter);
       return auditQuery;
     })(),
@@ -201,7 +202,9 @@ export default async function AdminPage({
       }[]
     ).map((m) => [m.user_id, m.user_profile?.full_name ?? null]),
   );
-  const auditList = ((audit ?? []) as unknown as AuditRow[]).map((event) => ({
+  const auditRows = (audit ?? []) as unknown as AuditRow[];
+  const auditHasOlder = auditRows.length > 30;
+  const auditList = auditRows.slice(0, 30).map((event) => ({
     ...event,
     actor:
       event.actor_id && actorNames.get(event.actor_id)
@@ -870,7 +873,7 @@ export default async function AdminPage({
               ))}
             </ol>
           )}
-          {(auditCount ?? 0) > auditPage * 30 ? (
+          {auditHasOlder ? (
             <p className="mt-3">
               <Link
                 href={`/admin?audit=${auditFilter ?? "all"}&auditPage=${auditPage + 1}`}
