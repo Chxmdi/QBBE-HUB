@@ -338,6 +338,7 @@ export const commsEn = {
     notifications: {
       mentioned: "{name} mentioned you",
       replied: "{name} replied to your message",
+      directMessage: "{name} sent you a direct message",
     },
     taskDescription: "Created from a channel message:\n\n> {body}",
     decisionDetail: "Captured from a channel conversation.",

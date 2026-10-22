@@ -239,6 +239,7 @@ export const accountEn = {
         assigned: "assigned",
         mentioned: "mentioned",
         reply: "reply",
+        directMessage: "direct message",
         approved: "approved",
         decisionRequested: "decision requested",
         dueDateChanged: "due date changed",

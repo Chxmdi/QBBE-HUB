@@ -248,6 +248,7 @@ export const accountFrCA: typeof accountEn = {
         assigned: "attribution",
         mentioned: "mention",
         reply: "réponse",
+        directMessage: "message direct",
         approved: "approbation",
         decisionRequested: "décision demandée",
         dueDateChanged: "échéance modifiée",

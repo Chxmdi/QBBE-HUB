@@ -185,6 +185,7 @@ const REASON_KEYS: Record<string, MessageKey> = {
   "assigned": "notifications.email.reasons.assigned",
   "mentioned": "notifications.email.reasons.mentioned",
   "reply": "notifications.email.reasons.reply",
+  "direct message": "notifications.email.reasons.directMessage",
   "approved": "notifications.email.reasons.approved",
   "decision requested": "notifications.email.reasons.decisionRequested",
   "due date changed": "notifications.email.reasons.dueDateChanged",
