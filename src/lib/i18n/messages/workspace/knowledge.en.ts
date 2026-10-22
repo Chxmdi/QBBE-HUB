@@ -564,7 +564,6 @@ export const knowledgeEn = {
       expired: "That export has expired. Request a fresh one.",
       invalidFile: "Invalid export file.",
       countFailed: "Could not record download.",
-      auditFailed: "Could not audit download.",
       prepareFailed: "Could not prepare that download.",
     },
   },

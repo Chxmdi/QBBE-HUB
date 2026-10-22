@@ -575,7 +575,6 @@ export const knowledgeFrCA: typeof knowledgeEn = {
       expired: "Cette exportation a expiré. Demandez-en une nouvelle.",
       invalidFile: "Fichier d’exportation non valide.",
       countFailed: "Impossible d’enregistrer le téléchargement.",
-      auditFailed: "Impossible de journaliser le téléchargement.",
       prepareFailed: "Impossible de préparer ce téléchargement.",
     },
   },
