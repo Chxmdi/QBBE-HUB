@@ -75,6 +75,7 @@ declare
   v_bool boolean;
   v_clean_path text;
   v_pending_path text;
+  v_error text;
 begin
   select organization_id into strict v_org
   from public.organization_membership where user_id = v_owner limit 1;
@@ -279,6 +280,15 @@ begin
     'closing the fiscal year', 'not even the table owner writes a closing entry outside the close');
   perform tests.authenticate(v_owner, 'aal2');
   v_close := public.ledger_close_fiscal_year(v_org, date '2025-10-01');
+  -- The ledger's deferred checks run at commit; force them, as COMMIT would.
+  begin
+    set constraints all immediate;
+    v_error := null;
+  exception when others then
+    v_error := sqlerrm;
+  end;
+  set constraints all deferred;
+  perform tests.ok(v_error is null, format('the close passes the checks that run at commit (%s)', coalesce(v_error, 'ok')));
   select closing_entry_id into v_closing from public.ledger_year_close where id = v_close;
   perform tests.ok(v_closing is not null, 'closing the year posts a closing entry');
   perform tests.ok((select kind = 'closing' and status = 'posted' and entry_date = date '2026-09-30'
