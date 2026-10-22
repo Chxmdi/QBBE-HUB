@@ -6,7 +6,9 @@ import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/table";
+import { CrmContactDialog } from "@/features/crm/components/crm-contact-dialog";
 import { CrmTabs } from "@/features/crm/components/crm-tabs";
+import { EraseContactButton } from "@/features/crm/components/erase-contact-button";
 import { SupporterOrganizationForm } from "@/features/crm/components/supporter-organization-form";
 import {
   contactSourceLabel,
@@ -55,6 +57,12 @@ export default async function SupporterPage({ params }: { params: Promise<{ id: 
         eyebrow={contactSourceLabel(contact.source, t)}
         title={contact.full_name}
         description={contact.role_title ?? undefined}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <CrmContactDialog contact={contact} />
+            {session.isAdmin ? <EraseContactButton contactId={contact.id} name={contact.full_name} /> : null}
+          </div>
+        }
       />
       <CrmTabs active="supporters" />
 

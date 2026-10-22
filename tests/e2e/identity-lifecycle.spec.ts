@@ -384,5 +384,10 @@ test.describe("identity lifecycle", () => {
     await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("link", { name: "My Work", exact: true })).toHaveCount(0);
+    // Not only the screens: the login is banned and holds no live session.
+    expect(
+      sql(`select (u.banned_until > now())::text || '|' || (select count(*) from auth.sessions s where s.user_id = u.id)
+           from auth.users u where u.email = '${email}'`),
+    ).toBe("true|0");
   });
 });

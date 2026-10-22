@@ -8,6 +8,7 @@ import { reconcileGoogleDrive } from "@/features/documents/services/google-drive
 import { recordJobRun } from "@/lib/job-observability";
 import type { JobContext, JobResult } from "../runner";
 import { logEvent } from "@/lib/server-log";
+import { withActiveOwners } from "../active-owners";
 
 /**
  * Pulls changes from the connected Google services — Gmail metadata, Calendar
@@ -39,7 +40,7 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
   let synced = 0;
   let failed = 0;
 
-  for (const connection of connections ?? []) {
+  for (const connection of await withActiveOwners(db, connections ?? [])) {
     const startedAt = new Date().toISOString();
     try {
       if (!connection.user_id) throw new Error("Google integration has no connected user.");

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
 import { followUpSchema } from "@/features/crm/schemas";
-import { requireSession } from "@/lib/auth";
+import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { crmMessage } from "@/features/crm/labels";
@@ -273,6 +273,62 @@ export async function createCrmContact(input: unknown): Promise<ActionResult> {
   if (error) return { ok: false, error: t("crm.errors.saveContact") };
 
   revalidatePath(`/crm/${data.crmOrganizationId}`);
+  return { ok: true };
+}
+
+const contactUpdateSchema = z.object({
+  contactId: z.string().uuid(),
+  fullName: requiredText(V.contactName, 200),
+  roleTitle: z.string().trim().max(200).optional(),
+  email: z.string().trim().email(V.invalidEmail).max(300).optional().or(z.literal("")),
+  phone: z.string().trim().max(50).optional(),
+});
+
+/**
+ * Corrects a contact's details (a person asking to fix their information).
+ * The correction is marked so the Zeffy sync does not overwrite it.
+ */
+export async function updateCrmContact(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  const t = await getT();
+  if (!session.isStaff) return { ok: false, error: t("crm.errors.staffRequired") };
+  const parsed = contactUpdateSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: crmMessage(t, parsed.error.issues[0]?.message) };
+  }
+  const data = parsed.data;
+  const supabase = await createSupabaseServerClient();
+  const { data: updated, error } = await supabase
+    .from("crm_contact")
+    .update({
+      full_name: data.fullName,
+      role_title: data.roleTitle || null,
+      email: data.email || null,
+      phone: data.phone || null,
+      details_edited_at: new Date().toISOString(),
+    })
+    .eq("id", data.contactId)
+    .select("id");
+  if (error || !updated?.length) return { ok: false, error: t("crm.errors.saveContact") };
+  revalidatePath(`/crm/contacts/${data.contactId}`);
+  return { ok: true };
+}
+
+/**
+ * Erases a contact at their request (administrators with MFA): identity,
+ * sensitive note and interaction text go; gift amounts stay for the tax
+ * record period; the Zeffy identity is never imported again.
+ */
+export async function eraseCrmContact(contactId: string): Promise<ActionResult> {
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const t = await getT();
+  if (!z.string().uuid().safeParse(contactId).success) return { ok: false, error: t("crm.erase.failed") };
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.rpc("erase_crm_contact", { p_contact: contactId });
+  if (error) return { ok: false, error: t("crm.erase.failed") };
+  revalidatePath(`/crm/contacts/${contactId}`);
+  revalidatePath("/crm/supporters");
   return { ok: true };
 }
 
