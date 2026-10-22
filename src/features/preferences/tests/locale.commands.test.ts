@@ -62,6 +62,27 @@ describe("setInterfaceLanguage", () => {
   });
 });
 
+describe("the cookie's Secure flag", () => {
+  // Safari refuses a Secure cookie sent over plain http, even from 127.0.0.1, so
+  // a production build served over http (CI's browser runs) lost the language.
+  it.each([
+    ["https://hub.example.org", "production", true],
+    ["http://127.0.0.1:3000", "production", false],
+    ["https://hub.example.org", "development", true],
+    [undefined, "production", true],
+    [undefined, "development", false],
+  ])("app address %s in %s: secure %s", async (url, nodeEnv, secure) => {
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", url ?? "");
+    vi.stubEnv("NODE_ENV", nodeEnv);
+    try {
+      await syncLanguageCookie("fr-CA");
+      expect(jar.set).toHaveBeenCalledWith(LOCALE_COOKIE, "fr-CA", expect.objectContaining({ secure }));
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
 describe("syncLanguageCookie", () => {
   it("copies a saved language into the cookie and touches no stored data", async () => {
     expect(await syncLanguageCookie("fr-CA")).toEqual({ ok: true });

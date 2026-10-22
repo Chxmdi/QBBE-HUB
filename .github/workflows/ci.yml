@@ -259,6 +259,10 @@ jobs:
           - { suite: qa-matrix, part: 3, parts: 3, flags: all }
     env:
       SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
+      # The address the browsers reach the app on. Cookies follow it: over
+      # plain http they are not marked Secure, which Firefox and WebKit would
+      # otherwise drop (the language choice, so French screens stayed English).
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
       # Read by the build and by the running server (per request).
       WORKSPACE_OS_FLAGS: ${{ matrix.flags == 'all' && 'all' || '' }}
       # The tests each row leaves out (see the job comment).
