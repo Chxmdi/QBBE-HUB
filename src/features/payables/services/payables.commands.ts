@@ -48,6 +48,7 @@ function dbMessage(t: TranslateFn, error: DbError, fallback: string, locale: Loc
   if (!error) return fallback;
   const tax = invoiceTaxMessage(t, error, locale);
   if (tax) return tax;
+  if (error.hint === "bill_request_not_drafter") return t("finance.payables.errors.requestNotDrafter");
   if (error.code === "23505" && /uq_finance_bill_vendor_reference/.test(error.message)) {
     return t("finance.payables.errors.duplicateVendorReference");
   }

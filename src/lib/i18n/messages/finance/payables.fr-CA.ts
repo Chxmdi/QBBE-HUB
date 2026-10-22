@@ -393,6 +393,7 @@ export const payablesFrCA: typeof payablesEn = {
     post: "Impossible de comptabiliser. Réessayez.",
     billNotFound: "Facture fournisseur introuvable.",
     requestApproval: "Impossible d’envoyer la facture en approbation. Réessayez.",
+    requestNotDrafter: "Seule la personne qui a rédigé cette facture ou un administrateur peut l’envoyer en approbation.",
     recordPayment: "Impossible d’inscrire le paiement. Réessayez.",
     reversePayment: "Impossible de contrepasser le paiement. Réessayez.",
     void: "Impossible de l’annuler. Réessayez.",

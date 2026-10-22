@@ -385,6 +385,7 @@ export const payablesEn = {
     post: "Could not post. Try again.",
     billNotFound: "Bill not found.",
     requestApproval: "Could not send the bill for approval. Try again.",
+    requestNotDrafter: "Only the person who drafted this bill or an administrator can send it for approval.",
     recordPayment: "Could not record the payment. Try again.",
     reversePayment: "Could not reverse the payment. Try again.",
     void: "Could not void it. Try again.",
