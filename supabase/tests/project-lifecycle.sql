@@ -112,8 +112,10 @@ begin
   -- this row by authorship.
   perform tests.clear_auth();
   reset role;
+  -- Authored by the owner: staff deciding their own request is refused
+  -- (separation of duties), so the queue case uses someone else's.
   insert into public.project_request (organization_id, title, summary, requested_by)
-  values (v_org, 'Somebody else''s idea', 'Not the volunteer''s.', v_staff)
+  values (v_org, 'Somebody else''s idea', 'Not the volunteer''s.', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1')
   returning id into v_request;
 
   perform tests.authenticate(v_volunteer);

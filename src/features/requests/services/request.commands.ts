@@ -249,6 +249,10 @@ export async function decideProjectRequest(input: unknown): Promise<ActionResult
   if (!existing) {
     return { ok: false, error: (await getT())("requests.errors.notAvailable") };
   }
+  // Separation of duties: the database refuses it too.
+  if (existing.requested_by === session.userId && status !== "withdrawn") {
+    return { ok: false, error: (await getT())("requests.errors.ownRequest") };
+  }
 
   if (status === "approved") {
     // One transaction: the project is created and the request settled together.
@@ -346,6 +350,10 @@ export async function requestApproval(input: unknown): Promise<ActionResult> {
     return { ok: false, error: requestIssueText(parsed.error.issues[0]?.message, await getT()) };
   }
   const data = parsed.data;
+  // Separation of duties: the database refuses it too.
+  if (data.approverId === session.userId) {
+    return { ok: false, error: (await getT())("requests.errors.selfApprover") };
+  }
 
   const supabase = await createSupabaseServerClient();
   const { data: created, error } = await supabase
@@ -409,6 +417,9 @@ export async function decideApproval(input: unknown): Promise<ActionResult> {
   }
   if (existing.decision !== "pending") {
     return { ok: false, error: (await getT())("requests.errors.alreadyAnswered") };
+  }
+  if (existing.requested_by === session.userId && decision !== "withdrawn") {
+    return { ok: false, error: (await getT())("requests.errors.ownRequest") };
   }
 
   const { data: updated, error } = await supabase
