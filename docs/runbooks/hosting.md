@@ -48,8 +48,14 @@ These are the trade-offs of the $0 choice. Read them once.
 - **Oracle reclaims idle free servers.** A server counts as idle only when
   processor, network *and* memory use all stay under 20% for 7 days. The
   scanner alone keeps memory above that, so this server is not idle.
-- **Security updates are automatic**, with a reboot at 04:30 UTC (half past
-  midnight in Montreal in summer) on nights an update needs one. The site is down for about a minute then.
+- **Security updates for the server itself are automatic**, with a reboot at
+  04:30 UTC (half past midnight in Montreal in summer) on nights an update
+  needs one. The site is down for about a minute then.
+- **The web server (Caddy) and the virus scanner are not updated by
+  themselves.** Their images are pinned to an exact build in
+  `deploy/server/compose.base.yaml`, so the server runs what was reviewed.
+  Each week Dependabot opens a pull request when a newer build exists. See
+  "Updating Caddy and the scanner" below.
 
 ## Setting it up (owner steps)
 
@@ -148,8 +154,12 @@ staging's database, and the reverse, but it cannot tell two keys apart.
 2. Open the run. Its summary shows one line starting with the IP address and
    `ssh-ed25519`. Copy the whole line into a new secret
    `DEPLOY_KNOWN_HOSTS` on `server-admin`, staging and production.
-3. **Run workflow** again, the box **not** ticked.
-   Optionally give a QBBE address for certificate notices.
+3. On `server-admin`, add the variable `ACME_EMAIL`: a QBBE mailbox someone
+   reads (for example the IT contact). Let's Encrypt, which issues the
+   site's certificates, writes there if a certificate cannot be renewed.
+   Until it is set, Server setup stops with "Set the ACME_EMAIL variable on
+   server-admin" and changes nothing on the server.
+4. **Run workflow** again, the box **not** ticked.
 
 You should see the run finish green, with `qbbe-caddy` and `qbbe-clamav`
 listed as running. The scanner downloads its signatures for a few minutes
@@ -349,7 +359,43 @@ WORKSPACE_OS_FLAGS=all
 - **What is live**: `cat /opt/qbbe/production/current-image`, or open
   `<SITE_URL>/api/health/version`, which shows the commit.
 - **Disk**: each environment keeps its five newest images; older ones are
-  removed at each release. Container logs rotate at 50 MB per container.
+  removed at each release. Each container keeps at most 200 MB of logs (ten
+  files of 20 MB); the oldest file is deleted when a new one starts.
+
+## Logs
+
+- **Access log** (`docker logs qbbe-caddy`): one JSON line per request with
+  the time, the visitor's IP address, the method, the address asked for,
+  the status, the duration and a request ID. Values of sign-in codes, tokens,
+  invitation codes and signatures in the address are removed before the line
+  is written; the rest of the address is kept. Cookies and the Authorization
+  header are never written.
+- **Request ID**: Caddy gives every request an ID, passes it to the app as
+  `X-Request-Id` and sends it back in the response. To trace a complaint, ask
+  for the time and, if possible, the ID shown in the browser's network tab,
+  then search both logs for it:
+  `docker logs qbbe-caddy 2>&1 | grep <id>`.
+- **App logs** (`docker logs qbbe-app-<environment>`): the app's own errors
+  and job runs.
+- **How long**: logs are kept by size, not by date (200 MB per container,
+  usually several weeks on this traffic). They are removed when the server is
+  rebuilt. How long IP addresses may be kept is a QBBE decision, recorded in
+  privacy.md.
+
+## Updating Caddy and the scanner
+
+1. When Dependabot opens a pull request titled like "Bump caddy" or "Bump
+   clamav/clamav-debian", check that CI is green and merge it.
+2. **Actions**, **Server setup**, **Run workflow**. It downloads the new
+   image before restarting anything; if the download fails, the old one keeps
+   running and the run fails.
+3. You should see the run finish green with `qbbe-caddy` and `qbbe-clamav`
+   running, and the site answering. If the site does not answer, revert the
+   merged pull request and run **Server setup** again.
+
+Do this within a week of the pull request for Caddy (it faces the internet);
+the scanner's virus signatures update by themselves, so its image can wait
+for the next convenient run.
 
 ## Rebuilding the server
 

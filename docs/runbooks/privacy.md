@@ -15,6 +15,7 @@ service-user/case records (those are P2 / out of first release).
 | Zeffy supporters and payments (`crm_contact` with `source = 'zeffy'`, `zeffy_payment`, `zeffy_campaign`) | Kept after Zeffy is disconnected: payments are donor financial records (six years, as gifts), supporters are CRM contacts | Read only from Zeffy. Payments readable by finance readers only (`can_read_ledger`); each view and CSV export of supporters' giving is recorded in the audit log. Not kept: postal addresses, checkout and ticket answers, card details, discount codes, tribute ("in memory of") names |
 | Notification delivery rows | Needed for job idempotency | Dedupe keys prevent double-send |
 | Audit events | At least six years; see [Audit trail retention](#audit-trail-retention) | Access changes, exports, ownership transfer |
+| Web server access log (on the server) | By size: at most 200 MB, usually several weeks; no date limit yet (QBBE to decide) | Visitor IP address, time, address requested, status. Sign-in codes, tokens and invitation codes are removed from addresses before writing. See hosting.md, "Logs" |
 
 ## Data inventory
 
@@ -111,6 +112,8 @@ not be communicated outside Quebec before the privacy impact assessment
 
 - Full Gmail bodies in application logs (SEC-006)
 - Service-role keys, OAuth refresh tokens, or SMTP credentials
+- Sign-in codes, tokens, invitation codes or signatures in web addresses, nor
+  cookies or the Authorization header, in the web server access log
 - Fake “sent” states when `EMAIL_PROVIDER_API_KEY` is unset
 
 ## Access
@@ -122,6 +125,8 @@ in queries, realtime, and `global_search`.
 ## Operator review (before production pilot)
 
 - [ ] Confirm Supabase project region and backup retention with QBBE
+- [ ] Decide how long the web server access log may keep IP addresses (today
+  it is limited by size only)
 - [ ] Designate the person in charge in writing and publish the contact
 - [ ] Complete and sign the privacy impact assessment
 - [ ] Sign data processing terms with each provider in `privacy-processors.md`

@@ -284,6 +284,64 @@ describe("separate deploy access per environment", () => {
   });
 });
 
+describe("server base images and access log", () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  const base = read("deploy/server/compose.base.yaml");
+  const site = read("deploy/server/site.caddy.template");
+  const setup = read("deploy/server/setup.sh");
+
+  it("pins Caddy and the scanner to an exact build that Dependabot proposes updates for", () => {
+    const images = [...base.matchAll(/^\s*image:\s*(\S+)/gm)].map((m) => m[1]);
+    expect(images).toHaveLength(2);
+    for (const image of images) expect(image).toMatch(/:[\w.-]+@sha256:[0-9a-f]{64}$/);
+    const dependabot = read(".github/dependabot.yml");
+    expect(dependabot).toMatch(/package-ecosystem:\s*docker-compose/);
+    expect(dependabot).toMatch(/directory:\s*\/deploy\/server/);
+  });
+
+  it("downloads the pinned images before restarting the shared services", () => {
+    const pull = setup.indexOf("compose.base.yaml\" pull");
+    expect(pull).toBeGreaterThan(-1);
+    expect(pull).toBeLessThan(setup.indexOf("compose.base.yaml\" up -d"));
+  });
+
+  it("runs Caddy with only the right to bind its ports, and neither service can gain privileges", () => {
+    expect(base).toMatch(/cap_drop: \[ALL\]\s*\n\s*cap_add: \[NET_BIND_SERVICE\]/);
+    expect(base.match(/no-new-privileges:true/g)).toHaveLength(2);
+  });
+
+  it("requires an address for certificate notices", () => {
+    const result = spawnSync("bash", [join(process.cwd(), "deploy/server/setup.sh"), "/nonexistent"], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, NODE_ENV: "test", ACME_EMAIL: "" },
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("ACME_EMAIL (the certificate notice address) is required.");
+    expect(setup).toContain("printf '{\\n\\temail %s\\n}\\n\\n' \"$ACME_EMAIL\"");
+  });
+
+  it("gives each request an ID the app, the browser and the log all see", () => {
+    expect(site).toContain("request_header X-Request-Id {http.request.uuid}");
+    expect(site).toContain("header X-Request-Id {http.request.uuid}");
+  });
+
+  it("writes the access log without codes or tokens from web addresses", () => {
+    expect(site).toMatch(/log \{\s*output stdout\s*format filter \{\s*wrap json/);
+    for (const name of ["code", "token", "token_hash", "access_token", "refresh_token", "id_token", "invite"]) {
+      expect(site).toMatch(new RegExp(`^\\s*delete ${name}$`, "m"));
+    }
+    expect(site).toMatch(/request>headers>Referer delete/);
+    expect(site).toMatch(/resp_headers>Location delete/);
+  });
+
+  it("caps every container's logs at 20 MB times ten files", () => {
+    for (const path of ["deploy/server/compose.base.yaml", "deploy/server/compose.app.yaml"]) {
+      expect(read(path)).toContain('options: { max-size: "20m", max-file: "10" }');
+    }
+    expect(setup).toContain('"max-size":"20m","max-file":"10"');
+  });
+});
+
 /**
  * release.sh run end to end against a stand-in docker
  * (tests/fixtures/fake-docker.sh): the swap, the automatic restore when the

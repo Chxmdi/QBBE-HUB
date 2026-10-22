@@ -14,7 +14,14 @@ services:
   caddy:
     # The official image, from its Amazon ECR Public copy: no Docker Hub
     # anonymous pull limit on the server.
-    image: public.ecr.aws/docker/library/caddy:2
+    # Pinned by digest: the server takes a new image only when a Dependabot
+    # pull request (.github/dependabot.yml) is merged and Server setup runs.
+    image: public.ecr.aws/docker/library/caddy:2@sha256:3095ad245c353e3bdb27a38f22a095c1cfa9e295ab21c0214c3e72b0e2960525
+    # It binds ports 80 and 443 and needs nothing else.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
     container_name: qbbe-caddy
     restart: unless-stopped
     ports:
@@ -28,13 +35,19 @@ services:
     networks: [edge-staging, edge-production, edge]
     logging: &logging
       driver: json-file
-      options: { max-size: "10m", max-file: "5" }
+      # Caddy's access log is here too: about 200 MB per container before
+      # the oldest lines go (docs/runbooks/hosting.md, "Logs").
+      options: { max-size: "20m", max-file: "10" }
 
   # clamd for the scan-documents jobs. No port is published: only containers
   # on the internal "scan" network can reach it. It needs about 3-4 GB
   # (ClamAV's own sizing) and the "egress" network to fetch signatures.
   clamav:
-    image: clamav/clamav-debian:stable
+    # Pinned by digest, like Caddy: the engine that parses every upload is
+    # updated by image, not by freshclam (which only refreshes signatures).
+    image: clamav/clamav-debian:stable@sha256:d7ede3cefeaf3b8a72ebcdee849d13f504bbca3f3b3cfade5bc7b6ee06a4f62c
+    security_opt:
+      - no-new-privileges:true
     container_name: qbbe-clamav
     restart: unless-stopped
     mem_limit: 4g

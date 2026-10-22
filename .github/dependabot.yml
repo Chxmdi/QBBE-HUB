@@ -1,0 +1,13 @@
+# Proposes a pull request when a pinned server image (Caddy, the virus
+# scanner) gets a new build, so security fixes reach the server through review
+# instead of an unpinned `latest`. Merging it changes nothing live until the
+# next Server setup run.
+version: 2
+updates:
+  - package-ecosystem: docker-compose
+    directory: /deploy/server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
