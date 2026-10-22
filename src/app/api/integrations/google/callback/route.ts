@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { requireSession } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requestOrigin } from "@/lib/request-origin";
 import { GOOGLE_PROVIDER_SCOPES, type GoogleIntegrationProvider } from "@/features/inbox/services/google-oauth";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +18,13 @@ export async function GET(request: Request) {
   const expected = cookieStore.get("qbbe_oauth_state")?.value;
   cookieStore.delete("qbbe_oauth_state");
 
+  // Redirects go to the host the browser used. request.url is the server's
+  // own address, which behind the proxy is localhost, where the person's
+  // session cookie does not exist.
+  const origin = requestOrigin(request);
   const fail = (message: string) =>
     NextResponse.redirect(
-      new URL(`/inbox?google_error=${encodeURIComponent(message)}`, request.url),
+      new URL(`/inbox?google_error=${encodeURIComponent(message)}`, origin),
     );
 
   if (!code || !state || !expected || state !== expected) {
@@ -83,26 +88,16 @@ export async function GET(request: Request) {
   const expires = tokens.expires_in
     ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
     : null;
-  // Google commonly omits refresh_token on reconnect. Preserve the prior
-  // server-side refresh token instead of accidentally converting a durable
-  // authorization into one that dies when the new access token expires.
-  const { data: priorSecret, error: priorSecretError } = await supabase
-    .from("integration_secret")
-    .select("refresh_token")
-    .eq("connection_id", connection.id)
-    .maybeSingle();
-  if (priorSecretError) {
-    return fail(t("inbox.google.reconcileFailed"));
-  }
-  const secretPayload = {
-    connection_id: connection.id,
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token ?? priorSecret?.refresh_token ?? null,
-    token_expires_at: expires,
-  };
-  const { error: secretError } = await supabase
-    .from("integration_secret")
-    .upsert(secretPayload, { onConflict: "connection_id" });
+  // Tokens cannot be read back through the API, so a plain upsert or update
+  // with this session matches nothing. The database stores them for the
+  // connection's owner, and keeps the stored refresh token when Google sends
+  // none on a reconnect.
+  const { error: secretError } = await supabase.rpc("store_integration_tokens", {
+    p_connection: connection.id,
+    p_access: tokens.access_token,
+    p_refresh: tokens.refresh_token ?? null,
+    p_expires: expires,
+  });
   if (secretError) {
     await supabase
       .from("integration_connection")
@@ -139,13 +134,14 @@ export async function GET(request: Request) {
       const watch = pushConfigured
         ? await createGmailInboxWatch(tokens.access_token, topicName!)
         : null;
-      const { error: cursorError } = await supabase.from("integration_secret")
-        .update({
+      const { error: cursorError } = await supabase.rpc("store_integration_sync_state", {
+        p_connection: connection.id,
+        p_state: {
           gmail_history_id: profile.historyId ?? watch?.historyId ?? null,
           gmail_pending_history_id: null,
           gmail_watch_expiration_at: watch?.expirationAt ?? null,
-        })
-        .eq("connection_id", connection.id);
+        },
+      });
       if (cursorError) throw new Error(`Could not save Gmail synchronization state: ${cursorError.message}`);
     } else if (provider === "google_calendar") {
       const { fetchCalendarOverlay } = await import("@/features/inbox/services/gmail-sync");
@@ -170,13 +166,14 @@ export async function GET(request: Request) {
         );
         if (calendarError) throw new Error(`Could not save Google Calendar overlay: ${calendarError.message}`);
       }
-      const { error: cursorError } = await supabase.from("integration_secret")
-        .update({ google_calendar_sync_token: sync.syncToken })
-        .eq("connection_id", connection.id);
+      const { error: cursorError } = await supabase.rpc("store_integration_sync_state", {
+        p_connection: connection.id,
+        p_state: { google_calendar_sync_token: sync.syncToken },
+      });
       if (cursorError) throw new Error(`Could not save Google Calendar sync token: ${cursorError.message}`);
     } else {
       const { reconcileGoogleDrive } = await import("@/features/documents/services/google-drive-reconcile");
-      await reconcileGoogleDrive(
+      const drive = await reconcileGoogleDrive(
         supabase,
         {
           id: connection.id,
@@ -185,6 +182,13 @@ export async function GET(request: Request) {
         },
         tokens.access_token,
       );
+      // The reconcile's own cursor update cannot reach the row with this
+      // session; save the page token through the database function.
+      const { error: cursorError } = await supabase.rpc("store_integration_sync_state", {
+        p_connection: connection.id,
+        p_state: { google_drive_page_token: drive.pageToken },
+      });
+      if (cursorError) throw new Error(`Could not save Google Drive page token: ${cursorError.message}`);
     }
     await supabase
       .from("integration_connection")
@@ -199,5 +203,5 @@ export async function GET(request: Request) {
   }
 
   const dest = provider === "gmail" ? "/inbox?filter=mail" : provider === "google_calendar" ? "/calendar" : "/documents";
-  return NextResponse.redirect(new URL(dest, request.url));
+  return NextResponse.redirect(new URL(dest, origin));
 }

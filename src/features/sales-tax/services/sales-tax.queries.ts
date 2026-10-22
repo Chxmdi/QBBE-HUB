@@ -1,6 +1,7 @@
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
 import { centsToDecimal, csvDocument } from "@/features/ledger/money";
 import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
+import { fetchAllPages } from "@/lib/supabase/fetch-all-pages";
 import {
   TAX_CODE_LABEL,
   closingFigures,
@@ -63,7 +64,10 @@ export interface TaxLine {
   source_id: string | null;
 }
 
+/** Lines shown on screen; the worksheet CSV carries them all. */
 export const LINE_LIMIT = 1000;
+/** A worksheet CSV with more lines than this is refused (HTTP 413) rather than cut short. */
+export const TAX_EXPORT_LINE_LIMIT = 50_000;
 
 export async function getTaxSettings(supabase: Client, organizationId: string): Promise<TaxSettings | null> {
   const { data } = await supabase
@@ -123,26 +127,51 @@ export interface LineFilter {
   codes?: readonly TaxCode[] | null;
 }
 
+/**
+ * Tax lines in a date range, read a page at a time because the API returns at
+ * most 1,000 rows per request (DATA-003). `truncated` is true when more than
+ * `limit` lines match. The order ends on id so pages neither repeat nor skip.
+ */
 export async function listTaxLines(
   supabase: Client,
   organizationId: string,
   filter: LineFilter,
+  limit: number = LINE_LIMIT,
 ): Promise<{ lines: TaxLine[]; truncated: boolean }> {
-  let query = supabase
-    .from("sales_tax_line")
-    .select("id, direction, tax_code, transaction_date, counterparty, reference, description, amount_cents, gst_cents, qst_cents, itc_cents, itr_cents, source_type, source_id")
-    .eq("organization_id", organizationId)
-    .gte("transaction_date", filter.from)
-    .lte("transaction_date", filter.to);
-  if (filter.direction) query = query.eq("direction", filter.direction);
-  if (filter.codes && filter.codes.length > 0) query = query.in("tax_code", [...filter.codes]);
-  const { data, error } = await query
-    .order("transaction_date")
-    .order("created_at")
-    .limit(LINE_LIMIT + 1);
+  const { rows, error, truncated } = await fetchAllPages<TaxLine>((start, end) => {
+    let query = supabase
+      .from("sales_tax_line")
+      .select("id, direction, tax_code, transaction_date, counterparty, reference, description, amount_cents, gst_cents, qst_cents, itc_cents, itr_cents, source_type, source_id")
+      .eq("organization_id", organizationId)
+      .gte("transaction_date", filter.from)
+      .lte("transaction_date", filter.to);
+    if (filter.direction) query = query.eq("direction", filter.direction);
+    if (filter.codes && filter.codes.length > 0) query = query.in("tax_code", [...filter.codes]);
+    return query.order("transaction_date").order("created_at").order("id").range(start, end);
+  }, limit);
   if (error) throw new Error(`Could not load the tax lines: ${error.message}`);
-  const lines = (data ?? []) as TaxLine[];
-  return { lines: lines.slice(0, LINE_LIMIT), truncated: lines.length > LINE_LIMIT };
+  return { lines: rows, truncated };
+}
+
+/**
+ * Totals of the lines a filter selects, summed in SQL (sales_tax_totals), so
+ * they stay right when the on-screen list stops at LINE_LIMIT.
+ */
+export function filteredTotals(rows: TaxTotalsRow[], filter: Pick<LineFilter, "direction" | "codes">) {
+  const picked = rows.filter(
+    (r) =>
+      (!filter.direction || r.direction === filter.direction) &&
+      (!filter.codes || filter.codes.length === 0 || filter.codes.includes(r.tax_code)),
+  );
+  const sum = (pick: (r: TaxTotalsRow) => number) => picked.reduce((n, r) => n + pick(r), 0);
+  return {
+    lineCount: sum((r) => r.line_count),
+    amount: sum((r) => r.amount_cents),
+    gst: sum((r) => r.gst_cents),
+    qst: sum((r) => r.qst_cents),
+    itc: sum((r) => r.itc_cents),
+    itr: sum((r) => r.itr_cents),
+  };
 }
 
 export interface Worksheet {

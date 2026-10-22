@@ -5,7 +5,12 @@ name: Rollback
 #
 # This restores the website only. Database migrations are append-only and
 # are not reversed here: fix forward with a new migration, or follow the
-# schema rollback section of docs/runbooks/release-procedure.md.
+# schema rollback section of docs/runbooks/release-procedure.md. The earlier
+# image can run against the migrated database because destructive changes
+# ship only after a release stopped using what they remove (the contract
+# rule, tests/unit/migration-contract.test.ts). Undoing a migration itself
+# means restoring the backup the Deploy run took right before migrating
+# (linked in its summary).
 #
 # The commit to restore is in the Deploy run's Release summary ("Rollback
 # target", the image <environment>-<commit>), and in

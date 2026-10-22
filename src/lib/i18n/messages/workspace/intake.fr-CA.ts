@@ -329,6 +329,7 @@ export const intakeFrCA: typeof intakeEn = {
     },
     export: {
       failed: "Impossible d’exporter les soumissions. Réessayez.",
+      tooMany: "Ce formulaire compte plus de {max} soumissions, trop pour un seul fichier.",
       submittedAt: "Soumis le",
       submittedBy: "Soumis par",
       signedBy: "Signé par",

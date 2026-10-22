@@ -56,10 +56,11 @@ export default async function DonorsPage({
     );
   }
 
-  // The database writes the audit record for this read.
+  // The database writes the audit record for this read. The whole list comes
+  // back as one JSON value, so it is not cut off at 1,000 donors (DATA-003).
   const { data, error } =
     from <= to
-      ? await supabase.rpc("gift_donor_list", {
+      ? await supabase.rpc("gift_donor_list_all", {
           p_organization: session.organizationId,
           p_from: from,
           p_to: to,

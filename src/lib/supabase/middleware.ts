@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { RETURN_PATH_HEADER, returnPath, signInUrl } from "@/lib/return-path";
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
@@ -30,6 +31,11 @@ export async function updateSession(request: NextRequest) {
   ) {
     return NextResponse.next({ request });
   }
+
+  // Pages that must send someone to verify first (the workspace layout's
+  // two-step check) read where they were going from here. Set by this
+  // middleware on every request, so a value sent by the browser is replaced.
+  request.headers.set(RETURN_PATH_HEADER, returnPath(request.nextUrl));
 
   let supabaseResponse = NextResponse.next({ request });
 
@@ -71,10 +77,9 @@ export async function updateSession(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`));
 
   if (!signedIn && !isPublic) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/sign-in";
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    // The whole link, query string included (/my-work?task=…): only the path
+    // used to survive, so links from emails lost their target.
+    return NextResponse.redirect(signInUrl(request.nextUrl));
   }
 
   // A signed-in person who opens /sign-in or /sign-up gets the form, as they

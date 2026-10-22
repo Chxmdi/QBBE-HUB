@@ -78,5 +78,12 @@ Migrations are never reversed automatically.
 - If the old website must run against the new schema, it can only do so when
   the migration was additive. That is why schema changes go
   expand, migrate, contract (`deployment.md`, CICD-002).
+- CI enforces the contract step. A migration that drops a table or column,
+  renames one, or changes a column's type fails `npm test`
+  (`tests/unit/migration-contract.test.ts`, `scripts/ci/migration-contract.mjs`)
+  unless it carries a line `-- contract: safe-after <sha>` naming the
+  already-released commit after which no code reads the old shape. The
+  reviewer confirms that commit is in a release that is live on production
+  before approving. Migrations up to `20261115020000` predate the rule.
 - Destructive recovery (restore from backup) follows `backup-recovery.md`,
   and is rehearsed on staging first.

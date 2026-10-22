@@ -20,8 +20,10 @@ import { TAX_CODES, TAX_CODE_LABEL, type Direction, type TaxCode } from "@/featu
 import {
   DIRECTION_LABEL,
   LINE_LIMIT,
+  filteredTotals,
   listTaxLines,
   listTaxPeriods,
+  taxTotals,
 } from "@/features/sales-tax/services/sales-tax.queries";
 import { getLocale, getT } from "@/lib/i18n/server";
 
@@ -66,13 +68,15 @@ export default async function TaxLinesPage({
   const direction: Direction | null =
     params.direction === "sale" || params.direction === "purchase" ? params.direction : null;
   const codes = codesParam(params.codes);
-  const [{ lines, truncated }, periods] = await Promise.all([
+  const [{ lines, truncated }, periods, totalsRows] = await Promise.all([
     listTaxLines(supabase, session.organizationId, { from, to, direction, codes }),
     listTaxPeriods(supabase, session.organizationId),
+    taxTotals(supabase, session.organizationId, from, to),
   ]);
   const closed = periods.filter((p) => p.status === "closed");
   const isClosed = (date: string) => closed.some((p) => p.starts_on <= date && date <= p.ends_on);
-  const total = (pick: (l: (typeof lines)[number]) => number) => lines.reduce((n, l) => n + pick(l), 0);
+  // Summed in SQL over every matching line, not just the ones on screen (DATA-003).
+  const totals = filteredTotals(totalsRows, { direction, codes });
 
   return (
     <div>
@@ -211,15 +215,15 @@ export default async function TaxLinesPage({
               <TableCell>{null}</TableCell>
               <TableCell>{null}</TableCell>
               <TableCell className="meta">
-                {t(lines.length === 1 ? "finance.salesTax.lineCountOne" : "finance.salesTax.lineCountOther", {
-                  count: lines.length,
+                {t(totals.lineCount === 1 ? "finance.salesTax.lineCountOne" : "finance.salesTax.lineCountOther", {
+                  count: totals.lineCount,
                 })}
               </TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{money(total((l) => l.amount_cents))}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{money(total((l) => l.gst_cents))}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{money(total((l) => l.qst_cents))}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{money(total((l) => l.itc_cents))}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{money(total((l) => l.itr_cents))}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(totals.amount)}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(totals.gst)}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(totals.qst)}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(totals.itc)}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(totals.itr)}</TableCell>
               {canManage ? <TableCell>{null}</TableCell> : null}
             </TableRow>
           </tbody>

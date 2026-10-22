@@ -12,6 +12,7 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [needsMfa, setNeedsMfa] = useState(false);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,6 +31,13 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
         const password = String(data.get("password"));
         if (password !== data.get("confirm")) throw new Error(t("auth.recovery.mismatch"));
         const { error: updateError } = await db.auth.updateUser({ password });
+        // An account with an authenticator changes its password only in a
+        // verified session; say so and offer the way, rather than a generic
+        // failure that sends people to request another link.
+        if (updateError && (updateError as { code?: string }).code === "insufficient_aal") {
+          setNeedsMfa(true);
+          throw new Error(t("auth.recovery.needsMfa"));
+        }
         if (updateError) throw new Error(t("auth.recovery.updateFailed"));
         await db.auth.signOut();
       }
@@ -58,6 +66,7 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
             <Input id="confirm-password" name="confirm" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /></div>
         </>}
         {error ? <p role="alert" className="text-sm text-danger-fg">{error}</p> : null}
+        {needsMfa ? <Link href="/mfa?next=%2Freset-password" className="text-sm text-brand-fg hover:underline">{t("auth.recovery.verifyFirst")}</Link> : null}
         <Button type="submit" loading={busy} disabled={busy} className="w-full">{mode === "request" ? t("auth.recovery.sendLink") : t("auth.recovery.savePassword")}</Button>
       </form>}
     <Link className="inline-block text-sm text-brand-fg hover:underline" href="/sign-in">{t("common.backToSignIn")}</Link>

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeader } from "@/components/shared/page-header";
 import { AgendaView, WeekView } from "@/features/calendar/components/week-view";
+import { calendarWindow } from "@/features/calendar/calendar-model";
 import { requireSession } from "@/lib/auth";
 import { getLocale } from "@/lib/i18n/server";
 import { reportError } from "@/lib/observability";
@@ -145,9 +146,9 @@ export default async function CalendarLensPage({
       ) : view === "month" ? (
         <MonthGrid days={monthDays(anchor)} month={anchor.slice(0, 7)} items={items} locale={locale} today={today} t={t} />
       ) : view === "week" ? (
-        <WeekView anchor={new Date(`${anchor}T12:00:00Z`)} items={items} locale={locale} />
+        <WeekView days={calendarWindow("week", anchor).days} today={today} items={items} locale={locale} />
       ) : (
-        <AgendaView items={items} locale={locale} />
+        <AgendaView items={items} today={today} locale={locale} />
       )}
     </div>
   );

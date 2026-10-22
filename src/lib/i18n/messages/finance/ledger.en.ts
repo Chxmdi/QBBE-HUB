@@ -257,7 +257,11 @@ export const ledgerEn = {
       bank_transaction: "bank transaction",
       gift: "gift",
       payroll_run: "pay run",
+      sales_tax_period: "GST/QST return",
     },
+    undoFromSource: "Undo from the {source}",
+    undoFromSourceHint:
+      "This entry came from a {source}. Void or reverse it there, so that record and the ledger stay in step.",
     programProject: "Program / project",
     trailHeading: "Trail",
     noTrail: "No recorded steps.",
@@ -381,6 +385,8 @@ export const ledgerEn = {
     deleteDraft: "Could not delete the draft. Try again.",
     reversalDate: "Enter the date of the reversing entry.",
     reverseEntry: "Could not reverse the entry. Try again.",
+    reverseFromSource:
+      "This entry came from another record (a gift, bill, invoice, payment, pay run or GST/QST return). Void or reverse it from that record, so both stay in step.",
     chooseStaff: "Choose a staff member.",
     alreadyReader: "They can already read the ledger.",
     grantAccess: "Could not grant access. Try again.",

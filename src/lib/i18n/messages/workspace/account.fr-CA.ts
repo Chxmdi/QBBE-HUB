@@ -62,6 +62,8 @@ export const accountFrCA: typeof accountEn = {
       failed: "Impossible de terminer la récupération. Veuillez réessayer.",
       sessionMissing: "Votre session de récupération est absente ou a expiré.",
       requestNewLink: "Demander un nouveau lien de récupération",
+      needsMfa: "Votre compte utilise la vérification en deux étapes. Entrez d’abord le code de votre authentificateur, puis choisissez le nouveau mot de passe.",
+      verifyFirst: "Entrer le code de l’authentificateur",
     },
     mfa: {
       title: "Authentification multifacteur",
@@ -70,6 +72,9 @@ export const accountFrCA: typeof accountEn = {
       accountantBody: "QBBE Hub exige un code d’authentificateur avant d’ouvrir les livres.",
       adminBody:
         "QBBE Hub exige un code d’authentificateur pour les propriétaires et les administrateurs.",
+      memberHeading: "Confirmez votre identité",
+      memberBody:
+        "Votre compte utilise la vérification en deux étapes. Entrez le code de votre authentificateur pour continuer.",
       loading: "Chargement de la vérification de sécurité…",
       checking: "Vérification de vos paramètres de sécurité…",
       preparing: "Préparation de la configuration de l’authentificateur…",
@@ -271,6 +276,7 @@ export const accountFrCA: typeof accountEn = {
         assigned: "attribution",
         mentioned: "mention",
         reply: "réponse",
+        directMessage: "message direct",
         approved: "approbation",
         decisionRequested: "décision demandée",
         dueDateChanged: "échéance modifiée",

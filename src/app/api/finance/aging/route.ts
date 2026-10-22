@@ -1,7 +1,8 @@
 import { requireStaff } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { dateParam, todayIn } from "@/features/ledger/services/ledger.access";
-import { agingCsv, type AgingRow } from "@/features/payables/model";
+import { agingCsv } from "@/features/payables/model";
+import { AGING_LIMIT, readAging } from "@/features/payables/services/aging.queries";
 import { getT } from "@/lib/i18n/server";
 
 /** Accounts payable or receivable aging as CSV (#150). Row-level security decides what is included. */
@@ -16,13 +17,10 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const kind = url.searchParams.get("kind") === "invoice" ? "invoice" : "bill";
   const asOf = dateParam(url.searchParams.get("as_of") ?? undefined, todayIn(session.timeZone));
-  const { data, error } = await supabase.rpc("finance_aging", {
-    p_organization: session.organizationId,
-    p_kind: kind,
-    p_as_of: asOf,
-  });
+  // Every open document, a page at a time; above the ceiling the file is refused, never cut short.
+  const { rows, error, truncated } = await readAging(supabase, session.organizationId, kind, asOf);
   if (error) return new Response(t("finance.payables.csv.exportFailed"), { status: 500 });
-  const rows = (data ?? []) as AgingRow[];
+  if (truncated) return new Response(t("finance.payables.csv.tooMany", { max: AGING_LIMIT }), { status: 413 });
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
     actor_id: session.userId,

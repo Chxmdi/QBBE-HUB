@@ -346,6 +346,7 @@ export const commsFrCA: typeof commsEn = {
     notifications: {
       mentioned: "{name} vous a mentionné",
       replied: "{name} a répondu à votre message",
+      directMessage: "{name} vous a envoyé un message direct",
     },
     taskDescription: "Créée à partir d’un message de canal :\n\n> {body}",
     decisionDetail: "Consignée à partir d’une conversation de canal.",

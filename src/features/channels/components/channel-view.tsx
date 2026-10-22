@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { SendHorizonal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,11 @@ import {
   mergeMessages,
   olderPage,
 } from "@/features/channels/history";
+import {
+  fetchLinkedMessage,
+  fetchThread,
+  type MessageContainer,
+} from "@/features/channels/services/thread.queries";
 import { authorizeRealtime, createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
@@ -163,9 +168,13 @@ export function ChannelView({
   const searchParams = useSearchParams();
   const permalinkId = searchParams.get("message");
   const threadParam = searchParams.get("thread");
-  const container = channelId
-    ? { column: "channel_id", id: channelId }
-    : { column: "conversation_id", id: conversationId! };
+  const container = useMemo<MessageContainer>(
+    () =>
+      channelId
+        ? { column: "channel_id", id: channelId }
+        : { column: "conversation_id", id: conversationId! },
+    [channelId, conversationId],
+  );
 
   const refresh = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
@@ -294,6 +303,28 @@ export function ChannelView({
     if (permalinkId || threadParam || !stickToLatestRef.current) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages.length, permalinkId, threadParam]);
+
+  // A thread opened, or a message linked, that the timeline has not loaded:
+  // the newest 100 messages leave older threads and their newer replies out.
+  // Read them on demand and merge them in. RLS re-checks access.
+  const fetchedRef = useRef(new Set<string>());
+  useEffect(() => {
+    const wanted = [
+      threadRootId ? { kind: "thread" as const, id: threadRootId } : null,
+      permalinkId && !messages.some((m) => m.id === permalinkId) ? { kind: "message" as const, id: permalinkId } : null,
+    ].filter((w): w is { kind: "thread" | "message"; id: string } => w !== null && !fetchedRef.current.has(`${w.kind}:${w.id}`));
+    if (wanted.length === 0) return;
+    const supabase = createSupabaseBrowserClient();
+    for (const want of wanted) {
+      fetchedRef.current.add(`${want.kind}:${want.id}`);
+      const load = want.kind === "thread"
+        ? fetchThread<Message>(supabase, container, want.id, MESSAGE_SELECT)
+        : fetchLinkedMessage<Message>(supabase, container, want.id, MESSAGE_SELECT);
+      void load.then((rows) => {
+        if (rows.length) setMessages((current) => mergeMessages(current, rows));
+      });
+    }
+  }, [threadRootId, permalinkId, messages, container]);
 
   // Consume ?message= / ?thread= (P0-MSG-06). Access is already re-checked by RLS.
   useEffect(() => {

@@ -129,6 +129,10 @@ export const payablesFrCA: typeof payablesEn = {
       "La TPS et la TVQ récupérables vont aux comptes de taxes à recevoir (1200, 1210). Si les taxes ne peuvent pas être récupérées, incluez-les plutôt dans les montants des lignes et laissez ces champs à zéro.",
     invoiceTaxHint:
       "La TPS et la TVQ facturées vont aux comptes de taxes à payer (2200, 2210). Laissez-les à zéro lorsque l’article est exonéré.",
+    invoiceTaxAuto:
+      "Calculées sur le montant avant taxes aux taux en vigueur. Réduisez-les lorsqu’une partie de la facture est exonérée ou hors champ, et mettez-les toutes deux à zéro lorsqu’elle l’est en entier, comme une subvention.",
+    invoiceTaxNotRegistered:
+      "Cet organisme n’est inscrit ni à la TPS ni à la TVQ; ses factures ne perçoivent donc aucune taxe. L’inscription s’enregistre sous Finances, TPS et TVQ.",
     saveDraft: "Enregistrer le brouillon",
     saveAndPostBill: "Enregistrer et comptabiliser la facture",
     saveAndPostInvoice: "Enregistrer et comptabiliser la facture",
@@ -302,6 +306,8 @@ export const payablesFrCA: typeof payablesEn = {
     save: "Enregistrer le seuil",
   },
   aging: {
+    readFailed:
+      "Une partie de ce rapport n’a pas pu être lue; les montants ci-dessous sont donc incomplets. Rechargez la page; si le problème persiste, avisez un administrateur.",
     description:
       "Ce qui reste dû à chaque date, selon le retard. Établi à partir des mêmes dates que les écritures du grand livre, il concorde donc avec les soldes des comptes fournisseurs et des comptes clients.",
     options: "Options du classement chronologique",
@@ -341,6 +347,7 @@ export const payablesFrCA: typeof payablesEn = {
     total: "Total",
     open: "Solde ouvert",
     exportFailed: "Impossible d’exporter le classement chronologique. Réessayez.",
+    tooMany: "Il y a plus de {max} documents ouverts à cette date, trop pour un seul rapport.",
   },
   invoiceSheet: {
     invoice: "Facture",
@@ -358,8 +365,18 @@ export const payablesFrCA: typeof payablesEn = {
     balance: "Solde dû",
     draft: "Brouillon — non émise",
     void: "Annulée",
+    gstNumber: "N° d’inscription à la TPS : {number}",
+    qstNumber: "N° d’inscription à la TVQ : {number}",
   },
   errors: {
+    invoiceTax: {
+      gstNotRegistered:
+        "Cet organisme n’est pas inscrit à la TPS; une facture ne peut donc pas en percevoir. Retirez la TPS, ou enregistrez l’inscription sous Finances, TPS et TVQ.",
+      qstNotRegistered:
+        "Cet organisme n’est pas inscrit à la TVQ; une facture ne peut donc pas en percevoir. Retirez la TVQ, ou enregistrez l’inscription sous Finances, TPS et TVQ.",
+      gstMismatch: "La TPS dépasse ce que donne le taux. Sur ce montant avant taxes, elle est d’au plus {amount}.",
+      qstMismatch: "La TVQ dépasse ce que donne le taux. Sur ce montant avant taxes, elle est d’au plus {amount}.",
+    },
     duplicateVendorReference: "Une facture avec ce numéro de facture du fournisseur est déjà saisie.",
     duplicateReceipt: "Cette facture numérisée est déjà saisie comme facture fournisseur.",
     foreignKey: "Un compte, un fonds, un programme ou un contact n’appartient pas à cet organisme.",

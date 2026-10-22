@@ -7,6 +7,7 @@ import { DataTable, TableCell, TableHead, TableHeader, TableRow } from "@/compon
 import { groupApprovalChain, sourceHasApprovals, type ApprovalChainRow } from "@/features/ledger/approval-chain";
 import { ApprovalChainSection } from "@/features/ledger/components/approval-chain";
 import { DraftActions, ReverseEntryButton } from "@/features/ledger/components/entry-actions";
+import { sourceRecordHref, UNDONE_FROM_SOURCE, type PaymentDocument } from "@/features/ledger/source-records";
 import { EntryForm } from "@/features/ledger/components/entry-form";
 import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
@@ -25,6 +26,7 @@ const SOURCE_KEY: Record<string, MessageKey> = {
   bank_transaction: "finance.ledger.entry.sources.bank_transaction",
   gift: "finance.ledger.entry.sources.gift",
   payroll_run: "finance.ledger.entry.sources.payroll_run",
+  sales_tax_period: "finance.ledger.entry.sources.sales_tax_period",
 };
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -114,6 +116,7 @@ export default async function JournalEntryPage({
     { data: reversals },
     { data: trailData },
     { data: approvalData },
+    { data: paymentData },
   ] = await Promise.all([
     supabase
       .from("journal_line")
@@ -125,11 +128,23 @@ export default async function JournalEntryPage({
     supabase.from("journal_entry").select("id, entry_number").eq("reverses_entry_id", id),
     supabase.rpc("ledger_entry_trail", { p_entry: id }),
     supabase.rpc("ledger_entry_approvals", { p_entry: id }),
+    entry.source_type === "finance_payment" && entry.source_id
+      ? supabase.from("finance_payment").select("bill_id, invoice_id").eq("id", entry.source_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
   const approvals = groupApprovalChain((approvalData ?? []) as ApprovalChainRow[], t);
   const trail = (trailData ?? []) as { occurred_at: string; action: string; actor_name: string }[];
   const lines = (lineData ?? []) as unknown as Line[];
   const reversal = ((reversals ?? []) as { id: string; entry_number: number | null }[])[0];
+  // An entry a gift, bill, payment... posted is undone from that record, which
+  // the database insists on; offer the way that works instead of Reverse.
+  const undoneFromSource = Boolean(entry.source_type && UNDONE_FROM_SOURCE.has(entry.source_type));
+  const sourceLabel = entry.source_type
+    ? entry.source_type in SOURCE_KEY
+      ? t(SOURCE_KEY[entry.source_type])
+      : entry.source_type.replace(/_/g, " ")
+    : "";
+  const sourceHref = sourceRecordHref(entry.source_type, entry.source_id, paymentData as PaymentDocument | null);
   const debits = lines.reduce((s, l) => s + Number(l.debit_cents), 0);
   const credits = lines.reduce((s, l) => s + Number(l.credit_cents), 0);
   const title = entry.entry_number
@@ -175,6 +190,20 @@ export default async function JournalEntryPage({
           canManage ? (
             entry.status === "draft" ? (
               <DraftActions entryId={entry.id} />
+            ) : entry.kind !== "reversal" && entry.kind !== "closing" && !reversal && entry.entry_number && undoneFromSource ? (
+              sourceHref ? (
+                <Link
+                  href={sourceHref}
+                  title={t("finance.ledger.entry.undoFromSourceHint", { source: sourceLabel })}
+                  className="rounded-(--radius-sm) border border-line bg-surface px-3 py-1.5 text-[13px] font-medium hover:bg-surface-soft"
+                >
+                  {t("finance.ledger.entry.undoFromSource", { source: sourceLabel })}
+                </Link>
+              ) : (
+                <p className="max-w-sm text-[12.5px] text-muted">
+                  {t("finance.ledger.entry.undoFromSourceHint", { source: sourceLabel })}
+                </p>
+              )
             ) : entry.kind !== "reversal" && entry.kind !== "closing" && !reversal && entry.entry_number ? (
               <ReverseEntryButton
                 entryId={entry.id}
@@ -226,13 +255,12 @@ export default async function JournalEntryPage({
               >
                 {t("finance.ledger.entry.openReceipt")}
               </a>
+            ) : entry.source_type && sourceHref ? (
+              <Link className="text-brand-fg hover:underline" href={sourceHref}>
+                {t("finance.ledger.entry.fromSource", { source: sourceLabel })}
+              </Link>
             ) : entry.source_type ? (
-              <span>{t("finance.ledger.entry.fromSource", {
-                  source:
-                    entry.source_type in SOURCE_KEY
-                      ? t(SOURCE_KEY[entry.source_type])
-                      : entry.source_type.replace(/_/g, " "),
-                })}</span>
+              <span>{t("finance.ledger.entry.fromSource", { source: sourceLabel })}</span>
             ) : (
               "—"
             )}

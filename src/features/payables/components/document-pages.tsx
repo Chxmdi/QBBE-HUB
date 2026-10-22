@@ -17,6 +17,7 @@ import {
   VoidDialog,
 } from "@/features/payables/components/document-actions";
 import { InvoiceSheet, PrintButton } from "@/features/payables/components/invoice-sheet";
+import type { TaxRegistration } from "@/features/payables/invoice-tax";
 import { PayablesTabs } from "@/features/payables/components/payables-tabs";
 import { ThresholdForm } from "@/features/payables/components/threshold-form";
 import {
@@ -35,6 +36,7 @@ import {
   loadContacts,
   loadDocument,
   loadPostingChoices,
+  loadTaxRegistration,
   type DocumentRecord,
 } from "@/features/payables/services/payables.queries";
 import { getLocale, getT } from "@/lib/i18n/server";
@@ -191,7 +193,7 @@ export async function DocumentListPage({
 async function editorProps(kind: DocumentKind, record: DocumentRecord | null) {
   const { session, supabase, canPost } = await getPayablesAccess();
   const locale = await getLocale();
-  const [choices, contacts, receipts] = await Promise.all([
+  const [choices, contacts, receipts, taxRegistration] = await Promise.all([
     loadPostingChoices(supabase, session.organizationId),
     loadContacts(supabase, session.organizationId),
     kind === "bill"
@@ -203,6 +205,9 @@ async function editorProps(kind: DocumentKind, record: DocumentRecord | null) {
           .order("document_date", { ascending: false })
           .limit(200)
       : Promise.resolve({ data: [] }),
+    kind === "invoice"
+      ? loadTaxRegistration(supabase, session.organizationId, record?.document_date ?? todayIn(session.timeZone))
+      : Promise.resolve(null),
   ]);
   const today = todayIn(session.timeZone);
   const gen = choices.funds.find((f) => f.code === "GEN") ?? choices.funds[0];
@@ -257,6 +262,7 @@ async function editorProps(kind: DocumentKind, record: DocumentRecord | null) {
     kind,
     initial,
     canPost,
+    taxRegistration,
     contacts: contacts
       .filter((c) => (kind === "bill" ? c.is_vendor : c.is_customer) && (c.is_active || c.id === record?.contact_id))
       .map((c) => ({ id: c.id, label: c.name, language: c.language })),
@@ -358,9 +364,16 @@ export async function DocumentDetailPage({
         : null;
   }
   let organizationName = "";
+  let taxRegistration: TaxRegistration | null = null;
   if (!isBill) {
-    const { data } = await supabase.from("organization").select("name").eq("id", session.organizationId).maybeSingle();
+    const [{ data }, registration] = await Promise.all([
+      supabase.from("organization").select("name").eq("id", session.organizationId).maybeSingle(),
+      record.gst_cents > 0 || record.qst_cents > 0
+        ? loadTaxRegistration(supabase, session.organizationId, record.document_date)
+        : Promise.resolve(null),
+    ]);
     organizationName = (data?.name as string | undefined) ?? "";
+    taxRegistration = registration;
   }
   const needsApproval = threshold !== null && record.total_cents >= threshold;
   const owing = record.total_cents - record.paid_cents;
@@ -599,7 +612,7 @@ export async function DocumentDetailPage({
               })}
             />
           </div>
-          <InvoiceSheet record={record} organizationName={organizationName} />
+          <InvoiceSheet record={record} organizationName={organizationName} registration={taxRegistration} />
         </div>
       ) : null}
     </div>

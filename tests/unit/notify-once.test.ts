@@ -66,3 +66,18 @@ describe("collapseDrafts", () => {
     ).toHaveLength(0);
   });
 });
+
+describe("createNotifications", () => {
+  it("re-opens the person's notification when the event repeats, instead of dropping it", async () => {
+    const { FakeSupabase, asClient } = await import("../support/fake-supabase");
+    const { createNotifications } = await import("@/features/jobs/services/notify");
+    const db = new FakeSupabase();
+    expect(await createNotifications(asClient(db), [draft({ reason: "mentioned" })])).toBe(1);
+    db.rows("notification")[0].read_at = "2026-10-01T00:00:00Z";
+    expect(await createNotifications(asClient(db), [draft({ reason: "followed", title: "Mentioned again" })])).toBe(0);
+    const rows = db.rows("notification");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ read_at: null, title: "Mentioned again", reason: "mentioned, followed" });
+    expect(db.rpcCalls.map((call) => call.name)).toEqual(["create_notifications", "create_notifications"]);
+  });
+});

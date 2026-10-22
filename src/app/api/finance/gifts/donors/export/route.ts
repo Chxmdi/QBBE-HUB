@@ -5,7 +5,7 @@ import { centsToDecimal, csvField } from "@/features/finance/money";
 import { isCalendarDate } from "@/lib/schema";
 
 /**
- * The donor list as CSV (#156). Read through public.gift_donor_list, which
+ * The donor list as CSV (#156). Read through public.gift_donor_list_all, which
  * refuses anyone who may not read the ledger and writes an audit record of
  * every export (who, when, which dates) before returning a row. Text is
  * neutralised against spreadsheet formula injection. Column headers and the
@@ -38,7 +38,9 @@ export async function GET(request: Request) {
     return new Response(t("finance.gifts.api.invalidRange"), { status: 400 });
   }
   const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.rpc("gift_donor_list", {
+  // The whole list as one JSON value: one call, so one audit record, and no
+  // 1,000-row cap on the result (DATA-003).
+  const { data, error } = await supabase.rpc("gift_donor_list_all", {
     p_organization: session.organizationId,
     p_from: from,
     p_to: to,
