@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/toast";
 import type { Choice } from "@/features/ledger/components/entry-form";
 import { formatCents, parseMoneyToCents } from "@/features/ledger/money";
 import { addDays, type DocumentKind } from "@/features/payables/model";
+import { invoiceTaxDefaults, invoiceTaxProblem, type TaxRegistration } from "@/features/payables/invoice-tax";
 import { saveDocument } from "@/features/payables/services/payables.commands";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/translate";
@@ -69,6 +70,7 @@ export function DocumentForm({
   funds,
   programs,
   canPost,
+  taxRegistration = null,
 }: {
   kind: DocumentKind;
   initial: DocumentFormValue;
@@ -79,6 +81,8 @@ export function DocumentForm({
   funds: Choice[];
   programs: Choice[];
   canPost: boolean;
+  /** Invoices only: whether tax is collected, and at what rates. */
+  taxRegistration?: TaxRegistration | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -96,7 +100,18 @@ export function DocumentForm({
   const [error, setError] = useState<string | null>(null);
 
   const subtotal = useMemo(() => lines.reduce((s, l) => s + cents(l.amount), 0), [lines]);
-  const total = subtotal + cents(value.gst) + cents(value.qst);
+  // A new invoice's tax follows the amount before tax until someone types in
+  // a tax field (an exempt supply, say). A saved draft keeps the tax it was
+  // saved with. The database checks it again on posting.
+  const [taxTouched, setTaxTouched] = useState(Boolean(initial.id || initial.gst || initial.qst));
+  const autoTax = !isBill && taxRegistration !== null && !taxTouched;
+  const defaults = taxRegistration ? invoiceTaxDefaults(subtotal, taxRegistration) : { gst: 0, qst: 0 };
+  const asInput = (c: number) => (c > 0 ? (c / 100).toFixed(2) : "");
+  const gstValue = autoTax ? asInput(defaults.gst) : value.gst;
+  const qstValue = autoTax ? asInput(defaults.qst) : value.qst;
+  const taxProblem =
+    !isBill && taxRegistration ? invoiceTaxProblem(subtotal, cents(gstValue), cents(qstValue), taxRegistration) : null;
+  const total = subtotal + cents(gstValue) + cents(qstValue);
 
   function set<K extends keyof DocumentFormValue>(key: K, v: DocumentFormValue[K]) {
     setValue((current) => ({ ...current, [key]: v }));
@@ -120,8 +135,8 @@ export function DocumentForm({
       memo: value.memo,
       fundId: value.fundId,
       controlAccountId: value.controlAccountId,
-      gst: value.gst,
-      qst: value.qst,
+      gst: gstValue,
+      qst: qstValue,
       post,
       lines: lines.map((l) => ({
         accountId: l.accountId,
@@ -399,8 +414,12 @@ export function DocumentForm({
           <Input
             id={`${formId}-gst`}
             inputMode="decimal"
-            value={value.gst}
-            onChange={(e) => set("gst", e.target.value)}
+            value={gstValue}
+            onChange={(e) => {
+              if (!taxTouched) set("qst", qstValue);
+              setTaxTouched(true);
+              set("gst", e.target.value);
+            }}
             className="text-right tabular-nums"
           />
         </div>
@@ -409,8 +428,12 @@ export function DocumentForm({
           <Input
             id={`${formId}-qst`}
             inputMode="decimal"
-            value={value.qst}
-            onChange={(e) => set("qst", e.target.value)}
+            value={qstValue}
+            onChange={(e) => {
+              if (!taxTouched) set("gst", gstValue);
+              setTaxTouched(true);
+              set("qst", e.target.value);
+            }}
             className="text-right tabular-nums"
           />
         </div>
@@ -426,7 +449,21 @@ export function DocumentForm({
         </dl>
         <p className="text-[12.5px] text-muted sm:col-span-4">
           {isBill ? t("finance.payables.form.billTaxHint") : t("finance.payables.form.invoiceTaxHint")}
+          {!isBill && taxRegistration
+            ? ` ${
+                taxRegistration.gstRegistered || taxRegistration.qstRegistered
+                  ? t("finance.payables.form.invoiceTaxAuto")
+                  : t("finance.payables.form.invoiceTaxNotRegistered")
+              }`
+            : null}
         </p>
+        {taxProblem ? (
+          <p role="alert" className="text-[13px] text-danger-fg sm:col-span-4">
+            {t(`finance.payables.errors.invoiceTax.${taxProblem}`, {
+              amount: formatCents(taxProblem === "gstMismatch" ? defaults.gst : defaults.qst, locale),
+            })}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2">

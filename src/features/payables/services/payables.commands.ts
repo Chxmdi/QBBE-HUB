@@ -7,9 +7,10 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { requiredText, isCalendarDate } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
-import { parseMoneyToCents } from "@/features/ledger/money";
+import { formatCents, parseMoneyToCents } from "@/features/ledger/money";
 import { DOCUMENT_KINDS, PAYMENT_METHODS } from "@/features/payables/model";
-import { getT } from "@/lib/i18n/server";
+import { getLocale, getT } from "@/lib/i18n/server";
+import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 
 /**
@@ -21,12 +22,32 @@ import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
 
 const ROOT = "/finance/payables";
 
-type DbError = { code?: string; message: string } | null;
+type DbError = { code?: string; message: string; hint?: string | null } | null;
+
+const INVOICE_TAX_KEYS = {
+  gstNotRegistered: "finance.payables.errors.invoiceTax.gstNotRegistered",
+  qstNotRegistered: "finance.payables.errors.invoiceTax.qstNotRegistered",
+  gstMismatch: "finance.payables.errors.invoiceTax.gstMismatch",
+  qstMismatch: "finance.payables.errors.invoiceTax.qstMismatch",
+} as const;
+
+/**
+ * The database refuses invoice tax it does not collect, or tax off the rate
+ * (app.sales_tax_check_invoice); its hint names which, and the amount due.
+ */
+function invoiceTaxMessage(t: TranslateFn, error: DbError, locale: Locale): string | null {
+  const match = /^invoice_tax:(\w+)(?::(\d+))?$/.exec(error?.hint ?? "");
+  if (!match || !(match[1] in INVOICE_TAX_KEYS)) return null;
+  const key = INVOICE_TAX_KEYS[match[1] as keyof typeof INVOICE_TAX_KEYS];
+  return t(key, { amount: match[2] ? formatCents(Number(match[2]), locale) : "" });
+}
 
 const READABLE_CODES = new Set(["23514", "22023", "42501", "23505", "P0002"]);
 
-function dbMessage(t: TranslateFn, error: DbError, fallback: string): string {
+function dbMessage(t: TranslateFn, error: DbError, fallback: string, locale: Locale = "en"): string {
   if (!error) return fallback;
+  const tax = invoiceTaxMessage(t, error, locale);
+  if (tax) return tax;
   if (error.code === "23505" && /uq_finance_bill_vendor_reference/.test(error.message)) {
     return t("finance.payables.errors.duplicateVendorReference");
   }
@@ -253,7 +274,7 @@ export async function saveDocument(input: unknown): Promise<ActionResult> {
       ok: false,
       id: id as string,
       error: t("finance.payables.errors.savedNotPosted", {
-        reason: dbMessage(t, posted.error, t("finance.payables.errors.tryAgain")),
+        reason: dbMessage(t, posted.error, t("finance.payables.errors.tryAgain"), await getLocale()),
       }),
     };
   }
@@ -286,7 +307,7 @@ export async function postDocument(input: unknown): Promise<ActionResult> {
   const { error } = await supabase.rpc(kind === "bill" ? "finance_post_bill" : "finance_post_invoice", {
     [kind === "bill" ? "p_bill" : "p_invoice"]: id,
   });
-  if (error) return { ok: false, error: dbMessage(t, error, t("finance.payables.errors.post")) };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.payables.errors.post"), await getLocale()) };
   refresh();
   return { ok: true, id };
 }
