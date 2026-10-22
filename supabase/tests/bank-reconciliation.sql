@@ -310,7 +310,9 @@ begin
   perform tests.clear_auth(); reset role;
 
   insert into public.ledger_reader (organization_id, user_id) values (v_org, v_staff);
-  perform tests.authenticate(v_staff, 'aal1');
+  -- Ledger readers read the books only with MFA.
+  perform tests.ensure_verified_mfa_factor(v_staff);
+  perform tests.authenticate(v_staff, 'aal2');
   select count(*) into v_rows from public.bank_transaction where bank_account_id = v_account;
   perform tests.ok(v_rows = 5, format('a ledger reader reads the statement lines (%s)', v_rows));
   select * into f from public.bank_reconciliation_summary(v_rec);

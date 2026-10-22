@@ -292,7 +292,9 @@ begin
   insert into public.ledger_reader (organization_id, user_id) values (v_org, v_staff);
   perform tests.clear_auth(); reset role;
 
-  perform tests.authenticate(v_staff, 'aal1');
+  -- Ledger readers read the books only with MFA.
+  perform tests.ensure_verified_mfa_factor(v_staff);
+  perform tests.authenticate(v_staff, 'aal2');
   select sum(closing_cents) into v_sum from public.ledger_fund_changes(v_org, date '2025-10-01', date '2026-09-30')
   where fund_id in (v_gen, v_grant, v_board);
   perform tests.ok(v_sum = 87000 + 18000 + 5000, format('a ledger reader reads the statement (%s)', v_sum));

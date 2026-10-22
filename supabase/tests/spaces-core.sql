@@ -145,10 +145,12 @@ begin
   reset role;
 
   perform tests.authenticate(v_owner, 'aal1');
-  perform tests.ok(public.space_capabilities(v_workspace) = array['view']
-      and public.space_capabilities(v_custom) = array['view']
-      and public.space_capabilities(v_program) = array['view'],
-    'owner without two-step sign-in: view only');
+  -- Without MFA the owner's role reaches nothing; only their own grants
+  -- count (none on these spaces).
+  perform tests.ok(cardinality(public.space_capabilities(v_workspace)) = 0
+      and cardinality(public.space_capabilities(v_custom)) = 0
+      and cardinality(public.space_capabilities(v_program)) = 0,
+    'owner without two-step sign-in: no organization-wide reach');
   reset role;
 
   perform tests.authenticate(v_admin);

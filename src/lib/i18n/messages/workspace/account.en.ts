@@ -55,6 +55,8 @@ export const accountEn = {
       title: "Multi-factor authentication",
       accountantHeading: "Protect your accountant access",
       adminHeading: "Protect your administrator account",
+      ledgerReaderHeading: "Protect your access to the books",
+      ledgerReaderBody: "QBBE Hub requires an authenticator code before payroll and gifts open.",
       accountantBody: "QBBE Hub requires an authenticator code before the books open.",
       adminBody: "QBBE Hub requires an authenticator code for owners and administrators.",
       loading: "Loading security check…",

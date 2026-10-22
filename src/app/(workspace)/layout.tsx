@@ -55,7 +55,7 @@ export default async function WorkspaceLayout({
     { data: myWorkCount },
     { data: programs },
     navSwitches,
-    { data: ledgerSettings },
+    { data: ledgerReader },
   ] = await Promise.all([
     supabase
       .from("notification")
@@ -78,13 +78,15 @@ export default async function WorkspaceLayout({
       .limit(8),
     readNavigationSwitches(supabase),
     // The ledger screens open only for administrators and the staff an
-    // administrator made ledger readers; the same read rule as
-    // getLedgerAccess decides whether the menus list them (audit M6).
+    // administrator made ledger readers (audit M6). A reader sees them listed
+    // before completing MFA too; getLedgerAccess then asks for it. Readers can
+    // see their own row without MFA.
     session.isStaff && !session.isAdmin
       ? supabase
-          .from("ledger_settings")
-          .select("organization_id")
+          .from("ledger_reader")
+          .select("user_id")
           .eq("organization_id", session.organizationId)
+          .eq("user_id", session.userId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
@@ -128,7 +130,7 @@ export default async function WorkspaceLayout({
       avatarUrl={session.profile.avatar_url}
       isAdmin={session.isAdmin}
       isStaff={session.isStaff}
-      canReadLedger={Boolean(ledgerSettings)}
+      canReadLedger={Boolean(ledgerReader)}
       navSwitches={navSwitches}
       unreadCount={unreadCount ?? 0}
       channels={channels}

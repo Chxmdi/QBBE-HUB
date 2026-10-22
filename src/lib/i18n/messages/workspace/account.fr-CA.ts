@@ -55,6 +55,8 @@ export const accountFrCA: typeof accountEn = {
       title: "Authentification multifacteur",
       accountantHeading: "Protégez votre accès de comptable",
       adminHeading: "Protégez votre compte administrateur",
+      ledgerReaderHeading: "Protégez votre accès aux livres",
+      ledgerReaderBody: "QBBE Hub exige un code d’authentificateur avant d’ouvrir la paie et les dons.",
       accountantBody: "QBBE Hub exige un code d’authentificateur avant d’ouvrir les livres.",
       adminBody:
         "QBBE Hub exige un code d’authentificateur pour les propriétaires et les administrateurs.",

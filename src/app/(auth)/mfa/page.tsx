@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { MfaFlow } from "./mfa-flow";
 import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
-import { hasAccountantGrant } from "@/features/ledger/services/ledger.access";
+import { hasAccountantGrant, hasLedgerReaderGrant } from "@/features/ledger/services/ledger.access";
 import { requireSession } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createSupabasePageClient } from "@/lib/supabase/page";
@@ -16,11 +16,14 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function MfaPage() {
   const session = await requireSession();
   const t = await getT();
-  // The external accountant (#154) opens the books only after MFA too.
-  const isAccountant =
-    !session.isAdmin && (await hasAccountantGrant(await createSupabasePageClient(), session));
-  if (!session.isAdmin && !isAccountant) redirect("/");
-  const mfaRequired = session.isAdmin || isAccountant;
+  // The external accountant (#154) and staff named ledger readers open the
+  // books only after MFA too.
+  const pageClient = await createSupabasePageClient();
+  const isAccountant = !session.isAdmin && !session.isStaff && (await hasAccountantGrant(pageClient, session));
+  const isLedgerReader =
+    !session.isAdmin && session.isStaff && (await hasLedgerReaderGrant(pageClient, session));
+  if (!session.isAdmin && !isAccountant && !isLedgerReader) redirect("/");
+  const mfaRequired = session.isAdmin || isAccountant || isLedgerReader;
 
   const supabase = await createSupabaseServerClient();
   const [assuranceResult, factorResult] = await Promise.all([
@@ -44,10 +47,18 @@ export default async function MfaPage() {
     <div className="space-y-4">
       <div className="text-center">
         <h2 className="text-lg font-semibold">
-          {isAccountant ? t("auth.mfa.accountantHeading") : t("auth.mfa.adminHeading")}
+          {isAccountant
+            ? t("auth.mfa.accountantHeading")
+            : isLedgerReader
+              ? t("auth.mfa.ledgerReaderHeading")
+              : t("auth.mfa.adminHeading")}
         </h2>
         <p className="mt-1 text-[13px] leading-relaxed text-muted">
-          {isAccountant ? t("auth.mfa.accountantBody") : t("auth.mfa.adminBody")}
+          {isAccountant
+            ? t("auth.mfa.accountantBody")
+            : isLedgerReader
+              ? t("auth.mfa.ledgerReaderBody")
+              : t("auth.mfa.adminBody")}
         </p>
       </div>
       <Suspense fallback={<div className="card p-6 text-center text-sm">{t("auth.mfa.loading")}</div>}>

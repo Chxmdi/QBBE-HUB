@@ -218,7 +218,9 @@ begin
   perform tests.authenticate(v_admin, 'aal2');
   insert into public.ledger_reader (organization_id, user_id) values (v_org, v_staff);
   perform tests.clear_auth(); reset role;
-  perform tests.authenticate(v_staff, 'aal1');
+  -- Ledger readers read the books only with MFA.
+  perform tests.ensure_verified_mfa_factor(v_staff);
+  perform tests.authenticate(v_staff, 'aal2');
   select count(*) into v_rows from public.sales_tax_line where organization_id = v_org;
   perform tests.ok(v_rows = 6, format('a ledger reader sees the tax lines (%s)', v_rows));
   perform tests.tax_raises(format('select public.sales_tax_delete_line(%L)', v_sale),

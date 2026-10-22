@@ -1,12 +1,12 @@
 import { expect, test } from "./fixtures";
-import { signIn } from "./auth";
+import { completeMfa, signIn } from "./auth";
 import { sql } from "./db";
 
 /**
  * Audit M6: the menu listed Ledger, Budgets, GST and QST, Bank, Gifts and
  * Payroll to every staff member, and each answered "You do not have access"
  * unless an administrator had made that person a ledger reader. The menus
- * now follow the same read rule as the screens.
+ * now list them for ledger readers, who complete MFA before the books open.
  */
 
 const LEDGER_SCREENS = ["Ledger", "Budgets", "GST and QST", "Bank", "Gifts and grants", "Payroll"];
@@ -29,9 +29,12 @@ test("staff see the ledger screens in the menu only once they are ledger readers
     await page.reload();
     for (const name of LEDGER_SCREENS) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
     await nav.getByRole("link", { name: "Ledger", exact: true }).click();
-    await expect(page).toHaveURL(/\/finance\/ledger$/);
+    await expect(page.getByRole("heading", { name: "Protect your access to the books", exact: true })).toBeVisible();
+    await completeMfa(page, "staff");
+    await page.waitForURL((url) => url.pathname === "/finance/ledger", { timeout: 30_000 });
     await expect(page.getByText("You do not have access")).toHaveCount(0);
   } finally {
     sql(`delete from ledger_reader where user_id = '${staffId}'`);
+    sql(`delete from auth.mfa_factors where user_id = '${staffId}'`);
   }
 });
