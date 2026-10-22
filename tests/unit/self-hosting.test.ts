@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -167,6 +167,7 @@ describe("separate deploy access per environment", () => {
     for (const [workflow, mode] of [
       [".github/workflows/deploy.yml", "deploy"],
       [".github/workflows/rollback.yml", "rollback"],
+      [".github/workflows/rollback.yml", "restore"],
     ] as const) {
       const line = read(workflow).match(/ssh qbbe "(sudo -n \/usr\/local\/sbin\/qbbe-release [^"]+)"/);
       expect(line, workflow).not.toBeNull();
@@ -175,7 +176,8 @@ describe("separate deploy access per environment", () => {
         .replace("${TARGET_ENVIRONMENT}", "staging")
         .replace("${IMAGE}", "ghcr.io/qbbe/hub:staging-0123456789abcdef")
         .replace("${host}", "staging.hub.example.org")
-        .replace("${REGISTRY_USER}", "someone");
+        .replace("${REGISTRY_USER}", "someone")
+        .replace("${mode}", mode);
       const result = spawnSync("bash", [join(process.cwd(), "deploy/server/qbbe-ssh-gate")], {
         env: { NODE_ENV: "test", PATH: `${bin}:${process.env.PATH ?? ""}`, SSH_ORIGINAL_COMMAND: command },
         encoding: "utf8",
@@ -265,7 +267,7 @@ describe("separate deploy access per environment", () => {
     // the wrapper stops first because it was not run through sudo.
     if (process.getuid?.() === 0) {
       expect(cases[0].output).toContain("only qbbe-production may release production");
-      expect(cases[1].output).toContain("mode must be deploy or rollback");
+      expect(cases[1].output).toContain("mode must be deploy, rollback or restore");
       // Before any image check: this machine has no Server setup.
       expect(cases[2].output).toContain("image-repository is missing");
       expect(cases[3].output).toContain("usage:");
@@ -279,5 +281,130 @@ describe("separate deploy access per environment", () => {
       const result = spawnSync("bash", ["-n", join(process.cwd(), script)], { encoding: "utf8" });
       expect(result.status, `${script}: ${result.stderr}`).toBe(0);
     }
+  });
+});
+
+/**
+ * release.sh run end to end against a stand-in docker
+ * (tests/fixtures/fake-docker.sh): the swap, the automatic restore when the
+ * new container never reports healthy, and the settings kept with each
+ * release so a rollback can put them back too (REL-001, OPS-006).
+ */
+describe("release.sh releases and restores", () => {
+  const sha = (n: number) => String(n).repeat(40).slice(0, 40);
+  const image = (n: number) => `ghcr.io/qbbe/hub:staging-${sha(n)}`;
+
+  function server() {
+    const root = mkdtempSync(join(tmpdir(), "qbbe-root-"));
+    const bin = mkdtempSync(join(tmpdir(), "qbbe-bin-"));
+    copyFileSync(join(process.cwd(), "tests/fixtures/fake-docker.sh"), join(bin, "docker"));
+    spawnSync("chmod", ["755", join(bin, "docker")]);
+    const dir = join(root, "staging");
+    mkdirSync(dir, { recursive: true });
+    mkdirSync(join(root, "base/sites"), { recursive: true });
+    for (const f of ["compose.app.yaml", "site.caddy.template"]) {
+      copyFileSync(join(process.cwd(), "deploy/server", f), join(dir, f));
+    }
+    const log = join(root, "docker.log");
+    const run = (args: string[], extra: Record<string, string> = {}) => {
+      const result = spawnSync("bash", [join(process.cwd(), "deploy/server/release.sh"), ...args], {
+        env: {
+          NODE_ENV: "test",
+          PATH: `${bin}:${process.env.PATH ?? ""}`,
+          QBBE_ROOT: root,
+          QBBE_SKIP_PULL: "1",
+          FAKE_DOCKER_LOG: log,
+          ...extra,
+        },
+        encoding: "utf8",
+      });
+      return { ok: result.status === 0, output: result.stdout + result.stderr };
+    };
+    const file = (name: string) => readFileSync(join(dir, name), "utf8");
+    const deploy = (n: number, settings: string, extra: Record<string, string> = {}) => {
+      writeFileSync(join(dir, "app.env.new"), settings);
+      return run(["staging", image(n), "staging.hub.example.org"], extra);
+    };
+    return { dir, run, file, deploy };
+  }
+
+  it("keeps each release's settings next to its image, the five newest only", () => {
+    const s = server();
+    for (let n = 1; n <= 7; n += 1) expect(s.deploy(n, `VERSION=${n}\n`).ok).toBe(true);
+    expect(s.file("current-image").trim()).toBe(image(7));
+    expect(s.file(`app.env.staging-${sha(7)}`)).toBe("VERSION=7\n");
+    const kept = readdirSync(s.dir).filter((name) => name.startsWith("app.env.staging-"));
+    expect(kept.sort()).toEqual([3, 4, 5, 6, 7].map((n) => `app.env.staging-${sha(n)}`).sort());
+    expect(statSync(join(s.dir, `app.env.staging-${sha(7)}`)).mode & 0o777).toBe(0o600);
+  });
+
+  it("puts the previous image and settings back when the new container never becomes healthy", () => {
+    const s = server();
+    expect(s.deploy(1, "VERSION=1\n").ok).toBe(true);
+    const failed = s.deploy(2, "VERSION=2\n", { FAKE_DOCKER_UNHEALTHY: image(2) });
+    expect(failed.ok).toBe(false);
+    expect(failed.output).toContain("putting");
+    expect(s.file("app.env")).toBe("VERSION=1\n");
+    expect(s.file(".env")).toContain(`QBBE_IMAGE=${image(1)}`);
+    expect(s.file("current-image").trim()).toBe(image(1));
+    expect(existsSync(join(s.dir, `app.env.staging-${sha(2)}`))).toBe(false);
+  });
+
+  it("with --restore-settings, a rollback puts back the settings that ran with that image", () => {
+    const s = server();
+    expect(s.deploy(1, "VERSION=1\n").ok).toBe(true);
+    expect(s.deploy(2, "VERSION=2\n").ok).toBe(true);
+    const back = s.run(["staging", image(1), "staging.hub.example.org", "--restore-settings"]);
+    expect(back.ok, back.output).toBe(true);
+    expect(s.file("app.env")).toBe("VERSION=1\n");
+    expect(s.file("current-image").trim()).toBe(image(1));
+    // Without the flag the current settings stay.
+    expect(s.deploy(2, "VERSION=2\n").ok).toBe(true);
+    expect(s.run(["staging", image(1), "staging.hub.example.org"]).ok).toBe(true);
+    expect(s.file("app.env")).toBe("VERSION=2\n");
+  });
+
+  it("a restore whose image cannot be fetched leaves the live settings as they were", () => {
+    const s = server();
+    expect(s.deploy(1, "VERSION=1\n").ok).toBe(true);
+    expect(s.deploy(2, "VERSION=2\n").ok).toBe(true);
+    const result = s.run(["staging", image(1), "staging.hub.example.org", "--restore-settings"], {
+      QBBE_SKIP_PULL: "0",
+      FAKE_DOCKER_PULL_FAIL: image(1),
+    });
+    expect(result.ok).toBe(false);
+    expect(s.file("app.env")).toBe("VERSION=2\n");
+    expect(s.file("current-image").trim()).toBe(image(2));
+    expect(existsSync(join(s.dir, "app.env.previous"))).toBe(false);
+  });
+
+  it("a restore whose container never becomes healthy puts the current image and settings back", () => {
+    const s = server();
+    expect(s.deploy(1, "VERSION=1\n").ok).toBe(true);
+    expect(s.deploy(2, "VERSION=2\n").ok).toBe(true);
+    const result = s.run(["staging", image(1), "staging.hub.example.org", "--restore-settings"], {
+      FAKE_DOCKER_UNHEALTHY: image(1),
+    });
+    expect(result.ok).toBe(false);
+    expect(s.file("app.env")).toBe("VERSION=2\n");
+    expect(s.file(".env")).toContain(`QBBE_IMAGE=${image(2)}`);
+    expect(s.file("current-image").trim()).toBe(image(2));
+    expect(existsSync(join(s.dir, `app.env.staging-${sha(1)}`))).toBe(true);
+  });
+
+  it("refuses an unknown option with a plain message", () => {
+    const s = server();
+    const result = s.run(["staging", image(1), "staging.hub.example.org", "--bogus"]);
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("release: unknown option '--bogus'");
+  });
+
+  it("refuses to restore settings it does not have", () => {
+    const s = server();
+    expect(s.deploy(1, "VERSION=1\n").ok).toBe(true);
+    const result = s.run(["staging", image(9), "staging.hub.example.org", "--restore-settings"]);
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("no settings kept for");
+    expect(s.file("app.env")).toBe("VERSION=1\n");
   });
 });

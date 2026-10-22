@@ -4,7 +4,10 @@
 # /usr/local/sbin/qbbe-release by setup.sh; sudoers.qbbe lets qbbe-staging run
 # it for staging only and qbbe-production for production only.
 #
-#   sudo -n /usr/local/sbin/qbbe-release <staging|production> <deploy|rollback> <image> <host> <registry user>
+#   sudo -n /usr/local/sbin/qbbe-release <staging|production> <deploy|rollback|restore> <image> <host> <registry user>
+#
+# "restore" is a rollback that also puts back the settings that ran with
+# that image (release.sh --restore-settings).
 #
 # Standard input: the registry token on the first line; for "deploy", the
 # environment's app settings (APP_ENV) on the lines after it. Nothing is read
@@ -25,7 +28,7 @@ MODE="${2:-}"
 IMAGE="${3:-}"
 HOST="${4:-}"
 REGISTRY_USER="${5:-}"
-[ "$#" = 5 ] || fail "usage: qbbe-release <staging|production> <deploy|rollback> <image> <host> <registry user>"
+[ "$#" = 5 ] || fail "usage: qbbe-release <staging|production> <deploy|rollback|restore> <image> <host> <registry user>"
 
 case "$ENVIRONMENT" in
   staging | production) ;;
@@ -35,8 +38,8 @@ esac
 # here means a mistake in that file cannot open the other environment.
 [ "${SUDO_USER:-}" = "qbbe-${ENVIRONMENT}" ] || fail "only qbbe-${ENVIRONMENT} may release ${ENVIRONMENT}."
 case "$MODE" in
-  deploy | rollback) ;;
-  *) fail "mode must be deploy or rollback." ;;
+  deploy | rollback | restore) ;;
+  *) fail "mode must be deploy, rollback or restore." ;;
 esac
 # A GitHub user, or an app or bot ("name[bot]").
 [[ "$REGISTRY_USER" =~ ^[A-Za-z0-9-]{1,39}(\[bot\])?$ ]] || fail "'${REGISTRY_USER}' is not a registry user name."
@@ -77,7 +80,11 @@ printf '%s' "$TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
   || fail "the registry refused the login."
 unset TOKEN
 status=0
-bash "${BIN}/release.sh" "$ENVIRONMENT" "$IMAGE" "$HOST" || status=$?
+if [ "$MODE" = restore ]; then
+  bash "${BIN}/release.sh" "$ENVIRONMENT" "$IMAGE" "$HOST" --restore-settings || status=$?
+else
+  bash "${BIN}/release.sh" "$ENVIRONMENT" "$IMAGE" "$HOST" || status=$?
+fi
 docker logout ghcr.io >/dev/null 2>&1 || true
 
 # While the old shared deploy path still exists, its user owns this folder
