@@ -1,0 +1,36 @@
+services:
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    environment:
+      SCANNER_DOMAIN: ${SCANNER_DOMAIN:?Set the scanner hostname}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - scanner
+  scanner:
+    build: .
+    restart: unless-stopped
+    environment:
+      SCANNER_HTTPS_TOKEN: ${SCANNER_HTTPS_TOKEN:?Set the server-only token}
+    volumes:
+      - signatures:/var/lib/clamav:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    depends_on:
+      - clamav
+  clamav:
+    image: ${CLAMAV_IMAGE:?Set an approved pinned clamav/clamav image}
+    restart: unless-stopped
+    volumes:
+      - signatures:/var/lib/clamav
+    mem_limit: 3g
+volumes:
+  caddy_data:
+  signatures:

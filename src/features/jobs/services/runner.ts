@@ -3,6 +3,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { sanitizeJobError } from "@/lib/job-observability";
 import { reportError } from "@/lib/observability";
 import { JOB_HANDLERS } from "./handlers";
+import { isJobAllowedOnHost } from "./activation-policy";
 
 /**
  * Executes one scheduled job and records what happened.
@@ -104,6 +105,7 @@ export interface RunOutcome extends JobResult {
 }
 
 export async function runJob(jobName: string): Promise<RunOutcome> {
+  if (!isJobAllowedOnHost(jobName)) throw new DisabledJobError(jobName);
   const db = createSupabaseServiceClient();
 
   const handler = JOB_HANDLERS[jobName];
