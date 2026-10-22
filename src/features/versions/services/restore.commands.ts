@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
 import { contentAdapterFor, isEditorDocumentType } from "../adapters/registry";
@@ -12,6 +13,15 @@ import { restoreBlockInto } from "../diff";
 import { versionsText } from "../messages";
 import { getObjectVersion } from "./version.queries";
 import { isObjectLocked } from "@/features/collab/lock";
+
+/**
+ * Restoring a version is offered in the collaboration pages (wos_editor) and on object record
+ * pages (wos_objects), so either switch opens them; with both off they are
+ * refused like the rest of Workspace OS.
+ */
+async function recordsEnabled(): Promise<boolean> {
+  return (await isEnabled("wos_editor")) || (await isEnabled("wos_objects"));
+}
 
 export interface RestoreResult {
   ok: boolean;
@@ -34,6 +44,7 @@ const restoreSchema = z.discriminatedUnion("scope", [
 export async function restoreFromVersion(input: unknown): Promise<RestoreResult> {
   await requireSession();
   const m = versionsText(await getLocale());
+  if (!(await recordsEnabled())) return { ok: false, error: m.errors.forbidden };
   const parsed = restoreSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: m.errors.failed };
   const request = parsed.data;

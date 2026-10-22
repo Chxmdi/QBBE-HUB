@@ -278,6 +278,7 @@ export async function setFavourite(input: unknown, favourite: boolean): Promise<
  */
 export async function recordPageVisit(pageId: string): Promise<void> {
   try {
+    if (!(await isEnabled("wos_pages"))) return;
     const session = await requireSession();
     const supabase = await createSupabaseServerClient();
     const { error } = await supabase
