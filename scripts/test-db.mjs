@@ -77,6 +77,17 @@ if (!raceHost) {
   console.error("Could not read the database container's address for concurrency.sql.");
   process.exit(1);
 }
+// The suite tests Workspace OS modules as they behave when switched on, so it
+// runs with every module on at the database (app.workspace_os_override, the
+// database side of WORKSPACE_OS_FLAGS); a file that tests a module switched
+// off clears it inside its own transaction. Put back afterwards, so a local
+// database is left as it was.
+const psqlOne = (statement) =>
+  run(["exec", "-i", CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-At", "-v", "ON_ERROR_STOP=1"], statement);
+const overrideAdded = psqlOne(
+  "insert into app.workspace_os_override (key) values ('all') on conflict do nothing returning key;",
+).stdout.split("\n").includes("all");
+
 const sql = [
   `select set_config('tests.race_host', '${raceHost}', false);`,
   ...FILES.map((file) => readFileSync(file, "utf8")),
@@ -85,6 +96,8 @@ const result = run(
   ["exec", "-i", CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1"],
   sql,
 );
+
+if (overrideAdded) psqlOne("delete from app.workspace_os_override where key = 'all';");
 
 // psql sends `raise notice` to stderr, and tests.ok reports every assertion
 // that way, so the PASS lines and any FAIL are both in there.
