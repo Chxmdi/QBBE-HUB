@@ -1522,7 +1522,10 @@ begin
     set local role authenticated;
     -- A delivery row exists (seeded above) and names a recipient and subject.
     -- A guest must see none of it: the policy admits only their own mail.
-    select count(*) into n from email_delivery;
+    -- Counted as "not addressed to the guest", because mail the browser
+    -- suites sent the guest earlier on the same database is theirs to see.
+    select count(*) into n from email_delivery
+    where recipient_user_id is distinct from v_guest;
     perform tests.ok(n = 0, 'guest sees no email delivery but their own');
   exception
     when insufficient_privilege then

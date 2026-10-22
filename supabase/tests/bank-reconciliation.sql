@@ -70,7 +70,12 @@ declare
 begin
   select organization_id into strict v_org
   from public.organization_membership where user_id = v_owner limit 1;
-  select id into strict v_cash from public.ledger_account where organization_id = v_org and code = '1000';
+  -- A cash account of the file's own, so entries the browser suites posted to
+  -- the shared 1000 account on the same database cannot change the balances
+  -- asserted below.
+  insert into public.ledger_account (organization_id, code, name, account_type)
+  values (v_org, '1097', 'Reconciliation test chequing', 'asset')
+  returning id into v_cash;
   select id into strict v_savings from public.ledger_account where organization_id = v_org and code = '1010';
   select id into strict v_equity from public.ledger_account where organization_id = v_org and code = '3000';
   select id into strict v_donations from public.ledger_account where organization_id = v_org and code = '4200';
