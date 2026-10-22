@@ -77,7 +77,10 @@ the sign-in page only when the site sets `NEXT_PUBLIC_GOOGLE_SIGN_IN=on`.
    *Worked if:* they land in the Hub. Then try an address that was **not**
    invited: it must be refused and land back on the sign-in page.
    *If the invited person is refused too:* check that the invitation's email
-   is exactly the Google address (same spelling, same domain).
+   is exactly the Google address (same spelling, same domain), that the
+   invitation is still open (not expired or revoked) in Admin, Invitations,
+   and that Google has verified that address: the Hub accepts a Google
+   sign-up only when Google says the address is verified.
 
 ## Turning it off
 

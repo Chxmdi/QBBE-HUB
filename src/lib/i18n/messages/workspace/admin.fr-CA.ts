@@ -78,15 +78,24 @@ export const adminFrCA: typeof adminEn = {
       invitations: {
         heading: "Invitations",
         emailNotConfigured:
-          "Invitation enregistrée — courriel non envoyé tant que EMAIL_PROVIDER_API_KEY n’est pas configurée. La ligne attribue quand même le rôle prévu à l’inscription.",
+          "Le courriel n’est pas configuré : les invitations ne sont pas envoyées par courriel. Utilisez « Nouveau lien » et transmettez vous-même le lien à la personne.",
         empty:
-          "Aucune invitation pour l’instant. Les personnes invitées reçoivent le rôle prévu à leur inscription.",
+          "Aucune invitation pour l’instant. Les personnes invitées obtiennent leur rôle en créant leur compte à partir du lien d’invitation.",
+        newLink: "Nouveau lien",
+        newLinkFor: "Nouveau lien d’invitation pour {email}",
+        newLinkFailed: "Impossible de créer un nouveau lien.",
+        creatingLink: "Création d’un nouveau lien…",
+        newLinkConfirm:
+          "Le lien actuel pour {email} cessera de fonctionner. Un nouveau lien sera créé et, si le courriel est configuré, envoyé à cette personne.",
+        newLinkCreate: "Créer le nouveau lien",
+        noLinkHint: "Créée avant les liens d’invitation. Utilisez « Nouveau lien » pour en donner un à cette personne.",
         invited: "{role} · invité {when}",
         states: {
           accepted: "acceptée",
           revoked: "révoquée",
           expired: "expirée",
           pending: "en attente",
+          noLink: "aucun lien",
         },
       },
       integrations: {
@@ -272,6 +281,7 @@ export const adminFrCA: typeof adminEn = {
           status: "statut",
           suppress: "envoi bloqué",
           user_invited: "personne invitée",
+          invitation_link_reissued: "nouveau lien d’invitation",
           vms_connected: "VMS connecté",
           zeffy_connected: "Zeffy connecté",
           zeffy_sync_requested: "Synchronisation Zeffy demandée",
@@ -341,15 +351,30 @@ export const adminFrCA: typeof adminEn = {
       button: "Inviter un utilisateur",
       title: "Inviter un utilisateur",
       emailNotConfigured:
-        "Le courriel transactionnel n’est pas configuré. L’invitation sera enregistrée, mais la personne ne recevra pas de courriel tant que EMAIL_PROVIDER_API_KEY n’est pas définie.",
+        "Le courriel n’est pas configuré : aucun courriel d’invitation ne sera envoyé. Vous recevrez un lien à transmettre vous-même à la personne.",
       email: "Courriel",
       role: "Rôle",
       roleHelp:
-        "Quand cette personne s’inscrit avec le courriel invité, le rôle est appliqué automatiquement. Les observateurs de la direction ont accès en lecture au portefeuille, sans droit d’écriture opérationnel.",
+        "La personne obtient ce rôle en créant son compte à partir du lien d’invitation. Les observateurs de la direction ont accès en lecture au portefeuille, sans droit d’écriture opérationnel.",
       close: "Fermer",
       submit: "Créer l’invitation",
-      queued: "Invitation enregistrée et mise en file d’attente pour envoi par courriel.",
-      notSent: "Invitation enregistrée — courriel non envoyé",
+      sent: "Invitation envoyée à {email}.",
+      notSent: "Invitation créée. Aucun courriel n’a été envoyé : transmettez vous-même le lien ci-dessous à {email}.",
+      linkLabel: "Lien d’invitation",
+      linkHelp:
+        "Utilisable une seule fois, seulement pour {email}, jusqu’au {date}. Toute personne qui détient ce lien peut créer le compte : ne le transmettez qu’à cette personne.",
+      copy: "Copier le lien",
+      copied: "Lien copié.",
+      copyFailed: "Sélectionnez le lien et copiez-le.",
+      message: {
+        subject: "Invitation à QBBE Hub",
+        heading: "{inviter} vous invite à rejoindre {organization} sur QBBE Hub",
+        body: "Rôle : {role}. Créez votre compte avec le bouton ci-dessous. Le lien est utilisable une seule fois, seulement pour {email}, jusqu’au {date}.",
+        button: "Créer mon compte",
+        linkText: "Ou ouvrez ce lien : {url}",
+        ignore: "Si vous n’attendiez pas cette invitation, vous pouvez ignorer ce courriel.",
+        footer: "Envoyé par QBBE Hub au nom de {organization}.",
+      },
     },
     teamControls: {
       updateFailed: "La mise à jour a échoué.",
