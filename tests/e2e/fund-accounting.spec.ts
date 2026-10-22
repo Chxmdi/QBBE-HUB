@@ -100,7 +100,7 @@ test("the owner releases restricted money and sees it on the statement of change
   expect(lines[1]).toBe(
     "Fund,Name,Restriction,Balance 2026-10-01,Revenue,Expenses,Transfers and releases,Balance 2027-09-30",
   );
-  expect(lines).toContain(`${code},${fundName},Externally restricted,0.00,500.00,0.00,'-200.00,300.00`);
+  expect(lines).toContain(`${code},${fundName},Externally restricted,0.00,500.00,0.00,-200.00,300.00`);
 
   // The statement's closing balances match the Funds page's balances.
   const mismatches = sql(`select count(*) from ledger_fund_changes('${orgId}', date '2026-10-01', date '2027-09-30') c
