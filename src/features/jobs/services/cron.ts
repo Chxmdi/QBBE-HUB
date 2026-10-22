@@ -136,6 +136,26 @@ export function nextRun(expression: string, from: Date = new Date()): Date | nul
   return null;
 }
 
+/**
+ * The longest gap between consecutive runs, in milliseconds, over the next
+ * eight runs: one minute for "* * * * *", a day for a daily job, a week for a
+ * weekly one. Used to tell an overdue job from a quiet one.
+ */
+export function scheduleIntervalMs(expression: string, from: Date = new Date()): number | null {
+  let previous = nextRun(expression, from);
+  if (!previous) return null;
+  let longest = 0;
+  // Eight gaps cover a full week, so a weekday-only schedule finds its
+  // weekend gap.
+  for (let i = 0; i < 8; i += 1) {
+    const next = nextRun(expression, previous);
+    if (!next) return null;
+    longest = Math.max(longest, next.getTime() - previous.getTime());
+    previous = next;
+  }
+  return longest;
+}
+
 const ENGLISH = createTranslator("en");
 
 /**

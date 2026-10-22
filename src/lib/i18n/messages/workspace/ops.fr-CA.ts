@@ -62,6 +62,7 @@ export const opsFrCA: typeof opsEn = {
       succeeded: "Réussie",
       failed: "Échouée",
       partial: "{count} en échec",
+      overdue: "En retard",
     },
     schedule: {
       everyMinute: "Chaque minute",

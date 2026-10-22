@@ -50,3 +50,35 @@ export function integrationHealthTone(status: string | null | undefined): "succe
   if (status === "synchronization_delayed" || status === "degraded" || status === "error") return "warning";
   return "neutral";
 }
+
+/**
+ * How often each provider's scheduled sync runs (job_definition), in seconds.
+ * Gmail, Calendar and Drive share google-sync; Zeffy has zeffy-sync; the
+ * volunteer system syncs daily.
+ */
+export const SYNC_INTERVAL_SECONDS: Record<string, number> = {
+  gmail: 900,
+  google_calendar: 900,
+  google_drive: 900,
+  zeffy: 900,
+  volunteer_system: 86_400,
+};
+
+/**
+ * The stored status changes only when a sync runs and fails, so a sync that
+ * stopped running left a green "Connected" badge forever. A connection whose
+ * last successful sync is older than three of its intervals reads as delayed.
+ * A connection that has never synced keeps its stored status (it may have
+ * been connected minutes ago).
+ */
+export function effectiveIntegrationStatus(
+  provider: string,
+  status: string | null | undefined,
+  lastSyncAt: string | null | undefined,
+  now: Date = new Date(),
+): string | null | undefined {
+  const interval = SYNC_INTERVAL_SECONDS[provider];
+  if (status !== "connected" || !interval || !lastSyncAt) return status;
+  const age = (now.getTime() - new Date(lastSyncAt).getTime()) / 1000;
+  return age > 3 * interval ? "synchronization_delayed" : status;
+}

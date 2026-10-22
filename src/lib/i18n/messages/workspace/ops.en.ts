@@ -61,6 +61,7 @@ export const opsEn = {
       succeeded: "Succeeded",
       failed: "Failed",
       partial: "{count} failed",
+      overdue: "Overdue",
     },
     schedule: {
       everyMinute: "Every minute",

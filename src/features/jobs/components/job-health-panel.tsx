@@ -219,8 +219,8 @@ export async function JobHealthPanel({
                       <span className="meta font-mono">{job.schedule}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={runTone(runOutcome(job.lastRun))}>
-                        {runLabel(runOutcome(job.lastRun), job.lastRun, t)}
+                      <Badge tone={runTone(runOutcome(job.lastRun, job.overdue))}>
+                        {runLabel(runOutcome(job.lastRun, job.overdue), job.lastRun, t)}
                       </Badge>
                       {job.lastRun ? (
                         <span className="meta mt-1 block">

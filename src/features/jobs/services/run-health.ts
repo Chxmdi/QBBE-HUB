@@ -21,13 +21,31 @@ export interface RunOutcomeInput {
   failedCount: number;
 }
 
-export type RunOutcome = "never" | "running" | "succeeded" | "partial" | "failed";
+export type RunOutcome = "never" | "running" | "succeeded" | "partial" | "failed" | "overdue";
 
-export function runOutcome(run: RunOutcomeInput | null): RunOutcome {
+/**
+ * `overdue`: the job has not started for more than three of its intervals.
+ * A failed last run still reads "failed" (its error says more); a clean or
+ * partial one turns "overdue", because a green badge on a job that stopped
+ * running is exactly what this page must not show.
+ */
+export function runOutcome(run: RunOutcomeInput | null, overdue = false): RunOutcome {
   if (!run) return "never";
-  if (run.status === "running") return "running";
   if (run.status === "failed") return "failed";
+  if (overdue) return "overdue";
+  if (run.status === "running") return "running";
   return run.failedCount > 0 ? "partial" : "succeeded";
+}
+
+/** True when an enabled job's last start is more than three intervals ago. */
+export function isOverdue(
+  enabled: boolean,
+  lastStartedAt: string | null | undefined,
+  intervalMs: number | null,
+  now: Date = new Date(),
+): boolean {
+  if (!enabled || !lastStartedAt || !intervalMs) return false;
+  return now.getTime() - new Date(lastStartedAt).getTime() > 3 * intervalMs;
 }
 
 export function runTone(
@@ -39,6 +57,7 @@ export function runTone(
     case "partial":
       return "warning";
     case "failed":
+    case "overdue":
       return "danger";
     case "running":
       return "info";
@@ -63,6 +82,8 @@ export function runLabel(
       return t("jobs.run.succeeded");
     case "failed":
       return t("jobs.run.failed");
+    case "overdue":
+      return t("jobs.run.overdue");
     case "partial":
       // The number is the point: "partial" alone leaves the operator guessing
       // whether one message or the whole batch went missing.

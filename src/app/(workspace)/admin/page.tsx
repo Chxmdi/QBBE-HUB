@@ -19,6 +19,7 @@ import { TeamOwnerControl } from "@/features/admin/components/team-owner-control
 import { createTeam } from "@/features/admin/services/team.commands";
 import { createWorkflowRule } from "@/features/admin/services/workflow.commands";
 import {
+  effectiveIntegrationStatus,
   integrationHealthLabel,
   integrationHealthTone,
 } from "@/features/admin/services/integration-health";
@@ -475,7 +476,7 @@ export default async function AdminPage({
                   ? emailConfigured
                     ? "connected"
                     : "configuration_required"
-                  : connection?.status;
+                  : effectiveIntegrationStatus(integration.provider, connection?.status, connection?.last_sync_at);
               return (
                 <div key={integration.provider} className="card p-4">
                   <div className="mb-1 flex items-center justify-between">
