@@ -141,6 +141,12 @@ begin
   end;
   reset role;
 
+  -- The fixture user later becomes a leadership viewer; a guest could not
+  -- be given the stronger grant this checks.
+  update public.organization_membership
+  set role = 'volunteer'
+  where organization_id = v_org and user_id = v_leadership;
+
   perform tests.authenticate(v_owner, 'aal2');
   v_grant := public.set_project_direct_access(
     v_project, v_volunteer, 'contributor'
