@@ -16,6 +16,7 @@ import {
   recordRateLimited,
   type GraphRule,
 } from "./run";
+import { logEvent } from "@/lib/server-log";
 
 /**
  * The `workflow-events` job (M14b): reads events written since its cursor and
@@ -139,11 +140,10 @@ export async function workflowEvents({ db, definition, now }: JobContext): Promi
         else processed += 1;
       } catch (error) {
         failed += 1;
-        console.error(JSON.stringify({
-          event: "workflow.run_failed",
+        logEvent("workflow.run_failed", {
           workflow: rule.id,
           error: error instanceof Error ? error.message : String(error),
-        }));
+        }, "error");
       }
     }
   }

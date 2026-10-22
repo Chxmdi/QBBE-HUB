@@ -57,6 +57,7 @@ export const approvalsFrCA: typeof approvalsEn = {
     submitFailed: "Impossible de la soumettre. Réessayez.",
     checkDecision: "Vérifiez la décision.",
     decideFailed: "Impossible d’enregistrer la décision. Réessayez.",
+    ownBill: "Vous avez rédigé cette facture : une autre personne doit l’approuver ou la refuser.",
     writeComment: "Écrivez un commentaire.",
     commentFailed: "Impossible de publier le commentaire. Réessayez.",
     withdrawFailed: "Impossible de la retirer. Réessayez.",

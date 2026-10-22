@@ -3,6 +3,16 @@ import type { peopleEn } from "./people.en";
 /** Français québécois — people, teamOverview, personWork, teamSignals, crm (#141). À faire réviser. */
 export const peopleFrCA: typeof peopleEn = {
   people: {
+    rectify: {
+      button: "Corriger le nom ou le titre",
+      title: "Corriger le profil de {name}",
+      explanation: "À utiliser quand un membre demande que son nom ou son titre soit corrigé.",
+      audited: "La modification est consignée dans le journal d’audit, avec les valeurs précédentes.",
+      save: "Enregistrer la correction",
+      cancel: "Annuler",
+      failed: "Impossible de corriger le profil.",
+      otherOrganization: "Cette personne fait aussi partie d’une organisation que vous n’administrez pas : seul un administrateur de toutes ses organisations peut corriger son profil.",
+    },
     title: "Personnes",
     eyebrow: "Répertoire",
     description: "Utilisateurs internes, rôles et charge de travail actuelle.",
@@ -194,6 +204,28 @@ export const peopleFrCA: typeof peopleEn = {
     },
   },
   crm: {
+    contactDialog: {
+      edit: "Corriger les coordonnées",
+      title: "Corriger les coordonnées du contact",
+      name: "Nom",
+      roleTitle: "Rôle ou titre",
+      email: "Courriel",
+      phone: "Téléphone",
+      save: "Enregistrer",
+      cancel: "Annuler",
+      saved: "Coordonnées enregistrées.",
+    },
+    erase: {
+      button: "Effacer le contact",
+      title: "Effacer {name}?",
+      explanation:
+        "À utiliser quand la personne demande à être effacée. Son nom, son courriel, son téléphone et ses notes, sa note confidentielle et le texte des interactions avec elle sont supprimés définitivement, et Zeffy ne l’importera plus.",
+      kept: "Les montants des dons sont conservés, sans son identité, pendant la période de conservation fiscale. Les reçus fiscaux déjà émis sont conservés tels quels. Les copies du nom dans l’historique d’activité, les notifications et les courriels envoyés sont supprimées par leur propre nettoyage, pas ici.",
+      confirm: "Effacer définitivement",
+      cancel: "Annuler",
+      done: "Contact effacé.",
+      failed: "Impossible d’effacer le contact.",
+    },
     tabs: {
       organizations: "Organisations",
       supporters: "Sympathisants",

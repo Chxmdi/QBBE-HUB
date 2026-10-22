@@ -8,10 +8,11 @@ import type {
   QueueHealth,
 } from "@/features/jobs/services/jobs.queries";
 import { jobDescription } from "@/features/jobs/services/i18n";
+import { DATABASE_ALERT_RATIO, DEFAULT_DATABASE_LIMIT_MB } from "@/features/jobs/services/handlers/ops-watchdog";
 import { runLabel, runOutcome, runTone } from "@/features/jobs/services/run-health";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { Formatters } from "@/lib/i18n/format";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { Formatters } from "@/lib/i18n/format-core";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * The operator's view of the background runtime.
@@ -46,16 +47,21 @@ export async function JobHealthPanel({
   queues,
   deadLetters,
   queueError,
+  databaseBytes,
 }: {
   jobs: JobHealth[];
   recentFailures: (JobRunSummary & { jobName: string })[];
   queues: QueueHealth[];
   deadLetters: DeadLetter[];
   queueError: string | null;
+  databaseBytes: number | null;
 }) {
   const t = await getT();
   const format = await getFormatters();
   const unconfigured = jobs.every((job) => job.lastRun === null);
+  const limitMb = Number(process.env.OPS_DATABASE_LIMIT_MB) || DEFAULT_DATABASE_LIMIT_MB;
+  const usedMb = databaseBytes === null ? null : Math.round(databaseBytes / (1024 * 1024));
+  const percent = usedMb === null ? 0 : Math.min(100, Math.round((usedMb / limitMb) * 100));
 
   return (
     <div className="space-y-10">
@@ -68,6 +74,18 @@ export async function JobHealthPanel({
           </code>{" "}
           {t("jobs.unconfiguredAfter")}
         </p>
+      ) : null}
+
+      {usedMb !== null ? (
+        <section>
+          <p className="mb-1.5 text-[13.5px]">{t("jobs.databaseSize", { used: format.number(usedMb), limit: format.number(limitMb), percent })}</p>
+          <div className="h-2 w-full max-w-md overflow-hidden rounded bg-surface-soft" aria-hidden>
+            <div
+              className={percent >= DATABASE_ALERT_RATIO * 100 ? "h-full bg-danger" : "h-full bg-brand"}
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        </section>
       ) : null}
 
       {/* Failures first — this is why the page gets opened. */}
@@ -219,8 +237,8 @@ export async function JobHealthPanel({
                       <span className="meta font-mono">{job.schedule}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={runTone(runOutcome(job.lastRun))}>
-                        {runLabel(runOutcome(job.lastRun), job.lastRun, t)}
+                      <Badge tone={runTone(runOutcome(job.lastRun, job.overdue))}>
+                        {runLabel(runOutcome(job.lastRun, job.overdue), job.lastRun, t)}
                       </Badge>
                       {job.lastRun ? (
                         <span className="meta mt-1 block">

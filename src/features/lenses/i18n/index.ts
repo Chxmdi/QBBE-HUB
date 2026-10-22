@@ -1,5 +1,5 @@
 import type { Locale } from "@/lib/i18n/config";
-import { interpolate, type MessageVars } from "@/lib/i18n/translate";
+import { interpolate, type MessageVars } from "@/lib/i18n/translator";
 import { lensesEn, type LensMessages } from "./en";
 import { lensesFrCA } from "./fr-CA";
 

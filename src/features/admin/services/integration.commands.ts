@@ -70,11 +70,8 @@ export async function disconnectIntegration(
     }
   }
   if (provider === "volunteer_system") {
-    await supabase
-      .from("vms_assignment_reference")
-      .delete()
-      .eq("organization_id", session.organizationId);
-    const { error: clearError } = await supabase.rpc("clear_org_vms_ids");
+    // Removes every link and every copied assignment in the organization.
+    const { error: clearError } = await supabase.rpc("clear_org_vms_ids", { p_org: session.organizationId });
     if (clearError) {
       return { ok: false, error: t("admin.errors.vmsCleanupFailed") };
     }
@@ -201,35 +198,19 @@ export async function linkVmsIdentity(
     return { ok: false, error: t("admin.errors.vmsOnlyActive") };
   }
 
-  const { data: updated, error } = await supabase
-    .from("user_profile")
-    .update({
-      vms_id: normalized || null,
-      vms_availability: "unknown",
-      vms_synced_at: null,
-    })
-    .eq("id", userId)
-    .select("id")
-    .maybeSingle();
-  if (error || !updated) return { ok: false, error: t("admin.errors.vmsStoreFailed") };
-
-  if (!normalized) {
-    await supabase
-      .from("vms_assignment_reference")
-      .delete()
-      .eq("organization_id", session.organizationId)
-      .eq("user_id", userId);
-  }
-
-  await supabase.from("audit_event").insert({
-    organization_id: session.organizationId,
-    actor_id: session.userId,
-    event_type: "integration",
-    action: normalized ? "vms_identity_linked" : "vms_identity_unlinked",
-    object_type: "user_profile",
-    object_id: userId,
-    metadata: normalized ? { vms_id: normalized } : {},
+  // Links (or, when empty, unlinks) and audits; unlinking or changing the
+  // link removes the person's copied assignments.
+  const { error } = await supabase.rpc("link_vms_identity", {
+    p_org: session.organizationId,
+    p_user: userId,
+    p_vms_id: normalized,
   });
+  if (error) {
+    return {
+      ok: false,
+      error: error.code === "23505" ? t("admin.errors.vmsIdTaken") : t("admin.errors.vmsStoreFailed"),
+    };
+  }
 
   revalidatePath("/admin");
   revalidatePath("/people");

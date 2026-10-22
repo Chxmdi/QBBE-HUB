@@ -2,17 +2,20 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { serviceRoleKey } from "@/lib/env";
 
 /**
- * Privileged Supabase client for background work.
+ * Privileged Supabase client (bypasses row-level security).
  *
  * Row Level Security is the authorization boundary for anything acting on
  * behalf of a signed-in person (AUTH-003), and this client deliberately
- * bypasses it. It exists for one caller: the job runner, which fans work out
- * across users and so has no single user to act as.
+ * bypasses it. Every file that may use it is listed in
+ * docs/adr/ADR-004-service-role-uses.md with its reason and the check that
+ * stands in for RLS there (the job runner, signed webhooks, the private API,
+ * a person's own integration tokens, and a few admin operations);
+ * tests/unit/service-role-allowlist.test.ts fails on any other import.
  *
  * Rules for using it:
- *   - only from `/api/jobs/*` handlers and the services they call;
- *   - never from a Server Component, Server Action, or anything reachable by a
- *     request the user controls;
+ *   - add a row to ADR-004 first, naming the check that replaces RLS;
+ *   - pin every query to the caller's own user or organization, or to a
+ *     signature-verified sender;
  *   - never construct it in a module that a client component can import.
  */
 export function createSupabaseServiceClient(): SupabaseClient {

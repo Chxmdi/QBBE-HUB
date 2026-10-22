@@ -6,6 +6,8 @@ import {
 } from "@/features/inbox/services/gmail-sync";
 import { recordJobRun } from "@/lib/job-observability";
 import type { JobContext, JobResult } from "../runner";
+import { logEvent } from "@/lib/server-log";
+import { withActiveOwners } from "../active-owners";
 
 /**
  * Renews Gmail push subscriptions before they lapse.
@@ -23,13 +25,13 @@ export async function gmailWatchRenew({ db }: JobContext): Promise<JobResult> {
   }
 
   const { data: connections, error: connectionError } = await db.from("integration_connection")
-    .select("id, organization_id")
+    .select("id, organization_id, user_id")
     .eq("provider", "gmail")
     .eq("status", "connected");
   if (connectionError) throw new Error(`could not load Gmail connections: ${connectionError.message}`);
 
   let renewed = 0; let skipped = 0; let failed = 0;
-  for (const connection of connections ?? []) {
+  for (const connection of await withActiveOwners(db, connections ?? [])) {
     const startedAt = new Date().toISOString();
     try {
       const { data: secret, error: secretError } = await db.from("integration_secret")
@@ -73,7 +75,7 @@ export async function gmailWatchRenew({ db }: JobContext): Promise<JobResult> {
       renewed += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Gmail watch renewal failed.";
-      console.error("Gmail watch renewal failed", { connectionId: connection.id, error: message });
+      logEvent("integration.gmail_watch_renew_failed", { connectionId: connection.id, error: message }, "error");
       await db.from("integration_connection")
         .update({ status: classifyIntegrationFailure(message), last_error: message })
         .eq("id", connection.id);

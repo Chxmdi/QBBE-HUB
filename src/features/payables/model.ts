@@ -3,7 +3,7 @@
  * are integer cents end to end, as in the ledger.
  */
 import { centsToDecimal, csvDocument } from "@/features/ledger/money";
-import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 export const DOCUMENT_KINDS = ["bill", "invoice"] as const;
 export type DocumentKind = (typeof DOCUMENT_KINDS)[number];
@@ -94,7 +94,7 @@ export function agingCsv(
   kind: DocumentKind,
   asOf: string,
   rows: AgingRow[],
-  t: TranslateFn = createTranslator("en"),
+  t: TranslateFn,
 ): string {
   const { totals } = summarizeAging(rows);
   const title = t(kind === "bill" ? "finance.payables.csv.payablesTitle" : "finance.payables.csv.receivablesTitle");
@@ -139,14 +139,6 @@ export function invoiceLabel(number: number | null, draft: string = "Draft"): st
   return number === null ? draft : `INV-${String(number).padStart(4, "0")}`;
 }
 
-
-/**
- * `t()` for the wording of a printed invoice (`finance.payables.invoiceSheet`),
- * in the customer's language whatever language the reader uses.
- */
-export function invoiceTranslator(language: "fr" | "en"): TranslateFn {
-  return createTranslator(language === "fr" ? "fr-CA" : "en");
-}
 
 export function formatCentsIn(language: "fr" | "en", cents: number): string {
   return new Intl.NumberFormat(language === "fr" ? "fr-CA" : "en-CA", {

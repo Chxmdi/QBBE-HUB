@@ -9,9 +9,9 @@ import {
 } from "@/features/crm/opportunity-schemas";
 import { kindLabel, stageLabel } from "@/features/crm/labels";
 import type { Locale } from "@/lib/i18n/config";
-import type { Formatters } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
 import { getFormatters, getLocale, getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import type { OpportunityRow, Pipeline } from "@/features/crm/services/opportunity.queries";
 import { createOpportunity } from "@/features/crm/services/opportunity.commands";
 import { cn } from "@/lib/utils";

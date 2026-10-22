@@ -3,7 +3,7 @@ import { DEFAULT_TIME_ZONE, formatInZone, zonedDueInfo } from "@/lib/time";
 import { formatDistanceToNowStrict, parseISO } from "date-fns";
 import { frCA } from "date-fns/locale";
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
-import { createTranslator } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -101,7 +101,8 @@ export function formatTime(
  * and labelled "Due today" on one screen. Both now ask `zonedDueInfo`, so the
  * two agree by construction rather than by whoever is looking.
  */
-export function dueLabel(
+export function dueLabelWith(
+  t: TranslateFn,
   iso: string | null | undefined,
   timeZone: string = DEFAULT_TIME_ZONE,
   locale: Locale = DEFAULT_LOCALE,
@@ -109,7 +110,8 @@ export function dueLabel(
   label: string;
   tone: "danger" | "warning" | "muted";
 } {
-  const t = createTranslator(locale);
+  // `t` is handed in rather than built here: building it needs the
+  // catalogues, and this module is in nearly every page's browser code.
   const info = zonedDueInfo(iso, timeZone);
   if (!info) return { label: t("due.none"), tone: "muted" };
   if (info.days < 0) {

@@ -12,7 +12,7 @@ import { getFormatters, getT } from "@/lib/i18n/server";
 import { isEnabled } from "@/lib/feature-flags";
 import { isRealTimeZone } from "@/lib/time";
 import { getPagesT } from "@/features/pages/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("notifications.page.title") };

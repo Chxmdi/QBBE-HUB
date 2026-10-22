@@ -36,7 +36,7 @@ app_env_has() {
 [[ "${RELEASE_ENABLED:-}" == "true" ]] \
   || fail "Release is disabled for ${TARGET_ENVIRONMENT:-?}. Complete the environment release checklist first."
 
-for name in SUPABASE_PROJECT_REF SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD \
+for name in SUPABASE_PROJECT_REF SUPABASE_DB_URL SUPABASE_DB_PASSWORD \
             STAGING_SUPABASE_REF PRODUCTION_SUPABASE_REF \
             DEPLOY_HOST DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS SITE_URL APP_ENV; do
   [[ -n "${!name:-}" ]] || fail "Missing ${name} for ${TARGET_ENVIRONMENT:-?}."
@@ -62,6 +62,14 @@ esac
 [[ "${SUPABASE_PROJECT_REF}" == "${expected_ref}" ]] \
   || fail "Refusing deployment: ${TARGET_ENVIRONMENT} is bound to Supabase project ${SUPABASE_PROJECT_REF}, not its registered project."
 
+# Migrations are pushed with this environment's own database address, not a
+# personal access token that reaches every project of the account (SEC-011).
+# It has to name this environment's project.
+[[ "${SUPABASE_DB_URL}" == postgres://* || "${SUPABASE_DB_URL}" == postgresql://* ]] \
+  || fail "SUPABASE_DB_URL for ${TARGET_ENVIRONMENT:-?} is not a postgres:// address."
+[[ "${SUPABASE_DB_URL}" == *"${SUPABASE_PROJECT_REF}"* ]] \
+  || fail "SUPABASE_DB_URL for ${TARGET_ENVIRONMENT:-?} does not name this environment's project (${SUPABASE_PROJECT_REF})."
+
 site="${SITE_URL%/}"
 [[ "$site" =~ ^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] \
   || fail "SITE_URL for ${TARGET_ENVIRONMENT} must be https://<host name> with no path (got ${SITE_URL})."
@@ -78,6 +86,22 @@ app_url="$(app_env NEXT_PUBLIC_APP_URL)"
 for name in NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
   [[ -n "$(app_env "$name")" ]] || fail "APP_ENV for ${TARGET_ENVIRONMENT} has no ${name}."
 done
+# A legacy (JWT) key names the project it was issued for in its "ref" claim.
+# A key pasted from the other environment's project would otherwise pass every
+# check above and fail only once the new release is serving traffic.
+key_ref() {
+  local payload
+  payload=$(printf '%s' "$1" | cut -d. -f2 -s | tr '_-' '/+')
+  [ -n "$payload" ] || return 0
+  while (( ${#payload} % 4 )); do payload="${payload}="; done
+  printf '%s' "$payload" | base64 -d 2>/dev/null | grep -oE '"ref"[[:space:]]*:[[:space:]]*"[a-z0-9]+"' | grep -oE '"[a-z0-9]+"$' | tr -d '"' || true
+}
+for name in NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
+  ref="$(key_ref "$(app_env "$name")")"
+  [[ -z "$ref" || "$ref" == "$expected_ref" ]] \
+    || fail "Refusing deployment: APP_ENV's ${name} belongs to Supabase project ${ref}, not ${TARGET_ENVIRONMENT}'s (${expected_ref})."
+done
+
 secret="$(app_env CRON_JOB_SECRET)"
 (( ${#secret} >= 32 )) \
   || fail "APP_ENV for ${TARGET_ENVIRONMENT} needs a CRON_JOB_SECRET of at least 32 characters (openssl rand -base64 48)."

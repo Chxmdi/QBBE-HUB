@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireAdminAal2 } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { answerText, csvField, type FormField } from "@/features/forms/fields";
+import { FORM_EXPORT_LIMIT, readSubmissionsForExport } from "@/features/forms/services/submission.export";
 import { getLocale } from "@/lib/i18n/server";
 import { createTranslator } from "@/lib/i18n/translate";
 
@@ -14,17 +15,6 @@ import { createTranslator } from "@/lib/i18n/translate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const EXPORT_LIMIT = 10000;
-
-interface ExportRow {
-  id: string;
-  submitted_at: string;
-  answers: Record<string, unknown>;
-  content_sha256: string;
-  submitter: { full_name: string } | null;
-  signature: { signer_name: string; signed_at: string }[];
-}
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdminAal2();
@@ -41,13 +31,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .eq("id", id)
     .maybeSingle();
   if (!form) return new Response(t("forms.errors.notFound"), { status: 404 });
-  const { data, error } = await supabase
-    .from("form_submission")
-    .select("id, submitted_at, answers, content_sha256, submitter:submitted_by(full_name), signature(signer_name, signed_at)")
-    .eq("form_id", id)
-    .order("submitted_at", { ascending: true })
-    .limit(EXPORT_LIMIT);
+  // Every submission, a page at a time; above the ceiling the file is refused, never cut short.
+  const { rows, error, truncated } = await readSubmissionsForExport(supabase, id);
   if (error) return new Response(t("forms.export.failed"), { status: 500 });
+  if (truncated) return new Response(t("forms.export.tooMany", { max: FORM_EXPORT_LIMIT }), { status: 413 });
 
   const fields = form.fields as FormField[];
   const header = [
@@ -59,7 +46,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     t("forms.export.submissionId"),
   ];
   const lines = [header.map(csvField).join(",")];
-  for (const row of (data ?? []) as unknown as ExportRow[]) {
+  for (const row of rows) {
     const signature = row.signature[0];
     lines.push(
       [

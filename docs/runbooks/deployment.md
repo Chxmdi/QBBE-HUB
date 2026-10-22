@@ -21,18 +21,38 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
 3. In Supabase Auth settings:
    - Configure the site URL to the production domain and add
      `https://<domain>/auth/callback` to redirect URLs.
-   - Enable email confirmation.
-   - **Restrict signup**: either disable public signup once the Primary
-     Owner exists, or restrict to invited emails. The database also enforces
-     this: `app.handle_new_user` refuses any sign-up without a live invitation
-     once an organization exists, and the refusal aborts the account creation.
+   - **Turn on email confirmation** (Authentication → Sign In / Providers →
+     Email → **Confirm email** on) and set up the project's SMTP sender so the
+     confirmation email actually arrives. Since 2026-10-22 (SEC-001) an invited
+     person gets no membership until their address is confirmed; with
+     confirmation off, the emailed invitation link is the only proof.
+   - **Leave "Allow new users to sign up" on.** Invited people create their
+     account through the sign-up form; turning sign-up off in Supabase would
+     refuse them too. The database decides who may join: once an organization
+     exists, `app.handle_new_user` refuses an account that does not carry a
+     valid invitation link for that exact address, and the refusal aborts the
+     account creation. Before 2026-10-22 it matched the invitation on the
+     address alone, so anyone who knew an invited address could take the seat.
+     Two other ways in still need an open invitation for the address: Google
+     sign-in, when Google says it has verified the address (the seat follows
+     once Auth confirms it), and an operator creating the account through the
+     Auth admin API with the link's secret in `user_metadata.invite_token`
+     (as `scripts/qa/perf-staging.mjs` does). A marker in `app_metadata` does
+     not work through the admin API: Auth adds it only after the check.
      Until 2026-09-02 this line claimed the enforcement came from
      `signup_allowed`. It did not. That function was called only from the
      sign-up form — a check in the visitor's own browser — while the trigger
      that grants the membership never consulted it and defaulted to an active
      **staff** account. Anyone could obtain one with a single API call using the
-     publishable key. Provider-side signup restriction is still worth setting;
-     it is defence in depth rather than the only line.
+     publishable key.
+   - The invitation secret travels in the link's address
+     (`/sign-up?invite=…`), so it can appear in the invitee's browser history
+     and in the server's access logs for `/sign-up`. It works once, only for
+     the invited address, for 14 days, and is removed from the account as
+     soon as it is used. Do not send access logs for `/sign-up` to third
+     parties. If a link may have leaked, open Admin, Invitations, click
+     **New link** on that row, then **Create new link**: the old link stops
+     working.
 4. Set up the QBBE server and each environment's settings as
    [`hosting.md`](hosting.md) describes: the server, its open ports, the
    GitHub environment variables and secrets (`APP_ENV` holds the app's
@@ -41,10 +61,39 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
    in a `NEXT_PUBLIC_*` variable.
 5. Deploy. Sign up the Primary Owner account **first** — the bootstrap
    trigger provisions the organization and mandatory channels.
-6. Complete encrypted daily database **and uploaded-file** backups to QBBE
-   Drive and rehearse restoration before entering pilot data. Do not enable
-   paid backups or Point-in-Time Recovery. See `backup-recovery.md`; automation
-   and restore evidence are still pending.
+
+   On a project that already had invitations before 2026-10-22: those have
+   no link, so nobody can create a password account from them. After the
+   deploy, list them in the Supabase SQL editor:
+
+   ```sql
+   select email, intended_role, expires_at
+   from invitation
+   where token_hash is null and accepted_at is null
+     and revoked_at is null and expires_at > now();
+   ```
+
+   For each address, open Admin, Invitations, find the row marked
+   **no link yet**, click **New link**, then **Create new link**. You should
+   see "Invitation sent to …", or, where email is not set up, the link to pass
+   on yourself. Run the query again: when it returns no rows, every open
+   invitation has a working link.
+6. Set up the nightly encrypted backup of the database **and uploaded files**
+   (the **Backup** workflow) and run the hosted restore drill before entering
+   pilot data. The one-time setup and the drill are in `backup-recovery.md`;
+   until both are done there is no backup. Three things to know first:
+   - Apply the `main` protection in "Branches and gates" below **before**
+     setup step 7 there. The `backup-production` environment holds
+     production's database password and a Supabase secret key that bypasses
+     row-level security, with no approval step; its only protection is that
+     it accepts runs from `main`.
+   - Each of `backup-staging` and `backup-production` needs its own
+     `BACKUP_INDEX_KEY` (make it with `openssl rand -base64 32`: one line
+     of 44 characters; a key typed by hand is refused).
+   - The nightly run backs up production only. Staging is backed up every
+     night only when the repository variable `BACKUP_STAGING_NIGHTLY` is
+     `on`, to stay inside Supabase's free 5 GB of monthly traffic; otherwise
+     run it by hand at least every 30 days.
 7. Enroll at least two named TOTP factors for the Primary Owner and every
    Workspace Admin, then complete the hosted MFA checks in
    `staging-provisioning.md`. Application and database enforcement are
@@ -91,14 +140,14 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
 
 `main` is the release branch and the only one production deploys from.
 
-**Current state: the protection is not applied.** As of the 2026-09 requirement
-audit, `main` is marked protected but
-`required_status_checks.enforcement_level` is `"off"` with zero contexts and
-zero rulesets — so **no status check is required to merge**, and a pull request
-with `Verify` and `Database security` both red can be merged. Three merges have
-landed on `main` with zero reviews. This section previously described the
-settings as though they were in place; they are not, and the sentence "there is
-no path to production that skips it" was false.
+**Current state (pre-launch audit, 2026-10):** a ruleset named `main: require
+CI` is applied to `main`, but it requires only **Verify** and **Database
+security**: it predates the longer list in `scripts/protect-main.sh`, which
+was changed and never re-applied. Until the script is run again, a pull
+request can merge with a leaked secret, a high-severity dependency or a broken
+Dockerfile, and no approval is required. Check the live rules with
+`gh api repos/Chxmdi/QBBE-HUB/rules/branches/main`; once re-applied they list
+the seven checks below.
 
 Apply it with:
 
@@ -110,7 +159,10 @@ The script is re-runnable, updates in place, and prints the live rules
 afterwards so the result is verified rather than assumed. It sets:
 
 - A pull request required before merging.
-- Status checks required to pass: **Verify** and **Database security**.
+- Status checks required to pass: **Verify**, **Database security**,
+  **Dependency audit**, **CodeQL**, **Secret scan**, **Dependency review** and
+  **Container image** (the only check that builds the Dockerfile; it adds 5 to
+  10 minutes to every pull request).
 - No force pushes, no deletion of `main`.
 
 Two deliberate departures from the specification's wording, both recorded here
@@ -142,7 +194,16 @@ Two gates exist specifically to catch drift that only shows up at runtime:
   can differ between a laptop and CI. Enforced by
   `tests/unit/migration-filenames.test.ts`, which also pins the naming pattern
   and checks that lexical order matches numeric order. Until 2026-09-01 this
-  paragraph described a gate that did not exist.
+  paragraph described a gate that did not exist. It also fails when a new
+  migration's version does not sort after every migration in
+  `tests/unit/migration-baseline.json`: applied versions run weeks ahead of the
+  calendar, so a file named with today's timestamp would make `db push` refuse
+  the deploy. Name a new migration after the newest version on `main` (see
+  AGENTS.md, "Migration versions"); never use `db push --include-all`.
+- **Every new public table, view, sequence and function states its access** —
+  Supabase's automatic grants are off, so an ungranted table answers
+  "permission denied" to every signed-in page. Enforced by
+  `tests/unit/migration-grants.test.ts`.
 - **Every registered job has a handler** — a `job_definition` row without a
   handler is a schedule firing into nothing; a handler without a row never runs.
 
@@ -159,17 +220,34 @@ Two gates exist specifically to catch drift that only shows up at runtime:
   ```sql
   select version, name from supabase_migrations.schema_migrations order by version;
   ```
-- Ship policies/indexes in the same migration as the tables they protect.
+- Ship policies/indexes in the same migration as the tables they protect,
+  and the grants: `grant select, insert, update, delete on public.<table> to
+  authenticated, service_role` (only what is needed), and for a function
+  `revoke all on function public.<f>(...) from public, anon` then `grant
+  execute ... to <callers>`.
 - `supabase db push` in CI/CD or manually by an admin — no undocumented
   dashboard edits in production.
 
 ## Rollback
 
 - App: run the **Rollback** workflow with the previous release's commit
-  (release-procedure.md). Check schema compatibility before rollback;
+  (release-procedure.md). Like **Deploy** and **Server setup**, it runs only
+  from `main`: started from another branch, it stops at once with "runs from
+  main only" and touches nothing. This is a clear message, not the
+  protection: a branch can edit its own copy of the workflow. What stops a
+  branch from using the environment's keys is each environment's
+  **Deployment branches and tags** rule set to `main` only (staging,
+  production and server-admin; hosting.md, "Deploy access"). Check schema compatibility before rollback;
   rehearse on staging.
 - Schema: write an inverse migration; for risky changes use
   expand → migrate → contract so old app versions keep working (CICD-002).
+  CI enforces the contract step: a migration that drops or renames a table
+  or column, or changes a column's type, needs a `-- contract: safe-after
+  <sha>` line naming the released commit that stopped using it
+  (release-procedure.md).
+- Undoing a migration means restoring the backup the Deploy run took right
+  before migrating (its summary links the Backup run); see
+  backup-recovery.md for the restore, rehearsed on staging first.
 
 ## Release checks
 
@@ -231,14 +309,23 @@ The full step-by-step procedure, including rollback, is
    projects. It also reads the app settings (`APP_ENV`) and refuses if they
    point at another environment's database or address, lack the keys the app
    needs, or set `WORKSPACE_OS_FLAGS` on production.
-4. Shows the migrations it will apply (dry run, in the run summary), applies
-   them, and confirms none are left. `supabase db push` stops the deploy if
-   the database holds a migration this commit does not have.
-5. Builds the environment's container image of the commit on an ARM runner
+4. Builds the environment's container image of the commit on an ARM runner
    and stores it as `ghcr.io/chxmdi/qbbe-hub:<environment>-<commit>`.
+5. Only once the image is built: shows the migrations it will apply (dry
+   run, in the run summary); when there are any, starts the **Backup**
+   workflow for that environment and waits for it to succeed (a failed
+   backup stops the deploy before the database changes); applies the
+   migrations, and confirms none are left. `supabase db push` stops the
+   deploy if the database holds a migration this commit does not have.
+   Migrating last keeps short the time the old site runs on the new schema.
 6. Releases it on the server (`deploy/server/release.sh`): the new container
    must report healthy within 3 minutes, or the previous image and settings
    are put back and the run fails. The replaced image is the rollback target.
+   Then it signs in as the environment's smoke user
+   (`scripts/ci/smoke-signed-in.mjs`) and reads that person's own membership
+   row, so a database missing its API grants fails the deploy instead of
+   sending every signed-in page back to `/sign-in`. Until `SMOKE_EMAIL` and
+   `SMOKE_PASSWORD` are set, staging shows a warning and production fails.
 7. Smoke-checks `SITE_URL/sign-in`, that the site reports this commit
    (`/api/health/version`), and that the background jobs reach it.
 
@@ -250,14 +337,16 @@ Create GitHub environments named `staging` and `production`. In each, configure:
 | Setting | Location | Purpose |
 |---|---|---|
 | `DEPLOY_HOST` | environment variable | the QBBE server's public IP |
-| `DEPLOY_SSH_KEY` | environment secret | the server's deploy key; never commit it |
+| `DEPLOY_SSH_KEY` | environment secret | this environment's own deploy key (`qbbe-staging` or `qbbe-production` once `DEPLOY_MODE=isolated`, hosting.md "Deploy access"); never commit it |
 | `DEPLOY_KNOWN_HOSTS` | environment secret | the server's pinned SSH host key (from **Server setup**) |
 | `APP_ENV` | environment secret | the app's runtime settings, one `NAME=value` per line ([`hosting.md`](hosting.md#the-app_env-secret)) |
 | `SUPABASE_PROJECT_REF` | environment variable | this environment's Supabase project ref |
-| `SUPABASE_ACCESS_TOKEN` | environment secret | Supabase personal access token of a QBBE account, for migrations |
+| `SUPABASE_DB_URL` | environment secret | that environment's database address for migrations (session pooler URI); reaches that project only. Replaces `SUPABASE_ACCESS_TOKEN`, which reached every project of the account (hosting.md, "Deploy access") |
 | `SUPABASE_DB_PASSWORD` | environment secret | this environment's database password, for migrations |
 | `SITE_URL` | environment variable | the environment's public address, `https://<host>` |
 | `RELEASE_ENABLED` | environment variable | literal `true` only after readiness review |
+| `SMOKE_EMAIL` | environment variable | the environment's smoke user (lowest role, one test program; staging-provisioning.md) |
+| `SMOKE_PASSWORD` | environment secret | that user's long random password |
 
 And at repository level (Settings, Secrets and variables, Actions, Variables):
 

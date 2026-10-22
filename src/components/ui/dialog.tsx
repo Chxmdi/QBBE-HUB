@@ -4,6 +4,7 @@ import * as React from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
+import { useToastLayer } from "@/components/ui/toast";
 
 /**
  * Accessible modal built on the native <dialog> element: focus trapping,
@@ -32,6 +33,7 @@ export function Dialog({
     if (open && !dialog.open) dialog.showModal();
     if (!open && dialog.open) dialog.close();
   }, [open]);
+  useToastLayer(ref, open);
 
   return (
     <dialog

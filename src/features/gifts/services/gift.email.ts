@@ -4,7 +4,7 @@ import {
   sendEmail,
 } from "@/features/notifications/services/email-provider";
 import { letterBodyHtml } from "@/features/gifts/acknowledgement";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 export interface EmailOutcome {
   ok: boolean;

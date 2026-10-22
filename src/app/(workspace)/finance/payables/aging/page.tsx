@@ -14,9 +14,9 @@ import {
   AGING_BUCKET_LABEL,
   invoiceLabel,
   summarizeAging,
-  type AgingRow,
   type DocumentKind,
 } from "@/features/payables/model";
+import { AGING_LIMIT, readAging } from "@/features/payables/services/aging.queries";
 import { getPayablesAccess } from "@/features/payables/services/payables.queries";
 import { getLocale, getT } from "@/lib/i18n/server";
 
@@ -34,12 +34,8 @@ export default async function AgingPage({ searchParams }: { searchParams: Promis
   const asOf = dateParam(params.as_of, todayIn(session.timeZone));
   const org = session.organizationId;
 
-  const { data } = await supabase.rpc("finance_aging", { p_organization: org, p_kind: kind, p_as_of: asOf });
-  const rows = ((data ?? []) as AgingRow[]).map((r) => ({
-    ...r,
-    total_cents: Number(r.total_cents),
-    open_cents: Number(r.open_cents),
-  }));
+  // Every open document, not just the first 1,000 the API returns per request (DATA-003).
+  const { rows, truncated, error: readError } = await readAging(supabase, org, kind, asOf);
   const { totals, contacts } = summarizeAging(rows);
 
   // The same total from the ledger, for those who may read it: the balance
@@ -100,6 +96,17 @@ export default async function AgingPage({ searchParams }: { searchParams: Promis
           ? t("finance.payables.aging.payablesHeading", { date: asOf })
           : t("finance.payables.aging.receivablesHeading", { date: asOf })}
       </h2>
+      {/* A page that failed after the first must not pass for the whole report. */}
+      {readError ? (
+        <p role="alert" className="mb-3 text-[13px] text-danger-fg">
+          {t("finance.payables.aging.readFailed")}
+        </p>
+      ) : null}
+      {truncated ? (
+        <p role="alert" className="mb-3 text-[13px] text-danger-fg">
+          {t("finance.payables.csv.tooMany", { max: AGING_LIMIT })}
+        </p>
+      ) : null}
       {rows.length === 0 ? (
         <EmptyState
           icon={<Hourglass />}

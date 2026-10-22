@@ -2,8 +2,10 @@
 
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatCentsIn, invoiceLabel, invoiceTranslator } from "@/features/payables/model";
+import { formatCentsIn, invoiceLabel } from "@/features/payables/model";
+import { invoiceTranslator } from "@/features/payables/invoice-language";
 import type { DocumentRecord } from "@/features/payables/services/payables.queries";
+import type { TaxRegistration } from "@/features/payables/invoice-tax";
 
 export function PrintButton({ label }: { label: string }) {
   return (
@@ -15,7 +17,16 @@ export function PrintButton({ label }: { label: string }) {
 }
 
 /** The invoice as the customer reads it, in the invoice's language. */
-export function InvoiceSheet({ record, organizationName }: { record: DocumentRecord; organizationName: string }) {
+export function InvoiceSheet({
+  record,
+  organizationName,
+  registration,
+}: {
+  record: DocumentRecord;
+  organizationName: string;
+  /** Registration numbers to print when the invoice charges tax. */
+  registration?: TaxRegistration | null;
+}) {
   const lang = record.language;
   const t = invoiceTranslator(lang);
   const money = (cents: number) => formatCentsIn(lang, cents);
@@ -24,6 +35,18 @@ export function InvoiceSheet({ record, organizationName }: { record: DocumentRec
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-[18px] font-semibold">{organizationName}</p>
+          {/* A customer claims the tax back only from an invoice that shows
+              the supplier's registration numbers. */}
+          {record.gst_cents > 0 && registration?.gstNumber ? (
+            <p className="text-[12.5px] text-muted">
+              {t("finance.payables.invoiceSheet.gstNumber", { number: registration.gstNumber })}
+            </p>
+          ) : null}
+          {record.qst_cents > 0 && registration?.qstNumber ? (
+            <p className="text-[12.5px] text-muted">
+              {t("finance.payables.invoiceSheet.qstNumber", { number: registration.qstNumber })}
+            </p>
+          ) : null}
         </div>
         <div className="text-right">
           <p className="text-[22px] font-semibold">{t("finance.payables.invoiceSheet.invoice")}</p>

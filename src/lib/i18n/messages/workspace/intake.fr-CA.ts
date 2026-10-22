@@ -92,6 +92,8 @@ export const intakeFrCA: typeof intakeEn = {
       approvalFailed: "Impossible de demander cette approbation.",
       approvalNotAvailable: "Cette approbation ne vous est pas accessible.",
       alreadyAnswered: "Une réponse a déjà été donnée.",
+      selfApprover: "Demandez à quelqu’un d’autre de décider : vous ne pouvez pas approuver votre propre demande.",
+      ownRequest: "Vous ne pouvez pas décider de votre propre demande. Vous pouvez la retirer.",
       onlyApprover:
         "Seule la personne sollicitée peut répondre — demandez à un administrateur de la réattribuer.",
       generic: "Cela n’a pas fonctionné. Réessayez.",
@@ -327,6 +329,7 @@ export const intakeFrCA: typeof intakeEn = {
     },
     export: {
       failed: "Impossible d’exporter les soumissions. Réessayez.",
+      tooMany: "Ce formulaire compte plus de {max} soumissions, trop pour un seul fichier.",
       submittedAt: "Soumis le",
       submittedBy: "Soumis par",
       signedBy: "Signé par",

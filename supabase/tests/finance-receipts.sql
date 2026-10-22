@@ -176,9 +176,9 @@ begin
 
   -- Signed out: nothing.
   set local role anon;
-  select count(*) into v_count from public.finance_receipt;
+  v_ok := tests.permission_denied('select 1 from public.finance_receipt');
   reset role;
-  perform tests.ok(v_count = 0, 'anon reads no receipts');
+  perform tests.ok(v_ok, 'anon is refused reading receipts');
 end
 $$;
 

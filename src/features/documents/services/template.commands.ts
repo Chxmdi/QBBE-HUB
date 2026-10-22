@@ -18,7 +18,7 @@ import {
 } from "@/features/documents/templates/merge";
 import { renderTextPdf } from "@/features/documents/templates/pdf";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { calendarDateInZone } from "@/lib/time";
 
 // Templates (#147). Owners and admins with MFA write them (checked here for a
@@ -306,9 +306,10 @@ export async function generateFromTemplate(input: unknown): Promise<ActionResult
       storage_path: path,
       mime_type: "application/pdf",
       size_bytes: pdf.byteLength,
-      // Who can open it is decided by the folder: a staff folder narrows it
-      // to staff (the template's default folder for anything confidential).
-      visibility: "organization",
+      // Every template merges a member, contact or gift record, so the
+      // result holds personal or donor details: staff only, whatever the
+      // folder (a folder can narrow access further, never widen it).
+      visibility: "staff",
       folder_id: data.folderId ?? (template.folder_id as string | null),
       tags: [template.kind as string],
       template_id: template.id,

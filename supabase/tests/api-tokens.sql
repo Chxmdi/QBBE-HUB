@@ -87,14 +87,27 @@ begin
     reset role;
   end loop;
 
-  -- Making tokens: only for yourself.
+  -- Making tokens: only for yourself, and only staff (owners and admins
+  -- with MFA) make them at all.
+  perform tests.ensure_verified_mfa_factor(v_owner);
+  perform tests.ensure_verified_mfa_factor(v_admin);
   foreach v_person in array array[v_owner, v_admin, v_staff, v_member, v_volunteer, v_accountant] loop
     perform tests.authenticate(v_person);
     v_hash := encode(extensions.digest(v_person::text, 'sha256'), 'hex');
-    insert into public.api_token (organization_id, user_id, name, token_hash, token_prefix, scopes, expires_at)
-    values (v_org, v_person, 'Mine', v_hash, 'qbbe_mine0001', array['objects:read'], now() + interval '10 days');
-    get diagnostics n = row_count;
-    perform tests.ok(n = 1, format('%s makes a token for themselves', v_person));
+    if v_person in (v_owner, v_admin, v_staff) then
+      insert into public.api_token (organization_id, user_id, name, token_hash, token_prefix, scopes, expires_at)
+      values (v_org, v_person, 'Mine', v_hash, 'qbbe_mine0001', array['objects:read'], now() + interval '10 days');
+      get diagnostics n = row_count;
+      perform tests.ok(n = 1, format('%s makes a token for themselves', v_person));
+    else
+      begin
+        insert into public.api_token (organization_id, user_id, name, token_hash, token_prefix, scopes, expires_at)
+        values (v_org, v_person, 'Mine', v_hash, 'qbbe_mine0001', array['objects:read'], now() + interval '10 days');
+        raise exception 'FAIL: % (not staff) made a token', v_person;
+      exception when insufficient_privilege then
+        perform tests.ok(true, format('%s (not staff) cannot make a token', v_person));
+      end;
+    end if;
     begin
       insert into public.api_token (organization_id, user_id, name, token_hash, token_prefix, scopes, expires_at)
       values (v_org, case when v_person = v_staff then v_owner else v_staff end, 'Theirs', repeat('e', 64),
@@ -147,8 +160,7 @@ begin
 
   -- Signed out: nothing.
   perform tests.clear_auth();
-  select count(*) into n from public.api_token;
-  perform tests.ok(n = 0, 'a signed-out visitor reads no tokens');
+  perform tests.ok(tests.permission_denied('select 1 from public.api_token'), 'a signed-out visitor is refused reading tokens');
   begin
     perform public.revoke_api_token(v_staff_token);
     raise exception 'FAIL: a signed-out visitor revoked a token';

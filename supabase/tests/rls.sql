@@ -95,6 +95,22 @@ begin
 end;
 $$;
 
+-- True when running the statement fails for lack of a privilege (42501),
+-- and only then: unlike tests.refused, an empty result is not enough. Signed-out
+-- visitors hold no grant on most tables (20261119100000_explicit_api_grants),
+-- so reading one is refused outright instead of returning no rows.
+create or replace function tests.permission_denied(statement text)
+returns boolean
+language plpgsql
+as $$
+begin
+  execute statement;
+  return false;
+exception when insufficient_privilege then
+  return true;
+end;
+$$;
+
 -- Write refusals (write-tampering.sql, untested-tables-deny.sql).
 -- Runs one statement as the current (authenticated) caller and undoes it
 -- either way, so an allowed write cannot change what a later case sees.
@@ -1100,10 +1116,8 @@ begin
           '{"metrics":{"tasks_completed":10}}'::jsonb, v_staff)
   returning id into v_report;
 
-  insert into report_version (organization_id, report_id, version_number,
-                              snapshot, generated_by)
-  values (v_org, v_report, 1, '{"metrics":{"tasks_completed":10}}'::jsonb, v_staff)
-  returning id into v_version;
+  -- Versions are recorded through record_report_version only.
+  v_version := public.record_report_version(v_report, '{"metrics":{"tasks_completed":10}}'::jsonb, null);
 
   select count(*) into n from report_version where id = v_version;
   perform tests.ok(n = 1, 'staff can record and read a report version');
@@ -1569,12 +1583,22 @@ begin
   end;
   reset role;
 
-  -- Invite-only: with an organization present, signup_allowed is false without an invite.
-  perform tests.clear_auth();
+  -- Invite-only: with an organization present, signup_allowed is false without
+  -- an invite. It is no longer callable by anonymous visitors at all, because
+  -- answering "is this address invited?" for any address told strangers whom
+  -- to impersonate (SEC-001); the sign-up page asks invitation_preview(token)
+  -- instead, which answers only for the holder of the link.
   perform tests.ok(
     public.signup_allowed('nobody@example.com') = false,
     'signup is invite-only after an organization exists'
   );
+  perform tests.clear_auth();
+  begin
+    perform public.signup_allowed('nobody@example.com');
+    perform tests.ok(false, 'anonymous visitors must not be able to call signup_allowed');
+  exception when insufficient_privilege then
+    perform tests.ok(true, 'anonymous visitors cannot call signup_allowed');
+  end;
 
   -- -----------------------------------------------------------------------
   -- The unscoped membership helpers must not reappear.

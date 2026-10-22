@@ -4,11 +4,9 @@ The approved seven-workstream plan supersedes earlier pilot exemptions. The
 finish line is verified staging with all PRD v2 P0/P1 and retained integrations
 accepted. Production publishing is a separate release decision.
 
-Authoritative live records:
-
-- [Acceptance matrix](../acceptance-matrix.md): every PRD criterion and integration.
-- [Execution journal](../execution-journal.md): active feature, prompts and next action.
-- [Readiness report](../readiness-report.md): release evidence and blockers.
+Current launch status, blockers and the go/no-go decision:
+[docs/STATUS.md](../STATUS.md). The acceptance matrix, execution journal and
+readiness report are historical records of earlier phases.
 
 No checklist entry is verified merely because it has a CI job or runbook.
 Require a passing run and artifact at the candidate commit. Missing QBBE input
@@ -33,3 +31,12 @@ Workstreams 1–5 now have implementation in the working tree. Workstreams 6–7
 remain blocked on QBBE credentials, staging projects, Drive custody and a
 named operator. `scripts/verify-integrations.sh` and `scripts/protect-main.sh`
 are the starting operator commands; they do not themselves certify readiness.
+
+Auth and privacy settings that the repository cannot prove, recorded per
+environment before pilot data is entered:
+
+- Each hosted Supabase project matches `auth-settings.md` (12-character
+  minimum, mixed case and a digit, secure password change on, leaked-password
+  protection on or its absence recorded).
+- The privacy notice at `/privacy` is approved by QBBE (no longer a draft) and
+  names the person in charge (`src/config/privacy.ts`, `privacy.md`).

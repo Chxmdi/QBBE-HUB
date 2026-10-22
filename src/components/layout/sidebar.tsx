@@ -25,7 +25,12 @@ export interface SidebarProgram {
 export interface SidebarCounts {
   myWork: number;
   inbox: number;
+  /** Direct conversations with unread messages. */
+  messages?: number;
 }
+
+/** Channels listed by name; the rest are behind "All channels". */
+const SIDEBAR_CHANNEL_LIMIT = 10;
 
 // Tokens (globals.css), used as inline background values.
 const PROGRAM_DOT_COLORS = [
@@ -156,7 +161,9 @@ export function Sidebar({
                           )}
                         >
                           {badge > 99 ? "99+" : badge}
-                          <span className="sr-only">{t("common.openItems")}</span>
+                          <span className="sr-only">
+                            {item.badge === "messages" ? t("nav.unreadConversations") : t("common.openItems")}
+                          </span>
                         </span>
                       ) : null}
                     </Link>
@@ -173,7 +180,7 @@ export function Sidebar({
               {t("nav.channelsHeading")}
             </p>
             <ul className="space-y-0.5">
-              {channels.map((channel) => {
+              {channels.slice(0, SIDEBAR_CHANNEL_LIMIT).map((channel) => {
                 const href = `/channels/${channel.id}`;
                 const active = pathname === href;
                 return (
@@ -209,6 +216,28 @@ export function Sidebar({
                   </li>
                 );
               })}
+              {channels.length > SIDEBAR_CHANNEL_LIMIT ? (
+                <li>
+                  {/* Every channel's unread flag is known; one past the
+                      limit still shows here, and on the channel list. */}
+                  <Link
+                    href="/channels"
+                    onClick={onMobileClose}
+                    className="flex items-center gap-2 rounded-(--radius-sm) px-2.5 py-[6px] text-[12.5px] font-medium text-white/75 hover:bg-white/8 hover:text-white"
+                  >
+                    {t("nav.allChannels")}
+                    {channels.slice(SIDEBAR_CHANNEL_LIMIT).some((channel) => channel.unread) ? (
+                      <>
+                        <span className="sr-only">{t("nav.unreadMessages")}</span>
+                        <span
+                          aria-hidden
+                          className="ml-auto size-1.5 rounded-full bg-accent shadow-[0_0_0_2px_rgb(255_255_255_/_0.08)]"
+                        />
+                      </>
+                    ) : null}
+                  </Link>
+                </li>
+              ) : null}
             </ul>
           </div>
         ) : null}
@@ -287,6 +316,13 @@ export function Sidebar({
             ) : null}
           </span>
           <ChevronRight className="size-4 text-accent/80" aria-hidden />
+        </Link>
+        <Link
+          href="/privacy"
+          onClick={onMobileClose}
+          className="mt-1 block px-1.5 text-[11.5px] text-white/72 hover:text-white hover:underline"
+        >
+          {t("privacy.linkLabel")}
         </Link>
       </div>
     </nav>

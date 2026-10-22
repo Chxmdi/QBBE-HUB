@@ -2,14 +2,18 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/input";
 import {
   changeMemberRole,
+  reissueInvitation,
   revokeInvitation,
   setMemberActive,
 } from "@/features/admin/services/admin.commands";
 import type { OrgRole } from "@/types/entities";
 import { useT } from "@/lib/i18n/client";
+import { InvitationLinkField } from "./invitation-link-field";
 
 export function MemberRoleSelect({
   membershipId,
@@ -132,5 +136,110 @@ export function RevokeInvitationButton({ invitationId }: { invitationId: string 
     >
       {t("admin.members.revoke")}
     </button>
+  );
+}
+
+/**
+ * Replace a pending or expired invitation's link (SEC-001): the old link stops
+ * working, the new one is emailed and shown here once. Invitations made before
+ * links existed get theirs this way.
+ */
+export function NewInvitationLinkButton({
+  invitationId,
+  email,
+}: {
+  invitationId: string;
+  email: string;
+}) {
+  const router = useRouter();
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [created, setCreated] = useState<{
+    link: string;
+    expiresAt: string;
+    timeZone?: string;
+  } | null>(null);
+
+  function openDialog() {
+    setError(null);
+    setNotice(null);
+    setCreated(null);
+    setOpen(true);
+  }
+
+  // Asked first, because the person may be about to use the current link.
+  async function handleNewLink() {
+    setBusy(true);
+    setError(null);
+    const result = await reissueInvitation(invitationId);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error ?? t("admin.workspace.invitations.newLinkFailed"));
+      return;
+    }
+    setNotice(
+      result.emailSent
+        ? t("admin.invite.sent", { email })
+        : t("admin.invite.notSent", { email }),
+    );
+    if (result.inviteLink && result.expiresAt) {
+      setCreated({ link: result.inviteLink, expiresAt: result.expiresAt, timeZone: result.timeZone });
+    }
+    router.refresh();
+  }
+
+  const done = Boolean(notice || created);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={openDialog}
+        aria-label={t("admin.workspace.invitations.newLinkFor", { email })}
+        className="text-[12.5px] font-medium text-brand-fg hover:underline disabled:opacity-60"
+      >
+        {t("admin.workspace.invitations.newLink")}
+      </button>
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title={t("admin.workspace.invitations.newLinkFor", { email })}
+      >
+        <div className="space-y-4">
+          {!done ? (
+            <p className="text-[13.5px]">
+              {t("admin.workspace.invitations.newLinkConfirm", { email })}
+            </p>
+          ) : null}
+          {/* Mounted for the dialog's whole life so the change is announced. */}
+          <p aria-live="polite" className="text-[13px] text-muted">
+            {busy ? t("admin.workspace.invitations.creatingLink") : ""}
+          </p>
+          {error ? <p role="alert" className="text-[13px] text-danger-fg">{error}</p> : null}
+          {notice ? <p role="status" className="text-[13px] text-success-fg">{notice}</p> : null}
+          {created ? (
+            <InvitationLinkField
+              link={created.link}
+              email={email}
+              expiresAt={created.expiresAt}
+              timeZone={created.timeZone}
+            />
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+              {done ? t("admin.invite.close") : t("common.cancel")}
+            </Button>
+            {!done ? (
+              <Button type="button" loading={busy} onClick={handleNewLink}>
+                {t("admin.workspace.invitations.newLinkCreate")}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </Dialog>
+    </>
   );
 }

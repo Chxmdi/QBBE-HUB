@@ -26,7 +26,7 @@ import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import type { AgendaItem, Decision, MeetingAction } from "@/types/entities";
 
 export async function generateMetadata(): Promise<Metadata> {

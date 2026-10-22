@@ -125,6 +125,10 @@ export const payablesEn = {
       "GST and QST you can claim back go to the tax receivable accounts (1200, 1210). If the taxes cannot be claimed, include them in the line amounts instead and leave these at zero.",
     invoiceTaxHint:
       "GST and QST charged go to the tax payable accounts (2200, 2210). Leave them at zero when the item is exempt.",
+    invoiceTaxAuto:
+      "Worked out from the amount before tax at the current rates. Lower them when part of the invoice is exempt or out of scope, and set both to zero when all of it is, such as a grant.",
+    invoiceTaxNotRegistered:
+      "This organization is not registered for GST or QST, so invoices charge no tax. Registration is recorded under Finance, GST and QST.",
     saveDraft: "Save draft",
     saveAndPostBill: "Save and post bill",
     saveAndPostInvoice: "Save and post invoice",
@@ -293,6 +297,8 @@ export const payablesEn = {
     save: "Save threshold",
   },
   aging: {
+    readFailed:
+      "Part of this report could not be read, so the figures below are incomplete. Reload the page; if this keeps happening, tell an administrator.",
     description:
       "What is still owed on each date, by how long past due. Built from the same dates as the ledger entries, so it adds up to the payable and receivable account balances.",
     options: "Aging options",
@@ -332,6 +338,7 @@ export const payablesEn = {
     total: "Total",
     open: "Open",
     exportFailed: "Could not export the aging. Try again.",
+    tooMany: "There are more than {max} open documents on this date, too many for one report.",
   },
   /** The printed invoice, in the customer's language rather than the reader's. */
   invoiceSheet: {
@@ -350,8 +357,18 @@ export const payablesEn = {
     balance: "Balance due",
     draft: "Draft — not issued",
     void: "Void",
+    gstNumber: "GST registration no. {number}",
+    qstNumber: "QST registration no. {number}",
   },
   errors: {
+    invoiceTax: {
+      gstNotRegistered:
+        "This organization is not registered for GST, so an invoice cannot charge it. Remove the GST, or record the registration under Finance, GST and QST.",
+      qstNotRegistered:
+        "This organization is not registered for QST, so an invoice cannot charge it. Remove the QST, or record the registration under Finance, GST and QST.",
+      gstMismatch: "The GST is more than the rate gives. On this amount before tax it is at most {amount}.",
+      qstMismatch: "The QST is more than the rate gives. On this amount before tax it is at most {amount}.",
+    },
     duplicateVendorReference: "A bill with this vendor invoice number is already entered.",
     duplicateReceipt: "This captured bill is already entered as a bill.",
     foreignKey: "An account, fund, program or contact is not in this organization.",
@@ -368,6 +385,7 @@ export const payablesEn = {
     post: "Could not post. Try again.",
     billNotFound: "Bill not found.",
     requestApproval: "Could not send the bill for approval. Try again.",
+    requestNotDrafter: "Only the person who drafted this bill or an administrator can send it for approval.",
     recordPayment: "Could not record the payment. Try again.",
     reversePayment: "Could not reverse the payment. Try again.",
     void: "Could not void it. Try again.",

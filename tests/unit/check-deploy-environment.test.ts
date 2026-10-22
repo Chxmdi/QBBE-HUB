@@ -31,7 +31,8 @@ function run(overrides: Record<string, string>) {
     NODE_ENV: "test",
     PATH: process.env.PATH ?? "",
     RELEASE_ENABLED: "true",
-    SUPABASE_ACCESS_TOKEN: "token",
+    // A placeholder address; nothing connects to it.
+    SUPABASE_DB_URL: `postgresql://user@db.${STAGING_REF}.example.invalid/postgres`,
     SUPABASE_DB_PASSWORD: "password",
     STAGING_SUPABASE_REF: STAGING_REF,
     PRODUCTION_SUPABASE_REF: PRODUCTION_REF,
@@ -51,6 +52,7 @@ function run(overrides: Record<string, string>) {
 const production = {
   TARGET_ENVIRONMENT: "production",
   SUPABASE_PROJECT_REF: PRODUCTION_REF,
+  SUPABASE_DB_URL: `postgresql://user@db.${PRODUCTION_REF}.example.invalid/postgres`,
   SITE_URL: PRODUCTION_SITE,
   APP_ENV: appEnv(PRODUCTION_REF, PRODUCTION_SITE),
 };
@@ -127,10 +129,17 @@ describe("check-deploy-environment.sh", () => {
     expect(run({ RELEASE_ENABLED: "" }).ok).toBe(false);
   });
 
+  it("refuses a database address that is not this environment's project", () => {
+    const other = run({ SUPABASE_DB_URL: `postgresql://user@db.${PRODUCTION_REF}.example.invalid/postgres` });
+    expect(other.ok).toBe(false);
+    expect(other.output).toContain("does not name this environment's project");
+    expect(run({ SUPABASE_DB_URL: "https://example.invalid" }).ok).toBe(false);
+  });
+
   it("refuses when any credential or setting is missing", () => {
     for (const name of [
       "SUPABASE_PROJECT_REF",
-      "SUPABASE_ACCESS_TOKEN",
+      "SUPABASE_DB_URL",
       "SUPABASE_DB_PASSWORD",
       "STAGING_SUPABASE_REF",
       "PRODUCTION_SUPABASE_REF",
@@ -159,5 +168,15 @@ describe("check-deploy-environment.sh", () => {
 
   it("refuses an unknown environment", () => {
     expect(run({ TARGET_ENVIRONMENT: "preview" }).ok).toBe(false);
+  });
+
+  it("refuses a key issued for another Supabase project, and accepts keys that name none", () => {
+    const key = (ref: string) => `e30.${Buffer.from(JSON.stringify({ ref, role: "service_role" })).toString("base64url")}.sig`;
+    const withKey = (value: string) => appEnv(STAGING_REF, STAGING_SITE, `SUPABASE_SERVICE_ROLE_KEY=${value}`);
+    const wrong = run({ APP_ENV: withKey(key(PRODUCTION_REF)) });
+    expect(wrong.ok).toBe(false);
+    expect(wrong.output).toContain("SUPABASE_SERVICE_ROLE_KEY belongs to Supabase project");
+    expect(run({ APP_ENV: withKey(key(STAGING_REF)) }).ok).toBe(true);
+    expect(run({ APP_ENV: withKey("sb_secret_example") }).ok).toBe(true);
   });
 });

@@ -261,7 +261,11 @@ export const ledgerFrCA: typeof ledgerEn = {
       bank_transaction: "opération bancaire",
       gift: "don",
       payroll_run: "traitement de paie",
+      sales_tax_period: "déclaration de TPS/TVQ",
     },
+    undoFromSource: "Annuler à partir de la provenance : {source}",
+    undoFromSourceHint:
+      "Cette écriture provient d’un autre dossier ({source}). Annulez-la ou contrepassez-la à partir de ce dossier, pour que le dossier et le grand livre restent concordants.",
     programProject: "Programme / projet",
     trailHeading: "Historique",
     noTrail: "Aucune étape consignée.",
@@ -386,6 +390,8 @@ export const ledgerFrCA: typeof ledgerEn = {
     deleteDraft: "Impossible de supprimer le brouillon. Réessayez.",
     reversalDate: "Saisissez la date de l’écriture de contrepassation.",
     reverseEntry: "Impossible de contrepasser l’écriture. Réessayez.",
+    reverseFromSource:
+      "Cette écriture provient d’un autre dossier (don, facture, paiement, traitement de paie ou déclaration de TPS/TVQ). Annulez-la ou contrepassez-la à partir de ce dossier, pour que les deux restent concordants.",
     chooseStaff: "Choisissez un membre du personnel.",
     alreadyReader: "Cette personne peut déjà consulter le grand livre.",
     grantAccess: "Impossible d’accorder l’accès. Réessayez.",

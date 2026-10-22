@@ -66,9 +66,27 @@ Add to the release's GitHub issue or the execution journal:
    restore. The bad deploy's **Release** summary names the image it replaced
    (`<environment>-<commit>`); `/opt/qbbe/<environment>/releases.log` on the
    server lists every release.
-3. The workflow puts that image back with the environment's current settings,
-   and confirms `/sign-in` answers and `/api/health/version` reports that
-   commit.
+3. **Restore settings:** leave it unticked to keep the environment's current
+   settings (`APP_ENV`). Tick it when the bad deploy also changed `APP_ENV`:
+   the server keeps the settings that ran with each of the five newest
+   releases (`/opt/qbbe/<environment>/app.env.<environment>-<commit>`), and
+   those come back with the image. Do not tick it if a key or secret has been
+   rotated since that release: the old settings hold the old one. If the
+   server has no settings for that release, the run stops with "no settings
+   kept for" and changes nothing; run it again unticked.
+4. The workflow puts that image back and confirms `/sign-in` answers and
+   `/api/health/version` reports that commit.
+5. Afterwards, make the `APP_ENV` secret in GitHub match what is now live,
+   or the next deploy brings the bad settings back.
+
+A release whose new container never reports healthy is undone by the server
+itself, before any rollback: the previous image and settings are put back
+and the Deploy run fails (`deploy/server/release.sh`, tested in
+`tests/unit/self-hosting.test.ts`).
+
+An older image only works on today's database if the migrations since it
+were additive (see "Database" below). Restoring old settings does not change
+that.
 
 ### Database
 
@@ -78,5 +96,12 @@ Migrations are never reversed automatically.
 - If the old website must run against the new schema, it can only do so when
   the migration was additive. That is why schema changes go
   expand, migrate, contract (`deployment.md`, CICD-002).
+- CI enforces the contract step. A migration that drops a table or column,
+  renames one, or changes a column's type fails `npm test`
+  (`tests/unit/migration-contract.test.ts`, `scripts/ci/migration-contract.mjs`)
+  unless it carries a line `-- contract: safe-after <sha>` naming the
+  already-released commit after which no code reads the old shape. The
+  reviewer confirms that commit is in a release that is live on production
+  before approving. Migrations up to `20261115020000` predate the rule.
 - Destructive recovery (restore from backup) follows `backup-recovery.md`,
   and is rehearsed on staging first.

@@ -117,8 +117,13 @@ export function Menu({
                 type="button"
                 tabIndex={i === activeIndex ? 0 : -1}
                 onClick={() => {
+                  // Give focus back before the action runs. The item is about
+                  // to unmount, and a dialog the action opens records the
+                  // focused element as the place to return to: done the other
+                  // way round, that was <body>, and keyboard users were sent
+                  // to the top of the page.
+                  close();
                   item.onSelect();
-                  close(false);
                 }}
                 className={cn(
                   "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13.5px]",

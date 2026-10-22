@@ -30,7 +30,7 @@ export const ledgerReportsFrCA: typeof ledgerReportsEn = {
     optionsLabel: "Options du grand livre",
     from: "Du",
     to: "Au",
-    truncated: "Affichage des {count} premières lignes. Resserrez les dates ou choisissez un compte.",
+    truncated: "Affichage des {count} premières lignes. Resserrez les dates ou choisissez un compte, ou exportez le CSV pour toutes les lignes.",
     emptyTitle: "Aucune ligne comptabilisée dans cet intervalle",
     emptyDescription: "Essayez un intervalle de dates plus large, un autre compte ou tous les fonds.",
     entry: "Écriture",

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isCalendarDate, optionalDay, requiredText } from "@/lib/schema";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * The risk and issue log.

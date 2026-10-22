@@ -9,7 +9,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { tagsSchemaFor } from "@/features/documents/services/library";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 const linkSchema = (t: TranslateFn) => z.object({
   title: requiredText(t("documents.errors.linkTitle"), 200),

@@ -39,3 +39,12 @@ it("falls back to the request origin when there is no host header", () => {
   });
   expect(requestOrigin(headerless)).toBe("https://hub.qbbe.ca");
 });
+
+it("takes the first value when a chain of proxies sends a list", () => {
+  const request = build("http://10.0.0.7:3000/api/integrations/google/callback", {
+    host: "10.0.0.7:3000",
+    "x-forwarded-host": "hub.qbbe.ca, 10.0.0.2",
+    "x-forwarded-proto": "https, http",
+  });
+  expect(requestOrigin(request)).toBe("https://hub.qbbe.ca");
+});

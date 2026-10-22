@@ -5,7 +5,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { PriorityBadge } from "@/components/shared/status-badges";
 import { useLocale, useT } from "@/lib/i18n/client";
-import { cn, dueLabel } from "@/lib/utils";
+import { cn, dueLabelWith } from "@/lib/utils";
 import type { LensRow, RefValue } from "@/lib/query/run";
 import type { TaskPriority } from "@/types/entities";
 
@@ -40,7 +40,7 @@ export function TaskMeta({ row, timeZone }: { row: LensRow; timeZone: string }) 
   const priority = textOf(row, "priority") as TaskPriority | null;
   const dueAt = textOf(row, "due");
   const assignee = refOf(row, "assignee");
-  const due = dueAt ? dueLabel(dueAt, timeZone, locale) : null;
+  const due = dueAt ? dueLabelWith(t, dueAt, timeZone, locale) : null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {priority ? <PriorityBadge priority={priority} /> : null}

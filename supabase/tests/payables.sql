@@ -306,6 +306,9 @@ begin
   perform tests.clear_auth(); reset role;
 
   perform tests.authenticate(v_admin, 'aal2');
+  -- An invoice charges GST and QST only once the organization is registered
+  -- (migration 20261118110000).
+  perform public.sales_tax_save_settings(v_org, true, null, true, null, 'quarterly', 10000, false);
   v_entry := public.finance_post_invoice(v_invoice);
   perform public.finance_post_invoice(v_invoice2);
   perform tests.ok((select invoice_number from public.finance_invoice where id = v_invoice) = 1

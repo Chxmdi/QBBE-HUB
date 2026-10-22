@@ -3,6 +3,7 @@ import {
   calendarDateInZone,
   DEFAULT_TIME_ZONE,
 } from "@/lib/time";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
 import {
@@ -11,7 +12,8 @@ import {
   markStale,
   portfolioCounts,
   rollupWorkloadByTeam,
-  summarizeWorkload,
+  workloadFromCounts,
+  type WorkloadCountRow,
   type DashboardLens,
   type PortfolioFilters,
   type PortfolioSource,
@@ -55,7 +57,9 @@ export async function getPortfolio(input: {
 }): Promise<PortfolioResult> {
   const now = input.now ?? new Date();
   const lens = dashboardLens(input.role);
-  const supabase = await createSupabaseServerClient();
+  // The page client throws on a failed read, so an outage reaches the error
+  // boundary instead of rendering as "No projects yet".
+  const supabase = await createSupabasePageClient();
   const refreshedAt = now.toISOString();
 
   // No lens short-circuit: row-level security already limits every reader,
@@ -79,13 +83,14 @@ export async function getPortfolio(input: {
 
   const [tasksRes, milestonesRes, issuesRes, updatesRes, grantsRes] =
     await Promise.all([
+      // Counted in the database: a download of every task stopped at 1,000
+      // rows, and past that progress and the blocked task were wrong.
       projectIds.length === 0
         ? Promise.resolve({ data: [] })
-        : supabase
-            .from("task")
-            .select("id, project_id, status, title, assignee_id")
-            .in("project_id", projectIds)
-            .is("archived_at", null),
+        : supabase.rpc("portfolio_project_progress", {
+            p_project_ids: projectIds,
+            p_member: input.filters.member ?? null,
+          }),
       projectIds.length === 0
         ? Promise.resolve({ data: [] })
         : supabase
@@ -115,12 +120,15 @@ export async function getPortfolio(input: {
         : Promise.resolve({ data: [] }),
     ]);
 
-  const tasks = (tasksRes.data ?? []) as {
-    project_id: string;
-    status: string;
-    title: string;
-    assignee_id: string | null;
-  }[];
+  const progress = new Map(
+    ((tasksRes.data ?? []) as {
+      project_id: string;
+      total: number | string;
+      completed: number | string;
+      blocked_task_title: string | null;
+      member_has_task: boolean;
+    }[]).map((row) => [row.project_id, row]),
+  );
   const milestones = (milestonesRes.data ?? []) as {
     project_id: string;
     name: string;
@@ -145,17 +153,15 @@ export async function getPortfolio(input: {
     ),
   );
   if (input.filters.member) {
-    for (const task of tasks) {
-      if (task.assignee_id === input.filters.member)
-        memberIds.add(task.project_id);
+    for (const row of progress.values()) {
+      if (row.member_has_task) memberIds.add(row.project_id);
     }
   }
 
   const sources: PortfolioSource[] = projects.map((project) => {
-    const projectTasks = tasks.filter((task) => task.project_id === project.id);
-    const completed = projectTasks.filter(
-      (task) => task.status === "completed",
-    ).length;
+    const counts = progress.get(project.id);
+    const total = Number(counts?.total ?? 0);
+    const completed = Number(counts?.completed ?? 0);
     const next = milestones.find(
       (milestone) =>
         milestone.project_id === project.id &&
@@ -166,7 +172,7 @@ export async function getPortfolio(input: {
       (update) => update.project_id === project.id && update.blockers,
     );
     const openIssue = issues.find((issue) => issue.project_id === project.id);
-    const blockedTask = projectTasks.find((task) => task.status === "blocked");
+    const blockedTaskTitle = counts?.blocked_task_title ?? null;
     return {
       id: project.id,
       name: project.name,
@@ -178,16 +184,13 @@ export async function getPortfolio(input: {
       stage: project.stage,
       priority: project.priority,
       targetDate: project.target_date,
-      progressPercent:
-        projectTasks.length === 0
-          ? 0
-          : Math.round((completed / projectTasks.length) * 100),
+      progressPercent: total === 0 ? 0 : Math.round((completed / total) * 100),
       nextMilestone: next?.name ?? null,
       nextMilestoneDue: next?.due_date ?? null,
       mainBlocker:
         latestBlocker?.blockers ??
         openIssue?.title ??
-        blockedTask?.title ??
+        blockedTaskTitle ??
         null,
       lastUpdateAt: project.last_status_update_at,
       createdAt: project.created_at,
@@ -228,40 +231,12 @@ export async function getWorkload(
     calendarDateInZone(now, timeZone) ?? now.toISOString().slice(0, 10);
   const weekOut = addCalendarDays(today, 7) ?? today;
   const [{ data }, { data: teams }, { data: members }] = await Promise.all([
-    supabase
-      .from("task")
-      .select(
-        "assignee_id, due_at, estimate_hours, assignee:assignee_id(full_name)",
-      )
-      .in("status", [
-        "not_started",
-        "ready",
-        "in_progress",
-        "waiting",
-        "blocked",
-        "in_review",
-      ])
-      .is("archived_at", null)
-      .limit(1000),
+    // Counted in the database; a download of open tasks stopped at 1,000.
+    supabase.rpc("open_task_workload", { p_today: today, p_week_out: weekOut }),
     supabase.from("team").select("id, name").order("name"),
     supabase.from("team_member").select("team_id, user_id"),
   ]);
-  const tasks = (data ?? []) as unknown as {
-    assignee_id: string | null;
-    due_at: string | null;
-    estimate_hours: number | null;
-    assignee: { full_name: string } | null;
-  }[];
-  const people = summarizeWorkload(
-    tasks.map((task) => ({
-      assigneeId: task.assignee_id,
-      assigneeName: task.assignee?.full_name ?? t("dashboard.unknown"),
-      dueAt: task.due_at,
-      estimateHours: task.estimate_hours,
-    })),
-    today,
-    weekOut,
-  );
+  const people = workloadFromCounts((data ?? []) as WorkloadCountRow[], t("dashboard.unknown"));
   const teamNames = new Map(
     (teams ?? []).map((team) => [team.id as string, team.name as string]),
   );

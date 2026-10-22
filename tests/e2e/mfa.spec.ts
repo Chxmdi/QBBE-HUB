@@ -254,6 +254,7 @@ test.describe.serial("administrator MFA and AAL2 enforcement", () => {
       await codeAwayFromBoundary(page, replacementSecret),
     );
     await page.getByRole("button", { name: "Enable MFA", exact: true }).click();
-    await page.waitForURL((url) => url.pathname === "/", { timeout: 60_000 });
+    // Verification returns to the page that was asked for (FUNC-013).
+    await page.waitForURL((url) => url.pathname === "/settings", { timeout: 60_000 });
   });
 });

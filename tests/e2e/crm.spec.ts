@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, test } from "./fixtures";
 import { signIn, signOut } from "./auth";
+import { sql } from "./db";
 import { clickWhenInteractive } from "./interactive";
 
 /**
@@ -161,4 +162,42 @@ test("a relationship stores a next action, a contact, a link, and a follow-up", 
   ).toBeVisible({
     timeout: 30_000,
   });
+});
+
+/** A contact in the owner's organization, made directly for the two tests below. */
+function seedContact(name: string, email: string): string {
+  return sql(`
+    insert into crm_contact (organization_id, full_name, email, phone, owner_id)
+    select m.organization_id, '${name}', '${email}', '514-555-0101', m.user_id
+    from organization_membership m join user_profile p on p.id = m.user_id
+    where p.email = 'qa-staff@example.com' limit 1
+    returning id;`);
+}
+
+test("staff correct a contact's phone and the correction is kept", async ({ page }) => {
+  const suffix = randomUUID().slice(0, 8);
+  const id = seedContact(`Correctable ${suffix}`, `correct-${suffix}@example.com`);
+  await signIn(page, "staff");
+  await page.goto(`/crm/contacts/${id}`);
+  await page.getByRole("button", { name: "Correct details" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Phone").fill("514-555-0177");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  expect(sql(`select phone || '|' || (details_edited_at is not null) from crm_contact where id = '${id}'`)).toBe("514-555-0177|true");
+});
+
+test("an administrator erases a contact at their request", async ({ page }) => {
+  const suffix = randomUUID().slice(0, 8);
+  const email = `erase-${suffix}@example.com`;
+  const id = seedContact(`Erasable ${suffix}`, email);
+  await signIn(page, "owner");
+  await page.goto(`/crm/contacts/${id}`);
+  await page.getByRole("button", { name: "Erase contact" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Gift amounts stay");
+  await dialog.getByRole("button", { name: "Erase for good" }).click();
+  await expect(dialog).toBeHidden();
+  expect(sql(`select coalesce(email, '') || '|' || full_name from crm_contact where id = '${id}'`)).toBe("|Erased contact");
+  expect(sql(`select count(*) from audit_event where object_id = '${id}' and action = 'crm_contact_erased'`)).toBe("1");
 });

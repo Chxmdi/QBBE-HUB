@@ -13,7 +13,7 @@ import {
   detachTaskLabel,
 } from "@/features/tasks/services/label.commands";
 import { useT } from "@/lib/i18n/client";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 export interface TaskLabel {
   id: string;

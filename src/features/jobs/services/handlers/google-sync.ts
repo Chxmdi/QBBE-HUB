@@ -7,6 +7,8 @@ import { classifyIntegrationFailure } from "@/features/admin/services/integratio
 import { reconcileGoogleDrive } from "@/features/documents/services/google-drive-reconcile";
 import { recordJobRun } from "@/lib/job-observability";
 import type { JobContext, JobResult } from "../runner";
+import { logEvent } from "@/lib/server-log";
+import { withActiveOwners } from "../active-owners";
 
 /**
  * Pulls changes from the connected Google services — Gmail metadata, Calendar
@@ -38,7 +40,7 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
   let synced = 0;
   let failed = 0;
 
-  for (const connection of connections ?? []) {
+  for (const connection of await withActiveOwners(db, connections ?? [])) {
     const startedAt = new Date().toISOString();
     try {
       if (!connection.user_id) throw new Error("Google integration has no connected user.");
@@ -167,7 +169,7 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
       synced += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "sync failed";
-      console.error("Google integration synchronization failed", { connectionId: connection.id, provider: connection.provider, error: message });
+      logEvent("integration.sync_failed", { connectionId: connection.id, provider: connection.provider, error: message }, "error");
       await db
         .from("integration_connection")
         .update({ status: classifyIntegrationFailure(message), last_error: message })

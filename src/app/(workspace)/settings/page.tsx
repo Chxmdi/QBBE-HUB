@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/shared/page-header";
 import { NotificationPreferencesForm } from "@/features/onboarding/components/notification-preferences-form";
@@ -7,6 +8,7 @@ import { verifiedTotpFactors } from "@/features/auth/mfa";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { LanguageSettings } from "@/features/preferences/components/language-switcher";
+import { ProfileForm } from "@/features/people/components/profile-form";
 import { isLocale } from "@/lib/i18n/config";
 import { getT } from "@/lib/i18n/server";
 
@@ -32,7 +34,7 @@ export default async function SettingsPage() {
     session.isAdmin
       ? supabase.auth.mfa.listFactors()
       : Promise.resolve({ data: null, error: null }),
-    supabase.from("user_profile").select("reduce_motion").eq("id", session.userId).maybeSingle(),
+    supabase.from("user_profile").select("full_name, title, email, reduce_motion").eq("id", session.userId).maybeSingle(),
   ]);
 
   type MembershipRow = {
@@ -55,6 +57,13 @@ export default async function SettingsPage() {
         title={t("settings.heading")}
         description={t("settings.description")}
       />
+      <ProfileForm
+        initial={{
+          fullName: profile?.full_name ?? session.profile.full_name,
+          title: profile?.title ?? null,
+          email: profile?.email ?? "",
+        }}
+      />
       <LanguageSettings
         current={isLocale(session.profile.locale) ? session.profile.locale : "auto"}
       />
@@ -71,6 +80,11 @@ export default async function SettingsPage() {
       {session.isAdmin && factorResult.data ? (
         <MfaSettings initialFactors={verifiedTotpFactors(factorResult.data.all, t)} />
       ) : null}
+      <p className="mt-6 text-[13.5px]">
+        <Link href="/privacy" className="font-medium text-brand-fg hover:underline">
+          {t("privacy.linkLabel")}
+        </Link>
+      </p>
     </div>
   );
 }

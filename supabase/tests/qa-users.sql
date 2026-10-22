@@ -43,7 +43,11 @@ begin
     p_email,
     crypt(p_password, gen_salt('bf')),
     now(),
-    '{"provider":"email","providers":["email"]}'::jsonb,
+    -- Provisioned by an operator, not signed up by a person: the marker lets
+    -- an open invitation for this address admit the account without the
+    -- emailed token. Only the service role or database access can set app
+    -- metadata, so a sign-up cannot claim it (see invitation-token.sql).
+    '{"provider":"email","providers":["email"],"provisioned_by_operator":true}'::jsonb,
     jsonb_build_object('full_name', p_full_name),
     now(), now(), '', '', '', ''
   );

@@ -116,8 +116,7 @@ begin
   reset role;
 
   perform tests.clear_auth();
-  select count(*) into n from public.workflow_review;
-  perform tests.ok(n = 0, 'a signed-out visitor reads no reviews');
+  perform tests.ok(tests.permission_denied('select 1 from public.workflow_review'), 'a signed-out visitor is refused reading reviews');
   begin
     perform public.decide_workflow_review(v_other_review, 'approved', null);
     raise exception 'FAIL: a signed-out visitor decided a review';

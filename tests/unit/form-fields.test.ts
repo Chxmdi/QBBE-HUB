@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { createTranslator } from "@/lib/i18n/translate";
+
+const en = createTranslator("en");
 import {
   answerText,
   assignFieldKeys,
@@ -24,7 +27,7 @@ describe("form answers", () => {
     const parsed = parseAnswers(FIELDS, {
       field_1: "  Ana ", field_2: "12", field_3: "1 234,56 $", field_4: "2026-10-01",
       field_5: "M", field_6: "on", field_7: { path: "o/u/r/p.png", name: "p.png" }, extra: "dropped",
-    });
+    }, en);
     expect(parsed).toEqual({
       ok: true,
       answers: {
@@ -35,25 +38,25 @@ describe("form answers", () => {
   });
 
   it("names the field it refuses", () => {
-    expect(parseAnswers(FIELDS, { field_4: "2026-10-01", field_6: true })).toEqual({
+    expect(parseAnswers(FIELDS, { field_4: "2026-10-01", field_6: true }, en)).toEqual({
       ok: false, error: "Answer “Name”.",
     });
-    expect(parseAnswers(FIELDS, { field_1: "A", field_4: "2026-10-01" })).toMatchObject({
+    expect(parseAnswers(FIELDS, { field_1: "A", field_4: "2026-10-01" }, en)).toMatchObject({
       ok: false, error: "Tick “I agree” to continue.",
     });
-    expect(parseAnswers(FIELDS, { field_1: "A", field_4: "2026-02-30", field_6: true })).toMatchObject({
+    expect(parseAnswers(FIELDS, { field_1: "A", field_4: "2026-02-30", field_6: true }, en)).toMatchObject({
       ok: false, error: "Enter a real date for “Day”.",
     });
-    expect(parseAnswers(FIELDS, { field_1: "A", field_4: "2026-10-01", field_6: true, field_3: "4.567" }))
+    expect(parseAnswers(FIELDS, { field_1: "A", field_4: "2026-10-01", field_6: true, field_3: "4.567" }, en))
       .toMatchObject({ ok: false, error: "Enter “Fee” as an amount, like 42.18." });
-    expect(parseAnswers(FIELDS, { field_1: "A", field_4: "2026-10-01", field_6: true, field_5: "XL" }))
+    expect(parseAnswers(FIELDS, { field_1: "A", field_4: "2026-10-01", field_6: true, field_5: "XL" }, en))
       .toMatchObject({ ok: false });
   });
 
   it("stores an unticked optional checkbox as false and skips empty optionals", () => {
     const fields: FormField[] = [{ key: "a", label: "A", type: "checkbox", required: false },
       { key: "b", label: "B", type: "text", required: false }];
-    expect(parseAnswers(fields, {})).toEqual({ ok: true, answers: { a: false } });
+    expect(parseAnswers(fields, {}, en)).toEqual({ ok: true, answers: { a: false } });
   });
 });
 
@@ -71,10 +74,10 @@ describe("builder helpers and export", () => {
     expect(parseOptions("S, M\nM\n  L  ,")).toEqual(["S", "M", "L"]);
   });
   it("renders answers for people and for spreadsheets", () => {
-    expect(answerText(FIELDS[2], 4218)).toBe("$42.18");
-    expect(answerText(FIELDS[2], 4218, true)).toBe("42.18");
-    expect(answerText(FIELDS[5], undefined)).toBe("No");
-    expect(answerText(FIELDS[6], { path: "x", name: "p.png" })).toBe("p.png");
+    expect(answerText(FIELDS[2], 4218, false, en)).toBe("$42.18");
+    expect(answerText(FIELDS[2], 4218, true, en)).toBe("42.18");
+    expect(answerText(FIELDS[5], undefined, false, en)).toBe("No");
+    expect(answerText(FIELDS[6], { path: "x", name: "p.png" }, false, en)).toBe("p.png");
   });
   it("neutralises spreadsheet formulas and quotes separators", () => {
     expect(csvField("=HYPERLINK(1)")).toBe("'=HYPERLINK(1)");

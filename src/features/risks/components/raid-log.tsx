@@ -19,8 +19,8 @@ import type { IssueRow, RaidLog, RiskRow } from "@/features/risks/services/risk.
 import { IssueControls, RiskControls } from "./raid-controls";
 import { cn } from "@/lib/utils";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { Formatters } from "@/lib/i18n/format";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { Formatters } from "@/lib/i18n/format-core";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * The project's risk and issue log on one screen.

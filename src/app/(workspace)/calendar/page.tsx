@@ -1,19 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import {
-  addMonths,
-  addWeeks,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
-  format,
-  isSameDay,
-  isSameMonth,
-  isToday,
-  parse,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { format } from "date-fns";
 import { PageHeader } from "@/components/shared/page-header";
 import {
   AgendaView,
@@ -23,8 +10,16 @@ import {
   type CalendarItem,
 } from "@/features/calendar/components/week-view";
 import { getLocale, getT } from "@/lib/i18n/server";
+import {
+  anchorDay,
+  calendarWindow,
+  dayAsLocalDate,
+  timeOfDayLabel,
+  timedItemDay,
+  windowInstants,
+} from "@/features/calendar/calendar-model";
+import { shiftAnchor } from "@/features/lenses/calendar/model";
 import { cn } from "@/lib/utils";
-import { isCalendarDate } from "@/lib/schema";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 
@@ -49,27 +44,21 @@ export default async function CalendarPage({
   const formats = calendarDateFormats(locale);
   const view = params.view === "month" ? "month" : "week";
 
-  // A date that is not a day (2026-02-30, or any other text) parsed to an
-  // Invalid Date, and the range below then threw: the page showed an error.
-  const anchor = params.date && isCalendarDate(params.date)
-    ? parse(params.date, "yyyy-MM-dd", new Date())
-    : new Date();
+  // Every day here is a YYYY-MM-DD in the workspace's zone. The server runs
+  // in UTC, so date-fns on a Date put evening meetings on the next day and
+  // moved "today" to tomorrow every evening. A date that is not a day
+  // (2026-02-30, or any other text) falls back to today.
+  const tz = session.timeZone;
+  const today = anchorDay(undefined, tz);
+  const anchor = anchorDay(params.date, tz);
 
   // Server-prepared bounded range (CAL-006).
-  const rangeStartDate =
-    view === "week"
-      ? startOfWeek(anchor, { weekStartsOn: 0 })
-      : startOfWeek(startOfMonth(anchor), { weekStartsOn: 0 });
-  const rangeEndDate =
-    view === "week"
-      ? endOfWeek(anchor, { weekStartsOn: 0 })
-      : endOfWeek(endOfMonth(anchor), { weekStartsOn: 0 });
+  const range = calendarWindow(view, anchor);
+  const { startIso: rangeStartIso, endIso: rangeEndIso } = windowInstants(range, tz);
+  const dateStart = range.from;
+  const dateEnd = range.to;
 
   const supabase = await createSupabasePageClient();
-  const rangeStartIso = rangeStartDate.toISOString();
-  const rangeEndIso = rangeEndDate.toISOString();
-  const dateStart = format(rangeStartDate, "yyyy-MM-dd");
-  const dateEnd = format(rangeEndDate, "yyyy-MM-dd");
 
   const [tasksRes, milestonesRes, meetingsRes, eventsRes, followUpsRes, googleRes] =
     await Promise.all([
@@ -94,14 +83,14 @@ export default async function CalendarPage({
         .from("meeting")
         .select("id, title, starts_at")
         .gte("starts_at", rangeStartIso)
-        .lte("starts_at", rangeEndIso)
+        .lt("starts_at", rangeEndIso)
         .neq("status", "cancelled")
         .limit(100),
       supabase
         .from("event")
         .select("id, name, starts_at")
         .gte("starts_at", rangeStartIso)
-        .lte("starts_at", rangeEndIso)
+        .lt("starts_at", rangeEndIso)
         .neq("status", "cancelled")
         .limit(100),
       supabase
@@ -120,7 +109,7 @@ export default async function CalendarPage({
         .is("meeting_id", null)
         .is("event_id", null)
         .gte("starts_at", rangeStartIso)
-        .lte("starts_at", rangeEndIso)
+        .lt("starts_at", rangeEndIso)
         .limit(100),
     ]);
 
@@ -146,10 +135,18 @@ export default async function CalendarPage({
   const canMove = (projectId: string | null) =>
     session.isAdmin || (projectId !== null && manageableProjects.has(projectId));
 
+  // A timed record sits on its workspace day and shows its workspace time.
+  const timed = (startsAt: string) => ({
+    date: new Date(startsAt),
+    day: timedItemDay(startsAt, tz) ?? startsAt.slice(0, 10),
+    timeLabel: timeOfDayLabel(startsAt, tz, locale),
+  });
+
   const items: CalendarItem[] = [
     ...(tasksRes.data ?? []).map((t) => ({
       id: `task-${t.id}`,
-      date: parse(t.due_at as string, "yyyy-MM-dd", new Date()),
+      date: dayAsLocalDate(t.due_at as string),
+      day: t.due_at as string,
       label: t.title as string,
       kind: "task" as const,
       href: `/my-work?task=${t.id}`,
@@ -168,7 +165,8 @@ export default async function CalendarPage({
       owner: { full_name: string } | null;
     }[]).map((m) => ({
       id: `milestone-${m.id}`,
-      date: parse(m.due_date, "yyyy-MM-dd", new Date()),
+      date: dayAsLocalDate(m.due_date),
+      day: m.due_date,
       label: m.name,
       kind: "milestone" as const,
       href: `/projects/${m.project_id}`,
@@ -180,7 +178,7 @@ export default async function CalendarPage({
     })),
     ...(meetingsRes.data ?? []).map((m) => ({
       id: `meeting-${m.id}`,
-      date: new Date(m.starts_at as string),
+      ...timed(m.starts_at as string),
       label: m.title as string,
       kind: "meeting" as const,
       href: `/meetings/${m.id}`,
@@ -188,7 +186,7 @@ export default async function CalendarPage({
     })),
     ...(eventsRes.data ?? []).map((e) => ({
       id: `event-${e.id}`,
-      date: new Date(e.starts_at as string),
+      ...timed(e.starts_at as string),
       label: e.name as string,
       kind: "event" as const,
       href: `/events/${e.id}`,
@@ -196,7 +194,8 @@ export default async function CalendarPage({
     })),
     ...(followUpsRes.data ?? []).map((f) => ({
       id: `follow-${f.id}`,
-      date: parse(f.due_at as string, "yyyy-MM-dd", new Date()),
+      date: dayAsLocalDate(f.due_at as string),
+      day: f.due_at as string,
       label: f.title as string,
       kind: "follow_up" as const,
       href: `/crm/${f.crm_organization_id}`,
@@ -204,7 +203,7 @@ export default async function CalendarPage({
     })),
     ...(googleRes.data ?? []).map((g) => ({
       id: `google-${g.id}`,
-      date: new Date(g.starts_at as string),
+      ...timed(g.starts_at as string),
       label: g.title as string,
       kind: "google" as const,
       href: (g.html_link as string | null) || "/calendar",
@@ -212,24 +211,16 @@ export default async function CalendarPage({
     })),
   ];
 
-  const previous = format(
-    view === "week" ? addWeeks(anchor, -1) : addMonths(anchor, -1),
-    "yyyy-MM-dd",
-  );
-  const next = format(
-    view === "week" ? addWeeks(anchor, 1) : addMonths(anchor, 1),
-    "yyyy-MM-dd",
-  );
+  const previous = shiftAnchor(view, anchor, -1);
+  const next = shiftAnchor(view, anchor, 1);
 
   const title =
     view === "week"
-      ? `${format(rangeStartDate, formats.rangeStart, formats.options)} – ${format(rangeEndDate, formats.rangeEnd, formats.options)}`
-      : format(anchor, formats.monthYear, formats.options);
+      ? `${format(dayAsLocalDate(range.from), formats.rangeStart, formats.options)} – ${format(dayAsLocalDate(range.to), formats.rangeEnd, formats.options)}`
+      : format(dayAsLocalDate(anchor), formats.monthYear, formats.options);
 
-  const monthDays =
-    view === "month"
-      ? eachDayOfInterval({ start: rangeStartDate, end: rangeEndDate })
-      : [];
+  const monthDays = view === "month" ? range.days : [];
+  const inMonth = (day: string) => day.slice(0, 7) === anchor.slice(0, 7);
 
   return (
     <div>
@@ -247,7 +238,7 @@ export default async function CalendarPage({
               {(["week", "month"] as const).map((option) => (
                 <Link
                   key={option}
-                  href={`/calendar?view=${option}&date=${format(anchor, "yyyy-MM-dd")}`}
+                  href={`/calendar?view=${option}&date=${anchor}`}
                   aria-current={view === option ? "page" : undefined}
                   className={cn(
                     "px-3 py-1.5 text-[13px] font-medium capitalize first:rounded-l-[7px] last:rounded-r-[7px]",
@@ -303,17 +294,17 @@ export default async function CalendarPage({
 
       {/* Mobile: agenda. Desktop: week grid or month grid. */}
       <div className="md:hidden">
-        <AgendaView items={items} locale={locale} />
+        <AgendaView items={items} today={today} locale={locale} />
       </div>
       <div className="hidden md:block">
         {view === "week" ? (
-          <WeekView anchor={anchor} items={items} locale={locale} />
+          <WeekView days={range.days} today={today} items={items} locale={locale} />
         ) : (
           <div className="card relative overflow-x-auto">
             <table className="w-full min-w-[720px] table-fixed border-collapse">
               <thead>
                 <tr>
-                  {monthDays.slice(0, 7).map((date) => format(date, "EEE", formats.options)).map((day) => (
+                  {monthDays.slice(0, 7).map((day) => format(dayAsLocalDate(day), "EEE", formats.options)).map((day) => (
                     <th
                       key={day}
                       scope="col"
@@ -328,28 +319,26 @@ export default async function CalendarPage({
                 {Array.from({ length: monthDays.length / 7 }).map((_, week) => (
                   <tr key={week}>
                     {monthDays.slice(week * 7, week * 7 + 7).map((day) => {
-                      const dayItems = items.filter((item) =>
-                        isSameDay(item.date, day),
-                      );
+                      const dayItems = items.filter((item) => item.day === day);
                       return (
                         <td
-                          key={day.toISOString()}
+                          key={day}
                           className={cn(
                             "h-28 border-b border-l border-line p-1.5 align-top first:border-l-0",
-                            !isSameMonth(day, anchor) && "bg-surface-soft/40",
+                            !inMonth(day) && "bg-surface-soft/40",
                           )}
                         >
                           <p
                             className={cn(
                               "mb-1 text-[12px]",
-                              isToday(day)
+                              day === today
                                 ? "inline-flex size-5.5 items-center justify-center rounded-full bg-brand font-semibold text-white"
-                                : isSameMonth(day, anchor)
+                                : inMonth(day)
                                   ? "font-medium"
                                   : "text-muted/60",
                             )}
                           >
-                            {format(day, "d")}
+                            {Number(day.slice(8))}
                           </p>
                           <ul className="space-y-1">
                             {dayItems.slice(0, 3).map((item) => (

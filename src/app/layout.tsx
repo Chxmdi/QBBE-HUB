@@ -65,6 +65,7 @@ export default async function RootLayout({
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
+        {/* Loads only this language's catalogue in the browser. */}
         <I18nProvider locale={locale}>{children}</I18nProvider>
       </body>
     </html>

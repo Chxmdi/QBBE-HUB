@@ -27,7 +27,7 @@ import {
 } from "@/features/documents/services/library";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useFormatters, useT } from "@/lib/i18n/client";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 

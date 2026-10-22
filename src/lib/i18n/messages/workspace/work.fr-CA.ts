@@ -270,6 +270,7 @@ export const workFrCA: typeof workEn = {
     },
     statusSelect: {
       label: "Statut de la tâche",
+      labelFor: "Statut de la tâche : {title}",
       updateFailed: "La mise à jour a échoué.",
     },
     blockedDialog: {

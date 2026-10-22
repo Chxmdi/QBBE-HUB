@@ -7,11 +7,18 @@ export async function proxy(request: NextRequest) {
   // from the request to put the nonce on its own scripts; the root layout
   // reads `x-nonce` for the theme script. The browser gets the same policy.
   const nonce = createNonce();
+  // One id per request, in every server log line and on the response, so a
+  // report ("reference ...") can be matched to the server's record. A
+  // well-formed incoming id (Caddy sets one) is kept; anything else is replaced.
+  const incoming = request.headers.get("x-request-id");
+  const requestId = incoming && /^[\w-]{8,64}$/.test(incoming) ? incoming : crypto.randomUUID();
+  request.headers.set("x-request-id", requestId);
   const policy = contentSecurityPolicy({ nonce });
   request.headers.set("x-nonce", nonce);
   request.headers.set("content-security-policy", policy);
   const response = await updateSession(request);
   response.headers.set("Content-Security-Policy", policy);
+  response.headers.set("x-request-id", requestId);
   return response;
 }
 

@@ -108,9 +108,11 @@ docs/runbooks/        deployment, integrations, backup, privacy, launch-gate
   non-leavable membership at the database layer.
 - Audit events record access changes, channel and announcement actions,
   report generation/approval/export, and destructive actions.
-- The browser only ever holds the publishable/anon key. Server-only
-  integration workers use the service role for narrowly scoped token and sync
-  operations; it is never exposed to a client.
+- The browser only ever holds the publishable/anon key. The service role key,
+  which bypasses row-level security, is used only by the server files listed in
+  [ADR-004](docs/adr/ADR-004-service-role-uses.md), each with the check that
+  stands in for RLS; a test fails when a new use appears. It is never exposed
+  to a client.
 
 ## Feature status vs. the master specification
 

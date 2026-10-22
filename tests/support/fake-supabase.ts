@@ -268,6 +268,36 @@ export class FakeSupabase {
         return { data: orphans, error: null };
       }
 
+      // create_notifications: insert, or re-open the person's notification for
+      // the same event (unread, reasons merged), as the database does.
+      case "create_notifications": {
+        const store = this.rows("notification");
+        let created = 0;
+        for (const candidate of (args.p_rows as Row[]) ?? []) {
+          if (candidate.dedupe_key == null) {
+            return { data: null, error: { code: "22023", message: "A notification needs a dedupe key" } };
+          }
+          const existing = store.find(
+            (row) => row.user_id === candidate.user_id && row.dedupe_key === candidate.dedupe_key,
+          );
+          if (!existing) {
+            store.push({ id: nextId("notification"), created_at: this.now().toISOString(), read_at: null, ...candidate });
+            created += 1;
+            continue;
+          }
+          const reasons = [existing.reason, candidate.reason]
+            .flatMap((value) => (typeof value === "string" ? value.split(",") : []))
+            .map((part) => part.trim())
+            .filter((part, i, all) => part && all.indexOf(part) === i);
+          Object.assign(existing, candidate, {
+            reason: reasons.length ? reasons.join(", ") : null,
+            read_at: null,
+            created_at: this.now().toISOString(),
+          });
+        }
+        return { data: created, error: null };
+      }
+
       default: {
         const answer = this.rpcAnswers.get(name);
         if (answer) return { data: answer(args), error: null };
@@ -339,8 +369,9 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
     return this;
   }
 
-  delete() {
+  delete(options?: { count?: "exact" | "planned" | "estimated" }) {
     this.mode = "delete";
+    this.wantCount = Boolean(options?.count);
     return this;
   }
 
@@ -546,7 +577,9 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
           updated_at: this.db.now().toISOString(),
         });
       }
-      if (!this.returning) return { data: null, error: null };
+      if (!this.returning) {
+        return { data: null, error: null, ...(this.wantCount ? { count: targets.length } : {}) };
+      }
       return this.shape(targets);
     }
 
@@ -557,7 +590,9 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
         this.table,
         store.filter((row) => !removed.has(row)),
       );
-      if (!this.returning) return { data: null, error: null };
+      if (!this.returning) {
+        return { data: null, error: null, ...(this.wantCount ? { count: targets.length } : {}) };
+      }
       return this.shape(targets);
     }
 

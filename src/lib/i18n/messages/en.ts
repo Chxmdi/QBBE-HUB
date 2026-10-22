@@ -176,6 +176,8 @@ export const en = {
     managePrograms: "Add or manage programs",
     viewAllPrograms: "View all programs",
     unreadMessages: "Unread messages",
+    unreadConversations: " unread conversations",
+    allChannels: "All channels",
     classicLabel: "{label} (classic)",
   },
   topbar: {

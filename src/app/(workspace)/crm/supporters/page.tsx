@@ -132,64 +132,62 @@ export default async function SupportersPage({
             {t("crm.supporters.title")}
           </h2>
           <DataTable minWidth={totals ? "820px" : "640px"}>
-            <table className="w-full text-[13.5px]">
-              <thead>
-                <tr className="border-b border-line text-left text-[12px] text-muted">
-                  <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporters.name")}</th>
-                  <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporters.kind")}</th>
-                  <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporters.organization")}</th>
-                  <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporters.lastActivity")}</th>
-                  {totals ? (
-                    <th scope="col" className="px-3 py-2 text-right font-medium">{t("crm.supporters.given")}</th>
-                  ) : null}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {list.rows.map((row) => {
-                  const giving = totals?.get(row.id);
-                  return (
-                    <tr key={row.id} className="interactive-row">
-                      <td className="px-3 py-2.5">
-                        <Link href={`/crm/contacts/${row.id}`} className="font-medium hover:text-brand-fg">
-                          {row.full_name}
-                        </Link>
-                        {row.email ? <p className="meta truncate">{row.email}</p> : null}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex flex-wrap gap-1">
-                          {row.zeffy_kinds.length ? (
-                            row.zeffy_kinds.map((code) => (
-                              <Badge key={code} tone={code === "donor" || code === "recurring" ? "brand" : "neutral"}>
-                                {zeffyKindLabel(code, t)}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-muted">{t("crm.supporters.none")}</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        {row.crm_organization ? (
-                          <Link href={`/crm/${row.crm_organization.id}`} className="hover:text-brand-fg">
-                            {row.crm_organization.name}
-                          </Link>
+            <thead>
+              <tr className="border-b border-line text-left text-[12px] text-muted">
+                <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporters.name")}</th>
+                <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporters.kind")}</th>
+                <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporters.organization")}</th>
+                <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporters.lastActivity")}</th>
+                {totals ? (
+                  <th scope="col" className="px-3 py-2 text-right font-medium">{t("crm.supporters.given")}</th>
+                ) : null}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {list.rows.map((row) => {
+                const giving = totals?.get(row.id);
+                return (
+                  <tr key={row.id} className="interactive-row">
+                    <td className="px-3 py-2.5">
+                      <Link href={`/crm/contacts/${row.id}`} className="font-medium hover:text-brand-fg">
+                        {row.full_name}
+                      </Link>
+                      {row.email ? <p className="meta truncate">{row.email}</p> : null}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex flex-wrap gap-1">
+                        {row.zeffy_kinds.length ? (
+                          row.zeffy_kinds.map((code) => (
+                            <Badge key={code} tone={code === "donor" || code === "recurring" ? "brand" : "neutral"}>
+                              {zeffyKindLabel(code, t)}
+                            </Badge>
+                          ))
                         ) : (
                           <span className="text-muted">{t("crm.supporters.none")}</span>
                         )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {row.crm_organization ? (
+                        <Link href={`/crm/${row.crm_organization.id}`} className="hover:text-brand-fg">
+                          {row.crm_organization.name}
+                        </Link>
+                      ) : (
+                        <span className="text-muted">{t("crm.supporters.none")}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {row.zeffy_last_activity_at ? format.date(row.zeffy_last_activity_at, session.timeZone) : t("crm.supporters.none")}
+                    </td>
+                    {totals ? (
+                      <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
+                        {giving ? money(giving.net_cents, giving.currency) : t("crm.supporters.none")}
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        {row.zeffy_last_activity_at ? format.date(row.zeffy_last_activity_at, session.timeZone) : t("crm.supporters.none")}
-                      </td>
-                      {totals ? (
-                        <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
-                          {giving ? money(giving.net_cents, giving.currency) : t("crm.supporters.none")}
-                        </td>
-                      ) : null}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
           </DataTable>
           <nav aria-label={t("crm.supporters.title")} className="mt-3 flex flex-wrap items-center gap-3 text-[13px]">
             <span className="text-muted">

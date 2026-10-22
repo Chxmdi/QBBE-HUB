@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { requireStaff } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getFormatters, getLocale } from "@/lib/i18n/server";
-import { interpolate } from "@/lib/i18n/translate";
+import { interpolate } from "@/lib/i18n/translator";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { CreateTokenForm, RevokeButton } from "@/features/api-tokens/components/token-controls";
 import { apiTokenMessages, type ApiTokensMessages } from "@/features/api-tokens/i18n";

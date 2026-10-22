@@ -14,7 +14,7 @@ import {
 import { requireAdminAal2 } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { labelOr } from "@/features/admin/labels";
 
 /**

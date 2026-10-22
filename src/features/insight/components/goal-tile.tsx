@@ -1,5 +1,5 @@
 import { CheckCircle2, CircleAlert, CircleDashed, TrendingUp } from "lucide-react";
-import type { Formatters } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
 import type { InsightT } from "../i18n/translate";
 import type { GoalStatus, GoalTrajectory } from "../operations/operations";
 

@@ -5,6 +5,16 @@
  */
 export const peopleEn = {
   people: {
+    rectify: {
+      button: "Correct name or title",
+      title: "Correct {name}’s profile",
+      explanation: "Use this when a member asks for their name or title to be corrected.",
+      audited: "The change is recorded in the audit trail, with the previous values.",
+      save: "Save correction",
+      cancel: "Cancel",
+      failed: "Could not correct the profile.",
+      otherOrganization: "This person also belongs to an organization you do not administer, so only an administrator of every organization they belong to can correct their profile.",
+    },
     title: "People",
     eyebrow: "Directory",
     description: "Internal users, roles, and current workload context.",
@@ -192,6 +202,28 @@ export const peopleEn = {
     },
   },
   crm: {
+    contactDialog: {
+      edit: "Correct details",
+      title: "Correct contact details",
+      name: "Name",
+      roleTitle: "Role or title",
+      email: "Email",
+      phone: "Phone",
+      save: "Save",
+      cancel: "Cancel",
+      saved: "Contact details saved.",
+    },
+    erase: {
+      button: "Erase contact",
+      title: "Erase {name}?",
+      explanation:
+        "Use this when the person asks to be erased. Their name, email, phone and notes, their sensitive note and the text of interactions with them are removed for good, and Zeffy will not import them again.",
+      kept: "Gift amounts stay, without their identity, for the tax-record period. Tax receipts already issued are kept as issued. Copies of the name in the activity history, notifications and sent emails are removed by their own clean-up, not here.",
+      confirm: "Erase for good",
+      cancel: "Cancel",
+      done: "Contact erased.",
+      failed: "Could not erase the contact.",
+    },
     tabs: {
       organizations: "Organizations",
       supporters: "Supporters",

@@ -270,6 +270,7 @@ export const workEn = {
     },
     statusSelect: {
       label: "Task status",
+      labelFor: "Task status: {title}",
       updateFailed: "Update failed.",
     },
     blockedDialog: {

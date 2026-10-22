@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./fixtures";
-import { signIn, signOut } from "./auth";
+import { currentTotp, recalledTotp, signIn, signOut } from "./auth";
 import { sql } from "./db";
 
 /**
@@ -8,19 +8,28 @@ import { sql } from "./db";
  * invitation that admits nobody, recovery through a real email, and a
  * deactivation that removes access without erasing who did what.
  *
+ * Invitations are claimed with the secret link they are sent with (SEC-001):
+ * the admin dialog shows that link once, and these tests open it the way the
+ * invitee would. Knowing the address alone gets nobody in.
+ *
  * Recovery goes through the local mail catcher rather than a stub. A recovery
  * path that is never sent, delivered and opened is a form, not a recovery path.
  */
 
 const MAILPIT = "http://127.0.0.1:54324";
-const PASSWORD = "QaTest!2026";
+// New accounts made here must meet the password rule (12 characters, mixed
+// case and a digit); the QA fixture users' password predates it.
+const PASSWORD = "QaTest!2026new";
+// The QA fixture users' own password, which every other spec signs in with.
+const FIXTURE_PASSWORD = "QaTest!2026";
 
 /** A fresh address per run, so a rerun is not answered by the previous run's invitation. */
 function uniqueEmail(prefix: string) {
   return `${prefix}-${Date.now()}@example.com`;
 }
 
-async function inviteFromAdmin(page: Page, email: string, role: string) {
+/** Invites `email` from Admin and returns the one-time link the dialog shows. */
+async function inviteFromAdmin(page: Page, email: string, role: string): Promise<string> {
   await page.goto("/admin");
   await page.getByRole("button", { name: "Invite user", exact: true }).click();
   const dialog = page.getByRole("dialog");
@@ -29,7 +38,10 @@ async function inviteFromAdmin(page: Page, email: string, role: string) {
   await dialog.getByLabel("Role", { exact: true }).selectOption({ label: role });
   await dialog.getByRole("button", { name: "Create invitation", exact: true }).click();
   await expect(dialog.getByRole("status")).toContainText(/Invit/i, { timeout: 15_000 });
+  const link = await dialog.getByLabel("Invitation link", { exact: true }).inputValue();
+  expect(link).toMatch(/\/sign-up\?invite=[A-Za-z0-9_-]{43}$/);
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  return link;
 }
 
 function invitationRow(page: Page, email: string) {
@@ -46,10 +58,11 @@ function memberRow(page: Page, email: string) {
     .filter({ hasText: email });
 }
 
-async function signUp(page: Page, name: string, email: string) {
-  await page.goto("/sign-up");
+/** Opens the invitation link; the address is the invited one and cannot be changed. */
+async function signUp(page: Page, name: string, email: string, link: string) {
+  await page.goto(new URL(link).pathname + new URL(link).search);
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
   await page.getByLabel("Full name", { exact: true }).fill(name);
-  await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Create account", exact: true }).click();
 }
@@ -73,8 +86,8 @@ async function completeOnboarding(page: Page) {
   });
 }
 
-async function joinAsNewPerson(page: Page, name: string, email: string) {
-  await signUp(page, name, email);
+async function joinAsNewPerson(page: Page, name: string, email: string, link: string) {
+  await signUp(page, name, email, link);
   await page.waitForURL((url) => url.pathname === "/", { timeout: 60_000 });
   await completeOnboarding(page);
 }
@@ -119,12 +132,17 @@ test.describe("identity lifecycle", () => {
   test("an invitation admits the person and the role it names", async ({ page }) => {
     const email = uniqueEmail("qa-invited");
     await signIn(page, "owner");
-    await inviteFromAdmin(page, email, "Volunteer");
+    const link = await inviteFromAdmin(page, email, "Volunteer");
     await expect(invitationRow(page, email)).toContainText("pending");
 
     await signOut(page);
+    // Knowing the address is not enough: without the link there is no form.
+    await page.goto("/sign-up");
+    await expect(page.getByText("Sign-up is by invitation", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create account", exact: true })).toHaveCount(0);
+
     // Reaching the workspace is the proof the invitation was honoured.
-    await joinAsNewPerson(page, "Invited Volunteer", email);
+    await joinAsNewPerson(page, "Invited Volunteer", email, link);
 
     await signOut(page);
     await signIn(page, "owner");
@@ -139,31 +157,78 @@ test.describe("identity lifecycle", () => {
   test("a revoked invitation admits nobody", async ({ page }) => {
     const email = uniqueEmail("qa-revoked");
     await signIn(page, "owner");
-    await inviteFromAdmin(page, email, "Staff");
+    const link = await inviteFromAdmin(page, email, "Staff");
     await invitationRow(page, email)
       .getByRole("button", { name: "Revoke", exact: true })
       .click();
     await expect(invitationRow(page, email)).toContainText("revoked", { timeout: 15_000 });
 
     await signOut(page);
-    await signUp(page, "Revoked Person", email);
-    // Scoped to the form's own alert: Next keeps a permanently empty
-    // role="alert" route announcer on the page, so an unscoped match is
-    // ambiguous rather than wrong.
+    // The link of a revoked invitation opens no form at all.
+    await page.goto(new URL(link).pathname + new URL(link).search);
     await expect(
-      page.getByRole("alert").filter({ hasText: "invite-only" }),
+      page.getByText("This invitation link can't be used", { exact: true }),
     ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Create account", exact: true })).toHaveCount(0);
     // Still outside: the refusal has to be the end of it, not a notice on the way in.
     await expect(page).toHaveURL(/\/sign-up/);
+  });
+
+  test("New link replaces the invitation's link: the old one stops working, the new one admits", async ({ page }) => {
+    const email = uniqueEmail("qa-relinked");
+    await signIn(page, "owner");
+    const oldLink = await inviteFromAdmin(page, email, "Volunteer");
+
+    // Asked first, because the person may be about to use the current link.
+    await invitationRow(page, email)
+      .getByRole("button", { name: `New invitation link for ${email}`, exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("will stop working");
+    await dialog.getByRole("button", { name: "Create new link", exact: true }).click();
+    await expect(dialog.getByRole("status")).toContainText(/Invit/i, { timeout: 15_000 });
+    const newLink = await dialog.getByLabel("Invitation link", { exact: true }).inputValue();
+    expect(newLink).toMatch(/\/sign-up\?invite=[A-Za-z0-9_-]{43}$/);
+    expect(newLink).not.toBe(oldLink);
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+
+    await signOut(page);
+    await page.goto(new URL(oldLink).pathname + new URL(oldLink).search);
+    await expect(
+      page.getByText("This invitation link can't be used", { exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
+
+    await joinAsNewPerson(page, "Relinked Volunteer", email, newLink);
+  });
+
+  test("a link revoked while its form is open is refused when the form is sent", async ({ page }) => {
+    const email = uniqueEmail("qa-revoked-midway");
+    await signIn(page, "owner");
+    const link = await inviteFromAdmin(page, email, "Staff");
+    await signOut(page);
+
+    await page.goto(new URL(link).pathname + new URL(link).search);
+    await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
+    // Revoked by an administrator elsewhere after the page was opened.
+    sql(`update invitation set revoked_at = now() where lower(email) = '${email}' and revoked_at is null;`);
+
+    await page.getByLabel("Full name", { exact: true }).fill("Too Late");
+    await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+    await page.getByRole("button", { name: "Create account", exact: true }).click();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "This invitation link can't be used any more." }),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(page).toHaveURL(/\/sign-up/);
+    expect(sql(`select count(*) from auth.users where email = '${email}';`)).toBe("0");
   });
 
   test("recovery sends a real email that sets a real password", async ({ page }) => {
     const email = uniqueEmail("qa-recovers");
     const newPassword = "RecoveredPass!2026";
     await signIn(page, "owner");
-    await inviteFromAdmin(page, email, "Staff");
+    const inviteLink = await inviteFromAdmin(page, email, "Staff");
     await signOut(page);
-    await joinAsNewPerson(page, "Recovering Person", email);
+    await joinAsNewPerson(page, "Recovering Person", email, inviteLink);
     await signOut(page);
 
     await page.goto("/forgot-password");
@@ -192,6 +257,59 @@ test.describe("identity lifecycle", () => {
     await page.waitForURL((url) => url.pathname === "/", { timeout: 60_000 });
   });
 
+  test("a link opened while signed out keeps its target through sign-in", async ({ page }) => {
+    await page.context().clearCookies();
+    await page.goto("/my-work?task=abc");
+    await expect(page).toHaveURL(/\/sign-in\?next=%2Fmy-work%3Ftask%3Dabc$/);
+  });
+
+  test("an administrator with an authenticator resets a forgotten password", async ({ page }) => {
+    const email = "qa-admin@example.com";
+    const newPassword = "RecoveredAdmin!2026";
+    // Signing in once makes sure the admin's authenticator is set up and its
+    // test secret is known.
+    await signIn(page, "admin");
+    await signOut(page);
+    try {
+      await page.goto("/forgot-password");
+      await page.getByLabel("Email", { exact: true }).fill(email);
+      await page.getByRole("button", { name: "Send recovery link", exact: true }).click();
+      await expect(page.getByRole("status")).toContainText("recovery link", { timeout: 20_000 });
+      const message = await latestMessageTo(page, email);
+      const link = (message.Text ?? message.HTML ?? "")
+        .match(/https?:\/\/\S*?(?=["'\s<]|$)/g)
+        ?.find((candidate) => candidate.includes("token"));
+      expect(link, "the recovery email must carry a link").toBeTruthy();
+
+      // The recovery session is unverified, so the page asks for the code first.
+      await page.goto(link!.replace(/&amp;/g, "&"));
+      await page.waitForURL(/\/mfa\?next=%2Freset-password/, { timeout: 30_000 });
+      const secret = await recalledTotp("admin");
+      expect(secret, "the admin's test authenticator secret").toBeTruthy();
+      const secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
+      if (secondsRemaining <= 2) await page.waitForTimeout((secondsRemaining + 1) * 1000);
+      await page.getByLabel("Six-digit code", { exact: true }).fill(currentTotp(secret!));
+      await page.getByRole("button", { name: "Verify and continue" }).click();
+
+      await page.waitForURL(/\/reset-password$/, { timeout: 30_000 });
+      await page.getByLabel("New password", { exact: true }).fill(newPassword);
+      await page.getByLabel("Confirm password", { exact: true }).fill(newPassword);
+      await page.getByRole("button", { name: "Save password", exact: true }).click();
+      await expect(page.getByRole("status")).toContainText("password has been changed", { timeout: 20_000 });
+
+      // The new password is the one that works now (the code step follows).
+      await page.goto("/sign-in");
+      await page.getByLabel("Email", { exact: true }).fill(email);
+      await page.getByLabel("Password", { exact: true }).fill(newPassword);
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+      await expect(page.getByLabel("Six-digit code", { exact: true })).toBeVisible({ timeout: 30_000 });
+    } finally {
+      // Every other spec signs the admin in with the shared test password.
+      sql(`update auth.users set encrypted_password = extensions.crypt('${FIXTURE_PASSWORD}', extensions.gen_salt('bf'))
+           where email = '${email}'`);
+    }
+  });
+
   test("deactivation removes access and keeps the record of what they did", async ({ page }) => {
     const stamp = Date.now();
     const email = `qa-leaver-${stamp}@example.com`;
@@ -203,9 +321,9 @@ test.describe("identity lifecycle", () => {
     const name = `Departing Staffer ${stamp}`;
 
     await signIn(page, "owner");
-    await inviteFromAdmin(page, email, "Staff");
+    const link = await inviteFromAdmin(page, email, "Staff");
     await signOut(page);
-    await joinAsNewPerson(page, name, email);
+    await joinAsNewPerson(page, name, email, link);
     await signOut(page);
 
     // A task assigned to them, created by the owner. A task belonging to no
@@ -266,5 +384,10 @@ test.describe("identity lifecycle", () => {
     await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page.getByRole("link", { name: "My Work", exact: true })).toHaveCount(0);
+    // Not only the screens: the login is banned and holds no live session.
+    expect(
+      sql(`select (u.banned_until > now())::text || '|' || (select count(*) from auth.sessions s where s.user_id = u.id)
+           from auth.users u where u.email = '${email}'`),
+    ).toBe("true|0");
   });
 });

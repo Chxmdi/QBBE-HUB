@@ -14,7 +14,7 @@ import { NotAReceiptNotice } from "@/features/gifts/components/not-a-receipt-not
 import { GIFT_TYPE_KEY, donorKey, donorName, loadGift } from "@/features/gifts/services/gift.data";
 import { intlLocale } from "@/lib/i18n/config";
 import { getFormatters, getLocale, getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("finance.gifts.detail.metaTitle") };

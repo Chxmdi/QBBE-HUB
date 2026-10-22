@@ -8,7 +8,7 @@ import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 /** Schema messages below are catalogue keys; Zod's own wording passes through. */
 async function issueText(message: string | undefined, fallback: MessageKey): Promise<string> {

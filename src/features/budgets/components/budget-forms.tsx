@@ -9,7 +9,7 @@ import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input
 import { useToast } from "@/components/ui/toast";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { centsToDecimal } from "@/features/ledger/money";
-import { evenSplit, fiscalMonths, monthLabel } from "@/features/budgets/budget";
+import { evenSplit, fiscalMonths, monthLabel } from "@/features/budgets/budget-months";
 import {
   approveBudget,
   createBudget,

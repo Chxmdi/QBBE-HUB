@@ -107,7 +107,15 @@ begin
   perform tests.authenticate(v_staff, 'aal1');
   d_loose := tests.editor_file_insert(v_org, null, v_staff, v_path);
   reset role;
-  perform tests.ok(d_loose is null, 'editor files: a staff-only file on no page is still refused to staff');
+  -- A staff-only file on no page is a staff-only library document, which
+  -- staff may file (and only staff may read).
+  perform tests.ok(d_loose is not null, 'editor files: a staff-only file on no page is filed as a staff-only library document');
+
+  v_path := tests.editor_file_upload(v_volunteer);
+  perform tests.authenticate(v_volunteer, 'aal1');
+  v_ok := tests.editor_file_insert(v_org, null, v_volunteer, v_path) is null;
+  reset role;
+  perform tests.ok(v_ok, 'editor files: a volunteer cannot file a staff-only file on no page');
 
   -- Reading a file ------------------------------------------------------------
   -- Storage serves only scanned-clean files; mark both as the scanner would,

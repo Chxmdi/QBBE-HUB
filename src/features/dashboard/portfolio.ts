@@ -178,6 +178,48 @@ export function isOverloaded(person: {
   return person.nearTermHours !== null && person.nearTermHours > OVERLOAD_HOURS;
 }
 
+/** One assignee's open work as the database counts it (open_task_workload). */
+export interface WorkloadCountRow {
+  assignee_id: string;
+  assignee_name: string | null;
+  active: number | string;
+  overdue: number | string;
+  due_soon: number | string;
+  estimated_hours: number | string | null;
+  unknown_estimates: number | string;
+  near_term_hours: number | string | null;
+  near_term_known: number | string;
+  near_term_unknown: number | string;
+}
+
+/**
+ * The workload chart's figures from per-person counts, with the same rules
+ * as summarizeWorkload: hours are unknown when no task has an estimate, and
+ * the near-term hours when no near-term task does. Counting in the database
+ * replaced a download of open tasks that stopped at 1,000 rows.
+ */
+export function workloadFromCounts(rows: WorkloadCountRow[], unknownName: string): WorkloadPerson[] {
+  return rows
+    .map((row) => {
+      const active = Number(row.active);
+      const overdue = Number(row.overdue);
+      const unknownEstimates = Number(row.unknown_estimates);
+      const nearTermHours = Number(row.near_term_known) === 0 ? null : Number(row.near_term_hours ?? 0);
+      return {
+        userId: row.assignee_id,
+        name: row.assignee_name ?? unknownName,
+        active,
+        dueSoon: Number(row.due_soon),
+        overdue,
+        estimatedHours: unknownEstimates === active ? null : Number(row.estimated_hours ?? 0),
+        unknownEstimates,
+        nearTermHours,
+        overloaded: isOverloaded({ overdue, nearTermHours }),
+      };
+    })
+    .sort((a, b) => b.active - a.active || a.name.localeCompare(b.name));
+}
+
 export function summarizeWorkload(
   tasks: {
     assigneeId: string | null;

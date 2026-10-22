@@ -1,4 +1,4 @@
-import type { Formatters } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
 import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
 
 export interface SnapshotRow {

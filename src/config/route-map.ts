@@ -62,6 +62,7 @@ export const ROUTE_MAP: ReadonlyArray<RouteMapEntry> = [
   // --- Sign-in and account (auth group, public) ---------------------------
   { pattern: "/sign-in", status: "production", task: "Sign in" },
   { pattern: "/sign-up", status: "production", task: "Sign up (invite-only after the first organization)" },
+  { pattern: "/privacy", status: "production", task: "Privacy notice (Law 25), public" },
   { pattern: "/forgot-password", status: "production", task: "Password reset request" },
   { pattern: "/reset-password", status: "production", task: "Password reset" },
   { pattern: "/mfa", status: "production", task: "Two-step sign-in (MFA)" },

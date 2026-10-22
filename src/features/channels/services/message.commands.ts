@@ -12,8 +12,9 @@ import { channelMuteAllows } from "@/features/notifications/services/mute";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { recipientTranslators } from "@/features/channels/recipient-locale";
+import { reportError } from "@/lib/observability";
 
 const sendMessageSchema = (t: TranslateFn) => z.object({
   channelId: z.string().uuid().optional(),
@@ -63,6 +64,10 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
       error: t("messages.errors.notSent"),
     };
   }
+
+  // Who this message has already notified, so a direct-message notice is
+  // not added on top of a mention or reply notice for the same person.
+  const notified = new Set<string>();
 
   // Server-side mention parsing (MSG-005).
   if (body.includes("@")) {
@@ -133,6 +138,7 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
         mentioned_user_id: userId,
       });
     }
+    for (const draft of mentionDrafts) notified.add(draft.user_id);
     if (mentionDrafts.length > 0) await createNotifications(supabase, mentionDrafts);
   }
 
@@ -155,6 +161,7 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
         level = (member?.muted_level as string | undefined) ?? "all";
       }
       if (channelMuteAllows(level, "reply")) {
+        notified.add(root.author_id as string);
         const recipientT = await recipientTranslators(supabase, [root.author_id as string]);
         await createNotifications(supabase, [{
           user_id: root.author_id as string,
@@ -176,7 +183,69 @@ export async function sendMessage(input: unknown): Promise<ActionResult> {
     }
   }
 
+  // Direct messages notify every other member of the conversation. Before,
+  // a plain direct message notified nobody: the recipient only found it by
+  // opening /messages. The notice names the sender and never carries the
+  // message text, because notices are also emailed and shown in digests.
+  if (conversationId) {
+    try {
+      await notifyConversationMembers(supabase, {
+        conversationId,
+        messageId: message.id as string,
+        authorId: session.userId,
+        authorName: session.profile.full_name,
+        organizationId: session.organizationId,
+        threadRootId: threadRootId ?? null,
+        skip: notified,
+      });
+    } catch (notifyError) {
+      // The message is saved; a failed notice must not report it as unsent.
+      reportError(notifyError, { feature: "messages", step: "direct-message-notify" });
+    }
+  }
+
   return { ok: true, id: message.id as string };
+}
+
+async function notifyConversationMembers(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  input: {
+    conversationId: string;
+    messageId: string;
+    authorId: string;
+    authorName: string;
+    organizationId: string;
+    threadRootId: string | null;
+    skip: ReadonlySet<string>;
+  },
+): Promise<void> {
+  const { data: members, error } = await supabase
+    .from("conversation_member")
+    .select("user_id")
+    .eq("conversation_id", input.conversationId);
+  if (error) throw new Error(`could not read conversation members: ${error.message}`);
+
+  const recipients = [...new Set((members ?? []).map((row) => row.user_id as string))]
+    .filter((userId) => userId !== input.authorId && !input.skip.has(userId));
+  if (recipients.length === 0) return;
+
+  const recipientT = await recipientTranslators(supabase, recipients);
+  await createNotifications(supabase, recipients.map((userId) => ({
+    user_id: userId,
+    organization_id: input.organizationId,
+    // Follows the person's mention choices (Hub and email): a direct message
+    // is addressed to them in the same way.
+    category: "mention",
+    title: recipientT(userId)("messages.notifications.directMessage", { name: input.authorName }),
+    body: null,
+    source_type: "message",
+    source_id: input.messageId,
+    link: `/messages/${input.conversationId}`,
+    reason: "direct message",
+    context: null,
+    thread_id: input.threadRootId ?? input.messageId,
+    dedupe_key: notificationDedupeKey("message", input.messageId, userId),
+  })));
 }
 
 export async function toggleReaction(

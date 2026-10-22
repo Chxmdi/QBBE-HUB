@@ -19,9 +19,11 @@ import { cn } from "@/lib/utils";
 import { useFormatters, useT } from "@/lib/i18n/client";
 import { createActionLabel } from "@/lib/i18n/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { countUnread, watchNotifications } from "@/components/layout/unread-badge";
 import type { Notification } from "@/types/entities";
 import { createActions } from "@/config/create-actions";
 import { ErrorState } from "@/components/ui/error-state";
+import { inAppLink } from "@/lib/safe-redirect";
 
 const ACTIONABLE_CATEGORIES = new Set([
   "assignment",
@@ -80,6 +82,23 @@ export function Topbar({
   >(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [badge, setBadge] = useState(unreadCount);
+  // The page's count changes when it is refreshed (marking one read, say):
+  // follow it, adjusting state during render as React recommends. And
+  // recount whenever one of the person's notifications is added, read or
+  // removed, so a new one shows without a reload.
+  const [pageCount, setPageCount] = useState(unreadCount);
+  if (pageCount !== unreadCount) {
+    setPageCount(unreadCount);
+    setBadge(unreadCount);
+  }
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    return watchNotifications(supabase, () => {
+      void countUnread(supabase).then((count) => {
+        if (count !== null) setBadge(count);
+      });
+    });
+  }, []);
   const router = useRouter();
   const menuRef = useDismissable(() => setOpenMenu(null));
   const t = useT();
@@ -256,7 +275,8 @@ export function Topbar({
                                 type="button"
                                 onClick={() => {
                                   setOpenMenu(null);
-                                  if (n.link) router.push(n.link);
+                                  const link = inAppLink(n.link);
+                                  if (link) router.push(link);
                                 }}
                                 className={cn(
                                   "w-full px-3.5 py-2 text-left text-[13px] hover:bg-surface-soft",

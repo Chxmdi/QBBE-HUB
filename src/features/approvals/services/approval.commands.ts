@@ -6,7 +6,7 @@ import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLocale, getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
   approvalDelegationSchema,
@@ -30,10 +30,12 @@ import {
 interface DbError {
   code?: string;
   message?: string;
+  hint?: string | null;
 }
 
 /** The database's own messages for refusals are written for people. */
 function explain(error: DbError, fallback: string, t: TranslateFn): string {
+  if (error.hint === "approval_own_bill") return t("finance.approvals.errors.ownBill");
   if (error.code === "42501" || error.code === "22023") return error.message ?? fallback;
   if (error.code === "23505") return t("finance.approvals.errors.alreadyWaiting");
   if (error.code === "23514") return t("finance.approvals.errors.checkAmountProgram");

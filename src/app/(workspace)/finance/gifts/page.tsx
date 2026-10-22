@@ -23,6 +23,9 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = "force-dynamic";
 
+/** Gifts listed on screen, newest first. The summary above counts every gift. */
+const GIFT_LIST_LIMIT = 1000;
+
 export default async function GiftsPage({
   searchParams,
 }: {
@@ -33,7 +36,10 @@ export default async function GiftsPage({
   const params = await searchParams;
   const today = todayIn(session.timeZone);
   const currentYear = Number(today.slice(0, 4));
-  const year = isCalendarYear(params.year ?? "") ? Number(params.year) : currentYear;
+  // gift_year_total takes 2000 to 2100, as the year field does; another
+  // year in the link shows the current one rather than an error page.
+  const requestedYear = isCalendarYear(params.year ?? "") ? Number(params.year) : NaN;
+  const year = requestedYear >= 2000 && requestedYear <= 2100 ? requestedYear : currentYear;
   const options = canManage ? await recordGiftOptions(supabase, session.organizationId, today, t) : null;
 
   const header = (
@@ -53,15 +59,21 @@ export default async function GiftsPage({
     );
   }
 
-  const { data } = await supabase
-    .from("gift")
-    .select(GIFT_SELECT)
-    .eq("organization_id", session.organizationId)
-    .gte("received_on", `${year}-01-01`)
-    .lte("received_on", `${year}-12-31`)
-    .order("received_on", { ascending: false })
-    .order("gift_number", { ascending: false })
-    .limit(1000);
+  // The list on screen stops at GIFT_LIST_LIMIT, newest first; the count and
+  // the year's total come from SQL over every gift (DATA-003).
+  const [{ data, count: giftsInYear }, { data: yearTotal, error: totalError }] = await Promise.all([
+    supabase
+      .from("gift")
+      .select(GIFT_SELECT, { count: "exact" })
+      .eq("organization_id", session.organizationId)
+      .gte("received_on", `${year}-01-01`)
+      .lte("received_on", `${year}-12-31`)
+      .order("received_on", { ascending: false })
+      .order("gift_number", { ascending: false })
+      .range(0, GIFT_LIST_LIMIT - 1),
+    supabase.rpc("gift_year_total", { p_organization: session.organizationId, p_year: year }).maybeSingle(),
+  ]);
+  if (totalError) throw new Error(`Could not total the year's gifts: ${totalError.message}`);
   const gifts = (data ?? []) as unknown as GiftRow[];
   // Donor names on screen are a read of donor data: record who looked, and when.
   await supabase.from("audit_event").insert({
@@ -73,8 +85,10 @@ export default async function GiftsPage({
     object_id: session.organizationId,
     metadata: { year, rows: gifts.length },
   });
-  const recorded = gifts.filter((g) => g.status === "recorded");
-  const total = recorded.reduce((sum, g) => sum + (g.gift_type === "in_kind" ? 0 : Number(g.amount_cents ?? 0)), 0);
+  const totals = yearTotal as { gift_count: number | string; total_cents: number | string } | null;
+  const recordedCount = Number(totals?.gift_count ?? 0);
+  const total = Number(totals?.total_cents ?? 0);
+  const listTruncated = (giftsInYear ?? 0) > gifts.length;
 
   return (
     <div>
@@ -90,12 +104,17 @@ export default async function GiftsPage({
           {t("finance.gifts.list.show")}
         </Button>
         <p className="ml-auto text-[13.5px] text-muted">
-          {t(recorded.length === 1 ? "finance.gifts.list.summaryOne" : "finance.gifts.list.summaryOther", {
-            count: recorded.length,
+          {t(recordedCount === 1 ? "finance.gifts.list.summaryOne" : "finance.gifts.list.summaryOther", {
+            count: recordedCount,
             total: formatCents(total, locale),
           })}
         </p>
       </form>
+      {listTruncated ? (
+        <p className="meta mb-3">
+          {t("finance.gifts.list.truncated", { shown: gifts.length, count: giftsInYear ?? gifts.length, year })}
+        </p>
+      ) : null}
       {gifts.length === 0 ? (
         <EmptyState icon={<Gift />} title={t("finance.gifts.list.emptyTitle", { year })} description={t("finance.gifts.list.emptyDescription")} />
       ) : (

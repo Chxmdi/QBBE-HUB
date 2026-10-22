@@ -52,8 +52,7 @@ begin
   reset role;
 
   perform tests.clear_auth();
-  select count(*) into n from public.event where id = v_event;
-  perform tests.ok(n = 0, 'signed-out: no events');
+  perform tests.ok(tests.permission_denied('select 1 from public.event'), 'signed-out: events refused');
   reset role;
 end;
 $$;

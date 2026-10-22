@@ -61,8 +61,7 @@ begin
   perform tests.ok(n = 1, 'the database owner (SQL editor) can turn a switch on');
 
   perform tests.clear_auth();
-  select count(*) into n from public.feature_flag where key = any (v_keys);
-  perform tests.ok(n = 0, 'a signed-out visitor cannot read the switches');
+  perform tests.ok(tests.permission_denied('select 1 from public.feature_flag'), 'a signed-out visitor cannot read the switches');
   reset role;
 end;
 $$;

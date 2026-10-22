@@ -190,10 +190,8 @@ begin
 
   -- Signed out: nothing at all.
   perform tests.clear_auth();
-  select count(*) into n from public.workflow_execution_step;
-  perform tests.ok(n = 0, 'a signed-out visitor reads no run steps');
-  select count(*) into n from public.workflow_rule;
-  perform tests.ok(n = 0, 'a signed-out visitor reads no workflows');
+  perform tests.ok(tests.permission_denied('select 1 from public.workflow_execution_step'), 'a signed-out visitor is refused reading run steps');
+  perform tests.ok(tests.permission_denied('select 1 from public.workflow_rule'), 'a signed-out visitor is refused reading workflows');
   begin
     insert into public.workflow_execution_step (execution_id, organization_id, position, step_id, step_kind, status)
     values (v_run, v_org, 10, 'forged', 'action', 'succeeded');

@@ -3,7 +3,7 @@ import {
   taskPriorityText,
   taskStatusText,
 } from "@/features/tasks/schemas";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 import type { TaskStatus } from "@/types/entities";
 
 /**

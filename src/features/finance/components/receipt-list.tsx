@@ -14,7 +14,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { formatCents } from "@/features/finance/money";
 import { useLocale, useT } from "@/lib/i18n/client";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import {
   openReceiptFile,
   setReceiptReviewed,

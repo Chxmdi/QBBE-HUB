@@ -8,7 +8,7 @@ import {
   TaskStatusBadge,
 } from "@/components/shared/status-badges";
 import { StatusSelect } from "@/features/tasks/components/status-select";
-import { cn, dueLabel } from "@/lib/utils";
+import { cn, dueLabelWith } from "@/lib/utils";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Task } from "@/types/entities";
 
@@ -33,7 +33,7 @@ export function TaskRow({
 }) {
   const t = useT();
   const locale = useLocale();
-  const due = dueLabel(task.due_at, timeZone, locale);
+  const due = dueLabelWith(t, task.due_at, timeZone, locale);
   return (
     <div className="interactive-row flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-line px-3 py-2.5 last:border-b-0">
       <div className="min-w-0 flex-1 basis-52">

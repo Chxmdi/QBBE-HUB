@@ -1,5 +1,5 @@
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/config";
-import { interpolate, type MessageVars } from "@/lib/i18n/translate";
+import { interpolate, type MessageVars } from "@/lib/i18n/translator";
 
 /**
  * A module's own catalogue, kept beside the module instead of in the shared

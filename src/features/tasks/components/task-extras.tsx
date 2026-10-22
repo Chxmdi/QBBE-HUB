@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Checkbox } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 function ruleLabel(rule: string, t: TranslateFn): string {
   if (rule === "weekly") return t("tasks.extras.ruleWeekly");

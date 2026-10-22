@@ -143,7 +143,10 @@ anything missing before going further.
 
 *If transfer is not available on your plan:* create the project fresh under
 QBBE, apply the schema with `npx supabase db push`, and treat it as a new
-environment rather than patching the old one.
+environment rather than patching the old one. The migrations grant the API
+roles their access explicitly, so a new project works whether or not
+"Automatically expose new tables" is on; check it with step 2.6 of
+[staging-provisioning.md](staging-provisioning.md).
 
 ---
 
@@ -165,6 +168,13 @@ A `copilot` environment exists and nothing in the workflows references it.
 Confirm what it is for and delete it if it is not needed — an environment can
 hold secrets.
 
+`backup-staging` and `backup-production` are **expected** environments, not
+stray ones: the nightly **Backup** workflow runs under them. Set them up as
+[backup-recovery.md](backup-recovery.md), setup step 7, describes (only after
+`main` is protected), and do not delete them. Each holds its project's
+`SUPABASE_DB_PASSWORD` and a Supabase secret key (`SUPABASE_SERVICE_ROLE_KEY`)
+with no approval step, so treat them as production credential stores.
+
 ### D3. Set per-environment values
 
 For **each** of `staging` and `production`, separately:
@@ -175,6 +185,7 @@ For **each** of `staging` and `production`, separately:
 | Variable | `RELEASE_ENABLED` — **`false` for production until #21 certifies staging** |
 | Secret | `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` — the server's deploy key and host key |
 | Secret | `APP_ENV` — every runtime value from the provider table |
+| Variable and secret | `SMOKE_EMAIL`, `SMOKE_PASSWORD` — that environment's smoke user, which Deploy signs in as after each release (staging-provisioning.md) |
 
 **The two environments must not share a Supabase project, a storage bucket, a
 database or an email sender.** That separation is the requirement itself, not a
@@ -189,6 +200,13 @@ Do it when you can update every holder in the same sitting.**
 Rotate: the Supabase service-role and anon keys, the server deploy key, the
 Google OAuth client secret, the email provider key, `CRON_JOB_SECRET` and
 `VMS_API_KEY`.
+
+Holders to update in the same sitting include the backup environments:
+`backup-staging` and `backup-production` each hold a copy of
+`SUPABASE_DB_PASSWORD` and `SUPABASE_SERVICE_ROLE_KEY` (or a dedicated
+`backup` secret key), and their `BACKUP_INDEX_KEY` should be replaced too
+(it costs the next backup one full re-download of the files;
+[backup-recovery.md](backup-recovery.md), "Keeping it running").
 
 A credential that was ever in a personal account stays a personal credential
 until it is rotated. Transferring the resource does not rotate its keys.

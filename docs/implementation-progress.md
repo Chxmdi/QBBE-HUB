@@ -1,5 +1,7 @@
 # PRD v2 release implementation
 
+> **Historical.** Superseded by [STATUS.md](STATUS.md) on 2026-10-22. Kept for history; do not use it for current status.
+
 Updated 2026-09-08. Branch: `implement/prd-v2-release`.
 
 The full approved plan remains in progress. No hosted environment has been

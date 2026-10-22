@@ -1,5 +1,7 @@
 # Deployment readiness report
 
+> **Historical.** Superseded by [STATUS.md](STATUS.md) on 2026-10-22. Kept for history; do not use it for current status.
+
 Verdict: **NOT READY**. Full implementation remains in progress; external
 verification is blocked. No staging release candidate has been certified.
 

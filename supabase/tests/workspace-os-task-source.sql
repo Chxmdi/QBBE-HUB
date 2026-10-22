@@ -147,8 +147,7 @@ begin
 
   -- Signed out: nothing.
   perform tests.clear_auth();
-  select count(*) into v_seen from public.task where id in (t_manual, t_message, t_meeting);
-  perform tests.ok(v_seen = 0, 'a signed-out visitor reads no task sources');
+  perform tests.ok(tests.permission_denied('select 1 from public.task'), 'a signed-out visitor is refused reading tasks');
   reset role;
 
   -- The service role (repairs) may still correct a source.

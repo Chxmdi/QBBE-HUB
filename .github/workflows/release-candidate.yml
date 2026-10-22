@@ -55,6 +55,8 @@ jobs:
   performance:
     name: Performance (local, informational)
     uses: ./.github/workflows/perf.yml
+    with:
+      informational: true
 
   # The acceptance figure: the same 50 people on the staging site, which must
   # be running this commit (deploy to staging first).
@@ -79,7 +81,9 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           CI_RESULT: ${{ needs.ci.result }}
           SECURITY_RESULT: ${{ needs.security.result }}
-          PERF_RESULT: ${{ needs.performance.result }}
+          # The load test's own outcome: the job succeeds even when it misses
+          # the target, because it is informational here.
+          PERF_RESULT: ${{ needs.performance.outputs.load_result || needs.performance.result }}
           PERF_STAGING_RESULT: ${{ needs.performance_staging.result }}
         run: |
           file="qa-evidence-${SHA}.md"

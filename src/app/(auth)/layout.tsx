@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { QbbeLogo } from "@/components/layout/qbbe-logo";
 import { LanguageToggle } from "@/features/preferences/components/language-switcher";
 import { getLocale, getT } from "@/lib/i18n/server";
@@ -29,8 +30,11 @@ export default async function AuthLayout({
           </p>
         </div>
         {children}
-        <div className="mt-5">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
           <LanguageToggle current={locale} />
+          <Link href="/privacy" className="text-[13px] font-medium text-brand-fg hover:underline">
+            {t("privacy.linkLabel")}
+          </Link>
         </div>
       </div>
     </main>

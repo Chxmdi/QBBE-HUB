@@ -9,9 +9,12 @@ import {
   STAFF_EXPORT_KINDS,
   hoursUntilExpiry,
   isDownloadable,
-  requestExportSchema,
+  requestExportSchemaFor,
 } from "@/features/exports/schemas";
 import { EXPORT_KINDS as BUILDER_KINDS } from "@/features/exports/services/export-builders";
+import { createTranslator } from "@/lib/i18n/translate";
+
+const requestExportSchema = requestExportSchemaFor(createTranslator("en"));
 import { JOB_HANDLERS } from "@/features/jobs/services/handlers";
 
 const PERSON = "11111111-1111-4111-8111-111111111111";

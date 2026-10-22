@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AckGift, GiftType } from "@/features/gifts/acknowledgement";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 /**
  * Reads shared by the gift pages and actions (#156). They go through the

@@ -34,7 +34,7 @@ import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { getLedgerAccess, todayIn, uuidParam } from "@/features/ledger/services/ledger.access";
 import { loadEntryChoices } from "@/features/ledger/services/ledger.queries";
 import { getLocale, getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import { isCalendarMonth } from "@/lib/schema";
 
 export async function generateMetadata(): Promise<Metadata> {

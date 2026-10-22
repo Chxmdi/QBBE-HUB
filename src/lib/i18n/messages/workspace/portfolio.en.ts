@@ -150,6 +150,8 @@ export const portfolioEn = {
     fromTemplate: {
       label: "Create from template",
       placeholder: "From template…",
+      create: "Create",
+      createLabel: "Create project from template",
       error: "Could not use the template.",
     },
     stageSelect: {

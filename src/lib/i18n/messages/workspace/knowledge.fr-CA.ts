@@ -460,7 +460,7 @@ export const knowledgeFrCA: typeof knowledgeEn = {
         choose: "Choisir…",
         folder: "Dossier",
         noFolder: "Aucun dossier",
-        hint: "Un dossier réservé au personnel limite qui peut ouvrir le document. Il est enregistré en PDF dans la bibliothèque et pourra être ouvert après la réussite de sa vérification de sécurité.",
+        hint: "Les documents produits contiennent des renseignements personnels : seuls le personnel et les administrateurs peuvent les ouvrir, peu importe le dossier. Le document est enregistré en PDF dans la bibliothèque et pourra être ouvert après la réussite de sa vérification de sécurité.",
         cancel: "Annuler",
         submit: "Produire le document",
       },
