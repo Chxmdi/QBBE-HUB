@@ -121,6 +121,7 @@ export const commsFrCA: typeof commsEn = {
     directory: "Répertoire des canaux",
     badges: {
       mandatory: "Obligatoire",
+      unread: "Non lu",
       private: "Privé",
       restrictedPosting: "Publication restreinte",
       teamAccess: "Accès par équipe",

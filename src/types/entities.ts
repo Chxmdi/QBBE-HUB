@@ -53,6 +53,10 @@ export interface Profile {
   timezone: string | null;
   /** Chosen interface language; null follows the browser (#141). */
   locale?: string | null;
+  /** First-run onboarding finished; null sends the person to /welcome. */
+  onboarded_at?: string | null;
+  display_density?: string | null;
+  reduce_motion?: boolean | null;
 }
 
 export interface Membership {

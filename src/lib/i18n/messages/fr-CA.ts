@@ -179,6 +179,8 @@ export const frCA: Messages = {
     managePrograms: "Ajouter ou gérer des programmes",
     viewAllPrograms: "Voir tous les programmes",
     unreadMessages: "Messages non lus",
+    unreadConversations: " conversations non lues",
+    allChannels: "Tous les canaux",
     classicLabel: "{label} (classique)",
   },
   topbar: {

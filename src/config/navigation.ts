@@ -125,7 +125,7 @@ export interface NavItem {
    */
   replaces?: string;
   /** Which live count this entry carries, if any (Part IV §5.2). */
-  badge?: "myWork" | "inbox";
+  badge?: "myWork" | "inbox" | "messages";
 }
 
 export interface NavGroup {
@@ -191,7 +191,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Inbox", href: "/inbox", icon: Inbox, access: "member", badge: "inbox" },
       { label: "Channels", href: "/channels", icon: MessagesSquare, access: "member" },
-      { label: "Messages", href: "/messages", icon: MessageSquare, access: "member" },
+      { label: "Messages", href: "/messages", icon: MessageSquare, access: "member", badge: "messages" },
       { label: "Saved", href: "/saved", icon: Bookmark, access: "member" },
       {
         label: "Announcements",
@@ -486,8 +486,14 @@ export function activeNavHref(groups: { items: { href: string }[] }[], pathname:
 }
 
 /** The live count an entry carries, from the counts the layout read once. */
-export function navBadge(item: { badge?: NavItem["badge"] }, counts: { myWork: number; inbox: number }): number {
-  return item.badge === "myWork" ? counts.myWork : item.badge === "inbox" ? counts.inbox : 0;
+export function navBadge(
+  item: { badge?: NavItem["badge"] },
+  counts: { myWork: number; inbox: number; messages?: number },
+): number {
+  if (item.badge === "myWork") return counts.myWork;
+  if (item.badge === "inbox") return counts.inbox;
+  if (item.badge === "messages") return counts.messages ?? 0;
+  return 0;
 }
 
 /** One tab of the phone bar (Part II §11.1). */

@@ -7,6 +7,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { AnnouncementComposeDialog } from "@/features/announcements/components/announcement-compose-dialog";
 import { ChannelCreateDialog } from "@/features/channels/components/channel-create-dialog";
 import { JoinChannelButton } from "@/features/channels/components/join-channel-button";
+import { unreadByChannel } from "@/features/channels/sidebar-state";
+import { getSidebarState } from "@/features/channels/sidebar-state.server";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { getT } from "@/lib/i18n/server";
@@ -27,7 +29,7 @@ export default async function ChannelsPage({
   const params = await searchParams;
   const supabase = await createSupabasePageClient();
 
-  const [{ data: channels }, { data: myMemberships }] = await Promise.all([
+  const [{ data: channels }, { data: myMemberships }, sidebarState] = await Promise.all([
     supabase
       .from("channel")
       .select(
@@ -40,7 +42,11 @@ export default async function ChannelsPage({
       .from("channel_member")
       .select("channel_id")
       .eq("user_id", session.userId),
+    // The sidebar names ten channels; this list marks every unread one. The
+    // layout already asked; the answer is shared within the request.
+    getSidebarState(),
   ]);
+  const unread = unreadByChannel(sidebarState);
 
   const memberIds = new Set((myMemberships ?? []).map((m) => m.channel_id as string));
   const channelList = (channels ?? []) as unknown as Channel[];
@@ -70,6 +76,9 @@ export default async function ChannelsPage({
             <p className="meta truncate">{channel.purpose}</p>
           ) : null}
         </div>
+        {joined && unread.get(channel.id) ? (
+          <Badge tone="accent">{t("channels.badges.unread")}</Badge>
+        ) : null}
         {channel.is_mandatory ? <Badge tone="brand">{t("channels.badges.mandatory")}</Badge> : null}
         {channel.privacy === "private" ? <Badge tone="neutral">{t("channels.badges.private")}</Badge> : null}
         {channel.posting_policy !== "everyone" ? (

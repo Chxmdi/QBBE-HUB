@@ -118,6 +118,7 @@ export const commsEn = {
     directory: "Channel directory",
     badges: {
       mandatory: "Mandatory",
+      unread: "Unread",
       private: "Private",
       restrictedPosting: "Restricted posting",
       teamAccess: "Team access",
