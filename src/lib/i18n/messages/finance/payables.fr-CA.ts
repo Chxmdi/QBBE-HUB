@@ -341,6 +341,7 @@ export const payablesFrCA: typeof payablesEn = {
     total: "Total",
     open: "Solde ouvert",
     exportFailed: "Impossible d’exporter le classement chronologique. Réessayez.",
+    tooMany: "Il y a plus de {max} documents ouverts à cette date, trop pour un seul rapport.",
   },
   invoiceSheet: {
     invoice: "Facture",

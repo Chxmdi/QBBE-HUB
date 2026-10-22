@@ -33,6 +33,7 @@ export const giftsEn = {
     show: "Show",
     summaryOne: "{count} gift · {total} received in money",
     summaryOther: "{count} gifts · {total} received in money",
+    truncated: "Showing the newest {shown} of {count} gifts received in {year}. The figures above cover the whole year.",
     emptyTitle: "No gifts recorded in {year}",
     emptyDescription: "Recorded gifts appear here.",
     colGift: "Gift",

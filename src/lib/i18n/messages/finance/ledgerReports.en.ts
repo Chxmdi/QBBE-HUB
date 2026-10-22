@@ -28,7 +28,7 @@ export const ledgerReportsEn = {
     optionsLabel: "General ledger options",
     from: "From",
     to: "To",
-    truncated: "Showing the first {count} lines. Narrow the dates or choose an account.",
+    truncated: "Showing the first {count} lines. Narrow the dates or choose an account, or export the CSV for every line.",
     emptyTitle: "No posted lines in this range",
     emptyDescription: "Try a wider date range, another account or all funds.",
     entry: "Entry",

@@ -320,6 +320,7 @@ export const intakeEn = {
     },
     export: {
       failed: "Could not export submissions. Try again.",
+      tooMany: "This form has more than {max} submissions, too many for one file.",
       submittedAt: "Submitted at",
       submittedBy: "Submitted by",
       signedBy: "Signed by",

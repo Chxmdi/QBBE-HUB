@@ -4,6 +4,7 @@ import {
   buildWorksheet,
   getTaxSettings,
   listTaxLines,
+  TAX_EXPORT_LINE_LIMIT,
   taxTotals,
   worksheetCsv,
 } from "@/features/sales-tax/services/sales-tax.queries";
@@ -26,7 +27,8 @@ export async function GET(request: Request) {
     const [rows, settings, { lines, truncated }] = await Promise.all([
       taxTotals(supabase, session.organizationId, from, to),
       getTaxSettings(supabase, session.organizationId),
-      listTaxLines(supabase, session.organizationId, { from, to }),
+      // Every line, a page at a time; above the ceiling the file is refused, never cut short.
+      listTaxLines(supabase, session.organizationId, { from, to }, TAX_EXPORT_LINE_LIMIT),
     ]);
     if (truncated) {
       return new Response(t("finance.salesTax.errors.tooManyLines"), { status: 413 });

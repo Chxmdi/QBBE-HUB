@@ -1,6 +1,7 @@
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ACCOUNT_TYPE_KEY, centsToDecimal, csvDocument, type AccountType } from "@/features/ledger/money";
 import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+import { fetchAllPages } from "@/lib/supabase/fetch-all-pages";
 
 /** CSV text defaults to English, so spreadsheets and tests stay stable (#141). */
 const EN = createTranslator("en");
@@ -34,7 +35,13 @@ export interface GeneralLedgerRow {
   running_cents: number;
 }
 
-export const GL_ROW_LIMIT = 10000;
+/**
+ * Lines shown on screen. More than this and the page says it shows only the
+ * first ones; the CSV carries them all.
+ */
+export const GL_SCREEN_LIMIT = 1000;
+/** A general ledger CSV larger than this is refused (HTTP 413) rather than cut short. */
+export const GL_EXPORT_LIMIT = 50_000;
 
 /** Posted balances as at a date. Row-level security decides what is summed. */
 export async function trialBalance(supabase: Client, organizationId: string, asOf: string, fundId: string | null) {
@@ -52,7 +59,13 @@ export async function trialBalance(supabase: Client, organizationId: string, asO
   return { rows, error };
 }
 
-/** Posted lines between two dates with each account's running balance. */
+/**
+ * Posted lines between two dates with each account's running balance, read a
+ * page at a time because the API returns at most 1,000 rows per request
+ * (DATA-003). `truncated` is true when more than `limit` lines exist. The
+ * function orders by account code, date, entry number and line number, which
+ * are unique together, so pages neither repeat nor skip a line.
+ */
 export async function generalLedger(
   supabase: Client,
   organizationId: string,
@@ -60,24 +73,29 @@ export async function generalLedger(
   to: string,
   accountId: string | null,
   fundId: string | null,
+  limit: number = GL_SCREEN_LIMIT,
 ) {
-  const { data, error } = await supabase
-    .rpc("ledger_general_ledger", {
-      p_organization: organizationId,
-      p_from: from,
-      p_to: to,
-      p_account: accountId,
-      p_fund: fundId,
-    })
-    .limit(GL_ROW_LIMIT);
-  const rows = ((data ?? []) as GeneralLedgerRow[]).map((r) => ({
+  const { rows: data, error, truncated } = await fetchAllPages<GeneralLedgerRow>(
+    (start, end) =>
+      supabase
+        .rpc("ledger_general_ledger", {
+          p_organization: organizationId,
+          p_from: from,
+          p_to: to,
+          p_account: accountId,
+          p_fund: fundId,
+        })
+        .range(start, end),
+    limit,
+  );
+  const rows = data.map((r) => ({
     ...r,
     opening_cents: Number(r.opening_cents),
     debit_cents: Number(r.debit_cents),
     credit_cents: Number(r.credit_cents),
     running_cents: Number(r.running_cents),
   }));
-  return { rows, error, truncated: rows.length === GL_ROW_LIMIT };
+  return { rows, error, truncated };
 }
 
 export function trialBalanceCsv(rows: TrialBalanceRow[], asOf: string, fundLabel: string, t: TranslateFn = EN): string {

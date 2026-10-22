@@ -10,7 +10,7 @@ import { LedgerTabs } from "@/features/ledger/components/ledger-tabs";
 import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { formatBalance, formatCents } from "@/features/ledger/money";
 import { dateParam, getLedgerAccess, todayIn, uuidParam } from "@/features/ledger/services/ledger.access";
-import { GL_ROW_LIMIT, generalLedger, groupByAccount } from "@/features/ledger/services/ledger.reports";
+import { GL_SCREEN_LIMIT, generalLedger, groupByAccount } from "@/features/ledger/services/ledger.reports";
 import { getLocale, getT } from "@/lib/i18n/server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -51,7 +51,7 @@ export default async function GeneralLedgerPage({
   const [{ data: accounts }, { data: funds }, { rows, error, truncated }] = await Promise.all([
     supabase.from("ledger_account").select("id, code, name").eq("organization_id", session.organizationId).order("code"),
     supabase.from("ledger_fund").select("id, code, name").eq("organization_id", session.organizationId).order("code"),
-    generalLedger(supabase, session.organizationId, from, to, accountId, fundId),
+    generalLedger(supabase, session.organizationId, from, to, accountId, fundId, GL_SCREEN_LIMIT),
   ]);
   if (error) throw new Error(`Could not load the general ledger: ${error.message}`);
   const groups = groupByAccount(rows);
@@ -111,7 +111,7 @@ export default async function GeneralLedgerPage({
       </form>
 
       {truncated ? (
-        <p className="meta mb-3">{t("finance.ledgerReports.generalLedger.truncated", { count: GL_ROW_LIMIT })}</p>
+        <p className="meta mb-3">{t("finance.ledgerReports.generalLedger.truncated", { count: GL_SCREEN_LIMIT })}</p>
       ) : null}
 
       {groups.length === 0 ? (

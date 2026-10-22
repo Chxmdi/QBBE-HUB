@@ -332,6 +332,7 @@ export const payablesEn = {
     total: "Total",
     open: "Open",
     exportFailed: "Could not export the aging. Try again.",
+    tooMany: "There are more than {max} open documents on this date, too many for one report.",
   },
   /** The printed invoice, in the customer's language rather than the reader's. */
   invoiceSheet: {
