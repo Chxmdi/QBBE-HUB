@@ -317,6 +317,13 @@ export function Sidebar({
           </span>
           <ChevronRight className="size-4 text-accent/80" aria-hidden />
         </Link>
+        <Link
+          href="/privacy"
+          onClick={onMobileClose}
+          className="mt-1 block px-1.5 text-[11.5px] text-white/72 hover:text-white hover:underline"
+        >
+          {t("privacy.linkLabel")}
+        </Link>
       </div>
     </nav>
   );

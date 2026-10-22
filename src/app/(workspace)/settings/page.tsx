@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/shared/page-header";
 import { NotificationPreferencesForm } from "@/features/onboarding/components/notification-preferences-form";
@@ -71,6 +72,11 @@ export default async function SettingsPage() {
       {session.isAdmin && factorResult.data ? (
         <MfaSettings initialFactors={verifiedTotpFactors(factorResult.data.all, t)} />
       ) : null}
+      <p className="mt-6 text-[13.5px]">
+        <Link href="/privacy" className="font-medium text-brand-fg hover:underline">
+          {t("privacy.linkLabel")}
+        </Link>
+      </p>
     </div>
   );
 }

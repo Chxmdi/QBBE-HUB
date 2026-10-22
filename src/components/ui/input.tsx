@@ -59,8 +59,12 @@ export function Label({
   );
 }
 
-export function FieldHint({ children }: { children: React.ReactNode }) {
-  return <p className="mt-1 text-[12.5px] text-muted">{children}</p>;
+export function FieldHint({ children, id }: { children: React.ReactNode; id?: string }) {
+  return (
+    <p id={id} className="mt-1 text-[12.5px] text-muted">
+      {children}
+    </p>
+  );
 }
 
 /**

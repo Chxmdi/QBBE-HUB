@@ -7,6 +7,11 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
+import {
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  passwordProblem,
+} from "@/features/auth/password-rules";
 
 export function SignUpForm() {
   const t = useT();
@@ -21,6 +26,11 @@ export function SignUpForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    const problem = passwordProblem(password);
+    if (problem) {
+      setError(t(`auth.password.${problem}`, { min: MIN_PASSWORD_LENGTH, max: MAX_PASSWORD_LENGTH }));
+      return;
+    }
     setLoading(true);
     const supabase = createSupabaseBrowserClient();
     const { data: allowed, error: allowError } = await supabase.rpc("signup_allowed", {
@@ -46,7 +56,12 @@ export function SignUpForm() {
     });
     setLoading(false);
     if (signUpError) {
-      setError(signUpError.message);
+      // Auth's own refusal of a weak password, in the reader's language.
+      setError(
+        signUpError.code === "weak_password"
+          ? t("auth.password.hint", { min: MIN_PASSWORD_LENGTH })
+          : signUpError.message,
+      );
       return;
     }
     if (data.session) {
@@ -99,17 +114,36 @@ export function SignUpForm() {
           type="password"
           autoComplete="new-password"
           required
-          minLength={8}
+          minLength={MIN_PASSWORD_LENGTH}
+          maxLength={MAX_PASSWORD_LENGTH}
+          aria-describedby="password-hint"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <FieldHint>{t("auth.signUp.passwordHint")}</FieldHint>
+        <FieldHint id="password-hint">
+          {t("auth.password.hint", { min: MIN_PASSWORD_LENGTH })}
+        </FieldHint>
       </div>
       {error ? (
         <p role="alert" className="text-[13px] text-danger-fg">
           {error}
         </p>
       ) : null}
+      <p className="text-[12.5px] text-muted">
+        {(() => {
+          // The sentence is translated whole; the link sits where {link} is.
+          const [before, after] = t("privacy.acknowledge", { link: "\u0000" }).split("\u0000");
+          return (
+            <>
+              {before}
+              <Link href="/privacy" className="font-medium text-brand-fg underline">
+                {t("privacy.linkInline")}
+              </Link>
+              {after}
+            </>
+          );
+        })()}
+      </p>
       <Button type="submit" loading={loading} className="w-full">
         {t("auth.signUp.submit")}
       </Button>

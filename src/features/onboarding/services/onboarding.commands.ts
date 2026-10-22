@@ -8,6 +8,7 @@ import { requireSession } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { PRIVACY_NOTICE_VERSION } from "@/config/privacy";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 /** Built per call so the validation message is in the person's language. */
@@ -60,6 +61,16 @@ export async function completeOnboarding(): Promise<ActionResult> {
   const session = await requireSession();
   const t = await getT();
   const supabase = await createSupabaseServerClient();
+  // The last step links the privacy notice; finishing records that this
+  // person was shown this version of it (Law 25, s. 8). First, so a failure
+  // leaves onboarding unfinished rather than unrecorded.
+  const { error: ackError } = await supabase
+    .from("privacy_notice_acknowledgement")
+    .upsert(
+      { user_id: session.userId, notice_version: PRIVACY_NOTICE_VERSION },
+      { onConflict: "user_id,notice_version", ignoreDuplicates: true },
+    );
+  if (ackError) return { ok: false, error: t("onboarding.errors.completeFailed") };
   const { error } = await supabase
     .from("user_profile")
     .update({ onboarded_at: new Date().toISOString() })

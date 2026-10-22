@@ -1,6 +1,6 @@
 import type { accountEn } from "./account.en";
 
-/** Français québécois — auth, settings, notifications, onboarding, account (#141). À faire réviser. */
+/** Français québécois — auth, settings, notifications, onboarding, account, privacy (#141). À faire réviser. */
 export const accountFrCA: typeof accountEn = {
   auth: {
     tagline:
@@ -14,10 +14,15 @@ export const accountFrCA: typeof accountEn = {
       newHere: "Nouveau sur QBBE Hub?",
       createAccount: "Créer un compte",
     },
+    password: {
+      hint: "Au moins {min} caractères, dont une minuscule, une majuscule et un chiffre.",
+      tooShort: "Utilisez au moins {min} caractères.",
+      tooLong: "Utilisez au plus {max} caractères.",
+      needsMix: "Incluez une minuscule, une majuscule et un chiffre.",
+    },
     signUp: {
       title: "Créer un compte",
       fullName: "Nom complet",
-      passwordHint: "Au moins 8 caractères.",
       submit: "Créer le compte",
       haveAccount: "Vous avez déjà un compte?",
       signIn: "Se connecter",
@@ -37,8 +42,6 @@ export const accountFrCA: typeof accountEn = {
         "Si cette adresse correspond à un compte, un lien de récupération arrivera sous peu. Ouvrez-le dans ce navigateur.",
       resetDone:
         "Votre mot de passe a été modifié. Connectez-vous avec votre nouveau mot de passe.",
-      passwordRules:
-        "Utilisez au moins 12 caractères. Votre espace de travail peut exiger des mesures de protection supplémentaires.",
       newPassword: "Nouveau mot de passe",
       confirmPassword: "Confirmer le mot de passe",
       sendLink: "Envoyer le lien de récupération",
@@ -384,5 +387,43 @@ export const accountFrCA: typeof accountEn = {
         "Terminez l’authentification multifacteur avant d’effectuer cette action.",
       mfaUnavailable: "Impossible de vérifier l’authentification multifacteur. Réessayez.",
     },
+  },
+  privacy: {
+    title: "Avis de confidentialité",
+    linkLabel: "Avis de confidentialité",
+    draftBanner:
+      "Ébauche : le QBBE n’a pas encore approuvé cet avis. Il décrit le fonctionnement actuel du Hub et pourrait changer avant sa version définitive.",
+    version: "Version {version}",
+    intro:
+      "QBBE Hub est l’espace de travail interne du Quebec Board of Black Educators (QBBE) pour son personnel, ses bénévoles, les membres de son conseil et ses invités. Cet avis explique quels renseignements personnels le Hub recueille, pourquoi, qui peut les consulter, où ils sont conservés et comment exercer vos droits.",
+    collectHeading: "Ce que nous recueillons",
+    collectBody:
+      "Votre nom, votre adresse courriel, votre titre, votre photo, votre fuseau horaire et votre langue; ce que vous écrivez et téléversez dans le Hub (messages, tâches, commentaires, documents, formulaires, signatures); vos connexions et les dernières pages consultées. Pour les donateurs, bailleurs de fonds et partenaires inscrits au CRM : leurs coordonnées, des notes sur nos échanges et, pour les donateurs, leurs dons et les montants. Pour les employés : les montants de paie importés du fournisseur de paie.",
+    whyHeading: "Pourquoi",
+    whyBody:
+      "Pour mener les activités de l’organisme, garder le lien avec les donateurs, bailleurs de fonds et partenaires, et tenir les registres financiers exigés par la loi. Nous ne vendons pas de renseignements personnels et ne les utilisons pas à des fins publicitaires.",
+    whoHeading: "Qui peut les consulter",
+    whoBody:
+      "Seules les personnes dont le rôle l’exige. La base de données refuse l’accès à toute autre personne : les canaux privés et les messages directs ne sont visibles que par leurs membres, le CRM par le personnel, les registres financiers et la paie par les personnes autorisées aux finances, et les notes sensibles par leur responsable et les administrateurs. Les administrateurs doivent utiliser l’authentification à deux facteurs.",
+    staffHeading: "Pour le personnel et les bénévoles",
+    staffBody:
+      "Le Hub conserve un historique de qui a modifié quoi dans les tâches, projets et documents. Si un administrateur active les signaux d’équipe, les responsables d’équipe voient des indicateurs par personne, comme les tâches en retard. Si vous connectez votre compte Google, le Hub lit les métadonnées des courriels et des événements d’agenda que vous choisissez de lier et peut envoyer des courriels en votre nom; vous pouvez le déconnecter en tout temps.",
+    whereHeading: "Où ils sont conservés, et fournisseurs hors Québec",
+    whereBody:
+      "Les données du Hub sont conservées chez Supabase et servies à partir d’un serveur loué par le QBBE; les courriels sont envoyés par Resend; des sauvegardes chiffrées des données et des fichiers sont conservées dans le Google Drive du QBBE; votre propre boîte courriel et votre agenda Google ne sont utilisés que si vous les connectez; les rapports d’erreurs, s’ils sont activés, sont envoyés à Sentry. Certains de ces fournisseurs peuvent traiter des renseignements à l’extérieur du Québec. Le QBBE évalue chacun d’eux avant d’y faire appel.",
+    keepHeading: "Combien de temps nous les conservons",
+    keepBody:
+      "Les registres financiers, y compris les dons et la paie, sont conservés six ans après la fin de l’exercice, comme l’exige la loi fiscale. Le journal d’audit des actions administratives est conservé au moins six ans. Les autres renseignements sont conservés tant qu’ils servent aux fins décrites ci-dessus; le QBBE établit encore la durée de conservation de certains d’entre eux, et cet avis l’indiquera une fois fixée.",
+    rightsHeading: "Vos droits",
+    rightsBody:
+      "Vous pouvez demander à consulter les renseignements personnels que nous détenons à votre sujet, à les faire corriger ou à les faire supprimer lorsque nous n’avons plus à les conserver, et demander comment ils sont utilisés. Nous répondons dans un délai de 30 jours. Vous pouvez aussi porter plainte auprès de la Commission d’accès à l’information du Québec.",
+    contactHeading: "Personne responsable de la protection des renseignements personnels",
+    contactPending:
+      "Le QBBE désigne actuellement cette personne. D’ici à ce que ses coordonnées soient publiées ici, écrivez au QBBE par votre contact habituel ou à un administrateur du Hub.",
+    contactNamed: "{title}, {email}",
+    linkInline: "avis de confidentialité",
+    acknowledge: "En créant un compte, vous reconnaissez avoir pris connaissance de l’{link}.",
+    onboardingNote: "En entrant dans l’espace de travail, vous reconnaissez avoir pris connaissance de l’{link}.",
+    backToSignIn: "Retour à la connexion",
   },
 };

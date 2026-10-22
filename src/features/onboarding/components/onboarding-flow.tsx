@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
@@ -113,6 +114,7 @@ export function OnboardingFlow({
 
   const [accessBefore, accessAfter] = around(t("onboarding.accessLevel", { role: "\u0000" }));
   const [tourBefore, tourAfter] = around(t("onboarding.tourIntro", { shortcut: "\u0000" }));
+  const [privacyBefore, privacyAfter] = around(t("privacy.onboardingNote", { link: "\u0000" }));
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-4 py-10">
@@ -316,6 +318,14 @@ export function OnboardingFlow({
                 <span className="text-muted">{t("onboarding.tour.announcementsHint")}</span>
               </li>
             </ul>
+            {/* Entering records that this version of the notice was shown. */}
+            <p className="text-[12.5px] text-muted">
+              {privacyBefore}
+              <Link href="/privacy" target="_blank" className="font-medium text-brand-fg underline">
+                {t("privacy.linkInline")}
+              </Link>
+              {privacyAfter}
+            </p>
             {error ? (
               <p role="alert" className="text-[13px] text-danger-fg">
                 {error}
