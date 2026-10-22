@@ -1,7 +1,7 @@
 -- Approved bills hand off to the ledger (#143, #150; migration
 -- 20260930150000). Proves: only the bill's own approval request unlocks
--- posting; changing what was approved needs a fresh approval, while changing
--- the bookkeeping coding does not; sending a changed bill again withdraws the
+-- posting; changing what was approved, including its expense account (since
+-- 20261123000000), needs a fresh approval; sending a changed bill again withdraws the
 -- older waiting request; the people who post are told when a bill is ready;
 -- deleting a draft withdraws its request. Run after qa-users.sql and rls.sql.
 -- All mutations are rolled back.
@@ -92,11 +92,11 @@ begin
   end;
   perform tests.ok(v_error ilike '%already waiting%', 'an unchanged bill is not sent twice');
 
-  -- Recoding (another expense account) is not a change to what was approved.
+  -- Recoding (another expense account) is a change to what was approved.
   perform public.finance_save_bill(v_org, v_bill, v_header, jsonb_build_array(jsonb_build_object(
     'account_id', v_supplies, 'description', 'October rent', 'amount_cents', 250000)));
-  perform tests.ok(public.finance_bill_approval_status(v_bill) = 'pending',
-    'changing the expense account keeps the request');
+  perform tests.ok(public.finance_bill_approval_status(v_bill) = 'changed',
+    'changing the expense account marks the request out of date');
 
   -- Changing a line's description is: the request is out of date, and sending
   -- again withdraws it.

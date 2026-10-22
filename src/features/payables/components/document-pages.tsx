@@ -478,7 +478,10 @@ export async function DocumentDetailPage({
               canEdit={canEdit}
               // Posting waits for the bill's own approval; the database refuses it anyway.
               canPost={canPost && !(isBill && needsApproval && approval?.status !== "approved")}
-              canRequestApproval={isBill && needsApproval && approval?.status !== "pending" && approval?.status !== "approved"}
+              // Only the drafter or an administrator sends it (the database refuses others).
+              canRequestApproval={
+                isBill && canEdit && needsApproval && approval?.status !== "pending" && approval?.status !== "approved"
+              }
             />
           </div>
         ) : null}

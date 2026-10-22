@@ -55,6 +55,7 @@ export const approvalsEn = {
     submitFailed: "Could not submit it. Try again.",
     checkDecision: "Check the decision.",
     decideFailed: "Could not record the decision. Try again.",
+    ownBill: "You drafted this bill, so someone else approves or rejects it.",
     writeComment: "Write a comment.",
     commentFailed: "Could not post the comment. Try again.",
     withdrawFailed: "Could not withdraw it. Try again.",
