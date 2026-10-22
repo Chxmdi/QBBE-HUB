@@ -1,6 +1,6 @@
 # QBBE Hub — Canonical GitHub Project Operating Model
 
-GitHub Project is the single project-management source of truth for QBBE Hub. Repository Issues represent Epics and executable work; pull requests represent implementation evidence; GitHub Actions represents automated verification evidence; the acceptance/readiness documents represent formal release evidence.
+GitHub Project is where QBBE Hub project work is tracked; current launch status is in [STATUS.md](STATUS.md). Repository Issues represent Epics and executable work; pull requests represent implementation evidence; GitHub Actions represents automated verification evidence; the acceptance/readiness documents represent formal release evidence.
 
 ## Traceability chain
 

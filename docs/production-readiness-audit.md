@@ -1,5 +1,7 @@
 # Production Readiness Audit
 
+> **Historical.** Superseded by [STATUS.md](STATUS.md) on 2026-10-22. Kept for history; do not use it for current status.
+
 **Audit date:** 2026-08-18  
 **Baseline:** `claude/production-ready-deployment-8n56h5`  
 **Verdict:** **NOT DEPLOYMENT READY**

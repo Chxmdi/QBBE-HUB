@@ -175,8 +175,8 @@ Everything else can be built and proven on the local stack in CI now.
 - [ ] E08-E3 Mobile Chrome and Safari projects, nightly
 - [ ] E08-F1 `seed-perf.mjs` 50-user fixture
 - [ ] E08-F2 k6 scenarios with p95 thresholds
-- [ ] E08-F3 `perf.yml` workflow (nightly and on demand)
-- [ ] E08-H1 `release-candidate.yml` with an evidence artifact
+- [x] E08-F3 `perf.yml` workflow (nightly and on demand)
+- [x] E08-H1 `release-candidate.yml` with an evidence artifact
 - [ ] E08-H2 Update `QA-FINAL`, `docs/runbooks/qa.md`
 - [ ] E08-I1 Local-stack candidate run recorded
 - [ ] E08-I2 (after #55) Staging candidate run; close #50 and #18
