@@ -1656,7 +1656,9 @@ Node 22, `psql`), it needs moto's S3 server (`pip install 'moto[server]'`).
   access; follow the documented provider recovery process. Use two named
   administrators where the free plan supports them, otherwise designate a
   separate recovery custodian (ENV-002).
-- **Lost administrator MFA factor**: verify the person's identity out of band
+- **Lost administrator MFA factor**: follow
+  [account-recovery.md](account-recovery.md) (identity check, two approvers,
+  `scripts/ops/reset-admin-mfa.mjs` or the dashboard). In short: verify the person's identity out of band
   and require approval from a second named administrator or the recovery
   custodian. From a server-only recovery tool or the Supabase dashboard, use
   the Auth admin factor-deletion operation for the exact user and factor; never
