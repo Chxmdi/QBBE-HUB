@@ -1,21 +1,24 @@
 import Link from "next/link";
-import {
-  eachDayOfInterval,
-  endOfWeek,
-  format,
-  isSameDay,
-  isToday,
-  startOfWeek,
-} from "date-fns";
+import { format } from "date-fns";
 import { frCA } from "date-fns/locale";
 import type { Locale } from "@/lib/i18n/config";
 import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 import { cn } from "@/lib/utils";
 import { RescheduleControl } from "@/features/calendar/components/reschedule-control";
+import { dayAsLocalDate } from "@/features/calendar/calendar-model";
 
 export interface CalendarItem {
   id: string;
+  /** For ordering within a day. */
   date: Date;
+  /**
+   * The workspace day (YYYY-MM-DD) the item belongs on. Grouping by `date`
+   * with date-fns answered in the server's zone (UTC), so evening meetings
+   * moved to the next day.
+   */
+  day: string;
+  /** Clock time already formatted in the workspace zone, for timed items. */
+  timeLabel?: string;
   label: string;
   kind: "task" | "milestone" | "meeting" | "event" | "follow_up" | "google";
   href: string;
@@ -103,53 +106,55 @@ function calendarItemTitle(item: CalendarItem, t: TranslateFn): string {
  * two are distinguishable without relying on color.
  */
 export function WeekView({
-  anchor,
+  days,
+  today,
   items,
   locale,
 }: {
-  anchor: Date;
+  /** The week's days, YYYY-MM-DD, Sunday first. */
+  days: string[];
+  /** Today in the workspace zone. */
+  today: string;
   items: CalendarItem[];
   locale: Locale;
 }) {
   const t = createTranslator(locale);
   const formats = calendarDateFormats(locale);
-  const start = startOfWeek(anchor, { weekStartsOn: 0 });
-  const days = eachDayOfInterval({
-    start,
-    end: endOfWeek(anchor, { weekStartsOn: 0 }),
-  });
 
   return (
     <div className="card relative overflow-x-auto">
       <div className="grid min-w-[860px] grid-cols-7">
         {days.map((day) => {
           const dayItems = items
-            .filter((item) => isSameDay(item.date, day))
+            .filter((item) => item.day === day)
             .sort((a, b) => a.date.getTime() - b.date.getTime());
           const allDay = dayItems.filter((i) => !i.timed);
           const timed = dayItems.filter((i) => i.timed);
+          const isToday = day === today;
+          const label = dayAsLocalDate(day);
           return (
             <div
-              key={day.toISOString()}
+              key={day}
+              data-day={day}
               className="min-h-[26rem] border-r border-line last:border-r-0"
             >
               <div
                 className={cn(
                   "sticky top-0 border-b border-line px-2.5 py-2",
-                  isToday(day) ? "bg-brand-soft" : "bg-surface-soft/60",
+                  isToday ? "bg-brand-soft" : "bg-surface-soft/60",
                 )}
               >
                 <p className="text-[11px] font-semibold tracking-wide text-muted uppercase">
-                  {format(day, "EEE", formats.options)}
+                  {format(label, "EEE", formats.options)}
                 </p>
                 <p
                   className={cn(
                     "text-[17px] font-semibold",
-                    isToday(day) && "text-brand-fg",
+                    isToday && "text-brand-fg",
                   )}
                 >
-                  {format(day, "d")}
-                  {isToday(day) ? (
+                  {format(label, "d")}
+                  {isToday ? (
                     <span className="ml-1.5 text-[10.5px] font-medium">{t("calendar.today")}</span>
                   ) : null}
                 </p>
@@ -194,7 +199,7 @@ export function WeekView({
                     )}
                   >
                     <span className="block text-[9.5px]">
-                      {format(item.date, formats.time, formats.options)} · {kindPrefix(item.kind, t)}
+                      {item.timeLabel ?? format(item.date, formats.time, formats.options)} · {kindPrefix(item.kind, t)}
                     </span>
                     <span className={cn("line-clamp-2", item.done && "line-through opacity-70")}>
                       <span className={cn(item.done && "line-through opacity-70")}>
@@ -223,13 +228,22 @@ export function WeekView({
 /**
  * Mobile agenda view (§11.2): a linear list rather than a compressed grid.
  */
-export function AgendaView({ items, locale }: { items: CalendarItem[]; locale: Locale }) {
+export function AgendaView({
+  items,
+  today,
+  locale,
+}: {
+  items: CalendarItem[];
+  /** Today in the workspace zone. */
+  today: string;
+  locale: Locale;
+}) {
   const t = createTranslator(locale);
   const formats = calendarDateFormats(locale);
   const sorted = [...items].sort((a, b) => a.date.getTime() - b.date.getTime());
   const byDay = new Map<string, CalendarItem[]>();
   for (const item of sorted) {
-    const key = format(item.date, "yyyy-MM-dd");
+    const key = item.day;
     const list = byDay.get(key) ?? [];
     list.push(item);
     byDay.set(key, list);
@@ -246,17 +260,18 @@ export function AgendaView({ items, locale }: { items: CalendarItem[]; locale: L
   return (
     <ol className="space-y-4">
       {Array.from(byDay.entries()).map(([key, dayItems]) => {
-        const date = dayItems[0].date;
+        const date = dayAsLocalDate(key);
+        const isToday = key === today;
         return (
           <li key={key}>
             <p
               className={cn(
                 "mb-1.5 text-[12.5px] font-semibold",
-                isToday(date) && "text-brand-fg",
+                isToday && "text-brand-fg",
               )}
             >
               {format(date, formats.agendaDay, formats.options)}
-              {isToday(date) ? t("calendar.todaySuffix") : ""}
+              {isToday ? t("calendar.todaySuffix") : ""}
             </p>
             <ul className="card divide-y divide-line">
               {dayItems.map((item) => (
@@ -280,7 +295,7 @@ export function AgendaView({ items, locale }: { items: CalendarItem[]; locale: L
                     </span>
                     {item.timed ? (
                       <span className="meta whitespace-nowrap">
-                        {format(item.date, formats.time, formats.options)}
+                        {item.timeLabel ?? format(item.date, formats.time, formats.options)}
                       </span>
                     ) : null}
                   </Link>
