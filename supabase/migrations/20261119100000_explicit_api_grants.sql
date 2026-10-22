@@ -1010,6 +1010,8 @@ revoke all on function public.home_away_since(uuid) from public, anon, authentic
 grant execute on function public.home_away_since(uuid) to authenticated, service_role;
 revoke all on function public.insight_apply_schedule_shift(jsonb,jsonb) from public, anon, authenticated, service_role;
 grant execute on function public.insight_apply_schedule_shift(jsonb,jsonb) to authenticated, service_role;
+revoke all on function public.invitation_preview(text) from public, anon, authenticated, service_role;
+grant execute on function public.invitation_preview(text) to anon, authenticated, service_role;
 revoke all on function public.is_object_locked(uuid) from public, anon, authenticated, service_role;
 grant execute on function public.is_object_locked(uuid) to authenticated, service_role;
 revoke all on function public.job_queue_archive(text,bigint) from public, anon, authenticated, service_role;
@@ -1227,7 +1229,7 @@ grant execute on function public.set_receipt_text(uuid,text,text) to authenticat
 revoke all on function public.set_updated_at() from public, anon, authenticated, service_role;
 grant execute on function public.set_updated_at() to public, anon, authenticated, service_role;
 revoke all on function public.signup_allowed(text) from public, anon, authenticated, service_role;
-grant execute on function public.signup_allowed(text) to anon, service_role;
+grant execute on function public.signup_allowed(text) to service_role;
 revoke all on function public.space_capabilities(uuid) from public, anon, authenticated, service_role;
 grant execute on function public.space_capabilities(uuid) to authenticated, service_role;
 revoke all on function public.submit_approval(uuid,text,text,bigint,uuid,text,uuid) from public, anon, authenticated, service_role;
@@ -1282,6 +1284,8 @@ revoke all on function public.workflow_submit_approval(uuid,uuid,text,text,text)
 grant execute on function public.workflow_submit_approval(uuid,uuid,text,text,text) to service_role;
 revoke all on function public.workspace_app_set_published(uuid,boolean) from public, anon, authenticated, service_role;
 grant execute on function public.workspace_app_set_published(uuid,boolean) to authenticated, service_role;
+revoke all on function public.workspace_bootstrap_open() from public, anon, authenticated, service_role;
+grant execute on function public.workspace_bootstrap_open() to anon, authenticated, service_role;
 revoke all on function public.zeffy_contacts_by_email(uuid,text[]) from public, anon, authenticated, service_role;
 grant execute on function public.zeffy_contacts_by_email(uuid,text[]) to service_role;
 revoke all on function public.zeffy_overview(uuid,date,date) from public, anon, authenticated, service_role;
