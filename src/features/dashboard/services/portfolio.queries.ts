@@ -3,6 +3,7 @@ import {
   calendarDateInZone,
   DEFAULT_TIME_ZONE,
 } from "@/lib/time";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
 import {
@@ -55,7 +56,9 @@ export async function getPortfolio(input: {
 }): Promise<PortfolioResult> {
   const now = input.now ?? new Date();
   const lens = dashboardLens(input.role);
-  const supabase = await createSupabaseServerClient();
+  // The page client throws on a failed read, so an outage reaches the error
+  // boundary instead of rendering as "No projects yet".
+  const supabase = await createSupabasePageClient();
   const refreshedAt = now.toISOString();
 
   // No lens short-circuit: row-level security already limits every reader,

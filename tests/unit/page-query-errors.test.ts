@@ -38,3 +38,15 @@ describe("workspace pages surface query failures", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("page loaders outside src/app read through the page client", () => {
+  // Loaders that a page calls directly. Each used the ordinary client and
+  // read only `data`, so a failed read rendered as an empty list.
+  const LOADERS = [
+    "src/features/dashboard/services/portfolio.queries.ts",
+    "src/features/crm/services/opportunity.queries.ts",
+  ];
+  it.each(LOADERS)("%s uses createSupabasePageClient", (path) => {
+    expect(readFileSync(join(ROOT, path), "utf8")).toMatch(/createSupabasePageClient\(\)/);
+  });
+});

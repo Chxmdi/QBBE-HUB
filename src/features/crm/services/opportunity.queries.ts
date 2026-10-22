@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import type { OpportunityKind, OpportunityStage } from "@/features/crm/opportunity-schemas";
 import { isOpenStage } from "@/features/crm/opportunity-schemas";
 
@@ -93,7 +93,8 @@ export async function getOpportunitiesForCrmOrganization(
   crmOrganizationId: string,
   today: string,
 ): Promise<Pipeline> {
-  const supabase = await createSupabaseServerClient();
+  // Throws on a failed read, so the page shows its error boundary, not an empty pipeline.
+  const supabase = await createSupabasePageClient();
   const { data } = await supabase
     .from("opportunity")
     .select(SELECT)
@@ -109,7 +110,8 @@ export async function getOpportunitiesForCrmOrganization(
 
 /** The whole organization's pipeline, for the CRM index. */
 export async function getPipeline(today: string): Promise<Pipeline> {
-  const supabase = await createSupabaseServerClient();
+  // Throws on a failed read, so the page shows its error boundary, not an empty pipeline.
+  const supabase = await createSupabasePageClient();
   const { data } = await supabase
     .from("opportunity")
     .select(SELECT)
