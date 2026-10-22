@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
@@ -25,6 +26,33 @@ interface ToastContextValue {
 }
 
 const ToastContext = React.createContext<ToastContextValue | null>(null);
+
+/**
+ * Open modal dialogs and drawers, innermost last. A modal <dialog> sits in
+ * the browser's top layer and makes the rest of the page inert, so toasts
+ * drawn at the page level were hidden behind it and never announced. While
+ * one is open the toast region is drawn inside it instead.
+ */
+interface ToastLayerValue {
+  add: (element: HTMLElement) => void;
+  remove: (element: HTMLElement) => void;
+}
+
+const ToastLayerContext = React.createContext<ToastLayerValue | null>(null);
+
+/**
+ * Called by Dialog and Drawer with their <dialog> while it is open. Outside a
+ * ToastProvider (sign-in pages) it does nothing.
+ */
+export function useToastLayer(ref: React.RefObject<HTMLElement | null>, open: boolean) {
+  const layer = React.useContext(ToastLayerContext);
+  React.useEffect(() => {
+    const element = ref.current;
+    if (!layer || !open || !element) return;
+    layer.add(element);
+    return () => layer.remove(element);
+  }, [layer, open, ref]);
+}
 
 /** Access the toast queue. Safe to call from any client component. */
 export function useToast(): ToastContextValue {
@@ -64,7 +92,17 @@ const toneMeta: Record<
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const t = useT();
   const [toasts, setToasts] = React.useState<Toast[]>([]);
+  const [layers, setLayers] = React.useState<HTMLElement[]>([]);
   const nextId = React.useRef(0);
+
+  const layer = React.useMemo<ToastLayerValue>(
+    () => ({
+      add: (element) => setLayers((current) => [...current.filter((e) => e !== element), element]),
+      remove: (element) => setLayers((current) => current.filter((e) => e !== element)),
+    }),
+    [],
+  );
+  const host = layers.at(-1) ?? null;
 
   const dismiss = React.useCallback((id: number) => {
     setToasts((current) => current.filter((t) => t.id !== id));
@@ -89,56 +127,63 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const value = React.useMemo(() => ({ toast }), [toast]);
 
+  // Live region: assertive for errors, polite otherwise. Inside the open
+  // dialog when there is one, so it is on top and not inert.
+  const region = (
+    <div
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-(--z-toast) flex flex-col items-center gap-2 p-4 sm:items-end"
+      aria-live="polite"
+      aria-atomic="false"
+    >
+      {toasts.map((item) => {
+        const meta = toneMeta[item.tone];
+        return (
+          <div
+            key={item.id}
+            role={item.tone === "error" ? "alert" : "status"}
+            className={cn(
+              "pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-(--radius-md) border bg-surface px-3.5 py-3 shadow-(--shadow-pop)",
+              "motion-safe:animate-[toast-in_160ms_var(--ease-app)]",
+              meta.classes,
+            )}
+          >
+            <span className="mt-0.5 shrink-0">{meta.icon}</span>
+            <div className="min-w-0 flex-1">
+              <span className="sr-only">{t(meta.label)}: </span>
+              <p className="text-[13.5px] text-ink">{item.message}</p>
+              {item.action ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    item.action!.onClick();
+                    dismiss(item.id);
+                  }}
+                  className="mt-1 text-[12.5px] font-medium text-brand-fg hover:underline"
+                >
+                  {item.action.label}
+                </button>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => dismiss(item.id)}
+              aria-label={t("ui.toast.dismiss")}
+              className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-surface-soft hover:text-ink"
+            >
+              <X className="size-3.5" aria-hidden />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <ToastContext.Provider value={value}>
-      {children}
-      {/* Live region: assertive for errors, polite otherwise. */}
-      <div
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-(--z-toast) flex flex-col items-center gap-2 p-4 sm:items-end"
-        aria-live="polite"
-        aria-atomic="false"
-      >
-        {toasts.map((item) => {
-          const meta = toneMeta[item.tone];
-          return (
-            <div
-              key={item.id}
-              role={item.tone === "error" ? "alert" : "status"}
-              className={cn(
-                "pointer-events-auto flex w-full max-w-sm items-start gap-2.5 rounded-(--radius-md) border bg-surface px-3.5 py-3 shadow-(--shadow-pop)",
-                "motion-safe:animate-[toast-in_160ms_var(--ease-app)]",
-                meta.classes,
-              )}
-            >
-              <span className="mt-0.5 shrink-0">{meta.icon}</span>
-              <div className="min-w-0 flex-1">
-                <span className="sr-only">{t(meta.label)}: </span>
-                <p className="text-[13.5px] text-ink">{item.message}</p>
-                {item.action ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      item.action!.onClick();
-                      dismiss(item.id);
-                    }}
-                    className="mt-1 text-[12.5px] font-medium text-brand-fg hover:underline"
-                  >
-                    {item.action.label}
-                  </button>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={() => dismiss(item.id)}
-                aria-label={t("ui.toast.dismiss")}
-                className="shrink-0 rounded p-0.5 text-muted transition-colors hover:bg-surface-soft hover:text-ink"
-              >
-                <X className="size-3.5" aria-hidden />
-              </button>
-            </div>
-          );
-        })}
-      </div>
+      <ToastLayerContext.Provider value={layer}>
+        {children}
+        {host ? createPortal(region, host) : region}
+      </ToastLayerContext.Provider>
     </ToastContext.Provider>
   );
 }
