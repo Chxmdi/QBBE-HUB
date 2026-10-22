@@ -104,6 +104,35 @@ export async function changeMemberRole(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
+/**
+ * Bans or unbans the account's sign-in through the Auth admin API. A ban is
+ * account-wide, so a member who is still active in another organization is
+ * not banned. Errors are returned (the Auth client returns them rather than
+ * throwing), so the administrator is told when it did not work.
+ */
+async function setSignInAllowed(userId: string, allowed: boolean): Promise<{ ok: boolean }> {
+  try {
+    const { createSupabaseServiceClient } = await import("@/lib/supabase/service");
+    const admin = createSupabaseServiceClient();
+    if (!allowed) {
+      const { data: others, error: othersError } = await admin
+        .from("organization_membership")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .limit(1);
+      if (othersError) return { ok: false };
+      if ((others ?? []).length > 0) return { ok: true };
+    }
+    const { error } = await admin.auth.admin.updateUserById(userId, {
+      ban_duration: allowed ? "none" : "876000h",
+    });
+    return { ok: !error };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function setMemberActive(
   membershipId: string,
   active: boolean,
@@ -138,14 +167,13 @@ export async function setMemberActive(
     .maybeSingle();
   if (error || !updated) return { ok: false, error: t("admin.errors.accountUpdateFailed") };
 
-  if (!active) {
-    try {
-      const { createSupabaseServiceClient } = await import("@/lib/supabase/service");
-      const admin = createSupabaseServiceClient();
-      await admin.auth.admin.signOut(membership.user_id, "global");
-    } catch {
-      // Service role is optional; the account-inactive page still blocks the UI.
-    }
+  // The database ends the member's integrations and sessions in this
+  // organization on deactivation. Sign-in itself is blocked (or allowed
+  // again) only when this was their last active membership.
+  const access = await setSignInAllowed(membership.user_id, active);
+  if (!access.ok) {
+    revalidatePath("/admin");
+    return { ok: false, error: t(active ? "admin.errors.signInUnblockFailed" : "admin.errors.signInBlockFailed") };
   }
 
   revalidatePath("/admin");
