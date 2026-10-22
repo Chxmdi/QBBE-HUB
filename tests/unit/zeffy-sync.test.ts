@@ -20,7 +20,7 @@ vi.mock("next/server", async (original) => ({
 const { zeffySync } = await import("@/features/jobs/services/handlers/zeffy-sync");
 const { zeffyEvents } = await import("@/features/jobs/services/handlers/zeffy-events");
 const { ZeffyClient } = await import("@/features/zeffy/client");
-const { syncOrganization } = await import("@/features/zeffy/sync");
+const { syncOrganization, emailHash } = await import("@/features/zeffy/sync");
 const { POST } = await import("@/app/api/integrations/zeffy/webhook/route");
 
 const ORG = "org-1";
@@ -114,6 +114,23 @@ function modelDatabaseFunctions(fake: FakeSupabase) {
       .filter((row) => wanted.includes(String(row.email).toLowerCase()))
       .map((row) => ({ id: row.id, email: row.email, zeffy_contact_id: row.zeffy_contact_id ?? null }));
   });
+  // public.erase_crm_contact, as far as the sync can see it.
+  fake.onRpc("erase_crm_contact", (args) => {
+    const contact = fake.rows("crm_contact").find((row) => row.id === args.p_contact);
+    if (!contact) return null;
+    if (contact.zeffy_contact_id) {
+      fake.rows("zeffy_suppressed_contact").push({
+        organization_id: contact.organization_id,
+        zeffy_contact_id: contact.zeffy_contact_id,
+        email_sha256: contact.email ? emailHash(String(contact.email)) : null,
+      });
+    }
+    Object.assign(contact, {
+      full_name: "Erased contact", email: null, phone: null, status: "inactive",
+      zeffy_contact_id: null, zeffy_kinds: [], details_edited_at: NOW.toISOString(),
+    });
+    return null;
+  });
   fake.onRpc("zeffy_refresh_supporter_kinds", (args) => {
     for (const id of args.p_zeffy_contact_ids as string[]) {
       const counted = fake
@@ -141,6 +158,7 @@ function seed(fake: FakeSupabase, contacts: Row[] = [], status = "connected") {
   fake.seed("zeffy_payment", []);
   fake.seed("zeffy_campaign", []);
   fake.seed("zeffy_contact_match", []);
+  fake.seed("zeffy_suppressed_contact", []);
   fake.seed("zeffy_sync_state", []);
   fake.seed("zeffy_webhook_event", []);
   fake.seed("background_job_run", []);
@@ -316,7 +334,7 @@ describe("zeffy-events", () => {
     expect(db.rows("zeffy_webhook_event")[0].processed_at).toBe(NOW.toISOString());
   });
 
-  it("marks a payment deleted, and unlinks a contact Zeffy deleted while keeping it", async () => {
+  it("marks a payment deleted, and erases a contact Zeffy deleted so it is not imported again", async () => {
     seed(db);
     fakeZeffy({ payments: [zeffyPayment("pay-1", buyer("zc-1", "a@example.com"))] });
     await zeffySync({ db: asClient(db), definition: definition(), now: NOW });
@@ -327,7 +345,39 @@ describe("zeffy-events", () => {
     await zeffyEvents({ db: asClient(db), definition: definition("zeffy-events"), now: NOW });
     expect(db.rows("zeffy_payment")[0].deleted_at).toBe(NOW.toISOString());
     expect(db.rows("crm_contact")).toHaveLength(1);
-    expect(db.rows("crm_contact")[0]).toMatchObject({ zeffy_contact_id: null, zeffy_kinds: [] });
+    expect(db.rows("crm_contact")[0]).toMatchObject({ full_name: "Erased contact", email: null, zeffy_contact_id: null });
+    expect(db.rows("zeffy_suppressed_contact")).toMatchObject([{ organization_id: ORG, zeffy_contact_id: "zc-1" }]);
+
+    // A later payment from the same Zeffy contact, or from a new Zeffy
+    // identity with the same email, creates nobody and keeps no company.
+    fakeZeffy({
+      payments: [
+        zeffyPayment("pay-2", { ...buyer("zc-1", "a@example.com"), buyer: { email: "a@example.com", first_name: "A", last_name: "B", is_corporate: true, company_name: "A Co" } }),
+        zeffyPayment("pay-3", buyer("zc-new", "A@Example.com")),
+      ],
+    });
+    await zeffySync({ db: asClient(db), definition: definition(), now: NOW });
+    expect(db.rows("crm_contact")).toHaveLength(1);
+    expect(db.rows("crm_contact")[0].email).toBeNull();
+    expect(db.rows("zeffy_payment").find((row) => row.zeffy_id === "pay-2")?.company_name ?? null).toBeNull();
+  });
+
+  it("only unlinks a contact entered in the Hub when Zeffy deletes its supporter", async () => {
+    seed(db, [{ id: "hub-1", organization_id: ORG, full_name: "Typed in the Hub", email: "hub@example.com", zeffy_contact_id: "zc-hub", source: "hub" }]);
+    db.seed("zeffy_webhook_event", [event("evt-1", "contact.deleted", "zc-hub")]);
+    await zeffyEvents({ db: asClient(db), definition: definition("zeffy-events"), now: NOW });
+    expect(db.rows("crm_contact")[0]).toMatchObject({ full_name: "Typed in the Hub", email: "hub@example.com", zeffy_contact_id: null });
+    expect(db.rows("zeffy_suppressed_contact")).toMatchObject([{ zeffy_contact_id: "zc-hub" }]);
+  });
+
+  it("does not overwrite a Zeffy supporter someone corrected in the Hub", async () => {
+    seed(db, [
+      { id: "zef-1", organization_id: ORG, full_name: "Corrected Name", email: "right@example.com", zeffy_contact_id: "zc-zef", source: "zeffy", details_edited_at: NOW.toISOString() },
+    ]);
+    fakeZeffy({ contacts: [{ ...fixture.contact, id: "zc-zef", first_name: "Wrong", last_name: "Name", email: "wrong@example.com" }] });
+    db.seed("zeffy_webhook_event", [event("evt-1", "contact.updated", "zc-zef")]);
+    await zeffyEvents({ db: asClient(db), definition: definition("zeffy-events"), now: NOW });
+    expect(db.rows("crm_contact")[0]).toMatchObject({ full_name: "Corrected Name", email: "right@example.com" });
   });
 
   it("updates details only for supporters the sync created", async () => {

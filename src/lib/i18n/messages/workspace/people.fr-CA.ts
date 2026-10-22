@@ -204,6 +204,28 @@ export const peopleFrCA: typeof peopleEn = {
     },
   },
   crm: {
+    contactDialog: {
+      edit: "Corriger les coordonnées",
+      title: "Corriger les coordonnées du contact",
+      name: "Nom",
+      roleTitle: "Rôle ou titre",
+      email: "Courriel",
+      phone: "Téléphone",
+      save: "Enregistrer",
+      cancel: "Annuler",
+      saved: "Coordonnées enregistrées.",
+    },
+    erase: {
+      button: "Effacer le contact",
+      title: "Effacer {name}?",
+      explanation:
+        "À utiliser quand la personne demande à être effacée. Son nom, son courriel, son téléphone et ses notes, sa note confidentielle et le texte des interactions avec elle sont supprimés définitivement, et Zeffy ne l’importera plus.",
+      kept: "Les montants des dons sont conservés, sans son identité, pendant la période de conservation fiscale. Les reçus fiscaux déjà émis sont conservés tels quels. Les copies du nom dans l’historique d’activité, les notifications et les courriels envoyés sont supprimées par leur propre nettoyage, pas ici.",
+      confirm: "Effacer définitivement",
+      cancel: "Annuler",
+      done: "Contact effacé.",
+      failed: "Impossible d’effacer le contact.",
+    },
     tabs: {
       organizations: "Organisations",
       supporters: "Sympathisants",

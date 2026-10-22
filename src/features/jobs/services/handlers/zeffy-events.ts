@@ -1,5 +1,6 @@
 import { ZeffyClient, ZeffyRateLimitedError, zeffyConfig } from "@/features/zeffy/client";
 import {
+  eraseDeletedContact,
   markPaymentDeleted,
   saveContacts,
   savePayments,
@@ -63,7 +64,7 @@ async function applyEvent(ctx: ZeffyContext, client: ZeffyClient, event: EventRo
       return;
     }
     case "contact.deleted":
-      await unlinkContact(ctx, id);
+      await eraseDeletedContact(ctx, id);
       return;
     default:
       return;
