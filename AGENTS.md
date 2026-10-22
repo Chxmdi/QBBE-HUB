@@ -46,6 +46,20 @@ the Docker daemon does not auto-start and Supabase must be started manually:
   manually after the first sign-up if you want synthetic data:
   `sudo -E docker exec -i supabase_db_workspace psql -U postgres -d postgres < supabase/seed/seed.sql`.
 
+### Migration versions
+
+- Applied migrations carry versions dated up to 2026-11-15, ahead of the
+  calendar. `supabase migration new` names a file with today's timestamp,
+  which would sort before them: the hosted `supabase db push` refuses it, and
+  a fresh `db reset` would apply it out of order. Until the calendar passes
+  the newest version on `main`, rename every new migration to the newest
+  version on `main` plus one step (for example `20261116010000_...` after
+  `20261115020000_...`). Never use `db push --include-all`, and never rename
+  or delete a migration that has been applied anywhere.
+- `tests/unit/migration-filenames.test.ts` enforces this against the frozen
+  list in `tests/unit/migration-baseline.json`. Do not add entries to that
+  list to make the test pass.
+
 ### Non-obvious gotchas
 
 - `auto_expose_new_tables = true` is set in `supabase/config.toml`. The
