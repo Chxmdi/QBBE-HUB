@@ -167,8 +167,8 @@ begin
   perform tests.ok((select count(*) from report_instance where id = v_report) = 1, 'fixture: the project manager sees the report');
   perform tests.ok(not tests.refused(format($q$update report_instance set title = 'Tamper report renamed' where id = %L$q$, v_report)),
     'fixture: the project manager may edit the report');
-  perform tests.gap(format('update report_instance set project_id = %L where id = %L', v_other_project, v_report),
-    'TEST-003', 'a project manager cannot move a report to a project they do not manage');
+  perform tests.refused_ok(format('update report_instance set project_id = %L where id = %L', v_other_project, v_report),
+    'a project manager cannot move a report to a project they do not manage');
   perform tests.refused_ok(format('update report_instance set generated_by = %L where id = %L', v_owner, v_report), 'a project manager cannot rewrite who generated a report');
   perform tests.refused_ok(format('update report_instance set approved_by = %L, approved_at = now() where id = %L', v_owner, v_report), 'a project manager cannot record someone else''s approval of a report');
 
