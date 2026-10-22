@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { parseSidebarState, type SidebarState } from "@/features/channels/sidebar-state";
+import { logEvent } from "@/lib/server-log";
 
 /**
  * public.sidebar_state() once per request: the workspace layout and the
@@ -11,6 +12,6 @@ import { parseSidebarState, type SidebarState } from "@/features/channels/sideba
 export const getSidebarState = cache(async (): Promise<SidebarState> => {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("sidebar_state");
-  if (error) console.error("Could not read sidebar_state", { error: error.message });
+  if (error) logEvent("channels.sidebar_state_failed", { error: error.message }, "error");
   return parseSidebarState(error ? null : data);
 });

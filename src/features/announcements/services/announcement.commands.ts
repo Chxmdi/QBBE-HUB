@@ -12,6 +12,7 @@ import { createNotifications, notificationDedupeKey } from "@/features/jobs/serv
 import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
+import { logEvent } from "@/lib/server-log";
 
 export async function acknowledgeAnnouncement(
   announcementId: string,
@@ -97,7 +98,7 @@ export async function publishAnnouncement(
     .maybeSingle();
 
   if (channelError) {
-    console.error(JSON.stringify({ event: "announcements.channel_lookup_failed", error: channelError.message }));
+    logEvent("announcements.channel_lookup_failed", { error: channelError.message }, "error");
     return { ok: false, error: t("announcements.errors.publishFailed") };
   }
   if (!channel) return { ok: false, error: t("announcements.errors.noChannel") };
