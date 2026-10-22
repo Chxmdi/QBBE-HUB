@@ -99,45 +99,36 @@ begin
   perform tests.ok((select count(*) from message where author_id <> v_guest) >= 1,
     'fixture: the guest sees messages by other people');
 
-  perform tests.gap(format(
+  perform tests.refused_ok(format(
     $q$insert into notification (user_id, organization_id, category, title, link)
-       values (%L, %L, 'security', 'Tamper', '/x')$q$, v_owner, v_org),
-    'SEC-004', 'a guest cannot create a notification for someone else');
-  perform tests.gap(format(
+       values (%L, %L, 'security', 'Tamper', '/x')$q$, v_owner, v_org), 'a guest cannot create a notification for someone else');
+  perform tests.refused_ok(format(
     $q$insert into audit_event (organization_id, actor_id, actor_type, event_type, action, result)
-       values (%L, %L, 'user', 'data_export', 'export_downloaded', 'success')$q$, v_org, v_owner),
-    'SEC-005', 'a guest cannot write an audit event under someone else''s name');
-  perform tests.gap(format(
+       values (%L, %L, 'user', 'data_export', 'export_downloaded', 'success')$q$, v_org, v_owner), 'a guest cannot write an audit event under someone else''s name');
+  perform tests.refused_ok(format(
     $q$insert into activity_event (organization_id, actor_id, verb, source_type, source_id, summary)
-       values (%L, %L, 'updated', 'task', %L, 'Tamper')$q$, v_org, v_owner, v_task),
-    'SEC-005', 'a guest cannot write an activity entry under someone else''s name');
-  perform tests.gap(format(
+       values (%L, %L, 'updated', 'task', %L, 'Tamper')$q$, v_org, v_owner, v_task), 'a guest cannot write an activity entry under someone else''s name');
+  perform tests.refused_ok(format(
     $q$insert into api_token (organization_id, user_id, name, token_hash, token_prefix, scopes, expires_at)
        values (%L, %L, 'Tamper', encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 'qbt_tamp', '{objects:read}', now() + interval '30 days')$q$,
-    v_org, v_guest),
-    'SEC-018', 'a guest cannot create an API key directly');
+    v_org, v_guest), 'a guest cannot create an API key directly');
 
   -- Their own chat message stays where it was posted, as what it was.
-  perform tests.gap(format('update message set channel_id = %L where id = %L', v_announcements, v_message),
-    'SEC-009', 'a message''s author cannot move it to another channel');
-  perform tests.gap(format('update message set is_system = true where id = %L', v_message),
-    'SEC-009', 'a message''s author cannot mark it as a system message');
-  perform tests.gap(format($q$update message set created_at = '2020-01-01' where id = %L$q$, v_message),
-    'SEC-009', 'a message''s author cannot backdate it');
+  perform tests.refused_ok(format('update message set channel_id = %L where id = %L', v_announcements, v_message), 'a message''s author cannot move it to another channel');
+  perform tests.refused_ok(format('update message set is_system = true where id = %L', v_message), 'a message''s author cannot mark it as a system message');
+  perform tests.refused_ok(format($q$update message set created_at = '2020-01-01' where id = %L$q$, v_message), 'a message''s author cannot backdate it');
   perform tests.refused_ok(format('update message set author_id = %L where id = %L', v_owner, v_message),
     'a message''s author cannot hand it to someone else');
 
   -- Membership of a conversation is not movable to someone else's.
-  perform tests.gap(format('update conversation_member set conversation_id = %L where conversation_id = %L',
-      v_private_conversation, v_conversation),
-    'TEST-003', 'a member cannot move their membership into another conversation');
+  perform tests.refused_ok(format('update conversation_member set conversation_id = %L where conversation_id = %L',
+      v_private_conversation, v_conversation), 'a member cannot move their membership into another conversation');
   perform tests.refused_ok(format('update conversation_member set user_id = %L where conversation_id = %L',
       v_owner, v_conversation),
     'a member cannot hand their membership to someone else');
 
   -- Their own profile cannot claim another person's volunteer record.
-  perform tests.gap(format($q$update user_profile set vms_id = 'tamper-vms-id' where id = %L$q$, v_guest),
-    'TEST-003', 'a person cannot set the volunteer-system link on their own profile');
+  perform tests.refused_ok(format($q$update user_profile set vms_id = 'tamper-vms-id' where id = %L$q$, v_guest), 'a person cannot set the volunteer-system link on their own profile');
 
   -- Unfiltered: an update with no WHERE touches nobody else's rows.
   perform tests.refused_ok(format('update notification set user_id = %L', v_owner),
@@ -152,8 +143,7 @@ begin
   perform tests.ok((select count(*) from task where id = v_task) = 1, 'fixture: the contributor sees the task');
   perform tests.ok(not tests.refused(format($q$update task set title = 'Tamper task renamed' where id = %L$q$, v_task)),
     'fixture: the contributor may work on the task');
-  perform tests.gap(format('update task set approver_id = %L where id = %L', v_volunteer, v_task),
-    'TEST-003', 'a contributor cannot make themselves the task''s approver');
+  perform tests.refused_ok(format('update task set approver_id = %L where id = %L', v_volunteer, v_task), 'a contributor cannot make themselves the task''s approver');
   perform tests.refused_ok(format('update task set project_id = %L where id = %L', v_other_project, v_task),
     'a contributor cannot move the task to another project');
   perform tests.refused_ok(format('update task set created_by = %L where id = %L', v_volunteer, v_task),
@@ -164,18 +154,13 @@ begin
   perform tests.ok((select count(*) from crm_contact where id = v_contact) = 1, 'fixture: staff see the CRM contact');
   perform tests.ok((select count(*) from crm_organization where id = v_crm_org) = 1, 'fixture: staff see the CRM organization');
   perform tests.ok((select count(*) from channel where id = v_staff_channel and owner_id = v_staff) = 1, 'fixture: staff see their own channel');
-  perform tests.gap(format('update crm_contact set owner_id = %L where id = %L', v_staff, v_contact),
-    'SEC-007', 'staff cannot make themselves owner of someone else''s CRM contact');
-  perform tests.gap(format('update crm_organization set owner_id = %L where id = %L', v_staff, v_crm_org),
-    'SEC-007', 'staff cannot make themselves owner of someone else''s CRM organization');
-  perform tests.gap(format('update crm_contact set owner_id = %L where owner_id is distinct from %L', v_staff, v_staff),
-    'SEC-007', 'an unfiltered update cannot take over every CRM contact');
-  perform tests.gap(format($q$update channel set type = 'announcements', is_mandatory = true where id = %L$q$, v_staff_channel),
-    'SEC-015', 'a channel''s owner cannot turn it into a mandatory announcements channel');
-  perform tests.gap(format(
+  perform tests.refused_ok(format('update crm_contact set owner_id = %L where id = %L', v_staff, v_contact), 'staff cannot make themselves owner of someone else''s CRM contact');
+  perform tests.refused_ok(format('update crm_organization set owner_id = %L where id = %L', v_staff, v_crm_org), 'staff cannot make themselves owner of someone else''s CRM organization');
+  perform tests.refused_ok(format('update crm_contact set owner_id = %L where owner_id is distinct from %L', v_staff, v_staff), 'an unfiltered update cannot take over every CRM contact');
+  perform tests.refused_ok(format($q$update channel set type = 'announcements', is_mandatory = true where id = %L$q$, v_staff_channel), 'a channel''s owner cannot turn it into a mandatory announcements channel');
+  perform tests.refused_ok(format(
     $q$insert into approval_request (organization_id, report_id, requested_by, approver_id, note)
-       values (%L, %L, %L, %L, 'Tamper')$q$, v_org, v_report, v_staff, v_staff),
-    'TEST-003', 'staff cannot name themselves the approver of their own request');
+       values (%L, %L, %L, %L, 'Tamper')$q$, v_org, v_report, v_staff, v_staff), 'staff cannot name themselves the approver of their own request');
 
   -- Project manager on one project, with a report on it.
   perform tests.authenticate(v_pm, 'aal1');
@@ -184,10 +169,8 @@ begin
     'fixture: the project manager may edit the report');
   perform tests.gap(format('update report_instance set project_id = %L where id = %L', v_other_project, v_report),
     'TEST-003', 'a project manager cannot move a report to a project they do not manage');
-  perform tests.gap(format('update report_instance set generated_by = %L where id = %L', v_owner, v_report),
-    'TEST-003', 'a project manager cannot rewrite who generated a report');
-  perform tests.gap(format('update report_instance set approved_by = %L, approved_at = now() where id = %L', v_owner, v_report),
-    'TEST-003', 'a project manager cannot record someone else''s approval of a report');
+  perform tests.refused_ok(format('update report_instance set generated_by = %L where id = %L', v_owner, v_report), 'a project manager cannot rewrite who generated a report');
+  perform tests.refused_ok(format('update report_instance set approved_by = %L, approved_at = now() where id = %L', v_owner, v_report), 'a project manager cannot record someone else''s approval of a report');
 
   perform tests.clear_auth();
 end;
