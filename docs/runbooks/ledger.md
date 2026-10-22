@@ -9,10 +9,12 @@ for the 2026-10-01 switchover.
 | Person | Can |
 | --- | --- |
 | Owner or admin who completed MFA | Everything: accounts, funds, periods, entries, posting, reversing, CSV exports, naming ledger readers. |
-| Staff named as a ledger reader | Read the journal, accounts, funds, periods and reports, and export CSV. Change nothing. |
+| Staff named as a ledger reader, after completing MFA | Read the journal, accounts, funds, periods and reports (payroll and gifts included), and export CSV. Change nothing. |
 | Other staff, volunteers, guests | Nothing. Staff see "You do not have access to the ledger". |
 
-Ledger readers are managed on the Ledger overview page. The accountant's own
+Ledger readers are managed on the Ledger overview page. A reader who signed in
+without an authenticator code is sent to set one up (or enter one) before the
+books open; make sure each reader has an authenticator app before naming them. The accountant's own
 read-only login arrives with B7; until then, give the accountant CSV exports.
 
 ## Rules the database enforces (for everyone, including admins)

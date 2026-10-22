@@ -149,11 +149,14 @@ async function draftsFor(db: SupabaseClient, events: ActivityEvent[], now: Date)
     const kind = classifyEvent(event);
     if (!effectiveRule(rulesByUser.get(userId) ?? [], kind).in_app) continue;
     // Asked as the follower, never as the job: access may have changed since they followed.
+    // At the level they read the inbox at: owners and administrators use the
+    // workspace only after MFA, and can_as grants that level only to someone
+    // with a verified authenticator.
     const { data: allowed } = await db.rpc("can_as", {
       p_user: userId,
       p_object: event.source_id,
       p_capability: "view",
-      p_assurance: "aal1",
+      p_assurance: "aal2",
     });
     if (allowed !== true) continue;
     drafts.push({

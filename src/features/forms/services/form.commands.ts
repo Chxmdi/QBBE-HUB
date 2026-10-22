@@ -16,6 +16,8 @@ import {
   parseAnswers,
   type FormField,
 } from "@/features/forms/fields";
+import { dbErrorMessage } from "@/lib/db-error";
+import { FORM_DB_ERRORS } from "@/features/forms/db-error-rules";
 
 const fieldSchema = z
   .object({
@@ -153,7 +155,10 @@ export async function setFormStatus(
   if (error || !data) {
     return {
       ok: false,
-      error: error?.code === "23514" ? error.message : (await getT())("forms.errors.changeFailed"),
+      error: dbErrorMessage(await getT(), error, (await getT())("forms.errors.changeFailed"), {
+        action: "forms.status",
+        rules: FORM_DB_ERRORS,
+      }),
     };
   }
   await audit(supabase, auth.session, STATUS_ACTIONS[status], "form_definition", formId);
@@ -227,10 +232,10 @@ export async function submitForm(input: unknown): Promise<ActionResult> {
   if (error || !id) {
     return {
       ok: false,
-      error:
-        error?.code === "23514" || error?.code === "22023"
-          ? error.message
-          : (await getT())("forms.errors.submitFailed"),
+      error: dbErrorMessage(await getT(), error, (await getT())("forms.errors.submitFailed"), {
+        action: "forms.submit",
+        rules: FORM_DB_ERRORS,
+      }),
     };
   }
   revalidatePath("/forms");

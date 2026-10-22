@@ -77,10 +77,14 @@ begin
     perform tests.ok(true, 'a leadership viewer cannot create a personal task');
   end;
 
-  -- The owner still reads it, as every task in the organization.
-  perform tests.authenticate(v_owner, 'aal1');
+  -- The owner still reads it, as every task in the organization, once
+  -- signed in with MFA.
+  perform tests.authenticate(v_owner, 'aal2');
   select count(*) into n from public.task where id = v_task;
   perform tests.ok(n = 1, 'the owner reads a staff member''s personal task');
+  perform tests.authenticate(v_owner, 'aal1');
+  select count(*) into n from public.task where id = v_task;
+  perform tests.ok(n = 0, 'without MFA the owner does not read a staff member''s personal task');
 end;
 $$;
 

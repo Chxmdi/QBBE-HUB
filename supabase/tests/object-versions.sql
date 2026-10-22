@@ -108,7 +108,10 @@ begin
     end;
     perform tests.ok(v_failed, format('%s without the second step cannot save a version', v_id));
     select count(*) into v_count from public.object_version where object_id = t_open;
-    perform tests.ok(v_count = 2, format('%s without the second step still reads the history', v_id));
+    -- Without MFA only through their own access: the owner manages the
+    -- project; the admin has no grant on it.
+    perform tests.ok(v_count = case when v_id = v_owner then 2 else 0 end,
+      format('%s without the second step reads the history only through their own access', v_id));
     reset role;
   end loop;
 

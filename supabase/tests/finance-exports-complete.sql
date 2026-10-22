@@ -141,7 +141,8 @@ begin
   -- ---------------------------------------------------------------------
   -- The year's total is summed in SQL
   -- ---------------------------------------------------------------------
-  perform tests.authenticate(v_staff, 'aal1');
+  -- A ledger reader reads donor totals only after MFA (20261122070000).
+  perform tests.authenticate(v_staff, 'aal2');
   select t.gift_count, t.total_cents into v_count, v_total from public.gift_year_total(v_org, 2026) t;
   perform tests.ok(v_count = v_expect_count and v_total = v_expect_total,
     format('the year total counts recorded gifts and sums money received (%s gifts, %s; expected %s, %s)',
@@ -160,7 +161,8 @@ begin
   select count(*) into v_audits_before from public.audit_event
   where organization_id = v_org and action = 'donor_list_exported' and actor_id = v_staff;
 
-  perform tests.authenticate(v_staff, 'aal1');
+  -- A ledger reader reads donor totals only after MFA (20261122070000).
+  perform tests.authenticate(v_staff, 'aal2');
   v_list := public.gift_donor_list_all(v_org, date '2026-01-01', date '2026-12-31', 'export');
   select count(*) into v_rows from public.gift_donor_list(v_org, date '2026-01-01', date '2026-12-31', 'view');
   perform tests.ok(jsonb_typeof(v_list) = 'array' and jsonb_array_length(v_list) = v_rows,

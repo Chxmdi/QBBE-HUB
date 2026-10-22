@@ -14,6 +14,8 @@ import {
   releaseHoldSchema,
   saveRuleSchema,
 } from "@/features/record-retention/schemas";
+import { dbErrorMessage, type DbError } from "@/lib/db-error";
+import { RECORD_DB_ERRORS } from "@/features/record-retention/db-error-rules";
 
 /**
  * Records retention and legal hold.
@@ -37,6 +39,12 @@ async function firstIssue(error: { issues: { message: string }[] }): Promise<str
   if (!message) return t("records.errors.invalidInput");
   const key = Object.entries(opsEn.records.errors).find(([, text]) => text === message)?.[0];
   return key ? t(`records.errors.${key}` as MessageKey) : message;
+}
+
+/** A refusal from the database in the reader's words, or `fallback` (logged) when it is not one people should read. */
+async function refusal(error: DbError, fallback: MessageKey, action: string): Promise<string> {
+  const t = await getT();
+  return dbErrorMessage(t, error, t(fallback), { action, rules: RECORD_DB_ERRORS });
 }
 
 export async function saveRetentionRule(input: unknown): Promise<ActionResult> {
@@ -74,8 +82,8 @@ export async function saveRetentionRule(input: unknown): Promise<ActionResult> {
     },
     { onConflict: "organization_id,category_key" },
   );
-  // The trigger's message names the category and its floor.
-  if (error) return { ok: false, error: error.message };
+  // The trigger's refusal names the floor; it is shown in the reader's words.
+  if (error) return { ok: false, error: await refusal(error, "records.errors.ruleNotSaved", "records.saveRule") };
 
   revalidatePath(PATH);
   return { ok: true };
@@ -125,7 +133,7 @@ export async function placeLegalHold(input: unknown): Promise<ActionResult> {
     })
     .select("id")
     .single();
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: await refusal(error, "records.errors.holdNotPlaced", "records.placeHold") };
 
   revalidatePath(PATH);
   return { ok: true, id: data.id as string };
@@ -145,7 +153,7 @@ export async function releaseLegalHold(input: unknown): Promise<ActionResult> {
     .eq("organization_id", authorization.session.organizationId)
     .is("released_at", null)
     .select("id");
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: await refusal(error, "records.errors.holdNotReleased", "records.releaseHold") };
   if (!data || data.length === 0) {
     return { ok: false, error: (await getT())("records.errors.holdNotActive") };
   }
@@ -170,9 +178,9 @@ export async function classifyDocument(input: unknown): Promise<ActionResult> {
     .eq("id", parsed.data.documentId)
     .eq("organization_id", authorization.session.organizationId)
     .select("id");
-  // The guard's message says why: a hold, or a change that would shorten
-  // how long the record must be kept.
-  if (error) return { ok: false, error: error.message };
+  // The guard's refusal says why: a hold, or a change that would shorten how
+  // long the record must be kept.
+  if (error) return { ok: false, error: await refusal(error, "records.errors.documentNotClassified", "records.classify") };
   if (!data || data.length === 0) {
     return { ok: false, error: (await getT())("records.errors.documentNotFound") };
   }

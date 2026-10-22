@@ -137,8 +137,12 @@ begin
   perform tests.ok(v_ok, 'the fan-out position is not readable through the API');
   reset role;
 
-  -- The fan-out job checks each follower as themselves.
-  perform tests.ok(public.can_as(v_owner, v_task, 'view'), 'the job confirms the owner can still see the task');
+  -- The fan-out job checks each follower as themselves, at the level they
+  -- read the inbox at (owners and administrators only after MFA).
+  perform tests.ensure_verified_mfa_factor(v_owner);
+  perform tests.ok(public.can_as(v_owner, v_task, 'view', 'aal2'), 'the job confirms the owner can still see the task');
+  perform tests.ok(not public.can_as(v_owner, v_task, 'view', 'aal1'),
+    'without MFA the owner reads only what their own grants give');
   perform tests.ok(not public.can_as(v_volunteer, v_task, 'view'), 'the job refuses a follower who cannot see the task');
 
   -- ---------------------------------------------------------- signed out

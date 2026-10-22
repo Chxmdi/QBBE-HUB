@@ -23,7 +23,9 @@ function world(allowed: (user: string) => boolean, switchOn = true) {
     { id: "f3", organization_id: "o1", user_id: "muted", object_id: "t1", query_spec: null },
   ]);
   db.seed("follow_rule_v2", [{ user_id: "muted", event_kind: "status", in_app: false, email: "off" }]);
-  db.onRpc("can_as", (args) => allowed(String(args.p_user)));
+  // Followers are checked at the level they read the inbox at; can_as grants
+  // it only to someone with a verified authenticator.
+  db.onRpc("can_as", (args) => args.p_assurance === "aal2" && allowed(String(args.p_user)));
   return db;
 }
 

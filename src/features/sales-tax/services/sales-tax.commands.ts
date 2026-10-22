@@ -11,6 +11,8 @@ import { parseMoneyToCents } from "@/features/ledger/money";
 import { FILING_FREQUENCIES, TAX_CODES } from "@/features/sales-tax/return-lines";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
+import { dbErrorMessage } from "@/lib/db-error";
+import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
 
 /**
  * GST/QST actions (#152). Every write is for owners and admins who completed
@@ -22,23 +24,16 @@ const SALES_TAX = "/finance/sales-tax";
 
 type DbError = { code?: string; message: string } | null;
 
-// The tax functions raise with sentences written for people; anything else
-// (row-level security, a network failure) gets a generic message.
-const READABLE_CODES = new Set(["23514", "22023", "42501", "23505", "P0002"]);
+// The tax functions raise English sentences; the listed ones are shown in the
+// reader's language, anything else (row-level security, a network failure) as
+// a generic message.
 
 function dbMessage(t: TranslateFn, error: DbError, fallback: MessageKey): string {
   if (!error) return t(fallback);
   if (error.code === "23514" && /violates check constraint/i.test(error.message)) {
     return t("finance.salesTax.errors.checkValues");
   }
-  if (
-    error.code &&
-    READABLE_CODES.has(error.code) &&
-    !/row-level security|permission denied/i.test(error.message)
-  ) {
-    return error.message;
-  }
-  return t(fallback);
+  return dbErrorMessage(t, error, t(fallback), { action: "finance.salesTax", rules: FINANCE_DB_ERRORS });
 }
 
 /**

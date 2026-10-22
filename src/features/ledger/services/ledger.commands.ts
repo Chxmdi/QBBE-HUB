@@ -14,6 +14,8 @@ import {
   FUND_RESTRICTIONS,
   parseMoneyToCents,
 } from "@/features/ledger/money";
+import { dbErrorMessage } from "@/lib/db-error";
+import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
 
 /**
  * Bookkeeping actions (#148, #149). Every write is for owners and admins who
@@ -26,27 +28,17 @@ const LEDGER = "/finance/ledger";
 
 type DbError = { code?: string; message: string } | null;
 
-// The ledger's own rules raise with sentences written for people; anything
-// else (row-level security, a network failure) gets a generic message.
-const READABLE_CODES = new Set(["23514", "22023", "42501", "23505", "P0002"]);
-
+// The ledger's own rules raise English sentences; the listed ones are shown
+// in the reader's language, anything else (row-level security, a network
+// failure) as a generic message.
 function dbMessage(t: TranslateFn, error: DbError, fallback: string): string {
   if (!error) return fallback;
   if (error.code === "23503") return t("finance.ledger.errors.notInOrganization");
-  if (error.code === "23505" && /unique|duplicate/i.test(error.message)) {
-    return error.message.includes("reversed") ? error.message : t("finance.ledger.errors.codeUsed");
-  }
+  if (error.code === "23505" && /unique|duplicate/i.test(error.message)) return t("finance.ledger.errors.codeUsed");
   if (error.code === "23514" && /violates check constraint/i.test(error.message)) {
     return t("finance.ledger.errors.checkValues");
   }
-  if (
-    error.code &&
-    READABLE_CODES.has(error.code) &&
-    !/row-level security|permission denied/i.test(error.message)
-  ) {
-    return error.message;
-  }
-  return fallback;
+  return dbErrorMessage(t, error, fallback, { action: "finance.ledger", rules: FINANCE_DB_ERRORS });
 }
 
 /** Validation messages are catalogue keys, translated when the action returns. */

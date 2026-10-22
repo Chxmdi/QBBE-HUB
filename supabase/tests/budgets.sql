@@ -194,7 +194,9 @@ begin
 
   -- Staff, even ledger readers, cannot change lines.
   insert into public.ledger_reader (organization_id, user_id) values (v_org, v_staff);
-  perform tests.authenticate(v_staff, 'aal1');
+  -- Ledger readers read the books only with MFA.
+  perform tests.ensure_verified_mfa_factor(v_staff);
+  perform tests.authenticate(v_staff, 'aal2');
   perform tests.budget_raises(format(
     'select public.budget_save_line(%L, null, %L, null, null, null, array_fill(1::bigint, array[12]), null)', v_budget, v_supplies),
     'administrator with MFA', 'a ledger reader cannot add budget lines');
@@ -336,7 +338,9 @@ begin
   perform tests.clear_auth(); reset role;
 
   insert into public.ledger_reader (organization_id, user_id) values (v_org, v_staff);
-  perform tests.authenticate(v_staff, 'aal1');
+  -- Ledger readers read the books only with MFA.
+  perform tests.ensure_verified_mfa_factor(v_staff);
+  perform tests.authenticate(v_staff, 'aal2');
   select count(*) into v_rows from public.budget_vs_actual(v_v2, date '2026-11-01');
   perform tests.ok(v_rows >= 3, 'a named ledger reader runs the report');
   perform tests.clear_auth(); reset role;

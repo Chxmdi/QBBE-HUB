@@ -73,7 +73,18 @@ begin
   );
   reset role;
 
+  -- Without MFA an admin reads only through their own grants (none here).
   perform tests.authenticate(v_admin, 'aal1');
+  begin
+    perform public.touch_presence(t_open, null, false);
+    perform tests.ok(false, 'admin without the second step cannot open an object they have no grant on');
+  exception when others then
+    perform tests.ok(sqlerrm like '%cannot open%',
+      'admin without the second step cannot open an object they have no grant on');
+  end;
+  reset role;
+
+  perform tests.authenticate(v_admin, 'aal2');
   perform public.touch_presence(t_open, null, false);
   select count(*) into v_count from public.object_presence where object_id = t_open;
   perform tests.ok(v_count = 2, 'admin sees everyone on an object they can view');

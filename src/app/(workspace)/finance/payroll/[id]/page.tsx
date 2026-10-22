@@ -68,7 +68,7 @@ export default async function PayrollRunPage({ params }: { params: Promise<{ id:
   const { run, allocation, entryNumbers } = found;
   const draft = run.status === "draft";
   // Posted runs show the entry that was posted; drafts, the one posting would make.
-  const preview = draft ? await previewLines(supabase, run.id, t("finance.payroll.run.previewFailed")) : null;
+  const preview = draft ? await previewLines(supabase, run.id, t, t("finance.payroll.run.previewFailed")) : null;
   const { data: postedLines } = draft
     ? { data: null }
     : await supabase

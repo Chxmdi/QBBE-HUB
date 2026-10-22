@@ -9,7 +9,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translator";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 import { parseMoneyToCents } from "@/features/ledger/money";
 import { emailAcknowledgement } from "@/features/gifts/services/gift.email";
 import {
@@ -26,6 +26,8 @@ import {
   toAckGift,
   type StatementRow,
 } from "@/features/gifts/services/gift.data";
+import { dbErrorMessage } from "@/lib/db-error";
+import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
 
 /**
  * Gift, grant and acknowledgement actions (#156). Every write is for owners
@@ -40,24 +42,16 @@ const GRANTS = "/finance/gifts/grants";
 
 type DbError = { code?: string; message: string } | null;
 
-// The database's own rules raise with sentences written for people; anything
-// else (row-level security, a network failure) gets a generic message.
-const READABLE_CODES = new Set(["23514", "22023", "42501", "23505", "P0002"]);
-
-function dbMessage(error: DbError, fallback: MessageKey): string {
+// The database's own rules raise English sentences; the listed ones are shown
+// in the reader's language, anything else (row-level security, a network
+// failure) as `fallback`, a key `translated` turns into the reader's language.
+function dbMessage(t: TranslateFn, error: DbError, fallback: MessageKey): string {
   if (!error) return fallback;
   if (error.code === "23503") return "finance.gifts.errors.notInOrganization";
   if (error.code === "23514" && /violates check constraint/i.test(error.message)) {
     return "finance.gifts.errors.checkValues";
   }
-  if (
-    error.code &&
-    READABLE_CODES.has(error.code) &&
-    !/row-level security|permission denied/i.test(error.message)
-  ) {
-    return error.message;
-  }
-  return fallback;
+  return dbErrorMessage(t, error, fallback, { action: "finance.gifts", rules: FINANCE_DB_ERRORS });
 }
 
 async function authorize(
@@ -184,7 +178,7 @@ async function recordGiftImpl(input: unknown): Promise<ActionResult> {
       note: g.note,
     },
   });
-  if (error || !data) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotRecord") };
+  if (error || !data) return { ok: false, error: dbMessage(await getT(), error, "finance.gifts.errors.couldNotRecord") };
   revalidatePath(GIFTS, "layout");
   revalidatePath("/finance/ledger", "layout");
   if (g.grantId) revalidatePath(GRANTS, "layout");
@@ -208,7 +202,7 @@ async function voidGiftImpl(input: unknown): Promise<ActionResult> {
     p_date: parsed.data.voidOn,
     p_reason: parsed.data.reason,
   });
-  if (error) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotVoid") };
+  if (error) return { ok: false, error: dbMessage(await getT(), error, "finance.gifts.errors.couldNotVoid") };
   revalidatePath(GIFTS, "layout");
   revalidatePath("/finance/ledger", "layout");
   return { ok: true };
@@ -276,7 +270,7 @@ async function issue(
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotIssue") };
+  if (error || !data) return { ok: false, error: dbMessage(await getT(), error, "finance.gifts.errors.couldNotIssue") };
   const id = data.id as string;
   if (delivery.channel === "email" && delivery.recipientEmail) {
     return deliverByEmail(supabase, { id, to: delivery.recipientEmail, subject: letter.subject, text: letter.text });
@@ -351,7 +345,7 @@ async function issueAnnualStatementImpl(input: unknown): Promise<ActionResult> {
     donorDisplayName(supabase, donor),
     organizationName(supabase, auth.organizationId),
   ]);
-  if (error) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotReadGifts") };
+  if (error) return { ok: false, error: dbMessage(await getT(), error, "finance.gifts.errors.couldNotReadGifts") };
   if (!name) return { ok: false, error: "finance.gifts.errors.donorNotFound" };
   const letter = renderAnnualStatement({
     language: parsedDelivery.data.language,
@@ -481,7 +475,7 @@ async function saveGrantImpl(input: unknown): Promise<ActionResult> {
         .insert({ ...row, organization_id: auth.organizationId })
         .select("id")
         .single();
-  if (error || !data) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotSaveGrant") };
+  if (error || !data) return { ok: false, error: dbMessage(await getT(), error, "finance.gifts.errors.couldNotSaveGrant") };
   revalidatePath(GRANTS, "layout");
   return { ok: true, id: data.id as string };
 }
@@ -510,7 +504,7 @@ async function addGrantReportImpl(input: unknown): Promise<ActionResult> {
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotAddReport") };
+  if (error || !data) return { ok: false, error: dbMessage(await getT(), error, "finance.gifts.errors.couldNotAddReport") };
   revalidatePath(`${GRANTS}/${parsed.data.grantId}`);
   return { ok: true, id: data.id as string };
 }
@@ -533,7 +527,7 @@ async function setGrantReportSubmittedImpl(input: unknown): Promise<ActionResult
     .eq("organization_id", auth.organizationId)
     .select("grant_id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: dbMessage(error, "finance.gifts.errors.couldNotUpdateReport") };
+  if (error || !data) return { ok: false, error: dbMessage(await getT(), error, "finance.gifts.errors.couldNotUpdateReport") };
   revalidatePath(`${GRANTS}/${data.grant_id as string}`);
   return { ok: true };
 }
@@ -551,7 +545,7 @@ async function deleteGrantReportImpl(reportId: string): Promise<ActionResult> {
     .select("grant_id")
     .maybeSingle();
   if (error || !data) {
-    return { ok: false, error: dbMessage(error, "finance.gifts.errors.onlyUnsubmittedRemovable") };
+    return { ok: false, error: dbMessage(await getT(), error, "finance.gifts.errors.onlyUnsubmittedRemovable") };
   }
   revalidatePath(`${GRANTS}/${data.grant_id as string}`);
   return { ok: true };

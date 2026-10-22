@@ -13,7 +13,9 @@ export const ME = "11111111-1111-4111-8111-111111111111";
 export const ID = "33333333-3333-4333-8333-333333333333";
 
 /** A refusal written for people (a ledger rule) and one that is not (row security). */
-export const READABLE = { code: "23514", message: "The period is closed." };
+/** A refusal the database words for people, and the key the actions show it as (the harness translator returns keys). */
+export const READABLE = { code: "23514", message: "Close the earlier periods first" };
+export const READABLE_KEY = "finance.dbErrors.closeEarlierFirst";
 export const RLS = { code: "42501", message: 'new row violates row-level security policy for table "journal_entry"' };
 
 export const harness = {
@@ -101,8 +103,9 @@ export type ValidCall = [name: string, call: () => Promise<Result>, gate: "admin
 /**
  * What every finance write must do, whatever it writes: refuse a caller below
  * its gate and one over the rate limit before touching the database; on
- * success, refresh the pages; on a refusal, show a rule's own sentence but
- * never a row-security or permission message, and refresh nothing.
+ * success, refresh the pages; on a refusal, show a rule's own sentence (in
+ * the reader's language) but never a row-security or permission message, and
+ * refresh nothing.
  */
 export function commandContract(valid: ValidCall[], fallbackPrefix: RegExp) {
   it.each(valid)("%s refuses a caller below its gate, before the database", async (_name, call, gate) => {
@@ -131,7 +134,7 @@ export function commandContract(valid: ValidCall[], fallbackPrefix: RegExp) {
   it.each(valid)("%s shows a rule's own sentence, and never a row-security message", async (_name, call) => {
     harness.rpc = () => ({ data: null, error: READABLE });
     harness.table = () => ({ data: null, error: READABLE });
-    expect(await call()).toEqual({ ok: false, error: READABLE.message });
+    expect(await call()).toEqual({ ok: false, error: READABLE_KEY });
 
     harness.revalidated = 0;
     harness.rpc = () => ({ data: null, error: RLS });

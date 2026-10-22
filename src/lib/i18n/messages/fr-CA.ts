@@ -11,6 +11,7 @@ import { adminFrCA } from "@/lib/i18n/messages/workspace/admin.fr-CA";
 import { opsFrCA } from "@/lib/i18n/messages/workspace/ops.fr-CA";
 import type { Messages } from "@/lib/i18n/messages/en";
 import { commonFrCA } from "@/lib/i18n/messages/finance/common.fr-CA";
+import { dbErrorsFrCA } from "@/lib/i18n/messages/finance/db-errors.fr-CA";
 import { approvalsFrCA } from "@/lib/i18n/messages/finance/approvals.fr-CA";
 import { receiptsFrCA } from "@/lib/i18n/messages/finance/receipts.fr-CA";
 import { payablesFrCA } from "@/lib/i18n/messages/finance/payables.fr-CA";
@@ -286,6 +287,7 @@ export const frCA: Messages = {
   },
   finance: {
     common: commonFrCA,
+    dbErrors: dbErrorsFrCA,
     approvals: approvalsFrCA,
     receipts: receiptsFrCA,
     payables: payablesFrCA,

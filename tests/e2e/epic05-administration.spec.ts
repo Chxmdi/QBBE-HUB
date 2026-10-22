@@ -176,3 +176,33 @@ test("an unapproved template cannot be used, and an approved one creates a clean
   `).trim();
   expect(approved).toBe("t");
 });
+
+test("audit pages share no event and skip none when many events have one timestamp", async ({ page }) => {
+  const stamp = Date.now();
+  const type = `zzpaging.${stamp}`;
+  // 45 events of one type recorded in the same instant: the boundary between
+  // the first and second page falls among them.
+  sql(`insert into audit_event (organization_id, actor_type, event_type, action, object_type, created_at)
+       select m.organization_id, 'system', '${type}', 'zzpage_' || g, 'organization', now()
+       from organization_membership m, generate_series(1, 45) g
+       where m.user_id = '${OWNER}'`);
+  try {
+    await signIn(page, "owner");
+    await page.goto(`/admin?audit=${type}`);
+    const section = page.getByRole("region", { name: "Audit history" });
+    const items = section.getByRole("listitem");
+    const seen: string[] = [];
+    for (let pageNo = 1; pageNo <= 3; pageNo += 1) {
+      await expect(items.first()).toBeVisible();
+      for (const text of await items.allInnerTexts()) seen.push(/zzpage (\d+)/.exec(text)?.[1] ?? text);
+      const older = section.getByRole("link", { name: "Older events" });
+      if ((await older.count()) === 0) break;
+      await older.click();
+      await page.waitForURL(/auditBeforeId=/);
+    }
+    expect(seen).toHaveLength(45);
+    expect(new Set(seen).size).toBe(45);
+  } finally {
+    sql(`delete from audit_event where event_type = '${type}'`);
+  }
+});
