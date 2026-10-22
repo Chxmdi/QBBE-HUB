@@ -1048,10 +1048,8 @@ begin
           '{"metrics":{"tasks_completed":10}}'::jsonb, v_staff)
   returning id into v_report;
 
-  insert into report_version (organization_id, report_id, version_number,
-                              snapshot, generated_by)
-  values (v_org, v_report, 1, '{"metrics":{"tasks_completed":10}}'::jsonb, v_staff)
-  returning id into v_version;
+  -- Versions are recorded through record_report_version only.
+  v_version := public.record_report_version(v_report, '{"metrics":{"tasks_completed":10}}'::jsonb, null);
 
   select count(*) into n from report_version where id = v_version;
   perform tests.ok(n = 1, 'staff can record and read a report version');

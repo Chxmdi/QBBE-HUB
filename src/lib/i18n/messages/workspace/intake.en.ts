@@ -89,6 +89,8 @@ export const intakeEn = {
       approvalFailed: "That approval could not be requested.",
       approvalNotAvailable: "That approval is not available to you.",
       alreadyAnswered: "That one has already been answered.",
+      selfApprover: "Ask someone else to decide: you cannot approve your own request.",
+      ownRequest: "You cannot decide your own request. You can withdraw it.",
       onlyApprover: "Only the person asked can answer this — ask an administrator to reassign it.",
       generic: "That didn't work. Try again.",
     },

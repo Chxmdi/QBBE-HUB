@@ -106,6 +106,17 @@ export const accountEn = {
     },
   },
   settings: {
+    profile: {
+      heading: "Profile",
+      name: "Name",
+      jobTitle: "Title",
+      email: "Email",
+      emailHelp: "Your sign-in email. An administrator changes it if it is wrong.",
+      save: "Save profile",
+      saved: "Profile saved.",
+      saveFailed: "Could not save your profile.",
+      nameRequired: "Enter your name.",
+    },
     title: "Account settings",
     eyebrow: "Account",
     heading: "Settings",

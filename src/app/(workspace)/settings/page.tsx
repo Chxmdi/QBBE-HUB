@@ -7,6 +7,7 @@ import { verifiedTotpFactors } from "@/features/auth/mfa";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { LanguageSettings } from "@/features/preferences/components/language-switcher";
+import { ProfileForm } from "@/features/people/components/profile-form";
 import { isLocale } from "@/lib/i18n/config";
 import { getT } from "@/lib/i18n/server";
 
@@ -32,7 +33,7 @@ export default async function SettingsPage() {
     session.isAdmin
       ? supabase.auth.mfa.listFactors()
       : Promise.resolve({ data: null, error: null }),
-    supabase.from("user_profile").select("reduce_motion").eq("id", session.userId).maybeSingle(),
+    supabase.from("user_profile").select("full_name, title, email, reduce_motion").eq("id", session.userId).maybeSingle(),
   ]);
 
   type MembershipRow = {
@@ -54,6 +55,13 @@ export default async function SettingsPage() {
         eyebrow={t("settings.eyebrow")}
         title={t("settings.heading")}
         description={t("settings.description")}
+      />
+      <ProfileForm
+        initial={{
+          fullName: profile?.full_name ?? session.profile.full_name,
+          title: profile?.title ?? null,
+          email: profile?.email ?? "",
+        }}
       />
       <LanguageSettings
         current={isLocale(session.profile.locale) ? session.profile.locale : "auto"}

@@ -208,14 +208,16 @@ test("an owner writes a French template; staff generate a PDF from it into the l
 
   const saved = sql(
     `select d.mime_type || '|' || f.name || '|' || t.source || '|' ||
-            (t.content like 'Bonjour %Bienvenue depuis le % 20__.%Référence ${stamp}.%')
+            (t.content like 'Bonjour %Bienvenue depuis le % 20__.%Référence ${stamp}.%') || '|' ||
+            d.visibility
        from document d
        join document_template tp on tp.id = d.template_id
        join document_folder f on f.id = d.folder_id
        join document_text t on t.document_id = d.id
       where tp.name = '${quote(name)}';`,
   ).trim();
-  expect(saved, "saved as a PDF in the template's folder, with its words stored for search").toBe(
-    "application/pdf|Personnel|generated|true",
+  // A merged record carries personal details, so the result is staff-only.
+  expect(saved, "saved as a staff-only PDF in the template's folder, with its words stored for search").toBe(
+    "application/pdf|Personnel|generated|true|staff",
   );
 });

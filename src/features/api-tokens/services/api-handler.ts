@@ -13,7 +13,11 @@ import { bearerToken, hashToken, type ApiScope } from "../token";
  *   3. the scope the route needs;
  *   4. a rate limit per token (120 calls a minute, like the app's writes);
  *   5. the call runs as the token's person (see `ApiIdentity`);
- *   6. every call, allowed or refused, is written to api_request_log.
+ *   6. every call made with a valid token, allowed or refused, is written to
+ *      api_request_log. Calls nobody authenticated (module off, no or unknown
+ *      token, rate-limited address) are not logged, so anonymous traffic
+ *      cannot grow the log; their only write is the per-address rate-limit
+ *      counter, which is purged daily.
  *
  * Errors are JSON: `{ "error": { "code": "...", "message": "..." } }`.
  */
@@ -82,15 +86,17 @@ type Handler<P> = (context: ApiContext, params: P) => Promise<Response>;
 export function apiRoute<P = Record<string, never>>(scope: ApiScope | null, handler: Handler<P>) {
   return async (request: Request, route: { params: Promise<P> }): Promise<Response> => {
     const started = Date.now();
-    const db = createSupabaseServiceClient();
     const url = new URL(request.url);
+    let db: SupabaseClient | null = null;
     let identity: ApiIdentity | null = null;
     let response: Response;
     let errorCode: string | null = null;
     try {
+      // Inside the try: missing server settings answer a JSON 500.
+      db = createSupabaseServiceClient();
       if (!(await isEnabled("wos_workflows_v2", db))) throw new ApiError(404, "not_found", "Not found.");
       // Before any token lookup, so guessing tokens is slow and cheap for us.
-      const address = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+      const address = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim().slice(0, 64) || "unknown";
       const perAddress = await checkRateLimit({ action: "api:v1:address", subject: address, ...API_ADDRESS_LIMIT });
       if (!perAddress.allowed) throw new ApiError(429, "rate_limited", "Too many calls. Try again later.", { "retry-after": "60" });
       identity = await authenticate(db, request.headers.get("authorization"), new Date());
@@ -113,10 +119,11 @@ export function apiRoute<P = Record<string, never>>(scope: ApiScope | null, hand
         response = apiJson({ error: { code: "internal", message: "Something went wrong." } }, 500);
       }
     }
+    if (!db || !identity) return response;
     const { error: logError } = await db.from("api_request_log").insert({
-      organization_id: identity?.organizationId ?? null,
-      token_id: identity?.tokenId ?? null,
-      user_id: identity?.userId ?? null,
+      organization_id: identity.organizationId,
+      token_id: identity.tokenId,
+      user_id: identity.userId,
       method: request.method,
       path: url.pathname.slice(0, 300),
       status: response.status,

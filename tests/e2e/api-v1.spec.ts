@@ -146,3 +146,17 @@ test("the API is off with the switch [switch off]", async ({ page }) => {
     sql(`delete from api_token where token_hash = '${hash}'`);
   }
 });
+
+test("calls nobody authenticated write nothing", async ({ page }) => {
+  const count = () => Number(sql(`select count(*) from api_request_log`));
+  for (const on of [false, true]) {
+    setSwitch(on);
+    const before = count();
+    for (let i = 0; i < 20; i += 1) {
+      const response = await page.request.get("/api/v1/me", i % 2 ? { headers: { authorization: `Bearer qbbe_${"x".repeat(43)}` } } : {});
+      expect(response.status()).toBe(on ? 401 : 404);
+    }
+    expect(count(), `switch ${on ? "on" : "off"}`).toBe(before);
+  }
+  setSwitch(false);
+});

@@ -40,6 +40,11 @@ describe("safeLink", () => {
     expect(safeLink("//evil.example/steal")).toBe("https://hub.example.org/");
   });
 
+  it("refuses a path that resolves to another host", () => {
+    expect(safeLink("/\\evil.example")).toBe("https://hub.example.org/");
+    expect(safeLink("/.//evil.example")).toBe("https://hub.example.org/");
+  });
+
   it("falls back to home for a missing link", () => {
     expect(safeLink(null)).toBe("https://hub.example.org/");
   });
@@ -153,5 +158,34 @@ describe("renderDigestEmail", () => {
   it("links each item and the inbox", () => {
     expect(digest.html).toContain("https://hub.example.org/my-work?task=t1");
     expect(digest.html).toContain("https://hub.example.org/inbox");
+  });
+});
+
+describe("links built from stored data", () => {
+  const crafted = '/"><a href="https://evil.example/login">Verify now</a><a href="';
+
+  it("cannot break out of the button's href", () => {
+    const email = renderNotificationEmail({
+      title: "Check this",
+      body: null,
+      category: "mention",
+      link: crafted,
+      recipientName: "Amara",
+      organizationName: "QBBE",
+    });
+    expect(email.html).not.toContain('<a href="https://evil.example');
+    expect(email.html).not.toMatch(/href="[^"]*evil\.example/);
+  });
+
+  it("cannot break out of a digest item's href", () => {
+    const digest = renderDigestEmail({
+      recipientName: "Amara",
+      organizationName: "QBBE",
+      groups: [{ category: "mention", items: [{ title: "x", body: null, category: "mention", link: crafted, createdAt: "2026-08-19T12:00:00Z" }] }],
+      totalCount: 1,
+      shownCount: 1,
+    });
+    expect(digest.html).not.toContain('<a href="https://evil.example');
+    expect(digest.html).not.toMatch(/href="[^"]*evil\.example/);
   });
 });

@@ -22,6 +22,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types/entities";
 import { createActions } from "@/config/create-actions";
 import { ErrorState } from "@/components/ui/error-state";
+import { inAppLink } from "@/lib/safe-redirect";
 
 const ACTIONABLE_CATEGORIES = new Set([
   "assignment",
@@ -256,7 +257,8 @@ export function Topbar({
                                 type="button"
                                 onClick={() => {
                                   setOpenMenu(null);
-                                  if (n.link) router.push(n.link);
+                                  const link = inAppLink(n.link);
+                                  if (link) router.push(link);
                                 }}
                                 className={cn(
                                   "w-full px-3.5 py-2 text-left text-[13px] hover:bg-surface-soft",

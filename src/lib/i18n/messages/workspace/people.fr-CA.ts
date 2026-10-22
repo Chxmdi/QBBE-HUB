@@ -3,6 +3,16 @@ import type { peopleEn } from "./people.en";
 /** Français québécois — people, teamOverview, personWork, teamSignals, crm (#141). À faire réviser. */
 export const peopleFrCA: typeof peopleEn = {
   people: {
+    rectify: {
+      button: "Corriger le nom ou le titre",
+      title: "Corriger le profil de {name}",
+      explanation: "À utiliser quand un membre demande que son nom ou son titre soit corrigé.",
+      audited: "La modification est consignée dans le journal d’audit, avec les valeurs précédentes.",
+      save: "Enregistrer la correction",
+      cancel: "Annuler",
+      failed: "Impossible de corriger le profil.",
+      otherOrganization: "Cette personne fait aussi partie d’une organisation que vous n’administrez pas : seul un administrateur de toutes ses organisations peut corriger son profil.",
+    },
     title: "Personnes",
     eyebrow: "Répertoire",
     description: "Utilisateurs internes, rôles et charge de travail actuelle.",

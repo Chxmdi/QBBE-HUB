@@ -825,6 +825,7 @@ export const adminFrCA: typeof adminEn = {
       vmsOnlyActive:
         "Seuls les membres actifs de cette organisation peuvent être liés à une identité VMS.",
       vmsStoreFailed: "Impossible d’enregistrer l’identifiant VMS.",
+      vmsIdTaken: "Cet identifiant VMS est déjà lié à une autre personne de l’organisation.",
       nameView: "Nommez la vue.",
       invalidView: "Vue non valide.",
       saveViewFailed: "Impossible d’enregistrer la vue.",

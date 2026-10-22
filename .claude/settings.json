@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dockerd)",
+      "Bash(dockerd:*)",
+      "Bash(nohup dockerd:*)",
+      "Bash(bash scripts/local-signing-key.sh)",
+      "Bash(npx supabase start:*)",
+      "Bash(npx supabase stop:*)",
+      "Bash(npx supabase status:*)",
+      "Bash(npx supabase db reset:*)",
+      "Bash(npm ci)",
+      "Bash(npm run db:seed)",
+      "Bash(npm run test:db)",
+      "Bash(npm run test:db:*)"
+    ]
+  }
+}

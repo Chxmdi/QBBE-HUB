@@ -5,6 +5,16 @@
  */
 export const peopleEn = {
   people: {
+    rectify: {
+      button: "Correct name or title",
+      title: "Correct {name}’s profile",
+      explanation: "Use this when a member asks for their name or title to be corrected.",
+      audited: "The change is recorded in the audit trail, with the previous values.",
+      save: "Save correction",
+      cancel: "Cancel",
+      failed: "Could not correct the profile.",
+      otherOrganization: "This person also belongs to an organization you do not administer, so only an administrator of every organization they belong to can correct their profile.",
+    },
     title: "People",
     eyebrow: "Directory",
     description: "Internal users, roles, and current workload context.",

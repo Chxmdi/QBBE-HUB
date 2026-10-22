@@ -112,6 +112,17 @@ export const accountFrCA: typeof accountEn = {
     },
   },
   settings: {
+    profile: {
+      heading: "Profil",
+      name: "Nom",
+      jobTitle: "Titre",
+      email: "Courriel",
+      emailHelp: "Le courriel avec lequel vous vous connectez. Un administrateur le modifie s’il est erroné.",
+      save: "Enregistrer le profil",
+      saved: "Profil enregistré.",
+      saveFailed: "Impossible d’enregistrer votre profil.",
+      nameRequired: "Entrez votre nom.",
+    },
     title: "Paramètres du compte",
     eyebrow: "Compte",
     heading: "Paramètres",
