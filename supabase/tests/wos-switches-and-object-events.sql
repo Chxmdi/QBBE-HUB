@@ -50,8 +50,25 @@ begin
   select coalesce(max(seq), 0) into v_before from object_event;
   insert into task (organization_id, title, created_by) values (v_org, 'zzprobe silent task', v_owner) returning id into v_task;
   update task set title = 'zzprobe silent task renamed' where id = v_task;
+  update user_profile set full_name = full_name || ' (probe)' where id = v_volunteer;
   select count(*) into n from object_event where seq > v_before;
-  perform tests.ok(n = 0, 'modules off: classic changes are not copied into object events');
+  perform tests.ok(n = 0, 'modules off: classic changes and profile renames are not copied into object events');
+
+  -- A screen-only switch (phone layout) does not open the object registry.
+  update feature_flag set enabled = true where key = 'wos_mobile' and organization_id is null;
+  perform tests.authenticate(v_owner, 'aal2');
+  select count(*) into n from object;
+  perform tests.ok(n = 0, 'only the phone layout on: the object registry still answers nothing');
+  perform tests.clear_auth();
+  reset role;
+  update feature_flag set enabled = false where key = 'wos_mobile' and organization_id is null;
+
+  begin
+    insert into app.workspace_os_override (key) values ('wos_objcts');
+    perform tests.ok(false, 'a misspelt module name is refused by the override');
+  exception when check_violation then
+    perform tests.ok(true, 'a misspelt module name is refused by the override');
+  end;
 
   -- Pages on (its feature_flag row, as the app reads it): pages answer, lenses still do not.
   update feature_flag set enabled = true where key = 'wos_pages' and organization_id is null;
@@ -76,6 +93,8 @@ begin
   insert into crm_contact (organization_id, full_name, email)
   values (v_org, 'Zzprobe Erasable Person', 'zzprobe-erase@example.com') returning id into v_contact;
   update crm_contact set full_name = 'Zzprobe Erasable Person Renamed' where id = v_contact;
+  select count(*) into n from activity_entry where object_id = v_contact and details::text like '%Zzprobe Erasable%';
+  perform tests.ok(n > 0, 'fixture: the activity log copied the contact''s name');
   select count(*) into n from object_event where object_id = v_contact and changes::text like '%Zzprobe Erasable%';
   perform tests.ok(n > 0, 'fixture: the contact''s name was recorded while modules were on');
   delete from crm_contact where id = v_contact;
@@ -83,6 +102,9 @@ begin
   perform tests.ok(n = 0, 'a deleted contact''s name is gone from its event history');
   select count(*) into n from object_event where object_id = v_contact and verb = 'deleted';
   perform tests.ok(n = 1, 'the deletion itself is still recorded');
+  select count(*) into n from activity_entry
+  where object_id = v_contact and (details::text like '%Zzprobe%' or subject like '%Zzprobe%');
+  perform tests.ok(n = 0, 'a deleted contact''s name is gone from the activity log too');
 
   -- Other records keep what was deleted, as the audit trail does.
   update task set title = 'zzprobe audited task' where id = v_task;
@@ -92,14 +114,35 @@ begin
 end;
 $$;
 
--- The switch check and the override are not the caller's to change or read.
+-- The override is not the API's to change or read: not a signed-in owner,
+-- not the service role.
 do $$
 begin
   perform tests.authenticate('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'aal2');
   perform tests.refused_ok($q$insert into app.workspace_os_override (key) values ('all')$q$,
     'not even an owner can turn modules on through the override');
+  perform tests.refused_ok($q$delete from app.workspace_os_override$q$,
+    'a signed-in user cannot clear the override');
   perform tests.clear_auth();
   reset role;
+
+  -- The helpers, for this transaction only.
+  grant usage on schema tests to service_role;
+  grant execute on all functions in schema tests to service_role;
+  set local role service_role;
+  perform tests.refused_ok($q$insert into app.workspace_os_override (key) values ('all')$q$,
+    'the service role cannot turn modules on through the override');
+  begin
+    perform 1 from app.workspace_os_override;
+    perform tests.ok(false, 'the service role cannot read the override');
+  exception when insufficient_privilege then
+    perform tests.ok(true, 'the service role cannot read the override');
+  end;
+  reset role;
+
+  perform tests.ok(
+    (select provolatile = 's' and proconfig @> array['search_path=""'] from pg_proc where oid = 'app.wos_enabled(text[])'::regprocedure),
+    'app.wos_enabled is stable with an empty search path');
 end;
 $$;
 

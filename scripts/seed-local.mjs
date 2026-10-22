@@ -62,10 +62,13 @@ psql("supabase/tests/qa-scoped-grants.sql", "3/3 Scoped-role grants");
 // plain build's database has none. CI's switches-on jobs and a local
 // `WORKSPACE_OS_FLAGS=all` build rely on this; production never seeds.
 {
-  const keys = (process.env.WORKSPACE_OS_FLAGS ?? "")
-    .split(",")
-    .map((key) => key.trim().toLowerCase())
-    .filter((key) => key === "all" || /^wos_[a-z0-9_]+$/.test(key));
+  // Only names the app knows (src/lib/feature-flags.ts), which ignores the
+  // rest, so a typo leaves a module off in both places.
+  const known = new Set(
+    [...readFileSync("src/lib/feature-flags.ts", "utf8").matchAll(/^\s*"(wos_[a-z0-9_]+)",/gm)].map((m) => m[1]),
+  );
+  const named = (process.env.WORKSPACE_OS_FLAGS ?? "").split(",").map((key) => key.trim().toLowerCase());
+  const keys = named.includes("all") ? ["all"] : named.filter((key) => known.has(key));
   const statement = [
     "delete from app.workspace_os_override;",
     ...keys.map((key) => `insert into app.workspace_os_override (key) values ('${key}') on conflict do nothing;`),
