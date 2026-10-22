@@ -782,6 +782,7 @@ export const adminEn = {
       vmsIdTooLong: "VMS id is too long.",
       vmsOnlyActive: "Only active members of this organization can be linked to VMS identities.",
       vmsStoreFailed: "Could not store the VMS id.",
+      vmsIdTaken: "This VMS id is already linked to someone else in the organization.",
       nameView: "Name the view.",
       invalidView: "Invalid view.",
       saveViewFailed: "Could not save the view.",

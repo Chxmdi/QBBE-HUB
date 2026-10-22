@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { RectifyProfileDialog } from "@/features/people/components/rectify-profile-dialog";
 import { TaskDrawer } from "@/features/tasks/components/task-drawer";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { taskStatusText } from "@/features/tasks/schemas";
@@ -179,6 +180,9 @@ export default async function PersonWorkPage({
                 : t("teamOverview.noWork")}
             </p>
           </div>
+          {session.isAdmin && !self ? (
+            <RectifyProfileDialog person={{ id: person.user_id, fullName: person.full_name, title: person.title }} />
+          ) : null}
           {reasons.length > 0 ? (
             <Badge tone="warning">{t("teamOverview.needsAttention")}</Badge>
           ) : (
