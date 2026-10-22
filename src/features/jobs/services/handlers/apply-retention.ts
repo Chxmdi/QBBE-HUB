@@ -1,4 +1,5 @@
 import { PartialJobFailure, type JobContext, type JobResult } from "../runner";
+import { logEvent } from "@/lib/server-log";
 import {
   SUBJECT_HANDLERS,
   cutoffFor,
@@ -75,8 +76,8 @@ export async function applyRetention({
     const handler = SUBJECT_HANDLERS[policy.subject_key];
 
     if (!handler) {
-      await record(policy, cutoff, 0, `No handler is implemented for "${policy.subject_key}".`);
       failed += 1;
+      await record(policy, cutoff, 0, `No handler is implemented for "${policy.subject_key}".`);
       continue;
     }
 
@@ -91,8 +92,8 @@ export async function applyRetention({
       );
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      await record(policy, cutoff, 0, message.slice(0, 500));
       failed += 1;
+      await record(policy, cutoff, 0, message.slice(0, 500));
       continue;
     }
 
@@ -103,11 +104,10 @@ export async function applyRetention({
       .from("retention_policy")
       .update({ last_run_at: now.toISOString(), last_affected: affected })
       .eq("id", policy.id);
+    // The run is already recorded; a stale "last run" date is not worth
+    // stopping tonight's other policies for.
     if (policyError) {
-      throw new PartialJobFailure(
-        `could not update retention policy ${policy.id}: ${policyError.message}`,
-        { processed, failed, metadata: { removed } },
-      );
+      logEvent("job.retention.policy_update_failed", { policyId: policy.id, error: policyError.message }, "error");
     }
     processed += 1;
   }

@@ -1,6 +1,7 @@
 import { requireSession, type SessionContext } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
+import { auditUnavailableResponse, recordAudit } from "@/lib/audit-write";
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -32,7 +33,7 @@ export async function fundLabel(supabase: Client, fundId: string | null): Promis
     : t("finance.ledger.export.unknownFund");
 }
 
-/** Records who took a copy of the books, then returns the file. */
+/** Records who took a copy of the books, then returns the file; no record, no file. */
 export async function csvResponse(
   supabase: Client,
   session: SessionContext,
@@ -41,7 +42,7 @@ export async function csvResponse(
   filename: string,
   metadata: Record<string, unknown>,
 ): Promise<Response> {
-  await supabase.from("audit_event").insert({
+  const audited = await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "ledger",
@@ -50,6 +51,7 @@ export async function csvResponse(
     object_id: session.organizationId,
     metadata,
   });
+  if (!audited) return auditUnavailableResponse();
   return new Response(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

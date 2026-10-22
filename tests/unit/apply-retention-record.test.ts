@@ -52,6 +52,14 @@ describe("apply-retention", () => {
     expect(error.result.failed).toBe(0);
   });
 
+  it("carries on when only the policy's last-run date cannot be updated", async () => {
+    const db = seeded();
+    db.fail((op) => op.name === "retention_policy" && op.kind === "update");
+    const result = await run(db);
+    expect(result.processed).toBe(1);
+    expect(db.rows("retention_run")).toHaveLength(1);
+  });
+
   it("fails the run when the record of a broken policy cannot be written", async () => {
     const db = seeded("no_such_subject");
     db.fail((op) => op.name === "retention_run" && op.kind === "insert");

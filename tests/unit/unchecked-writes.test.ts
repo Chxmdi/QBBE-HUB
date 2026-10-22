@@ -21,6 +21,16 @@ describe("unchecked database writes", () => {
     expect(findUncheckedWrites(source)).toEqual([1, 2, 6, 7]);
   });
 
+  it("finds a dropped database function result, and an ignored audit in a route", () => {
+    const source = ['await supabase.rpc("add_channel_member", args);', 'await recordAudit(supabase, row);'].join("\n");
+    expect(findUncheckedWrites(source)).toEqual([1]);
+    expect(findUncheckedWrites(source, { route: true })).toEqual([1, 2]);
+  });
+
+  it("does not take Array.from or Buffer.from for a table", () => {
+    expect(findUncheckedWrites('await Buffer.from(text).update(hash);')).toEqual([]);
+  });
+
   it("leaves alone a write whose result is read, and reads that are not writes", () => {
     const source = [
       'const { error } = await supabase.from("x").insert(row);',
@@ -37,10 +47,15 @@ describe("unchecked database writes", () => {
       { path: "src/a.ts", lines: [3, 9], allowed: 1 },
     ]);
     expect(violations({ "src/new.ts": [4] }, {})).toHaveLength(1);
-    expect(violations({ "src/a.ts": [3] }, { "src/a.ts": 2 })).toEqual([]);
+    expect(violations({ "src/a.ts": [3] }, { "src/a.ts": 1 })).toEqual([]);
   });
 
-  it("finds no new unchecked writes in src", () => {
+  it("rejects an allowance left higher than the count, so it cannot be reused", () => {
+    expect(violations({ "src/a.ts": [3] }, { "src/a.ts": 2 })).toHaveLength(1);
+    expect(violations({}, { "src/gone.ts": 1 })).toHaveLength(1);
+  });
+
+  it("matches the allowlist exactly in src", () => {
     const bad = violations(scan(), readAllowlist()) as { path: string; lines: number[] }[];
     expect(bad.map(({ path, lines }) => `${path}: lines ${lines.join(", ")}`)).toEqual([]);
   });

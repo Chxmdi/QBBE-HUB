@@ -196,6 +196,7 @@ describe("disconnecting an integration", () => {
           : { data: null, error: null };
     const result = await disconnectIntegration("gmail");
     expect(result.ok).toBe(false);
-    expect(writesOf().some((c) => c.table === "audit_event")).toBe(false);
+    // The disconnect itself happened, so it is still recorded.
+    expect(writesOf().some((c) => c.table === "audit_event")).toBe(true);
   });
 });

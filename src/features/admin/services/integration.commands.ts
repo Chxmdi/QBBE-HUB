@@ -54,7 +54,8 @@ export async function disconnectIntegration(
   if (error || !disconnected) return { ok: false, error: t("admin.errors.disconnectFailed") };
 
   // What Hub copied from the account goes with it. A failed delete leaves
-  // that copy behind, so say so; disconnecting again retries it.
+  // that copy behind: the disconnect is still recorded, and the person is
+  // told the copies remain.
   let cleanupError: unknown = null;
   if (provider === "gmail") {
     ({ error: cleanupError } = await supabase.from("gmail_message").delete().eq("user_id", session.userId));
@@ -65,10 +66,7 @@ export async function disconnectIntegration(
   if (provider === "google_drive") {
     ({ error: cleanupError } = await supabase.from("document").delete().eq("integration_connection_id", disconnected.id));
   }
-  if (cleanupError) {
-    logActionFailure("integration.disconnect_cleanup", cleanupError, { provider });
-    return { ok: false, error: t("admin.errors.googleCleanupFailed") };
-  }
+  if (cleanupError) logActionFailure("integration.disconnect_cleanup", cleanupError, { provider });
   if (provider === "volunteer_system") {
     // Removes every link and every copied assignment in the organization.
     const { error: clearError } = await supabase.rpc("clear_org_vms_ids", { p_org: session.organizationId });
@@ -84,8 +82,9 @@ export async function disconnectIntegration(
     event_type: "integration",
     action: "integration_disconnected",
     object_type: "integration_connection",
-    metadata: { provider },
+    metadata: cleanupError ? { provider, cleanup_failed: true } : { provider },
   });
+  if (cleanupError) return { ok: false, error: t("admin.errors.googleCleanupFailed") };
 
   revalidatePath("/admin");
   revalidatePath("/inbox");

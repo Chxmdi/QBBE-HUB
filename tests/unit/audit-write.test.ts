@@ -19,11 +19,23 @@ describe("recordAudit", () => {
     expect(await recordAudit(client({ message: "down" }), row)).toBe(false);
   });
 
-  it("refuses an export with a 500, no file, and a reason in the person's language", async () => {
+  it("refuses an export with a 503, no file, and a reason in the person's language", async () => {
     const response = await auditUnavailableResponse();
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(503);
     expect(response.headers.get("content-disposition")).toBeNull();
     expect(await response.text()).toMatch(/exportation a été arrêtée/);
+  });
+});
+
+describe("ledger exports (general ledger, journal, trial balance, statements and others)", () => {
+  it("hand over no file when the audit row cannot be stored", async () => {
+    const { csvResponse } = await import("@/features/ledger/services/ledger.export");
+    const session = { organizationId: "o", userId: "u" } as never;
+    const refused = await csvResponse(client({ message: "down" }), session, "gl_exported", "a,b", "gl.csv", {});
+    expect(refused.status).toBe(503);
+    expect(refused.headers.get("content-disposition")).toBeNull();
+    const served = await csvResponse(client(null), session, "gl_exported", "a,b", "gl.csv", {});
+    expect(await served.text()).toBe("a,b");
   });
 });
 

@@ -32,12 +32,12 @@ export async function recordAudit(client: SupabaseClient, row: AuditRow): Promis
 
 /**
  * The refusal an export route returns when its audit row could not be
- * written: no file, and a message that says why in the person's language.
+ * written: no file (503, try again), and a message that says why in the person's language.
  */
 export async function auditUnavailableResponse(): Promise<Response> {
   const t = await getT();
   return new Response(t("errors.auditUnavailable"), {
-    status: 500,
+    status: 503,
     headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
   });
 }
