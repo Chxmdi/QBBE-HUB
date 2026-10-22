@@ -16,6 +16,7 @@ import {
 import { recordMfaSecurityEvent } from "@/features/auth/services/mfa.commands";
 import { useT } from "@/lib/i18n/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { needsSecondFactor, SecondFactorReminder } from "./second-factor-reminder";
 
 type Enrollment = {
   factorId: string;
@@ -232,6 +233,8 @@ export function MfaSettings({
           </div>
         </form>
       ) : null}
+
+      {needsSecondFactor(true, factors.length) ? <SecondFactorReminder t={t} /> : null}
 
       <ul className="mt-5 divide-y divide-line border-t border-line">
         {factors.map((factor) => (
