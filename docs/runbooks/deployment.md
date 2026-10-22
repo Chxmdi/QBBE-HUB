@@ -29,17 +29,30 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
    - **Leave "Allow new users to sign up" on.** Invited people create their
      account through the sign-up form; turning sign-up off in Supabase would
      refuse them too. The database decides who may join: once an organization
-     exists, `app.handle_new_user` refuses a password sign-up that does not
-     carry a valid invitation link for that exact address (Google sign-in
-     needs an address Google has verified), and the refusal aborts the account
-     creation. Before 2026-10-22 it matched the invitation on the address
-     alone, so anyone who knew an invited address could take the seat.
+     exists, `app.handle_new_user` refuses an account that does not carry a
+     valid invitation link for that exact address, and the refusal aborts the
+     account creation. Before 2026-10-22 it matched the invitation on the
+     address alone, so anyone who knew an invited address could take the seat.
+     Two other ways in still need an open invitation for the address: Google
+     sign-in, when Google says it has verified the address (the seat follows
+     once Auth confirms it), and an operator creating the account through the
+     Auth admin API with the link's secret in `user_metadata.invite_token`
+     (as `scripts/qa/perf-staging.mjs` does). A marker in `app_metadata` does
+     not work through the admin API: Auth adds it only after the check.
      Until 2026-09-02 this line claimed the enforcement came from
      `signup_allowed`. It did not. That function was called only from the
      sign-up form — a check in the visitor's own browser — while the trigger
      that grants the membership never consulted it and defaulted to an active
      **staff** account. Anyone could obtain one with a single API call using the
      publishable key.
+   - The invitation secret travels in the link's address
+     (`/sign-up?invite=…`), so it can appear in the invitee's browser history
+     and in the server's access logs for `/sign-up`. It works once, only for
+     the invited address, for 14 days, and is removed from the account as
+     soon as it is used. Do not send access logs for `/sign-up` to third
+     parties. If a link may have leaked, open Admin, Invitations, click
+     **New link** on that row, then **Create new link**: the old link stops
+     working.
 4. Set up the QBBE server and each environment's settings as
    [`hosting.md`](hosting.md) describes: the server, its open ports, the
    GitHub environment variables and secrets (`APP_ENV` holds the app's
@@ -48,6 +61,23 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
    in a `NEXT_PUBLIC_*` variable.
 5. Deploy. Sign up the Primary Owner account **first** — the bootstrap
    trigger provisions the organization and mandatory channels.
+
+   On a project that already had invitations before 2026-10-22: those have
+   no link, so nobody can create a password account from them. After the
+   deploy, list them in the Supabase SQL editor:
+
+   ```sql
+   select email, intended_role, expires_at
+   from invitation
+   where token_hash is null and accepted_at is null
+     and revoked_at is null and expires_at > now();
+   ```
+
+   For each address, open Admin, Invitations, find the row marked
+   **no link yet**, click **New link**, then **Create new link**. You should
+   see "Invitation sent to …", or, where email is not set up, the link to pass
+   on yourself. Run the query again: when it returns no rows, every open
+   invitation has a working link.
 6. Complete encrypted daily database **and uploaded-file** backups to QBBE
    Drive and rehearse restoration before entering pilot data. Do not enable
    paid backups or Point-in-Time Recovery. See `backup-recovery.md`; automation

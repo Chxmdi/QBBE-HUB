@@ -83,12 +83,17 @@ export const adminEn = {
         newLinkFor: "New invitation link for {email}",
         newLinkFailed: "Could not create a new link.",
         creatingLink: "Creating a new link…",
+        newLinkConfirm:
+          "The current link for {email} will stop working. A new link is created and, if email is set up, sent to them.",
+        newLinkCreate: "Create new link",
+        noLinkHint: "Created before invitation links. Use New link to give this person one.",
         invited: "{role} · invited {when}",
         states: {
           accepted: "accepted",
           revoked: "revoked",
           expired: "expired",
           pending: "pending",
+          noLink: "no link yet",
         },
       },
       integrations: {
@@ -273,6 +278,7 @@ export const adminEn = {
           status: "status",
           suppress: "suppress",
           user_invited: "user invited",
+          invitation_link_reissued: "invitation link reissued",
           vms_connected: "vms connected",
           zeffy_connected: "Zeffy connected",
           zeffy_sync_requested: "Zeffy sync requested",
@@ -359,7 +365,7 @@ export const adminEn = {
       message: {
         subject: "You're invited to QBBE Hub",
         heading: "{inviter} invited you to join {organization} on QBBE Hub",
-        body: "You are invited as {role}. Create your account with the button below. The link works once, only for {email}, until {date}.",
+        body: "Role: {role}. Create your account with the button below. The link works once, only for {email}, until {date}.",
         button: "Create my account",
         linkText: "Or open this link: {url}",
         ignore: "If you were not expecting this invitation, you can ignore this email.",

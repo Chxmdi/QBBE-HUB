@@ -49,10 +49,14 @@ export function SignUpForm({ invitation }: { invitation: SignUpInvitation | null
     if (signUpError) {
       // The database refuses an unusable invitation by aborting the insert,
       // which Supabase Auth reports as a generic "Database error saving new
-      // user". Say what it means instead.
+      // user". With an invitation, that means the link; without one (the very
+      // first account) it can only be a fault, so it is not blamed on a link.
+      const databaseRefused = /database error/i.test(signUpError.message);
       setError(
-        /database error/i.test(signUpError.message)
-          ? t("auth.signUp.inviteRejected")
+        databaseRefused
+          ? invitation
+            ? t("auth.signUp.inviteRejected")
+            : t("auth.signUp.failed")
           : signUpError.message,
       );
       return;

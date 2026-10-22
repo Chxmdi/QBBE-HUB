@@ -21,8 +21,8 @@ export const accountFrCA: typeof accountEn = {
       submit: "Créer le compte",
       haveAccount: "Vous avez déjà un compte?",
       signIn: "Se connecter",
-      invitedTo: "Vous êtes invité à rejoindre {organization}.",
-      emailLocked: "Cette invitation vise cette adresse.",
+      invitedTo: "Vous avez reçu une invitation à rejoindre {organization}.",
+      emailLocked: "Cette invitation est réservée à cette adresse.",
       inviteOnlyTitle: "Inscription sur invitation",
       inviteOnlyBody:
         "Ouvrez le lien dans le courriel d’invitation qu’un administrateur vous a envoyé. Si vous n’en avez pas, demandez à un administrateur de vous inviter.",
@@ -31,6 +31,10 @@ export const accountFrCA: typeof accountEn = {
         "Il a peut-être expiré, été remplacé par un lien plus récent ou déjà été utilisé. Demandez un nouveau lien d’invitation à un administrateur.",
       inviteRejected:
         "Ce lien d’invitation ne peut plus être utilisé. Demandez un nouveau lien à un administrateur.",
+      previewFailedTitle: "Impossible de vérifier ce lien d’invitation",
+      previewFailedBody:
+        "Un problème est survenu de notre côté, pas avec votre lien. Rechargez cette page dans un moment. Si le problème persiste, prévenez la personne qui vous a envoyé l’invitation.",
+      failed: "Votre compte n’a pas pu être créé. Réessayez dans un moment.",
       goToSignIn: "Aller à la connexion",
       checkEmail: "Vérifiez vos courriels",
       confirmationSent:

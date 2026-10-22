@@ -157,14 +157,23 @@ export function NewInvitationLinkButton({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ link: string; expiresAt: string } | null>(null);
+  const [created, setCreated] = useState<{
+    link: string;
+    expiresAt: string;
+    timeZone?: string;
+  } | null>(null);
 
-  async function handleNewLink() {
-    setBusy(true);
+  function openDialog() {
     setError(null);
     setNotice(null);
     setCreated(null);
     setOpen(true);
+  }
+
+  // Asked first, because the person may be about to use the current link.
+  async function handleNewLink() {
+    setBusy(true);
+    setError(null);
     const result = await reissueInvitation(invitationId);
     setBusy(false);
     if (!result.ok) {
@@ -177,17 +186,19 @@ export function NewInvitationLinkButton({
         : t("admin.invite.notSent", { email }),
     );
     if (result.inviteLink && result.expiresAt) {
-      setCreated({ link: result.inviteLink, expiresAt: result.expiresAt });
+      setCreated({ link: result.inviteLink, expiresAt: result.expiresAt, timeZone: result.timeZone });
     }
     router.refresh();
   }
+
+  const done = Boolean(notice || created);
 
   return (
     <>
       <button
         type="button"
-        onClick={handleNewLink}
-        disabled={busy}
+        onClick={openDialog}
+        aria-label={t("admin.workspace.invitations.newLinkFor", { email })}
         className="text-[12.5px] font-medium text-brand-fg hover:underline disabled:opacity-60"
       >
         {t("admin.workspace.invitations.newLink")}
@@ -198,20 +209,34 @@ export function NewInvitationLinkButton({
         title={t("admin.workspace.invitations.newLinkFor", { email })}
       >
         <div className="space-y-4">
-          {busy ? (
-            <p aria-live="polite" className="text-[13px] text-muted">
-              {t("admin.workspace.invitations.creatingLink")}
+          {!done ? (
+            <p className="text-[13.5px]">
+              {t("admin.workspace.invitations.newLinkConfirm", { email })}
             </p>
           ) : null}
+          {/* Mounted for the dialog's whole life so the change is announced. */}
+          <p aria-live="polite" className="text-[13px] text-muted">
+            {busy ? t("admin.workspace.invitations.creatingLink") : ""}
+          </p>
           {error ? <p role="alert" className="text-[13px] text-danger-fg">{error}</p> : null}
           {notice ? <p role="status" className="text-[13px] text-success-fg">{notice}</p> : null}
           {created ? (
-            <InvitationLinkField link={created.link} email={email} expiresAt={created.expiresAt} />
+            <InvitationLinkField
+              link={created.link}
+              email={email}
+              expiresAt={created.expiresAt}
+              timeZone={created.timeZone}
+            />
           ) : null}
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-              {t("admin.invite.close")}
+              {done ? t("admin.invite.close") : t("common.cancel")}
             </Button>
+            {!done ? (
+              <Button type="button" loading={busy} onClick={handleNewLink}>
+                {t("admin.workspace.invitations.newLinkCreate")}
+              </Button>
+            ) : null}
           </div>
         </div>
       </Dialog>

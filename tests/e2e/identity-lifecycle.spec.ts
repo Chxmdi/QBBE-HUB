@@ -170,6 +170,54 @@ test.describe("identity lifecycle", () => {
     await expect(page).toHaveURL(/\/sign-up/);
   });
 
+  test("New link replaces the invitation's link: the old one stops working, the new one admits", async ({ page }) => {
+    const email = uniqueEmail("qa-relinked");
+    await signIn(page, "owner");
+    const oldLink = await inviteFromAdmin(page, email, "Volunteer");
+
+    // Asked first, because the person may be about to use the current link.
+    await invitationRow(page, email)
+      .getByRole("button", { name: `New invitation link for ${email}`, exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toContainText("will stop working");
+    await dialog.getByRole("button", { name: "Create new link", exact: true }).click();
+    await expect(dialog.getByRole("status")).toContainText(/Invit/i, { timeout: 15_000 });
+    const newLink = await dialog.getByLabel("Invitation link", { exact: true }).inputValue();
+    expect(newLink).toMatch(/\/sign-up\?invite=[A-Za-z0-9_-]{43}$/);
+    expect(newLink).not.toBe(oldLink);
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+
+    await signOut(page);
+    await page.goto(new URL(oldLink).pathname + new URL(oldLink).search);
+    await expect(
+      page.getByText("This invitation link can't be used", { exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
+
+    await joinAsNewPerson(page, "Relinked Volunteer", email, newLink);
+  });
+
+  test("a link revoked while its form is open is refused when the form is sent", async ({ page }) => {
+    const email = uniqueEmail("qa-revoked-midway");
+    await signIn(page, "owner");
+    const link = await inviteFromAdmin(page, email, "Staff");
+    await signOut(page);
+
+    await page.goto(new URL(link).pathname + new URL(link).search);
+    await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
+    // Revoked by an administrator elsewhere after the page was opened.
+    sql(`update invitation set revoked_at = now() where lower(email) = '${email}' and revoked_at is null;`);
+
+    await page.getByLabel("Full name", { exact: true }).fill("Too Late");
+    await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+    await page.getByRole("button", { name: "Create account", exact: true }).click();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "This invitation link can't be used any more." }),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(page).toHaveURL(/\/sign-up/);
+    expect(sql(`select count(*) from auth.users where email = '${email}';`)).toBe("0");
+  });
+
   test("recovery sends a real email that sets a real password", async ({ page }) => {
     const email = uniqueEmail("qa-recovers");
     const newPassword = "RecoveredPass!2026";

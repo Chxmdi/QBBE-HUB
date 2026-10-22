@@ -7,12 +7,16 @@
 -- sign up first and take the seat, an `admin` seat included, and
 -- `signup_allowed(email)` told anonymous callers which addresses were invited.
 --
--- A password sign-up now has to present the invitation's token, and the
--- membership waits for `email_confirmed_at`. Two other ways in keep working,
--- each with its own proof: a sign-in provider that has already verified the
--- address (Google), and an operator provisioning an account with the service
--- role or database access, marked in `raw_app_meta_data`, which a person
--- signing up cannot set.
+-- Creating the user now needs one of: the invitation's token (a password
+-- sign-up, or an operator through the Auth admin API), a sign-in provider that
+-- has verified the address (Google), or a direct SQL insert marked in
+-- `raw_app_meta_data`. The membership waits for `email_confirmed_at`.
+--
+-- Supabase Auth writes a new user in steps: it inserts the row, then confirms
+-- the address with a separate UPDATE and writes user metadata back from its
+-- in-memory copy. tests.auth_confirm repeats those steps, so these cases see
+-- what the real server does; tests/e2e/invitation-auth-order.spec.ts drives
+-- the real server itself.
 --
 -- Run after qa-users.sql and rls.sql; everything is rolled back.
 begin;
@@ -42,6 +46,30 @@ begin
   );
 end;
 $$;
+
+-- What Auth does when it confirms an address: one UPDATE of
+-- email_confirmed_at, then user metadata written back from the copy it held
+-- in memory (with `email_verified` added), which still has the invite token.
+create function tests.auth_confirm(p_id uuid, p_meta_in_memory jsonb default null)
+returns void
+language plpgsql
+set search_path = tests, public, auth
+as $$
+begin
+  update auth.users set email_confirmed_at = now(), confirmation_token = ''
+  where id = p_id;
+  update auth.users
+  set raw_user_meta_data = coalesce(p_meta_in_memory, raw_user_meta_data) || '{"email_verified":true}'::jsonb
+  where id = p_id;
+end;
+$$;
+
+create function tests.has_invite_token(p_id uuid)
+returns boolean
+language sql
+stable
+set search_path = tests, auth
+as $$ select raw_user_meta_data ? 'invite_token' from auth.users where id = p_id $$;
 
 create function tests.token_hash(p_token text)
 returns text
@@ -120,10 +148,12 @@ begin
   perform tests.ok(
     exists (select 1 from invitation where id = v_invitation and accepted_at is null),
     'the invitation stays open until the address is confirmed');
+  perform tests.ok(not tests.has_invite_token('dddddddd-0000-0000-0000-000000000004'),
+    'the token is removed from user metadata once the sign-up is checked');
 
   -- 4. Confirming the address grants exactly what the invitation named.
-  update auth.users set email_confirmed_at = now()
-  where id = 'dddddddd-0000-0000-0000-000000000004';
+  perform tests.auth_confirm('dddddddd-0000-0000-0000-000000000004',
+    '{"full_name":"Token Invitee","invite_token":"right-token-0123456789abcdefghijklmnopqr"}'::jsonb);
   select role, status, organization_id into r from organization_membership
   where user_id = 'dddddddd-0000-0000-0000-000000000004';
   perform tests.ok(r.role = 'admin' and r.status = 'active' and r.organization_id = v_org,
@@ -138,13 +168,8 @@ begin
   where object_id = 'dddddddd-0000-0000-0000-000000000004'
     and action = 'user_provisioned' and organization_id = v_org;
   perform tests.ok(n = 1, 'the provisioning is audited once, in the inviting organization');
-
-  -- A second confirmation-like update grants nothing twice.
-  update auth.users set email_confirmed_at = now()
-  where id = 'dddddddd-0000-0000-0000-000000000004';
-  select count(*) into n from organization_membership
-  where user_id = 'dddddddd-0000-0000-0000-000000000004';
-  perform tests.ok(n = 1, 'one invitation grants exactly one membership');
+  perform tests.ok(not tests.has_invite_token('dddddddd-0000-0000-0000-000000000004'),
+    'Auth writing its in-memory metadata back does not restore the token');
 
   -- 5. A spent token cannot be used again.
   begin
@@ -170,28 +195,54 @@ begin
   select count(*) into n from organization_membership
   where user_id = 'dddddddd-0000-0000-0000-000000000006' and role = 'volunteer' and status = 'active';
   perform tests.ok(n = 1, 'a confirmed sign-up with the right token is admitted immediately');
+  update auth.users
+  set raw_user_meta_data = '{"full_name":"Autoconfirm","invite_token":"autoconfirm-token-abcdefghijklmnopqrstuvwxyz","email_verified":true}'::jsonb
+  where id = 'dddddddd-0000-0000-0000-000000000006';
+  perform tests.ok(not tests.has_invite_token('dddddddd-0000-0000-0000-000000000006'),
+    'any later write of the token to user metadata is stripped');
 
-  -- 7. Google: the provider has verified the address, so the address is the proof.
-  insert into invitation (organization_id, email, intended_role, invited_by, expires_at, token_hash)
-  values (v_org, 'google-invitee@example.org', 'staff', v_owner, now() + interval '1 day',
-          tests.token_hash('google-token-unused-abcdefghijklmnopqrstuv'));
+  -- 7. Google, in the order Auth writes it: the user is inserted unconfirmed
+  --    with the provider's claims as user metadata, then confirmed. The
+  --    invitation predates links (no token_hash), which Google still honours.
+  insert into invitation (organization_id, email, intended_role, invited_by, expires_at)
+  values (v_org, 'google-invitee@example.org', 'staff', v_owner, now() + interval '1 day');
   begin
     perform tests.invitation_signup('dddddddd-0000-0000-0000-000000000007',
-      'google-invitee@example.org', false, '{"full_name":"Unverified Google"}'::jsonb,
+      'google-invitee@example.org', false,
+      '{"full_name":"Unverified Google","email_verified":false}'::jsonb,
       '{"provider":"google","providers":["google"]}'::jsonb);
-    perform tests.ok(false, 'a provider sign-up whose address is not verified must be refused');
+    perform tests.ok(false, 'a provider sign-up whose address the provider has not verified must be refused');
   exception when insufficient_privilege then
-    perform tests.ok(true, 'a provider sign-up whose address is not verified is refused');
+    perform tests.ok(true, 'a provider sign-up whose address the provider has not verified is refused');
   end;
   perform tests.invitation_signup('dddddddd-0000-0000-0000-000000000008',
-    'google-invitee@example.org', true, '{"full_name":"Verified Google"}'::jsonb,
+    'google-invitee@example.org', false,
+    '{"full_name":"Verified Google","email_verified":true}'::jsonb,
     '{"provider":"google","providers":["google"]}'::jsonb);
   select count(*) into n from organization_membership
+  where user_id = 'dddddddd-0000-0000-0000-000000000008';
+  perform tests.ok(n = 0, 'a Google account is created but holds no seat until Auth confirms it');
+  perform tests.auth_confirm('dddddddd-0000-0000-0000-000000000008');
+  select count(*) into n from organization_membership
   where user_id = 'dddddddd-0000-0000-0000-000000000008' and role = 'staff' and status = 'active';
-  perform tests.ok(n = 1, 'a Google-verified address matching an invitation is admitted');
+  perform tests.ok(n = 1, 'a Google-verified address matching an invitation is admitted once confirmed');
 
-  -- 8. Operators provisioning with the service role mark the account in
-  --    app metadata, which a person signing up cannot set.
+  -- A password sign-up cannot claim the provider's word for itself.
+  insert into invitation (organization_id, email, intended_role, invited_by, expires_at)
+  values (v_org, 'claims-verified@example.org', 'staff', v_owner, now() + interval '1 day');
+  begin
+    perform tests.invitation_signup('dddddddd-0000-0000-0000-000000000013',
+      'claims-verified@example.org', true,
+      '{"full_name":"Claims Verified","email_verified":true}'::jsonb);
+    perform tests.ok(false, 'email_verified in a password sign-up''s own metadata must prove nothing');
+  exception when insufficient_privilege then
+    perform tests.ok(true, 'email_verified in a password sign-up''s own metadata proves nothing');
+  end;
+
+  -- 8. A direct SQL insert by an operator (test fixtures) marks the account in
+  --    app metadata, which a person signing up cannot set. The Auth admin API
+  --    adds app_metadata after the insert, so operators there use the token
+  --    (tests/e2e/invitation-auth-order.spec.ts).
   insert into invitation (organization_id, email, intended_role, invited_by, expires_at)
   values (v_org, 'operator-provisioned@example.org', 'guest', v_owner, now() + interval '1 day');
   perform tests.invitation_signup('dddddddd-0000-0000-0000-000000000009',
@@ -219,11 +270,14 @@ begin
     'revoked-later@example.org', false,
     '{"full_name":"Revoked Later","invite_token":"revoked-later-token-abcdefghijklmnopqrstuv"}'::jsonb);
   update invitation set revoked_at = now() where id = v_invitation;
-  update auth.users set email_confirmed_at = now()
-  where id = 'dddddddd-0000-0000-0000-000000000011';
+  perform tests.auth_confirm('dddddddd-0000-0000-0000-000000000011');
   select count(*) into n from organization_membership
   where user_id = 'dddddddd-0000-0000-0000-000000000011';
   perform tests.ok(n = 0, 'an invitation revoked before confirmation grants nothing');
+  perform tests.ok(
+    exists (select 1 from auth.users where id = 'dddddddd-0000-0000-0000-000000000011'
+            and email_confirmed_at is not null),
+    'the confirmation itself still succeeds');
 
   -- 10. Claimed in time, confirmed after the expiry: still honoured.
   insert into invitation (organization_id, email, intended_role, invited_by, expires_at, token_hash)
@@ -233,16 +287,58 @@ begin
   perform tests.invitation_signup('dddddddd-0000-0000-0000-000000000012',
     'expires-later@example.org', false,
     '{"full_name":"Expires Later","invite_token":"expires-later-token-abcdefghijklmnopqrstuv"}'::jsonb);
-  update invitation set expires_at = now() - interval '1 minute' where id = v_invitation;
-  update auth.users set email_confirmed_at = now()
+  -- now() is fixed inside this transaction, so date the sign-up back instead
+  -- of waiting: the account was created two days ago, the invitation lapsed
+  -- a minute ago.
+  update auth.users set created_at = now() - interval '2 days'
   where id = 'dddddddd-0000-0000-0000-000000000012';
+  update invitation set expires_at = now() - interval '1 minute' where id = v_invitation;
+  perform tests.auth_confirm('dddddddd-0000-0000-0000-000000000012');
   select count(*) into n from organization_membership
   where user_id = 'dddddddd-0000-0000-0000-000000000012' and status = 'active';
   perform tests.ok(n = 1, 'an invitation claimed before it expired is honoured on confirmation');
+
+  -- 11. "New link" between sign-up and confirmation replaces the token the
+  --     person signed up with. Confirming their address still grants the seat.
+  insert into invitation (organization_id, email, intended_role, invited_by, expires_at, token_hash)
+  values (v_org, 'relinked@example.org', 'volunteer', v_owner, now() + interval '1 day',
+          tests.token_hash('relinked-old-token-abcdefghijklmnopqrstuvw'))
+  returning id into v_invitation;
+  perform tests.invitation_signup('dddddddd-0000-0000-0000-000000000014',
+    'relinked@example.org', false,
+    '{"full_name":"Relinked","invite_token":"relinked-old-token-abcdefghijklmnopqrstuvw"}'::jsonb);
+  update invitation
+  set token_hash = tests.token_hash('relinked-new-token-abcdefghijklmnopqrstuvw'),
+      expires_at = now() + interval '14 days'
+  where id = v_invitation;
+  perform tests.auth_confirm('dddddddd-0000-0000-0000-000000000014');
+  select count(*) into n from organization_membership
+  where user_id = 'dddddddd-0000-0000-0000-000000000014' and role = 'volunteer' and status = 'active';
+  perform tests.ok(n = 1, 'a New link issued before confirmation does not strand the person');
+
+  -- 12. Someone who already holds a membership (granted at sign-up before this
+  --     change) confirms later: nothing is granted or audited twice.
+  insert into invitation (organization_id, email, intended_role, invited_by, expires_at)
+  values (v_org, 'already-member@example.org', 'staff', v_owner, now() + interval '1 day');
+  perform tests.invitation_signup('dddddddd-0000-0000-0000-000000000015',
+    'already-member@example.org', false, '{"full_name":"Already Member"}'::jsonb,
+    '{"provider":"email","providers":["email"],"provisioned_by_operator":true}'::jsonb);
+  insert into organization_membership (organization_id, user_id, role, status)
+  values (v_org, 'dddddddd-0000-0000-0000-000000000015', 'staff', 'active');
+  perform tests.auth_confirm('dddddddd-0000-0000-0000-000000000015');
+  select count(*) into n from organization_membership
+  where user_id = 'dddddddd-0000-0000-0000-000000000015';
+  perform tests.ok(n = 1, 'confirming an existing member grants nothing new');
+  select count(*) into n from audit_event
+  where object_id = 'dddddddd-0000-0000-0000-000000000015' and action = 'user_provisioned';
+  perform tests.ok(n = 0, 'confirming an existing member audits nothing new');
+  perform tests.ok(
+    exists (select 1 from invitation where email = 'already-member@example.org' and accepted_at is null),
+    'confirming an existing member leaves other invitations unspent');
 end;
 $$;
 
--- 11. Anonymous visitors: no address oracle, and a token answers only for itself.
+-- 13. Anonymous visitors: no address oracle, and a token answers only for itself.
 insert into invitation (organization_id, email, intended_role, invited_by, expires_at, token_hash)
 select organization_id, 'preview-invitee@example.org', 'staff', user_id, now() + interval '1 day',
        tests.token_hash('preview-token-abcdefghijklmnopqrstuvwxyz0123')

@@ -3,6 +3,7 @@ import {
   EmailSendError,
   activeTransport,
   isRetryableStatus,
+  logPreview,
   recipientIsAllowed,
   sendEmail,
   transactionalEmailIsLive,
@@ -42,6 +43,21 @@ describe("transport selection", () => {
   it("falls back to logging when there is neither", () => {
     withEnv({ EMAIL_PROVIDER_API_KEY: undefined, SMTP_HOST: undefined });
     expect(activeTransport()).toBe("log");
+  });
+});
+
+describe("logPreview", () => {
+  it("never writes a link into the log, however early it appears", () => {
+    const preview = logPreview(
+      "Join: https://hub.example.org/sign-up?invite=abc_DEF-123 now, or http://x.test/reset?token=s3cret",
+    );
+    expect(preview).toBe("Join: [link] now, or [link]");
+    expect(preview).not.toContain("invite=");
+    expect(preview).not.toContain("token=");
+  });
+
+  it("still truncates to 200 characters", () => {
+    expect(logPreview("a".repeat(500))).toHaveLength(200);
   });
 });
 

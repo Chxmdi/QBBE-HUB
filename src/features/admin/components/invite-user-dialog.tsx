@@ -16,9 +16,12 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ link: string; email: string; expiresAt: string } | null>(
-    null,
-  );
+  const [created, setCreated] = useState<{
+    link: string;
+    email: string;
+    expiresAt: string;
+    timeZone?: string;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -27,7 +30,8 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
     setNotice(null);
     setCreated(null);
     setSaving(true);
-    const form = new FormData(e.currentTarget);
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
     const email = String(form.get("email") ?? "").trim().toLowerCase();
     const result = await inviteUser({
       email,
@@ -44,8 +48,17 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
         : t("admin.invite.notSent", { email }),
     );
     if (result.inviteLink && result.expiresAt) {
-      setCreated({ link: result.inviteLink, email, expiresAt: result.expiresAt });
+      setCreated({
+        link: result.inviteLink,
+        email,
+        expiresAt: result.expiresAt,
+        timeZone: result.timeZone,
+      });
     }
+    // Empty the address, so a second click cannot create (and email) a second
+    // invitation for the same person.
+    const emailField = formElement.elements.namedItem("email");
+    if (emailField instanceof HTMLInputElement) emailField.value = "";
     router.refresh();
   }
 
@@ -82,7 +95,12 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
           {error ? <p role="alert" className="text-[13px] text-danger-fg">{error}</p> : null}
           {notice ? <p role="status" className="text-[13px] text-success-fg">{notice}</p> : null}
           {created ? (
-            <InvitationLinkField link={created.link} email={created.email} expiresAt={created.expiresAt} />
+            <InvitationLinkField
+              link={created.link}
+              email={created.email}
+              expiresAt={created.expiresAt}
+              timeZone={created.timeZone}
+            />
           ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>

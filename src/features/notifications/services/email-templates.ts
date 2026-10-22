@@ -139,7 +139,7 @@ function shell(
   footerNote: string,
   locale: Locale,
   t: TranslateFn,
-  options: { manageLink?: boolean } = {},
+  options: { manageLink?: boolean; footerHtml?: string } = {},
 ): string {
   // Someone who is not a member yet has no notification settings to manage.
   const manage = options.manageLink === false
@@ -160,7 +160,7 @@ function shell(
 ${inner}
 </td></tr>
 <tr><td style="padding:16px 24px;border-top:1px solid ${LINE};font:400 12px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${MUTED};">
-${escapeHtml(footerNote)}${manage}
+${options.footerHtml ?? escapeHtml(footerNote)}${manage}
 </td></tr>
 </table>
 </td></tr></table>
@@ -483,6 +483,10 @@ ${block(en)}`;
   return {
     subject,
     text,
-    html: shell(subject, inner, `${fr.footer} / ${en.footer}`, "fr-CA", footerT, { manageLink: false }),
+    html: shell(subject, inner, `${fr.footer} / ${en.footer}`, "fr-CA", footerT, {
+      manageLink: false,
+      // The page is French; the English half is marked so it is read as English.
+      footerHtml: `${escapeHtml(fr.footer)} / <span lang="en">${escapeHtml(en.footer)}</span>`,
+    }),
   };
 }

@@ -29,6 +29,20 @@ describe("invitation email (SEC-001)", () => {
     expect(text).toMatch(/[Vv]olunteer/);
   });
 
+  it("names every role in French without a broken 'de' + vowel construction", () => {
+    for (const role of ["admin", "leadership_viewer", "staff", "volunteer", "guest"]) {
+      const { text } = renderInvitationEmail({ ...input, role });
+      expect(text).not.toMatch(/\bde [AEIOUÉÈÊaeiouéèê]/);
+      expect(text).toContain("Rôle : ");
+      expect(text).toContain("Role: ");
+    }
+  });
+
+  it("marks the English half of the footer as English", () => {
+    const { html } = renderInvitationEmail(input);
+    expect(html).toMatch(/<span lang="en">Sent by QBBE Hub on behalf of [^<]+<\/span>/);
+  });
+
   it("escapes what an administrator typed into their own name", () => {
     const { html } = renderInvitationEmail(input);
     expect(html).not.toContain("<script>");

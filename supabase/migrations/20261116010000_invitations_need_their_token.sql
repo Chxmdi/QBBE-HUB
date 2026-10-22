@@ -17,28 +17,38 @@
 -- Now:
 --
 --   * Each invitation carries `token_hash`, the SHA-256 of a random secret the
---     server generates and emails as a link. The secret itself is never
---     stored.
---   * A password sign-up must present that secret in its user metadata
---     (`invite_token`), for the invited address. Two other proofs remain:
---     a sign-in provider that has already verified the address (Google, per
---     docs/runbooks/google-sign-in.md), and an account provisioned by an
---     operator with the service role or database access, marked
---     `provisioned_by_operator` in `raw_app_meta_data`, which a person signing
---     up cannot set. Each still needs an open invitation for that address.
+--     server generates and emails as a link. Only the hash is kept on the
+--     invitation.
+--   * Creating the auth user needs an open, unexpired invitation for that
+--     address and one of these proofs:
+--       - the link's secret, passed as `invite_token` in the sign-up's user
+--         metadata. This is how a person signs up with a password, and how an
+--         operator provisions an account through the Auth admin API. The
+--         secret is removed from the user's metadata as soon as it is checked,
+--         so it does not stay on the account or in later sessions.
+--       - a sign-in provider other than email (Google, per
+--         docs/runbooks/google-sign-in.md) that says it has verified the
+--         address.
+--       - `provisioned_by_operator: true` in `raw_app_meta_data`, which a person
+--         signing up cannot set. Only a direct SQL insert into auth.users
+--         carries it at insert time (test fixtures do this); the Auth admin
+--         API adds app_metadata after the insert, so it uses the token.
 --   * The membership is granted only once `email_confirmed_at` is set: at
 --     sign-up where Auth confirms immediately, otherwise by the new trigger
---     when the person follows the confirmation email.
+--     when Auth confirms the address (the confirmation email, or Google's own
+--     confirmation, which Auth writes just after creating the user). At that
+--     point the confirmed address is the proof, so the newest open invitation
+--     for it is granted — including one an administrator re-issued with
+--     "New link" between sign-up and confirmation.
 --   * `signup_allowed` is no longer callable by `anon`. The sign-up page asks
 --     `invitation_preview(token)`, which answers only for the holder of a
 --     link, and `workspace_bootstrap_open()`, which only says whether the
 --     very first account can still be created.
 --
 -- The first account still bootstraps the workspace exactly as before.
--- Invitations created before this migration have no `token_hash`: they can
--- still be accepted through Google or operator provisioning, and an
--- administrator issues a fresh link for anyone else (Admin → Invitations →
--- New link).
+-- Invitations created before this migration have no `token_hash`: they still
+-- work for Google sign-in, and an administrator issues a link for anyone else
+-- (Admin, Invitations, New link; docs/runbooks/deployment.md lists them).
 -- ---------------------------------------------------------------------------
 
 alter table invitation add column if not exists token_hash text;
@@ -51,23 +61,19 @@ create unique index if not exists invitation_token_hash_key
   on invitation (token_hash) where token_hash is not null;
 
 comment on column invitation.token_hash is
-  'SHA-256 (hex) of the secret emailed in the invitation link. The secret is never stored.';
+  'SHA-256 (hex) of the secret emailed in the invitation link. The invitation keeps only the hash.';
 comment on column invitation.token is
   'Unused legacy column. Invitations are claimed with token_hash (SEC-001).';
 
 -- ---------------------------------------------------------------------------
--- Which open invitation, if any, this auth user may claim.
---
--- p_allow_expired is for the confirmation step: an invitation that was claimed
--- while open is honoured when the person confirms a little after it expired.
--- Revoked and already-accepted invitations never match.
+-- The sign-up gate: which open invitation, if any, this new auth user proves
+-- a claim to. Revoked, accepted and expired invitations never match.
 -- ---------------------------------------------------------------------------
 create or replace function app.claimable_invitation(
   p_email text,
   p_user_meta jsonb,
   p_app_meta jsonb,
-  p_email_confirmed boolean,
-  p_allow_expired boolean default false
+  p_email_confirmed boolean
 ) returns uuid
 language plpgsql
 stable
@@ -80,6 +86,11 @@ declare
   v_provider text := coalesce(nullif(p_app_meta ->> 'provider', ''), 'email');
   -- Compared as JSON, not cast, so an odd value is simply "not an operator".
   v_operator boolean := coalesce(p_app_meta -> 'provisioned_by_operator' = 'true'::jsonb, false);
+  -- Only read for a provider other than email, where Auth fills user metadata
+  -- from the provider's own claims; on a password sign-up the person writes
+  -- user metadata themselves, so it proves nothing there.
+  v_provider_verified boolean := v_provider <> 'email'
+    and (p_email_confirmed or p_user_meta ->> 'email_verified' = 'true');
   v_invitation uuid;
 begin
   if v_email = '' then
@@ -94,18 +105,17 @@ begin
       and lower(i.email) = v_email
       and i.accepted_at is null
       and i.revoked_at is null
-      and (p_allow_expired or i.expires_at > now());
+      and i.expires_at > now();
     return v_invitation;
   end if;
 
-  if v_operator or (v_provider <> 'email' and p_email_confirmed) then
-    -- Operator provisioning, or an address a sign-in provider has verified.
+  if v_operator or v_provider_verified then
     select i.id into v_invitation
     from invitation i
     where lower(i.email) = v_email
       and i.accepted_at is null
       and i.revoked_at is null
-      and (p_allow_expired or i.expires_at > now())
+      and i.expires_at > now()
     order by i.created_at desc
     limit 1;
     return v_invitation;
@@ -115,7 +125,7 @@ begin
 end;
 $$;
 
-revoke all on function app.claimable_invitation(text, jsonb, jsonb, boolean, boolean)
+revoke all on function app.claimable_invitation(text, jsonb, jsonb, boolean)
   from public, anon, authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -192,6 +202,17 @@ begin
     end if;
   end if;
 
+  -- The secret has done its job. Left in user metadata it would sit on the
+  -- account and be copied into every session token the person is issued.
+  -- Auth's own later writes are stripped by trg_auth_user_drop_invite_token.
+  -- (Only an UPDATE of email_confirmed_at fires the confirmation trigger, so
+  -- this does not.)
+  if new.raw_user_meta_data ? 'invite_token' then
+    update auth.users
+    set raw_user_meta_data = raw_user_meta_data - 'invite_token'
+    where id = new.id;
+  end if;
+
   insert into user_profile (id, full_name, email, avatar_url)
   values (
     new.id,
@@ -239,9 +260,48 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- The address is confirmed: grant the invitation this person claimed.
--- Never raises — a confirmation must not fail because an invitation was
--- revoked in the meantime; it simply grants nothing.
+-- Keep the invitation secret off the account after sign-up.
+--
+-- Auth keeps the user it just created in memory and writes its metadata back
+-- later in the same sign-up (confirming an address adds `email_verified`),
+-- which would restore the `invite_token` handle_new_user removed. Every update
+-- drops it again. The session Auth issues in that same sign-up request was
+-- built from its in-memory copy and still carries the (by then spent) secret
+-- until it is first refreshed, at most an hour.
+-- ---------------------------------------------------------------------------
+create or replace function app.drop_invite_token()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.raw_user_meta_data := new.raw_user_meta_data - 'invite_token';
+  return new;
+end;
+$$;
+
+revoke all on function app.drop_invite_token() from public, anon, authenticated;
+
+drop trigger if exists trg_auth_user_drop_invite_token on auth.users;
+create trigger trg_auth_user_drop_invite_token
+  before update on auth.users
+  for each row
+  when (new.raw_user_meta_data ? 'invite_token')
+  execute function app.drop_invite_token();
+
+-- ---------------------------------------------------------------------------
+-- The address is confirmed: grant the invitation for it.
+--
+-- This account already passed the sign-up gate (or predates it), and the
+-- address is now proven, so the newest open invitation for the address is
+-- granted. That covers a link an administrator re-issued after the person
+-- signed up (their old token no longer matches) and an invitation that lapsed
+-- between sign-up and confirmation; it must have still been open when the
+-- account was created. Someone who already has a membership gets nothing new.
+-- An invitation revoked in the meantime grants nothing, and the confirmation
+-- itself still succeeds. Any other failure in the grant aborts the
+-- confirmation, so it is retried rather than leaving a confirmed account
+-- without its seat.
 -- ---------------------------------------------------------------------------
 create or replace function app.handle_user_email_confirmed()
 returns trigger
@@ -256,8 +316,14 @@ begin
     return new;
   end if;
 
-  v_invitation := app.claimable_invitation(
-    new.email, new.raw_user_meta_data, new.raw_app_meta_data, true, true);
+  select i.id into v_invitation
+  from invitation i
+  where lower(i.email) = lower(trim(coalesce(new.email, '')))
+    and i.accepted_at is null
+    and i.revoked_at is null
+    and i.expires_at > new.created_at
+  order by i.created_at desc
+  limit 1;
 
   if v_invitation is not null then
     perform app.accept_invitation(new.id, v_invitation);

@@ -32,7 +32,7 @@
 // With PERF_LOCAL=1 (the local stack, for checking this script), SQL goes
 // through `docker exec … psql`, or through psql over PERF_DB_URL when set.
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
@@ -151,7 +151,7 @@ async function findUser(email) {
   return found[0]?.id ?? null;
 }
 
-async function ensurePerson(person, password) {
+async function ensurePerson(person, password, inviteToken) {
   const existing = await findUser(person.email);
   if (existing) {
     const { error } = await admin.auth.admin.updateUserById(existing, { password });
@@ -162,26 +162,33 @@ async function ensurePerson(person, password) {
     email: person.email,
     password,
     email_confirm: true,
-    user_metadata: { full_name: person.name },
-    // Created with the service role rather than signed up through an emailed
-    // invitation link, so the account says so; only the service role can set
-    // app metadata, which is why app.handle_new_user trusts this marker.
-    app_metadata: { provisioned_by_operator: true },
+    // The invitation link's secret, exactly as a person signing up presents
+    // it: app.handle_new_user checks it against the invitation and removes it.
+    // (A marker in app_metadata would not do: Auth adds app_metadata only
+    // after inserting the user, so the check never sees it.)
+    user_metadata: { full_name: person.name, invite_token: inviteToken },
   });
   if (error) throw new Error(`${person.email}: ${error.message}`);
   return data.user.id;
 }
 
 async function seedPeople(orgId, ownerId, password) {
-  // Sign-up is by invitation only: the invitation decides the role.
+  // Sign-up is by invitation only: the invitation decides the role. Each
+  // person still without an account gets a fresh invitation whose secret only
+  // this run knows; any older open one for them is revoked first.
+  const tokens = new Map(PEOPLE.map((p) => [p.email, randomBytes(32).toString("base64url")]));
+  const hash = (token) => createHash("sha256").update(token, "utf8").digest("hex");
   await exec(`
-    insert into invitation (organization_id, email, intended_role, invited_by, expires_at)
-    select '${orgId}', p.email, p.role::org_role, '${ownerId}', now() + interval '1 day'
-    from (values ${PEOPLE.map((p) => `('${p.email}', '${p.role}')`).join(", ")}) as p(email, role)
-    where not exists (select 1 from auth.users u where u.email = p.email)
-      and not exists (select 1 from invitation i where i.email = p.email and i.accepted_at is null and i.revoked_at is null and i.expires_at > now());
+    update invitation i set revoked_at = now()
+    from (values ${PEOPLE.map((p) => `('${p.email}')`).join(", ")}) as p(email)
+    where i.email = p.email and i.accepted_at is null and i.revoked_at is null
+      and not exists (select 1 from auth.users u where u.email = p.email);
+    insert into invitation (organization_id, email, intended_role, invited_by, expires_at, token_hash)
+    select '${orgId}', p.email, p.role::org_role, '${ownerId}', now() + interval '1 day', p.token_hash
+    from (values ${PEOPLE.map((p) => `('${p.email}', '${p.role}', '${hash(tokens.get(p.email))}')`).join(", ")}) as p(email, role, token_hash)
+    where not exists (select 1 from auth.users u where u.email = p.email);
   `);
-  for (const person of PEOPLE) await ensurePerson(person, password);
+  for (const person of PEOPLE) await ensurePerson(person, password, tokens.get(person.email));
   await exec(`
     update user_profile set onboarded_at = coalesce(onboarded_at, now())
     where email like 'qa-perf-%@example.com';

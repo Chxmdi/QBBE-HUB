@@ -6,18 +6,22 @@ import { Input, Label } from "@/components/ui/input";
 import { useFormatters, useT } from "@/lib/i18n/client";
 
 /**
- * The invitation link, shown once after it is created (SEC-001). Only its hash
- * is stored, so this is the administrator's one chance to copy it; a lost link
- * is replaced with "New link", which also cancels the old one.
+ * The invitation link, shown once after it is created (SEC-001). The
+ * invitation keeps only its hash, so this is the administrator's one chance to
+ * copy it; a lost link is replaced with "New link", which also cancels the old
+ * one.
  */
 export function InvitationLinkField({
   link,
   email,
   expiresAt,
+  timeZone,
 }: {
   link: string;
   email: string;
   expiresAt: string;
+  /** The organization's, so the date matches the one in the email. */
+  timeZone?: string;
 }) {
   const t = useT();
   const format = useFormatters();
@@ -52,7 +56,7 @@ export function InvitationLinkField({
         </Button>
       </div>
       <p id={`${id}-help`} className="text-[12.5px] text-muted">
-        {t("admin.invite.linkHelp", { email, date: format.date(expiresAt) })}
+        {t("admin.invite.linkHelp", { email, date: format.date(expiresAt, timeZone) })}
       </p>
       <p aria-live="polite" className="text-[12.5px] text-muted">
         {copyState === "copied"

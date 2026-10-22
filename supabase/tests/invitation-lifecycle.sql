@@ -1,5 +1,5 @@
--- Invitation acceptance must be enforced by the Auth provisioning trigger,
--- not only by the public preflight RPC used by the sign-up form.
+-- Invitation acceptance must be enforced by the Auth provisioning trigger
+-- itself; the sign-up page's own checks only choose which screen to show.
 -- Run after qa-users.sql and rls.sql; all records are rolled back.
 begin;
 

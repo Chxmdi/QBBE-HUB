@@ -28,12 +28,14 @@ const inviteSchema = (t: TranslateFn) => z.object({
  * it to create their account, and the membership is granted only once their
  * address is confirmed (`app.handle_new_user`). The secret is emailed and also
  * returned to the administrator, once, so an invitation still works where
- * email is not set up. Only its hash is stored.
+ * email is not set up. The invitation keeps only its hash.
  */
 export interface InviteResult extends ActionResult {
   emailSent?: boolean;
   inviteLink?: string;
   expiresAt?: string;
+  /** The zone the email states the expiry in, so the dialog names the same day. */
+  timeZone?: string;
 }
 
 interface InvitationDelivery {
@@ -144,7 +146,13 @@ export async function inviteUser(input: unknown): Promise<InviteResult> {
   });
 
   revalidatePath("/admin");
-  return { ok: true, emailSent: delivery.emailSent, inviteLink: delivery.inviteLink, expiresAt };
+  return {
+    ok: true,
+    emailSent: delivery.emailSent,
+    inviteLink: delivery.inviteLink,
+    expiresAt,
+    timeZone: session.timeZone,
+  };
 }
 
 /**
@@ -201,7 +209,13 @@ export async function reissueInvitation(invitationId: string): Promise<InviteRes
   });
 
   revalidatePath("/admin");
-  return { ok: true, emailSent: delivery.emailSent, inviteLink: delivery.inviteLink, expiresAt };
+  return {
+    ok: true,
+    emailSent: delivery.emailSent,
+    inviteLink: delivery.inviteLink,
+    expiresAt,
+    timeZone: session.timeZone,
+  };
 }
 
 const roleSchema = z.object({

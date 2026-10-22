@@ -135,6 +135,15 @@ async function sendViaSmtp(email: OutboundEmail): Promise<SendResult> {
   return { provider: "smtp", providerMessageId: null };
 }
 
+/**
+ * The log transport's preview leaves out every web address: invitation and
+ * recovery emails carry single-use secrets in their links, and logs are kept
+ * and read far more widely than mailboxes.
+ */
+export function logPreview(text: string): string {
+  return text.replace(/https?:\/\/\S+/g, "[link]").slice(0, 200);
+}
+
 function sendViaLog(email: OutboundEmail): SendResult {
   console.info(
     JSON.stringify({
@@ -142,7 +151,7 @@ function sendViaLog(email: OutboundEmail): SendResult {
       transport: "log",
       to: email.to,
       subject: email.subject,
-      preview: email.text.slice(0, 200),
+      preview: logPreview(email.text),
     }),
   );
   return { provider: "log", providerMessageId: null };

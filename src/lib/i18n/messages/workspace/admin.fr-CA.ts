@@ -85,12 +85,17 @@ export const adminFrCA: typeof adminEn = {
         newLinkFor: "Nouveau lien d’invitation pour {email}",
         newLinkFailed: "Impossible de créer un nouveau lien.",
         creatingLink: "Création d’un nouveau lien…",
+        newLinkConfirm:
+          "Le lien actuel pour {email} cessera de fonctionner. Un nouveau lien sera créé et, si le courriel est configuré, envoyé à cette personne.",
+        newLinkCreate: "Créer le nouveau lien",
+        noLinkHint: "Créée avant les liens d’invitation. Utilisez « Nouveau lien » pour en donner un à cette personne.",
         invited: "{role} · invité {when}",
         states: {
           accepted: "acceptée",
           revoked: "révoquée",
           expired: "expirée",
           pending: "en attente",
+          noLink: "aucun lien",
         },
       },
       integrations: {
@@ -276,6 +281,7 @@ export const adminFrCA: typeof adminEn = {
           status: "statut",
           suppress: "envoi bloqué",
           user_invited: "personne invitée",
+          invitation_link_reissued: "nouveau lien d’invitation",
           vms_connected: "VMS connecté",
           zeffy_connected: "Zeffy connecté",
           zeffy_sync_requested: "Synchronisation Zeffy demandée",
@@ -363,7 +369,7 @@ export const adminFrCA: typeof adminEn = {
       message: {
         subject: "Invitation à QBBE Hub",
         heading: "{inviter} vous invite à rejoindre {organization} sur QBBE Hub",
-        body: "Vous êtes invité à titre de {role}. Créez votre compte avec le bouton ci-dessous. Le lien est utilisable une seule fois, seulement pour {email}, jusqu’au {date}.",
+        body: "Rôle : {role}. Créez votre compte avec le bouton ci-dessous. Le lien est utilisable une seule fois, seulement pour {email}, jusqu’au {date}.",
         button: "Créer mon compte",
         linkText: "Ou ouvrez ce lien : {url}",
         ignore: "Si vous n’attendiez pas cette invitation, vous pouvez ignorer ce courriel.",

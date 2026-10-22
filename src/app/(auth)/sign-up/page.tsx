@@ -20,11 +20,22 @@ export default async function SignUpPage({
 }) {
   const t = await getT();
   const { invite } = await searchParams;
-  const token = typeof invite === "string" ? invite.trim() : "";
+  // A link pasted twice can arrive as ?invite=a&invite=a; the first one counts.
+  const token = (Array.isArray(invite) ? invite[0] : invite)?.trim() ?? "";
   const supabase = await createSupabaseServerClient();
 
   if (token) {
-    const { data } = await supabase.rpc("invitation_preview", { p_token: token });
+    const { data, error } = await supabase.rpc("invitation_preview", { p_token: token });
+    if (error) {
+      // Not the link's fault: saying it is would send the person to ask for a
+      // new one, which cancels the one they hold.
+      return (
+        <SignUpNotice
+          title={t("auth.signUp.previewFailedTitle")}
+          body={t("auth.signUp.previewFailedBody")}
+        />
+      );
+    }
     const invitation = Array.isArray(data) ? data[0] : null;
     if (!invitation) {
       return <SignUpNotice title={t("auth.signUp.invalidTitle")} body={t("auth.signUp.invalidBody")} />;

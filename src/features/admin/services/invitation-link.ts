@@ -4,10 +4,20 @@ import { absoluteUrl } from "@/lib/env";
 /**
  * The secret an invitation is claimed with (SEC-001).
  *
- * 32 random bytes, sent to the invited address as a link. Only its SHA-256
- * reaches the database (`invitation.token_hash`), so a copy of the table,
- * a backup or an administrator's read cannot be replayed as an invitation.
+ * 32 random bytes, sent to the invited address as a link. The invitation
+ * keeps only its SHA-256 (`invitation.token_hash`), so a copy of that table, a
+ * backup or an administrator's read cannot be replayed as an invitation.
  * `app.claimable_invitation` hashes the token a sign-up presents the same way.
+ *
+ * The secret does pass through the new account's user metadata: that is the
+ * only way a sign-up can hand it to the database. `app.handle_new_user`
+ * removes it as soon as it has been checked (and a trigger keeps it removed),
+ * so it is not left on the account. The session issued by the sign-up request
+ * itself still carries the spent secret until its first refresh.
+ *
+ * It also travels in the link's address, so it can land in the invitee's
+ * browser history and the server's access logs; it works once, only for the
+ * invited address, for INVITATION_LIFETIME_DAYS, and New link cancels it.
  */
 export interface InvitationSecret {
   token: string;

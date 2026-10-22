@@ -32,6 +32,10 @@ export const accountEn = {
         "It may have expired, been replaced by a newer link, or already been used. Ask an administrator for a new invitation link.",
       inviteRejected:
         "This invitation link can't be used any more. Ask an administrator for a new link.",
+      previewFailedTitle: "We couldn't check this invitation link",
+      previewFailedBody:
+        "Something went wrong on our side, not with your link. Reload this page in a moment. If it keeps happening, tell the person who invited you.",
+      failed: "Your account could not be created. Try again in a moment.",
       goToSignIn: "Go to sign in",
       checkEmail: "Check your email",
       confirmationSent:
