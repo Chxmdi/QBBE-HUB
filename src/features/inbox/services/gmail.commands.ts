@@ -9,6 +9,7 @@ import { buildGmailSendPayload } from "@/features/inbox/services/gmail-message";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translator";
+import { googleFetch } from "./google-fetch";
 
 interface GmailHeader { name?: string; value?: string }
 interface GmailPayload { body?: { data?: string }; parts?: GmailPayload[]; headers?: GmailHeader[] }
@@ -69,7 +70,7 @@ export async function getGmailMessageDetail(externalId: string): Promise<GmailMe
   if (!z.string().min(1).max(200).safeParse(externalId).success) return null;
   try {
     const { accessToken } = await gmailAccess();
-    const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(externalId)}?format=full`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" });
+    const response = await googleFetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(externalId)}?format=full`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" });
     if (!response.ok) return null;
     const item = await response.json() as { id?: string; threadId?: string; payload?: GmailPayload };
     return {
@@ -102,7 +103,7 @@ export async function sendGmailMessage(input: unknown): Promise<ActionResult> {
     const { session, accessToken } = await gmailAccess();
     const data = parsed.data;
     const payload = buildGmailSendPayload(data);
-    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    const response = await googleFetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
       method: "POST", headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
