@@ -326,6 +326,35 @@ jobs:
           MOBILE: ${{ inputs.mobile && matrix.browser == 'chromium' && 'chromium webkit' || '' }}
         run: npx playwright install --with-deps $(echo $SIGNED_IN_BROWSERS $MOBILE | tr ' ' '\n' | sort -u)
 
+      - name: Week of the virus signatures
+        id: clamav-week
+        if: matrix.shard.suite == 'signed-in' && matrix.browser == 'chromium'
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Reuse downloaded virus signatures
+        if: matrix.shard.suite == 'signed-in' && matrix.browser == 'chromium'
+        uses: actions/cache@v4
+        with:
+          path: ~/clamav-db
+          key: clamav-db-${{ steps.clamav-week.outputs.week }}
+          restore-keys: clamav-db-
+
+      - name: Start ClamAV for the upload and scan journey
+        # Only the part that runs document-scan.spec.ts needs a scanner. The
+        # signatures are cached for a week; freshclam only tops them up.
+        if: matrix.shard.suite == 'signed-in' && matrix.browser == 'chromium'
+        run: |
+          node scripts/ci/spec-groups.mjs ${{ matrix.shard.part }} ${{ matrix.shard.parts }} 2>/dev/null | grep -q document-scan || exit 0
+          mkdir -p ~/clamav-db && chmod 777 ~/clamav-db
+          docker run -d --name clamav -p 3310:3310 -v ~/clamav-db:/var/lib/clamav clamav/clamav:stable
+          for i in $(seq 1 60); do
+            docker logs clamav 2>&1 | grep -q "socket found, clamd started" && break
+            sleep 5
+          done
+          docker logs clamav 2>&1 | grep -q "socket found, clamd started" || { docker logs clamav | tail -20; exit 1; }
+          echo "CLAMAV_HOST=127.0.0.1" >> "$GITHUB_ENV"
+          echo "QA_CLAMAV=1" >> "$GITHUB_ENV"
+
       - name: Start the app
         # Each server log line gets a UTC time so a browser check that failed on
         # the connection (its job-log line is timestamped) can be matched to what
