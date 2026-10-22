@@ -16,6 +16,7 @@ import type { TranslateFn } from "@/lib/i18n/translate";
 import { inboxItemVisible } from "@/features/notifications/services/mute";
 import { NoticeCategory } from "@/features/notifications/components/notice-category";
 import type { Notification } from "@/types/entities";
+import { inAppLink } from "@/lib/safe-redirect";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("inbox.title") };
@@ -213,9 +214,9 @@ export default async function InboxPage({
                     )}
                   />
                   <div className="min-w-0 flex-1">
-                    {notification.link ? (
+                    {inAppLink(notification.link) ? (
                       <Link
-                        href={notification.link}
+                        href={inAppLink(notification.link)!}
                         className="text-[13.5px] font-medium hover:text-brand-fg"
                       >
                         {notification.title}

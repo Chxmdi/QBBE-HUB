@@ -1,6 +1,7 @@
 import { expect, test } from "./fixtures";
 import { signIn } from "./auth";
 import { sql } from "./db";
+import { clickWhenInteractive } from "./interactive";
 
 const MAILPIT = "http://127.0.0.1:54324";
 const JOB_SECRET = process.env.CRON_JOB_SECRET ?? "";
@@ -144,4 +145,30 @@ test("inbox filters, weekly modes, mutes, and one actionable email", async ({
   expect(body).toContain("Action: asked to review");
   expect(body).toContain("Owner: QA Owner");
   expect(body).toMatch(/Due:/);
+});
+
+test("a sign-in link cannot forward to another site", async ({ page }) => {
+  // "/.//host" survives a plain "starts with //" check and only becomes
+  // "//host" (another site, to the router) once parsed.
+  await page.goto("/sign-in?next=/.//evil.example/phish");
+  await page.getByLabel("Email", { exact: true }).fill("qa-staff@example.com");
+  await page.getByLabel("Password", { exact: true }).fill("QaTest!2026");
+  await clickWhenInteractive(page.getByRole("button", { name: "Sign in", exact: true }));
+  await page.waitForURL((url) => url.pathname === "/" || url.hostname !== "127.0.0.1", { timeout: 60_000 });
+  expect(new URL(page.url()).hostname).toBe("127.0.0.1");
+  expect(new URL(page.url()).pathname).toBe("/");
+});
+
+test("a notification row links only inside the Hub", async ({ page }) => {
+  // The database refuses an outside link outright, even from a superuser.
+  expect(() =>
+    sql(`
+      insert into public.notification (user_id, organization_id, category, title, link)
+      select user_id, organization_id, 'mention', 'Off-site', 'https://evil.example/login'
+      from public.organization_membership where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2' limit 1;
+    `),
+  ).toThrow();
+  await signIn(page, "staff");
+  await page.goto("/inbox");
+  await expect(page.locator('main a[href*="evil.example"]')).toHaveCount(0);
 });

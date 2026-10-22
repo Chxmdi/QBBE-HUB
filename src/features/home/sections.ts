@@ -10,6 +10,7 @@ import {
   type HomeProject,
   type HomeTask,
 } from "./model";
+import { inAppLink } from "@/lib/safe-redirect";
 
 /**
  * Home's sections (M17a) and My World (M17b), sorted by fixed rules from rows
@@ -358,7 +359,7 @@ export function buildMyWorld(data: HomeData): MyWorld {
         kind: "mention",
         id: mention.id,
         title: mention.title,
-        href: mention.link ?? "/inbox",
+        href: inAppLink(mention.link, "/inbox")!,
         facts: [
           ...(mention.body ? [{ kind: "summary" as const, text: mention.body.split("\n")[0] }] : []),
           { kind: "time", at: mention.created_at },

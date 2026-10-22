@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { LocalizedText } from "@/lib/objects/contracts";
+import { IN_APP_LINK_PATTERN } from "@/lib/safe-redirect";
 
 /**
  * The workflow actions' keys, labels and input shapes, with no server code, so
@@ -27,7 +28,7 @@ export const actionInputSchemas = {
   "notification.send": z.object({
     userId: uuid,
     title: z.string().trim().min(1).max(200),
-    link: z.string().trim().max(500).regex(/^\/(?!\/)/, "A link must start with a single /.").optional(),
+    link: z.string().trim().max(500).regex(IN_APP_LINK_PATTERN, "A link must be an in-app path starting with a single /.").optional(),
   }).strict(),
 } as const;
 

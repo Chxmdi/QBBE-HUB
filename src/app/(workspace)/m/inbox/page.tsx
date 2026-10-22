@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { MarkReadButton } from "@/features/inbox/components/mark-read-button";
 import { mobileT } from "@/features/mobile/i18n";
 import { myNotifications } from "@/features/mobile/services/mobile.queries";
+import { inAppLink } from "@/lib/safe-redirect";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +36,8 @@ export default async function PhoneInbox() {
               <div className="flex items-center justify-between gap-2 pt-1">
                 <span className="text-[12.5px] text-muted">{format.dateTime(n.createdAt, session.timeZone)}</span>
                 <span className="flex items-center gap-2">
-                  {n.link ? (
-                    <Link href={n.link} className="inline-flex min-h-11 items-center px-2 text-brand-fg underline">{t("inbox.open")}</Link>
+                  {inAppLink(n.link) ? (
+                    <Link href={inAppLink(n.link)!} className="inline-flex min-h-11 items-center px-2 text-brand-fg underline">{t("inbox.open")}</Link>
                   ) : null}
                   {!n.readAt ? <MarkReadButton notificationId={n.id} /> : null}
                 </span>
