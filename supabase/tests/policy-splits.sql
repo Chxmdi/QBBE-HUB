@@ -319,6 +319,12 @@ begin
   perform tests.clear_auth();
   reset role;
 
+  perform tests.authenticate(v_admin, 'aal1');
+  select count(*) into n from audit_event;
+  perform tests.ok(n = 0, 'audit log: an admin with an aal1 session reads nothing');
+  perform tests.clear_auth();
+  reset role;
+
   -- An aal2 claim without a verified authenticator is not MFA.
   delete from auth.mfa_factors where user_id = v_admin;
   perform tests.authenticate(v_admin, 'aal1');
