@@ -8,12 +8,20 @@ name: Deploy
 #   2. evidence  production only: a green Release candidate run for the same
 #                commit must exist, so production never gets a commit that was
 #                not certified as a whole (all browsers, security, 50 users)
-#   3. migrate   environment and isolation checks, then database migrations
-#   4. build     the environment's container image of this commit (the
+#   3. build     the environment's container image of this commit (the
 #                server is ARM, so it is built on an ARM runner)
+#   4. migrate   environment and isolation checks, a fresh backup (Backup
+#                workflow) when there is anything to apply, then database
+#                migrations. It waits for the build: the old image serves
+#                the migrated database until the swap, so that window is
+#                kept short, and a failed build changes nothing
 #   5. release   the server swaps to the new image; a new container that does
 #                not report healthy is replaced by the previous one again
 #   6. smoke     the site answers, runs this commit, and its jobs are wired
+#
+# Migrations that drop or rename a table or column, or change a column's
+# type, ship only after a release has stopped using it, and say which
+# (`-- contract: safe-after <sha>`; tests/unit/migration-contract.test.ts).
 #
 # Rollback: .github/workflows/rollback.yml and
 # docs/runbooks/release-procedure.md.
@@ -72,11 +80,16 @@ jobs:
         run: echo "Staging deploys are gated by CI on ${GITHUB_SHA}."
 
   migrate:
-    name: Environment checks and migrations
-    needs: evidence
+    name: Environment checks, backup and migrations
+    needs: [evidence, build]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The backup can take most of this.
+    timeout-minutes: 100
     environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      # Starts the Backup workflow and follows its run.
+      actions: write
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
@@ -133,6 +146,37 @@ jobs:
             cat migration-plan.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The only way to undo a migration is to restore a backup, so one is
+      # taken right before migrating, by the Backup workflow (its own
+      # environment and keys; docs/runbooks/backup-recovery.md). Nothing to
+      # apply, nothing to back up. A failed or missing backup stops the
+      # deploy before the database changes.
+      - name: Back up the database right before migrating
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_ENVIRONMENT: ${{ inputs.environment }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -qi "up to date" migration-plan.txt; then
+            echo "No migrations to apply; no backup needed." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          started=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run backup.yml --ref main -f environment="$TARGET_ENVIRONMENT"
+          run_id=""
+          for _ in $(seq 1 24); do
+            sleep 5
+            run_id=$(gh run list --workflow backup.yml --branch main --event workflow_dispatch \
+              --json databaseId,createdAt --limit 10 \
+              --jq "[.[] | select(.createdAt >= \"${started}\")] | sort_by(.createdAt) | .[0].databaseId // empty")
+            [ -n "$run_id" ] && break
+          done
+          [ -n "$run_id" ] || { echo "::error::The Backup workflow run did not start; no migration was applied."; exit 1; }
+          echo "Backup run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${run_id}" | tee -a "$GITHUB_STEP_SUMMARY"
+          gh run watch "$run_id" --exit-status --interval 30 \
+            || { echo "::error::The backup before migrating failed; no migration was applied. See the Backup run above."; exit 1; }
 
       - name: Apply migrations
         run: supabase db push --password "$SUPABASE_DB_PASSWORD"

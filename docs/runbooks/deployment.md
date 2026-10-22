@@ -170,6 +170,13 @@ Two gates exist specifically to catch drift that only shows up at runtime:
   rehearse on staging.
 - Schema: write an inverse migration; for risky changes use
   expand → migrate → contract so old app versions keep working (CICD-002).
+  CI enforces the contract step: a migration that drops or renames a table
+  or column, or changes a column's type, needs a `-- contract: safe-after
+  <sha>` line naming the released commit that stopped using it
+  (release-procedure.md).
+- Undoing a migration means restoring the backup the Deploy run took right
+  before migrating (its summary links the Backup run); see
+  backup-recovery.md for the restore, rehearsed on staging first.
 
 ## Release checks
 
@@ -231,11 +238,15 @@ The full step-by-step procedure, including rollback, is
    projects. It also reads the app settings (`APP_ENV`) and refuses if they
    point at another environment's database or address, lack the keys the app
    needs, or set `WORKSPACE_OS_FLAGS` on production.
-4. Shows the migrations it will apply (dry run, in the run summary), applies
-   them, and confirms none are left. `supabase db push` stops the deploy if
-   the database holds a migration this commit does not have.
-5. Builds the environment's container image of the commit on an ARM runner
+4. Builds the environment's container image of the commit on an ARM runner
    and stores it as `ghcr.io/chxmdi/qbbe-hub:<environment>-<commit>`.
+5. Only once the image is built: shows the migrations it will apply (dry
+   run, in the run summary); when there are any, starts the **Backup**
+   workflow for that environment and waits for it to succeed (a failed
+   backup stops the deploy before the database changes); applies the
+   migrations, and confirms none are left. `supabase db push` stops the
+   deploy if the database holds a migration this commit does not have.
+   Migrating last keeps short the time the old site runs on the new schema.
 6. Releases it on the server (`deploy/server/release.sh`): the new container
    must report healthy within 3 minutes, or the previous image and settings
    are put back and the run fails. The replaced image is the rollback target.
