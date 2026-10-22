@@ -184,3 +184,31 @@ describe("recipient allowlist", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("the log stand-in", () => {
+  const email = { to: "donor@example.com", subject: "Thank you, Jane", text: "Dear Jane, your gift of $100", html: "<p>Dear Jane</p>" };
+
+  it("is refused in production unless explicitly chosen, so nothing looks sent that was not", async () => {
+    withEnv({ NODE_ENV: "production", EMAIL_PROVIDER_API_KEY: undefined, SMTP_HOST: undefined, EMAIL_TRANSPORT: undefined });
+    const failure = await sendEmail(email).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(EmailSendError);
+    expect((failure as EmailSendError).retryable).toBe(false);
+    expect((failure as Error).message).toMatch(/not configured/);
+  });
+
+  it("writes neither the address nor the content to the log", async () => {
+    withEnv({ NODE_ENV: "production", EMAIL_PROVIDER_API_KEY: undefined, SMTP_HOST: undefined, EMAIL_TRANSPORT: "log" });
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    await expect(sendEmail(email)).resolves.toMatchObject({ provider: "log" });
+    const logged = info.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).not.toContain("donor@example.com");
+    expect(logged).not.toContain("Jane");
+    expect(logged).toMatch(/"recipient_sha256":"[0-9a-f]{64}"/);
+    info.mockRestore();
+  });
+
+  it("does not put a malformed address in the error it records", async () => {
+    const failure = await sendEmail({ ...email, to: "jane at example" }).catch((error: unknown) => error);
+    expect((failure as Error).message).not.toContain("jane at example");
+  });
+});
