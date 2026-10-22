@@ -306,9 +306,10 @@ export async function generateFromTemplate(input: unknown): Promise<ActionResult
       storage_path: path,
       mime_type: "application/pdf",
       size_bytes: pdf.byteLength,
-      // Who can open it is decided by the folder: a staff folder narrows it
-      // to staff (the template's default folder for anything confidential).
-      visibility: "organization",
+      // Every template merges a member, contact or gift record, so the
+      // result holds personal or donor details: staff only, whatever the
+      // folder (a folder can narrow access further, never widen it).
+      visibility: "staff",
       folder_id: data.folderId ?? (template.folder_id as string | null),
       tags: [template.kind as string],
       template_id: template.id,
