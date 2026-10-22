@@ -20,6 +20,8 @@ const MAILPIT = "http://127.0.0.1:54324";
 // New accounts made here must meet the password rule (12 characters, mixed
 // case and a digit); the QA fixture users' password predates it.
 const PASSWORD = "QaTest!2026new";
+// The QA fixture users' own password, which every other spec signs in with.
+const FIXTURE_PASSWORD = "QaTest!2026";
 
 /** A fresh address per run, so a rerun is not answered by the previous run's invitation. */
 function uniqueEmail(prefix: string) {
@@ -303,7 +305,7 @@ test.describe("identity lifecycle", () => {
       await expect(page.getByLabel("Six-digit code", { exact: true })).toBeVisible({ timeout: 30_000 });
     } finally {
       // Every other spec signs the admin in with the shared test password.
-      sql(`update auth.users set encrypted_password = extensions.crypt('${PASSWORD}', extensions.gen_salt('bf'))
+      sql(`update auth.users set encrypted_password = extensions.crypt('${FIXTURE_PASSWORD}', extensions.gen_salt('bf'))
            where email = '${email}'`);
     }
   });

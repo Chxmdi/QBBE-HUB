@@ -13,7 +13,8 @@ import { sql } from "./db";
  * and an unconfirmed sign-up confirmed through its real confirmation link.
  */
 
-const PASSWORD = "QaTest!2026";
+// At least 12 characters with upper, lower and digits (supabase/config.toml).
+const PASSWORD = "QaTest!2026-Invite";
 const API = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
