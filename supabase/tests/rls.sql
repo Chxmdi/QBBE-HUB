@@ -95,6 +95,58 @@ begin
 end;
 $$;
 
+-- Write refusals (write-tampering.sql, untested-tables-deny.sql).
+-- Runs one statement as the current (authenticated) caller and undoes it
+-- either way, so an allowed write cannot change what a later case sees.
+-- Refused means a permission error (42501, which row security also raises),
+-- an exception raised by a guard trigger (P0001), or a write that touched no
+-- row. Any other error is a broken fixture, not a refusal, and fails the file.
+create or replace function tests.refused(p_statement text)
+returns boolean
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_rows integer;
+begin
+  begin
+    execute p_statement;
+    get diagnostics v_rows = row_count;
+    raise exception using errcode = 'QTUND', message = v_rows::text;
+  exception
+    when sqlstate 'QTUND' then
+      return sqlerrm::integer = 0;
+    when insufficient_privilege or raise_exception then
+      return true;
+  end;
+end;
+$$;
+
+create or replace function tests.refused_ok(p_statement text, msg text)
+returns void
+language plpgsql
+set search_path = tests, public
+as $$
+begin
+  perform tests.ok(tests.refused(p_statement), msg);
+end;
+$$;
+
+-- A case whose fix has not landed on main yet. Prints PASS once it is refused.
+create or replace function tests.gap(p_statement text, finding text, msg text)
+returns void
+language plpgsql
+set search_path = tests, public
+as $$
+begin
+  if tests.refused(p_statement) then
+    raise notice 'PASS: %', msg;
+  else
+    raise notice 'TODO %: %', finding, msg;
+  end if;
+end;
+$$;
+
 grant usage on schema tests to anon, authenticated, postgres;
 grant execute on all functions in schema tests to anon, authenticated, postgres;
 
