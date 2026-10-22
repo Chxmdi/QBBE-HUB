@@ -61,8 +61,12 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-      - name: Unit tests
-        run: npm test
+      - name: Unit tests, with the coverage floors
+        # Fails when an area's line coverage falls below its floor in
+        # vitest.config.ts. The run took about 100 s and 4 GB locally.
+        run: npm run test:coverage
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
       - name: Reuse the previous build's cache
         uses: actions/cache@v4
