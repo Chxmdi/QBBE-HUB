@@ -220,6 +220,20 @@ jobs:
         if: always()
         run: supabase stop
 
+  browser-list:
+    # The browsers input as a JSON list, so each browser can be a job of its
+    # own below (GitHub expressions cannot split a string).
+    name: Browser list
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      json: ${{ steps.list.outputs.json }}
+    steps:
+      - id: list
+        env:
+          BROWSERS: ${{ inputs.browsers || 'chromium' }}
+        run: echo "json=$(printf '%s\n' $BROWSERS | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+
   browsers:
     # Every signed-in spec runs: the list is built from the folder, so a new
     # feature's spec is picked up without editing this file. The specs are
@@ -236,29 +250,30 @@ jobs:
     # and are left out of the switches-on rows; tests that need the switches
     # end with "[switches on]" and are left out of the switches-off rows
     # (scripts/ci/switch-tests.mjs keeps the titles honest).
-    name: "Database security: ${{ matrix.suite }} ${{ matrix.part }}/${{ matrix.parts }}${{ matrix.flags == 'all' && ' (switches on)' || '' }}"
+    name: "Database security: ${{ matrix.shard.suite }} ${{ matrix.shard.part }}/${{ matrix.shard.parts }}${{ matrix.flags == 'all' && ' (switches on)' || '' }}${{ matrix.browser != 'chromium' && format(' [{0}]', matrix.browser) || '' }}"
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.browsers && inputs.browsers != 'chromium' && 90 || 40 }}
+    timeout-minutes: ${{ matrix.browser != 'chromium' && 60 || 40 }}
+    needs: browser-list
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { suite: signed-in, part: 1, parts: 4, flags: off }
-          - { suite: signed-in, part: 2, parts: 4, flags: off }
-          - { suite: signed-in, part: 3, parts: 4, flags: off }
-          - { suite: signed-in, part: 4, parts: 4, flags: off }
-          - { suite: qa-matrix, part: 1, parts: 3, flags: off }
-          - { suite: qa-matrix, part: 2, parts: 3, flags: off }
-          - { suite: qa-matrix, part: 3, parts: 3, flags: off }
-          - { suite: signed-in, part: 1, parts: 4, flags: all }
-          - { suite: signed-in, part: 2, parts: 4, flags: all }
-          - { suite: signed-in, part: 3, parts: 4, flags: all }
-          - { suite: signed-in, part: 4, parts: 4, flags: all }
-          - { suite: qa-matrix, part: 1, parts: 3, flags: all }
-          - { suite: qa-matrix, part: 2, parts: 3, flags: all }
-          - { suite: qa-matrix, part: 3, parts: 3, flags: all }
+        # Each browser is a job with a database of its own. Run one after
+        # another on one database, a later browser met what an earlier one
+        # left behind (an extra ledger period moved every fiscal year, leftover
+        # tasks pushed a new one off the first page), so results depended on
+        # the order rather than on the browser.
+        browser: ${{ fromJSON(needs.browser-list.outputs.json) }}
+        flags: [off, all]
+        shard:
+          - { suite: signed-in, part: 1, parts: 4 }
+          - { suite: signed-in, part: 2, parts: 4 }
+          - { suite: signed-in, part: 3, parts: 4 }
+          - { suite: signed-in, part: 4, parts: 4 }
+          - { suite: qa-matrix, part: 1, parts: 3 }
+          - { suite: qa-matrix, part: 2, parts: 3 }
+          - { suite: qa-matrix, part: 3, parts: 3 }
     env:
-      SIGNED_IN_BROWSERS: ${{ inputs.browsers || 'chromium' }}
+      SIGNED_IN_BROWSERS: ${{ matrix.browser }}
       # The address the browsers reach the app on. Cookies follow it: over
       # plain http they are not marked Secure, which Firefox and WebKit would
       # otherwise drop (the language choice, so French screens stayed English).
@@ -304,7 +319,7 @@ jobs:
         # Only the browsers this run uses: installing all three pulls every
         # engine's system packages, which took 14 minutes on one runner.
         env:
-          MOBILE: ${{ inputs.mobile && 'chromium webkit' || '' }}
+          MOBILE: ${{ inputs.mobile && matrix.browser == 'chromium' && 'chromium webkit' || '' }}
         run: npx playwright install --with-deps $(echo $SIGNED_IN_BROWSERS $MOBILE | tr ' ' '\n' | sort -u)
 
       - name: Start the app
@@ -316,18 +331,18 @@ jobs:
           npx wait-on --timeout 60000 http-get://127.0.0.1:3000/sign-in
 
       - name: Signed-in lifecycle and access checks
-        if: matrix.suite == 'signed-in'
+        if: matrix.shard.suite == 'signed-in'
         run: |
-          SPECS=$(node scripts/ci/spec-groups.mjs ${{ matrix.part }} ${{ matrix.parts }})
+          SPECS=$(node scripts/ci/spec-groups.mjs ${{ matrix.shard.part }} ${{ matrix.shard.parts }})
           npx playwright test $SPECS --grep-invert "$SWITCH_GREP_INVERT" $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
 
       - name: Signed-in accessibility, responsive and keyboard matrix
-        if: matrix.suite == 'qa-matrix'
-        run: npx playwright test qa-matrix --fully-parallel --shard=${{ matrix.part }}/${{ matrix.parts }} --grep-invert "$SWITCH_GREP_INVERT" $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
+        if: matrix.shard.suite == 'qa-matrix'
+        run: npx playwright test qa-matrix --fully-parallel --shard=${{ matrix.shard.part }}/${{ matrix.shard.parts }} --grep-invert "$SWITCH_GREP_INVERT" $(printf -- "--project=%s " $SIGNED_IN_BROWSERS)
 
       - name: Phone emulation (qa-matrix and public routes)
-        if: matrix.suite == 'qa-matrix' && inputs.mobile
-        run: npx playwright test qa-matrix public-routes --fully-parallel --shard=${{ matrix.part }}/${{ matrix.parts }} --project=mobile-chrome --project=mobile-safari
+        if: matrix.shard.suite == 'qa-matrix' && inputs.mobile && matrix.browser == 'chromium'
+        run: npx playwright test qa-matrix public-routes --fully-parallel --shard=${{ matrix.shard.part }}/${{ matrix.shard.parts }} --project=mobile-chrome --project=mobile-safari
 
       - name: Show the app server log after a failure
         # Server-side errors behind a failed browser check, readable in the
@@ -338,7 +353,7 @@ jobs:
       - name: Name the evidence after this part
         if: failure()
         id: evidence
-        run: echo "name=authenticated-browser-failures-${{ matrix.suite }}-${{ strategy.job-index }}" >> "$GITHUB_OUTPUT"
+        run: echo "name=authenticated-browser-failures-${{ matrix.shard.suite }}-${{ matrix.browser }}-${{ strategy.job-index }}" >> "$GITHUB_OUTPUT"
 
       - name: Preserve authenticated failure evidence
         if: failure()
