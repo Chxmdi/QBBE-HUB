@@ -42,17 +42,13 @@ export default async function PeoplePage({
         "id, organization_id, user_id, role, status, joined_at, user_profile:user_id(id, full_name, email, avatar_url, title, timezone)",
       )
       .order("joined_at"),
+    // Counted in the database; a download of open tasks stopped at 1,000.
+    // Only the per-person totals are used here, so the dates are immaterial.
     session.isStaff
       ? supabase
-          .from("task")
-          .select("assignee_id")
-          .in("status", [
-            "not_started", "ready", "in_progress", "waiting", "blocked", "in_review",
-          ])
-          .is("archived_at", null)
-          .not("assignee_id", "is", null)
-          .then((res) => (res.data ?? []) as { assignee_id: string }[])
-      : Promise.resolve([] as { assignee_id: string }[]),
+          .rpc("open_task_workload", { p_today: "1970-01-01", p_week_out: "1970-01-01" })
+          .then((res) => (res.data ?? []) as { assignee_id: string; active: number | string }[])
+      : Promise.resolve([] as { assignee_id: string; active: number | string }[]),
     supabase.from("team").select("id, name").order("name"),
     supabase.from("team_member").select("team_id, user_id"),
   ]);
@@ -73,8 +69,8 @@ export default async function PeoplePage({
   const inactive = memberList.filter((m) => m.status !== "active");
 
   const workload = new Map<string, number>();
-  for (const task of openTasks) {
-    workload.set(task.assignee_id, (workload.get(task.assignee_id) ?? 0) + 1);
+  for (const row of openTasks) {
+    workload.set(row.assignee_id, Number(row.active));
   }
 
   return (
