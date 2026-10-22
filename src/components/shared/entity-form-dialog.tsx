@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
+import { useServerAction } from "@/lib/use-server-action";
 import { fieldProblem } from "./field-validity";
 
 export interface FormField {
@@ -60,9 +61,9 @@ export function EntityFormDialog({
   // dialog's control. Instance-scoped ids keep every label on its own input.
   const instanceId = useId();
   const [open, setOpen] = useState(defaultOpen);
-  const [error, setError] = useState<string | null>(null);
+  // A failed request re-enables Save and says why (useServerAction).
+  const { pending: saving, error, setError, run } = useServerAction();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
 
   function close() {
     setOpen(false);
@@ -91,7 +92,6 @@ export function EntityFormDialog({
       first.focus();
       return;
     }
-    setSaving(true);
     const form = new FormData(formElement);
     const values: Record<string, string> = { ...extraValues };
     for (const field of fields) {
@@ -99,8 +99,8 @@ export function EntityFormDialog({
       // Omit empty optional fields so server schemas treat them as absent.
       if (value !== "") values[field.name] = value;
     }
-    const result = await action(values);
-    setSaving(false);
+    const result = await run(() => action(values));
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("ui.somethingWrong"));
       return;

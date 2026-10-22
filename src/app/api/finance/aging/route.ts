@@ -4,6 +4,7 @@ import { dateParam, todayIn } from "@/features/ledger/services/ledger.access";
 import { agingCsv } from "@/features/payables/model";
 import { AGING_LIMIT, readAging } from "@/features/payables/services/aging.queries";
 import { getT } from "@/lib/i18n/server";
+import { auditUnavailableResponse, recordAudit } from "@/lib/audit-write";
 
 /** Accounts payable or receivable aging as CSV (#150). Row-level security decides what is included. */
 
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
   const { rows, error, truncated } = await readAging(supabase, session.organizationId, kind, asOf);
   if (error) return new Response(t("finance.payables.csv.exportFailed"), { status: 500 });
   if (truncated) return new Response(t("finance.payables.csv.tooMany", { max: AGING_LIMIT }), { status: 413 });
-  await supabase.from("audit_event").insert({
+  const audited = await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "finance",
@@ -30,6 +31,8 @@ export async function GET(request: Request) {
     object_id: session.organizationId,
     metadata: { kind, as_of: asOf, rows: rows.length },
   });
+  // No file without a record of who took it.
+  if (!audited) return auditUnavailableResponse();
   return new Response(agingCsv(kind, asOf, rows, t), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

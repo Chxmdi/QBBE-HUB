@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { RequeueFailedEmails } from "@/features/jobs/components/requeue-failed-emails";
 import { describeSchedule } from "@/features/jobs/services/cron";
 import type {
   DeadLetter,
@@ -201,6 +202,7 @@ export async function JobHealthPanel({
             </ol>
           </details>
         ) : null}
+        <RequeueFailedEmails />
       </section>
 
       {/* The schedule itself. */}

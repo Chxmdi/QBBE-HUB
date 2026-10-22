@@ -242,6 +242,8 @@ export const frCA: Messages = {
     workspaceBody:
       "La page a rencontré une erreur inattendue. Vos données sont en sécurité — réessayez et, si le problème persiste, prévenez un administrateur",
     reference: " (référence : {digest})",
+    auditUnavailable:
+      "Cette exportation a été arrêtée, car la trace de la personne qui l’a téléchargée n’a pas pu être enregistrée. Rien n’a été téléchargé. Réessayez dans un instant et, si le problème persiste, prévenez un administrateur.",
     notFoundTitle: "Introuvable — ou non accessible pour vous",
     notFoundBody:
       "Ce dossier n’existe pas, a été archivé ou ne fait pas partie de vos accès. Les liens directs revérifient toujours les autorisations.",
@@ -260,6 +262,8 @@ export const frCA: Messages = {
     breadcrumb: "Fil d’Ariane",
     loadFailed: "Impossible de charger ce contenu.",
     somethingWrong: "Une erreur s’est produite. Réessayez.",
+    actionUnreachable: "Impossible de joindre le Hub. Vérifiez votre connexion, puis réessayez.",
+    actionOutdated: "Le Hub a été mis à jour depuis l’ouverture de cette page. Rechargement pour que vous puissiez réessayer.",
     fieldErrors: {
       summary: "Vérifiez les champs signalés.",
       required: "Remplissez ce champ.",

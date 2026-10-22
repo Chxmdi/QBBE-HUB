@@ -288,6 +288,7 @@ export const adminFrCA: typeof adminEn = {
           zeffy_sync_requested: "Synchronisation Zeffy demandée",
           mfa_enrollment_completed: "inscription à l’AMF terminée",
           mfa_break_glass_reset: "authentificateurs réinitialisés par un opérateur (procédure d’urgence)",
+          failed_emails_requeued: "courriels en échec renvoyés",
           gift_list_viewed: "liste des dons consultée",
           user_provisioned: "compte provisionné",
           account_created: "compte créé",
@@ -805,6 +806,8 @@ export const adminFrCA: typeof adminEn = {
       disconnectFailed: "Impossible de déconnecter.",
       vmsCleanupFailed:
         "VMS déconnecté, mais le nettoyage des identités liées a échoué.",
+      googleCleanupFailed:
+        "Déconnecté, mais les copies que le Hub conservait de ce compte n’ont pas pu être supprimées. Demandez à un administrateur de les supprimer.",
       vmsNotConfigured:
         "Le système de gestion des bénévoles n’est pas configuré. Définissez d’abord VMS_API_URL (et VMS_API_KEY).",
       vmsResponded: "Le VMS a répondu {status}. La connexion n’a pas été enregistrée.",

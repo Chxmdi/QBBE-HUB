@@ -5,6 +5,7 @@ import { answerText, csvField, type FormField } from "@/features/forms/fields";
 import { FORM_EXPORT_LIMIT, readSubmissionsForExport } from "@/features/forms/services/submission.export";
 import { getLocale } from "@/lib/i18n/server";
 import { createTranslator } from "@/lib/i18n/translate";
+import { auditUnavailableResponse, recordAudit } from "@/lib/audit-write";
 
 /**
  * A form's submissions as CSV (#145). Owners and admins with MFA only, and
@@ -62,7 +63,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  await supabase.from("audit_event").insert({
+  const audited = await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "forms",
@@ -71,6 +72,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     object_id: id,
     metadata: { rows: lines.length - 1 },
   });
+  // No file without a record of who took it.
+  if (!audited) return auditUnavailableResponse();
 
   const stamp = new Date().toISOString().slice(0, 10);
   const slug = form.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "form";

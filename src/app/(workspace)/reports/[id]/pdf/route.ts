@@ -8,6 +8,7 @@ import {
   snapshotSections,
 } from "@/features/reports/snapshot-view";
 import { getFormatters, getT } from "@/lib/i18n/server";
+import { auditUnavailableResponse, recordAudit } from "@/lib/audit-write";
 
 function list(
   title: string,
@@ -75,7 +76,7 @@ export async function GET(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  await supabase.from("audit_event").insert({
+  const audited = await recordAudit(supabase, {
     organization_id: report.organization_id,
     actor_id: user?.id ?? null,
     event_type: "reporting",
@@ -83,6 +84,8 @@ export async function GET(
     object_type: "report_instance",
     object_id: report.id,
   });
+  // No file without a record of who took it.
+  if (!audited) return auditUnavailableResponse();
 
   return new NextResponse(Buffer.from(bytes), {
     headers: {

@@ -34,6 +34,19 @@ const eslintConfig = [
     },
   },
   {
+    // A promise nobody awaits or catches in a component is a failure nobody
+    // sees: a save that rejects leaves its button busy and says nothing. Use
+    // useServerAction (src/lib/use-server-action.ts), or `void` a call whose
+    // failure is handled inside it. Warnings for now; the save-button sweep
+    // turns them into errors once the existing ones are fixed.
+    files: ["src/**/*.tsx"],
+    languageOptions: { parserOptions: { projectService: true } },
+    rules: {
+      "@typescript-eslint/no-floating-promises": "warn",
+      "@typescript-eslint/no-misused-promises": ["warn", { checksVoidReturn: { attributes: false } }],
+    },
+  },
+  {
     ignores: [
       "**/node_modules/**",
       // Globbed rather than anchored: build output is generated in any
@@ -46,6 +59,8 @@ const eslintConfig = [
       "supabase/.temp/**",
       // OCR engine copied out of node_modules (scripts/copy-ocr-assets.mjs).
       "public/ocr/**",
+      // PDF reader copied out of node_modules by the same script.
+      "public/pdf/**",
       // Agent worktrees and local tool state; never source.
       ".claude/**",
     ],

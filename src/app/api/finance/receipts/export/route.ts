@@ -7,6 +7,7 @@ import {
   parseReceiptFilters,
   receiptQuery,
 } from "@/features/finance/services/receipt.queries";
+import { auditUnavailableResponse, recordAudit } from "@/lib/audit-write";
 
 /**
  * Receipts as CSV for the accountant (#142). Read through the caller's own
@@ -96,7 +97,7 @@ export async function GET(request: Request) {
     );
   }
 
-  await supabase.from("audit_event").insert({
+  const audited = await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "finance",
@@ -104,6 +105,8 @@ export async function GET(request: Request) {
     object_type: "finance_receipt",
     metadata: { rows: lines.length - 1, filters },
   });
+  // No file without a record of who took it.
+  if (!audited) return auditUnavailableResponse();
 
   const stamp = new Date().toISOString().slice(0, 10);
   // The byte-order mark makes Excel read accents (Montréal, Café) correctly.

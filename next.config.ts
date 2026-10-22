@@ -19,7 +19,15 @@ const securityHeaders = [
   },
 ];
 
+// The commit being built (Dockerfile build argument). Each release then has
+// its own deployment id, so a tab opened before a release reloads instead of
+// calling server actions the new build no longer has. Local and CI builds
+// name no commit and keep Next's default.
+const commit = process.env.APP_COMMIT?.trim();
+const deploymentId = commit && /^[0-9a-f]{7,40}$/i.test(commit) ? commit : undefined;
+
 const nextConfig: NextConfig = {
+  deploymentId,
   reactStrictMode: true,
   poweredByHeader: false,
   // The container image (Dockerfile) runs the self-contained server Next.js

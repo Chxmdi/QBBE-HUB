@@ -1,6 +1,7 @@
 import { uuidParam } from "@/features/ledger/services/ledger.access";
 import { authorizeLedgerExport } from "@/features/ledger/services/ledger.export";
 import { getT } from "@/lib/i18n/server";
+import { auditUnavailableResponse, recordAudit } from "@/lib/audit-write";
 
 /**
  * Opens a receipt's file for someone who may read the books (#154), through a
@@ -31,7 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     .from("receipts")
     .createSignedUrl(receipt.storage_path as string, 60);
   if (error || !signed) return new Response(t("finance.ledgerReports.api.fileOpenFailed"), { status: 502 });
-  await supabase.from("audit_event").insert({
+  const audited = await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "ledger",
@@ -39,5 +40,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     object_type: "finance_receipt",
     object_id: id,
   });
+  // No file without a record of who took it.
+  if (!audited) return auditUnavailableResponse();
   return new Response(null, { status: 303, headers: { Location: signed.signedUrl, "Cache-Control": "no-store" } });
 }

@@ -40,6 +40,10 @@ export async function retryFailedEmails({
     .select("id, attempt, status")
     .in("status", ["sending", "queued"])
     .lt("updated_at", stuckBefore)
+    // A failed send waiting for its next attempt is queued with the time it
+    // is due. It is only lost once that time is as far behind as the stall
+    // threshold, so the sweep never races the drain job's own retry.
+    .or(`scheduled_for.is.null,scheduled_for.lte.${stuckBefore}`)
     .order("updated_at", { ascending: true })
     .limit(definition.batch_size);
 

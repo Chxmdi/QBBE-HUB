@@ -10,6 +10,7 @@ import type { Option } from "@/features/tasks/components/task-create-dialog";
 import { createProject } from "@/features/projects/services/project.commands";
 import { priorityLabel, stageLabel } from "@/components/shared/status-badges";
 import { useT } from "@/lib/i18n/client";
+import { useServerAction } from "@/lib/use-server-action";
 
 export function ProjectCreateDialog({
   programs,
@@ -28,15 +29,13 @@ export function ProjectCreateDialog({
   const router = useRouter();
   const t = useT();
   const [open, setOpen] = useState(defaultOpen);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  // A failed request re-enables Create and says why (useServerAction).
+  const { pending: saving, error, setError, run } = useServerAction();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await createProject({
+    const result = await run(() => createProject({
       name: form.get("name"),
       outcome: (form.get("outcome") as string) || undefined,
       description: (form.get("description") as string) || undefined,
@@ -49,8 +48,8 @@ export function ProjectCreateDialog({
       reportingCadence: form.get("reportingCadence"),
       fundingSourceId: (form.get("fundingSourceId") as string) || undefined,
       stage: form.get("stage"),
-    });
-    setSaving(false);
+    }));
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("projects.create.error"));
       return;

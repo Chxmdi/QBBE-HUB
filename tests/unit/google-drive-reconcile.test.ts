@@ -84,7 +84,8 @@ describe("Google Drive reconciliation", () => {
 
     vi.stubGlobal("fetch", vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ startPageToken: "start-2" }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(null, { status: 503 })));
+      // Google keeps answering 503: the read is retried, then fails.
+      .mockImplementation(async () => new Response(null, { status: 503 })));
 
     await expect(reconcileGoogleDrive(
       asClient(db),

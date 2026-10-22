@@ -424,20 +424,45 @@ async function recordSuppression(
   }
 }
 
-/** Loads a pre-built delivery row (the digest path enqueues these directly). */
+/**
+ * Loads a delivery row by id: a pre-built digest, or a retry of any email.
+ *
+ * A notification email is sent through the notification path again, so a
+ * retry hours later still honours quiet hours, the person's email settings
+ * and a deleted notification, rather than resending the text it rendered.
+ */
 async function prepareExistingDelivery(
   db: SupabaseClient,
   deliveryId: string,
+  now: Date,
+  orgNames: Map<string, string>,
 ): Promise<Prepared> {
   const { data, error } = await db
     .from("email_delivery")
-    .select("id, status, attempt, recipient, subject, body_text, body_html, organization_id, recipient_user_id")
+    .select("id, status, attempt, recipient, subject, body_text, body_html, organization_id, recipient_user_id, kind, notification_id, dedupe_key")
     .eq("id", deliveryId)
     .maybeSingle();
 
   if (error) throw new Error(`could not load delivery: ${error.message}`);
-  const row = data as (DeliveryRow & { organization_id: string; recipient_user_id: string | null }) | null;
+  const row = data as (DeliveryRow & {
+    organization_id: string;
+    recipient_user_id: string | null;
+    kind?: string;
+    notification_id?: string | null;
+    dedupe_key?: string;
+  }) | null;
   if (!row || TERMINAL_STATUSES.has(row.status)) return { outcome: "done" };
+
+  if (row.kind === "notification") {
+    if (!row.notification_id) {
+      const { error: suppressionError } = await db.from("email_delivery")
+        .update({ status: "suppressed", suppressed_reason: "notification_deleted" })
+        .eq("id", row.id);
+      if (suppressionError) throw new Error(`could not suppress delivery: ${suppressionError.message}`);
+      return { outcome: "done" };
+    }
+    return prepareNotification(db, row.notification_id, now, orgNames, row.dedupe_key?.replace(/^email:/, ""));
+  }
 
   const { data: membership, error: membershipError } = await db
     .from("organization_membership")
@@ -478,6 +503,16 @@ async function prepareExistingDelivery(
 }
 
 /**
+ * How long a failed send waits before its next attempt: 1, 4 and 16 minutes,
+ * then hourly. With the job's eight attempts that spans about four hours, so
+ * an email outlives a provider outage of that length instead of being marked
+ * failed after ten minutes.
+ */
+export function emailRetryDelaySeconds(attempt: number): number {
+  return Math.min(3600, 60 * 4 ** Math.max(0, attempt - 1));
+}
+
+/**
  * What to do with a message once its outcome is known.
  *
  * Deciding this separately from doing it is what keeps one message's trouble
@@ -489,7 +524,8 @@ async function prepareExistingDelivery(
 type Disposition =
   | { kind: "ack" }
   | { kind: "dead-letter" }
-  | { kind: "defer"; delaySeconds: number }
+  /** Re-queued after a delay, as `message` when given, else as it came. */
+  | { kind: "defer"; delaySeconds: number; message?: Record<string, unknown> }
   /** Left on the queue: the visibility timeout is the retry. */
   | { kind: "leave" };
 
@@ -509,7 +545,7 @@ async function handleMessage(
   let prepared: Prepared;
 
   if (payload.delivery_id) {
-    prepared = await prepareExistingDelivery(db, payload.delivery_id);
+    prepared = await prepareExistingDelivery(db, payload.delivery_id, now, orgNames);
   } else if (payload.notification_id) {
     prepared = await prepareNotification(db, payload.notification_id, now, orgNames, payload.dedupe_key);
   } else {
@@ -585,19 +621,30 @@ async function handleMessage(
     const retryable = cause instanceof EmailSendError ? cause.retryable : true;
     const detail = cause instanceof Error ? cause.message : String(cause);
     const exhausted = delivery.attempt >= definition.max_attempts;
+    const retryIn = emailRetryDelaySeconds(delivery.attempt);
+    const retrying = retryable && !exhausted;
 
-    await db
+    const { error: outcomeError } = await db
       .from("email_delivery")
       .update({
         status: !retryable ? "bounced" : exhausted ? "failed" : "queued",
         last_error: detail.slice(0, 1000),
+        // When the retry is due, so the stuck-email sweep does not take a
+        // waiting email for a lost one and queue it early.
+        ...(retrying ? { scheduled_for: new Date(now.getTime() + retryIn * 1000).toISOString() } : {}),
       })
       .eq("id", delivery.id);
+    // Unrecorded, the row would stay `sending`; leave the message for the
+    // visibility timeout instead of queuing a retry the ledger cannot explain.
+    if (outcomeError) throw new Error(`could not record the failed send: ${outcomeError.message}`);
 
     return {
       // Permanent, or out of attempts: archive it so it shows up as a dead
-      // letter instead of cycling forever.
-      disposition: !retryable || exhausted ? { kind: "dead-letter" } : { kind: "leave" },
+      // letter instead of cycling forever. Otherwise try again later, by
+      // the delivery's id, waiting longer after each failure.
+      disposition: retrying
+        ? { kind: "defer", delaySeconds: retryIn, message: { kind: "retry", delivery_id: delivery.id } }
+        : { kind: "dead-letter" },
       outcome: "failed",
     };
   }
@@ -707,7 +754,7 @@ export async function drainNotifications({
           await enqueue(
             db,
             "notifications",
-            { ...payload, deferred: true },
+            handled.disposition.message ?? { ...payload, deferred: true },
             handled.disposition.delaySeconds,
           );
           await ack(db, "notifications", message.msgId);

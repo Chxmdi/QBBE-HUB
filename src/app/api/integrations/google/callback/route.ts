@@ -5,6 +5,7 @@ import { getT } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requestOrigin } from "@/lib/request-origin";
 import { GOOGLE_PROVIDER_SCOPES, type GoogleIntegrationProvider } from "@/features/inbox/services/google-oauth";
+import { googleFetch } from "@/features/inbox/services/google-fetch";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
     return fail(t("inbox.google.credentialsMissing"));
   }
 
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+  const tokenRes = await googleFetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({

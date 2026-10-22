@@ -24,7 +24,7 @@ import { withActiveOwners } from "../active-owners";
  * Integrations shows what is wrong rather than a silently stale panel.
  */
 
-export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
+export async function googleSync({ db, now, definition }: JobContext): Promise<JobResult> {
   const { data: connections, error: connectionError } = await db
     .from("integration_connection")
     .select("id, user_id, organization_id, provider, status")
@@ -32,7 +32,13 @@ export async function googleSync({ db, now }: JobContext): Promise<JobResult> {
     // Retry transient failures, not just healthy connections: a success below
     // sets the status back to connected, so an outage clears on its own. An
     // expired or revoked authorization still waits for the user to reconnect.
-    .in("status", ["connected", "synchronization_delayed", "degraded", "error"]);
+    .in("status", ["connected", "synchronization_delayed", "degraded", "error"])
+    // At most batch_size connections per run, least recently touched first:
+    // every attempt (success or failure) updates the row, so the rest are
+    // picked up on the next 15-minute run and one slow account cannot hold
+    // the whole job past its time.
+    .order("updated_at", { ascending: true })
+    .limit(definition.batch_size);
   if (connectionError) {
     throw new Error(`could not load Google connections: ${connectionError.message}`);
   }

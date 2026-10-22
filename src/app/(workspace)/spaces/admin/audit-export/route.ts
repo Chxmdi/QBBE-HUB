@@ -5,6 +5,7 @@ import { authorizeAdminAction } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isCalendarDate } from "@/lib/schema";
+import { auditUnavailableResponse, recordAudit } from "@/lib/audit-write";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
     if (page.length < PAGE_ROWS) break;
   }
 
-  await db.from("audit_event").insert({
+  const audited = await recordAudit(db, {
     organization_id: organizationId,
     actor_id: authorization.session.userId,
     event_type: "export",
@@ -66,6 +67,8 @@ export async function GET(request: Request) {
     object_type: "audit_event",
     metadata: { from: from.data, to: to.data, rows: rows.length },
   });
+  // No file without a record of who took it.
+  if (!audited) return auditUnavailableResponse();
 
   const header = ["created_at", "actor_id", "actor_type", "event_type", "action", "result", "object_type", "object_id", "metadata"];
   const csv = toCsv(header, rows.map((row) => header.map((key) => row[key])));

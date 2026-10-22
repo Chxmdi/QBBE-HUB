@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { classifyIntegrationFailure } from "@/features/admin/services/integration-health";
 import { refreshGoogleAccessToken } from "@/features/inbox/services/gmail-sync";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { googleFetch } from "@/features/inbox/services/google-fetch";
 
 type LinkedHubRecord =
   | { kind: "meeting"; id: string }
@@ -73,21 +74,22 @@ export async function createOrRecoverGoogleCalendarEvent(
   externalId: string,
   body: GoogleEventBody,
 ): Promise<GoogleEventResponse> {
-  const create = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=none", {
+  const create = await googleFetch("https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=none", {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ id: externalId, ...body }),
-  });
+  }, { retryUnsafe: true });
 
   let response = create;
   if (create.status === 409) {
-    response = await fetch(
+    response = await googleFetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(externalId)}?sendUpdates=none`,
       {
         method: "PATCH",
         headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify(body),
       },
+      { retryUnsafe: true },
     );
   }
 
@@ -206,13 +208,14 @@ async function updateGoogleCalendarRecord(input: CalendarRecordInput): Promise<s
   // edit; create returns null again if Calendar is still not connected.
   if (!link) return createGoogleCalendarRecord(input);
   const token = await calendarAccessToken(supabase, link.connection_id);
-  const response = await fetch(
+  const response = await googleFetch(
     `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(link.external_id)}?sendUpdates=none`,
     {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(googleEventBody(input)),
     },
+  { retryUnsafe: true },
   );
   if (response.status === 404) {
     const { error: staleLinkError } = await supabase
@@ -261,9 +264,10 @@ async function deleteGoogleCalendarRecord(input: {
   const link = await findCalendarLink(supabase, input.organizationId, input.userId, input.record);
   if (!link) return false;
   const token = await calendarAccessToken(supabase, link.connection_id);
-  const response = await fetch(
+  const response = await googleFetch(
     `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(link.external_id)}?sendUpdates=none`,
     { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
+  { retryUnsafe: true },
   );
   if (!calendarEventDeleteSucceeded(response.status)) {
     throw new Error(`Google Calendar rejected the cancellation (${response.status}).`);

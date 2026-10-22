@@ -2,6 +2,7 @@ import { requireStaff } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { letterDocument, type AckLanguage } from "@/features/gifts/acknowledgement";
+import { auditUnavailableResponse, recordAudit } from "@/lib/audit-write";
 
 /**
  * An issued thank-you letter or annual statement as a self-contained HTML
@@ -35,7 +36,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (!data) return new Response(t("finance.gifts.api.notFound"), { status: 404 });
 
   const download = new URL(request.url).searchParams.get("download") === "1";
-  await supabase.from("audit_event").insert({
+  const audited = await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "gifts",
@@ -44,6 +45,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     object_id: data.id,
     metadata: {},
   });
+  // No file without a record of who took it.
+  if (!audited) return auditUnavailableResponse();
 
   const html = letterDocument({
     subject: data.subject as string,
