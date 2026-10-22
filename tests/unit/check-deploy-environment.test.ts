@@ -160,4 +160,14 @@ describe("check-deploy-environment.sh", () => {
   it("refuses an unknown environment", () => {
     expect(run({ TARGET_ENVIRONMENT: "preview" }).ok).toBe(false);
   });
+
+  it("refuses a key issued for another Supabase project, and accepts keys that name none", () => {
+    const key = (ref: string) => `e30.${Buffer.from(JSON.stringify({ ref, role: "service_role" })).toString("base64url")}.sig`;
+    const withKey = (value: string) => appEnv(STAGING_REF, STAGING_SITE, `SUPABASE_SERVICE_ROLE_KEY=${value}`);
+    const wrong = run({ APP_ENV: withKey(key(PRODUCTION_REF)) });
+    expect(wrong.ok).toBe(false);
+    expect(wrong.output).toContain("SUPABASE_SERVICE_ROLE_KEY belongs to Supabase project");
+    expect(run({ APP_ENV: withKey(key(STAGING_REF)) }).ok).toBe(true);
+    expect(run({ APP_ENV: withKey("sb_secret_example") }).ok).toBe(true);
+  });
 });

@@ -15,6 +15,18 @@ services:
       CLAMAV_PORT: "3310"
       CLAMAV_SOCKET: ""
       NODE_OPTIONS: --max-old-space-size=${QBBE_NODE_HEAP_MB:-1536}
+      # Marks a deployed server: the app refuses to start when a required
+      # setting is missing or belongs to another project (src/instrumentation.ts).
+      QBBE_ENV: ${QBBE_ENV}
+    # Ready, not just running: settings complete and the database answers the
+    # service key (/api/health/ready). release.sh waits on this and restores
+    # the previous release when it never turns healthy.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 40s
+      retries: 4
     # Production gets twice staging's share of the processors when both are
     # busy (a staging load test cannot starve production).
     cpu_shares: ${QBBE_CPU_SHARES:-1024}

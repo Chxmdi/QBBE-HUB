@@ -93,6 +93,9 @@ export const RATE_LIMITS = {
   "zeffy:sync": { limit: 12, windowSeconds: 3600 },
   // Staff placing Zeffy supporters the sync could not ("Needs matching").
   "zeffy:match": { limit: 240, windowSeconds: 3600 },
+  // Browser crash reports (/api/client-errors), per address: a crash loop
+  // must not flood the logs or the monitoring quota.
+  "client-error:report": { limit: 20, windowSeconds: 60 },
 } as const;
 
 export type RateLimitedAction = keyof typeof RATE_LIMITS;
