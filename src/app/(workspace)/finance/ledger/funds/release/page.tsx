@@ -93,14 +93,20 @@ export default async function ReleaseRestrictedPage() {
     // Available on today, the form's default release date; the form asks
     // again when a different date is chosen.
     const active = fundRows.filter((f) => f.is_active);
-    restricted = await Promise.all(
-      active
-        .filter((f) => f.restriction !== "unrestricted")
-        .map(async (f) => {
-          const { data } = await supabase.rpc("ledger_fund_available_cents", { p_fund: f.id, p_as_of: today });
-          return { id: f.id, code: f.code, name: f.name, availableCents: Number(data ?? 0) };
-        }),
+    const restrictedFunds = active.filter((f) => f.restriction !== "unrestricted");
+    // One call for every restricted fund, not one per fund.
+    const { data: available } = restrictedFunds.length
+      ? await supabase.rpc("ledger_funds_available_cents", { p_funds: restrictedFunds.map((f) => f.id), p_as_of: today })
+      : { data: [] };
+    const availableByFund = new Map(
+      ((available ?? []) as { fund_id: string; available_cents: number }[]).map((a) => [a.fund_id, Number(a.available_cents)]),
     );
+    restricted = restrictedFunds.map((f) => ({
+      id: f.id,
+      code: f.code,
+      name: f.name,
+      availableCents: availableByFund.get(f.id) ?? 0,
+    }));
     unrestricted = active
       .filter((f) => f.restriction === "unrestricted")
       .map((f) => ({ id: f.id, code: f.code, name: f.name }));
