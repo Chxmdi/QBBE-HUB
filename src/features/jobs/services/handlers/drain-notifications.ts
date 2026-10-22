@@ -102,6 +102,7 @@ async function prepareNotification(
   notificationId: string,
   now: Date,
   orgNames: Map<string, string>,
+  queuedKey?: string,
 ): Promise<Prepared> {
   const { data: notificationRow, error: notificationError } = await db
     .from("notification")
@@ -134,9 +135,17 @@ async function prepareNotification(
     thread_id: string | null;
   };
 
-  const dedupeKey = notification.dedupe_key
-    ? `email:${notification.dedupe_key}`
-    : `email:notification:${notification.id}`;
+  // A notification re-opened by a later event (create_notifications) is
+  // queued under its own key, "<dedupe key>:reopened:<time>", so the email
+  // for the first event does not count as this one's. Any other key in the
+  // message is ignored: the notification's own key decides.
+  const reopened =
+    notification.dedupe_key && queuedKey?.startsWith(`${notification.dedupe_key}:reopened:`) ? queuedKey : null;
+  const dedupeKey = reopened
+    ? `email:${reopened}`
+    : notification.dedupe_key
+      ? `email:${notification.dedupe_key}`
+      : `email:notification:${notification.id}`;
 
   const existing = await existingDelivery(db, dedupeKey);
   if (existing && TERMINAL_STATUSES.has(existing.status)) return { outcome: "done" };
@@ -501,7 +510,7 @@ async function handleMessage(
   if (payload.delivery_id) {
     prepared = await prepareExistingDelivery(db, payload.delivery_id);
   } else if (payload.notification_id) {
-    prepared = await prepareNotification(db, payload.notification_id, now, orgNames);
+    prepared = await prepareNotification(db, payload.notification_id, now, orgNames, payload.dedupe_key);
   } else {
     // Unroutable payload — archive rather than loop on it forever.
     return { disposition: { kind: "dead-letter" }, outcome: "failed" };

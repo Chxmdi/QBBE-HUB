@@ -205,6 +205,29 @@ describe("delivery is exactly once", () => {
   });
 });
 
+describe("a re-opened notification", () => {
+  it("sends once more, and only once, when a later event re-opens it", async () => {
+    const db = new FakeSupabase(START);
+    seedWorkspace(db);
+    const id = raiseNotification(db);
+    await run(db);
+    const key = db.rows("notification")[0].dedupe_key as string;
+
+    // create_notifications queues a re-opened notification under its own key;
+    // the same message delivered twice still sends one email.
+    const reopened = { kind: "notification", notification_id: id, dedupe_key: `${key}:reopened:20261022150000000000` };
+    db.enqueueRaw("notifications", reopened);
+    db.enqueueRaw("notifications", reopened);
+    await run(db);
+    expect(sends).toHaveLength(2);
+
+    // A key that does not belong to this notification is ignored.
+    db.enqueueRaw("notifications", { kind: "notification", notification_id: id, dedupe_key: "other:reopened:1" });
+    await run(db);
+    expect(sends).toHaveLength(2);
+  });
+});
+
 describe("a message that cannot be delivered ends up in the archive", () => {
   it("dead-letters after the attempt limit and marks the ledger failed", async () => {
     const db = new FakeSupabase(START);
