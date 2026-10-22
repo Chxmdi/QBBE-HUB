@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { isEnabled } from "@/lib/feature-flags";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -16,6 +17,15 @@ import { reactionKeys } from "../reactions";
 import { commentTargetFor, objectCommentsPath } from "../target";
 import { objectCommentsText, type ObjectCommentsText } from "../messages";
 import { findMentionCandidates, type MentionCandidate } from "./object-comment.queries";
+
+/**
+ * Object comments appear in the collaboration pages (wos_editor) and on object record
+ * pages (wos_objects), so either switch opens them; with both off they are
+ * refused like the rest of Workspace OS.
+ */
+async function recordsEnabled(): Promise<boolean> {
+  return (await isEnabled("wos_editor")) || (await isEnabled("wos_objects"));
+}
 
 export interface CommentActionResult {
   ok: boolean;
@@ -135,6 +145,7 @@ async function syncMentions(
 
 export async function addObjectComment(input: unknown): Promise<CommentActionResult> {
   const session = await requireSession();
+  if (!(await recordsEnabled())) return { ok: false, error: (await text()).errors.forbidden };
   const limited = await enforceRateLimit("comment:create", session.userId);
   if (limited) return limited;
   const m = await text();
@@ -191,6 +202,7 @@ const editSchema = (m: ObjectCommentsText) =>
 export async function editObjectComment(input: unknown): Promise<CommentActionResult> {
   const session = await requireSession();
   const m = await text();
+  if (!(await recordsEnabled())) return { ok: false, error: m.errors.forbidden };
   const parsed = editSchema(m).safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? m.errors.invalid };
@@ -226,6 +238,7 @@ async function updateComment(
   patch: Record<string, string | null>,
 ): Promise<CommentActionResult> {
   await requireSession();
+  if (!(await recordsEnabled())) return { ok: false, error: (await text()).errors.forbidden };
   const m = await text();
   const id = z.string().uuid().safeParse(commentId);
   if (!id.success) return { ok: false, error: m.errors.notFound };
@@ -266,6 +279,7 @@ const reactionSchema = z.object({
 export async function setObjectCommentReaction(input: unknown): Promise<CommentActionResult> {
   const session = await requireSession();
   const m = await text();
+  if (!(await recordsEnabled())) return { ok: false, error: m.errors.forbidden };
   const parsed = reactionSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: m.errors.reactionFailed };
   const { commentId, reaction, on } = parsed.data;
@@ -292,6 +306,7 @@ export async function setObjectCommentReaction(input: unknown): Promise<CommentA
 /** People and objects for the `@` picker, as the signed-in person sees them. */
 export async function searchMentionTargets(query: unknown): Promise<MentionCandidate[]> {
   await requireSession();
+  if (!(await recordsEnabled())) return [];
   const parsed = z.string().max(40).safeParse(query);
   if (!parsed.success) return [];
   return findMentionCandidates(parsed.data);

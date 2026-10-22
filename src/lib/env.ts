@@ -49,6 +49,18 @@ export function appUrl(): string {
   return raw.replace(/\/+$/, "");
 }
 
+/**
+ * Whether cookies should carry the Secure flag. It follows the address the app
+ * is served on: Safari drops a Secure cookie set over plain http, even on
+ * 127.0.0.1, so a production build served over http (CI's browser runs) would
+ * silently lose it. Without a configured address, production is assumed https.
+ */
+export function secureCookies(): boolean {
+  const raw = process.env.NEXT_PUBLIC_APP_URL;
+  if (raw) return raw.startsWith("https:");
+  return process.env.NODE_ENV === "production";
+}
+
 /** Absolute URL for an in-app path, for use in email bodies. */
 export function absoluteUrl(path: string): string {
   return `${appUrl()}${path.startsWith("/") ? path : `/${path}`}`;

@@ -51,6 +51,8 @@ export function csvField(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";
   let text = String(value);
   // A leading =, +, - or @ would be run as a formula by Excel (CSV injection).
-  if (/^[=+\-@\t\r]/.test(text) && typeof value !== "number") text = `'${text}`;
+  // A plain negative amount ("-120.00") is data, not a formula: left as is,
+  // so a spreadsheet's SUM() counts it.
+  if (/^[=+\-@\t\r]/.test(text) && typeof value !== "number" && !/^-?\d+(\.\d+)?$/.test(text)) text = `'${text}`;
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }

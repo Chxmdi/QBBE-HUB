@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { createUniversalTask } from "@/features/universal-tasks/create-task";
 import { requireSession } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { readAll } from "@/lib/supabase/read-all";
@@ -133,20 +134,32 @@ export async function createTaskSeries(input: unknown): Promise<ActionResult> {
   // whether spawning is still allowed. An occurrence carrying a `series_id`
   // but no rule is a series that produces exactly one task and then stops
   // forever, without reporting anything.
-  const { error: occurrenceError } = await supabase.from("task").insert({
-    organization_id: session.organizationId,
-    project_id: projectId ?? null,
-    title,
-    description: description ?? null,
-    milestone_id: milestoneId ?? null,
-    priority,
-    assignee_id: ownerId,
-    due_at: anchor,
-    recurrence_rule: recurrenceRule,
-    recurrence_anchor: anchor,
-    series_id: data.id as string,
-    occurrence_date: anchor,
-  });
+  // Through the one "create task" path, so the owner gets the same assignment
+  // notice and the series the same activity entry as any other new task, and
+  // the task records the series as its source.
+  const occurrence = await createUniversalTask(
+    supabase,
+    { userId: session.userId, organizationId: session.organizationId, displayName: session.profile.full_name ?? "" },
+    {
+      title,
+      description: description ?? undefined,
+      projectId: projectId ?? undefined,
+      milestoneId: milestoneId ?? undefined,
+      assigneeId: ownerId ?? undefined,
+      priority,
+      dueAt: anchor,
+      source: { type: "recurrence", id: data.id as string },
+    },
+    {
+      extra: {
+        recurrence_rule: recurrenceRule,
+        recurrence_anchor: anchor,
+        series_id: data.id as string,
+        occurrence_date: anchor,
+      },
+    },
+  );
+  const occurrenceError = !occurrence.ok;
   if (occurrenceError) {
     // Leave no series that produces nothing: a row with no occurrence looks
     // like a recurrence that silently stopped.

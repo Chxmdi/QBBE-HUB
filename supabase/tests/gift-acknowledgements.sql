@@ -367,7 +367,8 @@ begin
     v_org, v_gift, v_donor, v_disclaimer),
     'row-level security', 'a ledger reader cannot issue acknowledgements');
   select count(*), sum(total_cents) into v_rows, v_sum
-  from public.gift_donor_list(v_org, date '2026-01-01', date '2026-12-31', 'export');
+  from public.gift_donor_list(v_org, date '2026-01-01', date '2026-12-31', 'export')
+  where donor_id in (v_donor, v_funder);  -- not donors the browser suites recorded
   perform tests.ok(v_rows = 2 and v_sum = 1525000,
     format('the donor list totals recorded gifts per donor (%s donors, %s)', v_rows, v_sum));
   perform tests.gift_raises(format($f$select * from public.gift_donor_list(%L, date '2026-01-01', date '2026-12-31')$f$, v_other_org),

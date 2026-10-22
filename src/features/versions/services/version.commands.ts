@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
 import { contentAdapterFor } from "../adapters/registry";
@@ -10,6 +11,15 @@ import { isContentSnapshot } from "../content";
 import { versionsText, type VersionsText } from "../messages";
 import { objectRefSchema } from "../schema";
 import { isObjectLocked } from "@/features/collab/lock";
+
+/**
+ * Versions and trash appear in the collaboration pages (wos_editor) and on object record
+ * pages (wos_objects), so either switch opens them; with both off they are
+ * refused like the rest of Workspace OS.
+ */
+async function recordsEnabled(): Promise<boolean> {
+  return (await isEnabled("wos_editor")) || (await isEnabled("wos_objects"));
+}
 
 export interface VersionActionResult {
   ok: boolean;
@@ -41,6 +51,7 @@ const saveSchema = z.object({
 export async function saveNamedVersion(input: unknown): Promise<VersionActionResult> {
   await requireSession();
   const m = versionsText(await getLocale());
+  if (!(await recordsEnabled())) return { ok: false, error: m.errors.forbidden };
   const parsed = saveSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: m.errors.failed };
   const { object, label } = parsed.data;
@@ -75,6 +86,7 @@ const autosaveSchema = z.object({
 export async function autosaveObjectContent(input: unknown): Promise<VersionActionResult> {
   await requireSession();
   const m = versionsText(await getLocale());
+  if (!(await recordsEnabled())) return { ok: false, error: m.errors.forbidden };
   const parsed = autosaveSchema.safeParse(input);
   if (!parsed.success || !isContentSnapshot(parsed.data.content)) {
     return { ok: false, error: m.errors.failed };
@@ -110,6 +122,7 @@ export async function autosaveObjectContent(input: unknown): Promise<VersionActi
 export async function trashObject(input: unknown): Promise<VersionActionResult> {
   await requireSession();
   const m = versionsText(await getLocale());
+  if (!(await recordsEnabled())) return { ok: false, error: m.errors.forbidden };
   const parsed = objectRefSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: m.errors.failed };
   const object = parsed.data;
@@ -130,6 +143,7 @@ export async function trashObject(input: unknown): Promise<VersionActionResult> 
 export async function restoreObject(objectId: unknown): Promise<VersionActionResult> {
   await requireSession();
   const m = versionsText(await getLocale());
+  if (!(await recordsEnabled())) return { ok: false, error: m.errors.forbidden };
   const id = z.string().uuid().safeParse(objectId);
   if (!id.success) return { ok: false, error: m.errors.notInTrash };
   const db = await createSupabaseServerClient();

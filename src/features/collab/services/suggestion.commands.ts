@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
 import { contentAdapterFor } from "@/features/versions/adapters/registry";
@@ -40,6 +41,7 @@ const createSchema = z.object({
 export async function suggestEdit(input: unknown): Promise<SuggestionResult> {
   const session = await requireSession();
   const m = collabText(await getLocale()).suggest.errors;
+  if (!(await isEnabled("wos_editor"))) return { ok: false, error: m.forbidden };
   const parsed = createSchema.safeParse(input);
   if (!parsed.success || parsed.data.end < parsed.data.start) return { ok: false, error: m.failed };
   const { object, start, end, proposed } = parsed.data;
@@ -91,6 +93,7 @@ interface SuggestionRow {
 export async function decideSuggestion(input: unknown): Promise<SuggestionResult> {
   await requireSession();
   const m = collabText(await getLocale()).suggest.errors;
+  if (!(await isEnabled("wos_editor"))) return { ok: false, error: m.forbidden };
   const parsed = decideSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: m.failed };
   const db = await createSupabaseServerClient();

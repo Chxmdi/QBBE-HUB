@@ -160,7 +160,7 @@ begin
 
   -- Signed out: nothing.
   perform tests.clear_auth();
-  perform tests.ok(tests.refused('select 1 from public.api_token'), 'a signed-out visitor is refused reading tokens');
+  perform tests.ok(tests.permission_denied('select 1 from public.api_token'), 'a signed-out visitor is refused reading tokens');
   begin
     perform public.revoke_api_token(v_staff_token);
     raise exception 'FAIL: a signed-out visitor revoked a token';

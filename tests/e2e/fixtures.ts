@@ -165,6 +165,7 @@ export const test = base.extend({
       //   case. It names neither address, so it is treated as X ≠ Y: settle
       //   and navigate again. Seen as mobile Safari's goto to /sign-up in
       //   public-routes (#188).
+      // - 'NS_BINDING_ABORTED': how Firefox reports the first case. Same.
       //
       // Up to three attempts; anything past that is a real failure.
       for (let attempt = 1; ; attempt += 1) {
@@ -174,8 +175,8 @@ export const test = base.extend({
         } catch (error) {
           const message = String(error);
           const match = /Navigation to "([^"]+)" is interrupted by another navigation to "([^"]+)"/.exec(message);
-          const webkitInterrupted = /WebKit encountered an internal error/.test(message);
-          if ((!match && !webkitInterrupted) || attempt >= 3) throw error;
+          const unnamedInterruption = /WebKit encountered an internal error|NS_BINDING_ABORTED/.test(message);
+          if ((!match && !unnamedInterruption) || attempt >= 3) throw error;
           if (match && match[1] === match[2]) {
             await page.waitForLoadState(
               options?.waitUntil === "commit" ? "domcontentloaded" : (options?.waitUntil ?? "load"),
@@ -189,9 +190,23 @@ export const test = base.extend({
       return response;
     };
 
+    // A reload meets the same race as a goto, reported differently: Firefox
+    // says NS_BINDING_ABORTED when a router.refresh() commits over it
+    // (task-core's reload after saving the approver), WebKit says it hit an
+    // internal error. Settle and reload again, up to three attempts.
     page.reload = async (options) => {
-      await settle();
-      const response = await reload(options);
+      let response: Awaited<ReturnType<typeof reload>> = null;
+      for (let attempt = 1; ; attempt += 1) {
+        await settle();
+        try {
+          response = await reload(options);
+          break;
+        } catch (error) {
+          const message = String(error);
+          const interrupted = /NS_BINDING_ABORTED|WebKit encountered an internal error|interrupted by another navigation/.test(message);
+          if (!interrupted || attempt >= 3) throw error;
+        }
+      }
       await waitUntilInteractive(page);
       return response;
     };

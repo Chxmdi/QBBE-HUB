@@ -82,7 +82,7 @@ describe("statement of changes in fund balances", () => {
       "Fund,Name,Restriction,Balance 2026-10-01,Revenue,Expenses,Transfers and releases,Balance 2027-09-30",
     );
     expect(lines[2]).toBe("GEN,Fund GEN,Unrestricted,100.00,1000.00,300.00,120.00,920.00");
-    expect(lines[3]).toBe("GRANT,Fund GRANT,Externally restricted,0.00,500.00,200.00,'-120.00,180.00");
+    expect(lines[3]).toBe("GRANT,Fund GRANT,Externally restricted,0.00,500.00,200.00,-120.00,180.00");
     expect(lines[4]).toBe(",All funds,,100.00,1500.00,500.00,0.00,1100.00");
   });
 });

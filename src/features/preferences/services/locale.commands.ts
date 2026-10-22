@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSessionContext } from "@/lib/auth";
+import { secureCookies } from "@/lib/env";
 import { LOCALE_COOKIE, LOCALES, type Locale } from "@/lib/i18n/config";
 import { createTranslator } from "@/lib/i18n/translate";
 import { getLocale } from "@/lib/i18n/server";
@@ -55,7 +56,7 @@ async function writeLocaleCookie(locale: Locale | null) {
     maxAge: ONE_YEAR,
     sameSite: "lax",
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: secureCookies(),
   });
 }
 

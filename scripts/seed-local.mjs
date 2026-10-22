@@ -57,4 +57,28 @@ psql("supabase/tests/qa-users.sql", "1/3 QA fixture users");
 psql("supabase/seed/seed.sql", "2/3 Workspace seed data");
 psql("supabase/tests/qa-scoped-grants.sql", "3/3 Scoped-role grants");
 
+// The database side of WORKSPACE_OS_FLAGS (app.workspace_os_override): the
+// modules a build with that variable shows are on at the database too, and a
+// plain build's database has none. CI's switches-on jobs and a local
+// `WORKSPACE_OS_FLAGS=all` build rely on this; production never seeds.
+{
+  const keys = (process.env.WORKSPACE_OS_FLAGS ?? "")
+    .split(",")
+    .map((key) => key.trim().toLowerCase())
+    .filter((key) => key === "all" || /^wos_[a-z0-9_]+$/.test(key));
+  const statement = [
+    "delete from app.workspace_os_override;",
+    ...keys.map((key) => `insert into app.workspace_os_override (key) values ('${key}') on conflict do nothing;`),
+  ].join("\n");
+  const result = run(
+    ["exec", "-i", CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-q"],
+    statement,
+  );
+  if (result.status !== 0) {
+    console.error(result.stderr);
+    process.exit(1);
+  }
+  console.log(keys.length ? `Workspace OS on at the database: ${keys.join(", ")}` : "Workspace OS off at the database.");
+}
+
 console.log("\nSeeded. Sign in as qa-owner@example.com / QaTest!2026");

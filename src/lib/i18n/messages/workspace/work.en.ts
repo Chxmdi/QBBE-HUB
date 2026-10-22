@@ -457,6 +457,8 @@ export const workEn = {
     restore: "Restore",
     notify: {
       assigned: "{name} assigned you a task",
+      recurringToOwner: "The next “{title}” is yours: the person it repeats for is no longer active",
+      recurringUnassigned: "The next “{title}” has no one assigned: the person it repeats for is no longer active",
       reviewRequest: "{name} asked you to review “{title}”",
       dueChanged: "Due date changed on “{title}”",
       madeRole: {

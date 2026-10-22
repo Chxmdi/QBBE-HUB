@@ -147,7 +147,7 @@ begin
 
   -- Signed out: nothing.
   perform tests.clear_auth();
-  perform tests.ok(tests.refused('select 1 from public.task'), 'a signed-out visitor is refused reading tasks');
+  perform tests.ok(tests.permission_denied('select 1 from public.task'), 'a signed-out visitor is refused reading tasks');
   reset role;
 
   -- The service role (repairs) may still correct a source.

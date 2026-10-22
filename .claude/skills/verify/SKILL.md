@@ -9,6 +9,11 @@ description: Run the QBBE Hub app locally against the local Supabase stack and d
 
 1. Create the local Auth signing key once (`bash scripts/local-signing-key.sh`; `supabase start` refuses to run without it), then start the local stack: `npx supabase start -x studio,edge-runtime,logflare,vector,supavisor,imgproxy`
 2. `npx supabase db reset && npm run db:seed` (seed prints `qa-owner@example.com / QaTest!2026`).
+   For a `WORKSPACE_OS_FLAGS=all` build, seed with the same value
+   (`WORKSPACE_OS_FLAGS=all npm run db:seed`): the database enforces the
+   switches too and reads them from `app.workspace_os_override`, which the
+   seed fills from that variable. Seeded without it, the modules show but
+   their data is refused.
 3. Export the app variables from `npx supabase status -o env` **before building**:
    `NEXT_PUBLIC_SUPABASE_URL=$API_URL NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY NEXT_PUBLIC_APP_URL=http://127.0.0.1:3000`.
    Without these exports the build has no Supabase URL and every sign-in fails
