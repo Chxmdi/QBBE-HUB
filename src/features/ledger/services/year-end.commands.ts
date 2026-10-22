@@ -9,6 +9,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translator";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { dbErrorMessage, type DbError } from "@/lib/db-error";
+import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
 
 /**
  * Year-end and accountant access (#154). Owners and admins who completed MFA
@@ -18,20 +20,11 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 const LEDGER = "/finance/ledger";
 
-// The ledger's own rules raise sentences written for people; anything else
-// (row-level security, a network failure) gets a generic message.
-const READABLE_CODES = new Set(["23514", "22023", "42501", "23505", "P0002"]);
-
-function dbMessage(error: { code?: string; message: string } | null, fallback: string): string {
-  if (!error) return fallback;
-  if (
-    error.code &&
-    READABLE_CODES.has(error.code) &&
-    !/row-level security|permission denied|violates check constraint/i.test(error.message)
-  ) {
-    return error.message;
-  }
-  return fallback;
+// The ledger's own rules raise English sentences; the listed ones are shown
+// in the reader's language, anything else as `fallback`.
+async function dbMessage(error: DbError, fallback: MessageKey): Promise<string> {
+  const t = await getT();
+  return dbErrorMessage(t, error, t(fallback), { action: "finance.yearEnd", rules: FINANCE_DB_ERRORS });
 }
 
 async function authorize(): Promise<
@@ -77,7 +70,7 @@ export async function grantAccountantAccess(input: unknown): Promise<ActionResul
     p_expires_on: parsed.data.expiresOn,
     p_note: parsed.data.note || null,
   });
-  if (error) return { ok: false, error: dbMessage(error, (await getT())("finance.ledgerReports.errors.grantFailed")) };
+  if (error) return { ok: false, error: await dbMessage(error, "finance.ledgerReports.errors.grantFailed") };
   revalidatePath(`${LEDGER}/accountant`);
   return { ok: true };
 }
@@ -88,7 +81,7 @@ export async function revokeAccountantAccess(grantId: string): Promise<ActionRes
   if (!z.string().uuid().safeParse(grantId).success) return { ok: false, error: (await getT())("finance.ledgerReports.errors.accessNotFound") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("ledger_revoke_accountant", { p_grant: grantId });
-  if (error) return { ok: false, error: dbMessage(error, (await getT())("finance.ledgerReports.errors.revokeFailed")) };
+  if (error) return { ok: false, error: await dbMessage(error, "finance.ledgerReports.errors.revokeFailed") };
   revalidatePath(`${LEDGER}/accountant`);
   return { ok: true };
 }
@@ -108,7 +101,7 @@ export async function closeFiscalYear(input: unknown): Promise<ActionResult> {
     p_organization: auth.organizationId,
     p_starts_on: parsed.data.startsOn,
   });
-  if (error) return { ok: false, error: dbMessage(error, (await getT())("finance.ledgerReports.errors.closeFailed")) };
+  if (error) return { ok: false, error: await dbMessage(error, "finance.ledgerReports.errors.closeFailed") };
   revalidatePath(LEDGER, "layout");
   return { ok: true };
 }
@@ -129,7 +122,7 @@ export async function reopenFiscalYear(input: unknown): Promise<ActionResult> {
     p_starts_on: parsed.data.startsOn,
     p_reason: parsed.data.reason,
   });
-  if (error) return { ok: false, error: dbMessage(error, (await getT())("finance.ledgerReports.errors.reopenFailed")) };
+  if (error) return { ok: false, error: await dbMessage(error, "finance.ledgerReports.errors.reopenFailed") };
   revalidatePath(LEDGER, "layout");
   return { ok: true };
 }

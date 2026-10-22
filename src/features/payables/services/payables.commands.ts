@@ -12,6 +12,8 @@ import { DOCUMENT_KINDS, PAYMENT_METHODS } from "@/features/payables/model";
 import { getLocale, getT } from "@/lib/i18n/server";
 import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
+import { dbErrorMessage } from "@/lib/db-error";
+import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
 
 /**
  * Payables and receivables actions (#150). Staff draft bills, invoices and
@@ -42,8 +44,6 @@ function invoiceTaxMessage(t: TranslateFn, error: DbError, locale: Locale): stri
   return t(key, { amount: match[2] ? formatCents(Number(match[2]), locale) : "" });
 }
 
-const READABLE_CODES = new Set(["23514", "22023", "42501", "23505", "P0002"]);
-
 function dbMessage(t: TranslateFn, error: DbError, fallback: string, locale: Locale = "en"): string {
   if (!error) return fallback;
   const tax = invoiceTaxMessage(t, error, locale);
@@ -58,14 +58,7 @@ function dbMessage(t: TranslateFn, error: DbError, fallback: string, locale: Loc
   if (error.code === "23503") return t("finance.payables.errors.foreignKey");
   if (error.code === "23514" && /due_after/.test(error.message)) return t("finance.payables.errors.dueBeforeDate");
   if (error.code === "23514" && /violates check constraint/i.test(error.message)) return t("finance.payables.errors.checkValues");
-  if (
-    error.code &&
-    READABLE_CODES.has(error.code) &&
-    !/row-level security|permission denied/i.test(error.message)
-  ) {
-    return error.message;
-  }
-  return fallback;
+  return dbErrorMessage(t, error, fallback, { action: "finance.payables", rules: FINANCE_DB_ERRORS });
 }
 
 /**

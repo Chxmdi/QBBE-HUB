@@ -119,9 +119,14 @@ describe("saveBudgetLine", () => {
 });
 
 describe("how database answers reach the person", () => {
-  it("shows the database's own sentence for a rule it explains, and hides permission errors", async () => {
+  it("shows a rule the database explains in the reader's words, and hides permission errors", async () => {
+    rpcAnswer = () => ({
+      data: null,
+      error: { code: "42501", message: "An approved budget is locked; revise it to make changes" },
+    });
+    expect(await budgets.deleteBudgetLine(BUDGET)).toEqual({ ok: false, error: t("finance.dbErrors.budgetLocked") });
     rpcAnswer = () => ({ data: null, error: { code: "22023", message: "An approved budget cannot change." } });
-    expect(await budgets.deleteBudgetLine(BUDGET)).toEqual({ ok: false, error: "An approved budget cannot change." });
+    expect(await budgets.deleteBudgetLine(BUDGET)).toEqual({ ok: false, error: t("finance.budgets.errors.removeLine") });
     rpcAnswer = () => ({ data: null, error: { code: "42501", message: "new row violates row-level security policy" } });
     expect(await budgets.approveBudget(BUDGET)).toEqual({ ok: false, error: t("finance.budgets.errors.approve") });
     rpcAnswer = () => ({ data: null, error: { code: "23503", message: "fk" } });

@@ -10,6 +10,7 @@ import { knowledgeEn } from "@/lib/i18n/messages/workspace/knowledge.en";
 import { adminEn } from "@/lib/i18n/messages/workspace/admin.en";
 import { opsEn } from "@/lib/i18n/messages/workspace/ops.en";
 import { commonEn } from "@/lib/i18n/messages/finance/common.en";
+import { dbErrorsEn } from "@/lib/i18n/messages/finance/db-errors.en";
 import { approvalsEn } from "@/lib/i18n/messages/finance/approvals.en";
 import { receiptsEn } from "@/lib/i18n/messages/finance/receipts.en";
 import { payablesEn } from "@/lib/i18n/messages/finance/payables.en";
@@ -279,6 +280,7 @@ export const en = {
   },
   finance: {
     common: commonEn,
+    dbErrors: dbErrorsEn,
     approvals: approvalsEn,
     receipts: receiptsEn,
     payables: payablesEn,
