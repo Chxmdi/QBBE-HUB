@@ -12,7 +12,7 @@ export interface LedgerSettings {
 export interface LedgerAccess {
   session: SessionContext;
   supabase: Awaited<ReturnType<typeof createSupabasePageClient>>;
-  /** Owners/admins with MFA, or staff an admin named as ledger readers. */
+  /** Owners/admins with MFA, or staff an admin named as ledger readers (also with MFA). */
   canRead: boolean;
   /** Owners/admins with MFA. The database checks this again on every write. */
   canManage: boolean;
@@ -41,11 +41,26 @@ export async function hasAccountantGrant(supabase: PageClient, session: SessionC
 }
 
 /**
+ * Whether an administrator named the caller (staff) a ledger reader. The
+ * reader can see their own row before completing MFA; payroll and gifts open
+ * only after it.
+ */
+export async function hasLedgerReaderGrant(supabase: PageClient, session: SessionContext): Promise<boolean> {
+  const { data } = await supabase
+    .from("ledger_reader")
+    .select("user_id")
+    .eq("organization_id", session.organizationId)
+    .eq("user_id", session.userId)
+    .limit(1);
+  return (data ?? []).length > 0;
+}
+
+/**
  * Route gate for the ledger screens. Staff, and a Guest holding a current
  * accountant grant, reach the pages; everyone else is sent home. Whether they
  * see the books is the database's answer: the settings row is readable
  * exactly when `app.can_read_ledger` is true for the caller. An accountant
- * who has not completed MFA is sent to do so first, and each accountant
+ * or ledger reader who has not completed MFA is sent to do so first, and each accountant
  * session that opens the books is written to the audit log once.
  */
 export async function getLedgerAccess(): Promise<LedgerAccess> {
@@ -59,6 +74,9 @@ export async function getLedgerAccess(): Promise<LedgerAccess> {
     .eq("organization_id", session.organizationId)
     .maybeSingle();
   const canRead = Boolean(data);
+  if (!canRead && session.isStaff && !session.isAdmin && (await hasLedgerReaderGrant(supabase, session))) {
+    redirect("/mfa?next=/finance/ledger");
+  }
   if (isAccountant) {
     if (!canRead) redirect("/mfa?next=/finance/ledger");
     await supabase.rpc("ledger_note_accountant_session", { p_organization: session.organizationId });

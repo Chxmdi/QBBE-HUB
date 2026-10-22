@@ -107,7 +107,10 @@ begin
     end;
     perform tests.ok(v_failed, format('%s without the second step cannot comment on an object', v_ids[1]));
     select count(*) into v_count from public.record_comment where parent_type = 'object' and parent_id = t_open;
-    perform tests.ok(v_count = 2, format('%s without the second step still reads the thread', v_ids[1]));
+    -- Without MFA an owner or admin reads through their own access only: the
+    -- owner manages the project; the admin has no grant on it.
+    perform tests.ok(v_count = case when v_ids[1] = v_owner then 2 else 0 end,
+      format('%s without the second step reads the thread only through their own access', v_ids[1]));
     reset role;
   end loop;
 

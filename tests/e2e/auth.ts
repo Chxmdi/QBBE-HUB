@@ -22,19 +22,21 @@ export type QaAccount =
 // the start of every run. Enrollment happens once per database; a local rerun
 // against the same database then meets the challenge screen with no secret,
 // and the whole authenticated suite fails before it tests anything.
+/** Accounts that enrol an authenticator: administrators, and staff named ledger readers. */
+type TotpAccount = "owner" | "admin" | "staff";
 const totpSecrets = new Map<QaAccount, string>();
-function totpPath(account: "owner" | "admin") {
+function totpPath(account: TotpAccount) {
   return join(process.cwd(), "playwright", ".auth", `qa-${account}-totp`);
 }
 
-export async function rememberTotp(account: "owner" | "admin", secret: string) {
+export async function rememberTotp(account: TotpAccount, secret: string) {
   totpSecrets.set(account, secret);
   const path = totpPath(account);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, secret, { mode: 0o600 });
 }
 
-export async function recalledTotp(account: "owner" | "admin"): Promise<string | undefined> {
+export async function recalledTotp(account: TotpAccount): Promise<string | undefined> {
   const remembered = totpSecrets.get(account);
   if (remembered) return remembered;
   try {
@@ -78,7 +80,8 @@ export function currentTotp(secret: string): string {
   return totpForCounter(secret, Math.floor(Date.now() / 30_000));
 }
 
-async function completeMfa(page: Page, account: "owner" | "admin") {
+/** Enrol or answer the authenticator on the MFA screen the page is on. */
+export async function completeMfa(page: Page, account: TotpAccount) {
   const codeInput = page.getByLabel("Six-digit code", { exact: true });
   await expect(codeInput).toBeVisible({ timeout: 20_000 });
 

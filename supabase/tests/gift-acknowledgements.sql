@@ -358,7 +358,9 @@ begin
   insert into public.ledger_reader (organization_id, user_id) values (v_org, v_staff);
   perform tests.clear_auth(); reset role;
 
-  perform tests.authenticate(v_staff, 'aal1');
+  -- Ledger readers read the books only with MFA.
+  perform tests.ensure_verified_mfa_factor(v_staff);
+  perform tests.authenticate(v_staff, 'aal2');
   select count(*) into v_rows from public.gift where organization_id = v_org;
   perform tests.ok(v_rows >= 4, 'a named ledger reader sees the gifts');
   perform tests.gift_raises(format($f$insert into public.gift_acknowledgement (organization_id, kind, gift_id,

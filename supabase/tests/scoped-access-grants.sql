@@ -287,11 +287,11 @@ begin
 
   perform tests.authenticate(v_owner, 'aal1');
   perform tests.ok(
-    public.has_program_capability(v_program, 'read')
-      and public.has_project_capability(v_project, 'read')
+    not public.has_program_capability(v_program, 'read')
+      and not public.has_project_capability(v_project, 'read')
       and not public.has_program_capability(v_program, 'manage')
       and not public.has_project_capability(v_project, 'collaborate'),
-    'AAL1 administrators retain read access but no scoped mutation capability'
+    'AAL1 administrators have no organization-wide read and no scoped mutation capability'
   );
   reset role;
 
