@@ -136,14 +136,17 @@ interface RpcResult {
 async function readQueueMetrics(): Promise<{
   queueResult: RpcResult;
   deadLetterResult: RpcResult;
+  databaseBytes: number | null;
 }> {
   try {
     const service = createSupabaseServiceClient();
-    const [queueResult, deadLetterResult] = await Promise.all([
+    const [queueResult, deadLetterResult, snapshot] = await Promise.all([
       service.rpc("job_queue_health"),
       service.rpc("job_queue_dead_letters", { p_limit: 20 }),
+      service.rpc("ops_health_snapshot"),
     ]);
-    return { queueResult, deadLetterResult };
+    const bytes = (snapshot.data as { database_bytes?: number } | null)?.database_bytes;
+    return { queueResult, deadLetterResult, databaseBytes: typeof bytes === "number" ? bytes : null };
   } catch (error) {
     const message =
       error instanceof MissingEnvError
@@ -154,6 +157,7 @@ async function readQueueMetrics(): Promise<{
     return {
       queueResult: { data: null, error: { message } },
       deadLetterResult: { data: null, error: { message } },
+      databaseBytes: null,
     };
   }
 }
@@ -164,6 +168,8 @@ export async function getJobHealth(): Promise<{
   queues: QueueHealth[];
   deadLetters: DeadLetter[];
   queueError: string | null;
+  /** Size of the whole database, for the size bar (the Free plan stops writes at 500 MB). */
+  databaseBytes: number | null;
 }> {
   const supabase = await createSupabaseServerClient();
 
@@ -190,7 +196,7 @@ export async function getJobHealth(): Promise<{
     readQueueMetrics(),
   ]);
 
-  const { queueResult, deadLetterResult } = queueMetrics;
+  const { queueResult, deadLetterResult, databaseBytes } = queueMetrics;
   // Failing loudly beats every job reading "Never run" (for example when the
   // app is deployed before the migration that adds job_health_summary).
   const readError = definitions.error ?? summary.error ?? failures.error;
@@ -267,5 +273,6 @@ export async function getJobHealth(): Promise<{
     // Surfaced rather than swallowed: an admin needs to know the difference
     // between "no queued work" and "could not read the queues".
     queueError: queueResult.error?.message ?? deadLetterResult.error?.message ?? null,
+    databaseBytes,
   };
 }

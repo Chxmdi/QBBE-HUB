@@ -4,6 +4,15 @@
  */
 export const opsEn = {
   jobs: {
+    opsAlert: {
+      overdue: "Background job {job} has stopped running",
+      failing: "Background job {job} failed {count} times in a row",
+      queue: "Work has been waiting {minutes} minutes in the {queue} queue",
+      database: "The database is at {percent}% of its {limit} MB limit",
+      refusals: "{count} {source} calls were refused in the last hour",
+      body: "Open Admin > Jobs for details. Uploads, email, syncs or other background work may be affected until this is fixed.",
+    },
+    databaseSize: "Database size: {used} MB of {limit} MB ({percent}%)",
     runner: {
       command: "select app.configure_job_runner('<this site's address>', '<CRON_JOB_SECRET>');",
       title: "Background jobs are not running",
@@ -88,6 +97,8 @@ export const opsEn = {
       "team-signal-digest":
         "Emails owners and admins a weekly list of people with open work signals, where the digest is switched on.",
       "drain-notifications": "Delivers queued notification email and records every attempt.",
+      "ops-watchdog":
+        "Alerts owners and admins when jobs stop or keep failing, queues back up, webhooks are refused, or the database nears its size limit.",
       "retry-failed-emails":
         "Recovers deliveries left in flight by a crashed run and retries transient failures with backoff.",
       "daily-digest":

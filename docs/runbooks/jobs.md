@@ -110,6 +110,8 @@ All times are UTC, because pg_cron evaluates in UTC.
 | `decision-revisit-reminders` | 11:10 | Reminds the decider and participants when a decision reaches its revisit date (only does anything with decisions v2 on). |
 | `team-signal-reminders` | 13:20 | Where Admin, Team signals has reminders on: records each person's open work signals and sends one gentle notification per new signal (#136). |
 | `team-signal-digest` | Mondays 12:40 | Where Admin, Team signals has the digest on: emails owners and admins the people with open work signals; no email when there are none (#136). |
+| `ops-watchdog` | every 15 min | Alerts owners and admins (in the app and by email, once per condition per day) when a job is overdue or fails three times in a row, a queue message waits over 15 minutes, webhooks are refused ten times in an hour, or the database reaches 70% of its limit. See [Alerts](#alerts). |
+| `job-dispatch-watchdog` | every 5 min | Not an app job: plain SQL that records a failed run ("Dispatch failed: HTTP 403", "timed out", "no answer") when the database's call to a job was refused or never answered. |
 
 The digest runs hourly rather than at a fixed time on purpose: each recipient's
 `notification_preference.timezone` and `digest_hour` decide whether this tick is
@@ -206,8 +208,26 @@ an integration that is switched off is not a fault.
 their error), is anything stuck (queue depth, oldest pending, dead letters), and
 is every job still on its schedule (last run, next run, failures in 24h).
 
+A job reads **Overdue** when it has not started for three of its schedule
+intervals, and **Failed** with "Dispatch failed: ..." when the database could
+not reach the app at all (wrong secret, app down, timeout). A database size bar
+shows how close the database is to its limit.
+
+**Admin → Integrations** reads "Synchronization delayed" when a connection's
+last successful sync is older than three sync intervals.
+
 **Admin → Email** is the delivery ledger — every attempt including suppressions,
 filterable by status, with the provider's own reason on anything that bounced.
+
+### Alerts
+
+`ops-watchdog` notifies the organization's active owners and admins. It
+cannot report a dead server, a broken network or an expired certificate,
+because it runs on that server: an external uptime monitor must watch
+`/api/health/version` and `/api/health/ready`, and the certificate's expiry
+(an owner step; see [incident-response.md](incident-response.md)). On a paid
+Supabase plan set `OPS_DATABASE_LIMIT_MB` to the plan's database size so the
+70% alert and the size bar use it.
 
 ### Running a job by hand
 
