@@ -78,10 +78,21 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
    see "Invitation sent to …", or, where email is not set up, the link to pass
    on yourself. Run the query again: when it returns no rows, every open
    invitation has a working link.
-6. Complete encrypted daily database **and uploaded-file** backups to QBBE
-   Drive and rehearse restoration before entering pilot data. Do not enable
-   paid backups or Point-in-Time Recovery. See `backup-recovery.md`; automation
-   and restore evidence are still pending.
+6. Set up the nightly encrypted backup of the database **and uploaded files**
+   (the **Backup** workflow) and run the hosted restore drill before entering
+   pilot data. The one-time setup and the drill are in `backup-recovery.md`;
+   until both are done there is no backup. Three things to know first:
+   - Apply the `main` protection in "Branches and gates" below **before**
+     setup step 7 there. The `backup-production` environment holds
+     production's database password and a Supabase secret key that bypasses
+     row-level security, with no approval step; its only protection is that
+     it accepts runs from `main`.
+   - Each of `backup-staging` and `backup-production` needs its own
+     `BACKUP_INDEX_KEY` (make it with `openssl rand -base64 48`).
+   - The nightly run backs up production only. Staging is backed up every
+     night only when the repository variable `BACKUP_STAGING_NIGHTLY` is
+     `on`, to stay inside Supabase's free 5 GB of monthly traffic; otherwise
+     run it by hand at least every 30 days.
 7. Enroll at least two named TOTP factors for the Primary Owner and every
    Workspace Admin, then complete the hosted MFA checks in
    `staging-provisioning.md`. Application and database enforcement are

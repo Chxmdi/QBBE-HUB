@@ -1,0 +1,323 @@
+name: Backup
+
+# Every night, an encrypted off-site copy of each environment's database and
+# every uploaded file (DATA-001; docs/runbooks/backup-recovery.md).
+#
+# Supabase keeps no backup of a free project, and even its paid daily
+# backups and point-in-time recovery leave out the bytes of uploaded files
+# (Storage keeps only their list in the database). This workflow makes the
+# copy that survives losing the Supabase project or account:
+#
+#   1. checks   the environment is its registered Supabase project, its key
+#               is that project's, and every backup setting is present
+#               (scripts/backup/check-backup-environment.sh)
+#   2. backup   Supabase's documented three-part dump (roles, schema, data),
+#               the migration history and what the dump leaves out, packed
+#               into one archive encrypted with age to the custodians' public
+#               keys; and each uploaded file as its own encrypted blob,
+#               downloading only files that are new or changed since the
+#               previous night (scripts/backup/create-backup.sh). No private
+#               key is in GitHub.
+#   3. upload   blobs to blobs/<environment>/<YYYY-MM>-<keys' tag>/, then the
+#               archive and its signed index under <environment>/<UTC date>/,
+#               each read back in full and compared by sha256
+#               (scripts/backup/bucket.sh). How long copies are kept is the
+#               bucket's lifecycle rules.
+#   4. check-in an outside monitor (BACKUP_HEALTHCHECK_URL) is pinged after
+#               every good night, and emails the custodians when a day passes
+#               without one: this catches the schedule itself stopping
+#               (GitHub turns off schedules in a public repository after 60
+#               quiet days), which no failed run would report.
+#   5. alert    any failure opens, or comments on, the issue
+#               "Backup failed: <environment>".
+#
+# Each environment's job runs under its own GitHub environment,
+# backup-staging or backup-production. They have no required reviewers, so
+# a nightly backup never waits for an approval, and accept only the main
+# branch. They leave out the app's APP_ENV, but they are not harmless: each
+# holds its project's database password and a Supabase secret
+# (service-role) key, which together read and write every row and file, so
+# anyone who can land a commit on main can reach them (runbook, setup step
+# 7). Each step gets only the secrets it uses; third-party actions run
+# before any secret is in a step's environment. The database password
+# reaches psql, pg_dump and the Supabase CLI as PGPASSWORD, never in an
+# address. The backup job's token can only read the repository; only the
+# alert job may write, and only issues.
+#
+# Supabase's free plan allows 5 GB of outgoing traffic a month for all its
+# projects together; each run's summary shows how much this run read, with
+# a warning when one environment is on course for more than 2 GB a month.
+# So staging is backed up nightly only when the repository variable
+# BACKUP_STAGING_NIGHTLY is "on"; Run workflow backs it up at any time.
+#
+# Restore: scripts/backup/bucket.sh fetch, then scripts/backup/restore-drill.sh,
+# into a scratch project, never production (docs/runbooks/backup-recovery.md,
+# "Restore").
+
+on:
+  schedule:
+    # 07:17 UTC daily: 03:17 in Montreal in summer (EDT), 02:17 in winter
+    # (EST), when nobody is working. Not on :00 or :30, when GitHub's
+    # scheduler is busiest and runs start late or are dropped.
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to back up
+        type: choice
+        options: [both, staging, production]
+        default: both
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Back up ${{ matrix.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # The nightly run backs up production, and staging too only when the
+        # repository variable BACKUP_STAGING_NIGHTLY is "on" (to save
+        # Supabase traffic; runbook, "Supabase traffic"). Run workflow backs
+        # up what it is asked for ("both" means both). The alert job's
+        # ENVIRONMENTS must give the same list (tested in
+        # tests/unit/backup-lib.test.ts).
+        environment: ${{ fromJSON(inputs.environment == 'staging' && '["staging"]' || inputs.environment == 'production' && '["production"]' || github.event_name == 'schedule' && vars.BACKUP_STAGING_NIGHTLY != 'on' && '["production"]' || '["staging","production"]') }}
+    environment: backup-${{ matrix.environment }}
+    # One backup of an environment at a time; a second waits.
+    concurrency:
+      group: backup-${{ matrix.environment }}
+      cancel-in-progress: false
+    env:
+      TARGET_ENVIRONMENT: ${{ matrix.environment }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # The backup scripts use only Node's standard library: no npm install.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # The version the local rehearsal used (docs/runbooks/backup-recovery.md).
+      - uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.121.0
+
+      # From the release itself, checked against the sha256 recorded here,
+      # rather than whatever version the runner's package archive has.
+      - name: Install age 1.2.1 (encryption)
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/age.tar.gz" \
+            https://github.com/FiloSottile/age/releases/download/v1.2.1/age-v1.2.1-linux-amd64.tar.gz
+          echo "7df45a6cc87d4da11cc03a539a7470c15b1041ab2b396af088fe9990f7c79d50  $RUNNER_TEMP/age.tar.gz" | sha256sum --check --strict -
+          tar -xzf "$RUNNER_TEMP/age.tar.gz" -C "$RUNNER_TEMP"
+          sudo install -m 0755 "$RUNNER_TEMP/age/age" "$RUNNER_TEMP/age/age-keygen" /usr/local/bin/
+          age --version
+
+      # supabase/config.toml names a local-only signing key file, and the CLI
+      # reads that config before any command; this makes a throwaway one. It
+      # is never sent anywhere.
+      - name: Local config's signing key
+        run: scripts/local-signing-key.sh
+
+      # Fails closed: names every missing setting and where it goes, and
+      # refuses a project or key that is not this environment's. Writes
+      # nothing.
+      - name: Check this environment's backup settings
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          # Repository-level registrations, the same ones the Deploy workflow checks.
+          STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
+          PRODUCTION_SUPABASE_PROJECT_REF: ${{ vars.PRODUCTION_SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          BACKUP_INDEX_KEY: ${{ secrets.BACKUP_INDEX_KEY }}
+          BACKUP_HEALTHCHECK_URL: ${{ secrets.BACKUP_HEALTHCHECK_URL }}
+          BACKUP_S3_ENDPOINT: ${{ vars.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_BUCKET: ${{ vars.BACKUP_S3_BUCKET }}
+          BACKUP_S3_REGION: ${{ vars.BACKUP_S3_REGION }}
+          BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+        run: scripts/backup/check-backup-environment.sh
+
+      # Through the shared pooler (session mode, port 5432): GitHub's runners
+      # have no IPv6, which the direct database address needs. The pooler is
+      # found by trying each region with the password, as the Performance
+      # (staging) workflow does. The address holds no password: the password
+      # is given as PGPASSWORD, here and to the dump step only.
+      - name: Connect to the ${{ matrix.environment }} database
+        shell: bash
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -uo pipefail
+          url=""
+          for region in ca-central-1 us-east-1 us-east-2 us-west-1 us-west-2 eu-west-1 eu-west-2 eu-west-3 eu-central-1 eu-central-2 eu-north-1 ap-south-1 ap-southeast-1 ap-southeast-2 ap-northeast-1 ap-northeast-2 sa-east-1; do
+            for prefix in aws-0 aws-1; do
+              candidate="postgresql://postgres.${SUPABASE_PROJECT_REF}@${prefix}-${region}.pooler.supabase.com:5432/postgres"
+              if PGCONNECT_TIMEOUT=8 psql -X -q -t -A "$candidate" -c "select 1" > /dev/null 2>&1; then
+                url="$candidate"; echo "Found the pooler: ${prefix}-${region}."; break 2
+              fi
+            done
+          done
+          [ -n "$url" ] || { echo "::error::Could not connect to the ${TARGET_ENVIRONMENT} database through its pooler with SUPABASE_DB_PASSWORD (a wrong password, or a paused project)."; exit 1; }
+          {
+            echo "BACKUP_DB_URL=$url"
+            # One month folder for the whole run, even if it crosses
+            # midnight at the end of a month.
+            echo "BACKUP_GENERATION=$(date -u +%Y-%m)"
+            echo "BACKUP_STATE_DIR=$RUNNER_TEMP/state"
+          } >> "$GITHUB_ENV"
+
+      # Also copies last month's blobs into this month's folder on the first
+      # night of a month, each checked against its recorded size and sha256.
+      - name: What the backup bucket already holds
+        env:
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          BACKUP_INDEX_KEY: ${{ secrets.BACKUP_INDEX_KEY }}
+          BACKUP_S3_ENDPOINT: ${{ vars.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_BUCKET: ${{ vars.BACKUP_S3_BUCKET }}
+          BACKUP_S3_REGION: ${{ vars.BACKUP_S3_REGION }}
+          BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+        run: scripts/backup/bucket.sh state "$TARGET_ENVIRONMENT" "$BACKUP_GENERATION" "$BACKUP_STATE_DIR"
+
+      # Exit 3 means the archive was made but is incomplete (a file could not
+      # be copied, or a table is missing from the dump): it is still uploaded
+      # (the rest is worth keeping) and the run is failed at the end.
+      - name: Dump, copy changed files, package and encrypt
+        shell: bash
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          BACKUP_INDEX_KEY: ${{ secrets.BACKUP_INDEX_KEY }}
+        run: |
+          set +e
+          scripts/backup/create-backup.sh "$RUNNER_TEMP/backup" "$TARGET_ENVIRONMENT"
+          status=$?
+          set -e
+          if [ "$status" = 3 ]; then
+            echo "BACKUP_INCOMPLETE=1" >> "$GITHUB_ENV"
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          fi
+          cat "$RUNNER_TEMP/backup/backup.env" >> "$GITHUB_ENV"
+
+      - name: Upload off-site and read it back
+        env:
+          BACKUP_S3_ENDPOINT: ${{ vars.BACKUP_S3_ENDPOINT }}
+          BACKUP_S3_BUCKET: ${{ vars.BACKUP_S3_BUCKET }}
+          BACKUP_S3_REGION: ${{ vars.BACKUP_S3_REGION }}
+          BACKUP_S3_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+          BACKUP_S3_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+        # When the file blobs fail, the archive (the database) is still
+        # stored, without its index, and this step fails; the summary below
+        # still shows where it is and its sha256.
+        run: |
+          status=0
+          scripts/backup/bucket.sh push "$RUNNER_TEMP/backup" "$TARGET_ENVIRONMENT" || status=$?
+          if [ -f "$RUNNER_TEMP/backup/upload.env" ]; then cat "$RUNNER_TEMP/backup/upload.env" >> "$GITHUB_ENV"; fi
+          exit "$status"
+
+      # Counts only. File names never appear here (they can carry people's
+      # names), nor how many sign-in accounts or MFA factors there are: a
+      # public repository's run summaries are public.
+      - name: Summary
+        if: always() && env.BACKUP_KEY != ''
+        env:
+          BACKUP_S3_BUCKET: ${{ vars.BACKUP_S3_BUCKET }}
+        run: |
+          {
+            echo "### Backup of ${TARGET_ENVIRONMENT}"
+            echo
+            echo "Stored as \`s3://${BACKUP_S3_BUCKET}/${BACKUP_KEY}\`: ${BACKUP_SIZE} bytes, sha256 \`${BACKUP_SHA256}\`, made in ${BACKUP_SECONDS}s, encrypted to the custodians' age keys. Files are in \`${BACKUP_BLOB_PREFIX}\`."
+            echo
+            cat "$RUNNER_TEMP/backup/summary.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail when the backup is incomplete
+        if: env.BACKUP_INCOMPLETE == '1'
+        run: |
+          echo "::error::The backup was stored, but it is incomplete: some uploaded files could not be copied, or a table with rows is missing from the dump. The step 'Dump, copy changed files, package and encrypt' says which kind and why; the manifest inside the archive names them."
+          exit 1
+
+      - name: Check in with the outside monitor
+        env:
+          BACKUP_HEALTHCHECK_URL: ${{ secrets.BACKUP_HEALTHCHECK_URL }}
+        run: |
+          curl -fsS -m 10 --retry 3 -o /dev/null "$BACKUP_HEALTHCHECK_URL" \
+            || echo "::warning::The outside monitor did not answer. The backup itself is stored; the monitor will report a missed check-in."
+
+      # A second, immediate alert by email, besides the GitHub issue: also
+      # when the run is cancelled, or stopped by its 90-minute time limit.
+      - name: Tell the outside monitor this run failed
+        if: failure() || cancelled()
+        env:
+          BACKUP_HEALTHCHECK_URL: ${{ secrets.BACKUP_HEALTHCHECK_URL }}
+        run: |
+          [ -n "$BACKUP_HEALTHCHECK_URL" ] || exit 0
+          curl -fsS -m 10 --retry 3 -o /dev/null "${BACKUP_HEALTHCHECK_URL%/}/fail" || true
+
+      # The runner is discarded after the job; this also removes the
+      # encrypted files and the bucket state straight away.
+      - name: Clean up
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/backup" "$RUNNER_TEMP/state" supabase/.temp
+
+  alert:
+    name: Report a failed backup
+    needs: backup
+    if: always() && needs.backup.result != 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # The only job that can write anything, and only issues. It reads this
+    # run's job results (actions: read) to tell which environment failed.
+    permissions:
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # The same list as the backup job's matrix (tested).
+      ENVIRONMENTS: ${{ inputs.environment == 'staging' && 'staging' || inputs.environment == 'production' && 'production' || github.event_name == 'schedule' && vars.BACKUP_STAGING_NIGHTLY != 'on' && 'production' || 'staging production' }}
+      ASSIGNEE: ${{ vars.BACKUP_ALERT_ASSIGNEE || github.repository_owner }}
+    steps:
+      - name: Open or update "Backup failed" issues
+        shell: bash
+        run: |
+          set -euo pipefail
+          results=$(gh api "repos/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs" --paginate \
+            --jq '.jobs[] | [.name, (.conclusion // "unfinished")] | @tsv')
+          for env in $ENVIRONMENTS; do
+            conclusion=$(awk -F'\t' -v name="Back up ${env}" '$1 == name { print $2 }' <<< "$results" | tail -n 1)
+            [ "$conclusion" = success ] && continue
+            title="Backup failed: ${env}"
+            body="The nightly backup of **${env}** did not complete (${conclusion:-did not start}) on $(date -u '+%Y-%m-%d %H:%M UTC').
+
+          Run: ${RUN_URL}
+
+          Until a backup succeeds, the newest copy in the backup bucket is older than 24 hours. What to do: docs/runbooks/backup-recovery.md, \"When a backup fails\". Close this issue once a run is green again."
+            number=$(gh issue list --state open --search "\"${title}\" in:title" --json number,title \
+              --jq "map(select(.title == \"${title}\")) | .[0].number // empty")
+            if [ -n "$number" ]; then
+              gh issue comment "$number" --body "$body"
+              echo "Commented on #${number} (${title})."
+            elif gh issue create --title "$title" --body "$body" --assignee "$ASSIGNEE" > /dev/null 2>&1; then
+              echo "Opened \"${title}\", assigned to ${ASSIGNEE}."
+            else
+              # The assignee may not be assignable (an organization name):
+              # never let that stop the alert itself.
+              gh issue create --title "$title" --body "$body"
+              echo "Opened \"${title}\" (unassigned). Set the repository variable BACKUP_ALERT_ASSIGNEE to a person's GitHub user name."
+            fi
+          done
