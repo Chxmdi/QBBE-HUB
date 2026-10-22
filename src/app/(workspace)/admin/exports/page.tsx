@@ -52,19 +52,25 @@ function formatSize(bytes: number | null, t: TranslateFn, format: Formatters): s
  * was fetched before it expired.
  */
 export default async function AdminExportsPage() {
-  await requireAdminAal2();
+  const session = await requireAdminAal2();
   const t = await getT();
   const format = await getFormatters();
   const locale = await getLocale();
   const now = new Date();
 
   const supabase = await createSupabaseServerClient();
-  const [rows, { data: members }] = await Promise.all([
+  const [rows, { data: members }, { data: crmContacts }] = await Promise.all([
     getExports(100),
     supabase
       .from("organization_membership")
       .select("user_id, status, user_profile:user_id(id, full_name)")
       .eq("status", "active"),
+    supabase
+      .from("crm_contact")
+      .select("id, full_name")
+      .eq("organization_id", session.organizationId)
+      .order("full_name")
+      .limit(1000),
   ]);
 
   type MemberRow = { user_profile: { id: string; full_name: string } | null };
@@ -72,6 +78,10 @@ export default async function AdminExportsPage() {
     .filter((m) => m.user_profile)
     .map((m) => ({ value: m.user_profile!.id, label: m.user_profile!.full_name }))
     .sort((a, b) => a.label.localeCompare(b.label, locale));
+  const contacts = ((crmContacts ?? []) as { id: string; full_name: string }[]).map((c) => ({
+    value: c.id,
+    label: c.full_name,
+  }));
 
   return (
     <div>
@@ -80,7 +90,7 @@ export default async function AdminExportsPage() {
         eyebrow={t("admin.eyebrow")}
         title={t("admin.exports.title")}
         description={t("admin.exports.description")}
-        actions={<RequestExportDialog people={people} />}
+        actions={<RequestExportDialog people={people} contacts={contacts} />}
       />
 
       {rows.length === 0 ? (
@@ -103,10 +113,10 @@ export default async function AdminExportsPage() {
                 <div className="flex flex-wrap items-start gap-2">
                   <span className="min-w-0 flex-1 text-[13.5px] font-medium">
                     {labelOr(t, `admin.exports.kinds.${row.kind}`, row.kind)}
-                    {row.subject ? (
+                    {row.subject ?? row.contact ? (
                       <span className="font-normal text-muted">
                         {" "}
-                        — {row.subject.full_name}
+                        — {(row.subject ?? row.contact)!.full_name}
                       </span>
                     ) : null}
                   </span>

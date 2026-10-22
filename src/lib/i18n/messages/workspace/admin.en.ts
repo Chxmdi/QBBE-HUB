@@ -662,6 +662,7 @@ export const adminEn = {
         crm_contacts: "Relationships and contacts",
         task_history: "Task history",
         report_bundle: "Reports and approvals",
+        contact_data: "Everything about one contact",
       },
       statuses: {
         queued: "Queued",
