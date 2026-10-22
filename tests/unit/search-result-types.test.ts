@@ -33,9 +33,10 @@ function currentSearchDefinition(): string {
   const defining = readdirSync(MIGRATIONS)
     .filter((f) => f.endsWith(".sql"))
     .sort()
+    // The definition, not a grant that merely names the function.
     .filter((f) =>
-      readFileSync(join(MIGRATIONS, f), "utf8").includes(
-        "function public.global_search",
+      /create\s+(or\s+replace\s+)?function\s+public\.global_search\b/i.test(
+        readFileSync(join(MIGRATIONS, f), "utf8"),
       ),
     );
   if (defining.length === 0) throw new Error("no migration defines global_search");

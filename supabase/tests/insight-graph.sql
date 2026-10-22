@@ -112,12 +112,9 @@ begin
 
   -- Signed out: nothing at all.
   perform tests.clear_auth();
-  select count(*) into n from public.milestone_dependency where blocked_milestone_id in (m_open, m_open2);
-  perform tests.ok(n = 0, 'signed-out: no milestone dependencies');
-  select count(*) into n from public.task_dependency where blocked_task_id in (t_open, t_open2);
-  perform tests.ok(n = 0, 'signed-out: no task dependencies');
-  select count(*) into n from public.project where id in (v_open, v_closed);
-  perform tests.ok(n = 0, 'signed-out: no projects');
+  perform tests.ok(tests.refused('select 1 from public.milestone_dependency'), 'signed-out: milestone dependencies refused');
+  perform tests.ok(tests.refused('select 1 from public.task_dependency'), 'signed-out: task dependencies refused');
+  perform tests.ok(tests.refused('select 1 from public.project'), 'signed-out: projects refused');
   reset role;
 end;
 $$;

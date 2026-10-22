@@ -147,8 +147,7 @@ begin
 
   -- Signed out: nothing.
   perform tests.clear_auth();
-  select count(*) into n from public.api_token;
-  perform tests.ok(n = 0, 'a signed-out visitor reads no tokens');
+  perform tests.ok(tests.refused('select 1 from public.api_token'), 'a signed-out visitor is refused reading tokens');
   begin
     perform public.revoke_api_token(v_staff_token);
     raise exception 'FAIL: a signed-out visitor revoked a token';
