@@ -11,6 +11,8 @@ import { parseMoneyToCents } from "@/features/ledger/money";
 import { evenSplit, MONTHS_IN_YEAR } from "@/features/budgets/budget";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey, MessageVars, TranslateFn } from "@/lib/i18n/translator";
+import { dbErrorMessage } from "@/lib/db-error";
+import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
 
 /**
  * Budget actions (#153). Every write is for owners and admins who completed
@@ -22,21 +24,14 @@ const BUDGETS = "/finance/budgets";
 
 type DbError = { code?: string; message: string } | null;
 
-// The budget functions raise with sentences written for people; anything
-// else (row-level security, a network failure) gets a generic message.
-const READABLE_CODES = new Set(["22023", "42501", "23505", "P0002"]);
+// The budget functions raise English sentences; the listed ones are shown in
+// the reader's language, anything else (row-level security, a network
+// failure) as a generic message.
 
 function dbMessage(t: TranslateFn, error: DbError, fallback: MessageKey): string {
   if (!error) return t(fallback);
   if (error.code === "23503") return t("finance.budgets.errors.notInOrganization");
-  if (
-    error.code &&
-    READABLE_CODES.has(error.code) &&
-    !/row-level security|permission denied|violates/i.test(error.message)
-  ) {
-    return error.message;
-  }
-  return t(fallback);
+  return dbErrorMessage(t, error, t(fallback), { action: "finance.budgets", rules: FINANCE_DB_ERRORS });
 }
 
 /**

@@ -7,6 +7,9 @@ import {
   type PayrollProvider,
   type RunCents,
 } from "@/features/payroll/categories";
+import { dbErrorMessage } from "@/lib/db-error";
+import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 type Client = Awaited<ReturnType<typeof createSupabasePageClient>>;
 
@@ -163,18 +166,22 @@ export async function payrollOptions(supabase: Client, organizationId: string): 
 }
 
 /**
- * The lines posting would create, or the reason it cannot yet. The database
- * explains itself for the checks it knows; anything else gets `fallback`.
+ * The lines posting would create, or the reason it cannot yet, in the
+ * reader's language. A refusal the database explains is translated; anything
+ * else gets `fallback`.
  */
 export async function previewLines(
   supabase: Client,
   runId: string,
+  t: TranslateFn,
   fallback: string,
 ): Promise<{ lines: PreviewLine[]; error: string | null }> {
   const { data, error } = await supabase.rpc("payroll_run_lines", { p_run: runId });
   if (error) {
-    const readable = error.code === "22023" || error.code === "P0002";
-    return { lines: [], error: readable ? error.message : fallback };
+    return {
+      lines: [],
+      error: dbErrorMessage(t, error, fallback, { action: "finance.payrollPreview", rules: FINANCE_DB_ERRORS }),
+    };
   }
   return {
     lines: ((data ?? []) as PreviewLine[]).map((l) => ({

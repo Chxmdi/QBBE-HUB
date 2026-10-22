@@ -33,6 +33,7 @@ import { createSupabasePageClient } from "@/lib/supabase/page";
 import { getFormatters, getT } from "@/lib/i18n/server";
 import { labelOr, roleCodeLabel, triggerEventLabel } from "@/features/admin/labels";
 import type { Membership } from "@/types/entities";
+import { auditCursorOf, auditOlderFilter, parseAuditCursor } from "@/features/admin/audit-cursor";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("admin.workspace.title") };
@@ -98,7 +99,7 @@ const INTEGRATION_PROVIDERS = [
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ audit?: string; auditPage?: string }>;
+  searchParams: Promise<{ audit?: string; auditBefore?: string; auditBeforeId?: string }>;
 }) {
   const session = await requireAdminAal2();
   const t = await getT();
@@ -112,7 +113,7 @@ export default async function AdminPage({
   };
   const format = await getFormatters();
   const params = await searchParams;
-  const auditPage = Math.max(1, Number(params.auditPage) || 1);
+  const auditCursor = parseAuditCursor(params.auditBefore, params.auditBeforeId);
   const auditFilter =
     params.audit && params.audit !== "all" ? params.audit : null;
   // Throws on a failed read: an outage shows the error boundary, not an empty Admin page.
@@ -121,7 +122,7 @@ export default async function AdminPage({
   const [
     { data: members },
     { data: invitations },
-    { data: audit, count: auditCount },
+    { data: audit },
     { data: integrations },
     { data: teams },
     { data: teamMembers },
@@ -151,10 +152,13 @@ export default async function AdminPage({
           // so PostgREST cannot join it and the whole query fails — which
           // showed an empty history. Names come from the member list below.
           "id, actor_id, event_type, action, object_type, created_at",
-          { count: "exact" },
         )
         .order("created_at", { ascending: false })
-        .range((auditPage - 1) * 30, auditPage * 30 - 1);
+        .order("id", { ascending: false })
+        // One more than a page, so "Older events" shows only when there are
+        // some, without counting the whole log.
+        .limit(31);
+      if (auditCursor) auditQuery = auditQuery.or(auditOlderFilter(auditCursor));
       if (auditFilter) auditQuery = auditQuery.eq("event_type", auditFilter);
       return auditQuery;
     })(),
@@ -201,7 +205,10 @@ export default async function AdminPage({
       }[]
     ).map((m) => [m.user_id, m.user_profile?.full_name ?? null]),
   );
-  const auditList = ((audit ?? []) as unknown as AuditRow[]).map((event) => ({
+  const auditRows = (audit ?? []) as unknown as AuditRow[];
+  const auditHasOlder = auditRows.length > 30;
+  const auditOlder = auditHasOlder ? auditCursorOf(auditRows[29]) : null;
+  const auditList = auditRows.slice(0, 30).map((event) => ({
     ...event,
     actor:
       event.actor_id && actorNames.get(event.actor_id)
@@ -870,10 +877,10 @@ export default async function AdminPage({
               ))}
             </ol>
           )}
-          {(auditCount ?? 0) > auditPage * 30 ? (
+          {auditOlder ? (
             <p className="mt-3">
               <Link
-                href={`/admin?audit=${auditFilter ?? "all"}&auditPage=${auditPage + 1}`}
+                href={`/admin?${new URLSearchParams({ audit: auditFilter ?? "all", auditBefore: auditOlder.before, auditBeforeId: auditOlder.beforeId })}`}
                 className="text-[13px] font-medium text-brand-fg hover:underline"
               >
                 {t("admin.workspace.audit.older")}

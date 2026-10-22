@@ -165,8 +165,8 @@ test("a file answer is stored and shows its scan state [switches on]", async ({ 
        join property_definition pd on pd.id = v.property_id and pd.key = 'proof'
        where d.title = '${fileName}'`,
     );
-    // "staff" with nothing attached: only the uploader, owners, admins and leadership viewers read it.
-    expect(stored).toBe("file|pending|staff|true|true");
+    // "private": only the uploader, MFA-verified owners and admins, and leadership viewers read it.
+    expect(stored).toBe("file|pending|private|true|true");
 
     await signOut(page);
     await signIn(page, "owner");

@@ -14,6 +14,17 @@ import {
   type FundChangeRow,
   type FundChanges,
 } from "@/features/ledger/fund-changes";
+import { logActionFailure } from "@/lib/server-log";
+
+/**
+ * A failed read, for the caller to report in its own words: the database's
+ * text is logged, and only its error code is returned.
+ */
+function failure(action: string, error: { code?: string; message: string } | null): string | null {
+  if (!error) return null;
+  logActionFailure(action, error);
+  return error.code || "unknown";
+}
 
 type Client = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -106,7 +117,7 @@ export async function statementsFor(
     closing_movement_cents: Number(r.closing_movement_cents),
     balance_cents: Number(r.balance_cents),
   }));
-  return { statements: buildStatements(rows, from, to), error: error?.message ?? null };
+  return { statements: buildStatements(rows, from, to), error: failure("finance.statements", error) };
 }
 
 /** A year's statements and, when the prior year has anything posted, the prior year's. */
@@ -136,7 +147,7 @@ export async function yearFundChanges(
     p_to: year.endsOn,
   });
   const rows = ((data ?? []) as FundChangeRow[]).map(normalizeFundChangeRow);
-  return { changes: buildFundChanges(rows, year.startsOn, year.endsOn), error: error?.message ?? null };
+  return { changes: buildFundChanges(rows, year.startsOn, year.endsOn), error: failure("finance.statements", error) };
 }
 
 /** Every posted line between two dates, fetched a page at a time. */
@@ -151,7 +162,7 @@ export async function exportLines(
     const { data, error } = await supabase
       .rpc("ledger_export_lines", { p_organization: organizationId, p_from: from, p_to: to })
       .range(offset, offset + PAGE - 1);
-    if (error) return { lines, error: error.message, tooMany: false };
+    if (error) return { lines, error: failure("finance.ledgerExport", error), tooMany: false };
     const page = (data ?? []) as ExportLine[];
     lines.push(
       ...page.map((l) => ({ ...l, debit_cents: Number(l.debit_cents), credit_cents: Number(l.credit_cents) })),

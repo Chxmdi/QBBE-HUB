@@ -19,6 +19,8 @@ import {
   translateParseError,
   type CsvMapping,
 } from "@/features/banking/parsers";
+import { dbErrorMessage } from "@/lib/db-error";
+import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
 
 /**
  * Bank import and reconciliation actions (#151). Every write is for owners
@@ -32,8 +34,6 @@ const BANK = "/finance/bank";
 const MAX_FILE_CHARS = 900_000;
 
 type DbError = { code?: string; message: string } | null;
-
-const READABLE_CODES = new Set(["23514", "22023", "42501", "23505", "P0002"]);
 
 type ErrorName = keyof typeof bankEn.errors;
 const E = (name: ErrorName): MessageKey => `finance.bank.errors.${name}`;
@@ -59,14 +59,7 @@ function dbMessage(t: TranslateFn, error: DbError, fallback: ErrorName): string 
   if (error.code === "23514" && /violates check constraint/i.test(error.message)) {
     return t(E("checkValues"));
   }
-  if (
-    error.code &&
-    READABLE_CODES.has(error.code) &&
-    !/row-level security|permission denied/i.test(error.message)
-  ) {
-    return error.message;
-  }
-  return t(E(fallback));
+  return dbErrorMessage(t, error, t(E(fallback)), { action: "finance.bank", rules: FINANCE_DB_ERRORS });
 }
 
 async function authorize(): Promise<

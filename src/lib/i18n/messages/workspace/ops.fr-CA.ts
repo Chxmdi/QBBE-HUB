@@ -234,7 +234,14 @@ export const opsFrCA: typeof opsEn = {
       yearOne: "{n} an",
       yearOther: "{n} ans",
     },
+    /** Database refusals in the reader's language (see the module's db-error-rules.ts). */
+    dbErrors: {
+      actionNotAllowed: "Cette action n’est pas permise pour ce type de dossier.",
+      tooShort: "Ce type de dossier doit être conservé au moins {days} jours.",
+      unknownSubject: "Ce type de dossier ne peut pas avoir de durée de conservation.",
+    },
     errors: {
+      notSaved: "La politique de conservation n’a pas pu être enregistrée. Réessayez.",
       mustKeep: "{label} : la conservation doit être d’au moins {duration}.",
       cannotAnonymise: "{label} : l’anonymisation n’est pas permise.",
       cannotDelete: "{label} : la suppression n’est pas permise.",
@@ -362,7 +369,26 @@ export const opsFrCA: typeof opsEn = {
       noRule: "aucune règle",
       permanently: "jamais",
     },
+    /** Database refusals in the reader's language (see the module's db-error-rules.ts). */
+    dbErrors: {
+      permanent: "Ces documents sont conservés en permanence; ils n’ont pas de durée de conservation à fixer.",
+      minYears: "Ces documents doivent être conservés au moins {years} ans.",
+      enterYears: "Indiquez pendant combien d’années ces documents sont conservés.",
+      unknownCategory: "Cette catégorie de documents n’existe pas.",
+      holdNoEdit: "Une suspension ne peut pas être modifiée, seulement levée.",
+      holdOrder: "Une suspension est d’abord imposée, puis levée.",
+      releaseReason: "Indiquez pourquoi la suspension est levée.",
+      recordMissing: "Ce document n’existe pas dans cet organisme.",
+      holdReleased: "Cette suspension a déjà été levée.",
+      shortensForever: "Ce changement raccourcirait la durée de conservation obligatoire du document (il doit être conservé en permanence).",
+      shortens: "Ce changement raccourcirait la durée de conservation obligatoire du document (jusqu’au {date}).",
+      underHold: "Ce document fait l’objet d’une suspension pour motif juridique et ne peut pas être reclassé.",
+    },
     errors: {
+      ruleNotSaved: "La durée de conservation n’a pas pu être enregistrée. Réessayez.",
+      holdNotPlaced: "La suspension n’a pas pu être imposée. Réessayez.",
+      holdNotReleased: "La suspension n’a pas pu être levée. Réessayez.",
+      documentNotClassified: "Le document n’a pas pu être classé. Réessayez.",
       enterYears: "Entrez un nombre d’années.",
       wholeYears: "Entrez un nombre entier d’années.",
       atLeastYear: "Entrez au moins un an.",

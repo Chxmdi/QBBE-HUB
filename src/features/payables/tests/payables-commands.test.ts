@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { commandContract, everyCommandIsGated, ID, resetHarness, untouched, type ValidCall } from "@/features/finance/testing/command-harness";
+import { commandContract, everyCommandIsGated, harness, ID, resetHarness, untouched, type ValidCall } from "@/features/finance/testing/command-harness";
 
 vi.mock("@/lib/auth", async () => (await import("@/features/finance/testing/command-harness")).authMock);
 vi.mock("@/lib/rate-limit", async () => (await import("@/features/finance/testing/command-harness")).rateLimitMock);
@@ -25,6 +25,27 @@ const VALID: ValidCall[] = [
 describe("payables commands", () => {
   commandContract(VALID, /^finance\.payables\.errors\./);
   everyCommandIsGated(commands, ["saveDocument"]);
+
+  it("names the invoice tax the database refused, with the amount due", async () => {
+    harness.rpc = () => ({ data: null, error: { code: "23514", message: "invoice tax", hint: "invoice_tax:gstMismatch:625" } });
+    expect(await commands.postDocument({ kind: "invoice", id: ID })).toEqual({
+      ok: false,
+      error: "finance.payables.errors.invoiceTax.gstMismatch",
+    });
+    harness.rpc = () => ({ data: null, error: { code: "23514", message: "invoice tax", hint: "invoice_tax:qstNotRegistered" } });
+    expect(await commands.postDocument({ kind: "invoice", id: ID })).toEqual({
+      ok: false,
+      error: "finance.payables.errors.invoiceTax.qstNotRegistered",
+    });
+    // An unknown hint falls back to the ordinary refusal.
+    harness.rpc = () => ({ data: null, error: { code: "XX000", message: "boom", hint: "invoice_tax:somethingElse" } });
+    expect(await commands.postDocument({ kind: "invoice", id: ID })).toEqual({ ok: false, error: "finance.payables.errors.post" });
+  });
+
+  it("tells a person who did not draft a bill that they cannot request its approval", async () => {
+    harness.rpc = () => ({ data: null, error: { code: "42501", message: "not the drafter", hint: "bill_request_not_drafter" } });
+    expect(await commands.requestBillApproval(ID)).toEqual({ ok: false, error: "finance.payables.errors.requestNotDrafter" });
+  });
 
   it("refuses malformed input before the database", async () => {
     const results = await Promise.all([

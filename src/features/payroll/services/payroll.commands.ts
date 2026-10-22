@@ -12,6 +12,8 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { parseMoneyToCents } from "@/features/finance/money";
 import { CATEGORY_KEYS, totalsAddUp, type RunCents } from "@/features/payroll/categories";
 import { MAX_RUNS } from "@/features/payroll/parsers";
+import { dbErrorMessage } from "@/lib/db-error";
+import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
 
 /**
  * Payroll actions (#155). Every write is for owners and admins who completed
@@ -27,20 +29,10 @@ const PAYROLL = "/finance/payroll";
 
 type DbError = { code?: string; message: string } | null;
 
-// The payroll and ledger functions raise with sentences written for people;
-// anything else (row-level security, a network failure) gets a generic one.
-const READABLE_CODES = new Set(["22023", "42501", "23505", "23514", "P0002"]);
-
-function dbMessage(error: DbError, fallback: string): string {
-  if (!error) return fallback;
-  if (
-    error.code &&
-    READABLE_CODES.has(error.code) &&
-    !/row-level security|permission denied|violates|duplicate key/i.test(error.message)
-  ) {
-    return error.message;
-  }
-  return fallback;
+// The payroll and ledger functions raise English sentences; the listed ones
+// are shown in the reader's language, anything else as `fallback`.
+function dbMessage(t: TranslateFn, error: DbError, fallback: string): string {
+  return dbErrorMessage(t, error, fallback, { action: "finance.payroll", rules: FINANCE_DB_ERRORS });
 }
 
 /**
@@ -118,7 +110,7 @@ export async function importPayrollRuns(input: unknown): Promise<ImportResult> {
       ...Object.fromEntries(CATEGORY_KEYS.map((k) => [`${k}_cents`, r.cents[k]])),
     })),
   });
-  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.importFailed")) };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.payroll.errors.importFailed")) };
   revalidatePath(PAYROLL, "layout");
   const result = data as { added: number; skipped: number; ids: string[] };
   return { ok: true, added: result.added, skipped: result.skipped, ids: result.ids };
@@ -147,7 +139,7 @@ export async function savePayrollAccountMap(input: unknown): Promise<ActionResul
       credit_account_id: m.creditAccountId,
     })),
   });
-  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.saveMapFailed")) };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.payroll.errors.saveMapFailed")) };
   revalidatePath(PAYROLL, "layout");
   return { ok: true };
 }
@@ -195,7 +187,7 @@ export async function savePayrollAllocation(input: unknown): Promise<ActionResul
   }
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("payroll_save_allocation", { p_run: runId, p_allocation: allocation });
-  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.saveAllocationFailed")) };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.payroll.errors.saveAllocationFailed")) };
   revalidatePath(`${PAYROLL}/${runId}`);
   return { ok: true };
 }
@@ -207,7 +199,7 @@ export async function postPayrollRun(runId: string): Promise<ActionResult & { en
   if (!id.safeParse(runId).success) return { ok: false, error: t("finance.payroll.errors.runNotFound") };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("payroll_post_run", { p_run: runId });
-  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.postFailed")) };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.payroll.errors.postFailed")) };
   revalidatePath(PAYROLL, "layout");
   revalidatePath("/finance/ledger", "layout");
   return { ok: true, entryNumber: data as number };
@@ -231,7 +223,7 @@ export async function reversePayrollRun(input: unknown): Promise<ActionResult> {
     p_entry_date: parsed.data.entryDate,
     p_memo: parsed.data.memo || null,
   });
-  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.reverseFailed")) };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.payroll.errors.reverseFailed")) };
   revalidatePath(PAYROLL, "layout");
   revalidatePath("/finance/ledger", "layout");
   return { ok: true };
@@ -244,7 +236,7 @@ export async function deletePayrollDraft(runId: string): Promise<ActionResult> {
   if (!id.safeParse(runId).success) return { ok: false, error: t("finance.payroll.errors.runNotFound") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("payroll_delete_draft", { p_run: runId });
-  if (error) return { ok: false, error: dbMessage(error, t("finance.payroll.errors.deleteFailed")) };
+  if (error) return { ok: false, error: dbMessage(t, error, t("finance.payroll.errors.deleteFailed")) };
   revalidatePath(PAYROLL, "layout");
   return { ok: true };
 }

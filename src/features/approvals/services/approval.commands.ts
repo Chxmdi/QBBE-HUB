@@ -17,6 +17,9 @@ import {
   submitApprovalSchema,
   withdrawApprovalSchema,
 } from "@/features/approvals/schemas";
+import { dbErrorMessage, knownDbErrorMessage } from "@/lib/db-error";
+import { APPROVAL_DB_ERRORS } from "@/features/approvals/db-error-rules";
+import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
 
 /**
  * Approval writes (#143).
@@ -27,19 +30,27 @@ import {
  * This file validates input and turns refusals into sentences.
  */
 
+const RULES = [...APPROVAL_DB_ERRORS, ...FINANCE_DB_ERRORS];
+
 interface DbError {
   code?: string;
   message?: string;
   hint?: string | null;
 }
 
-/** The database's own messages for refusals are written for people. */
+/**
+ * A refusal in the reader's language. The approval functions (and the finance
+ * bill rules they enforce) raise English sentences; the listed ones are
+ * translated, anything else becomes `fallback` and is logged.
+ */
 function explain(error: DbError, fallback: string, t: TranslateFn): string {
   if (error.hint === "approval_own_bill") return t("finance.approvals.errors.ownBill");
-  if (error.code === "42501" || error.code === "22023") return error.message ?? fallback;
-  if (error.code === "23505") return t("finance.approvals.errors.alreadyWaiting");
-  if (error.code === "23514") return t("finance.approvals.errors.checkAmountProgram");
-  return fallback;
+  const db = { ...error, message: error.message || "" };
+  if (!knownDbErrorMessage(t, db, RULES)) {
+    if (error.code === "23505") return t("finance.approvals.errors.alreadyWaiting");
+    if (error.code === "23514") return t("finance.approvals.errors.checkAmountProgram");
+  }
+  return dbErrorMessage(t, db, fallback, { action: "approvals", rules: RULES });
 }
 
 /** The first validation message, in the requester's language. */
@@ -162,8 +173,8 @@ export async function setApprovalDelegation(input: unknown): Promise<ActionResul
     return {
       ok: false,
       error:
-        error?.code === "23514"
-          ? (error.message ?? t("finance.approvals.away.errors.checkPeopleDates"))
+        error?.code === "23514" && !knownDbErrorMessage(t, error, RULES)
+          ? t("finance.approvals.away.errors.checkPeopleDates")
           : explain(error ?? {}, t("finance.approvals.away.errors.setFailed"), t),
     };
   }

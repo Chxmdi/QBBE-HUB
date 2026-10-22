@@ -147,16 +147,25 @@ test("the API is off with the switch [switch off]", async ({ page }) => {
   }
 });
 
-test("calls nobody authenticated write nothing", async ({ page }) => {
+// Calls nobody authenticated write nothing to the request log, with the API
+// off and with it on. The off half needs a build that lets the switch go off,
+// so it is tagged; a build with every switch forced on runs only the on half.
+async function anonymousCallsLogNothing(page: Page, on: boolean) {
   const count = () => Number(sql(`select count(*) from api_request_log`));
-  for (const on of [false, true]) {
-    setSwitch(on);
-    const before = count();
-    for (let i = 0; i < 20; i += 1) {
-      const response = await page.request.get("/api/v1/me", i % 2 ? { headers: { authorization: `Bearer qbbe_${"x".repeat(43)}` } } : {});
-      expect(response.status()).toBe(on ? 401 : 404);
-    }
-    expect(count(), `switch ${on ? "on" : "off"}`).toBe(before);
+  setSwitch(on);
+  const before = count();
+  for (let i = 0; i < 20; i += 1) {
+    const response = await page.request.get("/api/v1/me", i % 2 ? { headers: { authorization: `Bearer qbbe_${"x".repeat(43)}` } } : {});
+    expect(response.status()).toBe(on ? 401 : 404);
   }
+  expect(count(), `switch ${on ? "on" : "off"}`).toBe(before);
   setSwitch(false);
+}
+
+test("calls nobody authenticated write nothing while the API is off [switch off]", async ({ page }) => {
+  await anonymousCallsLogNothing(page, false);
+});
+
+test("calls nobody authenticated write nothing while the API is on", async ({ page }) => {
+  await anonymousCallsLogNothing(page, true);
 });
