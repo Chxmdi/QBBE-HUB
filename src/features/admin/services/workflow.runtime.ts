@@ -7,6 +7,7 @@ import {
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "@/lib/i18n/config";
 import { createTranslator } from "@/lib/i18n/translate";
+import { logEvent } from "@/lib/server-log";
 
 /**
  * Runs the workflow rules that match an event, and records what each one did.
@@ -172,9 +173,7 @@ export async function fireWorkflows(
     const { error } = await supabase.from("workflow_execution").insert(executions);
     // History is valuable, but not at the cost of the thing it describes.
     if (error) {
-      console.error(
-        JSON.stringify({ event: "workflow.history_write_failed", error: error.message }),
-      );
+      logEvent("workflow.history_write_failed", { error: error.message }, "error");
     }
   }
 }

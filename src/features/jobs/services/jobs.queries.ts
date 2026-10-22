@@ -1,7 +1,8 @@
 import { MissingEnvError } from "@/lib/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
-import { nextRun } from "./cron";
+import { nextRun, scheduleIntervalMs } from "./cron";
+import { isOverdue } from "./run-health";
 
 /**
  * Everything Admin → Jobs needs.
@@ -37,6 +38,8 @@ export interface JobHealth {
   lastRun: JobRunSummary | null;
   nextRunAt: string | null;
   failuresLast24h: number;
+  /** Enabled, and no start for more than three schedule intervals. */
+  overdue: boolean;
 }
 
 export interface QueueHealth {
@@ -92,6 +95,34 @@ function toSummary(row: RunRow): JobRunSummary {
   };
 }
 
+interface SummaryRow {
+  job_name: string;
+  last_run_id: string;
+  last_status: RunRow["status"];
+  last_started_at: string;
+  last_finished_at: string | null;
+  last_duration_ms: number | null;
+  last_processed_count: number;
+  last_failed_count: number;
+  last_error: string | null;
+  last_metadata: Record<string, unknown> | null;
+  failures_24h: number;
+}
+
+export function summaryToRun(row: SummaryRow): JobRunSummary {
+  return {
+    id: row.last_run_id,
+    status: row.last_status,
+    startedAt: row.last_started_at,
+    finishedAt: row.last_finished_at,
+    durationMs: row.last_duration_ms,
+    processedCount: row.last_processed_count,
+    failedCount: row.last_failed_count,
+    error: row.last_error,
+    metadata: row.last_metadata ?? {},
+  };
+}
+
 interface RpcResult {
   data: unknown;
   error: { message: string } | null;
@@ -105,14 +136,17 @@ interface RpcResult {
 async function readQueueMetrics(): Promise<{
   queueResult: RpcResult;
   deadLetterResult: RpcResult;
+  databaseBytes: number | null;
 }> {
   try {
     const service = createSupabaseServiceClient();
-    const [queueResult, deadLetterResult] = await Promise.all([
+    const [queueResult, deadLetterResult, snapshot] = await Promise.all([
       service.rpc("job_queue_health"),
       service.rpc("job_queue_dead_letters", { p_limit: 20 }),
+      service.rpc("ops_health_snapshot"),
     ]);
-    return { queueResult, deadLetterResult };
+    const bytes = (snapshot.data as { database_bytes?: number } | null)?.database_bytes;
+    return { queueResult, deadLetterResult, databaseBytes: typeof bytes === "number" ? bytes : null };
   } catch (error) {
     const message =
       error instanceof MissingEnvError
@@ -123,6 +157,7 @@ async function readQueueMetrics(): Promise<{
     return {
       queueResult: { data: null, error: { message } },
       deadLetterResult: { data: null, error: { message } },
+      databaseBytes: null,
     };
   }
 }
@@ -133,44 +168,43 @@ export async function getJobHealth(): Promise<{
   queues: QueueHealth[];
   deadLetters: DeadLetter[];
   queueError: string | null;
+  /** Size of the whole database, for the size bar (the Free plan stops writes at 500 MB). */
+  databaseBytes: number | null;
 }> {
   const supabase = await createSupabaseServerClient();
-  const since = new Date(Date.now() - 86_400_000).toISOString();
 
-  const [definitions, runs, queueMetrics] = await Promise.all([
+  // The newest run of every job and its real 24-hour failure count, from one
+  // call (public.job_health_summary). Reading the newest N runs across all
+  // jobs instead covered about half an hour on a normal day, so daily jobs
+  // read "Never run" and failures were undercounted.
+  const [definitions, summary, failures, queueMetrics] = await Promise.all([
     supabase
       .from("job_definition")
       .select("name, description, schedule, queue, enabled")
       .order("name"),
+    supabase.rpc("job_health_summary"),
+    // A run that returned normally having dropped part of its batch counts as
+    // a failure too: the column answers "did the work happen".
     supabase
       .from("job_run")
       .select(
         "id, job_name, status, started_at, finished_at, duration_ms, processed_count, failed_count, error, metadata",
       )
+      .or("status.eq.failed,failed_count.gt.0")
       .order("started_at", { ascending: false })
-      .limit(300),
+      .limit(10),
     readQueueMetrics(),
   ]);
 
-  const { queueResult, deadLetterResult } = queueMetrics;
-
-  const runRows = (runs.data ?? []) as unknown as RunRow[];
+  const { queueResult, deadLetterResult, databaseBytes } = queueMetrics;
+  // Failing loudly beats every job reading "Never run" (for example when the
+  // app is deployed before the migration that adds job_health_summary).
+  const readError = definitions.error ?? summary.error ?? failures.error;
+  if (readError) throw new Error(`Could not read job health: ${readError.message}`);
   const now = new Date();
 
-  const latestByJob = new Map<string, RunRow>();
-  const failuresByJob = new Map<string, number>();
-
-  // A run that returned normally having dropped part of its batch counts as a
-  // failure here. The column answers "did the work happen", and a handler that
-  // reports its own per-item failures would otherwise never reach this page.
-  const droppedWork = (row: RunRow) => row.status === "failed" || row.failed_count > 0;
-
-  for (const row of runRows) {
-    if (!latestByJob.has(row.job_name)) latestByJob.set(row.job_name, row);
-    if (droppedWork(row) && row.started_at >= since) {
-      failuresByJob.set(row.job_name, (failuresByJob.get(row.job_name) ?? 0) + 1);
-    }
-  }
+  const latestByJob = new Map<string, SummaryRow>();
+  for (const row of (summary.data ?? []) as SummaryRow[]) latestByJob.set(row.job_name, row);
 
   const jobs: JobHealth[] = ((definitions.data ?? []) as DefinitionRow[]).map(
     (definition) => {
@@ -182,17 +216,18 @@ export async function getJobHealth(): Promise<{
         schedule: definition.schedule,
         queue: definition.queue,
         enabled: definition.enabled,
-        lastRun: last ? toSummary(last) : null,
+        lastRun: last ? summaryToRun(last) : null,
         nextRunAt: next ? next.toISOString() : null,
-        failuresLast24h: failuresByJob.get(definition.name) ?? 0,
+        failuresLast24h: last?.failures_24h ?? 0,
+        overdue: isOverdue(definition.enabled, last?.last_started_at, scheduleIntervalMs(definition.schedule, now), now),
       };
     },
   );
 
-  const recentFailures = runRows
-    .filter(droppedWork)
-    .slice(0, 10)
-    .map((row) => ({ ...toSummary(row), jobName: row.job_name }));
+  const recentFailures = ((failures.data ?? []) as unknown as RunRow[]).map((row) => ({
+    ...toSummary(row),
+    jobName: row.job_name,
+  }));
 
   const queues: QueueHealth[] = (
     (queueResult.data ?? []) as {
@@ -238,5 +273,6 @@ export async function getJobHealth(): Promise<{
     // Surfaced rather than swallowed: an admin needs to know the difference
     // between "no queued work" and "could not read the queues".
     queueError: queueResult.error?.message ?? deadLetterResult.error?.message ?? null,
+    databaseBytes,
   };
 }

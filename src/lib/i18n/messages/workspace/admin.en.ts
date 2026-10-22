@@ -283,6 +283,7 @@ export const adminEn = {
           zeffy_connected: "Zeffy connected",
           zeffy_sync_requested: "Zeffy sync requested",
           mfa_enrollment_completed: "mfa enrollment completed",
+          mfa_break_glass_reset: "authenticators reset by an operator (break-glass)",
           gift_list_viewed: "gift list viewed",
           user_provisioned: "user provisioned",
           account_created: "account created",

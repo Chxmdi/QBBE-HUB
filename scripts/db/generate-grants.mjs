@@ -1,0 +1,229 @@
+// Print a migration that grants the API roles exactly the access they hold on
+// the local database today, without relying on Supabase's automatic grants.
+//
+//   node scripts/db/generate-grants.mjs <version> > supabase/migrations/<version>_explicit_api_grants.sql
+//
+// The output restates every grant as it stands, so it must be regenerated
+// whenever a migration ordered before it is added or changed (for example
+// when another branch merges): otherwise it would undo that migration's
+// grants. Its header records which earlier migrations it was built from, and
+// tests/unit/migration-grants.test.ts fails when they no longer match.
+//
+// To regenerate (the API roles' grants must be read from a database built
+// with Supabase's automatic grants on and only the earlier migrations):
+//   1. set auto_expose_new_tables = true in supabase/config.toml;
+//   2. move this migration and every later one out of supabase/migrations;
+//   3. npx supabase stop && npx supabase start && npx supabase db reset;
+//   4. node scripts/db/generate-grants.mjs 20261119100000 > /tmp/grants.sql
+//      (or, to see what would change and stop: add
+//      --check supabase/migrations/20261119100000_explicit_api_grants.sql,
+//      which prints each table, column, sequence or function whose grants in
+//      the database differ from the file, and exits 1 if any do);
+//   5. put the moved files and config.toml back, copy /tmp/grants.sql over
+//      this migration (diff it first: git diff --no-index <old> /tmp/grants.sql),
+//      reset again with automatic grants off and run npm run test:db.
+//
+// Run it against a local database built with the automatic grants still on
+// (that is the state the app was tested against), then review the output.
+//
+// Rules applied to what the database holds now, per public table and view:
+// - authenticated and service_role keep SELECT, INSERT, UPDATE and DELETE where
+//   they have them today. TRUNCATE, REFERENCES, TRIGGER and MAINTAIN are never
+//   granted: the app does not use them and TRUNCATE ignores row-level security.
+// - anon keeps only what a policy written for anon allows (signed-out visitors
+//   read published pages and nothing else). Row-level security stays the
+//   second barrier, not the only one.
+// Sequences: USAGE and SELECT for authenticated and service_role where held.
+// Functions: the EXECUTE grants held today, unchanged (migrations already set
+// them function by function).
+
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const VERSION = process.argv[2];
+const CHECK_FILE = process.argv[3] === "--check" ? process.argv[4] : null;
+if (!/^\d{14}$/.test(VERSION ?? "") || (process.argv[3] && !CHECK_FILE)) {
+  console.error("Usage: node scripts/db/generate-grants.mjs <14-digit version> [--check <existing migration file>]");
+  process.exit(1);
+}
+
+/** The object each grant or revoke statement is about, e.g. "function public.f(text)". */
+function objectOf(line) {
+  const m = /\son\s+(table|sequence|function)\s+(\S+?)\s+(?:to|from)\s/.exec(line);
+  if (!m) return null;
+  const column = /^grant \w+ \(([^)]+)\)/.exec(line);
+  return `${m[1]} ${m[2]}${column ? ` column ${column[1]}` : ""}`;
+}
+
+/** Objects whose statements differ between two generated files. */
+export function grantDifferences(expectedText, actualText) {
+  const group = (text) => {
+    const map = new Map();
+    for (const line of text.split("\n")) {
+      const object = objectOf(line);
+      if (!object) continue;
+      map.set(object, [...(map.get(object) ?? []), line].sort());
+    }
+    return map;
+  };
+  const a = group(expectedText);
+  const b = group(actualText);
+  const out = [];
+  for (const object of new Set([...a.keys(), ...b.keys()])) {
+    const left = (a.get(object) ?? []).join("\n");
+    const right = (b.get(object) ?? []).join("\n");
+    if (left !== right) out.push({ object, file: a.get(object) ?? [], database: b.get(object) ?? [] });
+  }
+  return out.sort((x, y) => x.object.localeCompare(y.object));
+}
+
+/** Fingerprint of every migration ordered before VERSION (names and contents). */
+export function earlierMigrationsFingerprint(dir, version) {
+  const files = readdirSync(dir).filter((f) => f.endsWith(".sql") && f.split("_")[0] < version).sort();
+  const hash = createHash("sha256");
+  for (const f of files) hash.update(f).update("\0").update(readFileSync(join(dir, f))).update("\0");
+  return `${files.length} ${hash.digest("hex").slice(0, 16)}`;
+}
+
+const CONTAINER = "supabase_db_workspace";
+const ROLES = ["anon", "authenticated", "service_role"];
+const TABLE_PRIVS = { r: "select", a: "insert", w: "update", d: "delete" };
+
+const probe = spawnSync("docker", ["info"], { stdio: "ignore" });
+const sudo = probe.status !== 0;
+function query(sql) {
+  const args = ["exec", "-i", CONTAINER, "psql", "-U", "postgres", "-d", "postgres", "-At", "-F", "\t", "-c", sql];
+  const result = spawnSync(sudo ? "sudo" : "docker", sudo ? ["docker", ...args] : args, { encoding: "utf8" });
+  if (result.status !== 0) {
+    console.error(result.stderr || `psql exited ${result.status}`);
+    process.exit(1);
+  }
+  return result.stdout
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.split("\t"));
+}
+
+/** Privilege letters each grantee holds in an aclitem[] text such as {anon=r/postgres}. */
+function parseAcl(acl) {
+  const held = new Map();
+  for (const item of (acl || "").replace(/^\{|\}$/g, "").split(",").filter(Boolean)) {
+    const [grantee, rest] = item.replace(/"/g, "").split("=");
+    held.set(grantee === "" ? "public" : grantee, rest.split("/")[0].replace(/\*/g, ""));
+  }
+  return held;
+}
+
+const quote = (name) => (/^[a-z_][a-z0-9_]*$/.test(name) ? name : `"${name.replace(/"/g, '""')}"`);
+
+// Commands a policy written for anon allows, per table.
+const anonCommands = new Map();
+for (const [table, cmd] of query(
+  "select tablename, cmd from pg_policies where schemaname = 'public' and 'anon' = any(roles) order by 1, 2",
+)) {
+  const set = anonCommands.get(table) ?? new Set();
+  for (const c of cmd === "ALL" ? ["select", "insert", "update", "delete"] : [cmd.toLowerCase()]) set.add(c);
+  anonCommands.set(table, set);
+}
+
+const out = [];
+out.push(
+  "-- Generated by scripts/db/generate-grants.mjs; see that file for the rules.",
+  `-- generated-after-migrations: ${earlierMigrationsFingerprint(join("supabase", "migrations"), VERSION)}`,
+  "-- Grants the API roles explicitly what they hold today, then stops new",
+  "-- objects in schema public from being granted to them automatically.",
+  "-- Every later migration that creates a table, view, sequence or function in",
+  "-- public must grant access itself (tests/unit/migration-grants.test.ts).",
+  "",
+  "grant usage on schema public to anon, authenticated, service_role;",
+  "",
+);
+
+const relations = query(
+  "select c.relname, c.relkind, coalesce(c.relacl::text, '') from pg_class c " +
+    "where c.relnamespace = 'public'::regnamespace and c.relkind in ('r','p','v','m','f') " +
+    "and not exists (select 1 from pg_depend d where d.objid = c.oid and d.deptype = 'e') order by 1",
+);
+out.push("-- Tables and views");
+for (const [name, , acl] of relations) {
+  const held = parseAcl(acl);
+  out.push(`revoke all on table public.${quote(name)} from anon, authenticated, service_role;`);
+  for (const role of ROLES) {
+    const letters = held.get(role) ?? "";
+    let privs = Object.entries(TABLE_PRIVS)
+      .filter(([letter]) => letters.includes(letter))
+      .map(([, priv]) => priv);
+    if (role === "anon") privs = privs.filter((p) => anonCommands.get(name)?.has(p));
+    if (privs.length) out.push(`grant ${privs.join(", ")} on table public.${quote(name)} to ${role};`);
+  }
+}
+
+// Column grants (for example "update (muted_level)"). The table-level revoke
+// above also removes these, so they are restated after it.
+out.push("", "-- Column grants");
+for (const [table, column, acl] of query(
+  "select c.relname, a.attname, a.attacl::text from pg_attribute a join pg_class c on c.oid = a.attrelid " +
+    "where c.relnamespace = 'public'::regnamespace and c.relkind in ('r','p','v','m','f') " +
+    "and a.attnum > 0 and not a.attisdropped and a.attacl is not null order by 1, 2",
+)) {
+  const held = parseAcl(acl);
+  for (const role of ROLES) {
+    const letters = held.get(role) ?? "";
+    let privs = Object.entries(TABLE_PRIVS)
+      .filter(([letter]) => letter !== "d" && letters.includes(letter))
+      .map(([, priv]) => priv);
+    if (role === "anon") privs = privs.filter((p) => anonCommands.get(table)?.has(p));
+    for (const priv of privs) out.push(`grant ${priv} (${quote(column)}) on table public.${quote(table)} to ${role};`);
+  }
+}
+
+out.push("", "-- Sequences");
+for (const [name, acl] of query(
+  "select c.relname, coalesce(c.relacl::text, '') from pg_class c " +
+    "where c.relnamespace = 'public'::regnamespace and c.relkind = 'S' order by 1",
+)) {
+  const held = parseAcl(acl);
+  out.push(`revoke all on sequence public.${quote(name)} from anon, authenticated, service_role;`);
+  for (const role of ["authenticated", "service_role"]) {
+    const letters = held.get(role) ?? "";
+    const privs = [letters.includes("U") && "usage", letters.includes("r") && "select"].filter(Boolean);
+    if (privs.length) out.push(`grant ${privs.join(", ")} on sequence public.${quote(name)} to ${role};`);
+  }
+}
+
+out.push("", "-- Functions");
+for (const [signature, acl] of query(
+  "select p.oid::regprocedure::text, coalesce(p.proacl::text, '') from pg_proc p " +
+    "where p.pronamespace = 'public'::regnamespace and p.prokind in ('f','p') " +
+    "and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e') order by 1",
+)) {
+  const held = parseAcl(acl);
+  const fn = `public.${signature}`;
+  out.push(`revoke all on function ${fn} from public, anon, authenticated, service_role;`);
+  // No ACL at all means Postgres's built-in default, which is EXECUTE for everyone.
+  const grantees = acl === "" ? ["public"] : ["public", ...ROLES].filter((r) => held.get(r)?.includes("X"));
+  if (grantees.length) out.push(`grant execute on function ${fn} to ${grantees.join(", ")};`);
+}
+
+out.push(
+  "",
+  "-- New objects in public are no longer granted to the API roles by default.",
+  "-- Postgres still lets everyone (PUBLIC) execute a new function; that default",
+  "-- cannot be changed per schema, so each migration revokes it explicitly.",
+  "alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated, service_role;",
+  "alter default privileges for role postgres in schema public revoke all on sequences from anon, authenticated, service_role;",
+  "alter default privileges for role postgres in schema public revoke all on functions from anon, authenticated, service_role;",
+  "",
+);
+
+if (CHECK_FILE) {
+  const differences = grantDifferences(readFileSync(CHECK_FILE, "utf8"), out.join("\n"));
+  for (const d of differences) {
+    console.error(`${d.object}\n  file:     ${d.file.filter((l) => l.startsWith("grant")).join(" | ") || "(no grant)"}\n  database: ${d.database.filter((l) => l.startsWith("grant")).join(" | ") || "(no grant)"}`);
+  }
+  console.error(differences.length ? `${differences.length} object(s) differ: regenerate the migration.` : "The file matches the database.");
+  process.exit(differences.length ? 1 : 0);
+}
+process.stdout.write(out.join("\n"));

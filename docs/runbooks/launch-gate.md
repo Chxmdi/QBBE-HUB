@@ -4,11 +4,9 @@ The approved seven-workstream plan supersedes earlier pilot exemptions. The
 finish line is verified staging with all PRD v2 P0/P1 and retained integrations
 accepted. Production publishing is a separate release decision.
 
-Authoritative live records:
-
-- [Acceptance matrix](../acceptance-matrix.md): every PRD criterion and integration.
-- [Execution journal](../execution-journal.md): active feature, prompts and next action.
-- [Readiness report](../readiness-report.md): release evidence and blockers.
+Current launch status, blockers and the go/no-go decision:
+[docs/STATUS.md](../STATUS.md). The acceptance matrix, execution journal and
+readiness report are historical records of earlier phases.
 
 No checklist entry is verified merely because it has a CI job or runbook.
 Require a passing run and artifact at the candidate commit. Missing QBBE input

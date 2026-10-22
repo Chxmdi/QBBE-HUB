@@ -19,6 +19,7 @@ import { isLocale } from "@/lib/i18n/config";
 import { createTranslator } from "@/lib/i18n/translate";
 import { ack, deadLetter, enqueue, readBatch } from "../queue";
 import { PartialJobFailure, type JobContext, type JobResult } from "../runner";
+import { logEvent } from "@/lib/server-log";
 
 /**
  * Drains the notifications queue.
@@ -662,13 +663,7 @@ export async function drainNotifications({
     if (message.readCount > definition.max_attempts) {
       handled = { disposition: { kind: "dead-letter" }, outcome: "failed" };
       poisoned += 1;
-      console.error(
-        JSON.stringify({
-          event: "job.notification.poisoned",
-          msgId: message.msgId,
-          readCount: message.readCount,
-        }),
-      );
+      logEvent("job.notification.poisoned", { msgId: message.msgId, readCount: message.readCount }, "error");
     } else {
       try {
         handled = await handleMessage(db, payload, definition, now, orgNames);
@@ -676,14 +671,11 @@ export async function drainNotifications({
         // One message's failure is its own. The rest of the batch still runs,
         // and this one comes back when the visibility timeout lapses.
         failed += 1;
-        console.error(
-          JSON.stringify({
-            event: "job.notification.failed",
-            msgId: message.msgId,
-            readCount: message.readCount,
-            error: cause instanceof Error ? cause.message : String(cause),
-          }),
-        );
+        logEvent("job.notification.failed", {
+          msgId: message.msgId,
+          readCount: message.readCount,
+          error: cause instanceof Error ? cause.message : String(cause),
+        }, "error");
         continue;
       }
     }

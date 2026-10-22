@@ -6,6 +6,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { isDownloadable } from "@/features/exports/schemas";
 import type { ExportStatus } from "@/features/exports/schemas";
 import { getT } from "@/lib/i18n/server";
+import { logEvent, requestIdOf } from "@/lib/server-log";
 
 /**
  * Handing over a finished export.
@@ -121,9 +122,7 @@ export async function GET(
     });
 
   if (error || !signed?.signedUrl) {
-    console.error(
-      JSON.stringify({ event: "export.sign_failed", id, error: error?.message }),
-    );
+    logEvent("export.sign_failed", { id, error: error?.message, requestId: requestIdOf(_request) }, "error");
     return NextResponse.json(
       { error: t("exports.errors.prepareFailed") },
       { status: 500 },

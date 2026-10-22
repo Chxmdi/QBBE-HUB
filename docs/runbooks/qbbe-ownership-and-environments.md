@@ -143,7 +143,10 @@ anything missing before going further.
 
 *If transfer is not available on your plan:* create the project fresh under
 QBBE, apply the schema with `npx supabase db push`, and treat it as a new
-environment rather than patching the old one.
+environment rather than patching the old one. The migrations grant the API
+roles their access explicitly, so a new project works whether or not
+"Automatically expose new tables" is on; check it with step 2.6 of
+[staging-provisioning.md](staging-provisioning.md).
 
 ---
 

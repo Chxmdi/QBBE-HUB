@@ -1099,7 +1099,7 @@ nothing is shown, and nothing is saved in `~/.zsh_history` or
 `~/.bash_history`. (An alternative: put the `export` lines in a file only you
 can read, made with `umask 077`, load it with `set -a; source <file>; set
 +a`, and delete it at the end.) If you typed a secret on a command line by
-mistake, say so in step 9.
+mistake, say so in step 10.
 
 1. **Declare the incident** (SEV-1, [Incident severity](#incident-severity)).
    Decide which copy to restore: the newest green **Backup** run from before
@@ -1316,7 +1316,7 @@ mistake, say so in step 9.
       file's own sha256. If it stops with `files are missing or do not
       match the manifest` (that night's new blobs may not have been
       stored), run it again with `ALLOW_MISSING_FILES=1` in front.
-   4. At the end, delete the folder with the rest (step 9): `rm -rf
+   4. At the end, delete the folder with the rest (step 10): `rm -rf
       ~/qbbe-restore-noindex`, and `unset AWS_CONFIG_FILE
       AWS_SHARED_CREDENTIALS_FILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY`.
 
@@ -1365,8 +1365,16 @@ mistake, say so in step 9.
    `SUPABASE_SERVICE_ROLE_KEY` (a new dedicated `backup` secret key of the
    new project); and the repository variable
    `PRODUCTION_SUPABASE_PROJECT_REF`. Then **Actions**, **Deploy**,
-   environment `production`. Its migration step should say the database is
-   up to date (the migration history was restored).
+   environment `production`. You should see:
+   - the environment check pass. If it says `APP_ENV's ... belongs to
+     Supabase project <old ref>`, a key was pasted from the old project:
+     copy it again from the new project's **Project Settings**, **API Keys**;
+   - the migration step say the database is up to date (the migration
+     history was restored);
+   - after the release, `https://<site>/api/health/ready` answer
+     `"ready":true` and `https://<site>/api/health/jobs` answer
+     `"jobRunner":"ready"`. A `"database":"failed"` means the service role
+     key in `APP_ENV` is not the new project's.
 
    The first nightly backup after this downloads every file from the new
    project once (restored files have a new version and date): expect the
@@ -1381,11 +1389,20 @@ mistake, say so in step 9.
    evidence, instead run `select cron.unschedule(jobid) from cron.job;` in
    its SQL editor; you should see one row per job. The new `CRON_JOB_SECRET`
    from point 5 also makes any call it still sends fail.
-8. **Tell people** they need to sign in again. Passwords still work. If an
+8. **Check the integrations.** Gmail, Calendar, Drive and Zeffy
+   connections come back with the backup, including their stored access
+   tokens. Open **Admin**, **Integrations** after the first 15-minute sync.
+   You should see each connected integration marked *Connected* with a
+   recent last sync. A connection marked *Authentication expired* (someone
+   disconnected it or revoked Hub's access after the backup was made) must be
+   reconnected by its owner from the same page. Changes made in Gmail,
+   Calendar, Drive or Zeffy between the backup and the restore are picked up
+   by the next sync; nothing has to be entered again.
+9. **Tell people** they need to sign in again. Passwords still work. If an
    administrator's authenticator code is refused (see the MFA warning in
    [What is backed up](#what-is-backed-up-and-what-is-not)), follow **Lost
    administrator MFA factor** below for that person.
-9. **Clean up the custodian's computer:**
+10. **Clean up the custodian's computer:**
    ```sh
    rm -rf ~/qbbe-restore ~/qbbe-backup-key.txt
    unset PGPASSWORD TARGET_SERVICE_ROLE_KEY BACKUP_S3_ACCESS_KEY_ID BACKUP_S3_SECRET_ACCESS_KEY
@@ -1437,7 +1454,7 @@ change).
    Do not use *Forgot password* or invitations on the scratch project:
    Supabase would email real people.
 4. Delete the scratch project (**Project Settings**, **General**, **Delete
-   project**), resume staging if you paused it, and do Restore step 9 (delete
+   project**), resume staging if you paused it, and do Restore step 10 (delete
    the downloaded files and the key file).
 5. Add a row to the drill record below with the times the script printed.
 
@@ -1639,7 +1656,9 @@ Node 22, `psql`), it needs moto's S3 server (`pip install 'moto[server]'`).
   access; follow the documented provider recovery process. Use two named
   administrators where the free plan supports them, otherwise designate a
   separate recovery custodian (ENV-002).
-- **Lost administrator MFA factor**: verify the person's identity out of band
+- **Lost administrator MFA factor**: follow
+  [account-recovery.md](account-recovery.md) (identity check, two approvers,
+  `scripts/ops/reset-admin-mfa.mjs` or the dashboard). In short: verify the person's identity out of band
   and require approval from a second named administrator or the recovery
   custodian. From a server-only recovery tool or the Supabase dashboard, use
   the Auth admin factor-deletion operation for the exact user and factor; never
@@ -1652,9 +1671,10 @@ Node 22, `psql`), it needs moto's S3 server (`pip install 'moto[server]'`).
 
 ## Incident severity
 
-Use the SEV-1..4 ladder from the master spec (§14.3). SEV-1 (data exposure,
-sign-in outage, corruption) requires immediate leadership notification and
-an entry in the incident register.
+Use the SEV-1 to SEV-4 ladder in [incident-response.md](incident-response.md#severity).
+A restore is SEV-1 (data loss, corruption or a sign-in outage): it requires
+immediate leadership notification and an entry in the incident register
+([incident-response.md](incident-response.md#the-incident-register)).
 
 ## Files
 

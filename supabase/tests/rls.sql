@@ -95,6 +95,21 @@ begin
 end;
 $$;
 
+-- True when running the statement fails for lack of a privilege. Signed-out
+-- visitors hold no grant on most tables (20261119100000_explicit_api_grants),
+-- so reading one is refused outright instead of returning no rows.
+create or replace function tests.refused(statement text)
+returns boolean
+language plpgsql
+as $$
+begin
+  execute statement;
+  return false;
+exception when insufficient_privilege then
+  return true;
+end;
+$$;
+
 grant usage on schema tests to anon, authenticated, postgres;
 grant execute on all functions in schema tests to anon, authenticated, postgres;
 

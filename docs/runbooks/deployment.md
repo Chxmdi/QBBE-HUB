@@ -140,14 +140,14 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
 
 `main` is the release branch and the only one production deploys from.
 
-**Current state: the protection is not applied.** As of the 2026-09 requirement
-audit, `main` is marked protected but
-`required_status_checks.enforcement_level` is `"off"` with zero contexts and
-zero rulesets — so **no status check is required to merge**, and a pull request
-with `Verify` and `Database security` both red can be merged. Three merges have
-landed on `main` with zero reviews. This section previously described the
-settings as though they were in place; they are not, and the sentence "there is
-no path to production that skips it" was false.
+**Current state (pre-launch audit, 2026-10):** a ruleset named `main: require
+CI` is applied to `main`, but it requires only **Verify** and **Database
+security**: it predates the longer list in `scripts/protect-main.sh`, which
+was changed and never re-applied. Until the script is run again, a pull
+request can merge with a leaked secret, a high-severity dependency or a broken
+Dockerfile, and no approval is required. Check the live rules with
+`gh api repos/Chxmdi/QBBE-HUB/rules/branches/main`; once re-applied they list
+the seven checks below.
 
 Apply it with:
 
@@ -159,7 +159,10 @@ The script is re-runnable, updates in place, and prints the live rules
 afterwards so the result is verified rather than assumed. It sets:
 
 - A pull request required before merging.
-- Status checks required to pass: **Verify** and **Database security**.
+- Status checks required to pass: **Verify**, **Database security**,
+  **Dependency audit**, **CodeQL**, **Secret scan**, **Dependency review** and
+  **Container image** (the only check that builds the Dockerfile; it adds 5 to
+  10 minutes to every pull request).
 - No force pushes, no deletion of `main`.
 
 Two deliberate departures from the specification's wording, both recorded here
@@ -191,7 +194,16 @@ Two gates exist specifically to catch drift that only shows up at runtime:
   can differ between a laptop and CI. Enforced by
   `tests/unit/migration-filenames.test.ts`, which also pins the naming pattern
   and checks that lexical order matches numeric order. Until 2026-09-01 this
-  paragraph described a gate that did not exist.
+  paragraph described a gate that did not exist. It also fails when a new
+  migration's version does not sort after every migration in
+  `tests/unit/migration-baseline.json`: applied versions run weeks ahead of the
+  calendar, so a file named with today's timestamp would make `db push` refuse
+  the deploy. Name a new migration after the newest version on `main` (see
+  AGENTS.md, "Migration versions"); never use `db push --include-all`.
+- **Every new public table, view, sequence and function states its access** —
+  Supabase's automatic grants are off, so an ungranted table answers
+  "permission denied" to every signed-in page. Enforced by
+  `tests/unit/migration-grants.test.ts`.
 - **Every registered job has a handler** — a `job_definition` row without a
   handler is a schedule firing into nothing; a handler without a row never runs.
 
@@ -208,7 +220,11 @@ Two gates exist specifically to catch drift that only shows up at runtime:
   ```sql
   select version, name from supabase_migrations.schema_migrations order by version;
   ```
-- Ship policies/indexes in the same migration as the tables they protect.
+- Ship policies/indexes in the same migration as the tables they protect,
+  and the grants: `grant select, insert, update, delete on public.<table> to
+  authenticated, service_role` (only what is needed), and for a function
+  `revoke all on function public.<f>(...) from public, anon` then `grant
+  execute ... to <callers>`.
 - `supabase db push` in CI/CD or manually by an admin — no undocumented
   dashboard edits in production.
 

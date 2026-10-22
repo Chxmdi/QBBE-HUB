@@ -65,7 +65,8 @@ read -r -d '' BODY <<'JSON' || true
           { "context": "Dependency audit" },
           { "context": "CodeQL" },
           { "context": "Secret scan" },
-          { "context": "Dependency review" }
+          { "context": "Dependency review" },
+          { "context": "Container image" }
         ]
       }
     }

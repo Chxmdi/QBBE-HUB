@@ -1,6 +1,7 @@
 # ADR-002: Postgres RLS is the authorization boundary
 
-Status: Accepted
+Status: Accepted; the service role clause is superseded by
+[ADR-004](ADR-004-service-role-uses.md) (2026-10-22)
 Date: 2026-08-13
 Owners: QBBE Hub engineering
 
@@ -20,7 +21,9 @@ be the only gate.
   `is_conversation_member`) avoid recursive policy evaluation and keep the
   rules auditable in one place (AUTH-009).
 - The application uses only the anon key in request handling; service-role
-  credentials are reserved for future server-only workers.
+  credentials are reserved for future server-only workers. (Superseded: the
+  reviewed exceptions, each with the check that stands in for RLS, are listed
+  in [ADR-004](ADR-004-service-role-uses.md).)
 - Global search is a SECURITY INVOKER SQL function so RLS filters results —
   search can never leak titles/snippets of unauthorized records (P0-SRC-02).
 

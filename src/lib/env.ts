@@ -53,3 +53,59 @@ export function appUrl(): string {
 export function absoluteUrl(path: string): string {
   return `${appUrl()}${path.startsWith("/") ? path : `/${path}`}`;
 }
+
+/**
+ * The Supabase project a legacy (JWT) API key belongs to, from its `ref`
+ * claim, or null for keys that carry none (new-style sb_ keys, local keys).
+ * Used only to catch a key pasted from the wrong project; never verifies it.
+ */
+export function keyProjectRef(key: string): string | null {
+  const payload = key.split(".")[1];
+  if (!payload) return null;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { ref?: unknown };
+    return typeof claims.ref === "string" ? claims.ref : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Settings a deployed server cannot work without, checked once at start-up
+ * (src/instrumentation.ts) and by /api/health/ready. Returns one plain
+ * sentence per problem and never a value, so the result is safe to log.
+ */
+export function serverEnvProblems(env: Record<string, string | undefined> = process.env): string[] {
+  const problems: string[] = [];
+  const url = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  let host = "";
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    problems.push("NEXT_PUBLIC_SUPABASE_URL is missing or not a URL.");
+  }
+  for (const name of ["NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"]) {
+    if (!env[name]) problems.push(`${name} is not set.`);
+  }
+  if ((env.CRON_JOB_SECRET ?? "").length < 32) problems.push("CRON_JOB_SECRET is missing or shorter than 32 characters.");
+  // Deployed sites are served over https; a local run may use http.
+  const addressShape = env.QBBE_ENV ? /^https:\/\/[^/]+\/?$/ : /^https?:\/\/[^/]+\/?$/;
+  if (!addressShape.test(env.NEXT_PUBLIC_APP_URL ?? "")) problems.push("NEXT_PUBLIC_APP_URL must be this site's address (https:// once deployed).");
+
+  // A hosted project's address names its ref; a JWT key names the project it
+  // was issued for. They must agree.
+  const projectRef = /^([a-z0-9]{20})\.supabase\.co$/.exec(host)?.[1];
+  if (projectRef) {
+    for (const name of ["NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"]) {
+      const ref = keyProjectRef(env[name] ?? "");
+      if (ref && ref !== projectRef) problems.push(`${name} belongs to another Supabase project than NEXT_PUBLIC_SUPABASE_URL.`);
+    }
+  }
+  return problems;
+}
+
+/**
+ * True on a deployed server (QBBE_ENV is set by deploy/server/compose.app.yaml).
+ * Local development, CI builds and tests leave it unset.
+ */
+export const isDeployedEnvironment = (env: Record<string, string | undefined> = process.env) => Boolean(env.QBBE_ENV);

@@ -3,6 +3,15 @@ import type { opsEn } from "./ops.en";
 /** Français québécois — jobs, retention, records (#141). À faire réviser. */
 export const opsFrCA: typeof opsEn = {
   jobs: {
+    opsAlert: {
+      overdue: "La tâche planifiée {job} ne s’exécute plus",
+      failing: "La tâche planifiée {job} a échoué {count} fois de suite",
+      queue: "Du travail attend depuis {minutes} minutes dans la file {queue}",
+      database: "La base de données atteint {percent} % de sa limite de {limit} Mo",
+      refusals: "{count} appels {source} ont été refusés dans la dernière heure",
+      body: "Ouvrez Administration > Tâches planifiées pour les détails. Les téléversements, les courriels, les synchronisations ou d’autres travaux de fond peuvent être touchés jusqu’à ce que ce soit réglé.",
+    },
+    databaseSize: "Taille de la base de données : {used} Mo sur {limit} Mo ({percent} %)",
     runner: {
       command: "select app.configure_job_runner('<adresse de ce site>', '<CRON_JOB_SECRET>');",
       title: "Les tâches planifiées ne s’exécutent pas",
@@ -62,6 +71,7 @@ export const opsFrCA: typeof opsEn = {
       succeeded: "Réussie",
       failed: "Échouée",
       partial: "{count} en échec",
+      overdue: "En retard",
     },
     schedule: {
       everyMinute: "Chaque minute",
@@ -88,6 +98,8 @@ export const opsFrCA: typeof opsEn = {
         "Envoie chaque semaine aux propriétaires et aux administrateurs la liste des personnes ayant un signal de travail ouvert, là où le résumé est activé.",
       "drain-notifications":
         "Envoie les courriels de notification en attente et consigne chaque tentative.",
+      "ops-watchdog":
+        "Avertit les propriétaires et les administrateurs quand des tâches cessent de s’exécuter ou échouent à répétition, qu’une file s’engorge, que des webhooks sont refusés ou que la base de données approche de sa limite de taille.",
       "retry-failed-emails":
         "Récupère les envois laissés en suspens par une exécution interrompue et relance les échecs passagers avec un délai croissant.",
       "daily-digest":
@@ -99,7 +111,7 @@ export const opsFrCA: typeof opsEn = {
       "stale-project-sweep":
         "Signale à leur responsable les projets actifs sans activité depuis quatorze jours.",
       "purge-job-history":
-        "Élague l’historique job_run et les messages de file archivés au-delà de leur durée de conservation.",
+        "Élague l’historique des tâches planifiées au-delà de sa durée de conservation : exécutions réussies après 7 jours (1 jour si elles n’ont rien traité), exécutions en échec après 180 jours, en gardant toujours la dernière exécution de chaque tâche. Élague aussi les anciens registres de tâches, les registres de courriels envoyés et les compteurs de limite de débit.",
       "scheduled-announcements":
         "Diffuse les notifications des annonces dont l’heure de publication est arrivée.",
       "google-sync":

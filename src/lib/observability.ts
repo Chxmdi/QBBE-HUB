@@ -9,11 +9,39 @@ export function reportError(error: unknown, context?: Record<string, unknown>) {
   const digest =
     error instanceof Error ? error.message : typeof error === "string" ? error : "unknown";
   console.error("[qbbe]", digest, context ?? "");
+  // In the browser the DSN is not available (it is a server setting): hand the
+  // report to the server, which forwards it (src/app/api/client-errors).
+  if (typeof window !== "undefined") {
+    sendFromBrowser(digest, context);
+    return;
+  }
+  forwardToMonitoring(digest, context);
+}
+
+/** Sends to the monitoring service only (no log line). Server side only. */
+export function forwardToMonitoring(message: string, context?: Record<string, unknown>) {
   const dsn = process.env.ERROR_MONITORING_DSN;
   if (!dsn) return;
-  void sendToDsn(dsn, digest, context).catch((sendError) => {
+  void sendToDsn(dsn, message, context).catch((sendError) => {
     console.error("[qbbe] monitoring ingest failed", sendError);
   });
+}
+
+function sendFromBrowser(message: string, context?: Record<string, unknown>) {
+  try {
+    void fetch("/api/client-errors", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        message: message.slice(0, 300),
+        digest: typeof context?.digest === "string" ? context.digest : undefined,
+        path: window.location.pathname,
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // Reporting must never throw inside an error boundary.
+  }
 }
 
 export function parseSentryDsn(dsn: string): {

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { reportError } from "@/lib/observability";
+import { logEvent } from "@/lib/server-log";
 
 type JobDatabaseClient = Pick<SupabaseClient, "from">;
 
@@ -33,7 +34,7 @@ export async function recordJobRun(client: JobDatabaseClient, input: JobRunInput
     started_at: input.startedAt ?? new Date().toISOString(),
     finished_at: new Date().toISOString(),
   });
-  if (error) console.error("Could not record background job run", { jobName: input.jobName, error: error.message });
+  if (error) logEvent("job.record_failed", { jobName: input.jobName, error: error.message }, "error");
 
   // The ledger row makes an integration failure discoverable; this makes it
   // observable. Without it a sync that breaks at 03:00 waits for somebody to

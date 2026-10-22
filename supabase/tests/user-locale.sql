@@ -34,6 +34,7 @@ begin
   perform tests.ok(n = 0, 'a person cannot change someone else''s language');
 
   perform tests.clear_auth();
+  reset role;
   select locale into v from public.user_profile where id = owner_u;
   perform tests.ok(v is distinct from 'fr-CA', 'the other person''s language is unchanged');
 end $$;

@@ -12,6 +12,7 @@ import { gmailPushSync } from "./gmail-push-sync";
 import { gmailWatchRenew } from "./gmail-watch-renew";
 import { googleSync } from "./google-sync";
 import { grantReportReminders } from "./grant-report-reminders";
+import { opsWatchdog } from "./ops-watchdog";
 import { purgeJobHistory } from "./purge-job-history";
 import { reportRecordRetention } from "./report-record-retention";
 import { retryFailedEmails } from "./retry-failed-emails";
@@ -38,6 +39,8 @@ import { followFanout } from "@/features/following/fanout";
 export const JOB_HANDLERS: Record<string, JobHandler> = {
   // Notification delivery
   "drain-notifications": drainNotifications,
+  // Operator alerts: jobs, queues, refused webhooks, database size
+  "ops-watchdog": opsWatchdog,
   "retry-failed-emails": retryFailedEmails,
   "retry-workflow-executions": retryWorkflowExecutions,
   // Step-graph workflows (Workspace OS S6, behind wos_workflows_v2)

@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -47,5 +47,36 @@ describe("migration filenames", () => {
     const byText = [...versions].sort();
     const byNumber = [...versions].sort((a, b) => Number(a) - Number(b));
     expect(byText).toEqual(byNumber);
+  });
+});
+
+/**
+ * Many applied migrations carry versions dated after the day they were
+ * written (up to 20261115020000). `supabase migration new` names a file with
+ * today's timestamp, which sorts before those: hosted `db push` then refuses
+ * to deploy, and a fresh `db reset` applies it before older files that may
+ * overwrite what it changed. So a file added after the baseline must sort
+ * after every baseline file, and baseline files must never be renamed or
+ * removed (environments that applied them would no longer match).
+ */
+describe("migration versions against the frozen baseline", () => {
+  const baseline = new Set<string>(
+    JSON.parse(readFileSync(join(process.cwd(), "tests", "unit", "migration-baseline.json"), "utf8")).files,
+  );
+  const files = readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql"));
+  const baselineMax = [...baseline].map((f) => f.split("_")[0]).sort().at(-1)!;
+
+  it("keeps every baseline migration under its original name", () => {
+    const present = new Set(files);
+    expect([...baseline].filter((f) => !present.has(f))).toEqual([]);
+  });
+
+  it("gives every new migration a version after the newest baseline version", () => {
+    const backdated = files
+      .filter((f) => !baseline.has(f))
+      .filter((f) => !VERSIONED.test(f) || f.split("_")[0] <= baselineMax);
+    // Rename these to a version after the newest migration on main (see
+    // AGENTS.md, "Migration versions"). Never use `db push --include-all`.
+    expect(backdated).toEqual([]);
   });
 });

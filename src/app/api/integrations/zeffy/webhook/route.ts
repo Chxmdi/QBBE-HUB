@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { dbDetail, logEvent, logRefusal } from "@/lib/server-log";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { runJob } from "@/features/jobs/services/runner";
@@ -24,14 +25,17 @@ const MAX_BODY_BYTES = 1_000_000;
 export async function POST(request: Request) {
   const secret = process.env.ZEFFY_WEBHOOK_SECRET;
   if (!secret) {
+    await logRefusal("zeffy_webhook", "not_configured", 503, request);
     return NextResponse.json({ error: "Zeffy webhook is not configured." }, { status: 503 });
   }
 
   const rawBody = await request.text();
   if (rawBody.length > MAX_BODY_BYTES) {
+    await logRefusal("zeffy_webhook", "too_large", 413, request);
     return NextResponse.json({ error: "Event too large." }, { status: 413 });
   }
   if (!zeffySignatureIsValid(rawBody, request.headers.get("zeffy-signature"), secret)) {
+    await logRefusal("zeffy_webhook", "signature_invalid", 401, request);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -39,6 +43,7 @@ export async function POST(request: Request) {
   try {
     payload = JSON.parse(rawBody);
   } catch {
+    await logRefusal("zeffy_webhook", "bad_request", 400, request);
     return NextResponse.json({ error: "Invalid event." }, { status: 400 });
   }
   const event = parseZeffyEvent(payload);
@@ -46,6 +51,7 @@ export async function POST(request: Request) {
 
   const limit = await checkRateLimit({ action: "zeffy:webhook", subject: "zeffy", ...RATE_LIMITS["zeffy:webhook"] });
   if (!limit.allowed) {
+    await logRefusal("zeffy_webhook", "rate_limited", 429, request);
     return NextResponse.json({ error: "Too many events." }, { status: 429 });
   }
 
@@ -53,6 +59,7 @@ export async function POST(request: Request) {
   try {
     supabase = createSupabaseServiceClient();
   } catch {
+    await logRefusal("zeffy_webhook", "not_configured", 503, request, "service role");
     return NextResponse.json({ error: "Service role is not configured." }, { status: 503 });
   }
 
@@ -65,6 +72,7 @@ export async function POST(request: Request) {
     .limit(1)
     .maybeSingle();
   if (connectionError) {
+    await logRefusal("zeffy_webhook", "db_error", 500, request, dbDetail(connectionError));
     return NextResponse.json({ error: "Could not find the Zeffy connection." }, { status: 500 });
   }
   // Not connected: nothing to file it under. The sync brings everything in
@@ -82,6 +90,7 @@ export async function POST(request: Request) {
     if ((insertError as { code?: string }).code === "23505") {
       return NextResponse.json({ ok: true, duplicate: true });
     }
+    await logRefusal("zeffy_webhook", "db_error", 500, request, dbDetail(insertError));
     return NextResponse.json({ error: "Could not record the event." }, { status: 500 });
   }
 
@@ -108,12 +117,10 @@ export async function POST(request: Request) {
     try {
       const outcome = await runJob("zeffy-events");
       if (outcome.status === "failed") {
-        console.error("Zeffy events worker failed", { runId: outcome.runId, error: outcome.error });
+        logEvent("zeffy_webhook.worker_failed", { runId: outcome.runId, error: outcome.error }, "error");
       }
     } catch (cause) {
-      console.error("Zeffy events worker could not start", {
-        error: cause instanceof Error ? cause.message : String(cause),
-      });
+      logEvent("zeffy_webhook.worker_not_started", { error: cause instanceof Error ? cause.message : String(cause) }, "error");
     }
   });
 

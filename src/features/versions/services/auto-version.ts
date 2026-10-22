@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { contentAdapterFor, type EditorDocumentType } from "@/features/versions/adapters/registry";
+import { logEvent } from "@/lib/server-log";
 
 /** The database takes an automatic snapshot at most this often (save_object_version). */
 const AUTO_VERSION_MINUTES = 10;
@@ -36,8 +37,8 @@ export async function recordAutomaticVersion(objectId: string, objectType: Edito
       p_properties: snapshot.properties,
       p_label: null,
     });
-    if (error) console.error("automatic snapshot failed", error.message);
+    if (error) logEvent("version.auto_snapshot_failed", { error: error.message }, "error");
   } catch (error) {
-    console.error("automatic snapshot failed", (error as Error).message);
+    logEvent("version.auto_snapshot_failed", { error: (error as Error).message }, "error");
   }
 }

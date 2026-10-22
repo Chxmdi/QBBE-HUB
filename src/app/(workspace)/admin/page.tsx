@@ -20,6 +20,7 @@ import { TeamOwnerControl } from "@/features/admin/components/team-owner-control
 import { createTeam } from "@/features/admin/services/team.commands";
 import { createWorkflowRule } from "@/features/admin/services/workflow.commands";
 import {
+  effectiveIntegrationStatus,
   integrationHealthLabel,
   integrationHealthTone,
 } from "@/features/admin/services/integration-health";
@@ -28,7 +29,7 @@ import {
   activeTransport,
   transactionalEmailIsLive,
 } from "@/features/notifications/services/email-provider";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabasePageClient } from "@/lib/supabase/page";
 import { getFormatters, getT } from "@/lib/i18n/server";
 import { labelOr, roleCodeLabel, triggerEventLabel } from "@/features/admin/labels";
 import type { Membership } from "@/types/entities";
@@ -114,7 +115,8 @@ export default async function AdminPage({
   const auditPage = Math.max(1, Number(params.auditPage) || 1);
   const auditFilter =
     params.audit && params.audit !== "all" ? params.audit : null;
-  const supabase = await createSupabaseServerClient();
+  // Throws on a failed read: an outage shows the error boundary, not an empty Admin page.
+  const supabase = await createSupabasePageClient();
 
   const [
     { data: members },
@@ -496,7 +498,7 @@ export default async function AdminPage({
                   ? emailConfigured
                     ? "connected"
                     : "configuration_required"
-                  : connection?.status;
+                  : effectiveIntegrationStatus(integration.provider, connection?.status, connection?.last_sync_at);
               return (
                 <div key={integration.provider} className="card p-4">
                   <div className="mb-1 flex items-center justify-between">

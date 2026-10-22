@@ -78,6 +78,22 @@ app_url="$(app_env NEXT_PUBLIC_APP_URL)"
 for name in NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
   [[ -n "$(app_env "$name")" ]] || fail "APP_ENV for ${TARGET_ENVIRONMENT} has no ${name}."
 done
+# A legacy (JWT) key names the project it was issued for in its "ref" claim.
+# A key pasted from the other environment's project would otherwise pass every
+# check above and fail only once the new release is serving traffic.
+key_ref() {
+  local payload
+  payload=$(printf '%s' "$1" | cut -d. -f2 -s | tr '_-' '/+')
+  [ -n "$payload" ] || return 0
+  while (( ${#payload} % 4 )); do payload="${payload}="; done
+  printf '%s' "$payload" | base64 -d 2>/dev/null | grep -oE '"ref"[[:space:]]*:[[:space:]]*"[a-z0-9]+"' | grep -oE '"[a-z0-9]+"$' | tr -d '"' || true
+}
+for name in NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
+  ref="$(key_ref "$(app_env "$name")")"
+  [[ -z "$ref" || "$ref" == "$expected_ref" ]] \
+    || fail "Refusing deployment: APP_ENV's ${name} belongs to Supabase project ${ref}, not ${TARGET_ENVIRONMENT}'s (${expected_ref})."
+done
+
 secret="$(app_env CRON_JOB_SECRET)"
 (( ${#secret} >= 32 )) \
   || fail "APP_ENV for ${TARGET_ENVIRONMENT} needs a CRON_JOB_SECRET of at least 32 characters (openssl rand -base64 48)."
