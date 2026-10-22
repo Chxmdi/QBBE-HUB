@@ -98,6 +98,8 @@ it if absent):
 | `SITE_URL` | variable | the staging address, `https://<staging host>` |
 | `APP_ENV` | secret | staging's app settings, below (c) |
 | `RELEASE_ENABLED` | variable | `true` once a–c are set. The workflow publishes nothing while it is anything else, so staging cannot be deployed with it `false`. Production keeps it `false` until #21. |
+| `SMOKE_EMAIL` | variable | the smoke user's address (section 3). After each release Deploy signs in as it and reads its own membership row; until this and `SMOKE_PASSWORD` are set, staging deploys show a warning and production deploys fail |
+| `SMOKE_PASSWORD` | secret | the smoke user's password |
 
 **b. GitHub, repository level.** Settings → Secrets and variables → Actions →
 **Variables** tab:

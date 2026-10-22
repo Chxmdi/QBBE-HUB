@@ -120,6 +120,11 @@ Each environment needs a host name that points at the public IP.
 Repository **Settings**, **Environments**, then **staging**, and afterwards
 **production** with production's own values.
 
+In each, under **Deployment branches and tags**, choose **Selected branches
+and tags** and add `main`. This is what stops a run from another branch from
+using the environment's keys; the workflows' own "runs from main only" check
+is only a clear message. You should see "main" listed under the rule.
+
 **Variables** (Environment variables, **Add variable**):
 
 | Name | Value |
@@ -128,6 +133,7 @@ Repository **Settings**, **Environments**, then **staging**, and afterwards
 | `SITE_URL` | `https://` plus that environment's host name from step 4 |
 | `SUPABASE_PROJECT_REF` | that environment's Supabase project ref (already set) |
 | `RELEASE_ENABLED` | `true` for staging; production stays `false` until it is certified |
+| `SMOKE_EMAIL` | that environment's smoke user (staging-provisioning.md); Deploy signs in as it after each release |
 
 **Secrets** (Environment secrets, **Add secret**):
 
@@ -138,6 +144,7 @@ Repository **Settings**, **Environments**, then **staging**, and afterwards
 | `SUPABASE_DB_URL` | that environment's database address for migrations: Supabase, the project, **Connect**, **Session pooler** URI, with the database password filled in. It reaches this project only, unlike a personal access token |
 | `SUPABASE_DB_PASSWORD` | that environment's database password (already set) |
 | `DEPLOY_KNOWN_HOSTS` | added in step 6 |
+| `SMOKE_PASSWORD` | the smoke user's password |
 
 Then delete the Netlify leftovers from both environments: `NETLIFY_SITE_ID`
 and `NETLIFY_AUTH_TOKEN`.

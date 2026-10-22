@@ -13,6 +13,8 @@ name: Deploy
 #                server is ARM, so it is built on an ARM runner)
 #   5. release   the server swaps to the new image; a new container that does
 #                not report healthy is replaced by the previous one again
+#   5b.          a signed-in person can read data through the API (inside
+#                the release job, so it needs no second environment approval)
 #   6. smoke     the site answers, runs this commit, and its jobs are wired
 #
 # Rollback: .github/workflows/rollback.yml and
@@ -40,6 +42,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Only main is published. Without this a run from another branch would
+  # show every job skipped and look like nothing happened. The control that
+  # holds even against an edited copy of this file is each environment's
+  # "Deployment branches and tags" rule (main only; hosting.md).
+  branch:
+    name: Runs from main only
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: |
+          echo "::error::Deploy publishes main only. Choose 'main' under 'Use workflow from' and run it again."
+          exit 1
+
   verify:
     # Re-run every gate against this workflow's exact commit, with no hosted secrets.
     uses: ./.github/workflows/ci.yml
@@ -224,6 +240,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+          # Later steps run third-party code; it gets no token from .git/config.
+          persist-credentials: false
 
       # Deploy access (docs/runbooks/hosting.md, "Deploy access"). With the
       # environment variable DEPLOY_MODE=isolated, this environment's own
@@ -298,9 +316,54 @@ jobs:
             echo "Rollback target (the image this replaced): \`${previous:-none}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The public pages answering says nothing about the database: a project
+      # missing its API grants deploys green, then sends every signed-in page
+      # back to /sign-in. This signs in as the environment's smoke user
+      # (lowest role, one test program; docs/runbooks/staging-provisioning.md)
+      # and reads that person's own membership row. It runs third-party code
+      # (the Supabase client), so the server key goes first and the check gets
+      # only the public project address and key, never the rest of APP_ENV.
+      - name: Remove the server key before running the check
+        run: rm -f ~/.ssh/qbbe ~/.ssh/config
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install the API client
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: A signed-in person can read data
+        env:
+          APP_ENV: ${{ secrets.APP_ENV }}
+          SMOKE_EMAIL: ${{ vars.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          PREVIOUS: ${{ steps.release.outputs.previous }}
+        run: |
+          if [ -z "$SMOKE_EMAIL" ] || [ -z "$SMOKE_PASSWORD" ]; then
+            message="Set the SMOKE_EMAIL variable and SMOKE_PASSWORD secret on the ${TARGET_ENVIRONMENT} environment (docs/runbooks/staging-provisioning.md, smoke user)."
+            if [ "$TARGET_ENVIRONMENT" = production ]; then echo "::error::${message}"; exit 1; fi
+            echo "::warning::Signed-in check skipped. ${message}"
+            exit 0
+          fi
+          # The project address and its public key, from the same settings the
+          # app was built with.
+          get() { printf '%s\n' "$APP_ENV" | tr -d '\r' | grep -E "^[[:space:]]*(export[[:space:]]+)?$1=" | tail -n 1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+          SUPABASE_URL=$(get NEXT_PUBLIC_SUPABASE_URL)
+          SUPABASE_ANON_KEY=$(get NEXT_PUBLIC_SUPABASE_ANON_KEY)
+          env -i PATH="$PATH" HOME="$HOME" SUPABASE_URL="$SUPABASE_URL" SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY" \
+            SMOKE_EMAIL="$SMOKE_EMAIL" SMOKE_PASSWORD="$SMOKE_PASSWORD" node scripts/ci/smoke-signed-in.mjs || {
+            echo "::error::The signed-in check failed on ${SITE_URL}; the line above says why. 'could not sign in': check SMOKE_EMAIL and SMOKE_PASSWORD. 'permission denied': the database is missing its API grants (docs/runbooks/staging-provisioning.md). The image is live; roll back to ${PREVIOUS:-<see the summary above>} only if the cause is in this release."
+            exit 1
+          }
+
   smoke:
     name: Smoke check
     needs: release
+    # Also after a failed signed-in check: the new image is live either way,
+    # and these public checks say whether it serves.
+    if: always() && needs.release.outputs.site != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Reads only the public address, so it needs no environment (and no

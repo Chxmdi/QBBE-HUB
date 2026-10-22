@@ -175,6 +175,7 @@ For **each** of `staging` and `production`, separately:
 | Variable | `RELEASE_ENABLED` — **`false` for production until #21 certifies staging** |
 | Secret | `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` — the server's deploy key and host key |
 | Secret | `APP_ENV` — every runtime value from the provider table |
+| Variable and secret | `SMOKE_EMAIL`, `SMOKE_PASSWORD` — that environment's smoke user, which Deploy signs in as after each release (staging-provisioning.md) |
 
 **The two environments must not share a Supabase project, a storage bucket, a
 database or an email sender.** That separation is the requirement itself, not a

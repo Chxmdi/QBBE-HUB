@@ -41,9 +41,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Runs from main only, and says so: without this job a run from another
+  # branch would show everything skipped. A branch can edit its own copy of
+  # this file, so the control that holds is the environment's "Deployment
+  # branches and tags" rule (main only; hosting.md, "Deploy access").
+  branch:
+    name: Runs from main only
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: |
+          echo "::error::Server setup runs from main only. Choose 'main' under 'Use workflow from' and run it again."
+          exit 1
+
   host-key:
     name: Show the server's host key
-    if: inputs.show_host_key
+    if: github.ref == 'refs/heads/main' && inputs.show_host_key
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: server-admin
@@ -71,7 +85,7 @@ jobs:
 
   setup:
     name: Prepare the server
-    if: ${{ !inputs.show_host_key }}
+    if: github.ref == 'refs/heads/main' && !inputs.show_host_key
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: server-admin

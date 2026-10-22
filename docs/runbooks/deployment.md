@@ -166,7 +166,13 @@ Two gates exist specifically to catch drift that only shows up at runtime:
 ## Rollback
 
 - App: run the **Rollback** workflow with the previous release's commit
-  (release-procedure.md). Check schema compatibility before rollback;
+  (release-procedure.md). Like **Deploy** and **Server setup**, it runs only
+  from `main`: started from another branch, it stops at once with "runs from
+  main only" and touches nothing. This is a clear message, not the
+  protection: a branch can edit its own copy of the workflow. What stops a
+  branch from using the environment's keys is each environment's
+  **Deployment branches and tags** rule set to `main` only (staging,
+  production and server-admin; hosting.md, "Deploy access"). Check schema compatibility before rollback;
   rehearse on staging.
 - Schema: write an inverse migration; for risky changes use
   expand → migrate → contract so old app versions keep working (CICD-002).
@@ -239,6 +245,11 @@ The full step-by-step procedure, including rollback, is
 6. Releases it on the server (`deploy/server/release.sh`): the new container
    must report healthy within 3 minutes, or the previous image and settings
    are put back and the run fails. The replaced image is the rollback target.
+   Then it signs in as the environment's smoke user
+   (`scripts/ci/smoke-signed-in.mjs`) and reads that person's own membership
+   row, so a database missing its API grants fails the deploy instead of
+   sending every signed-in page back to `/sign-in`. Until `SMOKE_EMAIL` and
+   `SMOKE_PASSWORD` are set, staging shows a warning and production fails.
 7. Smoke-checks `SITE_URL/sign-in`, that the site reports this commit
    (`/api/health/version`), and that the background jobs reach it.
 
@@ -258,6 +269,8 @@ Create GitHub environments named `staging` and `production`. In each, configure:
 | `SUPABASE_DB_PASSWORD` | environment secret | this environment's database password, for migrations |
 | `SITE_URL` | environment variable | the environment's public address, `https://<host>` |
 | `RELEASE_ENABLED` | environment variable | literal `true` only after readiness review |
+| `SMOKE_EMAIL` | environment variable | the environment's smoke user (lowest role, one test program; staging-provisioning.md) |
+| `SMOKE_PASSWORD` | environment secret | that user's long random password |
 
 And at repository level (Settings, Secrets and variables, Actions, Variables):
 
