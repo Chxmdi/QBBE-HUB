@@ -163,6 +163,10 @@ async function ensurePerson(person, password) {
     password,
     email_confirm: true,
     user_metadata: { full_name: person.name },
+    // Created with the service role rather than signed up through an emailed
+    // invitation link, so the account says so; only the service role can set
+    // app metadata, which is why app.handle_new_user trusts this marker.
+    app_metadata: { provisioned_by_operator: true },
   });
   if (error) throw new Error(`${person.email}: ${error.message}`);
   return data.user.id;

@@ -8,6 +8,10 @@ import { sql } from "./db";
  * invitation that admits nobody, recovery through a real email, and a
  * deactivation that removes access without erasing who did what.
  *
+ * Invitations are claimed with the secret link they are sent with (SEC-001):
+ * the admin dialog shows that link once, and these tests open it the way the
+ * invitee would. Knowing the address alone gets nobody in.
+ *
  * Recovery goes through the local mail catcher rather than a stub. A recovery
  * path that is never sent, delivered and opened is a form, not a recovery path.
  */
@@ -20,7 +24,8 @@ function uniqueEmail(prefix: string) {
   return `${prefix}-${Date.now()}@example.com`;
 }
 
-async function inviteFromAdmin(page: Page, email: string, role: string) {
+/** Invites `email` from Admin and returns the one-time link the dialog shows. */
+async function inviteFromAdmin(page: Page, email: string, role: string): Promise<string> {
   await page.goto("/admin");
   await page.getByRole("button", { name: "Invite user", exact: true }).click();
   const dialog = page.getByRole("dialog");
@@ -29,7 +34,10 @@ async function inviteFromAdmin(page: Page, email: string, role: string) {
   await dialog.getByLabel("Role", { exact: true }).selectOption({ label: role });
   await dialog.getByRole("button", { name: "Create invitation", exact: true }).click();
   await expect(dialog.getByRole("status")).toContainText(/Invit/i, { timeout: 15_000 });
+  const link = await dialog.getByLabel("Invitation link", { exact: true }).inputValue();
+  expect(link).toMatch(/\/sign-up\?invite=[A-Za-z0-9_-]{43}$/);
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  return link;
 }
 
 function invitationRow(page: Page, email: string) {
@@ -46,10 +54,11 @@ function memberRow(page: Page, email: string) {
     .filter({ hasText: email });
 }
 
-async function signUp(page: Page, name: string, email: string) {
-  await page.goto("/sign-up");
+/** Opens the invitation link; the address is the invited one and cannot be changed. */
+async function signUp(page: Page, name: string, email: string, link: string) {
+  await page.goto(new URL(link).pathname + new URL(link).search);
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue(email);
   await page.getByLabel("Full name", { exact: true }).fill(name);
-  await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
   await page.getByRole("button", { name: "Create account", exact: true }).click();
 }
@@ -73,8 +82,8 @@ async function completeOnboarding(page: Page) {
   });
 }
 
-async function joinAsNewPerson(page: Page, name: string, email: string) {
-  await signUp(page, name, email);
+async function joinAsNewPerson(page: Page, name: string, email: string, link: string) {
+  await signUp(page, name, email, link);
   await page.waitForURL((url) => url.pathname === "/", { timeout: 60_000 });
   await completeOnboarding(page);
 }
@@ -119,12 +128,17 @@ test.describe("identity lifecycle", () => {
   test("an invitation admits the person and the role it names", async ({ page }) => {
     const email = uniqueEmail("qa-invited");
     await signIn(page, "owner");
-    await inviteFromAdmin(page, email, "Volunteer");
+    const link = await inviteFromAdmin(page, email, "Volunteer");
     await expect(invitationRow(page, email)).toContainText("pending");
 
     await signOut(page);
+    // Knowing the address is not enough: without the link there is no form.
+    await page.goto("/sign-up");
+    await expect(page.getByText("Sign-up is by invitation", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create account", exact: true })).toHaveCount(0);
+
     // Reaching the workspace is the proof the invitation was honoured.
-    await joinAsNewPerson(page, "Invited Volunteer", email);
+    await joinAsNewPerson(page, "Invited Volunteer", email, link);
 
     await signOut(page);
     await signIn(page, "owner");
@@ -139,20 +153,19 @@ test.describe("identity lifecycle", () => {
   test("a revoked invitation admits nobody", async ({ page }) => {
     const email = uniqueEmail("qa-revoked");
     await signIn(page, "owner");
-    await inviteFromAdmin(page, email, "Staff");
+    const link = await inviteFromAdmin(page, email, "Staff");
     await invitationRow(page, email)
       .getByRole("button", { name: "Revoke", exact: true })
       .click();
     await expect(invitationRow(page, email)).toContainText("revoked", { timeout: 15_000 });
 
     await signOut(page);
-    await signUp(page, "Revoked Person", email);
-    // Scoped to the form's own alert: Next keeps a permanently empty
-    // role="alert" route announcer on the page, so an unscoped match is
-    // ambiguous rather than wrong.
+    // The link of a revoked invitation opens no form at all.
+    await page.goto(new URL(link).pathname + new URL(link).search);
     await expect(
-      page.getByRole("alert").filter({ hasText: "invite-only" }),
+      page.getByText("This invitation link can't be used", { exact: true }),
     ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: "Create account", exact: true })).toHaveCount(0);
     // Still outside: the refusal has to be the end of it, not a notice on the way in.
     await expect(page).toHaveURL(/\/sign-up/);
   });
@@ -161,9 +174,9 @@ test.describe("identity lifecycle", () => {
     const email = uniqueEmail("qa-recovers");
     const newPassword = "RecoveredPass!2026";
     await signIn(page, "owner");
-    await inviteFromAdmin(page, email, "Staff");
+    const inviteLink = await inviteFromAdmin(page, email, "Staff");
     await signOut(page);
-    await joinAsNewPerson(page, "Recovering Person", email);
+    await joinAsNewPerson(page, "Recovering Person", email, inviteLink);
     await signOut(page);
 
     await page.goto("/forgot-password");
@@ -203,9 +216,9 @@ test.describe("identity lifecycle", () => {
     const name = `Departing Staffer ${stamp}`;
 
     await signIn(page, "owner");
-    await inviteFromAdmin(page, email, "Staff");
+    const link = await inviteFromAdmin(page, email, "Staff");
     await signOut(page);
-    await joinAsNewPerson(page, name, email);
+    await joinAsNewPerson(page, name, email, link);
     await signOut(page);
 
     // A task assigned to them, created by the owner. A task belonging to no

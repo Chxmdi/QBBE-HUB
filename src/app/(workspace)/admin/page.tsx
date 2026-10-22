@@ -8,6 +8,7 @@ import { AdminNav } from "@/features/admin/components/admin-nav";
 import {
   MemberActiveToggle,
   MemberRoleSelect,
+  NewInvitationLinkButton,
   RevokeInvitationButton,
 } from "@/features/admin/components/member-controls";
 import { InviteUserDialog } from "@/features/admin/components/invite-user-dialog";
@@ -443,6 +444,9 @@ export default async function AdminPage({
                     >
                       {t(`admin.workspace.invitations.states.${state}`)}
                     </Badge>
+                    {state === "pending" || state === "expired" ? (
+                      <NewInvitationLinkButton invitationId={invitation.id} email={invitation.email} />
+                    ) : null}
                     {state === "pending" ? (
                       <RevokeInvitationButton invitationId={invitation.id} />
                     ) : null}

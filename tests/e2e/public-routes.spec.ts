@@ -92,8 +92,13 @@ test("auth routes render at every width in both themes", async ({ page }) => {
           );
         }
 
-        // The submit control must stay reachable at every width.
-        const submit = page.getByRole("button", { name: /Sign in|Create account|Send recovery link/ });
+        // The submit control must stay reachable at every width. Without an
+        // invitation link, /sign-up offers the way to sign in instead of a
+        // form (SEC-001), so its primary control is that link.
+        const submit = page
+          .getByRole("button", { name: /Sign in|Create account|Send recovery link/ })
+          .or(page.getByRole("link", { name: "Go to sign in", exact: true }))
+          .first();
         await expect(submit, `${route.name} @${size.name}`).toBeVisible();
         const box = await submit.boundingBox();
         if (box && box.height < 36) {

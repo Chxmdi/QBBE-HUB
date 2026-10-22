@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Plus } from "lucide-react";
 import { useT } from "@/lib/i18n/client";
+import { InvitationLinkField } from "./invitation-link-field";
 
 export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean }) {
   const router = useRouter();
@@ -15,16 +16,21 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ link: string; email: string; expiresAt: string } | null>(
+    null,
+  );
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setNotice(null);
+    setCreated(null);
     setSaving(true);
     const form = new FormData(e.currentTarget);
+    const email = String(form.get("email") ?? "").trim().toLowerCase();
     const result = await inviteUser({
-      email: form.get("email"),
+      email,
       intendedRole: form.get("intendedRole"),
     });
     setSaving(false);
@@ -34,15 +40,18 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
     }
     setNotice(
       result.emailSent
-        ? t("admin.invite.queued")
-        : t("admin.invite.notSent"),
+        ? t("admin.invite.sent", { email })
+        : t("admin.invite.notSent", { email }),
     );
+    if (result.inviteLink && result.expiresAt) {
+      setCreated({ link: result.inviteLink, email, expiresAt: result.expiresAt });
+    }
     router.refresh();
   }
 
   return (
     <>
-      <Button onClick={() => { setOpen(true); setNotice(null); setError(null); }}>
+      <Button onClick={() => { setOpen(true); setNotice(null); setError(null); setCreated(null); }}>
         <Plus className="size-4" aria-hidden />
         {t("admin.invite.button")}
       </Button>
@@ -72,6 +81,9 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
           </div>
           {error ? <p role="alert" className="text-[13px] text-danger-fg">{error}</p> : null}
           {notice ? <p role="status" className="text-[13px] text-success-fg">{notice}</p> : null}
+          {created ? (
+            <InvitationLinkField link={created.link} email={created.email} expiresAt={created.expiresAt} />
+          ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               {t("admin.invite.close")}

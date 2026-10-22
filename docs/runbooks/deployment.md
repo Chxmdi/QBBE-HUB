@@ -21,18 +21,25 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
 3. In Supabase Auth settings:
    - Configure the site URL to the production domain and add
      `https://<domain>/auth/callback` to redirect URLs.
-   - Enable email confirmation.
-   - **Restrict signup**: either disable public signup once the Primary
-     Owner exists, or restrict to invited emails. The database also enforces
-     this: `app.handle_new_user` refuses any sign-up without a live invitation
-     once an organization exists, and the refusal aborts the account creation.
+   - **Turn on email confirmation** (Authentication → Sign In / Providers →
+     Email → **Confirm email** on) and set up the project's SMTP sender so the
+     confirmation email actually arrives. Since 2026-10-22 (SEC-001) an invited
+     person gets no membership until their address is confirmed; with
+     confirmation off, the emailed invitation link is the only proof.
+   - **Leave "Allow new users to sign up" on.** Invited people create their
+     account through the sign-up form; turning sign-up off in Supabase would
+     refuse them too. The database decides who may join: once an organization
+     exists, `app.handle_new_user` refuses a password sign-up that does not
+     carry a valid invitation link for that exact address (Google sign-in
+     needs an address Google has verified), and the refusal aborts the account
+     creation. Before 2026-10-22 it matched the invitation on the address
+     alone, so anyone who knew an invited address could take the seat.
      Until 2026-09-02 this line claimed the enforcement came from
      `signup_allowed`. It did not. That function was called only from the
      sign-up form — a check in the visitor's own browser — while the trigger
      that grants the membership never consulted it and defaulted to an active
      **staff** account. Anyone could obtain one with a single API call using the
-     publishable key. Provider-side signup restriction is still worth setting;
-     it is defence in depth rather than the only line.
+     publishable key.
 4. Set up the QBBE server and each environment's settings as
    [`hosting.md`](hosting.md) describes: the server, its open ports, the
    GitHub environment variables and secrets (`APP_ENV` holds the app's

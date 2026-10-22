@@ -22,9 +22,17 @@ export const accountEn = {
       submit: "Create account",
       haveAccount: "Already have an account?",
       signIn: "Sign in",
-      checkFailed: "Could not check whether sign-up is open. Try again.",
-      inviteOnly:
-        "This workspace is invite-only. Ask an administrator to send you an invitation.",
+      invitedTo: "You're invited to join {organization}.",
+      emailLocked: "This invitation is for this address.",
+      inviteOnlyTitle: "Sign-up is by invitation",
+      inviteOnlyBody:
+        "Open the link in the invitation email an administrator sent you. If you don't have one, ask an administrator to invite you.",
+      invalidTitle: "This invitation link can't be used",
+      invalidBody:
+        "It may have expired, been replaced by a newer link, or already been used. Ask an administrator for a new invitation link.",
+      inviteRejected:
+        "This invitation link can't be used any more. Ask an administrator for a new link.",
+      goToSignIn: "Go to sign in",
       checkEmail: "Check your email",
       confirmationSent:
         "We sent a confirmation link to {email}. Follow it to finish creating your account.",

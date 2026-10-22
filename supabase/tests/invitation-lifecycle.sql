@@ -23,10 +23,14 @@ begin
         and peer.user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4'
     );
 
+  -- Each invitation carries a token and each sign-up presents it, so a refusal
+  -- below can only come from the expiry, revocation or acceptance it names,
+  -- never from a missing token (invitation-token.sql covers the token itself).
   insert into invitation (
-    organization_id, email, intended_role, invited_by, expires_at
+    organization_id, email, intended_role, invited_by, expires_at, token_hash
   ) values (
-    v_org, 'expired-invite@example.com', 'guest', v_owner, now() - interval '1 minute'
+    v_org, 'expired-invite@example.com', 'guest', v_owner, now() - interval '1 minute',
+    encode(extensions.digest('expired-invite-token-abcdefghijklmnopqrst', 'sha256'), 'hex')
   );
 
   begin
@@ -39,7 +43,7 @@ begin
       '00000000-0000-0000-0000-000000000000',
       v_expired_user, 'authenticated', 'authenticated',
       'expired-invite@example.com', 'x', now(), '{}'::jsonb,
-      '{"full_name":"Expired Invite"}'::jsonb, now(), now(), '', '', '', ''
+      '{"full_name":"Expired Invite","invite_token":"expired-invite-token-abcdefghijklmnopqrst"}'::jsonb, now(), now(), '', '', '', ''
     );
     perform tests.ok(false, 'an expired invitation must not provision a user');
   exception
@@ -53,10 +57,11 @@ begin
   perform tests.ok(n = 0, 'expired invitation rejection leaves no membership');
 
   insert into invitation (
-    organization_id, email, intended_role, invited_by, expires_at, revoked_at
+    organization_id, email, intended_role, invited_by, expires_at, revoked_at, token_hash
   ) values (
     v_org, 'revoked-invite@example.com', 'volunteer', v_owner,
-    now() + interval '1 day', now()
+    now() + interval '1 day', now(),
+    encode(extensions.digest('revoked-invite-token-abcdefghijklmnopqrst', 'sha256'), 'hex')
   );
 
   begin
@@ -69,7 +74,7 @@ begin
       '00000000-0000-0000-0000-000000000000',
       v_revoked_user, 'authenticated', 'authenticated',
       'revoked-invite@example.com', 'x', now(), '{}'::jsonb,
-      '{"full_name":"Revoked Invite"}'::jsonb, now(), now(), '', '', '', ''
+      '{"full_name":"Revoked Invite","invite_token":"revoked-invite-token-abcdefghijklmnopqrst"}'::jsonb, now(), now(), '', '', '', ''
     );
     perform tests.ok(false, 'a revoked invitation must not provision a user');
   exception
@@ -83,9 +88,10 @@ begin
   perform tests.ok(n = 0, 'revoked invitation rejection leaves no membership');
 
   insert into invitation (
-    organization_id, email, intended_role, invited_by, expires_at
+    organization_id, email, intended_role, invited_by, expires_at, token_hash
   ) values (
-    v_org, 'valid-invite@example.com', 'guest', v_owner, now() + interval '1 day'
+    v_org, 'valid-invite@example.com', 'guest', v_owner, now() + interval '1 day',
+    encode(extensions.digest('valid-invite-token-abcdefghijklmnopqrstuv', 'sha256'), 'hex')
   ) returning id into v_valid_invitation;
 
   insert into auth.users (
@@ -97,7 +103,7 @@ begin
     '00000000-0000-0000-0000-000000000000',
     v_valid_user, 'authenticated', 'authenticated',
     'valid-invite@example.com', 'x', now(), '{}'::jsonb,
-    '{"full_name":"Valid Invite"}'::jsonb, now(), now(), '', '', '', ''
+    '{"full_name":"Valid Invite","invite_token":"valid-invite-token-abcdefghijklmnopqrstuv"}'::jsonb, now(), now(), '', '', '', ''
   );
 
   select count(*) into n
