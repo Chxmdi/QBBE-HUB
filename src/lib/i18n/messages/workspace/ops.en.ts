@@ -94,7 +94,8 @@ export const opsEn = {
       "announcement-nudge": "Reminds people who have not acknowledged a required announcement.",
       "due-date-reminders": "Notifies assignees of tasks due today, due tomorrow, or overdue.",
       "stale-project-sweep": "Flags active projects with no activity in fourteen days to their lead.",
-      "purge-job-history": "Trims job_run history and archived queue messages past retention.",
+      "purge-job-history":
+        "Trims job history past retention: successful runs after 7 days (1 day if they did nothing), failed runs after 180 days, always keeping each job's latest run. Also trims old job records, sent email records and rate-limit counters.",
       "scheduled-announcements":
         "Fans out notifications for announcements whose publish time has arrived.",
       "google-sync":

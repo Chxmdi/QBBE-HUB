@@ -23,6 +23,21 @@ operate and no separate place a schedule can be defined. `job_definition` is
 the single registry: cron entries are generated from it, and the runner refuses
 any name absent from it.
 
+A migration that adds a `job_definition` row must also call `cron.schedule`
+for it. Two once did not (`retry-workflow-executions` and
+`decision-revisit-reminders`, REL-009), so they were listed as enabled and
+never ran. `supabase/tests/job-schedules.sql` now fails `npm run test:db` when
+an enabled job has no cron entry (or two), when a `dispatch_job` cron entry
+names a job that is not registered, or when a cron schedule differs from the
+one in `job_definition`. To check a live database by hand:
+
+```sql
+select d.name
+from public.job_definition d
+left join cron.job c on c.command = format('select app.dispatch_job(%L)', d.name)
+where d.enabled and c.jobid is null;   -- must return no rows
+```
+
 ## First-time setup, per environment
 
 Migrations create the queues, the registry, and the cron entries. Two things
@@ -89,13 +104,46 @@ All times are UTC, because pg_cron evaluates in UTC.
 | `zeffy-sync` | every 15 min | Pulls payments, supporters and campaigns from Zeffy into the CRM; skipped without `ZEFFY_API_KEY`. |
 | `zeffy-events` | every minute | Applies the payment and supporter changes Zeffy reported by webhook. |
 | `scan-documents` | every minute | Scans pending private uploads; only a clean ClamAV verdict releases a download. |
-| `purge-job-history` | 06:00 | Trims `job_run` and `email_delivery` past retention. |
+| `purge-job-history` | 06:00 | Trims `job_run`, `background_job_run`, `email_delivery` and `rate_limit_counter` past retention (see [Retention](#retention)). |
+| `purge-cron-history` | 05:47 | Not an app job: plain SQL inside the database that deletes pg_cron's own run log (`cron.job_run_details`) older than 7 days. Not shown in Admin → Jobs. |
+| `retry-workflow-executions` | every 15 min | Retries workflow-rule notifications that failed to record, without sending a second copy. |
+| `decision-revisit-reminders` | 11:10 | Reminds the decider and participants when a decision reaches its revisit date (only does anything with decisions v2 on). |
 | `team-signal-reminders` | 13:20 | Where Admin, Team signals has reminders on: records each person's open work signals and sends one gentle notification per new signal (#136). |
 | `team-signal-digest` | Mondays 12:40 | Where Admin, Team signals has the digest on: emails owners and admins the people with open work signals; no email when there are none (#136). |
 
 The digest runs hourly rather than at a fixed time on purpose: each recipient's
 `notification_preference.timezone` and `digest_hour` decide whether this tick is
 theirs, so 8am stays 8am across a daylight-saving change and across zones.
+
+## Retention
+
+Production runs on Supabase's Free plan, which makes the database read-only at
+500 MB. Job bookkeeping is the fastest-growing thing in it (about 12,700 job
+runs a day), so it is trimmed daily (OPS-001):
+
+| What | Kept for | Trimmed by |
+|---|---|---|
+| `cron.job_run_details` (pg_cron's log of every run) | 7 days | `purge-cron-history` (SQL in the database) |
+| `job_run`, successful runs that processed or dropped something | 7 days | `purge-job-history` |
+| `job_run`, successful runs that did nothing (most per-minute ticks) | 1 day | `purge-job-history` |
+| `job_run`, failed runs | 180 days | `purge-job-history` |
+| `job_run`, the latest run of each job | always | never purged, so Admin → Jobs can show it |
+| `background_job_run`, successful | 30 days | `purge-job-history` |
+| `background_job_run`, failed | 180 days | `purge-job-history` |
+| `email_delivery`, sent or suppressed | 180 days | `purge-job-history` |
+| `rate_limit_counter` | 1 day | `purge-job-history` |
+
+`scheduled-announcements` writes a `background_job_run` row only for a pass
+that notified someone; its repeat passes over the two-day window used to write
+one row per announcement every five minutes.
+
+To check cron history is being trimmed on a live database:
+
+```sql
+select count(*) from cron.job_run_details
+where end_time < now() - interval '8 days';   -- should be 0
+select pg_size_pretty(pg_database_size(current_database()));
+```
 
 ## Delivery guarantees
 

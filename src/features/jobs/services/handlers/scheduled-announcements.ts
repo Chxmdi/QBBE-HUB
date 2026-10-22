@@ -146,6 +146,11 @@ export async function scheduledAnnouncements({
     }
 
     fanned += count;
+    // Every pass re-reads two days of announcements and, rightly, notifies
+    // nobody twice. Recording those empty passes wrote one ledger row per
+    // announcement every five minutes (OPS-001); only a pass that reached
+    // someone is worth a row.
+    if (count === 0) continue;
     await recordJobRun(db, {
       organizationId: announcement.organization_id,
       jobName: "scheduled-announcements",

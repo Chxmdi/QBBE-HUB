@@ -339,8 +339,9 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
     return this;
   }
 
-  delete() {
+  delete(options?: { count?: "exact" | "planned" | "estimated" }) {
     this.mode = "delete";
+    this.wantCount = Boolean(options?.count);
     return this;
   }
 
@@ -546,7 +547,9 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
           updated_at: this.db.now().toISOString(),
         });
       }
-      if (!this.returning) return { data: null, error: null };
+      if (!this.returning) {
+        return { data: null, error: null, ...(this.wantCount ? { count: targets.length } : {}) };
+      }
       return this.shape(targets);
     }
 
@@ -557,7 +560,9 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
         this.table,
         store.filter((row) => !removed.has(row)),
       );
-      if (!this.returning) return { data: null, error: null };
+      if (!this.returning) {
+        return { data: null, error: null, ...(this.wantCount ? { count: targets.length } : {}) };
+      }
       return this.shape(targets);
     }
 

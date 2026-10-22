@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { dailyDigest } from "@/features/jobs/services/handlers/daily-digest";
 import { retryFailedEmails } from "@/features/jobs/services/handlers/retry-failed-emails";
 import { purgeJobHistory } from "@/features/jobs/services/handlers/purge-job-history";
+import { scheduledAnnouncements } from "@/features/jobs/services/handlers/scheduled-announcements";
 import { isoWeekKey } from "@/features/jobs/services/handlers/stale-project-sweep";
 import { JOB_HANDLERS, JOB_NAMES } from "@/features/jobs/services/handlers";
 import type { JobDefinition } from "@/features/jobs/services/runner";
@@ -245,28 +246,162 @@ describe("retry-failed-emails", () => {
 });
 
 describe("purge-job-history", () => {
-  it("keeps failures longer than successes", async () => {
-    const db = new FakeSupabase(new Date("2026-08-19T06:00:00Z"));
-    const daysAgo = (days: number) =>
-      new Date(db.now().getTime() - days * 86_400_000).toISOString();
+  const NOW = new Date("2026-08-19T06:00:00Z");
+  const daysAgo = (days: number) => new Date(NOW.getTime() - days * 86_400_000).toISOString();
 
-    db.seed("job_run", [
-      { id: "r1", job_name: "x", status: "succeeded", started_at: daysAgo(45) },
-      { id: "r2", job_name: "x", status: "succeeded", started_at: daysAgo(10) },
-      { id: "r3", job_name: "x", status: "failed", started_at: daysAgo(45) },
-      { id: "r4", job_name: "x", status: "failed", started_at: daysAgo(200) },
-    ]);
-    db.seed("email_delivery", []);
-
-    const result = await purgeJobHistory({
+  async function purge(db: FakeSupabase) {
+    return purgeJobHistory({
       db: asClient(db),
       definition: definition({ name: "purge-job-history" }),
       now: db.now(),
     });
+  }
 
-    expect(result.processed).toBe(2);
-    const remaining = db.rows("job_run").map((row) => row.id);
-    expect(remaining).toEqual(["r2", "r3"]);
+  function seedJobs(db: FakeSupabase, runs: Row[]) {
+    db.seed(
+      "job_definition",
+      [...new Set(runs.map((run) => run.job_name as string))].map((name) => ({ name })),
+    );
+    db.seed("job_run", runs);
+    db.seed("email_delivery", []);
+    db.seed("rate_limit_counter", []);
+    db.seed("background_job_run", []);
+  }
+
+  const run = (id: string, job: string, status: string, days: number, processed = 1) => ({
+    id,
+    job_name: job,
+    status,
+    started_at: daysAgo(days),
+    processed_count: processed,
+    failed_count: 0,
+  });
+
+  it("keeps successful runs 7 days and failed runs 180 days (OPS-001)", async () => {
+    const db = new FakeSupabase(NOW);
+    seedJobs(db, [
+      run("latest", "x", "succeeded", 0.1),
+      run("ok-8d", "x", "succeeded", 8),
+      run("ok-6d", "x", "succeeded", 6),
+      run("fail-45d", "x", "failed", 45),
+      run("fail-200d", "x", "failed", 200),
+    ]);
+
+    const result = await purge(db);
+
+    expect(db.rows("job_run").map((row) => row.id).sort()).toEqual(
+      ["fail-45d", "latest", "ok-6d"].sort(),
+    );
+    expect(result.metadata?.runs).toBe(2);
+  });
+
+  it("keeps successful runs that did nothing for one day only (OPS-001)", async () => {
+    const db = new FakeSupabase(NOW);
+    seedJobs(db, [
+      run("latest", "drain", "succeeded", 0.01, 0),
+      run("idle-2d", "drain", "succeeded", 2, 0),
+      run("idle-12h", "drain", "succeeded", 0.5, 0),
+      run("busy-2d", "drain", "succeeded", 2, 4),
+    ]);
+
+    await purge(db);
+
+    expect(db.rows("job_run").map((row) => row.id).sort()).toEqual(
+      ["busy-2d", "idle-12h", "latest"].sort(),
+    );
+  });
+
+  it("keeps a run that did nothing but processed a failure", async () => {
+    const db = new FakeSupabase(NOW);
+    seedJobs(db, [
+      run("latest", "drain", "succeeded", 0.01, 0),
+      { ...run("partial-2d", "drain", "succeeded", 2, 0), failed_count: 3 },
+    ]);
+
+    await purge(db);
+
+    expect(db.rows("job_run").map((row) => row.id)).toContain("partial-2d");
+  });
+
+  it("never removes the latest run of a job, so Admin > Jobs can still show it", async () => {
+    const db = new FakeSupabase(NOW);
+    seedJobs(db, [
+      // A weekly job whose last run found nothing to do.
+      run("weekly-last", "stale-project-sweep", "succeeded", 6, 0),
+      run("weekly-before", "stale-project-sweep", "succeeded", 13, 0),
+      // A job that has not run for months.
+      run("old-last", "vms-sync", "succeeded", 40),
+    ]);
+
+    await purge(db);
+
+    expect(db.rows("job_run").map((row) => row.id).sort()).toEqual(
+      ["old-last", "weekly-last"].sort(),
+    );
+  });
+
+  it("trims the per-organization ledger: successes after 30 days, failures after 180", async () => {
+    const db = new FakeSupabase(NOW);
+    seedJobs(db, []);
+    db.seed("background_job_run", [
+      { id: "b-ok-10d", status: "succeeded", finished_at: daysAgo(10) },
+      { id: "b-ok-40d", status: "succeeded", finished_at: daysAgo(40) },
+      { id: "b-fail-40d", status: "failed", finished_at: daysAgo(40) },
+      { id: "b-fail-200d", status: "failed", finished_at: daysAgo(200) },
+    ]);
+
+    const result = await purge(db);
+
+    expect(db.rows("background_job_run").map((row) => row.id).sort()).toEqual(
+      ["b-fail-40d", "b-ok-10d"].sort(),
+    );
+    expect(result.metadata?.ledger).toBe(2);
+  });
+});
+
+describe("scheduled-announcements", () => {
+  it("records a ledger row only for a pass that notified someone (OPS-001)", async () => {
+    const db = new FakeSupabase(new Date("2026-08-19T12:00:00Z"));
+    db.seed("announcement", [
+      {
+        id: "ann-1",
+        organization_id: ORG,
+        title: "Board meeting moved",
+        priority: "normal",
+        created_by: USER,
+        publish_at: "2026-08-19T11:00:00Z",
+        message_id: "msg-1",
+      },
+    ]);
+    db.seed("organization_membership", [
+      { organization_id: ORG, user_id: USER, status: "active" },
+      { organization_id: ORG, user_id: "user-2", status: "active" },
+      { organization_id: ORG, user_id: "user-3", status: "active" },
+    ]);
+    db.seed("user_profile", [
+      { id: "user-2", locale: "fr-CA" },
+      { id: "user-3", locale: "en" },
+    ]);
+    db.seed("notification", []);
+    db.seed("background_job_run", []);
+
+    const context = () => ({
+      db: asClient(db),
+      definition: definition({ name: "scheduled-announcements" }),
+      now: db.now(),
+    });
+
+    const first = await scheduledAnnouncements(context());
+    expect(first.processed).toBe(2);
+    expect(db.rows("background_job_run")).toHaveLength(1);
+
+    // Every five minutes for two days the same announcement is looked at again
+    // and, rightly, nobody is notified twice. Those passes must not add rows.
+    const second = await scheduledAnnouncements(context());
+    const third = await scheduledAnnouncements(context());
+    expect(second.processed).toBe(0);
+    expect(third.processed).toBe(0);
+    expect(db.rows("background_job_run")).toHaveLength(1);
   });
 });
 

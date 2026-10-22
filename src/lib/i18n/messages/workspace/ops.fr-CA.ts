@@ -99,7 +99,7 @@ export const opsFrCA: typeof opsEn = {
       "stale-project-sweep":
         "Signale à leur responsable les projets actifs sans activité depuis quatorze jours.",
       "purge-job-history":
-        "Élague l’historique job_run et les messages de file archivés au-delà de leur durée de conservation.",
+        "Élague l’historique des tâches planifiées au-delà de sa durée de conservation : exécutions réussies après 7 jours (1 jour si elles n’ont rien traité), exécutions en échec après 180 jours, en gardant toujours la dernière exécution de chaque tâche. Élague aussi les anciens registres de tâches, les registres de courriels envoyés et les compteurs de limite de débit.",
       "scheduled-announcements":
         "Diffuse les notifications des annonces dont l’heure de publication est arrivée.",
       "google-sync":
