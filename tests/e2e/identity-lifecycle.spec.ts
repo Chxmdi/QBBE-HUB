@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./fixtures";
-import { signIn, signOut } from "./auth";
+import { currentTotp, recalledTotp, signIn, signOut } from "./auth";
 import { sql } from "./db";
 
 /**
@@ -190,6 +190,59 @@ test.describe("identity lifecycle", () => {
     await page.getByLabel("Password", { exact: true }).fill(newPassword);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await page.waitForURL((url) => url.pathname === "/", { timeout: 60_000 });
+  });
+
+  test("a link opened while signed out keeps its target through sign-in", async ({ page }) => {
+    await page.context().clearCookies();
+    await page.goto("/my-work?task=abc");
+    await expect(page).toHaveURL(/\/sign-in\?next=%2Fmy-work%3Ftask%3Dabc$/);
+  });
+
+  test("an administrator with an authenticator resets a forgotten password", async ({ page }) => {
+    const email = "qa-admin@example.com";
+    const newPassword = "RecoveredAdmin!2026";
+    // Signing in once makes sure the admin's authenticator is set up and its
+    // test secret is known.
+    await signIn(page, "admin");
+    await signOut(page);
+    try {
+      await page.goto("/forgot-password");
+      await page.getByLabel("Email", { exact: true }).fill(email);
+      await page.getByRole("button", { name: "Send recovery link", exact: true }).click();
+      await expect(page.getByRole("status")).toContainText("recovery link", { timeout: 20_000 });
+      const message = await latestMessageTo(page, email);
+      const link = (message.Text ?? message.HTML ?? "")
+        .match(/https?:\/\/\S*?(?=["'\s<]|$)/g)
+        ?.find((candidate) => candidate.includes("token"));
+      expect(link, "the recovery email must carry a link").toBeTruthy();
+
+      // The recovery session is unverified, so the page asks for the code first.
+      await page.goto(link!.replace(/&amp;/g, "&"));
+      await page.waitForURL(/\/mfa\?next=%2Freset-password/, { timeout: 30_000 });
+      const secret = await recalledTotp("admin");
+      expect(secret, "the admin's test authenticator secret").toBeTruthy();
+      const secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
+      if (secondsRemaining <= 2) await page.waitForTimeout((secondsRemaining + 1) * 1000);
+      await page.getByLabel("Six-digit code", { exact: true }).fill(currentTotp(secret!));
+      await page.getByRole("button", { name: "Verify and continue" }).click();
+
+      await page.waitForURL(/\/reset-password$/, { timeout: 30_000 });
+      await page.getByLabel("New password", { exact: true }).fill(newPassword);
+      await page.getByLabel("Confirm password", { exact: true }).fill(newPassword);
+      await page.getByRole("button", { name: "Save password", exact: true }).click();
+      await expect(page.getByRole("status")).toContainText("password has been changed", { timeout: 20_000 });
+
+      // The new password is the one that works now (the code step follows).
+      await page.goto("/sign-in");
+      await page.getByLabel("Email", { exact: true }).fill(email);
+      await page.getByLabel("Password", { exact: true }).fill(newPassword);
+      await page.getByRole("button", { name: "Sign in", exact: true }).click();
+      await expect(page.getByLabel("Six-digit code", { exact: true })).toBeVisible({ timeout: 30_000 });
+    } finally {
+      // Every other spec signs the admin in with the shared test password.
+      sql(`update auth.users set encrypted_password = extensions.crypt('${PASSWORD}', extensions.gen_salt('bf'))
+           where email = '${email}'`);
+    }
   });
 
   test("deactivation removes access and keeps the record of what they did", async ({ page }) => {

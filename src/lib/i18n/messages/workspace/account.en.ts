@@ -50,6 +50,8 @@ export const accountEn = {
       failed: "Could not complete recovery. Please try again.",
       sessionMissing: "Your recovery session is missing or has expired.",
       requestNewLink: "Request a new recovery link",
+      needsMfa: "Your account uses two-step verification. Enter your authenticator code first, then set the new password.",
+      verifyFirst: "Enter your authenticator code",
     },
     mfa: {
       title: "Multi-factor authentication",
@@ -57,6 +59,8 @@ export const accountEn = {
       adminHeading: "Protect your administrator account",
       accountantBody: "QBBE Hub requires an authenticator code before the books open.",
       adminBody: "QBBE Hub requires an authenticator code for owners and administrators.",
+      memberHeading: "Confirm it is you",
+      memberBody: "Your account uses two-step verification. Enter the code from your authenticator to continue.",
       loading: "Loading security check…",
       checking: "Checking your security settings…",
       preparing: "Preparing authenticator setup…",

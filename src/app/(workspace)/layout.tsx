@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/layout/workspace-shell";
 import { LocaleSync } from "@/features/preferences/components/locale-sync";
@@ -5,6 +6,7 @@ import { requireSession } from "@/lib/auth";
 import { readNavigationSwitches } from "@/lib/navigation-switches";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
+import { RETURN_PATH_HEADER, mfaPath } from "@/lib/return-path";
 
 export default async function WorkspaceLayout({
   children,
@@ -33,7 +35,9 @@ export default async function WorkspaceLayout({
         verifiedTotpFactors(factorResult.data?.all ?? []).length > 0,
       )
     ) {
-      redirect("/mfa");
+      // Back to the page that was asked for once verified (a link from an
+      // email, say), not to Home.
+      redirect(mfaPath((await headers()).get(RETURN_PATH_HEADER)));
     }
   }
 
