@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createTranslator } from "@/lib/i18n/translate";
 import {
   addDays,
   agingCsv,
@@ -42,7 +43,7 @@ describe("summarizeAging", () => {
 
 describe("agingCsv", () => {
   it("writes decimals, bucket totals and neutralises formula text", () => {
-    const csv = agingCsv("bill", "2026-12-31", [row("b", "31-60", 499)]);
+    const csv = agingCsv("bill", "2026-12-31", [row("b", "31-60", 499)], createTranslator("en"));
     expect(csv.startsWith("﻿Accounts payable aging")).toBe(true);
     expect(csv).toContain("'=Alpha Inc,F-1,2026-10-01,2026-10-31,0,31–60 days,4.99,4.99");
     expect(csv).toContain(",Total,,4.99\r\n");

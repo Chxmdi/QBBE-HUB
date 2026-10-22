@@ -148,6 +148,8 @@ export const portfolioFrCA: typeof portfolioEn = {
     fromTemplate: {
       label: "Créer à partir d’un modèle",
       placeholder: "À partir d’un modèle…",
+      create: "Créer",
+      createLabel: "Créer le projet à partir du modèle",
       error: "Impossible d’utiliser le modèle.",
     },
     stageSelect: {

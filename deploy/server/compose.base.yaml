@@ -1,7 +1,14 @@
 # Shared services on the QBBE server (docs/runbooks/hosting.md): the HTTPS
 # front door and the virus scanner. Installed by setup.sh, project "qbbe-base".
 # Each environment's app runs in its own project from compose.app.yaml and
-# joins the two networks below by name.
+# joins its own two networks below by name: qbbe-edge-<environment> (Caddy to
+# the app) and qbbe-scan-<environment> (the app to the scanner). The apps
+# share no network, so one cannot reach the other except through Caddy.
+#
+# qbbe-edge and qbbe-scan are the networks both apps shared before. Caddy and
+# the scanner stay on them until both environments have been deployed again
+# on their own networks; remove them in the run that removes the old deploy
+# access (docs/runbooks/hosting.md, "Deploy access").
 
 services:
   caddy:
@@ -18,7 +25,7 @@ services:
       - ./sites:/etc/caddy/sites:ro
       - caddy-data:/data
       - caddy-config:/config
-    networks: [edge]
+    networks: [edge-staging, edge-production, edge]
     logging: &logging
       driver: json-file
       options: { max-size: "10m", max-file: "5" }
@@ -45,10 +52,21 @@ services:
       CLAMD_CONF_AlertBrokenExecutables: "yes"
     volumes:
       - clamav-db:/var/lib/clamav
-    networks: [scan, egress]
+    networks: [scan-staging, scan-production, scan, egress]
     logging: *logging
 
 networks:
+  edge-staging:
+    name: qbbe-edge-staging
+  edge-production:
+    name: qbbe-edge-production
+  scan-staging:
+    name: qbbe-scan-staging
+    internal: true
+  scan-production:
+    name: qbbe-scan-production
+    internal: true
+  # Shared by both apps before; see the note at the top.
   edge:
     name: qbbe-edge
   scan:

@@ -6,7 +6,7 @@ import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLocale, getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
   approvalDelegationSchema,

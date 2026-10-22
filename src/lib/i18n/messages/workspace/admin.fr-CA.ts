@@ -202,6 +202,7 @@ export const adminFrCA: typeof adminEn = {
           project_health_changed: "santé du projet modifiée",
           meeting_completed: "réunion terminée",
           event_assignment_created: "affectation à un événement créée",
+          object_event: "enregistrement modifié",
         },
         actions: {
           notify_assignee: "Aviser la personne assignée",

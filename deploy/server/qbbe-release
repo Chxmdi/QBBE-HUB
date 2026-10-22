@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# The only thing an environment's deploy user may run as root
+# (docs/runbooks/hosting.md, "Deploy access"). Installed root-owned at
+# /usr/local/sbin/qbbe-release by setup.sh; sudoers.qbbe lets qbbe-staging run
+# it for staging only and qbbe-production for production only.
+#
+#   sudo -n /usr/local/sbin/qbbe-release <staging|production> <deploy|rollback|restore> <image> <host> <registry user>
+#
+# "restore" is a rollback that also puts back the settings that ran with
+# that image (release.sh --restore-settings).
+#
+# Standard input: the registry token on the first line; for "deploy", the
+# environment's app settings (APP_ENV) on the lines after it. Nothing is read
+# from files the deploy user can write: the release script and the compose
+# and Caddy templates are the server's own copies in /opt/qbbe/bin, installed
+# by the Server setup run. A deploy user who could choose those files could
+# mount the host or the other environment's folder into a container.
+
+set -euo pipefail
+umask 077
+
+fail() { echo "qbbe-release: $*" >&2; exit 1; }
+
+[ "$(id -u)" = 0 ] || fail "run through sudo."
+
+ENVIRONMENT="${1:-}"
+MODE="${2:-}"
+IMAGE="${3:-}"
+HOST="${4:-}"
+REGISTRY_USER="${5:-}"
+[ "$#" = 5 ] || fail "usage: qbbe-release <staging|production> <deploy|rollback|restore> <image> <host> <registry user>"
+
+case "$ENVIRONMENT" in
+  staging | production) ;;
+  *) fail "environment must be staging or production." ;;
+esac
+# sudoers already limits each user to its own environment; checking again
+# here means a mistake in that file cannot open the other environment.
+[ "${SUDO_USER:-}" = "qbbe-${ENVIRONMENT}" ] || fail "only qbbe-${ENVIRONMENT} may release ${ENVIRONMENT}."
+case "$MODE" in
+  deploy | rollback | restore) ;;
+  *) fail "mode must be deploy, rollback or restore." ;;
+esac
+# A GitHub user, or an app or bot ("name[bot]").
+[[ "$REGISTRY_USER" =~ ^[A-Za-z0-9-]{1,39}(\[bot\])?$ ]] || fail "'${REGISTRY_USER}' is not a registry user name."
+
+BIN="/opt/qbbe/bin"
+# Only this repository's images, as Server setup recorded it: an image from
+# anywhere else would run code nobody here built.
+REPOSITORY="$(cat "${BIN}/image-repository" 2>/dev/null || true)"
+[ -n "$REPOSITORY" ] || fail "${BIN}/image-repository is missing; run the Server setup workflow."
+[[ "$IMAGE" =~ ^(.+):${ENVIRONMENT}-[0-9a-f]{7,40}$ && "${BASH_REMATCH[1]}" == "$REPOSITORY" ]] \
+  || fail "'${IMAGE}' is not a ${ENVIRONMENT} image from ${REPOSITORY}."
+DIR="/opt/qbbe/${ENVIRONMENT}"
+for f in release.sh compose.app.yaml site.caddy.template; do
+  [ -f "${BIN}/${f}" ] || fail "${BIN}/${f} is missing; run the Server setup workflow."
+done
+[ -d "$DIR" ] || fail "${DIR} is missing; run the Server setup workflow."
+
+IFS= read -r TOKEN || true
+[ -n "${TOKEN:-}" ] || fail "no registry token on standard input."
+
+if [ "$MODE" = deploy ]; then
+  # The rest of standard input is the new settings file, at most 1 MB (a
+  # few kilobytes in practice), so it cannot be used to fill the disk.
+  head -c 1048577 > "${DIR}/app.env.new"
+  size="$(stat -c %s "${DIR}/app.env.new")"
+  [ "$size" -gt 0 ] || { rm -f "${DIR}/app.env.new"; fail "no app settings on standard input."; }
+  [ "$size" -le 1048576 ] || { rm -f "${DIR}/app.env.new"; fail "the app settings are larger than 1 MB."; }
+else
+  [ -f "${DIR}/app.env" ] || fail "${ENVIRONMENT} has never been deployed on this server."
+  rm -f "${DIR}/app.env.new"
+fi
+
+install -m 644 -o root -g root "${BIN}/compose.app.yaml" "${BIN}/site.caddy.template" "${DIR}/"
+
+# This environment's own registry login, for this release only.
+export DOCKER_CONFIG="${DIR}/.docker"
+printf '%s' "$TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin >/dev/null \
+  || fail "the registry refused the login."
+unset TOKEN
+status=0
+if [ "$MODE" = restore ]; then
+  bash "${BIN}/release.sh" "$ENVIRONMENT" "$IMAGE" "$HOST" --restore-settings || status=$?
+else
+  bash "${BIN}/release.sh" "$ENVIRONMENT" "$IMAGE" "$HOST" || status=$?
+fi
+docker logout ghcr.io >/dev/null 2>&1 || true
+
+# While the old shared deploy path still exists, its user owns this folder
+# and must be able to read and replace what this run wrote, or falling back
+# to it fails. Once the folder belongs to root this changes nothing.
+owner="$(stat -c %u:%g "$DIR")"
+if [ "$owner" != "0:0" ]; then
+  chown -R -P "$owner" "$DIR"
+  [ -f "/opt/qbbe/base/sites/${ENVIRONMENT}.caddy" ] && chown -P "$owner" "/opt/qbbe/base/sites/${ENVIRONMENT}.caddy"
+fi
+exit "$status"

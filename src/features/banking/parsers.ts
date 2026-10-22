@@ -1,6 +1,6 @@
 import { parseMoneyToCents } from "@/features/finance/money";
 import { bankEn } from "@/lib/i18n/messages/finance/bank.en";
-import { interpolate, type MessageKey, type MessageVars, type TranslateFn } from "@/lib/i18n/translate";
+import { interpolate, type MessageKey, type MessageVars, type TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Bank statement parsers (#151). Pure functions, shared by the server (which

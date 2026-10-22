@@ -11,7 +11,7 @@ import { formatCents, parseMoneyToCents } from "@/features/ledger/money";
 import { DOCUMENT_KINDS, PAYMENT_METHODS } from "@/features/payables/model";
 import { getLocale, getT } from "@/lib/i18n/server";
 import type { Locale } from "@/lib/i18n/config";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Payables and receivables actions (#150). Staff draft bills, invoices and

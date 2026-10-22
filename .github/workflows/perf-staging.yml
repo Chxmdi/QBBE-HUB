@@ -58,7 +58,9 @@ jobs:
       APP_ENV: ${{ secrets.APP_ENV }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
       STAGING_SUPABASE_PROJECT_REF: ${{ vars.STAGING_SUPABASE_PROJECT_REF }}
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      # Staging's own database address, as the Deploy workflow uses; no
+      # personal access token that reaches every project (SEC-011).
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SITE_URL: ${{ vars.SITE_URL }}
     steps:
@@ -118,18 +120,10 @@ jobs:
           } >> "$GITHUB_ENV"
           echo "Staging reads ${url%/}."
 
-      # The fixture is written over a direct database connection with the
-      # environment's database password. The pooler address comes from
-      # `supabase link` (which needs SUPABASE_ACCESS_TOKEN); when the token is
-      # refused, the shared pooler is found by trying each region, which needs
-      # only the password. The connection is checked before anything is written.
-      - uses: supabase/setup-cli@v3
-        with:
-          version: 2.114.0
-
-      - name: Local config's signing key
-        run: scripts/local-signing-key.sh
-
+      # The fixture is written over a direct database connection: staging's
+      # SUPABASE_DB_URL when it is set, otherwise the shared pooler found by
+      # trying each region with the database password. The connection is
+      # checked before anything is written.
       - name: Connect to the staging database
         shell: bash
         run: |
@@ -137,12 +131,11 @@ jobs:
           enc=$(PW="$SUPABASE_DB_PASSWORD" python3 -c "import os,urllib.parse; print(urllib.parse.quote(os.environ['PW'], safe=''))")
           echo "::add-mask::$enc"
           url=""
-          if supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" > /dev/null 2> "$RUNNER_TEMP/link-err"; then
-            template=$(cat supabase/.temp/pooler-url 2>/dev/null || true)
+          if [ -n "${SUPABASE_DB_URL:-}" ]; then
+            [[ "$SUPABASE_DB_URL" == *"$STAGING_SUPABASE_PROJECT_REF"* ]] \
+              || { echo "::error::Refusing: SUPABASE_DB_URL does not name the registered staging project."; exit 1; }
             # Session mode (port 5432): the seeding runs in one connection.
-            [ -n "$template" ] && url=$(printf '%s' "$template" | sed -e "s|\[YOUR-PASSWORD\]|${enc}|" -e 's|:6543/|:5432/|')
-          else
-            echo "supabase link was refused: $(tail -n 1 "$RUNNER_TEMP/link-err")"
+            url=$(printf '%s' "$SUPABASE_DB_URL" | sed -e 's|:6543/|:5432/|')
           fi
           if [ -z "$url" ] || ! PGCONNECT_TIMEOUT=10 psql -X -q -t -A "$url" -c "select 1" > /dev/null 2>&1; then
             url=""

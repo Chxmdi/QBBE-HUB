@@ -1,6 +1,6 @@
 /**
  * English text for account screens (#141). Mounted at the top level of the
- * catalogue; this file owns only these namespaces: auth, settings, notifications, onboarding, account.
+ * catalogue; this file owns only these namespaces: auth, settings, notifications, onboarding, account, privacy.
  */
 export const accountEn = {
   auth: {
@@ -15,10 +15,15 @@ export const accountEn = {
       newHere: "New to QBBE Hub?",
       createAccount: "Create an account",
     },
+    password: {
+      hint: "At least {min} characters, with a lower-case letter, an upper-case letter and a digit.",
+      tooShort: "Use at least {min} characters.",
+      tooLong: "Use at most {max} characters.",
+      needsMix: "Include a lower-case letter, an upper-case letter and a digit.",
+    },
     signUp: {
       title: "Create account",
       fullName: "Full name",
-      passwordHint: "At least 8 characters.",
       submit: "Create account",
       haveAccount: "Already have an account?",
       signIn: "Sign in",
@@ -49,8 +54,6 @@ export const accountEn = {
       requestDone:
         "If this address belongs to an account, a recovery link will arrive shortly. Open it in this browser.",
       resetDone: "Your password has been changed. Sign in with your new password.",
-      passwordRules:
-        "Use at least 12 characters. Your workspace may require additional password safeguards.",
       newPassword: "New password",
       confirmPassword: "Confirm password",
       sendLink: "Send recovery link",
@@ -399,5 +402,43 @@ export const accountEn = {
       mfaRequired: "Complete multi-factor authentication before performing this action.",
       mfaUnavailable: "Could not verify multi-factor authentication. Try again.",
     },
+  },
+  privacy: {
+    title: "Privacy notice",
+    linkLabel: "Privacy notice",
+    draftBanner:
+      "Draft: QBBE has not approved this notice yet. It describes how the Hub works today and may change before it is final.",
+    version: "Version {version}",
+    intro:
+      "QBBE Hub is the internal workspace of the Quebec Board of Black Educators (QBBE) for its staff, volunteers, board members and invited guests. This notice explains what personal information the Hub collects, why, who can see it, where it is kept and how to exercise your rights.",
+    collectHeading: "What we collect",
+    collectBody:
+      "Your name, email address, job title, photo, time zone and language; what you write and upload in the Hub (messages, tasks, comments, documents, forms, signatures); when you sign in and which pages you last visited. For donors, funders and partners recorded in the CRM: contact details, notes about our conversations and, for donors, gifts and amounts. For employees: pay amounts imported from the payroll provider.",
+    whyHeading: "Why",
+    whyBody:
+      "To run the organization's work, to keep in touch with donors, funders and partners, and to keep the financial records the law requires. We do not sell personal information or use it for advertising.",
+    whoHeading: "Who can see it",
+    whoBody:
+      "Only the people whose role needs it. The database itself refuses everyone else: private channels and direct messages are visible to their members only, the CRM to staff, financial and payroll records to finance readers, and sensitive notes to their owner and administrators. Administrators must use two-factor sign-in.",
+    staffHeading: "For staff and volunteers",
+    staffBody:
+      "The Hub keeps a history of who changed what on tasks, projects and documents. If an administrator turns on Team signals, team leads see per-person indicators such as overdue work. If you connect your Google account, the Hub reads the metadata of the emails and calendar events you choose to link and can send email on your behalf; you can disconnect at any time.",
+    whereHeading: "Where it is kept, and providers outside Quebec",
+    whereBody:
+      "The Hub's data is stored with Supabase and served from a server QBBE rents; email is sent through Resend; encrypted backups of the data and files are kept in QBBE's Google Drive; your own Google mailbox and calendar are used only if you connect them; error reports, if turned on, go to Sentry. Some of these providers may process information outside Quebec. QBBE assesses each one before relying on it.",
+    keepHeading: "How long we keep it",
+    keepBody:
+      "Financial records, including gifts and payroll, are kept six years after the end of the fiscal year, as tax law requires. The audit trail of administrative actions is kept at least six years. Other information is kept while it serves the purposes above; QBBE is still setting retention periods for some of it, and this notice will say so when they are set.",
+    rightsHeading: "Your rights",
+    rightsBody:
+      "You can ask to see the personal information we hold about you, to correct it, or to have it deleted when we no longer need to keep it, and you can ask how it is used. We answer within 30 days. You can also complain to the Commission d’accès à l’information du Québec.",
+    contactHeading: "Person in charge of protecting personal information",
+    contactPending:
+      "QBBE is designating this person. Until their contact is published here, write to QBBE through your usual contact or an administrator of the Hub.",
+    contactNamed: "{title}, {email}",
+    linkInline: "privacy notice",
+    acknowledge: "By creating an account, you acknowledge the {link}.",
+    onboardingNote: "By entering the workspace, you acknowledge the {link}.",
+    backToSignIn: "Back to sign-in",
   },
 };

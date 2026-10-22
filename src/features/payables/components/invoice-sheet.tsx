@@ -2,7 +2,8 @@
 
 import { Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatCentsIn, invoiceLabel, invoiceTranslator } from "@/features/payables/model";
+import { formatCentsIn, invoiceLabel } from "@/features/payables/model";
+import { invoiceTranslator } from "@/features/payables/invoice-language";
 import type { DocumentRecord } from "@/features/payables/services/payables.queries";
 import type { TaxRegistration } from "@/features/payables/invoice-tax";
 

@@ -31,6 +31,9 @@ services:
     # busy (a staging load test cannot starve production).
     cpu_shares: ${QBBE_CPU_SHARES:-1024}
     mem_limit: ${QBBE_MEM_LIMIT:-3g}
+    # A runaway (or hostile) image cannot use up the server's process slots
+    # and take the other environment down with it.
+    pids_limit: 512
     read_only: true
     tmpfs:
       - /tmp
@@ -38,6 +41,9 @@ services:
     security_opt:
       - no-new-privileges:true
     cap_drop: [ALL]
+    # This environment's own networks: Caddy reaches the app on "edge", the
+    # app reaches the scanner on "scan". The other environment's app is on
+    # neither, so it cannot call this one except through Caddy.
     networks:
       edge:
         aliases: ["app-${QBBE_ENV}"]
@@ -49,7 +55,7 @@ services:
 networks:
   edge:
     external: true
-    name: qbbe-edge
+    name: qbbe-edge-${QBBE_ENV:?QBBE_ENV is required}
   scan:
     external: true
-    name: qbbe-scan
+    name: qbbe-scan-${QBBE_ENV:?QBBE_ENV is required}

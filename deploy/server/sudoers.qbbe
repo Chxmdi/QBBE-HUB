@@ -1,0 +1,5 @@
+# Installed by setup.sh as /etc/sudoers.d/qbbe (docs/runbooks/hosting.md).
+# Each environment's deploy user may run the release wrapper for its own
+# environment and nothing else. The wrapper checks the caller again.
+qbbe-staging ALL=(root) NOPASSWD: /usr/local/sbin/qbbe-release staging *
+qbbe-production ALL=(root) NOPASSWD: /usr/local/sbin/qbbe-release production *

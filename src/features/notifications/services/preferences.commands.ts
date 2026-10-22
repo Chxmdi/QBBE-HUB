@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isEnabled } from "@/lib/feature-flags";
 import { isRealTimeZone } from "@/lib/time";

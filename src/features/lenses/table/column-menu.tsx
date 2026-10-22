@@ -62,7 +62,7 @@ export function ColumnMenu({
             item.run();
             onClose();
           }}
-          className="block w-full px-3 py-1.5 text-left text-[13.5px] hover:bg-surface-soft focus:bg-surface-soft focus:outline-none"
+          className="block w-full px-3 py-1.5 text-left text-[13.5px] hover:bg-surface-soft focus:bg-surface-soft"
         >
           {item.label}
         </button>

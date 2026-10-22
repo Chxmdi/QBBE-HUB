@@ -36,7 +36,7 @@ app_env_has() {
 [[ "${RELEASE_ENABLED:-}" == "true" ]] \
   || fail "Release is disabled for ${TARGET_ENVIRONMENT:-?}. Complete the environment release checklist first."
 
-for name in SUPABASE_PROJECT_REF SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD \
+for name in SUPABASE_PROJECT_REF SUPABASE_DB_URL SUPABASE_DB_PASSWORD \
             STAGING_SUPABASE_REF PRODUCTION_SUPABASE_REF \
             DEPLOY_HOST DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS SITE_URL APP_ENV; do
   [[ -n "${!name:-}" ]] || fail "Missing ${name} for ${TARGET_ENVIRONMENT:-?}."
@@ -61,6 +61,14 @@ esac
 
 [[ "${SUPABASE_PROJECT_REF}" == "${expected_ref}" ]] \
   || fail "Refusing deployment: ${TARGET_ENVIRONMENT} is bound to Supabase project ${SUPABASE_PROJECT_REF}, not its registered project."
+
+# Migrations are pushed with this environment's own database address, not a
+# personal access token that reaches every project of the account (SEC-011).
+# It has to name this environment's project.
+[[ "${SUPABASE_DB_URL}" == postgres://* || "${SUPABASE_DB_URL}" == postgresql://* ]] \
+  || fail "SUPABASE_DB_URL for ${TARGET_ENVIRONMENT:-?} is not a postgres:// address."
+[[ "${SUPABASE_DB_URL}" == *"${SUPABASE_PROJECT_REF}"* ]] \
+  || fail "SUPABASE_DB_URL for ${TARGET_ENVIRONMENT:-?} does not name this environment's project (${SUPABASE_PROJECT_REF})."
 
 site="${SITE_URL%/}"
 [[ "$site" =~ ^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] \

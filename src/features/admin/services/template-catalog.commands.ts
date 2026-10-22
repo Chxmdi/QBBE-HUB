@@ -8,7 +8,7 @@ import { requiredText } from "@/lib/schema";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
 import { calendarDateInZone } from "@/lib/time";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 const KINDS = ["task", "event", "update", "report"] as const;
 

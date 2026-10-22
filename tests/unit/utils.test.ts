@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { addCalendarDays, calendarDateInZone, DEFAULT_TIME_ZONE } from "@/lib/time";
-import {
-  dueLabel,
-  initials,
-  myWorkBucket,
-  slugify,
-} from "@/lib/utils";
+import { initials, myWorkBucket, slugify } from "@/lib/utils";
+import { dueLabel } from "@/lib/i18n/due";
 
 // These functions answer in the organization's zone, so the dates asked about
 // have to be built in that zone too. Formatting `new Date()` with the runner's

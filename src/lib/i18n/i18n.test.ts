@@ -7,10 +7,11 @@ import {
 import { en } from "@/lib/i18n/messages/en";
 import { frCA } from "@/lib/i18n/messages/fr-CA";
 import { createTranslator, interpolate } from "@/lib/i18n/translate";
-import { formatCurrency, formatNumber } from "@/lib/i18n/format";
+import { formatCurrency, formatNumber } from "@/lib/i18n/format-core";
 import { NAV_GROUPS } from "@/config/navigation";
 import { navGroupLabel, navItemLabel } from "@/lib/i18n/navigation";
-import { dueLabel, formatDate, formatTime } from "@/lib/utils";
+import { formatDate, formatTime } from "@/lib/utils";
+import { dueLabel } from "@/lib/i18n/due";
 import { formatBalance, formatCents } from "@/features/ledger/money";
 
 /** Every dotted key with its string, flattened. */
@@ -182,7 +183,7 @@ describe("workspace catalogues", () => {
 const SAME_OUTSIDE_FINANCE = new Set([
   "communication", "document", "documents", "invitation", "mention", "notification",
   "signature",
-  " · Version {number}", ".", "—", "Action", "Actions", "Active", "Administration",
+  " · Version {number}", "Version {version}", "{title}, {email}", ".", "—", "Action", "Actions", "Active", "Administration",
   "Budgets", "CSV", "Communication", "Contact", "Contacts", "Conversation",
   "Date", "Description", "Direct", "Discussion", "Document", "Documents",
   "English", "Français", "Gmail", "Google", "Google Drive", "Impact",

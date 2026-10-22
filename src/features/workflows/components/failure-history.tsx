@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Formatters } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
 import { fill, type WorkflowsMessages } from "../i18n";
 import type { FailedRunRow } from "../services/workflow.queries";
 import { RetryFromStepButton } from "./retry-button";

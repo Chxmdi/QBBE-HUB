@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { createTranslator } from "@/lib/i18n/translate";
+
+const en = createTranslator("en");
 import {
   applyTaskFilters,
   describeFilterConflicts,
@@ -206,7 +209,7 @@ describe("filter combinations that cannot match", () => {
   it("names the contradiction rather than leaving an empty list to explain itself", () => {
     const conflicts = describeFilterConflicts(
       { status: "ready", blocked: "yes" },
-      { statusLabel: () => "Ready" },
+      { statusLabel: () => "Ready", t: en },
     );
     expect(conflicts).toHaveLength(1);
     expect(conflicts[0]).toContain("Ready");
@@ -214,13 +217,13 @@ describe("filter combinations that cannot match", () => {
   });
 
   it("treats blocked plus the blocked status as agreement, not conflict", () => {
-    expect(describeFilterConflicts({ status: "blocked", blocked: "yes" })).toEqual([]);
+    expect(describeFilterConflicts({ status: "blocked", blocked: "yes" }, { t: en })).toEqual([]);
   });
 
   it("flags an owner filter on a page that only shows one person's work", () => {
     const conflicts = describeFilterConflicts(
       { owner: UUID_B },
-      { scopedToUserId: UUID_A },
+      { scopedToUserId: UUID_A, t: en },
     );
     expect(conflicts).toHaveLength(1);
     expect(conflicts[0]).toContain("your own work");
@@ -228,19 +231,19 @@ describe("filter combinations that cannot match", () => {
 
   it("says nothing when the owner filter names the viewer", () => {
     expect(
-      describeFilterConflicts({ owner: UUID_A }, { scopedToUserId: UUID_A }),
+      describeFilterConflicts({ owner: UUID_A }, { scopedToUserId: UUID_A, t: en }),
     ).toEqual([]);
   });
 
   it("says nothing about an owner filter on a page that shows everyone", () => {
-    expect(describeFilterConflicts({ owner: UUID_B })).toEqual([]);
+    expect(describeFilterConflicts({ owner: UUID_B }, { t: en })).toEqual([]);
   });
 
   it("reports an ordinary filter set as fine", () => {
     expect(
       describeFilterConflicts(
         { status: "in_progress", priority: "high", project: UUID_A },
-        { scopedToUserId: UUID_A },
+        { scopedToUserId: UUID_A, t: en },
       ),
     ).toEqual([]);
   });

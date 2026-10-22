@@ -12,7 +12,7 @@ import { channelMuteAllows } from "@/features/notifications/services/mute";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { reportError } from "@/lib/observability";
 

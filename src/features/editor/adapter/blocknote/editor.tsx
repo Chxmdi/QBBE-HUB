@@ -21,7 +21,9 @@ import { flip, offset, shift } from "@floating-ui/react";
 import { BlockNoteView } from "@blocknote/ariakit";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { useLocale } from "@/lib/i18n/client";
+import { useFormatters, useLocale, useT } from "@/lib/i18n/client";
+import type { Formatters } from "@/lib/i18n/format-core";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { useEditorT } from "@/features/editor/i18n/client";
 import type { EditorT } from "@/features/editor/i18n";
 import { CONTENT_VERSION, type EditorBlock, type EditorContent } from "@/features/editor/adapter/content";
@@ -67,9 +69,14 @@ import { EditorUnitsInView, EditorUnitsOutside, editorUnitBlockSpecs, useEditorU
  *   F8           Quebec wording over BlockNote's France French
  */
 
-export function buildSchema(t: EditorT, locale: Locale, semantic: HandlersBox) {
+export function buildSchema(
+  t: EditorT,
+  locale: Locale,
+  semantic: HandlersBox,
+  app: { t: TranslateFn; format: Formatters },
+) {
   const { callout, bookmark, embed } = createWorkspaceBlocks(t);
-  const s = createSemanticBlocks(t, locale, semantic);
+  const s = createSemanticBlocks(t, locale, semantic, app);
   const layout = createLayoutBlocks(t);
   return BlockNoteSchema.create({
     blockSpecs: {
@@ -451,6 +458,8 @@ export default function BlockNoteEditorImpl({
 }: BlockEditorProps) {
   const locale = useLocale();
   const t = useEditorT();
+  const appT = useT();
+  const format = useFormatters();
   const theme = useDocumentTheme();
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -464,7 +473,10 @@ export default function BlockNoteEditorImpl({
   React.useEffect(() => {
     semanticBox.set(semantic ?? null);
   }, [semantic, semanticBox]);
-  const schema = React.useMemo(() => buildSchema(t, locale, semanticBox), [t, locale, semanticBox]);
+  const schema = React.useMemo(
+    () => buildSchema(t, locale, semanticBox, { t: appT, format }),
+    [t, locale, semanticBox, appT, format],
+  );
   // The first state only: the editor owns the document after it mounts.
   const [doc] = React.useState(() => createDocument(schema, initialState, initialContent.blocks));
 

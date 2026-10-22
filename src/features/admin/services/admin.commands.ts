@@ -7,7 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { reportError } from "@/lib/observability";
 import { sendEmail } from "@/features/notifications/services/email-provider";
 import { renderInvitationEmail } from "@/features/notifications/services/email-templates";

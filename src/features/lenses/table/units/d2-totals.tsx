@@ -486,7 +486,7 @@ function TotalsMenu({
             onClose(true);
           }}
           className={cn(
-            "flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-soft focus:bg-surface-soft focus:outline-none",
+            "flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-soft focus:bg-surface-soft",
             !item.radio && i === options.length && "border-t border-line",
           )}
         >

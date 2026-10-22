@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Checkbox, Input, Select } from "@/components/ui/input";
 import { PROJECT_HEALTHS, PROJECT_STAGES, type PortfolioFilters } from "@/features/dashboard/portfolio";
 import { getT } from "@/lib/i18n/server";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 const VALUE_KEYS = [
   "on_track", "at_risk", "off_track", "paused", "unknown",

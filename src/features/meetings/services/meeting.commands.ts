@@ -18,7 +18,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { wallTimeToInstant } from "@/lib/time";
 import { composeMeetingSummary } from "./meeting.summary";
 import { getLocale, getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 /** Validation messages are catalogue keys, translated when the action returns. */
 const K = (key: MessageKey): string => key;

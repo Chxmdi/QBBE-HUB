@@ -1,5 +1,5 @@
 import { peopleEn } from "@/lib/i18n/messages/workspace/people.en";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Display labels for the CRM's stored codes (#141). The codes stay in the

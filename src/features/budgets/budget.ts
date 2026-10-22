@@ -4,43 +4,16 @@
  * (revenue coming in, expense going out).
  */
 import { centsToDecimal, csvField } from "@/features/ledger/money";
-import { intlLocale, type Locale } from "@/lib/i18n/config";
-import { formatNumber } from "@/lib/i18n/format";
+import type { Locale } from "@/lib/i18n/config";
+import { formatNumber } from "@/lib/i18n/format-core";
 import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
 
-export const MONTHS_IN_YEAR = 12;
+// The phasing helpers the budget form uses in the browser live in
+// budget-months.ts, apart from the labels below, which build a translator
+// with both languages.
+import { fiscalMonths, MONTHS_IN_YEAR } from "@/features/budgets/budget-months";
 
-/**
- * An annual amount spread evenly over twelve months. Cents that do not divide
- * evenly go to the first months, one each, so the months always add up to
- * the annual amount exactly.
- */
-export function evenSplit(annualCents: number): number[] {
-  const base = Math.floor(annualCents / MONTHS_IN_YEAR);
-  const remainder = annualCents - base * MONTHS_IN_YEAR;
-  return Array.from({ length: MONTHS_IN_YEAR }, (_, i) => base + (i < remainder ? 1 : 0));
-}
-
-/** "2026-10-01" → ["2026-10", "2026-11", …, "2027-09"]. */
-export function fiscalMonths(fiscalYearStart: string): string[] {
-  const [year, month] = fiscalYearStart.split("-").map(Number);
-  return Array.from({ length: MONTHS_IN_YEAR }, (_, i) => {
-    const m = month - 1 + i;
-    const y = year + Math.floor(m / 12);
-    return `${y}-${String((m % 12) + 1).padStart(2, "0")}`;
-  });
-}
-
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** "2026-10" → "Oct 2026" (French: "oct. 2026"). */
-export function monthLabel(month: string, locale: Locale = "en"): string {
-  const [y, m] = month.split("-").map(Number);
-  if (locale === "en") return `${MONTH_NAMES[m - 1]} ${y}`;
-  return new Intl.DateTimeFormat(intlLocale(locale), { month: "short", year: "numeric", timeZone: "UTC" }).format(
-    Date.UTC(y, m - 1, 1),
-  );
-}
+export { evenSplit, fiscalMonths, monthLabel, MONTHS_IN_YEAR } from "@/features/budgets/budget-months";
 
 /** "2026-10-01" → "FY 2026-27" (a calendar-year budget reads "FY 2027"). */
 export function fiscalYearLabel(fiscalYearStart: string, locale: Locale = "en"): string {

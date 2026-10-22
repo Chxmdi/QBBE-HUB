@@ -1,6 +1,6 @@
 import { requireStaff } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { centsToDecimal, csvField } from "@/features/finance/money";
 import {

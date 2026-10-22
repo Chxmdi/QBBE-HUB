@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# The forced command for the deploy users (installed root-owned at
+# /usr/local/sbin/qbbe-ssh-gate; sshd runs it whatever the client asked,
+# see setup.sh). A deploy user's SSH key can do two things: check that it
+# connects ("true"), and run the release wrapper for its own environment.
+# No shell, no file copy, no port forwarding: from a shell on the host the
+# other environment's container is reachable directly, skipping Caddy.
+
+set -euo pipefail
+
+command="${SSH_ORIGINAL_COMMAND:-}"
+if [ "$command" = true ]; then
+  exit 0
+fi
+
+# Exactly what Deploy and Rollback send:
+#   sudo -n /usr/local/sbin/qbbe-release '<env>' '<mode>' '<image>' '<host>' '<user>'
+pattern="^sudo -n /usr/local/sbin/qbbe-release '([a-z]+)' '([a-z]+)' '([^' ]+)' '([^' ]+)' '([^' ]+)'$"
+if [[ "$command" =~ $pattern ]]; then
+  exec sudo -n /usr/local/sbin/qbbe-release \
+    "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[4]}" "${BASH_REMATCH[5]}"
+fi
+
+echo "qbbe-ssh-gate: this key may only run the release wrapper." >&2
+exit 1

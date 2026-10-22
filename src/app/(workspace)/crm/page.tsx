@@ -22,7 +22,7 @@ import { calendarDateInZone } from "@/lib/time";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { categoryLabel } from "@/features/crm/labels";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { Formatters } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
 import type { CrmFollowUp, CrmOrganization } from "@/types/entities";
 
 export async function generateMetadata(): Promise<Metadata> {

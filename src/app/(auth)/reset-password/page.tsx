@@ -3,7 +3,7 @@ import { PasswordRecoveryForm } from "@/features/onboarding/components/password-
 import type { Metadata } from "next";
 import { getT } from "@/lib/i18n/server";
 import { redirect } from "next/navigation";
-import { verifiedTotpFactors } from "@/features/auth/mfa";
+import { hasVerifiedTotpFactor } from "@/features/auth/mfa";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -25,7 +25,7 @@ export default async function ResetPasswordPage() {
     db.auth.mfa.getAuthenticatorAssuranceLevel(),
     db.auth.mfa.listFactors(),
   ]);
-  if (verifiedTotpFactors(factors.data?.all ?? []).length > 0 && assurance.data?.currentLevel !== "aal2") {
+  if (hasVerifiedTotpFactor(factors.data?.all ?? []) && assurance.data?.currentLevel !== "aal2") {
     redirect("/mfa?next=%2Freset-password");
   }
   return <PasswordRecoveryForm mode="reset" />;

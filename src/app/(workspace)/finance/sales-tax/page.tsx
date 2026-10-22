@@ -13,9 +13,9 @@ import { TaxTabs } from "@/features/sales-tax/components/tax-tabs";
 import { suggestNextPeriod } from "@/features/sales-tax/periods";
 import { FILING_FREQUENCY_LABEL } from "@/features/sales-tax/return-lines";
 import { getTaxSettings, listTaxPeriods } from "@/features/sales-tax/services/sales-tax.queries";
-import { formatNumber } from "@/lib/i18n/format";
+import { formatNumber } from "@/lib/i18n/format-core";
 import { getLocale, getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import type { Locale } from "@/lib/i18n/config";
 
 export async function generateMetadata(): Promise<Metadata> {

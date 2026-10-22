@@ -19,8 +19,8 @@ import type {
   ProgramOutcomes,
 } from "@/features/outcomes/services/outcome.queries";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { Formatters } from "@/lib/i18n/format";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { Formatters } from "@/lib/i18n/format-core";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * A program's delivery and its outcomes, side by side but never mixed.

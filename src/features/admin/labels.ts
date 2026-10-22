@@ -1,4 +1,4 @@
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Display labels for the codes admin screens show (#141). The codes stay as

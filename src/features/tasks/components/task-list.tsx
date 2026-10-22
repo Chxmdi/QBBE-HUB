@@ -19,7 +19,7 @@ import { StatusSelect } from "@/features/tasks/components/status-select";
 import { bulkUpdateTasks } from "@/features/tasks/services/task.commands";
 import { BULK_STATUSES } from "@/features/tasks/schemas";
 import { useLocale, useT } from "@/lib/i18n/client";
-import { cn, dueLabel } from "@/lib/utils";
+import { cn, dueLabelWith } from "@/lib/utils";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import type { Task, TaskPriority } from "@/types/entities";
 
@@ -191,7 +191,7 @@ export function TaskList({
               ) : null}
               <div className="card overflow-hidden">
                 {group.shown.map((task) => {
-                  const due = dueLabel(task.due_at, timeZone, locale);
+                  const due = dueLabelWith(t, task.due_at, timeZone, locale);
                   const isSelected = selected.has(task.id);
                   return (
                     <div

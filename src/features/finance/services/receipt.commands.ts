@@ -9,7 +9,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { parseMoneyToCents } from "@/features/finance/money";
 import { requiredText, isCalendarDate } from "@/lib/schema";
 import { getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 /**
  * Validation messages are catalogue keys, translated when the action returns

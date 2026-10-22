@@ -9,7 +9,7 @@ import { BlockedReasonDialog } from "@/features/tasks/components/blocked-reason-
 import { StatusSelect } from "@/features/tasks/components/status-select";
 import { updateTaskStatus } from "@/features/tasks/services/task.commands";
 import { useLocale, useT } from "@/lib/i18n/client";
-import { cn, dueLabel } from "@/lib/utils";
+import { cn, dueLabelWith } from "@/lib/utils";
 import type { Task, TaskStatus } from "@/types/entities";
 import { BOARD_COLUMNS } from "@/features/tasks/schemas";
 
@@ -178,7 +178,7 @@ export function TaskBoard({
                 </header>
                 <div className="space-y-2.5">
                   {shownTasks.map((task) => {
-                    const due = dueLabel(task.due_at, timeZone, locale);
+                    const due = dueLabelWith(t, task.due_at, timeZone, locale);
                     return (
                       <article
                         key={task.id}

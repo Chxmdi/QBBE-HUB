@@ -11,7 +11,7 @@ import {
   type ProjectRequestStatus,
 } from "@/features/requests/schemas";
 import { useT } from "@/lib/i18n/client";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import {
   decideApproval,
   decideProjectRequest,

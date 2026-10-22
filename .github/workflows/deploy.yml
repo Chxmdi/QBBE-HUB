@@ -91,7 +91,10 @@ jobs:
       # Starts the Backup workflow and follows its run.
       actions: write
     env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      # This environment's own database address (with its password), so the
+      # job holds nothing that reaches another project. A Supabase personal
+      # access token covers every project of the account (SEC-011).
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
     steps:
@@ -128,9 +131,6 @@ jobs:
       - name: Local config's signing key
         run: scripts/local-signing-key.sh
 
-      - name: Link the environment's database
-        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-
       # `db push` refuses to run when the database holds a migration version
       # this commit does not have (drift), so an out-of-band change stops the
       # deploy here rather than being silently built on.
@@ -139,7 +139,7 @@ jobs:
         # instead of being hidden by `tee`.
         shell: bash
         run: |
-          supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD" | tee migration-plan.txt
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run | tee migration-plan.txt
           {
             echo "### Migrations for ${{ inputs.environment }} at ${GITHUB_SHA}"
             echo '```'
@@ -179,11 +179,11 @@ jobs:
             || { echo "::error::The backup before migrating failed; no migration was applied. See the Backup run above."; exit 1; }
 
       - name: Apply migrations
-        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
 
       - name: Confirm nothing is left to apply
         run: |
-          supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD" | tee after.txt
+          supabase db push --db-url "$SUPABASE_DB_URL" --dry-run | tee after.txt
           grep -qi "up to date" after.txt || { echo "::error::Migrations still pending after push."; exit 1; }
 
   build:
@@ -269,16 +269,34 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      # Deploy access (docs/runbooks/hosting.md, "Deploy access"). With the
+      # environment variable DEPLOY_MODE=isolated, this environment's own
+      # user (qbbe-<environment>, its own key in DEPLOY_SSH_KEY) runs only the
+      # root-owned release wrapper. Otherwise the old shared deploy user is
+      # used, until both environments have been switched over.
+      - name: Choose the deploy path
+        id: path
+        env:
+          DEPLOY_MODE: ${{ vars.DEPLOY_MODE }}
+          LEGACY_USER: ${{ vars.DEPLOY_USER || 'ubuntu' }}
+        run: |
+          case "${DEPLOY_MODE:-legacy}" in
+            isolated) echo "user=qbbe-${{ inputs.environment }}" >> "$GITHUB_OUTPUT"; echo "mode=isolated" >> "$GITHUB_OUTPUT" ;;
+            legacy) echo "user=${LEGACY_USER}" >> "$GITHUB_OUTPUT"; echo "mode=legacy" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::DEPLOY_MODE must be 'isolated' or empty, not '${DEPLOY_MODE}'."; exit 1 ;;
+          esac
+
       - uses: ./.github/actions/qbbe-ssh
         with:
           host: ${{ vars.DEPLOY_HOST }}
-          user: ${{ vars.DEPLOY_USER || 'ubuntu' }}
+          user: ${{ steps.path.outputs.user }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
 
       # This environment's files only: the other environment's folder, its
       # container and its address are never written by this job.
       - name: Upload this release's files and settings
+        if: steps.path.outputs.mode == 'legacy'
         env:
           APP_ENV: ${{ secrets.APP_ENV }}
         run: |
@@ -292,11 +310,20 @@ jobs:
         env:
           REGISTRY_TOKEN: ${{ github.token }}
           REGISTRY_USER: ${{ github.actor }}
+          APP_ENV: ${{ secrets.APP_ENV }}
+          DEPLOY_PATH: ${{ steps.path.outputs.mode }}
         shell: bash
         run: |
           set -o pipefail
           host="${SITE_URL#https://}"; host="${host%%/*}"
           dir="/opt/qbbe/${TARGET_ENVIRONMENT}"
+          if [ "$DEPLOY_PATH" = isolated ]; then
+            # The wrapper reads the registry token, then the settings, from
+            # standard input; nothing is uploaded as a file.
+            { printf '%s\n' "$REGISTRY_TOKEN"; printf '%s\n' "$APP_ENV" | tr -d '\r'; } \
+              | ssh qbbe "sudo -n /usr/local/sbin/qbbe-release '${TARGET_ENVIRONMENT}' 'deploy' '${IMAGE}' '${host}' '${REGISTRY_USER}'" \
+              | tee release.log
+          else
           # The registry login lasts for this release only, in this
           # environment's own Docker config, and is removed afterwards.
           printf '%s' "$REGISTRY_TOKEN" | ssh qbbe "
@@ -305,6 +332,7 @@ jobs:
             bash '${dir}/release.sh' '${TARGET_ENVIRONMENT}' '${IMAGE}' '${host}'; status=\$?
             docker logout ghcr.io >/dev/null 2>&1
             exit \$status" | tee release.log
+          fi
           previous=$(sed -n 's/^ROLLBACK_TARGET=//p' release.log | tail -n 1)
           echo "previous=${previous}" >> "$GITHUB_OUTPUT"
           echo "site=${SITE_URL%/}" >> "$GITHUB_OUTPUT"

@@ -12,7 +12,7 @@ import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { cn } from "@/lib/utils";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { inboxItemVisible } from "@/features/notifications/services/mute";
 import { NoticeCategory } from "@/features/notifications/components/notice-category";
 import type { Notification } from "@/types/entities";

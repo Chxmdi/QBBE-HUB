@@ -32,8 +32,8 @@ import {
   restoreDocument,
 } from "@/features/documents/services/document.commands";
 import { useFormatters, useT } from "@/lib/i18n/client";
-import type { Formatters } from "@/lib/i18n/format";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { Formatters } from "@/lib/i18n/format-core";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { folderLabel, type LibraryFolder } from "@/features/documents/services/library";
 import { SearchSnippet } from "@/features/documents/components/search-snippet";
 

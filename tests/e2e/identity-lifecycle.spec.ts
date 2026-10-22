@@ -17,7 +17,9 @@ import { sql } from "./db";
  */
 
 const MAILPIT = "http://127.0.0.1:54324";
-const PASSWORD = "QaTest!2026";
+// New accounts made here must meet the password rule (12 characters, mixed
+// case and a digit); the QA fixture users' password predates it.
+const PASSWORD = "QaTest!2026new";
 
 /** A fresh address per run, so a rerun is not answered by the previous run's invitation. */
 function uniqueEmail(prefix: string) {

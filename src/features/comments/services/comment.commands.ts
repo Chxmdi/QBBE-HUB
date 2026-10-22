@@ -9,7 +9,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 const parentTypes = [
   "project",

@@ -1,4 +1,4 @@
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Payroll categories (#155). The same fifteen figures the database stores on

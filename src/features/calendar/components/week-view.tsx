@@ -1,83 +1,22 @@
 import Link from "next/link";
 import { format } from "date-fns";
-import { frCA } from "date-fns/locale";
 import type { Locale } from "@/lib/i18n/config";
 import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 import { cn } from "@/lib/utils";
+import {
+  calendarDateFormats,
+  KIND_STYLES,
+  type CalendarItem,
+} from "@/features/calendar/calendar-items";
+
+// Kept here too for the pages that import them from this file.
+export { calendarDateFormats, KIND_STYLES, type CalendarItem };
 import { RescheduleControl } from "@/features/calendar/components/reschedule-control";
 import { dayAsLocalDate } from "@/features/calendar/calendar-model";
-
-export interface CalendarItem {
-  id: string;
-  /** For ordering within a day. */
-  date: Date;
-  /**
-   * The workspace day (YYYY-MM-DD) the item belongs on. Grouping by `date`
-   * with date-fns answered in the server's zone (UTC), so evening meetings
-   * moved to the next day.
-   */
-  day: string;
-  /** Clock time already formatted in the workspace zone, for timed items. */
-  timeLabel?: string;
-  label: string;
-  kind: "task" | "milestone" | "meeting" | "event" | "follow_up" | "google";
-  href: string;
-  timed: boolean;
-  /**
-   * Who is accountable, where the record names somebody. Shown in the tooltip
-   * rather than the chip: the chip has room for one line and the name is not
-   * the thing somebody scans a calendar for.
-   */
-  owner?: string | null;
-  /** Already met. Rendered struck through, not hidden — it still happened. */
-  done?: boolean;
-  /**
-   * The record's own date as `yyyy-MM-dd` in the workspace zone, present only
-   * on records this viewer may move. Absence is what hides the control: the
-   * caller decides who may reschedule, so the chip never has to guess, and a
-   * viewer who cannot move a record is not shown a field that would fail.
-   */
-  reschedulableDate?: string | null;
-  /**
-   * The record's own id. `id` above is prefixed to keep chips unique across
-   * six record types in one list, so it is not the value any command wants.
-   */
-  recordId?: string;
-}
-
-export const KIND_STYLES: Record<CalendarItem["kind"], string> = {
-  // Both used to pin a hex literal for one theme; the -fg tokens already
-  // carry a designed dark value. The milestone chip failed dark-mode
-  // contrast (axe, qa-matrix, #101).
-  task: "bg-brand-soft text-brand-fg",
-  milestone: "bg-accent/20 text-accent-fg",
-  meeting: "bg-info/12 text-info-fg",
-  event: "bg-success/12 text-success-fg",
-  follow_up: "bg-warning/12 text-warning-fg",
-  google: "bg-surface-soft text-muted",
-};
 
 /** Short type prefix so kind never rests on color alone (§10.9). */
 function kindPrefix(kind: CalendarItem["kind"], t: TranslateFn): string {
   return t(`calendar.kinds.${kind}`);
-}
-
-/**
- * date-fns patterns and options for visible text in one language. French
- * reads the clock on 24 hours ("14 h 30") and puts the day before the month.
- */
-export function calendarDateFormats(locale: Locale) {
-  const french = locale === "fr-CA";
-  return {
-    options: french ? { locale: frCA } : {},
-    time: french ? "H 'h' mm" : "h:mm a",
-    agendaDay: french ? "EEEE d MMM" : "EEEE, MMM d",
-    rangeStart: french ? "d MMM" : "MMM d",
-    rangeEnd: french ? "d MMM yyyy" : "MMM d, yyyy",
-    monthYear: "MMMM yyyy",
-    shortMonthYear: "MMM yyyy",
-    shortDay: french ? "d MMM" : "MMM d",
-  };
 }
 
 function rescheduleControl(item: CalendarItem) {

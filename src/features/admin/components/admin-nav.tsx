@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 /**
  * Administration is one area with several surfaces. This is the same quiet

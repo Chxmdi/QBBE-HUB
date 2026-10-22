@@ -16,12 +16,14 @@ import {
   CHANNEL_HISTORY_PAGE_SIZE,
   mergeMessages,
   olderPage,
+  upsertMessage,
 } from "@/features/channels/history";
 import {
   fetchLinkedMessage,
   fetchThread,
   type MessageContainer,
 } from "@/features/channels/services/thread.queries";
+import { createReadReceipt } from "@/features/channels/read-receipt";
 import { authorizeRealtime, createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
@@ -98,7 +100,7 @@ export function Composer({
           aria-label={placeholder}
           rows={Math.min(6, Math.max(1, body.split("\n").length))}
           autoFocus={autoFocus}
-          className="max-h-40 flex-1 resize-none bg-transparent text-[14px] outline-none placeholder:text-muted/60"
+          className="max-h-40 flex-1 resize-none bg-transparent text-[14px] outline-none placeholder:text-muted"
         />
         <Button
           size="sm"
@@ -119,8 +121,8 @@ export function Composer({
 
 /**
  * Live message surface for channels and DMs. Durable reads come from
- * Postgres; realtime INSERT signals trigger a refetch of the new row
- * (MSG-001/MSG-010). Read cursor advances on view (MSG-007).
+ * Postgres; a realtime change fetches only the message it names
+ * (MSG-001/MSG-010). Read cursor advances on view (MSG-007), throttled.
  */
 export function ChannelView({
   channelId,
@@ -163,6 +165,11 @@ export function ChannelView({
     "connecting",
   );
   const savedMessageIds = new Set(initialSavedMessageIds);
+  // The realtime handler outlives renders; it reads the shown list from here.
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToLatestRef = useRef(true);
   const searchParams = useSearchParams();
@@ -186,8 +193,36 @@ export function ChannelView({
       .order("id", { ascending: false })
       .limit(CHANNEL_HISTORY_PAGE_SIZE);
     const latest = ([...((data ?? []) as unknown as Message[])] as Message[]).reverse();
-    setMessages((current) => mergeMessages(current, latest));
+    setMessages((current) => {
+      const merged = mergeMessages(current, latest);
+      // Same messages, same objects: keep the old list so nothing re-renders.
+      return merged.length === current.length && merged.every((m, i) => m === current[i])
+        ? current
+        : merged;
+    });
   }, [container.column, container.id]);
+
+  // One message, as the realtime signal or a local action names it. A new
+  // message used to refetch the latest page of 100 for every viewer.
+  const fetchMessage = useCallback(async (messageId: string) => {
+    const supabase = createSupabaseBrowserClient();
+    const { data, error } = await supabase
+      .from("message")
+      .select(MESSAGE_SELECT)
+      .eq("id", messageId)
+      .maybeSingle();
+    if (error) return;
+    if (!data) {
+      // Gone, or no longer visible to this person.
+      setMessages((current) =>
+        current.some((m) => m.id === messageId)
+          ? current.filter((m) => m.id !== messageId)
+          : current,
+      );
+      return;
+    }
+    setMessages((current) => upsertMessage(current, data as unknown as Message));
+  }, []);
 
   const loadOlder = useCallback(async () => {
     if (loadingOlder || messages.length === 0) return;
@@ -254,10 +289,19 @@ export function ChannelView({
             table: "message",
             filter: `${container.column}=eq.${container.id}`,
           },
-          () => {
-            void refresh();
-            if (channelId) void markChannelRead(channelId);
-            if (conversationId) void markConversationRead(conversationId);
+          (payload: { eventType: string; new?: { id?: string }; old?: { id?: string } }) => {
+            if (payload.eventType === "DELETE") {
+              const id = payload.old?.id;
+              if (id) setMessages((current) => current.filter((m) => m.id !== id));
+              return;
+            }
+            const id = payload.new?.id;
+            if (!id) return;
+            // The sender already fetched its own new message; its echo adds nothing.
+            if (payload.eventType === "INSERT" && messagesRef.current.some((m) => m.id === id)) {
+              return;
+            }
+            void fetchMessage(id);
           },
         )
         // "Subscribed" only means the socket joined the topic. Realtime starts
@@ -289,13 +333,30 @@ export function ChannelView({
       cancelled = true;
       if (subscription) void supabase.removeChannel(subscription);
     };
-  }, [container.column, container.id, channelId, conversationId, refresh]);
+  }, [container.column, container.id, refresh, fetchMessage]);
 
-  // Advance the read cursor when the surface is viewed.
+  // Advance the read cursor when the surface is viewed and when a newer
+  // message arrives, at most once every 10 seconds and only while visible.
+  const readReceipt = useMemo(
+    () =>
+      createReadReceipt(() => {
+        if (channelId) void markChannelRead(channelId);
+        if (conversationId) void markConversationRead(conversationId);
+      }),
+    [channelId, conversationId],
+  );
   useEffect(() => {
-    if (channelId) void markChannelRead(channelId);
-    if (conversationId) void markConversationRead(conversationId);
-  }, [channelId, conversationId, messages.length]);
+    const onVisibility = () => readReceipt.visible();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      readReceipt.flush();
+    };
+  }, [readReceipt]);
+  const newestId = messages.at(-1)?.id;
+  useEffect(() => {
+    readReceipt.request();
+  }, [readReceipt, newestId]);
 
   // Keep scrolled to the latest message unless a permalink is targeting one
   // or the user just loaded older history.
@@ -363,7 +424,7 @@ export function ChannelView({
     });
     if (result.ok) {
       stickToLatestRef.current = true;
-      await refresh();
+      if (result.id) await fetchMessage(result.id);
     }
     return result;
   }
@@ -375,7 +436,7 @@ export function ChannelView({
       threadRootId: threadRootId ?? undefined,
       body,
     });
-    if (result.ok) await refresh();
+    if (result.ok && result.id) await fetchMessage(result.id);
     return result;
   }
 
@@ -437,7 +498,7 @@ export function ChannelView({
                 onOpenThread={
                   replyPolicy !== "disabled" ? setThreadRootId : undefined
                 }
-                onChanged={refresh}
+                onChanged={fetchMessage}
                 canConvert={Boolean(channelId)}
               />
             ))
@@ -494,7 +555,7 @@ export function ChannelView({
               currentUserId={currentUserId}
               channelId={channelId}
               isStaff={isStaff}
-              onChanged={refresh}
+              onChanged={fetchMessage}
               isThreadReply
               highlighted={permalinkId === threadRoot.id}
               initiallySaved={savedMessageIds.has(threadRoot.id)}
@@ -507,7 +568,7 @@ export function ChannelView({
                 currentUserId={currentUserId}
                 channelId={channelId}
                 isStaff={isStaff}
-                onChanged={refresh}
+                onChanged={fetchMessage}
                 isThreadReply
                 highlighted={permalinkId === reply.id}
                 initiallySaved={savedMessageIds.has(reply.id)}

@@ -132,7 +132,7 @@ describe("reading periods and dates", () => {
   });
 
   it("shows a retention date, permanence, or that no rule applies", () => {
-    expect(describeRetainUntil("2032-03-31")).toBe("2032-03-31");
+    expect(describeRetainUntil("2032-03-31", en)).toBe("2032-03-31");
     expect(describeRetainUntil("2032-03-31", en, (d) => `on ${d}`)).toBe("on 2032-03-31");
     expect(describeRetainUntil("infinity", en)).not.toBe(describeRetainUntil(null, en));
     for (const value of ["infinity", null]) expect(describeRetainUntil(value, fr)).not.toMatch(/^records\./);

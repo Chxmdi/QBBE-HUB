@@ -23,7 +23,7 @@ import { normalizeExtractedText } from "@/features/documents/text-extract/text";
 import { TextReadingStatus } from "@/features/documents/text-extract/text-reading-status";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useLocale, useT } from "@/lib/i18n/client";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 
 const MAX_BYTES = 25 * 1024 * 1024;

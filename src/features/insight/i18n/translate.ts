@@ -1,5 +1,5 @@
 import { getLocale } from "@/lib/i18n/server";
-import { interpolate, type MessageVars } from "@/lib/i18n/translate";
+import { interpolate, type MessageVars } from "@/lib/i18n/translator";
 import type { Locale } from "@/lib/i18n/config";
 import { insightEn, type InsightMessages } from "./en";
 import { insightFr } from "./fr-CA";

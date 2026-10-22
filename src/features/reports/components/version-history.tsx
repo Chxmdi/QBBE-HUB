@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import type { ReportVersionRow } from "@/features/reports/services/report.queries";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Version notes the Hub writes itself are stored in English; show them in the

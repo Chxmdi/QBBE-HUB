@@ -40,7 +40,7 @@ import {
   type DocumentRecord,
 } from "@/features/payables/services/payables.queries";
 import { getLocale, getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 /**
  * What the bill page says about its approval (#143). Posting needs the bill's

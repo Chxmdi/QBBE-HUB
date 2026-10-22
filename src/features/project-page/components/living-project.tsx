@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Formatters } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
 import { cn } from "@/lib/utils";
 import type { HealthReason, ProjectHealth } from "../health";
 import type { BlockRow } from "../run-blocks";

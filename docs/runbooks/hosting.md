@@ -36,8 +36,10 @@ These are the trade-offs of the $0 choice. Read them once.
 
 - **One machine for both environments.** A heavy staging test (the 50-user
   load test) slows production while it runs; production gets twice
-  staging's processor share to limit this. Anyone who can deploy staging can
-  reach the machine production runs on.
+  staging's processor share to limit this. Once "Deploy access" below is
+  done, staging's deploy credentials can release staging and nothing else;
+  until then, anyone who can deploy staging can reach the machine production
+  runs on.
 - **No spare machine.** If the server stops, both environments are down until
   it is restarted or rebuilt (about 30 minutes with the steps below).
 - **Oracle can change the free tier.** It halved the free Ampere allowance in
@@ -127,7 +129,7 @@ Repository **Settings**, **Environments**, then **staging**, and afterwards
 |---|---|
 | `DEPLOY_SSH_KEY` | the whole private key file from step 2, including the BEGIN and END lines (the same for both environments) |
 | `APP_ENV` | that environment's app settings, one `NAME=value` per line; see "The APP_ENV secret" below |
-| `SUPABASE_ACCESS_TOKEN` | a Supabase personal access token of a QBBE account (Supabase, avatar, **Account preferences**, **Access Tokens**) |
+| `SUPABASE_DB_URL` | that environment's database address for migrations: Supabase, the project, **Connect**, **Session pooler** URI, with the database password filled in. It reaches this project only, unlike a personal access token |
 | `SUPABASE_DB_PASSWORD` | that environment's database password (already set) |
 | `DEPLOY_KNOWN_HOSTS` | added in step 6 |
 
@@ -140,20 +142,21 @@ staging's database, and the reverse, but it cannot tell two keys apart.
 
 ### 6. Prepare the server
 
-1. **Actions**, **Server setup**, **Run workflow**, environment `staging`,
-   tick **Only print the server's SSH host key**, **Run workflow**.
+1. **Actions**, **Server setup**, **Run workflow** (it runs from the
+   `server-admin` environment, see "Deploy access"), tick **Only print the
+   server's SSH host key**, **Run workflow**.
 2. Open the run. Its summary shows one line starting with the IP address and
    `ssh-ed25519`. Copy the whole line into a new secret
-   `DEPLOY_KNOWN_HOSTS` on **both** environments.
-3. **Run workflow** again, environment `staging`, the box **not** ticked.
+   `DEPLOY_KNOWN_HOSTS` on `server-admin`, staging and production.
+3. **Run workflow** again, the box **not** ticked.
    Optionally give a QBBE address for certificate notices.
 
 You should see the run finish green, with `qbbe-caddy` and `qbbe-clamav`
 listed as running. The scanner downloads its signatures for a few minutes
 after the first start.
 
-If it fails with "Could not sign in": `DEPLOY_SSH_KEY` is not the key from
-step 2, or `DEPLOY_HOST` is wrong. If it fails on the host key, print the key
+If it fails with "Could not sign in": `ADMIN_SSH_KEY` on `server-admin` is
+not the key from step 2, or `DEPLOY_HOST` is wrong. If it fails on the host key, print the key
 again (point 1 of this step); the server was probably recreated.
 
 ### 7. Tell Supabase the new addresses
@@ -190,6 +193,116 @@ candidate** run on the commit (release-procedure.md). Set production's
 Once both environments run here: in Netlify, delete the two QBBE sites
 (**Site configuration**, **Delete this site**), then revoke the Netlify
 access token.
+
+## Deploy access
+
+Staging and production each have their own deploy user on the server
+(`qbbe-staging`, `qbbe-production`) with its own SSH key, held only in that
+environment's `DEPLOY_SSH_KEY`. Their keys are in root-owned files
+(`/etc/ssh/authorized_keys/<user>`), and whatever they ask for, the server
+runs `/usr/local/sbin/qbbe-ssh-gate`, which allows only the release wrapper:
+no shell, no file copy, no forwarding. Neither user is in the docker group or
+has sudo, except to run `/usr/local/sbin/qbbe-release` for its own
+environment (`deploy/server/sudoers.qbbe`). The wrapper uses only the
+server's own copies of the release files (`/opt/qbbe/bin`), installed by
+**Server setup**, and releases only this repository's images. So a change to
+`release.sh`, `compose.app.yaml` or `site.caddy.template` reaches the server
+with the next **Server setup** run, not with a deploy. The apps sit on
+separate Docker networks that only Caddy and the scanner join. **Server
+setup** itself runs from its own `server-admin` environment with the
+administrator key.
+
+Until the switch below is done, deploys use the old shared deploy user (the
+`ubuntu` key in both environments), which can read both environments'
+settings and has root through sudo. The switch keeps that path working until
+the new one has deployed both environments once.
+
+One gap remains by design: both apps use the same virus scanner, so a
+compromised staging image could stop it for production too (uploads then stay
+"Security check pending" until it restarts). Running a second scanner would
+need about 4 GB more memory.
+
+### Before the next deploy after this change (owner steps)
+
+The deploy now needs two things the old one did not. Do both before running
+**Deploy** for either environment, or it stops at its first check (nothing
+live is touched).
+
+1. In each environment (staging, production): add the secret
+   `SUPABASE_DB_URL`. In Supabase: the project, **Connect**, **Session
+   pooler**, copy the URI, and put the database password in place of
+   `[YOUR-PASSWORD]`. Use the session pooler (port 5432), not the direct
+   connection: GitHub's runners cannot reach the direct address. You should
+   see the next Deploy's first job pass "Check environment readiness".
+2. Run **Server setup** once, as in step 3 below (it creates each
+   environment's own Docker networks). Without it the release step stops with
+   "network ... could not be found" and leaves the running site alone.
+
+### Switching over (owner steps)
+
+**Before you start:** do this when nobody needs a deploy for an hour. Step 8
+changes who can reach the server; if a step fails, stop and keep the old
+path (leave `DEPLOY_MODE` unset) rather than improvising.
+
+1. On your computer, make three new key pairs, one at a time:
+   `ssh-keygen -t ed25519 -N "" -C qbbe-staging -f qbbe-staging`, then the
+   same with `qbbe-production` and `qbbe-admin`. Each makes a private key file
+   and a `.pub` file. You should see three pairs of files.
+2. In GitHub: **Settings**, **Environments**, **New environment**, name
+   `server-admin`. Under **Deployment protection rules** tick **Required
+   reviewers** and add yourself; under **Deployment branches and tags**
+   choose **Selected branches and tags** and add `main`. Add to it:
+   - secrets `ADMIN_SSH_KEY` (for now, the private key in `DEPLOY_SSH_KEY`
+     today) and `DEPLOY_KNOWN_HOSTS` (the same line as now);
+   - variables `DEPLOY_HOST` (the server's IP), `STAGING_DEPLOY_PUBKEY` (the
+     one line in `qbbe-staging.pub`), `PRODUCTION_DEPLOY_PUBKEY` (the line in
+     `qbbe-production.pub`) and `ADMIN_PUBKEY` (the line in
+     `qbbe-admin.pub`). If the old deploy user is not `ubuntu`, also
+     `DEPLOY_USER` with its name.
+3. **Actions**, **Server setup**, **Run workflow**, box **not** ticked. You
+   should see it finish green. If it fails with "Could not sign in", check
+   `ADMIN_SSH_KEY` and `DEPLOY_HOST` on `server-admin`.
+4. In the **staging** environment: replace `DEPLOY_SSH_KEY` with the private
+   key file `qbbe-staging` (the whole file) and add the variable
+   `DEPLOY_MODE` with the value `isolated`. Then run **Deploy** for staging.
+   You should see the Release job sign in as `qbbe-staging` and finish green,
+   and the smoke check pass. If it fails, delete `DEPLOY_MODE` and put the
+   old key back in `DEPLOY_SSH_KEY`: the old path works again.
+5. Do the same for **production** with `qbbe-production`, then deploy
+   production (it asks for the usual approval).
+6. Delete the secret `SUPABASE_ACCESS_TOKEN` from both environments, and
+   revoke that token in Supabase (avatar, **Account preferences**, **Access
+   Tokens**).
+7. Prove the new administrator key before anything is removed: replace the
+   `server-admin` secret `ADMIN_SSH_KEY` with the private key file
+   `qbbe-admin` (the whole file), then run **Server setup** with the box
+   **not** ticked. (Step 3 already added `ADMIN_PUBKEY` next to the old key.)
+   You should see it sign in and finish green. If it cannot sign in, put the
+   old key back in `ADMIN_SSH_KEY` and check that `ADMIN_PUBKEY` matches
+   `qbbe-admin`; nothing has been removed yet.
+8. **Server setup** again, ticking **Remove the old shared deploy access**.
+   This takes the old user out of the docker group, gives the environment
+   folders to root and **leaves `ADMIN_PUBKEY` as the administrator's only
+   key**: the old key, which both environments held, stops working
+   everywhere. It refuses to run unless `ADMIN_PUBKEY` is already installed
+   (step 7). The server remembers this, so later runs keep it that way.
+   **This is hard to undo:** from now on the `qbbe-admin` key is the only way
+   in. If that file is lost, the server can only be reached through the
+   Oracle Cloud console (the instance's **Console connection**; to confirm on
+   QBBE's account). To rotate the administrator key later, add the new key
+   as `ADMIN_PUBKEY`, run Server setup (it adds it), switch `ADMIN_SSH_KEY`,
+   then remove the old line from the server by hand.
+9. Keep the three private key files only in the QBBE password manager, and
+   delete them from your computer.
+
+To check it worked, the security finding's test: an SSH session as
+`qbbe-staging` (with its key) is refused a shell, and its only permitted
+command cannot read `/opt/qbbe/production/app.env`, run `docker ps` or
+`sudo -n true`. The old key no longer signs in as `ubuntu`.
+
+After step 8, a later change can drop the old `qbbe-edge` and `qbbe-scan`
+networks from `compose.base.yaml`; nothing uses them once both environments
+have been deployed through the wrapper.
 
 ## The APP_ENV secret
 

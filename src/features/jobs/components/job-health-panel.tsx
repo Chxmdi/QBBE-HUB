@@ -11,8 +11,8 @@ import { jobDescription } from "@/features/jobs/services/i18n";
 import { DATABASE_ALERT_RATIO, DEFAULT_DATABASE_LIMIT_MB } from "@/features/jobs/services/handlers/ops-watchdog";
 import { runLabel, runOutcome, runTone } from "@/features/jobs/services/run-health";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { Formatters } from "@/lib/i18n/format";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { Formatters } from "@/lib/i18n/format-core";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * The operator's view of the background runtime.
