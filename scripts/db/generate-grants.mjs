@@ -14,9 +14,14 @@
 //   1. set auto_expose_new_tables = true in supabase/config.toml;
 //   2. move this migration and every later one out of supabase/migrations;
 //   3. npx supabase stop && npx supabase start && npx supabase db reset;
-//   4. node scripts/db/generate-grants.mjs <version> > /tmp/grants.sql;
+//   4. node scripts/db/generate-grants.mjs 20261119100000 > /tmp/grants.sql
+//      (or, to see what would change and stop: add
+//      --check supabase/migrations/20261119100000_explicit_api_grants.sql,
+//      which prints each table, column, sequence or function whose grants in
+//      the database differ from the file, and exits 1 if any do);
 //   5. put the moved files and config.toml back, copy /tmp/grants.sql over
-//      this migration, reset again and run npm run test:db.
+//      this migration (diff it first: git diff --no-index <old> /tmp/grants.sql),
+//      reset again with automatic grants off and run npm run test:db.
 //
 // Run it against a local database built with the automatic grants still on
 // (that is the state the app was tested against), then review the output.
@@ -38,9 +43,40 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const VERSION = process.argv[2];
-if (!/^\d{14}$/.test(VERSION ?? "")) {
-  console.error("Usage: node scripts/db/generate-grants.mjs <14-digit version of the migration being written>");
+const CHECK_FILE = process.argv[3] === "--check" ? process.argv[4] : null;
+if (!/^\d{14}$/.test(VERSION ?? "") || (process.argv[3] && !CHECK_FILE)) {
+  console.error("Usage: node scripts/db/generate-grants.mjs <14-digit version> [--check <existing migration file>]");
   process.exit(1);
+}
+
+/** The object each grant or revoke statement is about, e.g. "function public.f(text)". */
+function objectOf(line) {
+  const m = /\son\s+(table|sequence|function)\s+(\S+?)\s+(?:to|from)\s/.exec(line);
+  if (!m) return null;
+  const column = /^grant \w+ \(([^)]+)\)/.exec(line);
+  return `${m[1]} ${m[2]}${column ? ` column ${column[1]}` : ""}`;
+}
+
+/** Objects whose statements differ between two generated files. */
+export function grantDifferences(expectedText, actualText) {
+  const group = (text) => {
+    const map = new Map();
+    for (const line of text.split("\n")) {
+      const object = objectOf(line);
+      if (!object) continue;
+      map.set(object, [...(map.get(object) ?? []), line].sort());
+    }
+    return map;
+  };
+  const a = group(expectedText);
+  const b = group(actualText);
+  const out = [];
+  for (const object of new Set([...a.keys(), ...b.keys()])) {
+    const left = (a.get(object) ?? []).join("\n");
+    const right = (b.get(object) ?? []).join("\n");
+    if (left !== right) out.push({ object, file: a.get(object) ?? [], database: b.get(object) ?? [] });
+  }
+  return out.sort((x, y) => x.object.localeCompare(y.object));
 }
 
 /** Fingerprint of every migration ordered before VERSION (names and contents). */
@@ -182,4 +218,12 @@ out.push(
   "",
 );
 
+if (CHECK_FILE) {
+  const differences = grantDifferences(readFileSync(CHECK_FILE, "utf8"), out.join("\n"));
+  for (const d of differences) {
+    console.error(`${d.object}\n  file:     ${d.file.filter((l) => l.startsWith("grant")).join(" | ") || "(no grant)"}\n  database: ${d.database.filter((l) => l.startsWith("grant")).join(" | ") || "(no grant)"}`);
+  }
+  console.error(differences.length ? `${differences.length} object(s) differ: regenerate the migration.` : "The file matches the database.");
+  process.exit(differences.length ? 1 : 0);
+}
 process.stdout.write(out.join("\n"));
