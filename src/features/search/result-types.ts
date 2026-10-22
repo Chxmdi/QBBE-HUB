@@ -12,7 +12,7 @@
  * halves of the feature describe the same thing in the same sequence.
  */
 
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 export const SEARCH_RESULT_TYPES = [
   "person",

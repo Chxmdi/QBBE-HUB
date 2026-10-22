@@ -1,5 +1,6 @@
+import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth";
+import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { isDownloadable } from "@/features/exports/schemas";
@@ -17,6 +18,12 @@ import { logEvent, requestIdOf } from "@/lib/server-log";
  *
  * The order matters:
  *
+ *   0. an administrator must have finished two-step verification (SEC-003).
+ *      What an admin can export is organization-wide, and a password alone
+ *      is what a phished account has. The read policy also hides an admin's
+ *      own exports at aal1; checking here first sends them to /mfa instead
+ *      of a bare "not found". Staff exports hold only what staff can read
+ *      anyway, so staff are not asked for a second factor they do not have;
  *   1. read the row through the *user's* client, so row-level security decides
  *      whether this person may see the export at all;
  *   2. check the clock, not the status — expiry is swept by a job, so a row
@@ -40,6 +47,18 @@ export async function GET(
   const session = await requireSession();
   const t = await getT();
   const { id } = await params;
+
+  // Step 0: two-step verification for administrators, before anything is read,
+  // counted or signed.
+  if (session.isAdmin) {
+    const authorization = await authorizeAdminAction();
+    if (!authorization.ok) {
+      if (authorization.reason === "mfa") {
+        redirect(`/mfa?next=${encodeURIComponent("/admin/exports")}`);
+      }
+      return NextResponse.json({ error: authorization.error }, { status: 503 });
+    }
+  }
 
   // Step 1: the user's own client, so the read policy applies.
   const supabase = await createSupabaseServerClient();

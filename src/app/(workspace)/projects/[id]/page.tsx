@@ -112,6 +112,7 @@ export default async function ProjectDetailPage({
     { data: closure },
     { data: milestoneDependencies },
     { data: funders },
+    { data: taskCounts },
   ] = await Promise.all([
     supabase
       .from("milestone")
@@ -198,6 +199,8 @@ export default async function ProjectDetailPage({
       .in("category", ["funder", "sponsor", "donor", "government"])
       .eq("status", "active")
       .order("name"),
+    // The list below stops at 200 tasks; the counts are whole.
+    supabase.rpc("project_task_counts", { p_project: id }).maybeSingle(),
   ]);
 
   type TeamGrant = {
@@ -255,6 +258,10 @@ export default async function ProjectDetailPage({
     (t) => t.status !== "completed" && t.status !== "cancelled",
   );
   const doneTasks = taskList.filter((t) => t.status === "completed");
+  const counted = taskCounts as { open: number | string; completed: number | string; total: number | string } | null;
+  const openCount = counted ? Number(counted.open) : openTasks.length;
+  const doneCount = counted ? Number(counted.completed) : doneTasks.length;
+  const totalCount = counted ? Number(counted.total) : taskList.length;
   // Drawing every row made a busy project one of the heaviest pages in the
   // 50-user test (#115). The counts stay whole; the full list is one link away.
   const shownOpenTasks = showAllTasks
@@ -264,9 +271,9 @@ export default async function ProjectDetailPage({
     ? doneTasks
     : doneTasks.slice(0, PROJECT_TASK_ROW_LIMIT);
   const hiddenTaskCount =
-    openTasks.length -
+    openCount -
     shownOpenTasks.length +
-    doneTasks.length -
+    doneCount -
     shownDoneTasks.length;
 
   return (
@@ -342,12 +349,12 @@ export default async function ProjectDetailPage({
                   total: milestoneList.length,
                 })
               : t("projects.detail.noMilestones")}
-            {openTasks.length > 0
+            {openCount > 0
               ? t(
-                  openTasks.length === 1
+                  openCount === 1
                     ? "projects.detail.openTasksOne"
                     : "projects.detail.openTasksOther",
-                  { count: openTasks.length },
+                  { count: openCount },
                 )
               : ""}
           </span>
@@ -411,7 +418,7 @@ export default async function ProjectDetailPage({
             id: "tasks",
             label: t("projects.detail.tabs.tasks"),
             href: `/projects/${project.id}?tab=tasks`,
-            count: openTasks.length,
+            count: openCount,
           },
           {
             id: "updates",
@@ -532,8 +539,8 @@ export default async function ProjectDetailPage({
               {t("projects.detail.tasks.heading")}
               <span className="meta ml-2 font-normal">
                 {t("projects.detail.tasks.counts", {
-                  open: openTasks.length,
-                  done: doneTasks.length,
+                  open: openCount,
+                  done: doneCount,
                 })}
               </span>
             </h2>
@@ -547,10 +554,10 @@ export default async function ProjectDetailPage({
                 {shownOpenTasks.map((task) => (
                   <TaskRow key={task.id} task={task} timeZone={session.timeZone} />
                 ))}
-                {doneTasks.length > 0 ? (
+                {doneCount > 0 ? (
                   <details>
                     <summary className="cursor-pointer border-t border-line bg-surface-soft/60 px-3 py-2 text-[12.5px] font-medium text-muted">
-                      {t("projects.detail.tasks.completed", { count: doneTasks.length })}
+                      {t("projects.detail.tasks.completed", { count: doneCount })}
                     </summary>
                     {shownDoneTasks.map((task) => (
                       <TaskRow
@@ -567,7 +574,7 @@ export default async function ProjectDetailPage({
                     href={`/projects/${project.id}?tab=tasks&all=1`}
                     className="block border-t border-line px-3 py-2 text-[12.5px] font-medium text-brand-fg hover:bg-surface-soft"
                   >
-                    {t("projects.detail.tasks.showAll", { count: taskList.length })}
+                    {t("projects.detail.tasks.showAll", { count: totalCount })}
                   </Link>
                 ) : null}
               </div>

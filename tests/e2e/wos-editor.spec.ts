@@ -37,9 +37,16 @@ async function caretAtEnd(page: Page, block: Locator) {
   await block.click({ position: { x: box.width - 4, y: box.height / 2 } });
 }
 
+// The page inside a YouTube embed is youtube.com's markup, not ours, and its
+// own ARIA findings would fail every run, so the embed is left out of the
+// scan. Our part of it, the <iframe> and its title, is checked by the test
+// itself (it finds the frame by that title).
+const THIRD_PARTY_EMBED = "iframe[src^='https://www.youtube-nocookie.com/']";
+
 async function seriousAxe(page: Page) {
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22a", "wcag22aa"])
+    .exclude(THIRD_PARTY_EMBED)
     .analyze();
   return results.violations
     .filter((v) => v.impact === "critical" || v.impact === "serious")

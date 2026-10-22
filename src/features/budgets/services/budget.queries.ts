@@ -1,5 +1,5 @@
 import type { createSupabasePageClient } from "@/lib/supabase/page";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import { normalizeRows, type BudgetAccountType, type BudgetReportRow } from "@/features/budgets/budget";
 
 type Client = Awaited<ReturnType<typeof createSupabasePageClient>>;

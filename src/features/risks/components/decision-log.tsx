@@ -15,7 +15,7 @@ import {
 } from "@/features/risks/services/decision.commands";
 import type { DecisionRequestRow, DecisionRow } from "@/features/risks/services/decision.queries";
 import { useFormatters, useT } from "@/lib/i18n/client";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 const decisionFields = (t: TranslateFn) => [
   { name: "title", label: t("risks.decisions.fields.title"), type: "text" as const, required: true },

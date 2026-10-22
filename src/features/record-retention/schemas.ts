@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requiredText, isCalendarDate } from "@/lib/schema";
 import { opsEn } from "@/lib/i18n/messages/workspace/ops.en";
-import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Records retention and legal hold (#146).
@@ -62,17 +62,18 @@ export const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ] as const;
 
-const ENGLISH = createTranslator("en");
+// Labels take the caller's `t`: the policy and record forms run in the
+// browser, and an English default would load both language catalogues.
 
 /** A month's name (1 = January) in the reader's language. */
-export function monthName(month: number, t: TranslateFn = ENGLISH): string {
+export function monthName(month: number, t: TranslateFn): string {
   return t(`records.months.${month}` as MessageKey);
 }
 
 /** Who confirms a category's period ("accountant", "counsel") in the reader's language. */
 export function confirmerLabel(
   who: RecordCategory["confirm_with"],
-  t: TranslateFn = ENGLISH,
+  t: TranslateFn,
 ): string {
   return t(`records.who.${who}` as MessageKey);
 }
@@ -99,7 +100,7 @@ const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 export function describePeriod(
   category: Pick<RecordCategory, "retention_basis">,
   years: number | null,
-  t: TranslateFn = ENGLISH,
+  t: TranslateFn,
 ): string {
   if (category.retention_basis === "permanent" || years === null) {
     return t("records.period.permanent");
@@ -116,7 +117,7 @@ export function describePeriod(
  */
 export function describeRetainUntil(
   value: string | null,
-  t: TranslateFn = ENGLISH,
+  t: TranslateFn,
   date: (isoDate: string) => string = (isoDate) => isoDate,
 ): string {
   if (value === null) return t("records.retainUntil.noRule");

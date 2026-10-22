@@ -1,6 +1,7 @@
 {
   "_about": "Seconds each signed-in spec file took in CI on Chromium (run 36732905529, 2026-09-30). scripts/ci/spec-groups.mjs uses them to give each machine an even share. Files not listed count as 30 s. Refresh when a file grows a lot. The wos-*, workspace-os-*, lenses-*, insight-*, object-* and the other Workspace OS specs were measured locally (I6, 2026-10-01, one Chromium worker, same stack as CI, the larger of the switches-off and switches-on runs).",
-  "access-impact.spec.ts": 27, "api-v1.spec.ts": 12, "approval-delegation.spec.ts": 12,
+  "access-impact.spec.ts": 27, "assignment-notification.spec.ts": 15, "document-scan.spec.ts": 20,
+  "gift-void.spec.ts": 10, "member-role-change.spec.ts": 10, "api-v1.spec.ts": 12, "approval-delegation.spec.ts": 12,
   "approvals.spec.ts": 29, "bank.spec.ts": 16, "budgets.spec.ts": 11,
   "collaboration.spec.ts": 28, "connected-search.spec.ts": 4, "crm.spec.ts": 15,
   "decisions-v2.spec.ts": 10, "document-search.spec.ts": 14, "documents-library.spec.ts": 10,

@@ -86,6 +86,10 @@ function calls(fetchMock: ReturnType<typeof vi.fn>) {
 
 beforeEach(() => {
   db = new FakeSupabase();
+  db.seed("organization_membership", [
+    { organization_id: ORG, user_id: USER, status: "active" },
+    { organization_id: ORG, user_id: "user-2", status: "active" },
+  ]);
   vi.stubEnv("GOOGLE_CLIENT_ID", "client-id");
   vi.stubEnv("GOOGLE_CLIENT_SECRET", "client-secret");
 });

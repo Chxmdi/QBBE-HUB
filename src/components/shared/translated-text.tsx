@@ -1,7 +1,7 @@
 "use client";
 
 import { useT } from "@/lib/i18n/client";
-import type { MessageKey, MessageVars } from "@/lib/i18n/translate";
+import type { MessageKey, MessageVars } from "@/lib/i18n/translator";
 
 /**
  * One catalogue string in the reader's language, for markup shared by server

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { optionalDay, requiredText } from "@/lib/schema";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Intake: proposing work, and asking a named person to decide.

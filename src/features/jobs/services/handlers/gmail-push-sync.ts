@@ -2,6 +2,7 @@ import { classifyIntegrationFailure } from "@/features/admin/services/integratio
 import { reconcileGmailConnection } from "@/features/inbox/services/gmail-reconcile";
 import { ack, deadLetter, readBatch } from "../queue";
 import type { JobContext, JobResult } from "../runner";
+import { withActiveOwners } from "../active-owners";
 
 interface GmailPushQueuePayload {
   kind?: string;
@@ -55,7 +56,8 @@ export async function gmailPushSync({
       !connection ||
       connection.provider !== "gmail" ||
       connection.status !== "connected" ||
-      !connection.user_id
+      !connection.user_id ||
+      (await withActiveOwners(db, [connection])).length === 0
     ) {
       await ack(db, "integrations", message.msgId);
       resolved += 1;

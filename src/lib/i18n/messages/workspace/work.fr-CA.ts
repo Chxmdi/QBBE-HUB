@@ -270,6 +270,7 @@ export const workFrCA: typeof workEn = {
     },
     statusSelect: {
       label: "Statut de la tâche",
+      labelFor: "Statut de la tâche : {title}",
       updateFailed: "La mise à jour a échoué.",
     },
     blockedDialog: {
@@ -458,6 +459,8 @@ export const workFrCA: typeof workEn = {
     restore: "Restaurer",
     notify: {
       assigned: "{name} vous a assigné une tâche",
+      recurringToOwner: "La prochaine occurrence de « {title} » vous revient : la personne qui s’en occupait n’est plus active",
+      recurringUnassigned: "La prochaine occurrence de « {title} » n’est assignée à personne : la personne qui s’en occupait n’est plus active",
       reviewRequest: "{name} vous demande de réviser « {title} »",
       dueChanged: "Échéance modifiée pour « {title} »",
       madeRole: {

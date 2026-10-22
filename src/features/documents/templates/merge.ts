@@ -9,7 +9,7 @@
  * the PDF writer escapes every character of the result.
  */
 
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 export const TEMPLATE_KINDS = [
   { id: "letter", en: "Letter", fr: "Lettre" },

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import type { Formatters } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
 import type { ObjectApprovalsT } from "../i18n";
 import type { ObjectApprovalRow } from "../services/object-approval.queries";
 

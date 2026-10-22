@@ -1,4 +1,4 @@
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /** Completion measures activity; only accountable project health drives health. */
 export function summarizeProjectHealth(projects: { health: string; stage: string; archived_at: string | null }[]) {

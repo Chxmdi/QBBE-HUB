@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { createTranslator } from "@/lib/i18n/translate";
+import { formattersFor } from "@/lib/i18n/format";
 import { createEditorT, editorEn, editorFrCA, type EditorT } from "@/features/editor/i18n";
 import {
   BLOCK_CATEGORIES,
@@ -24,7 +26,7 @@ const types = BLOCK_REGISTRY.map((entry) => entry.type);
 
 describe("block registry", () => {
   it("names every block in the built schema, and nothing else", () => {
-    const schema = buildSchema(stubT, "en", new HandlersBox(null));
+    const schema = buildSchema(stubT, "en", new HandlersBox(null), { t: createTranslator("en"), format: formattersFor("en") });
     const schemaTypes = Object.keys(schema.blockSchema).sort();
     expect([...types].sort()).toEqual(schemaTypes);
     expect(new Set(types).size).toBe(types.length);
@@ -126,7 +128,7 @@ describe("derived menus", () => {
   });
 
   it("turns blocks into types and props the schema accepts", () => {
-    const schema = buildSchema(stubT, "en", new HandlersBox(null));
+    const schema = buildSchema(stubT, "en", new HandlersBox(null), { t: createTranslator("en"), format: formattersFor("en") });
     for (const { key, block } of turnIntoTargets()) {
       const spec = schema.blockSchema[block.type as keyof typeof schema.blockSchema] as
         | { propSchema: Record<string, { default: unknown; values?: readonly unknown[] }> }

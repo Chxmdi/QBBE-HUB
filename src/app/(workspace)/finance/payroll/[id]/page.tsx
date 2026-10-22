@@ -25,7 +25,7 @@ import {
   previewLines,
 } from "@/features/payroll/services/payroll.queries";
 import { getLocale, getT } from "@/lib/i18n/server";
-import { formatNumber } from "@/lib/i18n/format";
+import { formatNumber } from "@/lib/i18n/format-core";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("finance.payroll.run.metaTitle") };

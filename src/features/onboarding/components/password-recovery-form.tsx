@@ -6,12 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/client";
+import {
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  passwordProblem,
+} from "@/features/auth/password-rules";
 
 export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [needsMfa, setNeedsMfa] = useState(false);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -28,8 +34,19 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
         if (sendError) throw new Error(t("auth.recovery.requestFailed"));
       } else {
         const password = String(data.get("password"));
+        const problem = passwordProblem(password);
+        if (problem) {
+          throw new Error(t(`auth.password.${problem}`, { min: MIN_PASSWORD_LENGTH, max: MAX_PASSWORD_LENGTH }));
+        }
         if (password !== data.get("confirm")) throw new Error(t("auth.recovery.mismatch"));
         const { error: updateError } = await db.auth.updateUser({ password });
+        // An account with an authenticator changes its password only in a
+        // verified session; say so and offer the way, rather than a generic
+        // failure that sends people to request another link.
+        if (updateError && (updateError as { code?: string }).code === "insufficient_aal") {
+          setNeedsMfa(true);
+          throw new Error(t("auth.recovery.needsMfa"));
+        }
         if (updateError) throw new Error(t("auth.recovery.updateFailed"));
         await db.auth.signOut();
       }
@@ -51,13 +68,14 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
           <Label htmlFor="recovery-email">{t("common.email")}</Label>
           <Input id="recovery-email" name="email" type="email" autoComplete="email" required maxLength={254} />
         </div> : <>
-          <p className="text-sm text-muted">{t("auth.recovery.passwordRules")}</p>
+          <p className="text-sm text-muted">{t("auth.password.hint", { min: MIN_PASSWORD_LENGTH })}</p>
           <div><Label htmlFor="new-password">{t("auth.recovery.newPassword")}</Label>
-            <Input id="new-password" name="password" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /></div>
+            <Input id="new-password" name="password" type="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} maxLength={MAX_PASSWORD_LENGTH} required /></div>
           <div><Label htmlFor="confirm-password">{t("auth.recovery.confirmPassword")}</Label>
-            <Input id="confirm-password" name="confirm" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /></div>
+            <Input id="confirm-password" name="confirm" type="password" autoComplete="new-password" minLength={MIN_PASSWORD_LENGTH} maxLength={MAX_PASSWORD_LENGTH} required /></div>
         </>}
         {error ? <p role="alert" className="text-sm text-danger-fg">{error}</p> : null}
+        {needsMfa ? <Link href="/mfa?next=%2Freset-password" className="text-sm text-brand-fg hover:underline">{t("auth.recovery.verifyFirst")}</Link> : null}
         <Button type="submit" loading={busy} disabled={busy} className="w-full">{mode === "request" ? t("auth.recovery.sendLink") : t("auth.recovery.savePassword")}</Button>
       </form>}
     <Link className="inline-block text-sm text-brand-fg hover:underline" href="/sign-in">{t("common.backToSignIn")}</Link>

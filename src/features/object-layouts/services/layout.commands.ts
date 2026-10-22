@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/i18n/server";
 import { layoutSchema, normalizeLayout } from "../layout";
@@ -20,6 +21,7 @@ const saveSchema = z.object({ typeId: z.string().uuid(), layout: layoutSchema })
 export async function saveObjectLayout(input: unknown): Promise<LayoutResult> {
   const session = await requireSession();
   const m = layoutsText(await getLocale()).errors;
+  if (!(await isEnabled("wos_editor"))) return { ok: false, error: m.forbidden };
   const parsed = saveSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: m.invalid };
   const db = await createSupabaseServerClient();
@@ -38,6 +40,7 @@ export async function saveObjectLayout(input: unknown): Promise<LayoutResult> {
 export async function resetObjectLayout(typeId: unknown): Promise<LayoutResult> {
   await requireSession();
   const m = layoutsText(await getLocale()).errors;
+  if (!(await isEnabled("wos_editor"))) return { ok: false, error: m.forbidden };
   const id = z.string().uuid().safeParse(typeId);
   if (!id.success) return { ok: false, error: m.failed };
   const db = await createSupabaseServerClient();

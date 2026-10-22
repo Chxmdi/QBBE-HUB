@@ -24,10 +24,16 @@ test.afterAll(() => {
 });
 
 // A script error in the page (such as one thrown while a key is handled) fails the test.
+// WebKit also reports a background page load that a navigation cancelled (a
+// link prefetch, `?_rsc=`) as "... due to access control checks"; that is the
+// browser abandoning a request nobody needs any more, not an error in the page.
 const pageErrors: string[] = [];
+const cancelledPrefetch = (message: string) => /due to access control checks/.test(message) && /[?&]_rsc=/.test(message);
 test.beforeEach(({ page }) => {
   pageErrors.length = 0;
-  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("pageerror", (error) => {
+    if (!cancelledPrefetch(error.message)) pageErrors.push(error.message);
+  });
 });
 test.afterEach(() => {
   expect(pageErrors).toEqual([]);

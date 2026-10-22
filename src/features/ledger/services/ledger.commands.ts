@@ -7,7 +7,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { requiredText, isCalendarDate, isCalendarMonth } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
   ACCOUNT_TYPES,
@@ -396,6 +396,12 @@ export async function reverseEntry(input: unknown): Promise<ActionResult> {
     p_entry_date: parsed.data.entryDate,
     p_memo: parsed.data.memo || null,
   });
+  // An entry from a gift, bill, invoice, payment, pay run or tax return is
+  // undone from that record; the database refuses it here (see
+  // app.guard_source_entry_reversal).
+  if ((error as { hint?: string } | null)?.hint?.startsWith("ledger_source_reversal:")) {
+    return { ok: false, error: t("finance.ledger.errors.reverseFromSource") };
+  }
   if (error || !data) return { ok: false, error: dbMessage(t, error, t("finance.ledger.errors.reverseEntry")) };
   revalidatePath(LEDGER, "layout");
   return { ok: true, id: data as string };

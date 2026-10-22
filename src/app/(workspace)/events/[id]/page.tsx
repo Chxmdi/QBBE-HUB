@@ -15,7 +15,7 @@ import { getPickerOptions } from "@/features/tasks/services/task.queries";
 import { requireSession } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("events.detailTitle") };

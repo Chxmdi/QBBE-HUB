@@ -8,6 +8,7 @@ import {
 } from "@/lib/time";
 import { getLocale, getT } from "@/lib/i18n/server";
 import { createSupabasePageClient } from "@/lib/supabase/page";
+import { requireSession } from "@/lib/auth";
 import type {
   ActivityEvent,
   Announcement,
@@ -92,10 +93,13 @@ export async function getDashboardData(
   userId: string,
   timeZone: string = DEFAULT_TIME_ZONE,
 ): Promise<DashboardData> {
-  const [supabase, t, locale] = await Promise.all([
+  // The session is cached per request, so this is the same read the page
+  // already made, not another round trip.
+  const [supabase, t, locale, session] = await Promise.all([
     createSupabasePageClient(),
     getT(),
     getLocale(),
+    requireSession(),
   ]);
 
   // "Today" is a question about the organization's calendar, not the server's.
@@ -247,11 +251,15 @@ export async function getDashboardData(
       .from("announcement_acknowledgment")
       .select("announcement_id")
       .eq("user_id", userId),
+    // Scoped to the organization so the database reads the newest rows from
+    // the (organization_id, created_at desc) index and stops at ten, rather
+    // than checking every activity row in the table (PERF-001).
     supabase
       .from("activity_event")
       .select(
         "id, actor_id, verb, source_type, source_id, summary, created_at, actor:actor_id(id, full_name, avatar_url)",
       )
+      .eq("organization_id", session.organizationId)
       .order("created_at", { ascending: false })
       .limit(10),
     supabase

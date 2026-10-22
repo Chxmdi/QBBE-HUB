@@ -18,8 +18,11 @@
  */
 export function requestOrigin(request: Request): string {
   const url = new URL(request.url);
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  // A chain of proxies sends a list ("hub.example.org, 10.0.0.2"); the first
+  // is the one the browser used. A list as the host made every redirect throw.
+  const first = (value: string | null) => value?.split(",")[0]?.trim() || null;
+  const host = first(request.headers.get("x-forwarded-host")) ?? first(request.headers.get("host"));
   if (!host) return url.origin;
-  const protocol = request.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
+  const protocol = first(request.headers.get("x-forwarded-proto")) ?? url.protocol.replace(":", "");
   return `${protocol}://${host}`;
 }

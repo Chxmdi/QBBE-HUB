@@ -195,3 +195,70 @@ test("a bill over the threshold is approved, then posted to the ledger", async (
          where organization_id = '${org}'`);
   }
 });
+
+/**
+ * Separation of duties on bills: only the drafter or an administrator sends a
+ * bill for approval, and the drafter cannot approve it even when someone else
+ * sent it. The full rules are proven in
+ * supabase/tests/finance-separation-of-duties.sql.
+ */
+test("a bill's drafter cannot approve it, and only the drafter or an admin sends it", async ({ page }) => {
+  test.setTimeout(240_000);
+  const run = Date.now();
+  const vendor = `QA Duties Vendor ${run}`;
+  const reference = `D-${run}`;
+  const title = `Bill from ${vendor} #${reference}`;
+  const org = orgId();
+  const owner = ownerId();
+
+  const previousThreshold = sql(
+    `select coalesce(bill_approval_threshold_cents::text, 'null') from finance_billing_settings where organization_id = '${org}'`,
+  ) || "null";
+  sql(`insert into finance_billing_settings (organization_id, bill_approval_threshold_cents)
+       values ('${org}', 100000)
+       on conflict (organization_id) do update set bill_approval_threshold_cents = 100000`);
+  // A draft the owner wrote.
+  const vendorId = sql(`insert into finance_contact (organization_id, name, is_vendor, created_by)
+       values ('${org}', '${vendor}', true, '${owner}') returning id::text`);
+  const billId = sql(`insert into finance_bill (organization_id, vendor_id, vendor_reference, bill_date, due_date,
+         fund_id, subtotal_cents, created_by)
+       select '${org}', '${vendorId}', '${reference}', '2026-10-06', '2026-11-05', f.id, 150000, '${owner}'
+       from ledger_fund f where f.organization_id = '${org}' and f.code = 'GEN'
+       returning id::text`);
+  sql(`insert into finance_bill_line (organization_id, bill_id, line_no, account_id, description, amount_cents)
+       select '${org}', '${billId}', 1, a.id, 'Hall rental', 150000
+       from ledger_account a where a.organization_id = '${org}' and a.code = '5200'`);
+  const billUrl = `/finance/payables/bills/${billId}`;
+
+  try {
+    // Staff who did not write it are not offered to send it.
+    await signIn(page, "staff");
+    await page.goto(billUrl);
+    await expect(page.getByText("Send it for approval; it can be posted once approved.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send for approval" })).toHaveCount(0);
+    await signOut(page);
+
+    // An admin sends it.
+    await signIn(page, "admin");
+    await page.goto(billUrl);
+    await page.getByRole("button", { name: "Send for approval" }).click();
+    await expect(page.getByText("It is waiting for approval.")).toBeVisible({ timeout: 20_000 });
+    await signOut(page);
+
+    // The owner who drafted it is refused, in words.
+    await signIn(page, "owner");
+    await page.goto("/approvals?tab=all");
+    const row = page.getByRole("list", { name: "Approvals" }).getByRole("link", { name: new RegExp(title) });
+    await expect(row).toBeVisible();
+    await row.click();
+    const details = page.getByRole("region", { name: "Approval details" });
+    await details.getByRole("button", { name: "Approve", exact: true }).click();
+    await expect(details.getByRole("alert")).toHaveText("You drafted this bill, so someone else approves or rejects it.");
+    expect(sql(`select a.status from approval_item a join finance_bill b on b.approval_item_id = a.id
+                where b.id = '${billId}'`)).toBe("pending");
+  } finally {
+    sql(`delete from finance_bill where id = '${billId}' and status = 'draft'`);
+    sql(`update finance_billing_settings set bill_approval_threshold_cents = ${previousThreshold}
+         where organization_id = '${org}'`);
+  }
+});

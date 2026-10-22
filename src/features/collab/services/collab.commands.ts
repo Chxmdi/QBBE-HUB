@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth";
+import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isCursor, type PresenceCursor, type PresenceEntry } from "../presence";
 
@@ -15,6 +16,7 @@ export async function touchPresence(
   editing: boolean,
 ): Promise<boolean> {
   await requireSession();
+  if (!(await isEnabled("wos_editor"))) return false;
   const parsed = objectId.safeParse(id);
   if (!parsed.success || (cursor !== null && !isCursor(cursor))) return false;
   const db = await createSupabaseServerClient();
@@ -28,6 +30,7 @@ export async function touchPresence(
 
 export async function leavePresence(id: unknown): Promise<void> {
   await requireSession();
+  if (!(await isEnabled("wos_editor"))) return;
   const parsed = objectId.safeParse(id);
   if (!parsed.success) return;
   const db = await createSupabaseServerClient();
@@ -37,6 +40,7 @@ export async function leavePresence(id: unknown): Promise<void> {
 /** Everyone present on the object, as the reader may see them (RLS). */
 export async function listPresence(id: unknown): Promise<PresenceEntry[]> {
   await requireSession();
+  if (!(await isEnabled("wos_editor"))) return [];
   const parsed = objectId.safeParse(id);
   if (!parsed.success) return [];
   const db = await createSupabaseServerClient();
@@ -66,6 +70,7 @@ export interface LockResult {
 
 export async function setObjectLock(id: unknown, locked: boolean, reason?: string): Promise<LockResult> {
   await requireSession();
+  if (!(await isEnabled("wos_editor"))) return { ok: false };
   const parsed = objectId.safeParse(id);
   const why = z.string().trim().max(300).optional().safeParse(reason);
   if (!parsed.success || !why.success) return { ok: false };

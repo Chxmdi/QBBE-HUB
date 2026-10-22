@@ -2,6 +2,7 @@ import { requireStaff, type SessionContext } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import type { Choice } from "@/features/ledger/components/entry-form";
 import type { DocumentKind, DocumentStatus } from "@/features/payables/model";
+import type { TaxRegistration } from "@/features/payables/invoice-tax";
 
 type Client = Awaited<ReturnType<typeof createSupabasePageClient>>;
 
@@ -276,4 +277,37 @@ export async function listDocuments(
     paid_cents: Number(i.paid_cents),
     status: i.status as DocumentStatus,
   }));
+}
+
+/**
+ * GST/QST registration and rates on a date, for the invoice form and the
+ * printed invoice. Null when it cannot be read, in which case the form keeps
+ * its tax fields as typed and the database still checks them on posting.
+ */
+export async function loadTaxRegistration(
+  supabase: Client,
+  organizationId: string,
+  date: string,
+): Promise<TaxRegistration | null> {
+  const { data, error } = await supabase
+    .rpc("finance_tax_registration", { p_organization: organizationId, p_date: date })
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as {
+    gst_registered: boolean;
+    gst_number: string | null;
+    qst_registered: boolean;
+    qst_number: string | null;
+    gst_rate: number | string | null;
+    qst_rate: number | string | null;
+  };
+  const rate = (value: number | string | null) => (value === null ? null : String(value));
+  return {
+    gstRegistered: row.gst_registered,
+    gstNumber: row.gst_number,
+    qstRegistered: row.qst_registered,
+    qstNumber: row.qst_number,
+    gstRate: rate(row.gst_rate),
+    qstRate: rate(row.qst_rate),
+  };
 }

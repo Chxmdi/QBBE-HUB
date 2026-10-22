@@ -112,9 +112,9 @@ begin
 
   -- Signed out: nothing at all.
   perform tests.clear_auth();
-  perform tests.ok(tests.refused('select 1 from public.milestone_dependency'), 'signed-out: milestone dependencies refused');
-  perform tests.ok(tests.refused('select 1 from public.task_dependency'), 'signed-out: task dependencies refused');
-  perform tests.ok(tests.refused('select 1 from public.project'), 'signed-out: projects refused');
+  perform tests.ok(tests.permission_denied('select 1 from public.milestone_dependency'), 'signed-out: milestone dependencies refused');
+  perform tests.ok(tests.permission_denied('select 1 from public.task_dependency'), 'signed-out: task dependencies refused');
+  perform tests.ok(tests.permission_denied('select 1 from public.project'), 'signed-out: projects refused');
   reset role;
 end;
 $$;

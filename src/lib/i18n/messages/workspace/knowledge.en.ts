@@ -455,7 +455,7 @@ export const knowledgeEn = {
         choose: "Choose…",
         folder: "Folder",
         noFolder: "No folder",
-        hint: "A staff-only folder limits who can open the document. It is saved as a PDF in the library and opens once its security check passes.",
+        hint: "Generated documents contain personal details, so only staff and administrators can open them, whatever the folder. It is saved as a PDF in the library and opens once its security check passes.",
         cancel: "Cancel",
         submit: "Generate document",
       },

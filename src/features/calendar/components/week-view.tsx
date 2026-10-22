@@ -1,80 +1,22 @@
 import Link from "next/link";
-import {
-  eachDayOfInterval,
-  endOfWeek,
-  format,
-  isSameDay,
-  isToday,
-  startOfWeek,
-} from "date-fns";
-import { frCA } from "date-fns/locale";
+import { format } from "date-fns";
 import type { Locale } from "@/lib/i18n/config";
 import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
 import { cn } from "@/lib/utils";
+import {
+  calendarDateFormats,
+  KIND_STYLES,
+  type CalendarItem,
+} from "@/features/calendar/calendar-items";
+
+// Kept here too for the pages that import them from this file.
+export { calendarDateFormats, KIND_STYLES, type CalendarItem };
 import { RescheduleControl } from "@/features/calendar/components/reschedule-control";
-
-export interface CalendarItem {
-  id: string;
-  date: Date;
-  label: string;
-  kind: "task" | "milestone" | "meeting" | "event" | "follow_up" | "google";
-  href: string;
-  timed: boolean;
-  /**
-   * Who is accountable, where the record names somebody. Shown in the tooltip
-   * rather than the chip: the chip has room for one line and the name is not
-   * the thing somebody scans a calendar for.
-   */
-  owner?: string | null;
-  /** Already met. Rendered struck through, not hidden — it still happened. */
-  done?: boolean;
-  /**
-   * The record's own date as `yyyy-MM-dd` in the workspace zone, present only
-   * on records this viewer may move. Absence is what hides the control: the
-   * caller decides who may reschedule, so the chip never has to guess, and a
-   * viewer who cannot move a record is not shown a field that would fail.
-   */
-  reschedulableDate?: string | null;
-  /**
-   * The record's own id. `id` above is prefixed to keep chips unique across
-   * six record types in one list, so it is not the value any command wants.
-   */
-  recordId?: string;
-}
-
-export const KIND_STYLES: Record<CalendarItem["kind"], string> = {
-  // Both used to pin a hex literal for one theme; the -fg tokens already
-  // carry a designed dark value. The milestone chip failed dark-mode
-  // contrast (axe, qa-matrix, #101).
-  task: "bg-brand-soft text-brand-fg",
-  milestone: "bg-accent/20 text-accent-fg",
-  meeting: "bg-info/12 text-info-fg",
-  event: "bg-success/12 text-success-fg",
-  follow_up: "bg-warning/12 text-warning-fg",
-  google: "bg-surface-soft text-muted",
-};
+import { dayAsLocalDate } from "@/features/calendar/calendar-model";
 
 /** Short type prefix so kind never rests on color alone (§10.9). */
 function kindPrefix(kind: CalendarItem["kind"], t: TranslateFn): string {
   return t(`calendar.kinds.${kind}`);
-}
-
-/**
- * date-fns patterns and options for visible text in one language. French
- * reads the clock on 24 hours ("14 h 30") and puts the day before the month.
- */
-export function calendarDateFormats(locale: Locale) {
-  const french = locale === "fr-CA";
-  return {
-    options: french ? { locale: frCA } : {},
-    time: french ? "H 'h' mm" : "h:mm a",
-    agendaDay: french ? "EEEE d MMM" : "EEEE, MMM d",
-    rangeStart: french ? "d MMM" : "MMM d",
-    rangeEnd: french ? "d MMM yyyy" : "MMM d, yyyy",
-    monthYear: "MMMM yyyy",
-    shortMonthYear: "MMM yyyy",
-    shortDay: french ? "d MMM" : "MMM d",
-  };
 }
 
 function rescheduleControl(item: CalendarItem) {
@@ -103,53 +45,55 @@ function calendarItemTitle(item: CalendarItem, t: TranslateFn): string {
  * two are distinguishable without relying on color.
  */
 export function WeekView({
-  anchor,
+  days,
+  today,
   items,
   locale,
 }: {
-  anchor: Date;
+  /** The week's days, YYYY-MM-DD, Sunday first. */
+  days: string[];
+  /** Today in the workspace zone. */
+  today: string;
   items: CalendarItem[];
   locale: Locale;
 }) {
   const t = createTranslator(locale);
   const formats = calendarDateFormats(locale);
-  const start = startOfWeek(anchor, { weekStartsOn: 0 });
-  const days = eachDayOfInterval({
-    start,
-    end: endOfWeek(anchor, { weekStartsOn: 0 }),
-  });
 
   return (
     <div className="card relative overflow-x-auto">
       <div className="grid min-w-[860px] grid-cols-7">
         {days.map((day) => {
           const dayItems = items
-            .filter((item) => isSameDay(item.date, day))
+            .filter((item) => item.day === day)
             .sort((a, b) => a.date.getTime() - b.date.getTime());
           const allDay = dayItems.filter((i) => !i.timed);
           const timed = dayItems.filter((i) => i.timed);
+          const isToday = day === today;
+          const label = dayAsLocalDate(day);
           return (
             <div
-              key={day.toISOString()}
+              key={day}
+              data-day={day}
               className="min-h-[26rem] border-r border-line last:border-r-0"
             >
               <div
                 className={cn(
                   "sticky top-0 border-b border-line px-2.5 py-2",
-                  isToday(day) ? "bg-brand-soft" : "bg-surface-soft/60",
+                  isToday ? "bg-brand-soft" : "bg-surface-soft/60",
                 )}
               >
                 <p className="text-[11px] font-semibold tracking-wide text-muted uppercase">
-                  {format(day, "EEE", formats.options)}
+                  {format(label, "EEE", formats.options)}
                 </p>
                 <p
                   className={cn(
                     "text-[17px] font-semibold",
-                    isToday(day) && "text-brand-fg",
+                    isToday && "text-brand-fg",
                   )}
                 >
-                  {format(day, "d")}
-                  {isToday(day) ? (
+                  {format(label, "d")}
+                  {isToday ? (
                     <span className="ml-1.5 text-[10.5px] font-medium">{t("calendar.today")}</span>
                   ) : null}
                 </p>
@@ -194,7 +138,7 @@ export function WeekView({
                     )}
                   >
                     <span className="block text-[9.5px]">
-                      {format(item.date, formats.time, formats.options)} · {kindPrefix(item.kind, t)}
+                      {item.timeLabel ?? format(item.date, formats.time, formats.options)} · {kindPrefix(item.kind, t)}
                     </span>
                     <span className={cn("line-clamp-2", item.done && "line-through opacity-70")}>
                       <span className={cn(item.done && "line-through opacity-70")}>
@@ -223,13 +167,22 @@ export function WeekView({
 /**
  * Mobile agenda view (§11.2): a linear list rather than a compressed grid.
  */
-export function AgendaView({ items, locale }: { items: CalendarItem[]; locale: Locale }) {
+export function AgendaView({
+  items,
+  today,
+  locale,
+}: {
+  items: CalendarItem[];
+  /** Today in the workspace zone. */
+  today: string;
+  locale: Locale;
+}) {
   const t = createTranslator(locale);
   const formats = calendarDateFormats(locale);
   const sorted = [...items].sort((a, b) => a.date.getTime() - b.date.getTime());
   const byDay = new Map<string, CalendarItem[]>();
   for (const item of sorted) {
-    const key = format(item.date, "yyyy-MM-dd");
+    const key = item.day;
     const list = byDay.get(key) ?? [];
     list.push(item);
     byDay.set(key, list);
@@ -246,17 +199,18 @@ export function AgendaView({ items, locale }: { items: CalendarItem[]; locale: L
   return (
     <ol className="space-y-4">
       {Array.from(byDay.entries()).map(([key, dayItems]) => {
-        const date = dayItems[0].date;
+        const date = dayAsLocalDate(key);
+        const isToday = key === today;
         return (
           <li key={key}>
             <p
               className={cn(
                 "mb-1.5 text-[12.5px] font-semibold",
-                isToday(date) && "text-brand-fg",
+                isToday && "text-brand-fg",
               )}
             >
               {format(date, formats.agendaDay, formats.options)}
-              {isToday(date) ? t("calendar.todaySuffix") : ""}
+              {isToday ? t("calendar.todaySuffix") : ""}
             </p>
             <ul className="card divide-y divide-line">
               {dayItems.map((item) => (
@@ -280,7 +234,7 @@ export function AgendaView({ items, locale }: { items: CalendarItem[]; locale: L
                     </span>
                     {item.timed ? (
                       <span className="meta whitespace-nowrap">
-                        {format(item.date, formats.time, formats.options)}
+                        {item.timeLabel ?? format(item.date, formats.time, formats.options)}
                       </span>
                     ) : null}
                   </Link>

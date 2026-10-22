@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox, FieldHint, Input, Label } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import {
   THRESHOLD_LIMITS,
   type TeamSignalSettingsInput,

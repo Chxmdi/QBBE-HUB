@@ -1,6 +1,6 @@
 import type { CreateAction } from "@/config/create-actions";
 import type { NavGroup, VisibleNavItem } from "@/config/navigation";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Translations for `src/config/navigation.ts`, looked up by href.

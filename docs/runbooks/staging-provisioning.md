@@ -112,14 +112,17 @@ it if absent):
 | Name | Kind | Value |
 |---|---|---|
 | `DEPLOY_HOST` | variable | the QBBE server's public IP |
-| `DEPLOY_SSH_KEY` | secret | the server's deploy key (hosting.md step 2) |
+| `DEPLOY_SSH_KEY` | secret | staging's own deploy key (`qbbe-staging`, hosting.md "Deploy access") |
+| `DEPLOY_MODE` | variable | `isolated` once staging deploys through its own user (hosting.md "Deploy access") |
 | `DEPLOY_KNOWN_HOSTS` | secret | the server's host key line (hosting.md step 6) |
 | `SUPABASE_PROJECT_REF` | variable | the **staging** project ref |
-| `SUPABASE_ACCESS_TOKEN` | secret | a Supabase personal access token of a QBBE account, used for migrations |
+| `SUPABASE_DB_URL` | secret | staging's database address (session pooler URI), used for migrations; reaches staging only |
 | `SUPABASE_DB_PASSWORD` | secret | the **staging** database password |
 | `SITE_URL` | variable | the staging address, `https://<staging host>` |
 | `APP_ENV` | secret | staging's app settings, below (c) |
 | `RELEASE_ENABLED` | variable | `true` once a–c are set. The workflow publishes nothing while it is anything else, so staging cannot be deployed with it `false`. Production keeps it `false` until #21. |
+| `SMOKE_EMAIL` | variable | the smoke user's address (section 3). After each release Deploy signs in as it and reads its own membership row; until this and `SMOKE_PASSWORD` are set, staging deploys show a warning and production deploys fail |
+| `SMOKE_PASSWORD` | secret | the smoke user's password |
 
 **b. GitHub, repository level.** Settings → Secrets and variables → Actions →
 **Variables** tab:
@@ -155,6 +158,19 @@ merged unfinished behind a switch in the `feature_flag` table, all off
 `WORKSPACE_OS_FLAGS` line in 4c instead of changing the table, so the
 staging database keeps the same switch values as production.
 
+- The database enforces the switches too (Workspace OS tables and calls
+  answer nothing to signed-in people while their module is off), and it
+  cannot read the app's environment. So staging also needs the same modules
+  on at the database, once, in the staging project's SQL editor, with the
+  same value as the variable:
+
+  ```sql
+  insert into app.workspace_os_override (key) values ('all') on conflict do nothing;
+  ```
+
+  (or one row per module, e.g. `('wos_objects')`). Without it, staging shows
+  the modules but their pages are empty and every save is refused. Never
+  run this on production.
 - The variable can only switch a module **on**. Names it does not recognise
   are ignored, so a typo leaves that module off rather than breaking the build.
 - It covers Workspace OS switches only. `gmail_inbox` and the other older

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Pure helpers for the document library (#147): folder categories, tag
@@ -25,10 +25,11 @@ export interface LibraryFolder {
   visibility: "organization" | "staff";
 }
 
-const english = createTranslator("en");
+// Labels take the caller's `t`: the library panels run in the browser, and an
+// English default would load both language catalogues there.
 
 /** A category's name in the reader's language (English when `t` is left out). */
-export function categoryLabel(category: string, t: TranslateFn = english): string {
+export function categoryLabel(category: string, t: TranslateFn): string {
   const known = FOLDER_CATEGORIES.find((c) => c.id === category)?.id ?? "other";
   return t(`documents.categories.${known}`);
 }
@@ -36,7 +37,7 @@ export function categoryLabel(category: string, t: TranslateFn = english): strin
 /** "Governance / Bylaws". The folder's own name is data and stays as typed. */
 export function folderLabel(
   folder: Pick<LibraryFolder, "category" | "name">,
-  t: TranslateFn = english,
+  t: TranslateFn,
 ): string {
   return t("documents.folderPath", { category: categoryLabel(folder.category, t), name: folder.name });
 }
@@ -44,7 +45,7 @@ export function folderLabel(
 /** Folders grouped by category, in the category order above, for a <select>. */
 export function groupFolders<T extends Pick<LibraryFolder, "category" | "name">>(
   folders: T[],
-  t: TranslateFn = english,
+  t: TranslateFn,
 ): { category: string; label: string; folders: T[] }[] {
   return FOLDER_CATEGORIES.map((c) => ({
     category: c.id as string,
@@ -98,5 +99,4 @@ export function tagsSchemaFor(t: TranslateFn) {
 }
 
 /** The English tags schema, for callers outside a request. */
-export const tagsSchema = tagsSchemaFor(english);
 

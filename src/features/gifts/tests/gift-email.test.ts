@@ -69,3 +69,21 @@ describe("emailing an acknowledgement", () => {
     expect(t.marks.at(-1)).toMatchObject({ email_status: "failed" });
   });
 });
+
+describe("when production has no email provider", () => {
+  it("records the letter as failed, not sent", async () => {
+    const previous = { ...process.env };
+    Object.assign(process.env, { NODE_ENV: "production" });
+    delete process.env.EMAIL_PROVIDER_API_KEY;
+    delete process.env.SMTP_HOST;
+    delete process.env.EMAIL_TRANSPORT;
+    const t = deps({ send: undefined });
+    try {
+      const result = await emailAcknowledgement(ack, t.deps);
+      expect(result.ok).toBe(false);
+      expect(t.marks).toEqual([expect.objectContaining({ email_status: "failed" })]);
+    } finally {
+      process.env = previous;
+    }
+  });
+});

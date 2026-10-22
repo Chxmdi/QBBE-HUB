@@ -6,7 +6,9 @@ import { EntityFormDialog } from "@/components/shared/entity-form-dialog";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/table";
+import { CrmContactDialog } from "@/features/crm/components/crm-contact-dialog";
 import { CrmTabs } from "@/features/crm/components/crm-tabs";
+import { EraseContactButton } from "@/features/crm/components/erase-contact-button";
 import { SupporterOrganizationForm } from "@/features/crm/components/supporter-organization-form";
 import {
   contactSourceLabel,
@@ -55,6 +57,12 @@ export default async function SupporterPage({ params }: { params: Promise<{ id: 
         eyebrow={contactSourceLabel(contact.source, t)}
         title={contact.full_name}
         description={contact.role_title ?? undefined}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <CrmContactDialog contact={contact} />
+            {session.isAdmin ? <EraseContactButton contactId={contact.id} name={contact.full_name} /> : null}
+          </div>
+        }
       />
       <CrmTabs active="supporters" />
 
@@ -70,69 +78,67 @@ export default async function SupporterPage({ params }: { params: Promise<{ id: 
               <p className="card px-4 py-6 text-center text-[13px] text-muted">{t("crm.supporter.zeffyEmpty")}</p>
             ) : (
               <DataTable minWidth={finance ? "760px" : "560px"}>
-                <table className="w-full text-[13.5px]">
-                  <thead>
-                    <tr className="border-b border-line text-left text-[12px] text-muted">
-                      <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporter.date")}</th>
-                      <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporter.campaign")}</th>
-                      <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporter.what")}</th>
+                <thead>
+                  <tr className="border-b border-line text-left text-[12px] text-muted">
+                    <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporter.date")}</th>
+                    <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporter.campaign")}</th>
+                    <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporter.what")}</th>
+                    {finance ? (
+                      <>
+                        <th scope="col" className="px-3 py-2 text-right font-medium">{t("crm.supporter.amount")}</th>
+                        <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporter.receipt")}</th>
+                      </>
+                    ) : null}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {activity.map((row) => (
+                    <tr key={row.zeffy_id}>
+                      <td className="px-3 py-2.5 whitespace-nowrap">{format.date(row.paid_at, session.timeZone)}</td>
+                      <td className="px-3 py-2.5">
+                        <span className="font-medium">{row.campaign_title ?? "—"}</span>
+                        {row.campaign_category ? (
+                          <p className="meta">{zeffyCategoryLabel(row.campaign_category, t)}</p>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap gap-1">
+                          {row.item_kinds.map((code) => (
+                            <Badge key={code} tone="neutral">{zeffyKindLabel(code, t)}</Badge>
+                          ))}
+                          {row.is_recurring && row.recurring_interval ? (
+                            <Badge tone="brand">{t("crm.supporter.recurring", { interval: zeffyIntervalLabel(row.recurring_interval, t) })}</Badge>
+                          ) : null}
+                          {row.refund_status === "full" ? <Badge tone="warning">{t("crm.supporter.refunded")}</Badge> : null}
+                          {row.refund_status === "partial" ? (
+                            <Badge tone="warning">
+                              {t("crm.supporter.partlyRefunded", {
+                                amount: row.refunded_cents !== null ? money(row.refunded_cents, row.currency) : "—",
+                              })}
+                            </Badge>
+                          ) : null}
+                          {row.dispute_status ? <Badge tone="danger">{t("crm.supporter.disputed")}</Badge> : null}
+                        </div>
+                      </td>
                       {finance ? (
                         <>
-                          <th scope="col" className="px-3 py-2 text-right font-medium">{t("crm.supporter.amount")}</th>
-                          <th scope="col" className="px-3 py-2 font-medium">{t("crm.supporter.receipt")}</th>
+                          <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
+                            {row.amount_cents !== null ? money(row.amount_cents, row.currency) : "—"}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {row.receipt_url ? (
+                              <a href={row.receipt_url} target="_blank" rel="noopener noreferrer" className="underline hover:text-brand-fg">
+                                {t("crm.supporter.receiptLink")}
+                              </a>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
                         </>
                       ) : null}
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-line">
-                    {activity.map((row) => (
-                      <tr key={row.zeffy_id}>
-                        <td className="px-3 py-2.5 whitespace-nowrap">{format.date(row.paid_at, session.timeZone)}</td>
-                        <td className="px-3 py-2.5">
-                          <span className="font-medium">{row.campaign_title ?? "—"}</span>
-                          {row.campaign_category ? (
-                            <p className="meta">{zeffyCategoryLabel(row.campaign_category, t)}</p>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex flex-wrap gap-1">
-                            {row.item_kinds.map((code) => (
-                              <Badge key={code} tone="neutral">{zeffyKindLabel(code, t)}</Badge>
-                            ))}
-                            {row.is_recurring && row.recurring_interval ? (
-                              <Badge tone="brand">{t("crm.supporter.recurring", { interval: zeffyIntervalLabel(row.recurring_interval, t) })}</Badge>
-                            ) : null}
-                            {row.refund_status === "full" ? <Badge tone="warning">{t("crm.supporter.refunded")}</Badge> : null}
-                            {row.refund_status === "partial" ? (
-                              <Badge tone="warning">
-                                {t("crm.supporter.partlyRefunded", {
-                                  amount: row.refunded_cents !== null ? money(row.refunded_cents, row.currency) : "—",
-                                })}
-                              </Badge>
-                            ) : null}
-                            {row.dispute_status ? <Badge tone="danger">{t("crm.supporter.disputed")}</Badge> : null}
-                          </div>
-                        </td>
-                        {finance ? (
-                          <>
-                            <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
-                              {row.amount_cents !== null ? money(row.amount_cents, row.currency) : "—"}
-                            </td>
-                            <td className="px-3 py-2.5">
-                              {row.receipt_url ? (
-                                <a href={row.receipt_url} target="_blank" rel="noopener noreferrer" className="underline hover:text-brand-fg">
-                                  {t("crm.supporter.receiptLink")}
-                                </a>
-                              ) : (
-                                "—"
-                              )}
-                            </td>
-                          </>
-                        ) : null}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                  ))}
+                </tbody>
               </DataTable>
             )}
           </section>

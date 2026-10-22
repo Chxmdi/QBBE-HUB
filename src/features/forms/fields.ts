@@ -6,11 +6,12 @@
  */
 
 import type { Locale } from "@/lib/i18n/config";
-import { formatCurrency } from "@/lib/i18n/format";
-import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
+import { formatCurrency } from "@/lib/i18n/format-core";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /** English by default, so callers and tests without a request read as before. */
-const EN = createTranslator("en");
+// Functions here take the caller's `t`: the form builder and form fill run in
+// the browser, and an English default would load both language catalogues.
 
 export const FIELD_TYPES = ["text", "number", "money", "date", "choice", "checkbox", "file"] as const;
 export type FieldType = (typeof FIELD_TYPES)[number];
@@ -132,7 +133,7 @@ export type ParsedAnswers = { ok: true; answers: Answers } | { ok: false; error:
 export function parseAnswers(
   fields: FormField[],
   raw: Record<string, unknown>,
-  t: TranslateFn = EN,
+  t: TranslateFn,
 ): ParsedAnswers {
   const answers: Answers = {};
   for (const field of fields) {
@@ -197,8 +198,8 @@ export function parseAnswers(
 export function answerText(
   field: FormField,
   value: unknown,
-  forSpreadsheet = false,
-  t: TranslateFn = EN,
+  forSpreadsheet: boolean,
+  t: TranslateFn,
   locale: Locale = "en",
 ): string {
   if (value === undefined || value === null) return field.type === "checkbox" ? t("forms.answers.no") : "";

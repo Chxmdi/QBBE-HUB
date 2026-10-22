@@ -11,7 +11,7 @@ import { getZeffyOverview } from "@/features/crm/services/supporter.queries";
 import { requireSession, NO_ACCESS_REDIRECT } from "@/lib/auth";
 import { getFormatters, getT } from "@/lib/i18n/server";
 import { calendarDateInZone } from "@/lib/time";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("crm.zeffy.title") };
@@ -186,23 +186,21 @@ export default async function ZeffyOverviewPage({
               <p className="card px-4 py-6 text-center text-[13px] text-muted">{t("crm.zeffy.attendanceEmpty")}</p>
             ) : (
               <DataTable minWidth="420px">
-                <table className="w-full text-[13.5px]">
-                  <tbody className="divide-y divide-line">
-                    {overview.attendance.map((row) => (
-                      <tr key={row.campaign_id ?? row.title ?? ""}>
-                        <th scope="row" className="px-3 py-2.5 text-left font-medium">
-                          {row.title ?? "—"}
-                        </th>
-                        <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
-                          {t(row.tickets === 1 ? "crm.zeffy.ticketsOne" : "crm.zeffy.tickets", { count: row.tickets })}
-                        </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-muted">
-                          {t(row.buyers === 1 ? "crm.zeffy.buyersOne" : "crm.zeffy.buyers", { count: row.buyers })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <tbody className="divide-y divide-line">
+                  {overview.attendance.map((row) => (
+                    <tr key={row.campaign_id ?? row.title ?? ""}>
+                      <th scope="row" className="px-3 py-2.5 text-left font-medium">
+                        {row.title ?? "—"}
+                      </th>
+                      <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap">
+                        {t(row.tickets === 1 ? "crm.zeffy.ticketsOne" : "crm.zeffy.tickets", { count: row.tickets })}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums whitespace-nowrap text-muted">
+                        {t(row.buyers === 1 ? "crm.zeffy.buyersOne" : "crm.zeffy.buyers", { count: row.buyers })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
               </DataTable>
             )}
           </section>

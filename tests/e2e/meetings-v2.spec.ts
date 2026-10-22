@@ -126,7 +126,9 @@ test("the organizer captures during a meeting and the review turns it into real 
     sql(`select count(*) from public.meeting_capture where meeting_id = '${meetingId}' and status = 'approved';`),
   ).toBe("3");
 
-  // French.
+  // French. The cookie is the choice here; a language another spec saved on
+  // qa-staff's profile would otherwise be copied back over it on the reload.
+  sql(`update public.user_profile set locale = null where email = 'qa-staff@example.com';`);
   const origin = new URL(page.url()).origin;
   await page.context().addCookies([{ name: "qbbe-locale", value: "fr-CA", url: origin }]);
   await page.reload();

@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
-import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
+import { hasVerifiedTotpFactor, requiresAdministratorMfa } from "@/features/auth/mfa";
+import type { Factor } from "@supabase/supabase-js";
 import type { OrgRole, Profile } from "@/types/entities";
 
 export const ADMIN_ACCESS_REQUIRED_ERROR = "Admin access required.";
@@ -39,6 +40,13 @@ export interface SessionContext {
   timeZone: string;
   isAdmin: boolean;
   isStaff: boolean;
+  /**
+   * The person's MFA factors, from the same Auth response that established
+   * the session. `mfa.listFactors()` returns exactly these, fetched by a
+   * second, identical getUser() round trip. Optional so hand-built contexts
+   * (tests) can leave it out; readers fall back to listFactors.
+   */
+  factors?: Factor[];
 }
 
 /**
@@ -101,6 +109,7 @@ export const getSessionContext = cache(
           ?.timezone ?? DEFAULT_TIME_ZONE,
       isAdmin: role === "owner" || role === "admin",
       isStaff: role === "owner" || role === "admin" || role === "staff",
+      factors: user.factors ?? [],
     };
   },
 );
@@ -189,7 +198,7 @@ export async function authorizeAdminAction(options?: {
       session.isAdmin,
       assuranceResult.data.currentLevel,
       assuranceResult.data.nextLevel,
-      verifiedTotpFactors(factorResult.data.all).length > 0,
+      hasVerifiedTotpFactor(factorResult.data.all),
     )
   ) {
     return { ok: false, error: t("account.errors.mfaRequired"), reason: "mfa" };

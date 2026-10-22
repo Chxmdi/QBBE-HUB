@@ -22,6 +22,7 @@ function definition(): JobDefinition {
 }
 
 function seedConnection(db: FakeSupabase, pending: string | null = "101") {
+  db.seed("organization_membership", [{ organization_id: ORG, user_id: USER, status: "active" }]);
   db.seed("integration_connection", [{
     id: CONNECTION,
     organization_id: ORG,

@@ -199,6 +199,7 @@ export const adminEn = {
           project_health_changed: "project health changed",
           meeting_completed: "meeting completed",
           event_assignment_created: "event assignment created",
+          object_event: "record changed",
         },
         actions: {
           notify_assignee: "Notify assignee",
@@ -808,6 +809,9 @@ export const adminEn = {
       vmsIdTooLong: "VMS id is too long.",
       vmsOnlyActive: "Only active members of this organization can be linked to VMS identities.",
       vmsStoreFailed: "Could not store the VMS id.",
+      vmsIdTaken: "This VMS id is already linked to someone else in the organization.",
+      signInBlockFailed: "The member was deactivated and their integrations ended, but their sign-in could not be blocked. Try again.",
+      signInUnblockFailed: "The member was reactivated, but their sign-in could not be unblocked. Try again.",
       nameView: "Name the view.",
       invalidView: "Invalid view.",
       saveViewFailed: "Could not save the view.",

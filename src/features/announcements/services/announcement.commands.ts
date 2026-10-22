@@ -11,7 +11,8 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
 import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
+import { logEvent } from "@/lib/server-log";
 
 export async function acknowledgeAnnouncement(
   announcementId: string,
@@ -86,13 +87,20 @@ export async function publishAnnouncement(
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data: channel } = await supabase
+  // One per organization (a unique index guarantees it); a lookup error is
+  // a failure to report, not a missing channel.
+  const { data: channel, error: channelError } = await supabase
     .from("channel")
     .select("id")
+    .eq("organization_id", session.organizationId)
     .eq("type", "announcements")
     .eq("is_mandatory", true)
     .maybeSingle();
 
+  if (channelError) {
+    logEvent("announcements.channel_lookup_failed", { error: channelError.message }, "error");
+    return { ok: false, error: t("announcements.errors.publishFailed") };
+  }
   if (!channel) return { ok: false, error: t("announcements.errors.noChannel") };
 
   // A scheduled announcement keeps its text on its own row until the publish

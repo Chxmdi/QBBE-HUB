@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TIME_ZONE, formatInZone, isRealTimeZone, viewerTimeZone, wallTimeToInstant } from "@/lib/time";
-import { dueLabel, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { dueLabel } from "@/lib/i18n/due";
 
 /** A `date` column's value is a calendar day, not UTC midnight shifted west. */
 describe("formatInZone with a bare calendar date", () => {

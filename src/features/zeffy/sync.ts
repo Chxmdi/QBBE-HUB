@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ZeffyClient, type ZeffyResource } from "./client";
 import {
@@ -39,6 +40,35 @@ export const REFRESH_DAYS = 120;
 const REFRESH_EVERY_MS = 24 * 60 * 60 * 1000;
 const CAMPAIGNS_EVERY_MS = 60 * 60 * 1000;
 
+/** How an erased person's email is kept in zeffy_suppressed_contact. */
+export function emailHash(email: string): string {
+  return createHash("sha256").update(email.trim().toLowerCase(), "utf8").digest("hex");
+}
+
+/** The Zeffy identities (by id or by email) erased from this organization's CRM. */
+async function suppressedIdentities(
+  ctx: ZeffyContext,
+  ids: string[],
+  emails: string[],
+): Promise<{ ids: Set<string>; emailHashes: Set<string> }> {
+  const hashes = [...new Set(emails.map(emailHash))];
+  const rows: { zeffy_contact_id: string; email_sha256: string | null }[] = [];
+  for (const [column, values] of [["zeffy_contact_id", ids], ["email_sha256", hashes]] as const) {
+    if (!values.length) continue;
+    const { data, error } = await ctx.db
+      .from("zeffy_suppressed_contact")
+      .select("zeffy_contact_id, email_sha256")
+      .eq("organization_id", ctx.organizationId)
+      .in(column, [...values]);
+    fail("load erased supporters", error);
+    rows.push(...((data ?? []) as typeof rows));
+  }
+  return {
+    ids: new Set(rows.map((row) => row.zeffy_contact_id)),
+    emailHashes: new Set(rows.map((row) => row.email_sha256).filter((hash): hash is string => Boolean(hash))),
+  };
+}
+
 function fail(what: string, error: { message: string } | null): void {
   if (error) throw new Error(`Could not ${what}: ${error.message}`);
 }
@@ -56,7 +86,9 @@ export interface PlacementSummary {
 /**
  * Finds or creates the CRM contact for each buyer. `refreshDetails` lets a
  * Zeffy contact update overwrite the name, email and phone of a contact the
- * sync itself created; a contact someone entered in the Hub keeps its values.
+ * sync itself created, unless someone corrected it in the Hub; a contact
+ * someone entered in the Hub keeps its values. A buyer whose Zeffy identity
+ * was erased (zeffy_suppressed_contact) is neither linked nor created.
  */
 export async function placeBuyers(
   ctx: ZeffyContext,
@@ -67,17 +99,28 @@ export async function placeBuyers(
   const unique = new Map<string, ZeffyBuyer>();
   for (const buyer of buyers) unique.set(buyer.zeffyContactId, buyer);
   if (!unique.size) return summary;
+
+  const suppressed = await suppressedIdentities(
+    ctx,
+    [...unique.keys()],
+    [...unique.values()].map((buyer) => buyer.email).filter((email): email is string => Boolean(email)),
+  );
+  for (const [id, buyer] of unique) {
+    if (suppressed.ids.has(id) || (buyer.email && suppressed.emailHashes.has(emailHash(buyer.email)))) unique.delete(id);
+  }
+  if (!unique.size) return summary;
   const createMissing = options.createMissing ?? true;
 
   const ids = [...unique.keys()];
   const { data: linkedRows, error: linkedError } = await ctx.db
     .from("crm_contact")
-    .select("id, email, zeffy_contact_id, source")
+    .select("id, email, zeffy_contact_id, source, details_edited_at")
     .eq("organization_id", ctx.organizationId)
     .in("zeffy_contact_id", ids);
   fail("load linked supporters", linkedError);
-  const linkedById = new Map<string, ContactCandidate & { source: string }>();
-  for (const row of (linkedRows ?? []) as (ContactCandidate & { source: string })[]) {
+  type Linked = ContactCandidate & { source: string; details_edited_at?: string | null };
+  const linkedById = new Map<string, Linked>();
+  for (const row of (linkedRows ?? []) as Linked[]) {
     if (row.zeffy_contact_id) linkedById.set(row.zeffy_contact_id, row);
   }
 
@@ -106,7 +149,7 @@ export async function placeBuyers(
     );
 
     if (decision.kind === "linked") {
-      if (options.refreshDetails && linked?.source === "zeffy") {
+      if (options.refreshDetails && linked?.source === "zeffy" && !linked.details_edited_at) {
         const update: Record<string, string> = { full_name: buyer.fullName };
         if (buyer.email) update.email = buyer.email;
         if (buyer.phone) update.phone = buyer.phone;
@@ -227,6 +270,18 @@ export async function savePayments(
     return { saved: 0, contacts: [], placement: { linked: 0, created: 0, ambiguous: 0 } };
   }
   const rows = new Map(payments.map((payment) => [payment.id, paymentRow(ctx.organizationId, payment, ctx.now)]));
+  // An erased supporter's payments keep their amounts, not their identity.
+  const erased = await suppressedIdentities(
+    ctx,
+    [...new Set([...rows.values()].map((row) => row.zeffy_contact_id).filter((id): id is string => Boolean(id)))],
+    [],
+  );
+  for (const row of rows.values()) {
+    if (row.zeffy_contact_id && erased.ids.has(row.zeffy_contact_id)) {
+      row.company_name = null;
+      row.receipt_url = null;
+    }
+  }
   const { error } = await ctx.db
     .from("zeffy_payment")
     .upsert([...rows.values()], { onConflict: "organization_id,zeffy_id" });
@@ -264,7 +319,58 @@ export async function saveContacts(ctx: ZeffyContext, contacts: ZeffyContact[]):
   return buyers.length;
 }
 
-/** A contact deleted in Zeffy: the CRM contact stays, its Zeffy link goes. */
+/**
+ * A contact deleted in Zeffy is an erasure request: its CRM contact is
+ * erased (public.erase_crm_contact keeps gift amounts and suppresses the
+ * Zeffy identity), and an identity with no CRM contact is suppressed so a
+ * later payment does not import it.
+ */
+export async function eraseDeletedContact(ctx: ZeffyContext, zeffyContactId: string): Promise<void> {
+  const { data, error } = await ctx.db
+    .from("crm_contact")
+    .select("id, source")
+    .eq("organization_id", ctx.organizationId)
+    .eq("zeffy_contact_id", zeffyContactId);
+  fail("find a deleted Zeffy contact", error);
+  for (const row of (data ?? []) as { id: string; source: string }[]) {
+    if (row.source === "zeffy") {
+      const { error: eraseError } = await ctx.db.rpc("erase_crm_contact", { p_contact: row.id });
+      fail("erase a deleted Zeffy contact", eraseError);
+    }
+  }
+  // A contact entered in the Hub is QBBE's own record: it loses only its
+  // Zeffy link; erasing it is an administrator's decision.
+  await unlinkContact(ctx, zeffyContactId);
+
+  const { data: matches, error: matchError } = await ctx.db
+    .from("zeffy_contact_match")
+    .select("email")
+    .eq("organization_id", ctx.organizationId)
+    .eq("zeffy_contact_id", zeffyContactId);
+  fail("read a deleted Zeffy contact's match", matchError);
+  const email = ((matches ?? []) as { email: string | null }[]).find((row) => row.email)?.email ?? null;
+  const { error: suppressError } = await ctx.db
+    .from("zeffy_suppressed_contact")
+    .upsert(
+      { organization_id: ctx.organizationId, zeffy_contact_id: zeffyContactId, email_sha256: email ? emailHash(email) : null },
+      { onConflict: "organization_id,zeffy_contact_id", ignoreDuplicates: true },
+    );
+  fail("suppress a deleted Zeffy contact", suppressError);
+  const { error: deleteMatchError } = await ctx.db
+    .from("zeffy_contact_match")
+    .delete()
+    .eq("organization_id", ctx.organizationId)
+    .eq("zeffy_contact_id", zeffyContactId);
+  fail("forget a deleted Zeffy contact's match", deleteMatchError);
+  const { error: paymentError } = await ctx.db
+    .from("zeffy_payment")
+    .update({ company_name: null, receipt_url: null })
+    .eq("organization_id", ctx.organizationId)
+    .eq("zeffy_contact_id", zeffyContactId);
+  fail("detach a deleted Zeffy contact's payments", paymentError);
+}
+
+/** A contact Zeffy no longer returns: the CRM contact stays, its Zeffy link goes. */
 export async function unlinkContact(ctx: ZeffyContext, zeffyContactId: string): Promise<void> {
   const { error } = await ctx.db
     .from("crm_contact")

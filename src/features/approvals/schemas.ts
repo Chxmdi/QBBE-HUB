@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { requiredText, isCalendarDate } from "@/lib/schema";
 import type { Locale } from "@/lib/i18n/config";
-import { formatCurrency } from "@/lib/i18n/format";
+import { formatCurrency } from "@/lib/i18n/format-core";
+import { parseMoneyToCents } from "@/features/finance/money";
 import { createTranslator, type MessageKey } from "@/lib/i18n/translate";
 
 /**
@@ -73,16 +74,15 @@ export const EVENT_LABELS: Record<string, MessageKey> = {
 };
 
 /**
- * "42.18", "1,234.56", "$1 234.56" or "1234" → cents. Returns null for
- * anything that is not a non-negative amount with at most two decimals, so a
- * typo is refused rather than rounded. Money is integer cents end to end.
+ * "42.18", "42,18", "1,234.56", "1 234,56 $" or "1234" → cents, through the
+ * same parser as the rest of finance, so a French amount is read the way the
+ * French message asks for it. Returns null for anything that is not a
+ * non-negative amount with at most two decimals, and for "1,234", which could
+ * mean either 1234 or 1.234; a typo is refused rather than guessed.
  */
 export function parseAmountToCents(input: string): number | null {
-  const cleaned = input.replace(/[\s  $]/g, "");
-  const match = /^(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?$/.exec(cleaned);
-  if (!match) return null;
-  const cents = Number(match[1].replace(/,/g, "")) * 100 + Number((match[2] ?? "").padEnd(2, "0"));
-  return Number.isSafeInteger(cents) && cents <= 100_000_000_000 ? cents : null;
+  const cents = parseMoneyToCents(input);
+  return cents !== null && cents <= 100_000_000_000 ? cents : null;
 }
 
 const amountFormatter = new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" });

@@ -21,6 +21,7 @@
  * because retrying it only burns attempts and delays the dead-letter signal.
  */
 
+import { createHash } from "node:crypto";
 import { emailApiKey, emailFromAddress } from "@/lib/env";
 import { sendSmtpMail } from "@/lib/smtp";
 
@@ -136,22 +137,23 @@ async function sendViaSmtp(email: OutboundEmail): Promise<SendResult> {
 }
 
 /**
- * The log transport's preview leaves out every web address: invitation and
- * recovery emails carry single-use secrets in their links, and logs are kept
- * and read far more widely than mailboxes.
+ * The stand-in for a real provider in development and tests. It logs that a
+ * message would have gone, never to whom or what it said: recipients'
+ * addresses and letters (donor names, gift amounts) do not belong in server
+ * logs. In production it runs only when explicitly chosen
+ * (EMAIL_TRANSPORT=log); otherwise sending fails, so nothing looks delivered
+ * that was not.
  */
-export function logPreview(text: string): string {
-  return text.replace(/https?:\/\/\S+/g, "[link]").slice(0, 200);
-}
-
 function sendViaLog(email: OutboundEmail): SendResult {
+  if (process.env.NODE_ENV === "production" && process.env.EMAIL_TRANSPORT !== "log") {
+    throw new EmailSendError("email is not configured: set EMAIL_PROVIDER_API_KEY", { retryable: false });
+  }
   console.info(
     JSON.stringify({
       event: "email.send",
       transport: "log",
-      to: email.to,
-      subject: email.subject,
-      preview: logPreview(email.text),
+      recipient_sha256: createHash("sha256").update(email.to.trim().toLowerCase(), "utf8").digest("hex"),
+      idempotency_key: email.idempotencyKey ?? null,
     }),
   );
   return { provider: "log", providerMessageId: null };
@@ -182,7 +184,7 @@ export function recipientIsAllowed(to: string, allowlist = recipientAllowlist())
 
 export async function sendEmail(email: OutboundEmail): Promise<SendResult> {
   if (!email.to.includes("@")) {
-    throw new EmailSendError(`not a deliverable address: ${email.to}`, {
+    throw new EmailSendError("not a deliverable address", {
       retryable: false,
     });
   }

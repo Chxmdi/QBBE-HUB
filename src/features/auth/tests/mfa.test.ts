@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createTranslator } from "@/lib/i18n/translate";
 import type { Factor } from "@supabase/supabase-js";
 import {
   isValidTotpCode,
@@ -50,7 +51,7 @@ describe("administrator TOTP MFA", () => {
   });
 
   it("uses only verified TOTP factors for a login challenge", () => {
-    expect(verifiedTotpFactors(factors)).toEqual([
+    expect(verifiedTotpFactors(factors, createTranslator("en"))).toEqual([
       { id: "verified", name: "Work phone" },
     ]);
   });
@@ -66,7 +67,7 @@ describe("administrator TOTP MFA", () => {
   });
 
   it("turns provider verification errors into actionable copy", () => {
-    expect(mfaErrorMessage("mfa challenge expired")).toContain("expired");
-    expect(mfaErrorMessage("mfa verification failed")).toContain("not accepted");
+    expect(mfaErrorMessage("mfa challenge expired", createTranslator("en"))).toContain("expired");
+    expect(mfaErrorMessage("mfa verification failed", createTranslator("en"))).toContain("not accepted");
   });
 });

@@ -8,7 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { calendarDateInZone } from "@/lib/time";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 const saveViewSchema = (t: TranslateFn) => z.object({
   name: requiredText(t("admin.errors.nameView"), 80),

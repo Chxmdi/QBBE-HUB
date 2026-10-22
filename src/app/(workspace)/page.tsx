@@ -41,7 +41,7 @@ import { calendarDateInZone, viewerTimeZone } from "@/lib/time";
 import type { ProjectHealth, Task } from "@/types/entities";
 import { healthSummaryLabel } from "@/features/dashboard/health";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("home.title") };

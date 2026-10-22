@@ -9,7 +9,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { FOLDER_CATEGORIES, tagsSchemaFor } from "@/features/documents/services/library";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 // Library actions (#147). Row-level security and the triggers in migration
 // 20260927600000 are the authorization and the version bookkeeping; these

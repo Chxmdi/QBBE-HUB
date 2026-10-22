@@ -24,7 +24,7 @@ import { getMyWork, getPickerOptions, getArchivedTasks } from "@/features/tasks/
 import { RestoreTaskButton } from "@/features/tasks/components/restore-task-button";
 import { requireSession } from "@/lib/auth";
 import { getLocale, getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import { calendarDateInZone, formatInZone } from "@/lib/time";
 import { myWorkBucket } from "@/lib/utils";
 import type { Task } from "@/types/entities";

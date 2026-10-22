@@ -231,10 +231,23 @@ Two gates exist specifically to catch drift that only shows up at runtime:
 ## Rollback
 
 - App: run the **Rollback** workflow with the previous release's commit
-  (release-procedure.md). Check schema compatibility before rollback;
+  (release-procedure.md). Like **Deploy** and **Server setup**, it runs only
+  from `main`: started from another branch, it stops at once with "runs from
+  main only" and touches nothing. This is a clear message, not the
+  protection: a branch can edit its own copy of the workflow. What stops a
+  branch from using the environment's keys is each environment's
+  **Deployment branches and tags** rule set to `main` only (staging,
+  production and server-admin; hosting.md, "Deploy access"). Check schema compatibility before rollback;
   rehearse on staging.
 - Schema: write an inverse migration; for risky changes use
   expand → migrate → contract so old app versions keep working (CICD-002).
+  CI enforces the contract step: a migration that drops or renames a table
+  or column, or changes a column's type, needs a `-- contract: safe-after
+  <sha>` line naming the released commit that stopped using it
+  (release-procedure.md).
+- Undoing a migration means restoring the backup the Deploy run took right
+  before migrating (its summary links the Backup run); see
+  backup-recovery.md for the restore, rehearsed on staging first.
 
 ## Release checks
 
@@ -296,14 +309,23 @@ The full step-by-step procedure, including rollback, is
    projects. It also reads the app settings (`APP_ENV`) and refuses if they
    point at another environment's database or address, lack the keys the app
    needs, or set `WORKSPACE_OS_FLAGS` on production.
-4. Shows the migrations it will apply (dry run, in the run summary), applies
-   them, and confirms none are left. `supabase db push` stops the deploy if
-   the database holds a migration this commit does not have.
-5. Builds the environment's container image of the commit on an ARM runner
+4. Builds the environment's container image of the commit on an ARM runner
    and stores it as `ghcr.io/chxmdi/qbbe-hub:<environment>-<commit>`.
+5. Only once the image is built: shows the migrations it will apply (dry
+   run, in the run summary); when there are any, starts the **Backup**
+   workflow for that environment and waits for it to succeed (a failed
+   backup stops the deploy before the database changes); applies the
+   migrations, and confirms none are left. `supabase db push` stops the
+   deploy if the database holds a migration this commit does not have.
+   Migrating last keeps short the time the old site runs on the new schema.
 6. Releases it on the server (`deploy/server/release.sh`): the new container
    must report healthy within 3 minutes, or the previous image and settings
    are put back and the run fails. The replaced image is the rollback target.
+   Then it signs in as the environment's smoke user
+   (`scripts/ci/smoke-signed-in.mjs`) and reads that person's own membership
+   row, so a database missing its API grants fails the deploy instead of
+   sending every signed-in page back to `/sign-in`. Until `SMOKE_EMAIL` and
+   `SMOKE_PASSWORD` are set, staging shows a warning and production fails.
 7. Smoke-checks `SITE_URL/sign-in`, that the site reports this commit
    (`/api/health/version`), and that the background jobs reach it.
 
@@ -315,14 +337,16 @@ Create GitHub environments named `staging` and `production`. In each, configure:
 | Setting | Location | Purpose |
 |---|---|---|
 | `DEPLOY_HOST` | environment variable | the QBBE server's public IP |
-| `DEPLOY_SSH_KEY` | environment secret | the server's deploy key; never commit it |
+| `DEPLOY_SSH_KEY` | environment secret | this environment's own deploy key (`qbbe-staging` or `qbbe-production` once `DEPLOY_MODE=isolated`, hosting.md "Deploy access"); never commit it |
 | `DEPLOY_KNOWN_HOSTS` | environment secret | the server's pinned SSH host key (from **Server setup**) |
 | `APP_ENV` | environment secret | the app's runtime settings, one `NAME=value` per line ([`hosting.md`](hosting.md#the-app_env-secret)) |
 | `SUPABASE_PROJECT_REF` | environment variable | this environment's Supabase project ref |
-| `SUPABASE_ACCESS_TOKEN` | environment secret | Supabase personal access token of a QBBE account, for migrations |
+| `SUPABASE_DB_URL` | environment secret | that environment's database address for migrations (session pooler URI); reaches that project only. Replaces `SUPABASE_ACCESS_TOKEN`, which reached every project of the account (hosting.md, "Deploy access") |
 | `SUPABASE_DB_PASSWORD` | environment secret | this environment's database password, for migrations |
 | `SITE_URL` | environment variable | the environment's public address, `https://<host>` |
 | `RELEASE_ENABLED` | environment variable | literal `true` only after readiness review |
+| `SMOKE_EMAIL` | environment variable | the environment's smoke user (lowest role, one test program; staging-provisioning.md) |
+| `SMOKE_PASSWORD` | environment secret | that user's long random password |
 
 And at repository level (Settings, Secrets and variables, Actions, Variables):
 

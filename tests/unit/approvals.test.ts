@@ -16,14 +16,27 @@ describe("parseAmountToCents", () => {
     expect(parseAmountToCents(" 0.07 ")).toBe(7);
   });
 
+  it("reads amounts written the Quebec way, as the French message asks", () => {
+    expect(parseAmountToCents("42,18")).toBe(4218);
+    expect(parseAmountToCents("12,5")).toBe(1250);
+    expect(parseAmountToCents("1 234,56")).toBe(123456);
+    expect(parseAmountToCents("1 234,56 $")).toBe(123456);
+    expect(parseAmountToCents("1\u202f234,56\u00a0$")).toBe(123456);
+  });
+
   it("refuses anything it would have to guess", () => {
-    for (const bad of ["", "abc", "-5", "1.234", "12,34", "1e3", "1,23.00"]) {
+    for (const bad of ["", "abc", "-5", "1.234", "1,234", "0,125", "1e3", "1,23.00", "12,345,67", "1000000000.01"]) {
       expect(parseAmountToCents(bad)).toBeNull();
     }
   });
 });
 
 describe("submitApprovalSchema", () => {
+  it("accepts a French amount", () => {
+    const result = submitApprovalSchema.safeParse({ subjectType: "purchase", title: "Portable", amount: "42,18" });
+    expect(result.success && result.data.amount).toBe(4218);
+  });
+
   it("requires an amount for money items", () => {
     const result = submitApprovalSchema.safeParse({ subjectType: "purchase", title: "Laptop" });
     expect(result.success).toBe(false);

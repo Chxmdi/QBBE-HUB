@@ -69,6 +69,8 @@ declare
   v_release2 uuid;
   v_period uuid;
   v_rows integer;
+  v_releases_before integer;
+  v_audits_before integer;
   v_sum bigint;
   v_sum2 bigint;
   v_row record;
@@ -122,6 +124,12 @@ begin
   -- ---------------------------------------------------------------------
   -- Who may release
   -- ---------------------------------------------------------------------
+  -- Releases the browser suites posted earlier on the same database are not
+  -- this file's; only a new one would mean a refused release left an entry.
+  select count(*) into v_releases_before from public.journal_entry
+  where organization_id = v_org and source_type = 'fund_release';
+  select count(*) into v_audits_before from public.audit_event
+  where organization_id = v_org and event_type = 'ledger' and action = 'restricted_released';
   perform tests.authenticate(v_staff, 'aal1');
   perform tests.fa_raises(format(
     'select public.ledger_release_restricted(%L, %L, %L, 1000, date ''2026-03-15'', ''Report accepted'')',
@@ -180,7 +188,7 @@ begin
     'insert into public.ledger_fund_release (organization_id, from_fund_id, to_fund_id, amount_cents, release_date, condition, entry_id) values (%L, %L, %L, 100, date ''2026-03-15'', ''x'', %L)',
     v_org, v_grant, v_gen, v_entry), 'permission denied', 'releases are not written directly, even by the owner');
   select count(*) into v_rows from public.journal_entry where organization_id = v_org and source_type = 'fund_release';
-  perform tests.ok(v_rows = 0, 'no refused release left an entry behind');
+  perform tests.ok(v_rows = v_releases_before, 'no refused release left an entry behind');
 
   -- ---------------------------------------------------------------------
   -- A release
@@ -222,7 +230,7 @@ begin
     'the release and who made it are recorded');
   select count(*) into v_rows from public.audit_event
   where organization_id = v_org and event_type = 'ledger' and action = 'restricted_released';
-  perform tests.ok(v_rows = 2, format('each release is audited (%s)', v_rows));
+  perform tests.ok(v_rows = v_audits_before + 2, format('each release is audited (%s)', v_rows - v_audits_before));
 
   -- ---------------------------------------------------------------------
   -- Statement of changes in fund balances
@@ -296,7 +304,8 @@ begin
   select sum(closing_cents) into v_sum from public.ledger_fund_changes(v_org, date '2025-10-01', date '2026-09-30')
   where fund_id in (v_gen, v_grant, v_board);
   perform tests.ok(v_sum = 87000 + 18000 + 5000, format('a ledger reader reads the statement (%s)', v_sum));
-  select count(*) into v_rows from public.ledger_fund_release where organization_id = v_org;
+  select count(*) into v_rows from public.ledger_fund_release
+  where organization_id = v_org and from_fund_id in (v_grant, v_board);
   perform tests.ok(v_rows = 2, 'a ledger reader reads the releases');
   perform tests.fa_raises(format(
     'select public.ledger_release_restricted(%L, %L, %L, 1000, date ''2026-10-15'', ''Report accepted'')',

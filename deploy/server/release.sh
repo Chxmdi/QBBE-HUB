@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Puts one image live for one environment (docs/runbooks/hosting.md).
 #
-#   release.sh <staging|production> <image> <site host>
+#   release.sh <staging|production> <image> <site host> [--restore-settings]
 #
 # Run on the server by the Deploy and Rollback workflows, as the deploy user,
 # from /opt/qbbe/<environment>/ where the workflow has just uploaded this
@@ -11,6 +11,12 @@
 # previous image and settings are put back and the release fails, so a bad
 # image never stays live. Only this environment's container and address are
 # touched; the other environment keeps running.
+#
+# Each successful release keeps a copy of its settings next to its image tag
+# (app.env.<environment>-<commit>, mode 600; the five newest), so Rollback
+# can put back the settings that ran with an image, not only the image:
+# with --restore-settings, the kept copy for <image> becomes the new
+# settings. Without it, the current settings stay.
 #
 # Prints ROLLBACK_TARGET=<the image this release replaced>.
 
@@ -22,6 +28,13 @@ HOST="${3:-}"
 ROOT="${QBBE_ROOT:-/opt/qbbe}"
 
 fail() { echo "release: $*" >&2; exit 1; }
+
+RESTORE_SETTINGS=0
+case "${4:-}" in
+  "") ;;
+  --restore-settings) RESTORE_SETTINGS=1 ;;
+  *) fail "unknown option '${4}'." ;;
+esac
 
 case "$ENVIRONMENT" in
   staging) OTHER=production; CPU_SHARES=512; MEM_LIMIT=2g; HEAP_MB=1024 ;;
@@ -43,6 +56,19 @@ done
 [ -d "$SITES" ] || fail "${SITES} is missing; run the Server setup workflow first."
 if [ -f "${SITES}/${OTHER}.caddy" ] && grep -q "^${HOST//./\\.} {" "${SITES}/${OTHER}.caddy"; then
   fail "${HOST} is already ${OTHER}'s address."
+fi
+
+# Fetch the image before touching the settings: a failed download must
+# leave the live settings exactly as they were.
+if [ "${QBBE_SKIP_PULL:-0}" != 1 ]; then
+  docker pull --quiet "$IMAGE" >/dev/null
+fi
+
+TAG="${IMAGE##*:}"
+KEPT="${DIR}/app.env.${TAG}"
+if [ "$RESTORE_SETTINGS" = 1 ]; then
+  [ -f "$KEPT" ] || fail "no settings kept for ${TAG}; restore the image alone, or deploy it again."
+  cp -p "$KEPT" "${DIR}/app.env.new"
 fi
 
 # A new settings file replaces the current one only for this release; the
@@ -71,9 +97,6 @@ CONF
 }
 compose() { docker compose -p "qbbe-${ENVIRONMENT}" -f "${DIR}/compose.app.yaml" --env-file "${DIR}/.env" "$@"; }
 
-if [ "${QBBE_SKIP_PULL:-0}" != 1 ]; then
-  docker pull --quiet "$IMAGE" >/dev/null
-fi
 
 write_env "$IMAGE"
 if ! compose up -d --wait --wait-timeout 180; then
@@ -101,6 +124,14 @@ if [ -n "$previous" ] && [ "$previous" != "$IMAGE" ]; then
 fi
 printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$IMAGE" >> "${DIR}/releases.log"
 rm -f "${DIR}/app.env.previous"
+
+# The settings this image ran with, for a later rollback; the five newest.
+# The temporary name is outside the app.env.<tag> pattern pruned below.
+( umask 077 && cp "${DIR}/app.env" "${DIR}/.kept-settings.tmp" ) && mv "${DIR}/.kept-settings.tmp" "$KEPT"
+chmod 600 "$KEPT"
+# Tags are <environment>-<hex>, so the names are safe to list and remove.
+# shellcheck disable=SC2012
+ls -t "${DIR}"/app.env."${ENVIRONMENT}"-* 2>/dev/null | tail -n +6 | xargs -r rm -f
 
 # Keep this environment's five newest images for rollback; older ones go.
 repo="${IMAGE%:*}"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
+import { memo, useEffect, useId, useRef, useState } from "react";
 import {
   Bookmark,
   CalendarPlus,
@@ -46,7 +46,12 @@ interface UpcomingMeeting {
   starts_at: string;
 }
 
-export function MessageItem({
+/**
+ * One message in a channel, thread or conversation. Memoised: the view keeps
+ * unchanged messages as the same objects, so a new message renders one row
+ * rather than every row in the channel.
+ */
+export const MessageItem = memo(function MessageItem({
   message,
   currentUserId,
   channelId,
@@ -64,7 +69,8 @@ export function MessageItem({
   channelId?: string;
   replyCount?: number;
   onOpenThread?: (rootId: string) => void;
-  onChanged: () => void;
+  /** Called with this message's id after an action that may have changed it. */
+  onChanged: (messageId: string) => void;
   isThreadReply?: boolean;
   canConvert?: boolean;
   isStaff?: boolean;
@@ -80,6 +86,8 @@ export function MessageItem({
   // label resolved to the first message's control.
   const fieldId = useId();
   const [showEmoji, setShowEmoji] = useState(false);
+  const emojiRef = useRef<HTMLDivElement>(null);
+  const emojiTriggerRef = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.body);
   const [saving, setSaving] = useState(false);
@@ -88,6 +96,17 @@ export function MessageItem({
   const [saved, setSaved] = useState(initiallySaved);
   const deleted = Boolean(message.deleted_at);
   const isAuthor = message.author_id === currentUserId;
+
+  // The reaction picker closes on Escape (focus back to its button) and on a
+  // click anywhere else, like the Message actions menu beside it.
+  useEffect(() => {
+    if (!showEmoji) return;
+    function onPointerDown(e: MouseEvent) {
+      if (!emojiRef.current?.contains(e.target as Node)) setShowEmoji(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [showEmoji]);
 
   // Group reactions by emoji.
   const reactionGroups = new Map<string, { count: number; mine: boolean }>();
@@ -101,7 +120,7 @@ export function MessageItem({
   async function handleReaction(emoji: string) {
     setShowEmoji(false);
     await toggleReaction(message.id, emoji);
-    onChanged();
+    onChanged(message.id);
   }
 
   async function handleConvertTask() {
@@ -161,7 +180,7 @@ export function MessageItem({
     setDialog(null);
     if (result.ok) {
       toast(t("messages.item.pinned"));
-      onChanged();
+      onChanged(message.id);
     } else {
       toast(result.error ?? t("messages.item.pinFailed"), { tone: "error" });
     }
@@ -181,13 +200,13 @@ export function MessageItem({
       return;
     }
     setEditing(false);
-    onChanged();
+    onChanged(message.id);
   }
 
   async function handleDelete() {
     if (!window.confirm(t("messages.item.deleteConfirm"))) return;
     const result = await deleteMessage(message.id);
-    if (result.ok) onChanged();
+    if (result.ok) onChanged(message.id);
     else toast(result.error ?? t("messages.item.deleteFailed"), { tone: "error" });
   }
 
@@ -387,9 +406,24 @@ export function MessageItem({
       </div>
 
       {!deleted && !editing ? (
-        <div className="absolute top-1 right-3 hidden items-center gap-0.5 rounded-(--radius-sm) border border-line bg-surface p-0.5 shadow-(--shadow-raise) group-focus-within:flex group-hover:flex">
-          <div className="relative">
+        // Always rendered and in the tab order, so keyboard and screen-reader
+        // users reach these actions; only hidden from sight until the message
+        // is hovered or something in it has focus. It ignores the pointer
+        // while unseen, so a tap on the message text never lands on it.
+        <div className="pointer-events-none absolute top-1 right-3 flex items-center gap-0.5 rounded-(--radius-sm) border border-line bg-surface p-0.5 opacity-0 shadow-(--shadow-raise) group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+          <div
+            ref={emojiRef}
+            className="relative"
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && showEmoji) {
+                e.preventDefault();
+                setShowEmoji(false);
+                emojiTriggerRef.current?.focus();
+              }
+            }}
+          >
             <button
+              ref={emojiTriggerRef}
               type="button"
               onClick={() => setShowEmoji((v) => !v)}
               aria-label={t("messages.item.addReaction")}
@@ -404,7 +438,11 @@ export function MessageItem({
                   <button
                     key={emoji}
                     type="button"
-                    onClick={() => handleReaction(emoji)}
+                    onClick={() => {
+                      // The picker unmounts; keep focus where it was opened.
+                      emojiTriggerRef.current?.focus();
+                      void handleReaction(emoji);
+                    }}
                     aria-label={t("messages.item.reactWith", { emoji })}
                     className="rounded p-1 text-[15px] hover:bg-surface-soft"
                   >
@@ -540,4 +578,4 @@ export function MessageItem({
       ) : null}
     </div>
   );
-}
+});

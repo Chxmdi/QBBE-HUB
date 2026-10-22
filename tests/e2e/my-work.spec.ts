@@ -11,6 +11,24 @@ import { signIn, signOut } from "./auth";
  * authenticated suite.
  */
 
+/**
+ * The task's row in the list, expanding its group first if needed. Each group
+ * shows only its first rows; on a database other specs (or an earlier browser)
+ * have already used, the new task can sit behind "Show N more".
+ */
+async function taskRow(page: Page, title: string) {
+  const row = page.getByText(title, { exact: true });
+  const more = page.getByRole("button", { name: /^Show \d+ more$/ });
+  // Wait for the list itself: the row, or a group with rows held back.
+  await expect(row.or(more).first()).toBeVisible({ timeout: 30_000 });
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (await row.isVisible()) break;
+    if ((await more.count()) === 0) break;
+    await more.first().click();
+  }
+  return row;
+}
+
 async function createTask(
   page: Page,
   fields: { title: string; priority?: string; due?: string; criteria?: string },
@@ -85,7 +103,7 @@ test("filters narrow the real result set and survive being shared", async ({
   await expect(page.getByText(critical, { exact: true })).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByText(low, { exact: true })).toBeVisible();
+  await expect(await taskRow(page, low)).toBeVisible();
 
   await page.getByLabel("Filter by priority").selectOption("critical");
   await expect(page).toHaveURL(/priority=critical/, { timeout: 30_000 });
@@ -101,14 +119,15 @@ test("filters narrow the real result set and survive being shared", async ({
 
   // An unparseable filter costs that filter, not the page.
   await page.goto("/my-work?priority=not-a-priority");
-  await expect(page.getByText(critical, { exact: true })).toBeVisible({
+  await expect(await taskRow(page, critical)).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByText(low, { exact: true })).toBeVisible();
+  await expect(await taskRow(page, low)).toBeVisible();
 
   await page.goto("/my-work?priority=critical");
   await page.getByRole("button", { name: /Clear 1 filter/ }).click();
-  await expect(page.getByText(low, { exact: true })).toBeVisible({
+  await expect(page).not.toHaveURL(/priority=/, { timeout: 30_000 });
+  await expect(await taskRow(page, low)).toBeVisible({
     timeout: 30_000,
   });
 });
@@ -163,7 +182,7 @@ test("a task records who changed what", async ({ page }) => {
   await createTask(page, { title, priority: "low" });
 
   await page.goto("/my-work");
-  await page.getByText(title, { exact: true }).click();
+  await (await taskRow(page, title)).click();
   const drawer = page.getByRole("dialog");
   await expect(drawer).toBeVisible({ timeout: 30_000 });
   await drawer.getByLabel("Priority", { exact: true }).selectOption("critical");
@@ -187,7 +206,7 @@ test("a task link re-checks access for whoever opens it", async ({ page }) => {
   const title = `Private ${Date.now()}`;
   await createTask(page, { title });
   await page.goto("/my-work");
-  await page.getByText(title, { exact: true }).click();
+  await (await taskRow(page, title)).click();
   await expect(page).toHaveURL(/task=[0-9a-f-]{36}/, { timeout: 30_000 });
   const shared = page.url();
 

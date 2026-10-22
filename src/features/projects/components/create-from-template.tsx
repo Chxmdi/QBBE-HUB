@@ -1,11 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createProjectFromTemplate } from "@/features/admin/services/workflow.commands";
+import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
 
+/**
+ * Choosing a template only selects it; Create makes the project. The select
+ * used to create one on every change, so arrow keys (which change a closed
+ * select in Chrome and Edge) or a second choice made several projects with
+ * all their tasks.
+ */
 export function CreateFromTemplateButton({
   templates,
 }: {
@@ -13,13 +20,22 @@ export function CreateFromTemplateButton({
 }) {
   const router = useRouter();
   const t = useT();
+  const [templateId, setTemplateId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  // State updates land after the next render; a double click arrives before.
+  const running = useRef(false);
 
   if (templates.length === 0) return null;
 
-  async function handleChange(templateId: string) {
-    if (!templateId) return;
+  async function create() {
+    if (!templateId || running.current) return;
+    running.current = true;
+    setBusy(true);
+    setError(null);
     const result = await createProjectFromTemplate(templateId);
+    running.current = false;
+    setBusy(false);
     if (!result.ok) {
       setError(result.error ?? t("projects.fromTemplate.error"));
       return;
@@ -30,23 +46,40 @@ export function CreateFromTemplateButton({
 
   return (
     <div>
-      <label className="sr-only" htmlFor="project-template">
-        {t("projects.fromTemplate.label")}
-      </label>
-      <Select
-        id="project-template"
-        className="h-9 w-auto px-2 text-[13px]"
-        defaultValue=""
-        onChange={(e) => void handleChange(e.target.value)}
-      >
-        <option value="">{t("projects.fromTemplate.placeholder")}</option>
-        {templates.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name}
-          </option>
-        ))}
-      </Select>
-      {error ? <p className="text-[12px] text-danger-fg">{error}</p> : null}
+      <div className="flex items-center gap-1.5">
+        <label className="sr-only" htmlFor="project-template">
+          {t("projects.fromTemplate.label")}
+        </label>
+        <Select
+          id="project-template"
+          className="h-9 w-auto px-2 text-[13px]"
+          value={templateId}
+          disabled={busy}
+          onChange={(e) => setTemplateId(e.target.value)}
+        >
+          <option value="">{t("projects.fromTemplate.placeholder")}</option>
+          {templates.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+            </option>
+          ))}
+        </Select>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => void create()}
+          disabled={!templateId}
+          loading={busy}
+          aria-label={t("projects.fromTemplate.createLabel")}
+        >
+          {t("projects.fromTemplate.create")}
+        </Button>
+      </div>
+      {error ? (
+        <p role="alert" className="text-[12px] text-danger-fg">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

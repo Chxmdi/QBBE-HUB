@@ -1,6 +1,6 @@
 import type { Locale } from "@/lib/i18n/config";
 import type { LocalizedText } from "@/lib/objects/contracts";
-import { interpolate, type MessageVars } from "@/lib/i18n/translate";
+import { interpolate, type MessageVars } from "@/lib/i18n/translator";
 import { blueprintsEn, type BlueprintsMessages } from "./en";
 import { blueprintsFrCA } from "./fr-CA";
 

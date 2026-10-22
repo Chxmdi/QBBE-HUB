@@ -11,7 +11,8 @@
  * properties.
  */
 
-import { absoluteUrl } from "@/lib/env";
+import { absoluteUrl, appUrl } from "@/lib/env";
+import { inAppLink } from "@/lib/safe-redirect";
 import { htmlLang, isLocale, type Locale } from "@/lib/i18n/config";
 import { formattersFor } from "@/lib/i18n/format";
 import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
@@ -99,10 +100,10 @@ export function escapeHtml(value: string): string {
  * is dropped in favour of the Hub's home (SEC-003).
  */
 export function safeLink(path: string | null | undefined): string {
-  if (!path || !path.startsWith("/") || path.startsWith("//")) {
-    return absoluteUrl("/");
-  }
-  return absoluteUrl(path);
+  const link = inAppLink(path);
+  if (!link) return absoluteUrl("/");
+  const target = new URL(absoluteUrl(link));
+  return target.origin === new URL(appUrl()).origin ? target.href : absoluteUrl("/");
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -144,7 +145,7 @@ function shell(
   // Someone who is not a member yet has no notification settings to manage.
   const manage = options.manageLink === false
     ? ""
-    : ` <a href="${safeLink("/settings/notifications")}" style="color:${BRAND};">${escapeHtml(t("notifications.email.manage"))}</a>.`;
+    : ` <a href="${escapeHtml(safeLink("/settings/notifications"))}" style="color:${BRAND};">${escapeHtml(t("notifications.email.manage"))}</a>.`;
   return `<!doctype html>
 <html lang="${htmlLang(locale)}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -169,7 +170,7 @@ ${options.footerHtml ?? escapeHtml(footerNote)}${manage}
 
 function button(href: string, label: string): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0 4px;"><tr><td style="background:${BRAND};border-radius:7px;">
-<a href="${href}" style="display:inline-block;padding:10px 18px;font:600 14px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${EMAIL_COLORS.surface};text-decoration:none;">${escapeHtml(label)}</a>
+<a href="${escapeHtml(href)}" style="display:inline-block;padding:10px 18px;font:600 14px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${EMAIL_COLORS.surface};text-decoration:none;">${escapeHtml(label)}</a>
 </td></tr></table>`;
 }
 
@@ -190,6 +191,7 @@ const REASON_KEYS: Record<string, MessageKey> = {
   "assigned": "notifications.email.reasons.assigned",
   "mentioned": "notifications.email.reasons.mentioned",
   "reply": "notifications.email.reasons.reply",
+  "direct message": "notifications.email.reasons.directMessage",
   "approved": "notifications.email.reasons.approved",
   "decision requested": "notifications.email.reasons.decisionRequested",
   "due date changed": "notifications.email.reasons.dueDateChanged",
@@ -311,7 +313,7 @@ export function renderDigestEmail(input: DigestEmailInput): EmailBody {
 ${group.items
   .map(
     (item) => `<tr><td style="padding:7px 0;border-top:1px solid ${LINE};">
-<a href="${safeLink(item.link)}" style="font-weight:600;color:${INK};text-decoration:none;">${escapeHtml(item.title)}</a>
+<a href="${escapeHtml(safeLink(item.link))}" style="font-weight:600;color:${INK};text-decoration:none;">${escapeHtml(item.title)}</a>
 ${item.body ? `<br><span style="font-size:13px;color:${MUTED};">${escapeHtml(item.body)}</span>` : ""}
 </td></tr>`,
   )
@@ -384,7 +386,7 @@ export function renderTeamDigestEmail(input: TeamDigestEmailInput): EmailBody {
   const rows = input.people
     .map(
       (person) => `<tr><td style="padding:9px 0;border-top:1px solid ${LINE};">
-<a href="${safeLink(person.link)}" style="font-weight:600;color:${INK};text-decoration:none;">${escapeHtml(person.name)}</a>
+<a href="${escapeHtml(safeLink(person.link))}" style="font-weight:600;color:${INK};text-decoration:none;">${escapeHtml(person.name)}</a>
 <ul style="margin:4px 0 0;padding-left:18px;font-size:13px;color:${MUTED};">${person.reasons
         .map((reason) => `<li>${escapeHtml(reason)}</li>`)
         .join("")}</ul>

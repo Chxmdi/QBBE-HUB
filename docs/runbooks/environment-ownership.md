@@ -17,7 +17,7 @@ and `RELEASE_ENABLED` from that environment only.
 ## Required GitHub Environment bindings
 
 ### staging
-- `DEPLOY_HOST`, secrets `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`: the QBBE server
+- `DEPLOY_HOST`, secrets `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`: the QBBE server. Each environment's `DEPLOY_SSH_KEY` is its own deploy user's key; the administrator key is only in the `server-admin` environment (hosting.md, "Deploy access")
 - secret `APP_ENV`: staging-only Supabase URL/keys and all staging integration credentials
 - `RELEASE_ENABLED=false` until #55 is ready to certify staging
 
@@ -60,6 +60,8 @@ Before release, prove all of the following:
 - staging's `APP_ENV` points at the staging Supabase project and address, production's at production's (the deploy check refuses otherwise)
 - staging and production Supabase refs differ
 - no staging/preview environment contains production service-role/OAuth/email secrets
+- staging's deploy credentials cannot read production's settings or control the server: as `qbbe-staging`, `cat /opt/qbbe/production/app.env`, `docker ps` and `sudo -n true` all fail (hosting.md, "Deploy access")
+- no environment holds a Supabase personal access token; migrations use that environment's own `SUPABASE_DB_URL`
 - production publishing remains disabled until #21 passes
 - a staging write cannot mutate production data
 - QBBE custodians can access/recover each production-critical provider account

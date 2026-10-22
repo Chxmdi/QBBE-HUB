@@ -202,6 +202,7 @@ export const adminFrCA: typeof adminEn = {
           project_health_changed: "santé du projet modifiée",
           meeting_completed: "réunion terminée",
           event_assignment_created: "affectation à un événement créée",
+          object_event: "enregistrement modifié",
         },
         actions: {
           notify_assignee: "Aviser la personne assignée",
@@ -826,6 +827,9 @@ export const adminFrCA: typeof adminEn = {
       vmsOnlyActive:
         "Seuls les membres actifs de cette organisation peuvent être liés à une identité VMS.",
       vmsStoreFailed: "Impossible d’enregistrer l’identifiant VMS.",
+      vmsIdTaken: "Cet identifiant VMS est déjà lié à une autre personne de l’organisation.",
+      signInBlockFailed: "Le membre a été désactivé et ses intégrations ont pris fin, mais sa connexion n’a pas pu être bloquée. Réessayez.",
+      signInUnblockFailed: "Le membre a été réactivé, mais sa connexion n’a pas pu être débloquée. Réessayez.",
       nameView: "Nommez la vue.",
       invalidView: "Vue non valide.",
       saveViewFailed: "Impossible d’enregistrer la vue.",

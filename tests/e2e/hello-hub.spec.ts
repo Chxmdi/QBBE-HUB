@@ -69,7 +69,7 @@ test("owner creates a project and a milestone", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Create project" })).toBeVisible();
   const name = `Hello Hub ${Date.now()}`;
   await page.locator("#project-name").fill(name);
-  await page.getByRole("button", { name: "Create project" }).click();
+  await page.getByRole("button", { name: "Create project", exact: true }).click();
   await expect(page).toHaveURL(/\/projects\/[0-9a-f-]+$/, { timeout: 60_000 });
   const detailHeading = page.getByRole("heading", { name });
   await expect(detailHeading).toBeVisible({ timeout: 30_000 });

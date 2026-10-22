@@ -282,3 +282,52 @@ test("reduced motion is honoured", async ({ browser }) => {
   expect(parseFloat(duration)).toBeLessThan(0.05);
   await context.close();
 });
+
+/**
+ * The privacy notice (Law 25) must be readable before anyone signs in or
+ * creates an account, and linked wherever information is collected.
+ */
+test("the privacy notice renders signed out and is linked from sign-in, sign-up and Settings", async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(90_000);
+  const response = await page.goto("/privacy");
+  expect(response?.status()).toBe(200);
+  expect(new URL(page.url()).pathname).toBe("/privacy");
+  await expect(page.getByRole("heading", { level: 1, name: "Privacy notice" })).toBeVisible();
+  // Marked as a draft until QBBE approves it.
+  await expect(page.getByRole("note")).toContainText("Draft");
+  const axe = await new AxeBuilder({ page }).analyze();
+  const serious = axe.violations.filter((v) => v.impact === "critical" || v.impact === "serious");
+  expect(serious, JSON.stringify(serious)).toEqual([]);
+
+  for (const path of ["/sign-in", "/sign-up"]) {
+    await page.goto(path);
+    await expect(page.getByRole("link", { name: /privacy notice/i }).first(), path).toBeVisible();
+  }
+  // The sign-up form itself (where the acknowledgement sits) opens from an
+  // invitation link once a workspace exists; without one the page explains
+  // that sign-up is by invitation.
+  const { sql } = await import("./db");
+  const { createHash, randomBytes } = await import("node:crypto");
+  const token = randomBytes(32).toString("base64url");
+  sql(
+    `insert into invitation (organization_id, email, intended_role, invited_by, expires_at, token_hash)
+     select organization_id, 'privacy-${Date.now()}@example.com', 'volunteer', user_id, now() + interval '1 day',
+            '${createHash("sha256").update(token).digest("hex")}'
+     from organization_membership where role = 'owner' and status = 'active' order by joined_at limit 1;`,
+  );
+  await page.goto(`/sign-up?invite=${token}`);
+  await expect(page.getByText("By creating an account, you acknowledge the")).toBeVisible();
+
+  await context.addCookies([{ name: "qbbe-locale", value: "fr-CA", url: page.url() }]);
+  await page.goto(`/sign-up?invite=${token}`);
+  await expect(page.getByRole("link", { name: /confidentialit/i }).first()).toBeVisible();
+  await context.clearCookies({ name: "qbbe-locale" });
+
+  const { signIn } = await import("./auth");
+  await signIn(page, "staff");
+  await page.goto("/settings");
+  await expect(page.getByRole("main").getByRole("link", { name: "Privacy notice" })).toBeVisible();
+});

@@ -52,7 +52,7 @@ begin
   reset role;
 
   perform tests.clear_auth();
-  perform tests.ok(tests.refused('select 1 from public.event'), 'signed-out: events refused');
+  perform tests.ok(tests.permission_denied('select 1 from public.event'), 'signed-out: events refused');
   reset role;
 end;
 $$;

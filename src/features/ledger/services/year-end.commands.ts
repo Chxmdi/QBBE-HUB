@@ -7,7 +7,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { requiredText, isCalendarDate } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 
 /**

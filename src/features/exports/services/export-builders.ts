@@ -6,8 +6,10 @@ import { readAll, type PagedQuery } from "@/lib/supabase/read-all";
  *
  * These run under the **service role**, because the job runner has no user
  * session — which means row-level security is not protecting anything here.
- * Every builder therefore filters by organization explicitly, and the
- * person-data builder filters by subject as well. Getting that wrong would
+ * Every builder therefore filters by organization explicitly, the
+ * person-data builder filters by subject as well, and the builders staff may
+ * request (task history, report bundle) keep only what the requester could
+ * read in the app. Getting that wrong would
  * hand somebody a copy of another organization's records, so each query below
  * carries its own scope rather than relying on a caller to add one.
  */
@@ -199,11 +201,22 @@ async function taskHistory(
   return [{ name: "tasks", rows: visible }];
 }
 
+/**
+ * Reports, their versions and approvals: only those the requester could open
+ * in the app (SEC-006).
+ *
+ * Staff may request this kind, and the job runs as the service role, so the
+ * report policy that would hide a restricted program's reports is not in
+ * play. Each report is kept only if `actor_can_read_report` says the
+ * requester may read it, and versions and approvals follow the kept reports.
+ * Without a requester there is nobody to scope to, so nothing is built.
+ */
 async function reportBundle(
   db: SupabaseClient,
-  { organizationId }: BuildRequest,
+  { organizationId, requestedBy }: BuildRequest,
 ): Promise<ExportSection[]> {
-  return Promise.all([
+  if (!requestedBy) throw new Error("a report bundle needs a requester to scope it to");
+  const [reports, versions, approvals] = await Promise.all([
     section(db, "reports", db
       .from("report_instance")
       .select("id, title, report_type, period_start, period_end, status, created_at")
@@ -220,6 +233,23 @@ async function reportBundle(
       .select("id, report_version_id, decision, note, decided_at")
       .eq("organization_id", organizationId)),
   ]);
+
+  const readable = new Set<string>();
+  for (const row of reports.rows) {
+    const { data, error } = await db.rpc("actor_can_read_report", {
+      p_user: requestedBy,
+      p_report: row.id as string,
+    });
+    if (error) throw new Error(`could not check report access: ${error.message}`);
+    if (data === true) readable.add(row.id as string);
+  }
+  const keptVersions = versions.rows.filter((v) => readable.has(v.report_id as string));
+  const versionIds = new Set(keptVersions.map((v) => v.id as string));
+  return [
+    { name: "reports", rows: reports.rows.filter((r) => readable.has(r.id as string)) },
+    { name: "versions", rows: keptVersions },
+    { name: "approvals", rows: approvals.rows.filter((a) => versionIds.has(a.report_version_id as string)) },
+  ];
 }
 
 const BUILDERS: Record<

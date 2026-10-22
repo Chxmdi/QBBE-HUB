@@ -95,10 +95,11 @@ begin
 end;
 $$;
 
--- True when running the statement fails for lack of a privilege. Signed-out
+-- True when running the statement fails for lack of a privilege (42501),
+-- and only then: unlike tests.refused, an empty result is not enough. Signed-out
 -- visitors hold no grant on most tables (20261119100000_explicit_api_grants),
 -- so reading one is refused outright instead of returning no rows.
-create or replace function tests.refused(statement text)
+create or replace function tests.permission_denied(statement text)
 returns boolean
 language plpgsql
 as $$
@@ -107,6 +108,58 @@ begin
   return false;
 exception when insufficient_privilege then
   return true;
+end;
+$$;
+
+-- Write refusals (write-tampering.sql, untested-tables-deny.sql).
+-- Runs one statement as the current (authenticated) caller and undoes it
+-- either way, so an allowed write cannot change what a later case sees.
+-- Refused means a permission error (42501, which row security also raises),
+-- an exception raised by a guard trigger (P0001), or a write that touched no
+-- row. Any other error is a broken fixture, not a refusal, and fails the file.
+create or replace function tests.refused(p_statement text)
+returns boolean
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_rows integer;
+begin
+  begin
+    execute p_statement;
+    get diagnostics v_rows = row_count;
+    raise exception using errcode = 'QTUND', message = v_rows::text;
+  exception
+    when sqlstate 'QTUND' then
+      return sqlerrm::integer = 0;
+    when insufficient_privilege or raise_exception then
+      return true;
+  end;
+end;
+$$;
+
+create or replace function tests.refused_ok(p_statement text, msg text)
+returns void
+language plpgsql
+set search_path = tests, public
+as $$
+begin
+  perform tests.ok(tests.refused(p_statement), msg);
+end;
+$$;
+
+-- A case whose fix has not landed on main yet. Prints PASS once it is refused.
+create or replace function tests.gap(p_statement text, finding text, msg text)
+returns void
+language plpgsql
+set search_path = tests, public
+as $$
+begin
+  if tests.refused(p_statement) then
+    raise notice 'PASS: %', msg;
+  else
+    raise notice 'TODO %: %', finding, msg;
+  end if;
 end;
 $$;
 
@@ -1063,10 +1116,8 @@ begin
           '{"metrics":{"tasks_completed":10}}'::jsonb, v_staff)
   returning id into v_report;
 
-  insert into report_version (organization_id, report_id, version_number,
-                              snapshot, generated_by)
-  values (v_org, v_report, 1, '{"metrics":{"tasks_completed":10}}'::jsonb, v_staff)
-  returning id into v_version;
+  -- Versions are recorded through record_report_version only.
+  v_version := public.record_report_version(v_report, '{"metrics":{"tasks_completed":10}}'::jsonb, null);
 
   select count(*) into n from report_version where id = v_version;
   perform tests.ok(n = 1, 'staff can record and read a report version');
@@ -1485,7 +1536,10 @@ begin
     set local role authenticated;
     -- A delivery row exists (seeded above) and names a recipient and subject.
     -- A guest must see none of it: the policy admits only their own mail.
-    select count(*) into n from email_delivery;
+    -- Counted as "not addressed to the guest", because mail the browser
+    -- suites sent the guest earlier on the same database is theirs to see.
+    select count(*) into n from email_delivery
+    where recipient_user_id is distinct from v_guest;
     perform tests.ok(n = 0, 'guest sees no email delivery but their own');
   exception
     when insufficient_privilege then

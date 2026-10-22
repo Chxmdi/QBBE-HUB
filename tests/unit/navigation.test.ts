@@ -169,7 +169,8 @@ describe("visibleNav with every switch off", () => {
     const items = visibleNav(ADMIN).flatMap((g) => g.items);
     expect(items.find((i) => i.href === "/my-work")?.badge).toBe("myWork");
     expect(items.find((i) => i.href === "/inbox")?.badge).toBe("inbox");
-    expect(items.filter((i) => i.badge)).toHaveLength(2);
+    expect(items.find((i) => i.href === "/messages")?.badge).toBe("messages");
+    expect(items.filter((i) => i.badge)).toHaveLength(3);
   });
 
   it("points the mobile tabs at the old screens", () => {

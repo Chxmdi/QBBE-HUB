@@ -8,7 +8,10 @@
 --   1 program, 10 projects, each with 5 staff contributors and 8 volunteer
 --     contributors, so every person has scoped work;
 --   2,000 tasks spread over the projects and assigned across the people;
---   1 public channel everyone is in, with 1,000 messages of history.
+--   1 public channel everyone is in, with 1,000 messages of history;
+--   10,000 activity rows, five per task, written the way the app writes them
+--     (task source, project and program), spread over the last ~25 days, so
+--     the Home and program feeds are measured at a realistic size (PERF-001).
 
 do $$
 declare
@@ -107,6 +110,15 @@ begin
          now() - (1000 - m) * interval '1 minute'
   from generate_series(1, 1000) as m;
 
-  raise notice 'Performance fixture created: 50 people, 10 projects, 2000 tasks, 1000 messages.';
+  insert into activity_event (organization_id, actor_id, verb, source_type, source_id, project_id, program_id,
+                              summary, created_at)
+  select t.organization_id, t.assignee_id, 'updated', 'task', t.id, t.project_id, v_program,
+         format('Perf activity %s on %s', k, t.title),
+         now() - (k * interval '5 day') - (t.sort_key * interval '1 minute')
+  from task t
+  join project pr on pr.id = t.project_id and pr.program_id = v_program
+  cross join generate_series(1, 5) as k;
+
+  raise notice 'Performance fixture created: 50 people, 10 projects, 2000 tasks, 1000 messages, 10000 activity rows.';
 end
 $$;

@@ -19,13 +19,15 @@ test("the owner records a gift, posts it and issues a bilingual not-a-receipt ac
   sql(`delete from ledger_reader where user_id = '${staffId}'`);
 
   // The books must be open for the gift's date: the accountant's approval and
-  // a period covering 15 September 2026 (the fiscal year starts in October).
+  // the fiscal year the other ledger specs use (October 2026 to September
+  // 2027). A lone period of another month would move where every fiscal year
+  // starts for the specs that run after this one.
   sql(`update ledger_settings set chart_approved_on = '2026-09-20', chart_approved_by_name = 'QA Accountant, CPA',
          chart_approval_recorded_at = now() where organization_id = '${orgId}' and chart_approved_on is null`);
   sql(`insert into ledger_period (organization_id, name, starts_on, ends_on)
-       select '${orgId}', '2026-09', '2026-09-01', '2026-09-30'
-       where not exists (select 1 from ledger_period where organization_id = '${orgId}'
-                          and date '2026-09-15' between starts_on and ends_on)`);
+       select '${orgId}', to_char(m, 'YYYY-MM'), m::date, (m + interval '1 month' - interval '1 day')::date
+       from generate_series(date '2026-10-01', date '2027-09-01', interval '1 month') as m
+       where not exists (select 1 from ledger_period p where p.organization_id = '${orgId}' and p.starts_on = m::date)`);
   sql(`insert into crm_contact (organization_id, full_name, email) values ('${orgId}', '${donor}', 'gift-donor@example.com')`);
 
   await signIn(page, "owner");
@@ -35,7 +37,7 @@ test("the owner records a gift, posts it and issues a bilingual not-a-receipt ac
 
   await clickWhenInteractive(page.getByRole("button", { name: "Record a gift" }));
   const dialog = page.getByRole("dialog", { name: "Record a gift" });
-  await dialog.getByLabel("Date received").fill("2026-09-15");
+  await dialog.getByLabel("Date received").fill("2026-10-15");
   await dialog.getByLabel("Donor", { exact: true }).selectOption({ label: donor });
   await dialog.getByLabel("Amount received").fill("125.00");
   await expect(dialog.getByLabel("Debit")).toHaveValue(/.+/);
@@ -68,9 +70,9 @@ test("the owner records a gift, posts it and issues a bilingual not-a-receipt ac
   await expect(page.getByRole("heading", { name: /^Entry \d+$/ })).toBeVisible();
 
   // The donor list shows the donor; exporting it is audited.
-  await page.goto("/finance/gifts/donors?from=2026-09-01&to=2026-09-30");
+  await page.goto("/finance/gifts/donors?from=2026-10-01&to=2026-10-31");
   await expect(page.getByRole("cell", { name: new RegExp(donor) })).toBeVisible();
-  const csv = await page.request.get("/api/finance/gifts/donors/export?from=2026-09-01&to=2026-09-30");
+  const csv = await page.request.get("/api/finance/gifts/donors/export?from=2026-10-01&to=2026-10-31");
   expect(csv.status()).toBe(200);
   expect(await csv.text()).toContain(`${donor},Person,gift-donor@example.com,1,125.00`);
   expect(
@@ -84,14 +86,14 @@ test("the owner records a gift, posts it and issues a bilingual not-a-receipt ac
   await page.goto("/finance/gifts");
   await expect(page.getByText("You do not have access to the ledger")).toBeVisible();
   await expect(page.getByText(donor)).toHaveCount(0);
-  expect((await page.request.get("/api/finance/gifts/donors/export?from=2026-09-01&to=2026-09-30")).status()).toBe(403);
+  expect((await page.request.get("/api/finance/gifts/donors/export?from=2026-10-01&to=2026-10-31")).status()).toBe(403);
   expect((await page.request.get(href!)).status()).toBe(404);
 });
 
 /** Year 0000 has no days, and Postgres refused it: both gift pages showed "Something went wrong". */
 test("a year that does not exist shows the current year on the gift pages, not an error", async ({ page }) => {
   await signIn(page, "owner");
-  for (const path of ["/finance/gifts?year=0000", "/finance/gifts/statement?year=0000"]) {
+  for (const path of ["/finance/gifts?year=0000", "/finance/gifts?year=1999", "/finance/gifts?year=2101", "/finance/gifts/statement?year=0000", "/finance/gifts/statement?year=2101"]) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Something went wrong" }), path).toHaveCount(0);

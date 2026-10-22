@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { occurrenceStart } from "@/features/meetings/occurrence";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
@@ -18,7 +19,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { wallTimeToInstant } from "@/lib/time";
 import { composeMeetingSummary } from "./meeting.summary";
 import { getLocale, getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 /** Validation messages are catalogue keys, translated when the action returns. */
 const K = (key: MessageKey): string => key;
@@ -63,21 +64,6 @@ const createMeetingSchema = z.object({
   occurrences: z.coerce.number().int().min(2).max(12).optional(),
   agendaTemplateId: z.string().uuid().optional().or(z.literal("")),
 });
-
-/** The start of occurrence `index` (0-based) in wall-clock terms. */
-function occurrenceStart(
-  first: Date,
-  repeat: "weekly" | "fortnightly" | "monthly",
-  index: number,
-): Date {
-  const next = new Date(first.getTime());
-  if (repeat === "monthly") {
-    next.setUTCMonth(next.getUTCMonth() + index);
-  } else {
-    next.setUTCDate(next.getUTCDate() + index * (repeat === "weekly" ? 7 : 14));
-  }
-  return next;
-}
 
 export async function createMeeting(input: unknown): Promise<ActionResult> {
   const session = await requireSession();

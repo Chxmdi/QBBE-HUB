@@ -36,6 +36,7 @@ export const giftsFrCA: typeof giftsEn = {
     show: "Afficher",
     summaryOne: "{count} don · {total} reçu en argent",
     summaryOther: "{count} dons · {total} reçus en argent",
+    truncated: "Affichage des {shown} dons les plus récents sur les {count} reçus en {year}. Les chiffres ci-dessus couvrent toute l’année.",
     emptyTitle: "Aucun don inscrit en {year}",
     emptyDescription: "Les dons inscrits s’affichent ici.",
     colGift: "Don",

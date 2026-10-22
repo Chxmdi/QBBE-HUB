@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TranslatedText } from "@/components/shared/translated-text";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 import { TASK_STATUSES, TASK_STATUS_LABELS } from "@/features/tasks/schemas";
 import type {
   ProjectHealth,

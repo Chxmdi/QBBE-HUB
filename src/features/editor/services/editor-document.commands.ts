@@ -137,6 +137,9 @@ export async function registerEditorUpload(input: unknown): Promise<{ ok: true; 
 
 /** A short-lived address for a stored file, or null while its scan is pending or it is not visible. */
 export async function resolveEditorFile(ref: string): Promise<string | null> {
+  // Editor documents are opened from pages, records and templates alike.
+  const on = (await isEnabled("wos_editor")) || (await isEnabled("wos_objects")) || (await isEnabled("wos_pages"));
+  if (!on) return null;
   const documentId = documentIdFromRef(ref);
   if (!documentId) return null;
   const result = await getDocumentDownloadUrl(documentId);

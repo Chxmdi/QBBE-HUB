@@ -18,11 +18,42 @@ export function compareMessages(a: Ordered, b: Ordered): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-/** Merges two slices of history, keeping one copy of each message, in order. */
+/**
+ * Whether two copies of a message would render the same. Rows come from the
+ * API as plain JSON in a fixed column order, so comparing their JSON is exact
+ * enough: at worst a reordered reaction list costs one extra render.
+ */
+function sameMessage(a: unknown, b: unknown): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Merges two slices of history, keeping one copy of each message, in order.
+ * The right side wins, except that a message which has not changed keeps the
+ * object already shown, so a refetch does not re-render every row.
+ */
 export function mergeMessages<T extends Ordered>(left: T[], right: T[]): T[] {
   const byId = new Map<string, T>();
-  for (const message of [...left, ...right]) byId.set(message.id, message);
+  for (const message of left) byId.set(message.id, message);
+  for (const message of right) {
+    const shown = byId.get(message.id);
+    if (!shown || !sameMessage(shown, message)) byId.set(message.id, message);
+  }
   return [...byId.values()].sort(compareMessages);
+}
+
+/**
+ * Puts one fetched message into the shown history: added in order if new,
+ * replaced if changed. Returns the same list when nothing changed, so React
+ * skips the render entirely.
+ */
+export function upsertMessage<T extends Ordered>(current: T[], message: T): T[] {
+  const index = current.findIndex((m) => m.id === message.id);
+  if (index === -1) return mergeMessages(current, [message]);
+  if (sameMessage(current[index], message)) return current;
+  const next = current.slice();
+  next[index] = message;
+  return next;
 }
 
 /** Whether `message` comes strictly before `cursor` in history order. */

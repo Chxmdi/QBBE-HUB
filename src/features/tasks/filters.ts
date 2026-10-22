@@ -1,10 +1,6 @@
 import { TASK_STATUSES } from "@/features/tasks/schemas";
 import { addCalendarDays } from "@/lib/time";
-import {
-  createTranslator,
-  type MessageKey,
-  type TranslateFn,
-} from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 import type { TaskStatus } from "@/types/entities";
 
 /**
@@ -128,13 +124,16 @@ export function describeFilterConflicts(
   options: {
     scopedToUserId?: string;
     statusLabel?: (status: TaskStatus) => string;
-    /** The reader's language (#141); English when omitted. */
-    t?: TranslateFn;
-  } = {},
+    /**
+     * The reader's language (#141). Required: an English default would load
+     * both language catalogues into the filter bar's browser code.
+     */
+    t: TranslateFn;
+  },
 ): string[] {
   const conflicts: string[] = [];
   const label = options.statusLabel ?? ((status: TaskStatus) => status);
-  const t = options.t ?? createTranslator("en");
+  const t = options.t;
 
   if (filters.status && filters.status !== "blocked" && filters.blocked === "yes") {
     conflicts.push(

@@ -5,7 +5,7 @@ import { authorizeAdminAction } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
 import { opsEn } from "@/lib/i18n/messages/workspace/ops.en";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import {
   classifyDocumentSchema,

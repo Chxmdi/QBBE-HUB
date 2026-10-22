@@ -105,9 +105,9 @@ begin
   end loop;
 
   perform tests.clear_auth();
-  perform tests.ok(tests.refused(format('update public.workflow_rule set stopped_at = now() where id = %L', v_rule)),
+  perform tests.ok(tests.permission_denied(format('update public.workflow_rule set stopped_at = now() where id = %L', v_rule)),
     'a signed-out visitor cannot stop a workflow');
-  perform tests.ok(tests.refused('select 1 from public.workflow_execution'), 'a signed-out visitor is refused reading runs');
+  perform tests.ok(tests.permission_denied('select 1 from public.workflow_execution'), 'a signed-out visitor is refused reading runs');
   reset role;
 
   perform tests.ok(

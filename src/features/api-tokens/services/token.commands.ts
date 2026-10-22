@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth";
+import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
-import { interpolate } from "@/lib/i18n/translate";
+import { interpolate } from "@/lib/i18n/translator";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { apiTokenMessages } from "../i18n";
@@ -31,6 +31,12 @@ export async function createApiToken(input: unknown): Promise<CreateTokenResult>
   // The page is staff's, as the menu says; the action must agree, since a
   // Server Action answers whoever calls it.
   if (!session.isStaff) return { ok: false, error: m.errors.staffOnly };
+  // Owners and admins need a completed MFA sign-in, as the database does;
+  // say so rather than failing with a generic error.
+  if (session.isAdmin) {
+    const privileged = await authorizeAdminAction();
+    if (!privileged.ok) return { ok: false, error: privileged.error };
+  }
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: interpolate(m.errors.invalid, { detail: parsed.error.issues[0]?.message ?? "" }) };

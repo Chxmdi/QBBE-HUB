@@ -1,4 +1,4 @@
-import { interpolate, type MessageVars } from "@/lib/i18n/translate";
+import { interpolate, type MessageVars } from "@/lib/i18n/translator";
 import type { Locale } from "@/lib/i18n/config";
 import { objectsEn, type ObjectsMessages } from "./en";
 import { objectsFr } from "./fr-CA";

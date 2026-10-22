@@ -59,7 +59,16 @@ function fakeDb(snapshot: OpsSnapshot) {
     return q;
   };
   const db = {
-    rpc: async (name: string) => ({ data: name === "ops_health_snapshot" ? snapshot : [], error: null }),
+    rpc: async (name: string, args?: { p_rows?: Record<string, unknown>[] }) => {
+      // create_notifications: the one write path for notifications.
+      if (name === "create_notifications") {
+        for (const row of args?.p_rows ?? []) {
+          if (!notifications.some((n) => n.user_id === row.user_id && n.dedupe_key === row.dedupe_key)) notifications.push(row);
+        }
+        return { data: args?.p_rows?.length ?? 0, error: null };
+      }
+      return { data: name === "ops_health_snapshot" ? snapshot : [], error: null };
+    },
     from: (table: string) => {
       if (table === "organization_membership") {
         return chain(() => [{ user_id: "u1", organization_id: "o1", user: { locale: "fr-CA" } }]);

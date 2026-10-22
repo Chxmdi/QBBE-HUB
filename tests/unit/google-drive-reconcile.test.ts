@@ -245,6 +245,9 @@ describe("Google Drive recovery", () => {
       status: "connected",
     }]);
     db.seed("background_job_run", []);
+    db.seed("organization_membership", [
+      { organization_id: CONNECTION.organization_id, user_id: CONNECTION.user_id, status: "active" },
+    ]);
     vi.stubEnv("GOOGLE_CLIENT_ID", "client-id");
     vi.stubEnv("GOOGLE_CLIENT_SECRET", "client-secret");
     const fetchMock = vi.fn().mockResolvedValueOnce(new Response(

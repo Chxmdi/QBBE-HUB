@@ -8,7 +8,7 @@ import { saveNotificationPreferences } from "@/features/notifications/services/p
 import type { DeliveryMode } from "@/features/notifications/services/delivery-rules";
 import { useLocale, useT } from "@/lib/i18n/client";
 import { intlLocale, type Locale } from "@/lib/i18n/config";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import { usePagesT } from "@/features/pages/i18n/client";
 import type { PagesKey } from "@/features/pages/i18n";
 import {

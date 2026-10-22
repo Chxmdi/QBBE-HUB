@@ -1,10 +1,13 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/layout/workspace-shell";
 import { LocaleSync } from "@/features/preferences/components/locale-sync";
 import { requireSession } from "@/lib/auth";
 import { readNavigationSwitches } from "@/lib/navigation-switches";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
+import { hasVerifiedTotpFactor, requiresAdministratorMfa } from "@/features/auth/mfa";
+import { RETURN_PATH_HEADER, mfaPath } from "@/lib/return-path";
+import { getSidebarState } from "@/features/channels/sidebar-state.server";
 
 export default async function WorkspaceLayout({
   children,
@@ -18,10 +21,16 @@ export default async function WorkspaceLayout({
   // renders. The database independently applies the same requirement to its
   // privileged authorization helpers, so direct API calls cannot bypass this
   // navigation guard.
+  // The factors come from the Auth response requireSession already fetched;
+  // listFactors() would fetch the same user again (one more Auth round trip
+  // on every admin page view). The assurance level is read from the session
+  // token without a network call.
   if (session.isAdmin) {
     const [assuranceResult, factorResult] = await Promise.all([
       supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
-      supabase.auth.mfa.listFactors(),
+      session.factors
+        ? Promise.resolve({ data: { all: session.factors }, error: null })
+        : supabase.auth.mfa.listFactors(),
     ]);
     if (
       assuranceResult.error ||
@@ -30,46 +39,35 @@ export default async function WorkspaceLayout({
         session.isAdmin,
         assuranceResult.data?.currentLevel,
         assuranceResult.data?.nextLevel,
-        verifiedTotpFactors(factorResult.data?.all ?? []).length > 0,
+        hasVerifiedTotpFactor(factorResult.data?.all ?? []),
       )
     ) {
-      redirect("/mfa");
+      // Back to the page that was asked for once verified (a link from an
+      // email, say), not to Home.
+      redirect(mfaPath((await headers()).get(RETURN_PATH_HEADER)));
     }
   }
 
   // First run lands in onboarding rather than an unexplained dashboard
-  // (§10.18).
-  const { data: profile } = await supabase
-    .from("user_profile")
-    .select("onboarded_at, display_density, reduce_motion")
-    .eq("id", session.userId)
-    .maybeSingle();
+  // (§10.18). The session already read the whole profile row.
+  const profile = session.profile;
   if (profile && !profile.onboarded_at) redirect("/welcome");
 
-  // Live, permission-aware sidebar counts (Part IV §5.2).
+  // Live, permission-aware sidebar counts (Part IV §5.2), in one call:
+  // unread notifications, open tasks (my_open_task_count, #115), an unread
+  // flag for every channel the person is in, and unread direct
+  // conversations. It used to be one query per count and one more per
+  // channel, for the first ten channels only. supabase/tests/sidebar-state.sql
+  // keeps it equal to those queries.
   // The Workspace OS switches the menus show entries for (epic #199), read
   // once here and passed down; the sidebar, tabs and palette never fetch them.
   const [
-    { count: unreadCount },
-    { data: memberships },
-    { data: myWorkCount },
+    state,
     { data: programs },
     navSwitches,
     { data: ledgerSettings },
   ] = await Promise.all([
-    supabase
-      .from("notification")
-      .select("id", { count: "exact", head: true })
-      .is("read_at", null),
-    supabase
-      .from("channel_member")
-      .select("last_read_at, channel:channel_id(id, slug, archived_at)")
-      .eq("user_id", session.userId),
-    // Counted by a function rather than through the task read rule on every
-    // page: for your own tasks that rule is only organization membership, and
-    // evaluating the whole rule made this the costliest query in the 50-user
-    // test (#115). supabase/tests/my-open-task-count.sql keeps them equal.
-    supabase.rpc("my_open_task_count"),
+    getSidebarState(),
     supabase
       .from("program")
       .select("id, name")
@@ -89,37 +87,6 @@ export default async function WorkspaceLayout({
       : Promise.resolve({ data: null }),
   ]);
 
-  type MembershipRow = {
-    last_read_at: string;
-    channel: { id: string; slug: string; archived_at: string | null } | null;
-  };
-
-  const channelRows = ((memberships ?? []) as unknown as MembershipRow[])
-    .filter((m) => m.channel && !m.channel.archived_at)
-    .slice(0, 10);
-
-  // Unread flag per channel: any message newer than the member's last-read
-  // cursor (MSG-007). It asks for one row, not a count: an exact count reads
-  // and access-checks every unread message, on every page, for every channel
-  // in the sidebar, where the flag only needs to know that one exists (#115).
-  const unreadFlags = await Promise.all(
-    channelRows.map(async (m) => {
-      const { data } = await supabase
-        .from("message")
-        .select("id")
-        .eq("channel_id", m.channel!.id)
-        .gt("created_at", m.last_read_at)
-        .neq("author_id", session.userId)
-        .limit(1);
-      return (data?.length ?? 0) > 0;
-    }),
-  );
-
-  const channels = channelRows.map((m, i) => ({
-    id: m.channel!.id,
-    slug: m.channel!.slug,
-    unread: unreadFlags[i],
-  }));
 
   return (
     <WorkspaceShell
@@ -130,10 +97,14 @@ export default async function WorkspaceLayout({
       isStaff={session.isStaff}
       canReadLedger={Boolean(ledgerSettings)}
       navSwitches={navSwitches}
-      unreadCount={unreadCount ?? 0}
-      channels={channels}
+      unreadCount={state.unreadNotifications}
+      channels={state.channels}
       programs={(programs ?? []).map((p) => ({ id: p.id, name: p.name }))}
-      counts={{ myWork: Number(myWorkCount ?? 0), inbox: unreadCount ?? 0 }}
+      counts={{
+        myWork: state.openTasks,
+        inbox: state.unreadNotifications,
+        messages: state.unreadConversations,
+      }}
       density={(profile?.display_density as "comfortable" | "compact") ?? "comfortable"}
       reduceMotion={profile?.reduce_motion === true}
     >

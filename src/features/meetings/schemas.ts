@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { optionalDay, requiredText } from "@/lib/schema";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 const K = (key: MessageKey): string => key;
 

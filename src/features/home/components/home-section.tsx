@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Formatters } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
 import type { HomeFact, HomeItem } from "../model";
 import { homeEn } from "../i18n/en";
 import type { HomeT } from "../i18n";

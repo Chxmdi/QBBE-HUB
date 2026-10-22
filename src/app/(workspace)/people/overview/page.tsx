@@ -10,8 +10,8 @@ import { createSupabasePageClient } from "@/lib/supabase/page";
 import { calendarDateInZone } from "@/lib/time";
 import { isProjectStale } from "@/features/projects/stale";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { Formatters } from "@/lib/i18n/format";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { Formatters } from "@/lib/i18n/format-core";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import {
   attentionReasons,
   attentionRules,

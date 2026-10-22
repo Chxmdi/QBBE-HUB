@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { createTranslator as englishTranslator } from "@/lib/i18n/translate";
+
+const english = englishTranslator("en");
 import {
   folderLabel,
   groupFolders,
@@ -30,7 +33,7 @@ describe("likePattern", () => {
 
 describe("folders", () => {
   it("labels a folder with its category", () => {
-    expect(folderLabel({ category: "governance", name: "Bylaws" })).toBe("Governance / Bylaws");
+    expect(folderLabel({ category: "governance", name: "Bylaws" }, english)).toBe("Governance / Bylaws");
   });
 
   it("groups folders in category order and sorts names", () => {
@@ -38,7 +41,7 @@ describe("folders", () => {
       { category: "hr", name: "Personnel" },
       { category: "governance", name: "Policies" },
       { category: "governance", name: "Bylaws" },
-    ]);
+    ], english);
     expect(groups.map((g) => g.label)).toEqual(["Governance", "HR"]);
     expect(groups[0].folders.map((f) => f.name)).toEqual(["Bylaws", "Policies"]);
   });

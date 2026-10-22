@@ -5,8 +5,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  *
  * The dedupe key names the event, not the reason someone was included. Mention,
  * assignment, and follow on that same event collapse to one row, and the
- * reasons are merged into it. A second email is then impossible: the unique
- * key on (user_id, dedupe_key) is what the mailer also keys off.
+ * reasons are merged into it, and the mailer keys off the same (user_id,
+ * dedupe_key), so one event sends one email. When the event happens again the
+ * row is re-opened rather than dropped, and a read one sends one more email.
  *
  * Rows without a dedupe key are refused here. PostgreSQL treats NULLs as
  * distinct, so a missing key would never collapse.
@@ -34,7 +35,6 @@ export interface NotificationDraft {
 }
 
 const CHUNK = 200;
-const UNIQUE_VIOLATION = "23505";
 
 const URGENCY_RANK: Record<NotificationUrgency, number> = {
   low: 0,
@@ -134,96 +134,27 @@ function rowPayload(draft: NotificationDraft): Record<string, unknown> {
 }
 
 /**
- * Inserts notifications, merging reasons when the event already exists for
- * that person. Returns how many new rows were created. A merge is not a
- * second notification.
+ * Creates notifications, re-opening the person's existing one when the event
+ * repeats (unread again, reasons merged). Returns how many new rows were
+ * created; a re-opened notification is not a new one.
+ *
+ * The database does it (create_notifications). A person cannot read anyone
+ * else's notifications, so reading first to merge saw nothing, and the
+ * insert that followed hit the unique key: a second mention, a task back in
+ * review or a reassignment back never reached the person. The function runs
+ * as the caller, so their insert rule still decides what they may create.
  */
 export async function createNotifications(
   db: SupabaseClient,
   drafts: NotificationDraft[],
 ): Promise<number> {
   const collapsed = collapseDrafts(drafts);
-  let inserted = 0;
-
+  let created = 0;
   for (let index = 0; index < collapsed.length; index += CHUNK) {
     const chunk = collapsed.slice(index, index + CHUNK);
-    const userIds = [...new Set(chunk.map((draft) => draft.user_id))];
-    const keys = [...new Set(chunk.map((draft) => draft.dedupe_key))];
-
-    const { data: existingRows, error: existingError } = await db
-      .from("notification")
-      .select("id, user_id, dedupe_key, reason")
-      .in("user_id", userIds)
-      .in("dedupe_key", keys);
-
-    if (existingError) {
-      throw new Error(`could not load notifications: ${existingError.message}`);
-    }
-
-    const existing = new Map<string, { id: string; reason: string | null }>();
-    for (const row of existingRows ?? []) {
-      existing.set(
-        `${row.user_id as string}\u0000${row.dedupe_key as string}`,
-        {
-          id: row.id as string,
-          reason: (row.reason as string | null) ?? null,
-        },
-      );
-    }
-
-    const fresh: NotificationDraft[] = [];
-    for (const draft of chunk) {
-      const prior = existing.get(`${draft.user_id}\u0000${draft.dedupe_key}`);
-      if (!prior) {
-        fresh.push(draft);
-        continue;
-      }
-      const reason = mergeReasons(prior.reason, draft.reason);
-      const { error } = await db
-        .from("notification")
-        .update({
-          reason,
-          title: draft.title,
-          body: draft.body ?? null,
-          context: draft.context ?? null,
-          owner_label: draft.owner_label ?? null,
-          due_on: draft.due_on ?? null,
-          link: draft.link ?? null,
-          category: draft.category,
-          urgency: draft.urgency ?? "normal",
-          read_at: null,
-        })
-        .eq("id", prior.id);
-      if (error)
-        throw new Error(`could not merge notification: ${error.message}`);
-    }
-
-    if (fresh.length === 0) continue;
-
-    // A plain insert, never an upsert and never a read-back. A person may
-    // create a notification for someone else but may not read it, and both
-    // ON CONFLICT and RETURNING need the new row to pass the read policy, so
-    // either makes row-level security refuse the whole write. A duplicate
-    // (the same person and event) fails the unique key instead; when that
-    // happens the chunk is retried a row at a time and duplicates are skipped.
-    const rows = fresh.map(rowPayload);
-    const { error } = await db.from("notification").insert(rows);
-    if (!error) {
-      inserted += rows.length;
-    } else if (error.code === UNIQUE_VIOLATION) {
-      for (const row of rows) {
-        const { error: rowError } = await db.from("notification").insert(row);
-        if (!rowError) inserted += 1;
-        else if (rowError.code !== UNIQUE_VIOLATION) {
-          throw new Error(
-            `could not create notifications: ${rowError.message}`,
-          );
-        }
-      }
-    } else {
-      throw new Error(`could not create notifications: ${error.message}`);
-    }
+    const { data, error } = await db.rpc("create_notifications", { p_rows: chunk.map(rowPayload) });
+    if (error) throw new Error(`could not create notifications: ${error.message}`);
+    created += Number(data ?? 0);
   }
-
-  return inserted;
+  return created;
 }

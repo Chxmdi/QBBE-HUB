@@ -57,6 +57,20 @@ describe("completeOnboarding and display settings", () => {
     expect((profileUpdate()?.payload as { onboarded_at: string }).onboarded_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it("records that the person acknowledged the current privacy notice", async () => {
+    const { PRIVACY_NOTICE_VERSION } = await import("@/config/privacy");
+    expect(await completeOnboarding()).toEqual({ ok: true });
+    const ack = tableCalls.find((c) => c.table === "privacy_notice_acknowledgement");
+    expect(ack?.action).toBe("upsert");
+    expect(ack?.payload).toEqual({ user_id: ME, notice_version: PRIVACY_NOTICE_VERSION });
+  });
+
+  it("does not finish onboarding when the acknowledgement cannot be recorded", async () => {
+    answer = () => ({ data: null, error: { message: "denied" } });
+    expect((await completeOnboarding()).ok).toBe(false);
+    expect(profileUpdate()).toBeUndefined();
+  });
+
   it("stores reduced motion only as true or false", async () => {
     expect(await setReduceMotion(true)).toEqual({ ok: true });
     expect(profileUpdate()?.payload).toEqual({ reduce_motion: true });
