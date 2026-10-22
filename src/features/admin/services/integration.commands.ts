@@ -1,18 +1,30 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { mapVmsSnapshot } from "@/features/admin/services/vms";
+import { runJob } from "@/features/jobs/services/runner";
+import {
+  ZeffyApiError,
+  ZeffyClient,
+  ZeffyRateLimitedError,
+  zeffyConfig,
+} from "@/features/zeffy/client";
 import { getT } from "@/lib/i18n/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
+
+/** Organization-wide integrations an administrator connects for everyone. */
+const ORGANIZATION_PROVIDERS = new Set(["volunteer_system", "zeffy"]);
 
 export async function disconnectIntegration(
-  provider: "gmail" | "google_calendar" | "google_drive" | "volunteer_system",
+  provider: "gmail" | "google_calendar" | "google_drive" | "volunteer_system" | "zeffy",
 ): Promise<ActionResult> {
   const t = await getT();
   let session = await requireSession();
-  if (provider === "volunteer_system") {
+  if (ORGANIZATION_PROVIDERS.has(provider)) {
     const authorization = await authorizeAdminAction();
     if (!authorization.ok) return { ok: false, error: authorization.error };
     session = authorization.session;
@@ -28,7 +40,9 @@ export async function disconnectIntegration(
     .eq("provider", provider)
     .eq("organization_id", session.organizationId);
 
-  const scopedQuery = provider === "volunteer_system"
+  // Zeffy keeps what it already copied: payments are financial records, and
+  // supporters are CRM contacts the team may have worked with since.
+  const scopedQuery = ORGANIZATION_PROVIDERS.has(provider)
     ? query.is("user_id", null)
     : query.eq("user_id", session.userId);
   const { data: disconnected, error } = await scopedQuery
@@ -219,5 +233,117 @@ export async function linkVmsIdentity(
 
   revalidatePath("/admin");
   revalidatePath("/people");
+  return { ok: true };
+}
+
+function runZeffySyncAfterResponse(): void {
+  after(async () => {
+    try {
+      const outcome = await runJob("zeffy-sync");
+      if (outcome.status === "failed") {
+        console.error("Zeffy sync failed", { runId: outcome.runId, error: outcome.error });
+      }
+    } catch (cause) {
+      console.error("Zeffy sync could not start", {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
+  });
+}
+
+/**
+ * Connects this organization to Zeffy with the API key in ZEFFY_API_KEY. The
+ * key is checked with one small read first, so a wrong key is reported here
+ * rather than as a failed sync later. The first copy starts right away.
+ */
+export async function connectZeffy(): Promise<ActionResult> {
+  const t = await getT();
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
+  const config = zeffyConfig();
+  if (!config) return { ok: false, error: t("admin.errors.zeffyNotConfigured") };
+
+  try {
+    await new ZeffyClient(config).listPage("campaigns", { limit: 1 });
+  } catch (cause) {
+    if (cause instanceof ZeffyRateLimitedError) return { ok: false, error: t("admin.errors.zeffyBusy") };
+    if (cause instanceof ZeffyApiError && (cause.status === 401 || cause.status === 403)) {
+      return { ok: false, error: t("admin.errors.zeffyKeyRejected", { status: cause.status }) };
+    }
+    if (cause instanceof ZeffyApiError && cause.status > 0) {
+      return { ok: false, error: t("admin.errors.zeffyResponded", { status: cause.status }) };
+    }
+    return { ok: false, error: t("admin.errors.zeffyUnreachable") };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const fields = { status: "connected", last_error: null, last_sync_at: null };
+  const { data: updated, error: updateError } = await supabase
+    .from("integration_connection")
+    .update(fields)
+    .eq("organization_id", session.organizationId)
+    .eq("provider", "zeffy")
+    .is("user_id", null)
+    .select("id");
+  let error = updateError;
+  if (!error && !(updated ?? []).length) {
+    ({ error } = await supabase.from("integration_connection").insert({
+      organization_id: session.organizationId,
+      user_id: null,
+      provider: "zeffy",
+      ...fields,
+    }));
+  }
+  if (error) {
+    // The single-organization index: another organization holds the key.
+    if ((error as { code?: string }).code === "23505") {
+      return { ok: false, error: t("admin.errors.zeffyOtherOrganization") };
+    }
+    return { ok: false, error: t("admin.errors.zeffyRecordFailed") };
+  }
+
+  await supabase.from("audit_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    event_type: "integration",
+    action: "zeffy_connected",
+    object_type: "integration_connection",
+  });
+  runZeffySyncAfterResponse();
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+/** Runs the Zeffy sync now instead of at the next quarter hour. */
+export async function syncZeffyNow(): Promise<ActionResult> {
+  const t = await getT();
+  const authorization = await authorizeAdminAction();
+  if (!authorization.ok) return { ok: false, error: authorization.error };
+  const session = authorization.session;
+  if (!zeffyConfig()) return { ok: false, error: t("admin.errors.zeffyNotConfigured") };
+  const limited = await enforceRateLimit("zeffy:sync", session.userId);
+  if (limited) return limited;
+
+  const supabase = await createSupabaseServerClient();
+  const { data: connection } = await supabase
+    .from("integration_connection")
+    .select("id")
+    .eq("organization_id", session.organizationId)
+    .eq("provider", "zeffy")
+    .is("user_id", null)
+    .neq("status", "disconnected")
+    .maybeSingle();
+  if (!connection) return { ok: false, error: t("admin.errors.zeffyNotConnected") };
+
+  await supabase.from("audit_event").insert({
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    event_type: "integration",
+    action: "zeffy_sync_requested",
+    object_type: "integration_connection",
+  });
+  runZeffySyncAfterResponse();
+  revalidatePath("/admin");
   return { ok: true };
 }

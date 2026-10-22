@@ -182,7 +182,7 @@ describe("workspace catalogues", () => {
 const SAME_OUTSIDE_FINANCE = new Set([
   "communication", "document", "documents", "invitation", "mention", "notification",
   "signature",
-  " · Version {number}", ".", "Action", "Actions", "Active", "Administration",
+  " · Version {number}", ".", "—", "Action", "Actions", "Active", "Administration",
   "Budgets", "CSV", "Communication", "Contact", "Contacts", "Conversation",
   "Date", "Description", "Direct", "Discussion", "Document", "Documents",
   "English", "Français", "Gmail", "Google", "Google Drive", "Impact",
@@ -190,7 +190,7 @@ const SAME_OUTSIDE_FINANCE = new Set([
   "Navigation", "Note", "Notes", "Notifications", "Occurrences", "Options", "Page", "Pages",
   "PDF", "QBBE Hub", "Question {n}", "Questions", "Rose", "Sections",
   "Signature", "Signatures", "Type", "URL", "VMS", "Version {number}",
-  "Versions", "accent", "active", "association", "communications",
+  "Versions", "Zeffy", "accent", "active", "association", "communications",
   "compact", "danger", "direct", "discussion", "google",
   "https://drive.google.com/…", "information", "message", "note", "{category} / {name}", "{count} min",
   "{count} minute", "{count} minutes", "{greeting}, {name}", "{label} — {description}", "{status} {count}", "← Messages",

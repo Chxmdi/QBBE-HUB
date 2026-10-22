@@ -118,6 +118,88 @@ integration visibly. Disconnect clears VMS identity/assignment references and
 does **not** delete Hub tasks or historical work.
 
 
+## Zeffy (read only)
+
+QBBE's donations, event tickets, memberships and shop orders come in from
+Zeffy's public API (`https://api.zeffy.com/api/v1`, reference at
+<https://www.zeffy.com/api/docs>). The Hub only reads: nothing is written back
+to Zeffy and nothing is posted to the ledger.
+
+**What lands where.**
+
+- Everyone with a completed payment becomes a CRM contact (`crm_contact`,
+  `source = 'zeffy'`), or is linked to the existing contact with the same
+  email when exactly one contact has it. When several contacts share the
+  email, nothing is guessed: the supporter waits in `zeffy_contact_match` for
+  staff to choose. A contact entered in the Hub keeps its own name and email;
+  Zeffy updates only the contacts it created.
+- `crm_contact.zeffy_kinds` says what each supporter did (donor, ticket,
+  member, shop, recurring, ...), with no amounts; staff see it.
+- Payments go to `zeffy_payment` (amounts in cents, refunds, disputes,
+  recurring donations, fund, receipt link). Only finance readers (admins with
+  MFA, named ledger readers, the accountant) read them, as with gifts.
+- Campaigns go to `zeffy_campaign` (goal, amount raised, dates); staff read
+  them, since Zeffy publishes them anyway.
+- Not kept: postal addresses, answers to checkout and ticket questions, card
+  details, discount codes and tribute names.
+
+**Settings** (in the environment's `APP_ENV`): `ZEFFY_API_KEY` (Zeffy,
+Settings, Integrations, API; organization owner only) and
+`ZEFFY_WEBHOOK_SECRET` (the webhook's signing secret, `whsec_...`). Point the
+Zeffy webhook at `https://<site>/api/integrations/zeffy/webhook`. Then Admin,
+Integrations, Zeffy, **Connect**: the key is checked with one read and the
+first copy starts at once. One Zeffy account connects to one Hub organization.
+
+**Staging holds no real supporters.** Connect staging to a separate, free test
+Zeffy organization, and the real QBBE account to production only.
+
+**How it stays current.**
+
+- `zeffy-sync` (every 15 minutes) reads payments created since its last
+  complete pass (with a day of overlap), changed contacts, campaigns hourly,
+  and once a day re-reads the last 120 days of payments, because a refund or
+  dispute changes an old payment. Each run stays under 60 requests (Zeffy
+  allows 100 a minute per organization) and saves its place after every page,
+  so the first copy of a large account takes several runs and a 429 only
+  pauses it.
+- The webhook verifies `Zeffy-Signature` (HMAC-SHA256 over `"{t}.{body}"`,
+  five-minute tolerance) before reading anything, records each event once by
+  Zeffy's event id (Zeffy retries for up to three days with the same id), saves
+  a completed payment at once and leaves id-only events to `zeffy-events`,
+  which reads the current state from Zeffy.
+- **Disconnect** stops both jobs and keeps what was copied. **Sync now**
+  runs the sync at once (12 an hour).
+
+**CRM screens** (Relationships, staff only; volunteers are turned away):
+
+- **Supporters** (`/crm/supporters`) lists every CRM contact, from Zeffy or
+  entered in the Hub, with search and filters by activity (donor, ticket
+  buyer, member, ...) and source. Finance readers also see each supporter's
+  net giving and an **Export giving (CSV)** link.
+- **A supporter** (`/crm/contacts/<id>`) shows their Zeffy activity
+  (campaign, date, what they did, refunds and disputes), the CRM
+  interactions recorded with them, and a link to a CRM organization. Finance
+  readers also see each amount, the Zeffy tax receipt and a giving summary.
+- **Zeffy** (`/crm/zeffy`) shows the connection and last copy, campaigns
+  against their goals with a link to each in Zeffy, ticket counts per event
+  for 30 days, 90 days or 12 months, and **Needs matching**: Zeffy supporters
+  whose email several contacts share, for staff to place (one of those
+  contacts, or a new one). Finance readers also see money raised in the
+  period and this year, by kind of campaign, active recurring donors and
+  their monthly total, lapsed donors (last gift 12 to 24 months ago),
+  refunds, and disputes waiting for a response.
+- Amounts come only through the database functions
+  `zeffy_supporter_totals`, `zeffy_supporter_activity` and `zeffy_overview`,
+  which return them to finance readers only. Every view of a supporter's
+  giving and every export is recorded in the audit log
+  (`supporter_list_viewed`, `supporter_giving_viewed`,
+  `supporter_list_exported`), and so is each placement (`supporter_matched`).
+
+**Trying it locally** without a Zeffy account: `node scripts/qa/zeffy-mock.mjs
+serve`, run the Hub with `ZEFFY_API_KEY=mock-key
+ZEFFY_API_BASE_URL=http://127.0.0.1:4010`, connect in Admin, and send signed
+webhooks with `node scripts/qa/zeffy-mock.mjs send payment.completed pay-new`.
+
 ## Health visibility
 
 Admin → Integrations shows each provider's connection status and last sync

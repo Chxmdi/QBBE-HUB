@@ -108,6 +108,10 @@ export const opsFrCA: typeof opsEn = {
         "Renouvelle les abonnements aux notifications Gmail un jour avant leur expiration.",
       "vms-sync":
         "Met à jour la disponibilité des bénévoles à partir du système de gestion des bénévoles (VMS).",
+      "zeffy-sync":
+        "Récupère les paiements, les sympathisants et les campagnes de Zeffy dans le CRM.",
+      "zeffy-events":
+        "Applique les changements de paiements et de sympathisants signalés par Zeffy par webhook.",
       "run-exports":
         "Produit les exportations de données en attente et les dépose dans l’espace de stockage privé des exportations.",
       "expire-exports":

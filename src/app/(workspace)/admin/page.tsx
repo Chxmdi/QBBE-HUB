@@ -84,6 +84,7 @@ const INTEGRATION_PROVIDERS = [
   "google_calendar",
   "google_drive",
   "volunteer_system",
+  "zeffy",
   "email",
 ] as const;
 
@@ -119,6 +120,7 @@ export default async function AdminPage({
     { data: rules },
     { data: jobRuns },
     { data: workflowRuns },
+    { data: zeffyState },
   ] = await Promise.all([
     supabase
       .from("organization_membership")
@@ -172,6 +174,11 @@ export default async function AdminPage({
       )
       .order("created_at", { ascending: false })
       .limit(20),
+    supabase
+      .from("zeffy_sync_state")
+      .select("last_webhook_at, state")
+      .eq("organization_id", session.organizationId)
+      .maybeSingle(),
   ]);
 
   const memberList = ((members ?? []) as unknown as Membership[]).filter(
@@ -201,6 +208,11 @@ export default async function AdminPage({
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
   );
   const vmsConfigured = Boolean(process.env.VMS_API_URL);
+  const zeffyConfigured = Boolean(process.env.ZEFFY_API_KEY?.trim());
+  const zeffyWebhookConfigured = Boolean(process.env.ZEFFY_WEBHOOK_SECRET?.trim());
+  const zeffySync = zeffyState as
+    | { last_webhook_at: string | null; state: { firstSyncDoneAt?: string | null } | null }
+    | null;
   const teamList = (teams ?? []) as {
     id: string;
     name: string;
@@ -487,6 +499,7 @@ export default async function AdminPage({
                     status={status}
                     googleConfigured={googleConfigured}
                     vmsConfigured={vmsConfigured}
+                    zeffyConfigured={zeffyConfigured}
                   />
                   {connection?.last_sync_at ? (
                     <p className="meta mt-1.5">
@@ -494,6 +507,26 @@ export default async function AdminPage({
                         when: format.relative(connection.last_sync_at),
                       })}
                     </p>
+                  ) : null}
+                  {integration.provider === "zeffy" &&
+                  connection &&
+                  connection.status !== "disconnected" ? (
+                    <>
+                      {!zeffySync?.state?.firstSyncDoneAt ? (
+                        <p className="meta mt-1.5">
+                          {t("admin.workspace.integrations.actions.zeffyFirstCopy")}
+                        </p>
+                      ) : null}
+                      <p className="meta mt-1.5">
+                        {!zeffyWebhookConfigured
+                          ? t("admin.workspace.integrations.actions.zeffyWebhookMissing")
+                          : zeffySync?.last_webhook_at
+                            ? t("admin.workspace.integrations.actions.zeffyWebhookLast", {
+                                when: format.relative(zeffySync.last_webhook_at),
+                              })
+                            : t("admin.workspace.integrations.actions.zeffyWebhookNone")}
+                      </p>
+                    </>
                   ) : null}
                   {connection?.last_error ? (
                     <p className="mt-1.5 text-[12.5px] text-danger-fg">

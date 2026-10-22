@@ -1,0 +1,7 @@
+{
+  "staffOnly": ["/crm/supporters", "/crm/zeffy"],
+  "qa": [
+    { "path": "/crm/supporters", "name": "crm-supporters" },
+    { "path": "/crm/zeffy", "name": "crm-zeffy" }
+  ]
+}

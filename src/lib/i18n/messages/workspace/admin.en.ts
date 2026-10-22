@@ -109,6 +109,11 @@ export const adminEn = {
           description:
             "Volunteer identity/availability references. Server-to-server integration boundary.",
         },
+        zeffy: {
+          name: "Zeffy",
+          description:
+            "Donations, tickets and memberships from Zeffy, read only. Supporters appear in Relationships; amounts only for finance readers.",
+        },
         email: {
           name: "Transactional email",
           description:
@@ -136,6 +141,16 @@ export const adminEn = {
             "Google OAuth credentials are not set. Connect stays unavailable until GOOGLE_CLIENT_ID / SECRET / redirect URI exist.",
           vmsNotConfigured:
             "Set VMS_API_URL to enable Connect. Hub does not store a second volunteer database.",
+          zeffyNotConfigured:
+            "Set ZEFFY_API_KEY in this environment's settings to enable Connect. The Hub only reads from Zeffy.",
+          syncNow: "Sync now",
+          syncStarted: "Sync started. New supporters appear within a few minutes.",
+          syncFailed: "Could not start the sync.",
+          zeffyWebhookLast: "Last webhook {when}",
+          zeffyWebhookNone: "No webhook received yet",
+          zeffyWebhookMissing:
+            "Webhook not set up (ZEFFY_WEBHOOK_SECRET). Changes arrive with the 15-minute sync instead of at once.",
+          zeffyFirstCopy: "First copy from Zeffy in progress; large accounts take several runs.",
         },
       },
       teams: {
@@ -255,6 +270,8 @@ export const adminEn = {
           suppress: "suppress",
           user_invited: "user invited",
           vms_connected: "vms connected",
+          zeffy_connected: "Zeffy connected",
+          zeffy_sync_requested: "Zeffy sync requested",
           mfa_enrollment_completed: "mfa enrollment completed",
           gift_list_viewed: "gift list viewed",
           user_provisioned: "user provisioned",
@@ -752,6 +769,16 @@ export const adminEn = {
       vmsUnreachable:
         "Could not reach the Volunteer Management System. Connection was not recorded.",
       vmsRecordFailed: "Could not record the VMS connection.",
+      zeffyNotConfigured:
+        "Zeffy is not set up in this environment. Add ZEFFY_API_KEY to its settings first.",
+      zeffyKeyRejected: "Zeffy did not accept the API key ({status}). Create a new key in Zeffy and update ZEFFY_API_KEY.",
+      zeffyResponded: "Zeffy responded {status}. The connection was not recorded.",
+      zeffyBusy: "Zeffy asked us to slow down. Try again in a minute.",
+      zeffyUnreachable: "Could not reach Zeffy. Check the network and try again.",
+      zeffyOtherOrganization:
+        "Another organization in this Hub is already connected to Zeffy. One Zeffy account belongs to one organization.",
+      zeffyRecordFailed: "Could not record the Zeffy connection.",
+      zeffyNotConnected: "Connect Zeffy first.",
       vmsIdTooLong: "VMS id is too long.",
       vmsOnlyActive: "Only active members of this organization can be linked to VMS identities.",
       vmsStoreFailed: "Could not store the VMS id.",
