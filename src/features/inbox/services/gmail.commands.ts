@@ -8,7 +8,7 @@ import { refreshGoogleAccessToken } from "@/features/inbox/services/gmail-sync";
 import { buildGmailSendPayload } from "@/features/inbox/services/gmail-message";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 interface GmailHeader { name?: string; value?: string }
 interface GmailPayload { body?: { data?: string }; parts?: GmailPayload[]; headers?: GmailHeader[] }

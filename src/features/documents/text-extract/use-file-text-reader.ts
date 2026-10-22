@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { OcrCancelled } from "@/features/finance/receipt-ocr/read-receipt";
 import { canReadFileText, readFileText, type FileText, type ReadProgress } from "./read-file-text";
-import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /** A slow device gets this long; the file is saved without its words after that. */
 export const TEXT_READ_TIMEOUT_MS = 120_000;
@@ -116,7 +116,7 @@ export function useFileTextReader() {
 /** One line for the form, or null when there is nothing to say. */
 export function textReaderMessage(
   state: TextReaderState,
-  t: TranslateFn = createTranslator("en"),
+  t: TranslateFn,
 ): string | null {
   switch (state.kind) {
     case "running":

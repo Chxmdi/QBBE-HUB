@@ -4,7 +4,7 @@ import { LocaleSync } from "@/features/preferences/components/locale-sync";
 import { requireSession } from "@/lib/auth";
 import { readNavigationSwitches } from "@/lib/navigation-switches";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
+import { hasVerifiedTotpFactor, requiresAdministratorMfa } from "@/features/auth/mfa";
 import { getSidebarState } from "@/features/channels/sidebar-state.server";
 
 export default async function WorkspaceLayout({
@@ -37,7 +37,7 @@ export default async function WorkspaceLayout({
         session.isAdmin,
         assuranceResult.data?.currentLevel,
         assuranceResult.data?.nextLevel,
-        verifiedTotpFactors(factorResult.data?.all ?? []).length > 0,
+        hasVerifiedTotpFactor(factorResult.data?.all ?? []),
       )
     ) {
       redirect("/mfa");

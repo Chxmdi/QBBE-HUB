@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { format } from "date-fns";
-import { KIND_STYLES } from "@/features/calendar/components/week-view";
+import { KIND_STYLES } from "@/features/calendar/calendar-items";
 import { RescheduleControl } from "@/features/calendar/components/reschedule-control";
-import { calendarDateFormats } from "@/features/calendar/components/week-view";
+import { calendarDateFormats } from "@/features/calendar/calendar-items";
 import type { Locale } from "@/lib/i18n/config";
 import { cn } from "@/lib/utils";
 import type { LensT } from "@/features/lenses/i18n";

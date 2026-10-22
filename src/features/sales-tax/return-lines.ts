@@ -35,7 +35,7 @@
  *      CONFIRM ELIGIBILITY WITH YOUR ACCOUNTANT before using the rebate figures.
  */
 
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 export const TAX_CODES = ["standard", "zero_rated", "exempt", "out_of_scope"] as const;
 export type TaxCode = (typeof TAX_CODES)[number];

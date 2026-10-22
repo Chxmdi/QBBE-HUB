@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { opsEn } from "@/lib/i18n/messages/workspace/ops.en";
-import { createTranslator, type MessageKey, type TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Retention policies.
@@ -20,10 +20,11 @@ export const ACTION_LABELS: Record<RetentionAction, string> = {
   anonymise: "Keep the record, remove the content",
 };
 
-const ENGLISH = createTranslator("en");
+// Labels take the caller's `t`: the policy and record forms run in the
+// browser, and an English default would load both language catalogues.
 
 /** How an action reads, in the reader's language. */
-export function actionLabel(action: RetentionAction, t: TranslateFn = ENGLISH): string {
+export function actionLabel(action: RetentionAction, t: TranslateFn): string {
   return t(`retention.actions.${action}` as MessageKey);
 }
 
@@ -45,7 +46,7 @@ export interface RetentionSubject {
  */
 export function describeDuration(
   days: number,
-  t: TranslateFn = ENGLISH,
+  t: TranslateFn,
   number: (value: number) => string = String,
 ): string {
   if (days < 30) {
@@ -92,7 +93,7 @@ export function localizeSubject<T extends SubjectText>(subject: T, t: TranslateF
 export function policyIsAllowed(
   subject: RetentionSubject,
   policy: { retainDays: number; action: RetentionAction },
-  t: TranslateFn = ENGLISH,
+  t: TranslateFn,
   number: (value: number) => string = String,
 ): { ok: true } | { ok: false; reason: string } {
   if (policy.retainDays < subject.minimum_days) {

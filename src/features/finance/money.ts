@@ -1,5 +1,5 @@
 import type { Locale } from "@/lib/i18n/config";
-import { formatCurrency } from "@/lib/i18n/format";
+import { formatCurrency } from "@/lib/i18n/format-core";
 
 /**
  * Money for the finance screens (#142). Amounts live in integer cents end to

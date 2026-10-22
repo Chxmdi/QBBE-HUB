@@ -1,7 +1,8 @@
 import type { Factor } from "@supabase/supabase-js";
-import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
-const english = createTranslator("en");
+// No default translator here: building one loads both language catalogues,
+// and the MFA screens import this module in the browser. Callers pass `t`.
 
 export interface TotpFactorOption {
   id: string;
@@ -28,7 +29,7 @@ export function requiresAdministratorMfa(
 
 export function verifiedTotpFactors(
   factors: Factor[],
-  t: TranslateFn = english,
+  t: TranslateFn,
 ): TotpFactorOption[] {
   return factors
     .filter((factor) => factor.factor_type === "totp" && factor.status === "verified")
@@ -36,6 +37,11 @@ export function verifiedTotpFactors(
       id: factor.id,
       name: factor.friendly_name?.trim() || t("auth.mfa.fallbackName", { number: index + 1 }),
     }));
+}
+
+/** Whether any TOTP factor is verified; for gates that need no names. */
+export function hasVerifiedTotpFactor(factors: Factor[]): boolean {
+  return factors.some((factor) => factor.factor_type === "totp" && factor.status === "verified");
 }
 
 export function unverifiedTotpFactorIds(factors: Factor[]): string[] {
@@ -53,7 +59,7 @@ export function isValidTotpCode(value: string): boolean {
 }
 
 /** Turns a provider error into a sentence for the person, in their language. */
-export function mfaErrorMessage(message: string, t: TranslateFn = english): string {
+export function mfaErrorMessage(message: string, t: TranslateFn): string {
   const normalized = message.toLowerCase();
   if (normalized.includes("expired")) {
     return t("auth.mfa.errors.expired");

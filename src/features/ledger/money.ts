@@ -1,6 +1,6 @@
 import type { Locale } from "@/lib/i18n/config";
-import { formatCurrency } from "@/lib/i18n/format";
-import type { MessageKey } from "@/lib/i18n/translate";
+import { formatCurrency } from "@/lib/i18n/format-core";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 /**
  * Money and labels for the general ledger (#148). Amounts are integer cents

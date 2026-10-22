@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Requesting a data export.
@@ -109,4 +109,3 @@ export function requestExportSchemaFor(t: TranslateFn) {
     );
 }
 
-export const requestExportSchema = requestExportSchemaFor(createTranslator("en"));

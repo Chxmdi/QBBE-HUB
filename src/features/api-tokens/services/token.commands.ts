@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { getLocale } from "@/lib/i18n/server";
-import { interpolate } from "@/lib/i18n/translate";
+import { interpolate } from "@/lib/i18n/translator";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { apiTokenMessages } from "../i18n";

@@ -6,7 +6,7 @@ import { requiredText } from "@/lib/schema";
 import { isRealTimeZone } from "@/lib/time";
 import { requireSession } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 

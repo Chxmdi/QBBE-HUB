@@ -10,7 +10,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { parseMoneyToCents } from "@/features/ledger/money";
 import { FILING_FREQUENCIES, TAX_CODES } from "@/features/sales-tax/return-lines";
 import { getT } from "@/lib/i18n/server";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * GST/QST actions (#152). Every write is for owners and admins who completed

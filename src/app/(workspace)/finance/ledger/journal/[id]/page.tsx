@@ -14,7 +14,7 @@ import { ENTRY_KIND_KEY, centsToDecimal, formatCents } from "@/features/ledger/m
 import { getLedgerAccess, todayIn, uuidParam } from "@/features/ledger/services/ledger.access";
 import { loadEntryChoices } from "@/features/ledger/services/ledger.queries";
 import { getLocale, getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 /** What a journal entry came from, for the "From …" line. */
 const SOURCE_KEY: Record<string, MessageKey> = {

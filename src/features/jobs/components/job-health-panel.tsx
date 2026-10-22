@@ -10,8 +10,8 @@ import type {
 import { jobDescription } from "@/features/jobs/services/i18n";
 import { runLabel, runOutcome, runTone } from "@/features/jobs/services/run-health";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { Formatters } from "@/lib/i18n/format";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { Formatters } from "@/lib/i18n/format-core";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * The operator's view of the background runtime.

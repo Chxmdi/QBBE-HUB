@@ -4,7 +4,7 @@ import { authorizeLedgerExport, csvResponse } from "@/features/ledger/services/l
 import { exportLines } from "@/features/ledger/services/year-end.queries";
 import { journalImportCsv } from "@/features/ledger/year-end";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Every posted line between two dates as a plain CSV the accountant's

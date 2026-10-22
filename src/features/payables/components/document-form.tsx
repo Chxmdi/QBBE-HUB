@@ -11,7 +11,7 @@ import { formatCents, parseMoneyToCents } from "@/features/ledger/money";
 import { addDays, type DocumentKind } from "@/features/payables/model";
 import { saveDocument } from "@/features/payables/services/payables.commands";
 import { useLocale, useT } from "@/lib/i18n/client";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 export interface DocumentLineValue {
   accountId: string;

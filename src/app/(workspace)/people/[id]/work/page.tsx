@@ -12,7 +12,7 @@ import { NO_ACCESS_REDIRECT, requireAdminAal2, requireSession } from "@/lib/auth
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { calendarDateInZone } from "@/lib/time";
 import { getFormatters, getT } from "@/lib/i18n/server";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import type { TaskStatus } from "@/types/entities";
 import {
   attentionReasons,

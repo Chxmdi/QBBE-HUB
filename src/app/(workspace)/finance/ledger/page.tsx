@@ -7,7 +7,7 @@ import { NoLedgerAccess } from "@/features/ledger/components/no-ledger-access";
 import { ChartApprovalForm, LedgerReaders } from "@/features/ledger/components/setup-forms";
 import { getLedgerAccess, todayIn } from "@/features/ledger/services/ledger.access";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("finance.ledger.title") };

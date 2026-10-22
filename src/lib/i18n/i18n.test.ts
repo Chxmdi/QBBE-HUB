@@ -7,10 +7,11 @@ import {
 import { en } from "@/lib/i18n/messages/en";
 import { frCA } from "@/lib/i18n/messages/fr-CA";
 import { createTranslator, interpolate } from "@/lib/i18n/translate";
-import { formatCurrency, formatNumber } from "@/lib/i18n/format";
+import { formatCurrency, formatNumber } from "@/lib/i18n/format-core";
 import { NAV_GROUPS } from "@/config/navigation";
 import { navGroupLabel, navItemLabel } from "@/lib/i18n/navigation";
-import { dueLabel, formatDate, formatTime } from "@/lib/utils";
+import { formatDate, formatTime } from "@/lib/utils";
+import { dueLabel } from "@/lib/i18n/due";
 import { formatBalance, formatCents } from "@/features/ledger/money";
 
 /** Every dotted key with its string, flattened. */

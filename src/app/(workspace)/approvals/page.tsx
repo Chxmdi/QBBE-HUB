@@ -36,9 +36,9 @@ import type {
 import { requireStaff } from "@/lib/auth";
 import { createSupabasePageClient } from "@/lib/supabase/page";
 import { getFormatters, getLocale, getT } from "@/lib/i18n/server";
-import type { Formatters } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
 import type { Locale } from "@/lib/i18n/config";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 import { cn } from "@/lib/utils";
 
 export async function generateMetadata(): Promise<Metadata> {

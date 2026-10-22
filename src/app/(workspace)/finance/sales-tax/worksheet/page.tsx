@@ -20,7 +20,7 @@ import {
 } from "@/features/sales-tax/services/sales-tax.queries";
 import type { Locale } from "@/lib/i18n/config";
 import { getLocale, getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("finance.salesTax.tabs.worksheet") };

@@ -1,4 +1,4 @@
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Bank names by institution value (#141). Plain module, not "use client", so

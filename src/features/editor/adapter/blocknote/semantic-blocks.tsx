@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Input, Select } from "@/components/ui/input";
 import { taskStatusLabel } from "@/components/shared/status-badges";
-import { createTranslator } from "@/lib/i18n/translate";
-import { formattersFor } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import type { Locale } from "@/lib/i18n/config";
 import { cn } from "@/lib/utils";
 import type { TaskStatus } from "@/types/entities";
@@ -275,10 +275,17 @@ function Unavailable({ t }: { t: EditorT }) {
   );
 }
 
-export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: HandlersRef) {
+/**
+ * `app` is the page's own translator and formatters (useT, useFormatters),
+ * handed in so this module does not load both language catalogues.
+ */
+export function createSemanticBlocks(
+  t: EditorT,
+  locale: Locale,
+  handlers: HandlersRef,
+  { t: app, format }: { t: TranslateFn; format: Formatters },
+) {
   const cache = createSummaryCache(handlers);
-  const app = createTranslator(locale);
-  const format = formattersFor(locale);
 
   const objectBlock = (type: "task" | "decision" | "person" | "libraryFile" | "pageLink", kind: SemanticKind) =>
     createReactBlockSpec(
@@ -390,8 +397,8 @@ export function createSemanticBlocks(t: EditorT, locale: Locale, handlers: Handl
   };
 }
 
-type AppT = ReturnType<typeof createTranslator>;
-type Format = ReturnType<typeof formattersFor>;
+type AppT = TranslateFn;
+type Format = Formatters;
 
 function ObjectBlockView({
   kind,

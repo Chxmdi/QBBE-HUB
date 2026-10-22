@@ -10,7 +10,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { parseMoneyToCents } from "@/features/ledger/money";
 import { DOCUMENT_KINDS, PAYMENT_METHODS } from "@/features/payables/model";
 import { getT } from "@/lib/i18n/server";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 
 /**
  * Payables and receivables actions (#150). Staff draft bills, invoices and

@@ -1,4 +1,4 @@
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 
 /** The parts of the browser's ValidityState a message depends on. */
 export type Validity = Pick<

@@ -11,7 +11,7 @@ import { getZeffyOverview } from "@/features/crm/services/supporter.queries";
 import { requireSession, NO_ACCESS_REDIRECT } from "@/lib/auth";
 import { getFormatters, getT } from "@/lib/i18n/server";
 import { calendarDateInZone } from "@/lib/time";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("crm.zeffy.title") };

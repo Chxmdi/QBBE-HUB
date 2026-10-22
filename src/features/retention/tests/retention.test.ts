@@ -1,4 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
+import { createTranslator } from "@/lib/i18n/translate";
+
+const en = createTranslator("en");
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -63,13 +66,13 @@ describe("floors", () => {
   };
 
   it("refuses anything below the subject's floor", () => {
-    const result = policyIsAllowed(subject, { retainDays: 30, action: "delete" });
+    const result = policyIsAllowed(subject, { retainDays: 30, action: "delete" }, en);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/at least 6 years/);
   });
 
   it("accepts the floor exactly", () => {
-    expect(policyIsAllowed(subject, { retainDays: 2190, action: "delete" }).ok).toBe(
+    expect(policyIsAllowed(subject, { retainDays: 2190, action: "delete" }, en).ok).toBe(
       true,
     );
   });
@@ -78,7 +81,7 @@ describe("floors", () => {
     const result = policyIsAllowed(subject, {
       retainDays: 2555,
       action: "anonymise",
-    });
+    }, en);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toMatch(/cannot be anonymised/);
   });
@@ -93,11 +96,11 @@ describe("floors", () => {
 
 describe("durations read as durations", () => {
   it("says days, months and years as a person would", () => {
-    expect(describeDuration(14)).toBe("14 days");
-    expect(describeDuration(90)).toBe("3 months");
-    expect(describeDuration(365)).toBe("1 year");
-    expect(describeDuration(2190)).toBe("6 years");
-    expect(describeDuration(1825)).toBe("5 years");
+    expect(describeDuration(14, en)).toBe("14 days");
+    expect(describeDuration(90, en)).toBe("3 months");
+    expect(describeDuration(365, en)).toBe("1 year");
+    expect(describeDuration(2190, en)).toBe("6 years");
+    expect(describeDuration(1825, en)).toBe("5 years");
   });
 });
 

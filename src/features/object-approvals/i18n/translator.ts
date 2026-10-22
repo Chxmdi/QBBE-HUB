@@ -1,4 +1,4 @@
-import { interpolate } from "@/lib/i18n/translate";
+import { interpolate } from "@/lib/i18n/translator";
 import type { Locale } from "@/lib/i18n/config";
 
 /**

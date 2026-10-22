@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { requiredText, isCalendarDate, optionalDay } from "@/lib/schema";
-import type { MessageKey, TranslateFn } from "@/lib/i18n/translate";
+import type { MessageKey, TranslateFn } from "@/lib/i18n/translator";
 import type { TaskStatus } from "@/types/entities";
 
 /** Canonical statuses (P0-TSK-02). Shared by board, list, and commands. */

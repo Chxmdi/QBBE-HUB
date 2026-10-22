@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
-import { requiresAdministratorMfa, verifiedTotpFactors } from "@/features/auth/mfa";
+import { hasVerifiedTotpFactor, requiresAdministratorMfa } from "@/features/auth/mfa";
 import type { Factor } from "@supabase/supabase-js";
 import type { OrgRole, Profile } from "@/types/entities";
 
@@ -198,7 +198,7 @@ export async function authorizeAdminAction(options?: {
       session.isAdmin,
       assuranceResult.data.currentLevel,
       assuranceResult.data.nextLevel,
-      verifiedTotpFactors(factorResult.data.all).length > 0,
+      hasVerifiedTotpFactor(factorResult.data.all),
     )
   ) {
     return { ok: false, error: t("account.errors.mfaRequired"), reason: "mfa" };

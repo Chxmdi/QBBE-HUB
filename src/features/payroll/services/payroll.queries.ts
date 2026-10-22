@@ -1,5 +1,5 @@
 import type { createSupabasePageClient } from "@/lib/supabase/page";
-import type { MessageKey } from "@/lib/i18n/translate";
+import type { MessageKey } from "@/lib/i18n/translator";
 import {
   CATEGORY_KEYS,
   type AccountType,

@@ -18,7 +18,7 @@ import {
 } from "@/features/documents/templates/merge";
 import { renderTextPdf } from "@/features/documents/templates/pdf";
 import { getT } from "@/lib/i18n/server";
-import type { TranslateFn } from "@/lib/i18n/translate";
+import type { TranslateFn } from "@/lib/i18n/translator";
 import { calendarDateInZone } from "@/lib/time";
 
 // Templates (#147). Owners and admins with MFA write them (checked here for a

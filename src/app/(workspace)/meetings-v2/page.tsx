@@ -8,7 +8,7 @@ import { getFormatters, getLocale } from "@/lib/i18n/server";
 import { meetingsV2Enabled } from "@/features/meetings-v2/flag";
 import { meetingsV2T, type MeetingsV2T } from "@/features/meetings-v2/i18n";
 import { listMeetingObjects, type MeetingListRow } from "@/features/meetings-v2/services/meeting-v2.queries";
-import type { Formatters } from "@/lib/i18n/format";
+import type { Formatters } from "@/lib/i18n/format-core";
 
 export const dynamic = "force-dynamic";
 

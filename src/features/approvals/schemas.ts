@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requiredText, isCalendarDate } from "@/lib/schema";
 import type { Locale } from "@/lib/i18n/config";
-import { formatCurrency } from "@/lib/i18n/format";
+import { formatCurrency } from "@/lib/i18n/format-core";
 import { createTranslator, type MessageKey } from "@/lib/i18n/translate";
 
 /**
