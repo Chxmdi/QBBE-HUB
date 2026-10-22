@@ -1,13 +1,8 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getReportSnapshot } from "@/features/reports/services/report.queries";
-import { snapshotSections } from "@/features/reports/snapshot-view";
+import { buildReportCsv } from "@/features/reports/report-csv";
 import { getT } from "@/lib/i18n/server";
-
-function csvEscape(value: unknown): string {
-  const str = value === null || value === undefined ? "" : String(value);
-  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
-}
 
 /**
  * CSV export of a report snapshot (P0-RPT-04). Access is enforced by RLS on
@@ -37,38 +32,14 @@ export async function GET(
   // anything generated before versioning existed.
   const chosen = await getReportSnapshot(id);
   const snapshot = (chosen?.snapshot ?? report.snapshot) as Record<string, unknown>;
-  const rows: string[] = [];
-  rows.push(`# ${report.title}`);
-  // The generation time stays an ISO timestamp: a spreadsheet reads it as one.
-  rows.push(
-    t("reports.csvExported", { version: chosen?.version ?? 1, at: String(report.created_at) }),
-  );
-  rows.push("");
-
-  const metrics = (snapshot.metrics ?? {}) as Record<string, number>;
-  rows.push(t("reports.csvHeader"));
-  for (const [key, value] of Object.entries(metrics)) {
-    rows.push([csvEscape(t("reports.csvMetric")), csvEscape(key), csvEscape(value), ""].join(","));
-  }
-
-  // Section names and wording follow the reader's language; stored dates stay
-  // as recorded so a spreadsheet can sort them.
-  for (const section of snapshotSections(snapshot, { t })) {
-    if (section.rows.length === 0) {
-      rows.push([csvEscape(section.title.toLowerCase()), "", csvEscape(t("reports.noneInSnapshot")), ""].join(","));
-      continue;
-    }
-    for (const row of section.rows) {
-      rows.push(
-        [
-          csvEscape(section.title.toLowerCase()),
-          csvEscape(row.primary),
-          csvEscape(row.secondary ?? ""),
-          "",
-        ].join(","),
-      );
-    }
-  }
+  // Formula-looking text is neutralised inside the builder (SEC-028).
+  const csv = buildReportCsv({
+    title: report.title as string,
+    version: chosen?.version ?? 1,
+    generatedAt: String(report.created_at),
+    snapshot,
+    t,
+  });
 
   // Audit the export (SEC-005).
   const {
@@ -83,7 +54,7 @@ export async function GET(
     object_id: report.id,
   });
 
-  return new NextResponse(rows.join("\n"), {
+  return new NextResponse(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="qbbe-report-${report.id}.csv"`,

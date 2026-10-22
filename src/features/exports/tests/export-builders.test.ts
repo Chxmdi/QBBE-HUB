@@ -2,8 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildExport } from "../services/export-builders";
 
-function database(tables: Record<string, Record<string, unknown>[]>, failPage = false) {
-  return { from(table: string) {
+type Rpc = (name: string, args: Record<string, unknown>) => { data: unknown; error: { message: string } | null };
+
+function database(
+  tables: Record<string, Record<string, unknown>[]>,
+  failPage = false,
+  rpc: Rpc = () => ({ data: null, error: null }),
+) {
+  return { async rpc(name: string, args: Record<string, unknown>) { return rpc(name, args); },
+  from(table: string) {
     let rows = tables[table] ?? [];
     const query = {
       select() { return query; },
@@ -56,5 +63,55 @@ describe("export data boundaries", () => {
     }), "person_data", { organizationId: "ours", subjectUserId: "person", params: {} });
     expect(result.sections.find(s => s.name === "messages_written")?.rows.map(r => r.id)).toEqual(["yes"]);
     expect(result.sections.find(s => s.name === "email_deliveries")?.rows.map(r => r.id)).toEqual(["yes"]);
+  });
+});
+
+describe("report bundle scope (SEC-006)", () => {
+  const tables = {
+    report_instance: [
+      { id: "readable", organization_id: "ours" },
+      { id: "hidden", organization_id: "ours" },
+      { id: "foreign", organization_id: "other" },
+    ],
+    report_version: [
+      { id: "v-readable", report_id: "readable", organization_id: "ours", snapshot: {} },
+      { id: "v-hidden", report_id: "hidden", organization_id: "ours", snapshot: { salaries: "probe" } },
+    ],
+    report_approval: [
+      { id: "a-readable", report_version_id: "v-readable", organization_id: "ours" },
+      { id: "a-hidden", report_version_id: "v-hidden", organization_id: "ours" },
+    ],
+  };
+
+  it("keeps only the reports the requester can read, with their versions and approvals", async () => {
+    const asked: unknown[] = [];
+    const result = await buildExport(database(tables, false, (name, args) => {
+      asked.push({ name, args });
+      return { data: name === "actor_can_read_report" && args.p_report === "readable", error: null };
+    }), "report_bundle", { organizationId: "ours", subjectUserId: null, params: {}, requestedBy: "staff" });
+
+    const ids = (name: string) => result.sections.find(s => s.name === name)?.rows.map(r => r.id);
+    expect(ids("reports")).toEqual(["readable"]);
+    expect(ids("versions")).toEqual(["v-readable"]);
+    expect(ids("approvals")).toEqual(["a-readable"]);
+    expect(JSON.stringify(result)).not.toContain("probe");
+    expect(asked).toContainEqual({ name: "actor_can_read_report", args: { p_user: "staff", p_report: "hidden" } });
+  });
+
+  it("exports nothing when the capability check says no", async () => {
+    const result = await buildExport(database(tables, false, () => ({ data: false, error: null })),
+      "report_bundle", { organizationId: "ours", subjectUserId: null, params: {}, requestedBy: "staff" });
+    expect(result.rowCount).toBe(0);
+  });
+
+  it("refuses to build a bundle without knowing who asked", async () => {
+    await expect(buildExport(database(tables, false, () => ({ data: true, error: null })),
+      "report_bundle", { organizationId: "ours", subjectUserId: null, params: {} })).rejects.toThrow("requester");
+  });
+
+  it("fails rather than guessing when the capability check errors", async () => {
+    await expect(buildExport(database(tables, false, () => ({ data: null, error: { message: "offline" } })),
+      "report_bundle", { organizationId: "ours", subjectUserId: null, params: {}, requestedBy: "staff" }))
+      .rejects.toThrow("offline");
   });
 });
