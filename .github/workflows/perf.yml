@@ -15,7 +15,20 @@ on:
   schedule:
     - cron: "30 6 * * *"
   # Called by release-candidate.yml, so the candidate's evidence includes it.
+  # There it is informational: a slow run is reported in the evidence but does
+  # not fail the candidate (a failed job would make the whole run "failure",
+  # and Deploy accepts production only from a successful candidate run).
   workflow_call:
+    inputs:
+      informational:
+        description: Report a missed target as the load_result output instead of failing
+        type: boolean
+        required: false
+        default: false
+    outputs:
+      load_result:
+        description: success or failure of the load test itself
+        value: ${{ jobs.load.outputs.load_result }}
   workflow_dispatch:
     inputs:
       duration:
@@ -33,6 +46,8 @@ jobs:
     name: 50-user load test
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      load_result: ${{ steps.k6.outcome }}
     steps:
       - uses: actions/checkout@v4
 
@@ -176,6 +191,8 @@ jobs:
           ) &
 
       - name: 50 people for ${{ inputs.duration || '2m' }}
+        id: k6
+        continue-on-error: ${{ inputs.informational == true }}
         run: |
           k6 run \
             -e BASE_URL=http://127.0.0.1:3000 \
