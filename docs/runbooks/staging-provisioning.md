@@ -55,6 +55,17 @@ Nothing in this file can be completed from a developer machine alone.
 5. Run the security advisor for that project and resolve anything it reports
    before continuing. A staging environment that starts with advisor findings
    will be certified with them.
+6. Check the API grants landed. In the project's SQL editor:
+   ```sql
+   select has_table_privilege('anon', 'public.task', 'insert') as anon_insert,
+          has_table_privilege('authenticated', 'public.task', 'select') as signed_in_read;
+   ```
+   **You should see** `anon_insert` false and `signed_in_read` true. The
+   migrations grant every table explicitly
+   (`20261119100000_explicit_api_grants.sql`) and switch off Supabase's
+   automatic grants, so the dashboard's "Automatically expose new tables"
+   setting no longer changes anything. If `signed_in_read` is false, the
+   migration chain did not finish: run `supabase db push` again.
 
 **Failure to watch for:** `db push` refusing because the remote has migrations
 the repository does not. That means the project is not empty — most likely you
@@ -70,6 +81,18 @@ provisions the organization.
    immediately — owner operations require it.
 3. Invite the remaining role accounts from the admin page rather than inserting
    them, so the invite-only path is exercised on the environment being certified.
+4. Invite one more account as the **smoke user**: a QBBE address kept for this
+   purpose, the lowest role (volunteer), a member of one test program only, a
+   long random password stored in the password manager, no MFA. After each
+   deploy, `scripts/ci/smoke-signed-in.mjs` signs in as it and reads its own
+   membership row:
+   ```bash
+   SUPABASE_URL=https://<staging-ref>.supabase.co SUPABASE_ANON_KEY=<anon key> \
+   SMOKE_EMAIL=<smoke address> SMOKE_PASSWORD=<password> node scripts/ci/smoke-signed-in.mjs
+   ```
+   **You should see** `Signed-in smoke check: signed in and read 1 membership
+   row (role volunteer, active).` A `42501 permission denied` means the API
+   grants are missing (step 2.6).
 
 **Do not** run `supabase/tests/qa-users.sql` against staging. It writes directly
 to `auth.users` with a known fixture password, which is acceptable on a local
