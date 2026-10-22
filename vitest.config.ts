@@ -6,14 +6,14 @@ import path from "path";
  * Set from a measured run on 2026-10-22, rounded down; raise with new tests.
  */
 const COVERAGE_FLOORS = {
-  lines: 34,
+  lines: 36,
   "src/lib/**": { lines: 74 },
-  "src/features/ledger/services/**": { lines: 5 },
-  "src/features/payables/services/**": { lines: 0 },
-  "src/features/payroll/services/**": { lines: 0 },
-  "src/features/banking/services/**": { lines: 0 },
-  "src/features/sales-tax/services/**": { lines: 11 },
-  "src/features/finance/services/**": { lines: 0 },
+  "src/features/ledger/services/**": { lines: 74 },
+  "src/features/payables/services/**": { lines: 68 },
+  "src/features/payroll/services/**": { lines: 76 },
+  "src/features/banking/services/**": { lines: 61 },
+  "src/features/sales-tax/services/**": { lines: 65 },
+  "src/features/finance/services/**": { lines: 66 },
   "src/features/admin/services/**": { lines: 12 },
   "src/features/auth/services/**": { lines: 0 },
   "src/features/exports/services/**": { lines: 30 },
