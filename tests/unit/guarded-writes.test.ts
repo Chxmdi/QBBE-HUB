@@ -186,4 +186,16 @@ describe("disconnecting an integration", () => {
     answer = () => ({ data: null, error: null });
     expect((await disconnectIntegration("gmail")).ok).toBe(false);
   });
+  it("says so when the copied mail cannot be removed, instead of reporting success", async () => {
+    const { disconnectIntegration } = await import("@/features/admin/services/integration.commands");
+    answer = (call) =>
+      call.action === "update"
+        ? { data: { id: ID }, error: null }
+        : call.table === "gmail_message" && call.action === "delete"
+          ? { data: null, error: { message: "boom" } }
+          : { data: null, error: null };
+    const result = await disconnectIntegration("gmail");
+    expect(result.ok).toBe(false);
+    expect(writesOf().some((c) => c.table === "audit_event")).toBe(false);
+  });
 });

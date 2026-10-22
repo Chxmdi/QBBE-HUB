@@ -15,6 +15,8 @@ import {
 } from "@/features/zeffy/client";
 import { getT } from "@/lib/i18n/server";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { recordAudit } from "@/lib/audit-write";
+import { logActionFailure } from "@/lib/server-log";
 
 /** Organization-wide integrations an administrator connects for everyone. */
 const ORGANIZATION_PROVIDERS = new Set(["volunteer_system", "zeffy"]);
@@ -51,23 +53,21 @@ export async function disconnectIntegration(
 
   if (error || !disconnected) return { ok: false, error: t("admin.errors.disconnectFailed") };
 
+  // What Hub copied from the account goes with it. A failed delete leaves
+  // that copy behind, so say so; disconnecting again retries it.
+  let cleanupError: unknown = null;
   if (provider === "gmail") {
-    await supabase.from("gmail_message").delete().eq("user_id", session.userId);
+    ({ error: cleanupError } = await supabase.from("gmail_message").delete().eq("user_id", session.userId));
   }
   if (provider === "google_calendar") {
-    await supabase.from("calendar_event_link").delete().eq("user_id", session.userId);
+    ({ error: cleanupError } = await supabase.from("calendar_event_link").delete().eq("user_id", session.userId));
   }
   if (provider === "google_drive") {
-    const { data: connection } = await supabase
-      .from("integration_connection")
-      .select("id")
-      .eq("organization_id", session.organizationId)
-      .eq("provider", provider)
-      .eq("user_id", session.userId)
-      .maybeSingle();
-    if (connection) {
-      await supabase.from("document").delete().eq("integration_connection_id", connection.id);
-    }
+    ({ error: cleanupError } = await supabase.from("document").delete().eq("integration_connection_id", disconnected.id));
+  }
+  if (cleanupError) {
+    logActionFailure("integration.disconnect_cleanup", cleanupError, { provider });
+    return { ok: false, error: t("admin.errors.googleCleanupFailed") };
   }
   if (provider === "volunteer_system") {
     // Removes every link and every copied assignment in the organization.
@@ -77,7 +77,8 @@ export async function disconnectIntegration(
     }
   }
 
-  await supabase.from("audit_event").insert({
+  // The disconnect has happened either way; a failed audit write is logged.
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "integration",

@@ -1,4 +1,4 @@
-import type { JobContext, JobResult } from "../runner";
+import { PartialJobFailure, type JobContext, type JobResult } from "../runner";
 import {
   SUBJECT_HANDLERS,
   cutoffFor,
@@ -48,62 +48,68 @@ export async function applyRetention({
   let failed = 0;
   const removed: Record<string, number> = {};
 
+  // A run record that cannot be written stops the job: carrying on would
+  // delete more with no trace of it. The job run itself then fails, naming
+  // the policy and how many rows went, which Admin > Jobs and the operator
+  // alerts show.
+  async function record(policy: PolicyRow, cutoff: string, affected: number, failure?: string) {
+    const { error: recordError } = await db.from("retention_run").insert({
+      organization_id: policy.organization_id,
+      policy_id: policy.id,
+      subject_key: policy.subject_key,
+      action: policy.action,
+      cutoff,
+      affected,
+      ...(failure === undefined ? {} : { error: failure }),
+    });
+    if (recordError) {
+      throw new PartialJobFailure(
+        `could not record retention policy ${policy.id} (${policy.subject_key}, ${affected} affected): ${recordError.message}`,
+        { processed, failed, metadata: { removed } },
+      );
+    }
+  }
+
   for (const policy of (policies ?? []) as PolicyRow[]) {
     const cutoff = cutoffFor(policy.retain_days, now);
     const handler = SUBJECT_HANDLERS[policy.subject_key];
 
     if (!handler) {
+      await record(policy, cutoff, 0, `No handler is implemented for "${policy.subject_key}".`);
       failed += 1;
-      await db.from("retention_run").insert({
-        organization_id: policy.organization_id,
-        policy_id: policy.id,
-        subject_key: policy.subject_key,
-        action: policy.action,
-        cutoff,
-        affected: 0,
-        error: `No handler is implemented for "${policy.subject_key}".`,
-      });
       continue;
     }
 
+    let affected: number;
     try {
-      const affected = await handler.apply(
+      affected = await handler.apply(
         db,
         policy.organization_id,
         cutoff,
         policy.action,
         definition.batch_size,
       );
-
-      await db.from("retention_run").insert({
-        organization_id: policy.organization_id,
-        policy_id: policy.id,
-        subject_key: policy.subject_key,
-        action: policy.action,
-        cutoff,
-        affected,
-      });
-
-      await db
-        .from("retention_policy")
-        .update({ last_run_at: now.toISOString(), last_affected: affected })
-        .eq("id", policy.id);
-
-      removed[policy.subject_key] = (removed[policy.subject_key] ?? 0) + affected;
-      processed += 1;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
+      await record(policy, cutoff, 0, message.slice(0, 500));
       failed += 1;
-      await db.from("retention_run").insert({
-        organization_id: policy.organization_id,
-        policy_id: policy.id,
-        subject_key: policy.subject_key,
-        action: policy.action,
-        cutoff,
-        affected: 0,
-        error: message.slice(0, 500),
-      });
+      continue;
     }
+
+    removed[policy.subject_key] = (removed[policy.subject_key] ?? 0) + affected;
+    await record(policy, cutoff, affected);
+
+    const { error: policyError } = await db
+      .from("retention_policy")
+      .update({ last_run_at: now.toISOString(), last_affected: affected })
+      .eq("id", policy.id);
+    if (policyError) {
+      throw new PartialJobFailure(
+        `could not update retention policy ${policy.id}: ${policyError.message}`,
+        { processed, failed, metadata: { removed } },
+      );
+    }
+    processed += 1;
   }
 
   return { processed, failed, metadata: { removed } };

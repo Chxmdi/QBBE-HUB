@@ -789,6 +789,7 @@ export const adminEn = {
       removeAssignmentFailed: "Could not remove the team assignment.",
       disconnectFailed: "Could not disconnect.",
       vmsCleanupFailed: "VMS disconnected, but linked identity cleanup failed.",
+      googleCleanupFailed: "Disconnected, but the copies Hub kept from this account could not be removed. Disconnect again to retry.",
       vmsNotConfigured:
         "Volunteer Management System is not configured. Set VMS_API_URL (and VMS_API_KEY) first.",
       vmsResponded: "VMS responded {status}. Connection was not recorded.",

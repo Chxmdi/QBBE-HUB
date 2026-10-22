@@ -806,6 +806,8 @@ export const adminFrCA: typeof adminEn = {
       disconnectFailed: "Impossible de déconnecter.",
       vmsCleanupFailed:
         "VMS déconnecté, mais le nettoyage des identités liées a échoué.",
+      googleCleanupFailed:
+        "Déconnecté, mais les copies que le Hub conservait de ce compte n’ont pas pu être supprimées. Déconnectez de nouveau pour réessayer.",
       vmsNotConfigured:
         "Le système de gestion des bénévoles n’est pas configuré. Définissez d’abord VMS_API_URL (et VMS_API_KEY).",
       vmsResponded: "Le VMS a répondu {status}. La connexion n’a pas été enregistrée.",

@@ -94,6 +94,14 @@ the Docker daemon does not auto-start and Supabase must be started manually:
   `postgres` user). Requires
   `supabase start`. Falls back to `sudo docker` when the daemon socket is
   root-owned (typical on this VM).
+- Unchecked database writes: `node scripts/ci/check-unchecked-writes.mjs`
+  (also run by `tests/unit/unchecked-writes.test.ts`). Every
+  `await x.from(...).insert/update/upsert/delete(...)` must read its
+  `{ error }`. Older ones are counted per file in
+  `scripts/ci/unchecked-writes-allowlist.json`; a count may only go down.
+  After fixing some, run the script with `--update`. Exports of personal or
+  financial data write their audit row with `recordAudit` from
+  `src/lib/audit-write.ts` and refuse the file if it fails.
 - Notification email job (Unit 9): `GET` or `POST /api/jobs/notification-email`
   with `Authorization: Bearer $CRON_JOB_SECRET` (or Vercel `CRON_SECRET`).
   `/api/jobs/*` is excluded from session middleware so cron can run.
