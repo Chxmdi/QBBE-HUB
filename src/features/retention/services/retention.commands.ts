@@ -13,6 +13,8 @@ import {
   savePolicySchema,
   type RetentionSubject,
 } from "@/features/retention/schemas";
+import { dbErrorMessage } from "@/lib/db-error";
+import { RETENTION_DB_ERRORS } from "@/features/retention/db-error-rules";
 
 /**
  * Setting what the organization keeps.
@@ -79,9 +81,14 @@ export async function saveRetentionPolicy(input: unknown): Promise<ActionResult>
     );
 
   if (error) {
-    // The trigger's message names the subject and its floor, which is more
-    // use than anything this function could substitute for it.
-    return { ok: false, error: error.message };
+    // The trigger's refusal names the floor; it is shown in the reader's words.
+    return {
+      ok: false,
+      error: dbErrorMessage(t, error, t("retention.errors.notSaved"), {
+        action: "retention.savePolicy",
+        rules: RETENTION_DB_ERRORS,
+      }),
+    };
   }
 
   // Retention is a governance decision, so it is auditable whether or not it

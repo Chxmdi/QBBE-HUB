@@ -216,7 +216,14 @@ export const opsEn = {
       yearOne: "{n} year",
       yearOther: "{n} years",
     },
+    /** Database refusals in the reader's language (see the module's db-error-rules.ts). */
+    dbErrors: {
+      actionNotAllowed: "That action is not allowed for this kind of record.",
+      tooShort: "This kind of record must be kept for at least {days} days.",
+      unknownSubject: "That kind of record cannot have a retention period.",
+    },
     errors: {
+      notSaved: "The retention policy could not be saved. Try again.",
       mustKeep: "{label} must be kept for at least {duration}.",
       cannotAnonymise: "{label} cannot be anonymised.",
       cannotDelete: "{label} cannot be deleted.",
@@ -340,7 +347,26 @@ export const opsEn = {
       noRule: "No rule",
       permanently: "Permanently",
     },
+    /** Database refusals in the reader's language (see the module's db-error-rules.ts). */
+    dbErrors: {
+      permanent: "These records are kept permanently; they have no retention period to set.",
+      minYears: "These records must be kept for at least {years} years.",
+      enterYears: "Enter how many years these records are kept.",
+      unknownCategory: "That record category does not exist.",
+      holdNoEdit: "A hold cannot be edited, only released.",
+      holdOrder: "A hold is placed first and released later.",
+      releaseReason: "Say why the hold is being released.",
+      recordMissing: "That record does not exist in this organization.",
+      holdReleased: "This hold has already been released.",
+      shortensForever: "This change would shorten how long the record must be kept (it must be kept permanently).",
+      shortens: "This change would shorten how long the record must be kept (until {date}).",
+      underHold: "This record is under legal hold and cannot be reclassified.",
+    },
     errors: {
+      ruleNotSaved: "The retention period could not be saved. Try again.",
+      holdNotPlaced: "The hold could not be placed. Try again.",
+      holdNotReleased: "The hold could not be released. Try again.",
+      documentNotClassified: "The document could not be classified. Try again.",
       enterYears: "Enter a number of years.",
       wholeYears: "Enter a whole number of years.",
       atLeastYear: "Enter at least one year.",
