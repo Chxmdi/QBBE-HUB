@@ -250,11 +250,11 @@ Create GitHub environments named `staging` and `production`. In each, configure:
 | Setting | Location | Purpose |
 |---|---|---|
 | `DEPLOY_HOST` | environment variable | the QBBE server's public IP |
-| `DEPLOY_SSH_KEY` | environment secret | the server's deploy key; never commit it |
+| `DEPLOY_SSH_KEY` | environment secret | this environment's own deploy key (`qbbe-staging` or `qbbe-production` once `DEPLOY_MODE=isolated`, hosting.md "Deploy access"); never commit it |
 | `DEPLOY_KNOWN_HOSTS` | environment secret | the server's pinned SSH host key (from **Server setup**) |
 | `APP_ENV` | environment secret | the app's runtime settings, one `NAME=value` per line ([`hosting.md`](hosting.md#the-app_env-secret)) |
 | `SUPABASE_PROJECT_REF` | environment variable | this environment's Supabase project ref |
-| `SUPABASE_ACCESS_TOKEN` | environment secret | Supabase personal access token of a QBBE account, for migrations |
+| `SUPABASE_DB_URL` | environment secret | that environment's database address for migrations (session pooler URI); reaches that project only. Replaces `SUPABASE_ACCESS_TOKEN`, which reached every project of the account (hosting.md, "Deploy access") |
 | `SUPABASE_DB_PASSWORD` | environment secret | this environment's database password, for migrations |
 | `SITE_URL` | environment variable | the environment's public address, `https://<host>` |
 | `RELEASE_ENABLED` | environment variable | literal `true` only after readiness review |

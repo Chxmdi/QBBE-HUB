@@ -89,10 +89,11 @@ it if absent):
 | Name | Kind | Value |
 |---|---|---|
 | `DEPLOY_HOST` | variable | the QBBE server's public IP |
-| `DEPLOY_SSH_KEY` | secret | the server's deploy key (hosting.md step 2) |
+| `DEPLOY_SSH_KEY` | secret | staging's own deploy key (`qbbe-staging`, hosting.md "Deploy access") |
+| `DEPLOY_MODE` | variable | `isolated` once staging deploys through its own user (hosting.md "Deploy access") |
 | `DEPLOY_KNOWN_HOSTS` | secret | the server's host key line (hosting.md step 6) |
 | `SUPABASE_PROJECT_REF` | variable | the **staging** project ref |
-| `SUPABASE_ACCESS_TOKEN` | secret | a Supabase personal access token of a QBBE account, used for migrations |
+| `SUPABASE_DB_URL` | secret | staging's database address (session pooler URI), used for migrations; reaches staging only |
 | `SUPABASE_DB_PASSWORD` | secret | the **staging** database password |
 | `SITE_URL` | variable | the staging address, `https://<staging host>` |
 | `APP_ENV` | secret | staging's app settings, below (c) |
