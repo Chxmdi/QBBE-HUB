@@ -283,6 +283,33 @@ describe("bucket.sh state: which index to trust", () => {
   });
 });
 
+describe("bucket.sh state: an old index copied to a newer key", () => {
+  it("refuses a correctly signed index whose run is not the one its key names, and uses the real newest", async () => {
+    const s3root = join(root, "state-replay", "s3");
+    const blob = content(10);
+    const files = [{ fp: "f".repeat(64), sha256: blob.sha, size: 10 }];
+    const oldAt = when(-6 * DAY);
+    const goodAt = when(-2 * DAY);
+    const replayAt = when(-DAY);
+    const old = signedIndex(oldAt, "2026-10", files, [blob.record]);
+    const good = signedIndex(goodAt, "2026-10", files, [blob.record]);
+    putObject(s3root, runKey(oldAt, "index.json"), JSON.stringify(old));
+    putObject(s3root, runKey(goodAt, "index.json"), JSON.stringify(good));
+    // Someone holding only the bucket key copies the real old index, byte
+    // for byte, to a newer run's name. Its signature is still right.
+    putObject(s3root, runKey(replayAt, "index.json"), readFileSync(objectFile(s3root, runKey(oldAt, "index.json"))));
+    const dir = join(root, "state-replay", "state");
+    const result = await run("bash", ["scripts/backup/bucket.sh", "state", "local", "2026-10", dir], s3Env(s3root));
+    expect(result.status, result.output).toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, "previous-index.json"), "utf8")).mac).toBe(good.mac);
+    expect(result.output).toContain(`previous index: ${runKey(goodAt, "index.json")}`);
+    const warnings = result.output.split("\n").filter((line) => line.includes("::warning::"));
+    expect(warnings, result.output).toHaveLength(1);
+    expect(warnings[0]).toMatch(/1 backup index\(es\) newer than the one used/);
+    expect(lines(readFileSync(join(dir, "ignored-indexes.txt"), "utf8"))).toEqual([`${runKey(replayAt, "index.json")} key`]);
+  });
+});
+
 describe("bucket.sh state and export-storage.mjs: objects a run cannot vouch for", () => {
   it("checks what holds a blob's name in the new month, keeps a matching copy, and stores the rest under another name", async () => {
     const s3root = join(root, "carry", "s3");
@@ -463,6 +490,37 @@ describe("bucket.sh fetch and unpack-blobs: a restore", () => {
     for (const [i, f] of [a, b, c, e].entries()) {
       expect(readFileSync(join(work, "storage", "objects", "documents", `${"abce"[i]}.bin`)).equals(f.plain)).toBe(true);
     }
+  });
+});
+
+describe("bucket.sh fetch: a run whose archive is missing", () => {
+  it("skips a valid index without its archive and fetches the next run, for latest and for a date", async () => {
+    const s3root = join(root, "fetch-missing", "s3");
+    const january = `blobs/local/2026-01-${TAG}/`;
+    const a = content(50);
+    putObject(s3root, `${january}${a.sha}.age`, a.blob);
+    const earlier = new Date("2026-01-10T03:00:00Z");
+    const later = new Date("2026-01-10T05:00:00Z");
+    const archive = randomBytes(64);
+    const files = [{ fp: "0".repeat(64), sha256: a.sha, size: 50 }];
+    putObject(s3root, runKey(earlier, "index.json"), JSON.stringify(signedIndex(earlier, "2026-01", files, [a.record], sha256(archive))));
+    putObject(s3root, runKey(earlier, "tar.gz.age"), archive);
+    // The newest run's index is well formed, but its archive is not there.
+    putObject(s3root, runKey(later, "index.json"), JSON.stringify(signedIndex(later, "2026-01", files, [a.record], sha256(randomBytes(64)))));
+    const env = s3Env(s3root, { BACKUP_AGE_RECIPIENT: "", BACKUP_INDEX_KEY: "" });
+    for (const which of ["latest", "2026-01-10"]) {
+      const dest = join(root, "fetch-missing", `dest-${which}`);
+      const result = await run("bash", ["scripts/backup/bucket.sh", "fetch", "local", which, dest], env);
+      expect(result.status, `${which}: ${result.output}`).toBe(0);
+      expect(result.output).toContain(`Skipping ${stamp(later)}: its index is valid, but its archive qbbe-local-${stamp(later)}.tar.gz.age is not in the bucket.`);
+      expect(result.output).toContain(`Fetching ${stamp(earlier)}.`);
+      expect(readFileSync(join(dest, `qbbe-local-${stamp(earlier)}.tar.gz.age`)).equals(archive)).toBe(true);
+      expect(readFileSync(join(dest, "blobs", `${a.sha}.age`)).equals(a.blob)).toBe(true);
+    }
+    // One run asked for by name has nothing to fall back to.
+    const one = await run("bash", ["scripts/backup/bucket.sh", "fetch", "local", stamp(later), join(root, "fetch-missing", "dest-one")], env);
+    expect(one.status).not.toBe(0);
+    expect(one.output).toContain(`its archive qbbe-local-${stamp(later)}.tar.gz.age is not in the bucket`);
   });
 });
 

@@ -68,12 +68,21 @@ Terms used below:
   `host=… user=…` form), so the password never shows in a process list or
   in a log.
 - **TLS**: the encryption that `https` uses, here for database connections.
-  The scripts require it for every database that is not on the same
-  computer: they set `PGSSLMODE=require` (the setting `psql` and `pg_dump`
-  read) unless the address already says `sslmode=require` or
-  `sslmode=verify-full`, and they refuse `disable`, `allow` and `prefer`.
-  Only the computer's own addresses (`127.0.0.1`, `localhost`, `::1`: the
-  local Supabase stack, which has no TLS) are exempt.
+  For every database that is not on the same computer, the scripts set
+  `PGSSLMODE=require` (the setting `psql` reads) unless the address already
+  says `sslmode=require` or `sslmode=verify-full`, and they refuse
+  `disable`, `allow` and `prefer` (if `sslmode` appears more than once in
+  the address, every value must be `require` or `verify-full`). So every `psql` connection
+  (the row counts, the migration history, the platform extras, and all of
+  the restore drill) **requires** TLS: it fails rather than run without
+  it. The three database dumps of the nightly run are made by the Supabase
+  CLI (`supabase db dump`), which does not obey that setting: it uses TLS
+  whenever the server offers it, and Supabase's hosted database always
+  does, but it does not refuse a connection that has been downgraded to
+  plain text. Only the computer's own addresses (`127.0.0.1`, `localhost`,
+  `::1`, or a `host=` parameter naming one of them or a Unix socket
+  folder: the local Supabase stack, which has no TLS) are exempt; a `host=`
+  parameter naming any other computer counts as not local.
 - **RPO** (recovery point objective): how much recent work can be lost.
   **RTO** (recovery time objective): how long it takes to be working again.
 
@@ -191,11 +200,15 @@ Checked against the actual dump files on 2026-10-22.
   - if a migration is applied while the database is being dumped, the dumps
     are redone once, and the run fails if it happens again;
   - the night uses the newest index of the last 40 days whose signature is
-    right. Indexes dated more than an hour ahead are ignored, and newer ones
-    that fail the signature or format check are skipped, with one warning
-    giving their number. A planted or old-key index therefore never makes a
-    night download every file while a good index exists;
-  - the database connection must use TLS (see *Terms* at the top);
+    right and that records the run its name gives (its archive name and
+    time). Indexes dated more than an hour ahead are ignored, and newer ones
+    that fail the signature or format check, or a real older index copied to
+    a newer name, are skipped, with one warning giving their number. A
+    planted, copied or old-key index therefore never makes a night download
+    every file, or use an old run's record, while a good index exists;
+  - the `psql` connections to the database must use TLS; the Supabase
+    CLI's dumps use TLS because Supabase's hosted database offers it, but
+    the CLI does not refuse a downgrade (see *Terms* at the top);
   - the SQL files are checked against the manifest before encrypting;
   - every blob the archive needs must be in the bucket, under the name its
     index records, at the encrypted size recorded when it was stored;
@@ -1004,7 +1017,7 @@ gives only their number, never their names.
 
 | The warning says | What happened | Is anything lost? |
 |---|---|---|
-| `N backup index(es) … failed their signature or format check … were ignored` | index files the night could not trust: signed with another `BACKUP_INDEX_KEY` (expected once, after you change it), malformed, or naming another environment. The night used the newest index whose signature is right | No |
+| `N backup index(es) … failed their signature or format check … were ignored` | index files the night could not trust: signed with another `BACKUP_INDEX_KEY` (expected once, after you change it), malformed, naming another environment, or a real older index copied to a newer run's name (its recorded archive name and time are not the ones its name gives). The night used the newest index whose signature is right | No |
 | `N dated more than an hour ahead were ignored` (same warning) | index files whose name claims a time in the future, so that they would sort as the newest | No. `fetch latest` ignores them too |
 | `N blob name(s) in blobs/… hold an object that does not match the record of the blob it is named after` | on the first night of a month, an object of the blob's size was already at its name in the new folder and did not hold the recorded bytes. (An object of another size there is passed over without a warning: it cannot be the blob.) | No. The blob was copied under the next free name (`<sha256>.2.age`), and the index records that name |
 | `N new blob(s) stored under another name (<sha256>.<n>.age)` | a new file's blob could not use its usual name, because an object that no signed index vouches for is there | No. Same as above |
@@ -1137,7 +1150,9 @@ mistake, say so in step 9.
    the run: `fetch` then prints `Runs of production considered for …,
    newest first: N.` and up to 10 lines, each a run's time and its
    `archive sha256` (or `not a valid backup index`), and fetches the newest
-   valid one. Runs dated more than an hour ahead are ignored (`N dated
+   valid one whose archive is in the bucket (a run with a valid index but
+   no archive is skipped with `Skipping <time>: its index is valid, but its
+   archive … is not in the bucket.`). Runs dated more than an hour ahead are ignored (`N dated
    more than an hour ahead were ignored`): someone holding the bucket key
    could add a run named in the future so that it sorts as the newest. If
    the fetched archive's sha256 is not the one from point 1, pick the run
@@ -1647,7 +1662,7 @@ an entry in the incident register.
 |---|---|
 | `.github/workflows/backup.yml` | the nightly run (staging only with `BACKUP_STAGING_NIGHTLY=on`), upload, outside check-in (its body carries the archive's sha256), the **Backup failed** issues and the **Backup traffic high** issue |
 | `scripts/backup/check-backup-environment.sh` | refuses missing settings, the wrong project, another project's key, a private key among the public ones, and an index key that is short or not random |
-| `scripts/backup/create-backup.sh` | requires TLS for a non-local database, dumps, checks the dump, copies changed files, writes the manifest, encrypts, prints the traffic line |
+| `scripts/backup/create-backup.sh` | requires TLS for its `psql` connections to a non-local database (the CLI dumps use TLS when offered), dumps, checks the dump, copies changed files, writes the manifest, encrypts, prints the traffic line |
 | `scripts/backup/migration-history.sql` | writes the migration history files with one `psql` query; each table, key and index is created only if the target lacks it |
 | `scripts/backup/platform-extras.sql` | writes `platform.sql` (what the standard dump leaves out); every scheduled job is restored paused, and its last line, `-- start-schedule: …`, starts the ones that were running |
 | `scripts/backup/export-storage.mjs` | downloads new or changed files, encrypting each into a blob (identical files share one); relies only on blobs a signed index recorded, and stores a new blob under another name when its usual one is taken |

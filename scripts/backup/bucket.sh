@@ -10,10 +10,12 @@
 #     scripts/backup/bucket.sh fetch <environment> <which> <dest-dir>
 #
 # state  before a backup: what this month's blob folder holds, and the
-#        newest index whose signature verifies (BACKUP_INDEX_KEY), among
-#        those of the last 40 days dated no more than an hour ahead. Newer
-#        ones that fail (planted, or signed with an old key) are skipped
-#        with one warning giving their number; their keys are listed in
+#        newest index whose signature verifies (BACKUP_INDEX_KEY) and that
+#        records the run its key names (archive name and time: a real older
+#        index copied to a newer key is refused), among those of the last
+#        40 days dated no more than an hour ahead. Newer ones that fail
+#        (planted, copied, or signed with an old key) are skipped with one
+#        warning giving their number; their keys are listed in
 #        <state-dir>/ignored-indexes.txt. On the first night of a month (or
 #        after a gap, or after a first night that failed), it brings the
 #        blobs that index recorded into this month's folder: an object
@@ -41,9 +43,11 @@
 #        archive name or its key from the Backup run's summary. For `latest`
 #        and a date, runs dated more than an hour ahead are ignored, and the
 #        runs considered are listed with their archive's sha256, so a
-#        custodian can pick another. Each blob is taken from its recorded
-#        name, else from an identical copy in any month folder of the same
-#        keys (both checked against the recorded size and sha256), else
+#        custodian can pick another; a run whose index is valid but whose
+#        archive is not in the bucket is skipped for the next one. Each blob
+#        is taken from its recorded name, else from an identical copy in any
+#        month folder of the same keys (both checked against the recorded
+#        size and sha256), else
 #        every copy found is saved for unpack-blobs, which keeps the one
 #        that decrypts to the file's sha256. Needs no index key, so it cannot
 #        check an index's signature: EXPECTED_SHA256 in the restore is the
@@ -252,8 +256,8 @@ case "$command" in
         const fs = await import("node:fs");
         let parsed;
         try { parsed = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); } catch { parsed = { unreadable: true }; }
-        console.log(lib.readPreviousIndex(parsed, process.argv[2], lib.parseIndexKey(process.env.BACKUP_INDEX_KEY)).reason ?? "trusted");
-      ' "$private/candidate.json" "$environment") \
+        console.log(lib.readPreviousIndex(parsed, process.argv[2], lib.parseIndexKey(process.env.BACKUP_INDEX_KEY), process.argv[3]).reason ?? "trusted");
+      ' "$private/candidate.json" "$environment" "$key") \
         || fail "BACKUP_INDEX_KEY is not usable (the line above says why). Make one with: openssl rand -base64 32"
       if [[ "$verdict" == trusted ]]; then
         mv "$private/candidate.json" "$dir/previous-index.json"
@@ -265,25 +269,25 @@ case "$command" in
     done < "$private/candidates.txt"
     if (( untrusted > 0 || future > 0 )); then
       parts=()
-      (( untrusted > 0 )) && parts+=("${untrusted} backup index(es) ${newest:+newer than the one used }failed their signature or format check")
+      (( untrusted > 0 )) && parts+=("${untrusted} backup index(es) ${newest:+newer than the one used }failed their signature or format check, or recorded another run than their key names")
       (( future > 0 )) && parts+=("${future} dated more than an hour ahead")
       joined=$(printf '%s; ' "${parts[@]}")
-      echo "::warning::${joined%; } were ignored. They were signed with another BACKUP_INDEX_KEY, or put there by someone holding the bucket key; their keys are in the state folder's ignored-indexes.txt (runbook, \"Objects the backup did not make\")."
+      echo "::warning::${joined%; } were ignored. They were signed with another BACKUP_INDEX_KEY, or put there (or an older index copied there) by someone holding the bucket key; their keys are in the state folder's ignored-indexes.txt (runbook, \"Objects the backup did not make\")."
     fi
     # What to bring from the folder the trusted index recorded (only for the
     # same keys and an earlier month).
     # shellcheck disable=SC2016 # JavaScript, not shell, expands ${…} here.
     lib '
       const fs = await import("node:fs");
-      const [indexFile, listingFile, environment, generation, prefix, planFile] = process.argv.slice(1);
+      const [indexFile, listingFile, environment, generation, prefix, planFile, indexKey] = process.argv.slice(1);
       const parsed = fs.existsSync(indexFile) ? JSON.parse(fs.readFileSync(indexFile, "utf8")) : null;
-      const previous = lib.readPreviousIndex(parsed, environment, lib.parseIndexKey(process.env.BACKUP_INDEX_KEY));
+      const previous = lib.readPreviousIndex(parsed, environment, lib.parseIndexKey(process.env.BACKUP_INDEX_KEY), indexKey || undefined);
       const tag = lib.parseBlobPrefix(prefix).tag;
       const listing = lib.parseBlobListing(fs.readFileSync(listingFile, "utf8"), prefix);
       const plan = lib.carryPlan(previous, { prefix, generation, tag, listing });
       fs.writeFileSync(planFile, plan.carry.map((b) => `${b.sha256} ${b.encSize} ${b.encSha256} ${b.from} ${b.to} ${b.check.join(",") || "-"}\n`).join(""));
       console.log(JSON.stringify({ from: plan.from, unverifiable: plan.unverifiable }));
-    ' "$dir/previous-index.json" "$dir/blobs-current.txt" "$environment" "$generation" "$current" "$private/carry-plan.txt" > "$private/carry.json" \
+    ' "$dir/previous-index.json" "$dir/blobs-current.txt" "$environment" "$generation" "$current" "$private/carry-plan.txt" "$newest" > "$private/carry.json" \
       || fail "Cannot plan the monthly copy (the line above says why)."
     from=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).from ?? "")' "$private/carry.json")
     unverifiable=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).unverifiable)' "$private/carry.json")
@@ -448,12 +452,20 @@ case "$command" in
         fs.writeFileSync(infoFile, [checked.archive, checked.archiveSha256, checked.blobPrefix].join("\n") + "\n");
         fs.writeFileSync(planFile, plan.map((p) => `${p.sha256} ${p.candidates.map((c) => [c.key, c.size ?? "-", c.sha256 ?? "-", c.local, c.kind].join("|")).join(";")}\n`).join(""));
       ' "$private/index.json" "$environment" "$key" "$private/blob-listing.txt" "$private/index.txt" "$private/blobs.txt"; then
-        index_key="$key"
-        break
+        # A valid index whose archive is not in the bucket (a run that
+        # stopped between the two uploads, or an archive deleted since):
+        # try the next run.
+        read -r archive < "$private/index.txt"
+        if grep -qxF "$(dirname "$key")/${archive}" "$private/keys.txt"; then
+          index_key="$key"
+          break
+        fi
+        echo "Skipping $(run_time "$key"): its index is valid, but its archive ${archive} is not in the bucket."
+        continue
       fi
       echo "Skipping $(run_time "$key"): not a valid backup index (the line above says why)."
     done < "$private/candidates.txt"
-    [[ -n "$index_key" ]] || fail "No valid backup index among the runs considered; nothing was fetched. Fetch one run by its time from the Backup run's summary instead."
+    [[ -n "$index_key" ]] || fail "No run among those considered has both a valid backup index and its archive in the bucket (the lines above say why); nothing was fetched. Fetch one run by its time from the Backup run's summary instead."
     echo "Fetching $(run_time "$index_key")."
     index="$dest/$(basename "$index_key")"
     mv "$private/index.json" "$index"

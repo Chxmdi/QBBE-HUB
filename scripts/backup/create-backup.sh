@@ -12,10 +12,13 @@
 # The database address holds no password: psql, pg_dump and the Supabase
 # CLI read it from PGPASSWORD (or a private pgpass file named by
 # PGPASSFILE), so it is never on a command line. An address with a password
-# is refused. A database that is not on this computer is reached over TLS
-# only: PGSSLMODE=require is set unless the address (sslmode=require or
-# verify-full) or PGSSLMODE already asks for it, and anything weaker is
-# refused (lib.mjs databaseTls).
+# is refused. For a database that is not on this computer, PGSSLMODE=require
+# is set unless the address (sslmode=require or verify-full) or PGSSLMODE
+# already asks for it, and anything weaker is refused (lib.mjs
+# databaseTls). That makes every psql call here require TLS. The three
+# `supabase db dump` calls do not obey sslmode or PGSSLMODE: the CLI uses
+# TLS when the server offers it (Supabase's hosted database always does),
+# but does not refuse a connection downgraded to plain text.
 #
 # Called by .github/workflows/backup.yml every night, and by hand for the
 # local rehearsal (SUPABASE_BIN="npx supabase" when the CLI is not on PATH).
@@ -133,6 +136,8 @@ for attempt in 1 2; do
   sql -f "$work/tables-with-rows.sql" > "$work/source-tables.txt"
 
   step "Database: roles, schema, data (Supabase's three-part dump)"
+  # The CLI uses TLS when the server offers it, but, unlike psql, does not
+  # enforce the sslmode / PGSSLMODE set above (see the top of this file).
   "${supabase[@]}" db dump --db-url "$BACKUP_DB_URL" -f "$work/db/roles.sql" --role-only
   "${supabase[@]}" db dump --db-url "$BACKUP_DB_URL" -f "$work/db/schema.sql"
   "${supabase[@]}" db dump --db-url "$BACKUP_DB_URL" -f "$work/db/data.sql" --use-copy --data-only \

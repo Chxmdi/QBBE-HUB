@@ -793,22 +793,29 @@ export function indexMac(index, key) {
  */
 
 /**
- * @typedef {{ usable: boolean, reason: "none" | "format" | "environment" | "signature" | null,
+ * @typedef {{ usable: boolean, reason: "none" | "format" | "environment" | "signature" | "key" | null,
  *   files: Map<string, { sha256: string, size: number }>, blobs: Map<string, BlobRecord>,
  *   blobPrefix: string | null, generation: string | null, tag: string | null }} PreviousIndex
  */
 
 /**
  * The previous night's index, if it can be trusted: the right format and
- * environment, and a valid signature (BACKUP_INDEX_KEY). Anything else
- * counts as no index (`usable` false, `reason` says why): every file is then
- * downloaded again, which costs traffic but never correctness.
+ * environment, a valid signature (BACKUP_INDEX_KEY), and, when `indexKey`
+ * (the bucket key it was read from) is given, the run that key names: its
+ * archive name must be the key's, and its createdAt no later than the key's
+ * second and no more than two hours before it (the manifest is written just
+ * before the archive is named). The signature covers the content but not
+ * the key, so without this a real, older index copied to a newer key would
+ * pass (`reason` "key"). Anything else counts as no index (`usable` false,
+ * `reason` says why): every file is then downloaded again, which costs
+ * traffic but never correctness.
  * @param {unknown} index the parsed JSON, or null
  * @param {string} environment
  * @param {Buffer} key from parseIndexKey
+ * @param {string} [indexKey] the bucket key it was read from
  * @returns {PreviousIndex}
  */
-export function readPreviousIndex(index, environment, key) {
+export function readPreviousIndex(index, environment, key, indexKey) {
   /** @param {PreviousIndex["reason"]} reason @returns {PreviousIndex} */
   const unusable = (reason) => ({ usable: false, reason, files: new Map(), blobs: new Map(), blobPrefix: null, generation: null, tag: null });
   if (index === null || index === undefined) return unusable("none");
@@ -818,6 +825,7 @@ export function readPreviousIndex(index, environment, key) {
   if (value.environment !== environment) return unusable("environment");
   if (typeof value.mac !== "string" || !/^[0-9a-f]{64}$/.test(value.mac)) return unusable("signature");
   if (!timingSafeEqual(Buffer.from(indexMac(value, key), "hex"), Buffer.from(value.mac, "hex"))) return unusable("signature");
+  if (indexKey !== undefined && !indexMatchesKey(value, environment, indexKey)) return unusable("key");
   const where = parseBlobPrefix(value.blobPrefix);
   if (
     !where ||
@@ -847,6 +855,28 @@ export function readPreviousIndex(index, environment, key) {
 }
 
 const HEX64 = /^[0-9a-f]{64}$/;
+
+/** How long before its archive is named a run's manifest may be written. */
+const MAX_RUN_LEAD_MS = 2 * 3600_000;
+
+/**
+ * True when an index records the run its bucket key names: the archive
+ * name the key gives, and a createdAt from that run (at most the key's
+ * second, and at most MAX_RUN_LEAD_MS before it).
+ * @param {Record<string, unknown>} value
+ * @param {string} environment
+ * @param {string} indexKey
+ */
+function indexMatchesKey(value, environment, indexKey) {
+  const time = indexKeyTime(indexKey, environment);
+  if (time === null) return false;
+  const archive = `${String(indexKey.split("/").at(-1)).replace(/\.index\.json$/, "")}.tar.gz.age`;
+  if (value.archive !== archive) return false;
+  if (typeof value.createdAt !== "string") return false;
+  const created = Date.parse(value.createdAt);
+  if (Number.isNaN(created)) return false;
+  return created < time.getTime() + 1000 && created >= time.getTime() - MAX_RUN_LEAD_MS;
+}
 
 /**
  * @param {unknown} entry
@@ -1632,11 +1662,17 @@ const STRONG_SSLMODES = new Set(["require", "verify-ca", "verify-full"]);
 
 /**
  * TLS for a database connection: required for any database that is not on
- * this computer, so nobody on the network path can read the dump (or the
+ * this computer, so nobody on the network path can read the data (or the
  * password) in plain text. Only 127.x, localhost and ::1 (the local stack,
- * which has no TLS) are exempt. Returns the PGSSLMODE to set (`require`), or
- * null when the URL or PGSSLMODE already asks for TLS, or the database is
- * local. Throws when either asks for less.
+ * which has no TLS), or a host= parameter naming only those or a Unix
+ * socket folder, are exempt; a host= parameter naming another computer
+ * makes the database not local. Of a repeated sslmode the last counts, as
+ * in libpq. Returns the PGSSLMODE to set (`require`), or null when the URL
+ * or PGSSLMODE already asks for TLS, or the database is local. Throws when
+ * either asks for less. libpq (psql) enforces the result; the Supabase
+ * CLI's `db dump` does not: it uses TLS when the server offers it
+ * (Supabase's hosted database always does) but does not refuse a
+ * downgrade.
  * @param {string} url a postgresql:// URL (no password)
  * @param {string | undefined} pgsslmode the PGSSLMODE in the environment
  * @returns {{ mode: "require" | null }}
@@ -1649,12 +1685,24 @@ export function databaseTls(url, pgsslmode) {
     throw new Error("The database address must be a postgresql:// URL.");
   }
   if (!/^postgres(ql)?:$/.test(parsed.protocol)) throw new Error("The database address must be a postgresql:// URL.");
-  if (isLocalHost(parsed.hostname.toLowerCase().replace(/^\[|\]$/g, ""))) return { mode: null };
-  const inUrl = parsed.searchParams.get("sslmode");
-  if (inUrl !== null) {
-    if (STRONG_SSLMODES.has(inUrl)) return { mode: null };
-    throw new Error(`The database address asks for sslmode=${inUrl}; a database that is not on this computer is reached over TLS only: use sslmode=require (or verify-full).`);
+  // A host= parameter (a name, a list of names, or a Unix socket folder)
+  // replaces the address's host, as in libpq; any one not on this computer
+  // makes the database not local.
+  const hostParams = parsed.searchParams.getAll("host");
+  const hosts = hostParams.length > 0 ? hostParams.flatMap((h) => h.split(",")) : [parsed.hostname];
+  const local = hosts.every((h) => {
+    const host = h.trim().toLowerCase().replace(/^\[|\]$/g, "");
+    return host.startsWith("/") || isLocalHost(host);
+  });
+  if (local) return { mode: null };
+  // libpq keeps the last of a repeated parameter and other drivers the first,
+  // so every value must be strong.
+  const modes = parsed.searchParams.getAll("sslmode");
+  const weak = modes.find((m) => !STRONG_SSLMODES.has(m));
+  if (weak !== undefined) {
+    throw new Error(`The database address asks for sslmode=${weak}; a database that is not on this computer is reached over TLS only: use sslmode=require (or verify-full).`);
   }
+  if (modes.length > 0) return { mode: null };
   const fromEnv = (pgsslmode ?? "").trim();
   if (fromEnv === "") return { mode: "require" };
   if (STRONG_SSLMODES.has(fromEnv)) return { mode: null };

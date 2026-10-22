@@ -161,8 +161,11 @@ jobs:
       # found by trying each region with the password, as the Performance
       # (staging) workflow does. The address holds no password: the password
       # is given as PGPASSWORD, here and to the dump step only. It asks for
-      # TLS (sslmode=require), so the dump never crosses the network in
-      # plain text; create-backup.sh refuses any weaker setting.
+      # TLS (sslmode=require), which every psql connection (here and in
+      # create-backup.sh) enforces; create-backup.sh refuses any weaker
+      # setting. The Supabase CLI's dumps do not enforce it: they use TLS
+      # because Supabase's pooler offers it, but would not refuse a
+      # connection downgraded to plain text.
       - name: Connect to the ${{ matrix.environment }} database
         shell: bash
         env:

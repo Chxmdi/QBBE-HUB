@@ -492,6 +492,25 @@ describe("downloading only what changed", () => {
     expect(readPreviousIndex(index, "staging", INDEX_KEY).usable).toBe(true);
   });
 
+  it("refuses a signed index read from a key that is not its own run's (an old index copied to a newer name)", () => {
+    const index = signedIndex();
+    const own = "staging/2026-10-22/qbbe-staging-20261022T071700Z.index.json";
+    expect(readPreviousIndex(index, "staging", INDEX_KEY, own).usable).toBe(true);
+    // A real, correctly signed index copied to a later run's key.
+    expect(readPreviousIndex(index, "staging", INDEX_KEY, "staging/2026-10-23/qbbe-staging-20261023T071700Z.index.json")).toMatchObject({ usable: false, reason: "key" });
+    expect(readPreviousIndex(index, "staging", INDEX_KEY, "staging/2026-10-22/qbbe-staging-20261022T071701Z.index.json").reason).toBe("key");
+    expect(readPreviousIndex(index, "staging", INDEX_KEY, "staging/2026-10-22/evil.index.json").reason).toBe("key");
+    // The run's time: createdAt (the manifest's, written just before the
+    // archive is named) may not come after the key's second, nor hours before it.
+    expect(readPreviousIndex(signedIndex({ createdAt: "2026-10-22T07:16:58.400Z" }), "staging", INDEX_KEY, own).usable).toBe(true);
+    expect(readPreviousIndex(signedIndex({ createdAt: "2026-10-22T07:17:00.999Z" }), "staging", INDEX_KEY, own).usable).toBe(true);
+    expect(readPreviousIndex(signedIndex({ createdAt: "2026-10-22T07:17:01.000Z" }), "staging", INDEX_KEY, own).reason).toBe("key");
+    expect(readPreviousIndex(signedIndex({ createdAt: "2026-10-20T07:17:00.000Z" }), "staging", INDEX_KEY, own).reason).toBe("key");
+    expect(readPreviousIndex(signedIndex({ createdAt: "not a time" }), "staging", INDEX_KEY, own).reason).toBe("key");
+    // A wrong signature is still reported as such.
+    expect(readPreviousIndex(index, "staging", OTHER_KEY, own).reason).toBe("signature");
+  });
+
   it("reads the index key as hex or base64 of at least 32 bytes, without repeating it", () => {
     expect(parseIndexKey(Buffer.from(Array.from({ length: 32 }, (_, i) => i)).toString("hex"))).toHaveLength(32);
     const random = (n: number) => Buffer.from(Array.from({ length: n }, (_, i) => (i * 29 + 3) % 256));
@@ -1133,6 +1152,27 @@ describe("the restore drill's refusal to touch production", () => {
     expect(databaseTls("postgresql://postgres@localhost:54322/postgres", "disable")).toEqual({ mode: null });
     expect(() => databaseTls("postgresql://postgres@172.18.0.1:54322/postgres", "disable")).toThrow(/TLS/);
     expect(() => databaseTls("host=db.example.com user=postgres", undefined)).toThrow(/postgresql:\/\//);
+  });
+
+  it("refuses a repeated sslmode with any weak value (libpq reads the last, other drivers the first)", () => {
+    expect(() => databaseTls(`${scratchPooler}?sslmode=require&sslmode=disable`, undefined)).toThrow(/sslmode=disable/);
+    expect(() => databaseTls(`${scratchPooler}?sslmode=verify-full&sslmode=prefer`, "require")).toThrow(/sslmode=prefer/);
+    expect(() => databaseTls(`${scratchPooler}?sslmode=disable&sslmode=require`, undefined)).toThrow(/sslmode=disable/);
+    expect(databaseTls(`${scratchPooler}?sslmode=require&sslmode=verify-full`, undefined)).toEqual({ mode: null });
+  });
+
+  it("treats an address whose host= parameter names another computer as not local", () => {
+    expect(databaseTls("postgresql://postgres@localhost:5432/postgres?host=db.example.com", undefined)).toEqual({ mode: "require" });
+    expect(() => databaseTls("postgresql://postgres@127.0.0.1:5432/postgres?host=db.example.com", "disable")).toThrow(/TLS.*PGSSLMODE/);
+    expect(() => databaseTls("postgresql://postgres@localhost/postgres?host=db.example.com&sslmode=disable", undefined)).toThrow(/sslmode=disable/);
+    expect(databaseTls("postgresql:///postgres?host=db.example.com", undefined)).toEqual({ mode: "require" });
+    // Any non-local name in a list (or a repeated host=) counts.
+    expect(databaseTls("postgresql://postgres@localhost/postgres?host=localhost,db.example.com", undefined)).toEqual({ mode: "require" });
+    expect(databaseTls("postgresql://postgres@localhost/postgres?host=localhost&host=db.example.com", undefined)).toEqual({ mode: "require" });
+    // host= naming this computer, or a Unix socket folder, stays local.
+    expect(databaseTls("postgresql://postgres@localhost:54322/postgres?host=127.0.0.1", "disable")).toEqual({ mode: null });
+    expect(databaseTls("postgresql:///postgres?host=/var/run/postgresql", undefined)).toEqual({ mode: null });
+    expect(databaseTls("postgresql://postgres@localhost/postgres?host=%2Ftmp", undefined)).toEqual({ mode: null });
   });
 
   it("is what `manifest.mjs guard` runs, exiting 1 with the reason", () => {
