@@ -36,7 +36,10 @@ export default async function GiftsPage({
   const params = await searchParams;
   const today = todayIn(session.timeZone);
   const currentYear = Number(today.slice(0, 4));
-  const year = isCalendarYear(params.year ?? "") ? Number(params.year) : currentYear;
+  // gift_year_total takes 2000 to 2100, as the year field does; another
+  // year in the link shows the current one rather than an error page.
+  const requestedYear = isCalendarYear(params.year ?? "") ? Number(params.year) : NaN;
+  const year = requestedYear >= 2000 && requestedYear <= 2100 ? requestedYear : currentYear;
   const options = canManage ? await recordGiftOptions(supabase, session.organizationId, today, t) : null;
 
   const header = (

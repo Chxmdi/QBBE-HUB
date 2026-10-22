@@ -35,7 +35,7 @@ export default async function AgingPage({ searchParams }: { searchParams: Promis
   const org = session.organizationId;
 
   // Every open document, not just the first 1,000 the API returns per request (DATA-003).
-  const { rows, truncated } = await readAging(supabase, org, kind, asOf);
+  const { rows, truncated, error: readError } = await readAging(supabase, org, kind, asOf);
   const { totals, contacts } = summarizeAging(rows);
 
   // The same total from the ledger, for those who may read it: the balance
@@ -96,6 +96,12 @@ export default async function AgingPage({ searchParams }: { searchParams: Promis
           ? t("finance.payables.aging.payablesHeading", { date: asOf })
           : t("finance.payables.aging.receivablesHeading", { date: asOf })}
       </h2>
+      {/* A page that failed after the first must not pass for the whole report. */}
+      {readError ? (
+        <p role="alert" className="mb-3 text-[13px] text-danger-fg">
+          {t("finance.payables.aging.readFailed")}
+        </p>
+      ) : null}
       {truncated ? (
         <p role="alert" className="mb-3 text-[13px] text-danger-fg">
           {t("finance.payables.csv.tooMany", { max: AGING_LIMIT })}

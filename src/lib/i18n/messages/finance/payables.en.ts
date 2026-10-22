@@ -297,6 +297,8 @@ export const payablesEn = {
     save: "Save threshold",
   },
   aging: {
+    readFailed:
+      "Part of this report could not be read, so the figures below are incomplete. Reload the page; if this keeps happening, tell an administrator.",
     description:
       "What is still owed on each date, by how long past due. Built from the same dates as the ledger entries, so it adds up to the payable and receivable account balances.",
     options: "Aging options",

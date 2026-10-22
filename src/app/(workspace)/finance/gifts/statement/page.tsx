@@ -39,7 +39,9 @@ export default async function StatementPage({
   const [t, locale, format] = await Promise.all([getT(), getLocale(), getFormatters()]);
   const params = await searchParams;
   const today = todayIn(session.timeZone);
-  const year = isCalendarYear(params.year ?? "") ? Number(params.year) : Number(today.slice(0, 4));
+  // The year field's range (2000 to 2100); another year shows the current one.
+  const requestedYear = isCalendarYear(params.year ?? "") ? Number(params.year) : NaN;
+  const year = requestedYear >= 2000 && requestedYear <= 2100 ? requestedYear : Number(today.slice(0, 4));
   const language: AckLanguage = params.lang === "en" ? "en" : "fr";
   const donor = parseDonorKey(params.donor);
   const header = (

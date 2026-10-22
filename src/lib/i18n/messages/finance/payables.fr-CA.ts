@@ -306,6 +306,8 @@ export const payablesFrCA: typeof payablesEn = {
     save: "Enregistrer le seuil",
   },
   aging: {
+    readFailed:
+      "Une partie de ce rapport n’a pas pu être lue; les montants ci-dessous sont donc incomplets. Rechargez la page; si le problème persiste, avisez un administrateur.",
     description:
       "Ce qui reste dû à chaque date, selon le retard. Établi à partir des mêmes dates que les écritures du grand livre, il concorde donc avec les soldes des comptes fournisseurs et des comptes clients.",
     options: "Options du classement chronologique",
