@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { dbDetail, logRefusal } from "@/lib/server-log";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   parseResendEvent,
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const secret = process.env.EMAIL_WEBHOOK_SECRET;
   if (!secret) {
+    await logRefusal("email_webhook", "not_configured", 503, request);
     return NextResponse.json({ error: "Email webhook is not configured." }, { status: 503 });
   }
 
@@ -25,18 +27,27 @@ export async function POST(request: Request) {
     timestamp: request.headers.get("svix-timestamp"),
     signature: request.headers.get("svix-signature"),
   }, secret);
-  if (!valid) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!valid) {
+    await logRefusal("email_webhook", "signature_invalid", 401, request);
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   let payload: unknown;
   try { payload = JSON.parse(rawBody); }
-  catch { return NextResponse.json({ error: "Invalid event." }, { status: 400 }); }
+  catch {
+    await logRefusal("email_webhook", "bad_request", 400, request);
+    return NextResponse.json({ error: "Invalid event." }, { status: 400 });
+  }
 
   const event = parseResendEvent(payload);
   if (event.kind === "ignored") return NextResponse.json({ ok: true, ignored: true });
 
   let supabase;
   try { supabase = createSupabaseServiceClient(); }
-  catch { return NextResponse.json({ error: "Service role is not configured." }, { status: 503 }); }
+  catch {
+    await logRefusal("email_webhook", "not_configured", 503, request, "service role");
+    return NextResponse.json({ error: "Service role is not configured." }, { status: 503 });
+  }
 
   const detail = event.kind === "bounced"
     ? `bounced${event.permanent ? "" : " (transient)"}${event.detail ? `: ${event.detail}` : ""}`
@@ -49,7 +60,10 @@ export async function POST(request: Request) {
       .eq("provider_message_id", event.messageId);
     // A non-2xx asks the provider to redeliver, so a database hiccup cannot
     // lose the event.
-    if (error) return NextResponse.json({ error: "Could not record the event." }, { status: 500 });
+    if (error) {
+      await logRefusal("email_webhook", "db_error", 500, request, dbDetail(error));
+      return NextResponse.json({ error: "Could not record the event." }, { status: 500 });
+    }
   }
 
   const suppress = event.kind === "complained" || event.permanent;
@@ -64,7 +78,10 @@ export async function POST(request: Request) {
       })),
       { onConflict: "address", ignoreDuplicates: true },
     );
-    if (error) return NextResponse.json({ error: "Could not record the suppression." }, { status: 500 });
+    if (error) {
+      await logRefusal("email_webhook", "db_error", 500, request, dbDetail(error));
+      return NextResponse.json({ error: "Could not record the suppression." }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ ok: true });

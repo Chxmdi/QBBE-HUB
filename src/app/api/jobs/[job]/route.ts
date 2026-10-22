@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { logRefusal } from "@/lib/server-log";
 import { NextResponse } from "next/server";
 import { MissingEnvError, jobSecret } from "@/lib/env";
 import { enforceRateLimit } from "@/lib/rate-limit";
@@ -53,6 +54,7 @@ export async function POST(
   { params }: { params: Promise<{ job: string }> },
 ) {
   if (!secretMatches(request.headers.get("x-job-secret"))) {
+    await logRefusal("job_route", "unauthorized", 403, request);
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -62,6 +64,7 @@ export async function POST(
   // only ever catches a loop or an abused secret.
   const limited = await enforceRateLimit("job:run", job);
   if (limited) {
+    await logRefusal("job_route", "rate_limited", 429, request, job);
     return NextResponse.json({ error: "too many requests" }, { status: 429 });
   }
 
@@ -80,22 +83,18 @@ export async function POST(
     return NextResponse.json(body, { status: 200 });
   } catch (error) {
     if (error instanceof UnknownJobError) {
+      await logRefusal("job_route", "unknown_job", 404, request, job);
       return NextResponse.json({ error: "unknown job" }, { status: 404 });
     }
     if (error instanceof DisabledJobError) {
+      await logRefusal("job_route", "disabled_job", 409, request, job);
       return NextResponse.json({ error: "job disabled" }, { status: 409 });
     }
     if (error instanceof MissingEnvError) {
-      console.error(JSON.stringify({ event: "job.misconfigured", job, error: error.message }));
+      await logRefusal("job_route", "not_configured", 503, request, `${job}: ${error.message}`);
       return NextResponse.json({ error: "job runner is not configured" }, { status: 503 });
     }
-    console.error(
-      JSON.stringify({
-        event: "job.route_failed",
-        job,
-        error: error instanceof Error ? error.message : String(error),
-      }),
-    );
+    await logRefusal("job_route", "failed", 500, request, `${job}: ${error instanceof Error ? error.message : String(error)}`);
     return NextResponse.json({ error: "job could not start" }, { status: 500 });
   }
 }
