@@ -4,5 +4,35 @@ __HOST__ {
 	request_body {
 		max_size 30MB
 	}
+	# One ID per request: sent to the app and back to the browser, and in the
+	# access log, so an error a person reports can be found (OBS-006).
+	request_header X-Request-Id {http.request.uuid}
+	header X-Request-Id {http.request.uuid}
+	# One JSON line per request on Caddy's output (docker logs qbbe-caddy).
+	# Query values that can carry a secret are removed first: sign-in and
+	# recovery codes, tokens, invitations. The Referer and redirect Location
+	# headers, which can hold the same codes, are dropped. Cookie and
+	# Authorization headers are left out by Caddy itself.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete code
+					delete token
+					delete token_hash
+					delete access_token
+					delete refresh_token
+					delete id_token
+					delete invite
+					delete key
+					delete signature
+				}
+				request>headers>Referer delete
+				resp_headers>Location delete
+			}
+		}
+	}
 	reverse_proxy app-__ENV__:3000
 }

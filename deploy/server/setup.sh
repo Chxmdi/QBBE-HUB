@@ -49,6 +49,10 @@ ROOT="${QBBE_ROOT:-/opt/qbbe}"
 ACME_EMAIL="${ACME_EMAIL:-}"
 
 fail() { echo "setup: $*" >&2; exit 1; }
+# Let's Encrypt writes here when a certificate is about to expire unrenewed:
+# without it nobody hears before the site goes down.
+[[ "$ACME_EMAIL" =~ ^[^[:space:]\'\"]+@[^[:space:]\'\"]+$ ]] \
+  || fail "ACME_EMAIL (the certificate notice address) is required."
 [ "$(id -u)" = 0 ] || fail "run as root (sudo)."
 id "$DEPLOY_USER" >/dev/null 2>&1 || fail "user ${DEPLOY_USER} does not exist."
 case "$DEPLOY_USER" in
@@ -101,7 +105,7 @@ fi
 
 echo "== Docker"
 mkdir -p /etc/docker
-desired='{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"5"},"live-restore":true}'
+desired='{"log-driver":"json-file","log-opts":{"max-size":"20m","max-file":"10"},"live-restore":true}'
 if [ "$(cat /etc/docker/daemon.json 2>/dev/null)" != "$desired" ]; then
   printf '%s\n' "$desired" > /etc/docker/daemon.json
   systemctl restart docker
@@ -248,15 +252,14 @@ fi
 install -d -m 755 -o "$owner" -g "$owner" "$ROOT" "${ROOT}/base" "${ROOT}/base/sites"
 [ "$owner" = root ] && chown -R root:root "${ROOT}/base"
 install -m 644 -o "$owner" -g "$owner" "${SRC}/compose.base.yaml" "${ROOT}/base/"
-# Caddy refuses an empty `email` option, so the line is there only when an
-# address was given.
 {
-  if [ -n "$ACME_EMAIL" ]; then
-    printf '{\n\temail %s\n}\n\n' "$ACME_EMAIL"
-  fi
+  printf '{\n\temail %s\n}\n\n' "$ACME_EMAIL"
   cat "${SRC}/Caddyfile"
 } > "${ROOT}/base/Caddyfile"
 chown "$owner:$owner" "${ROOT}/base/Caddyfile"
+# Pull first: the images are pinned by digest, so this takes exactly the
+# versions in compose.base.yaml (a merged Dependabot update included).
+docker compose -p qbbe-base -f "${ROOT}/base/compose.base.yaml" pull --quiet
 docker compose -p qbbe-base -f "${ROOT}/base/compose.base.yaml" up -d --remove-orphans
 # A changed Caddyfile is read on reload; an unchanged one makes this a no-op.
 docker exec qbbe-caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || true

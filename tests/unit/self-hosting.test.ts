@@ -284,6 +284,122 @@ describe("separate deploy access per environment", () => {
   });
 });
 
+describe("server base images and access log", () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  const base = read("deploy/server/compose.base.yaml");
+  const site = read("deploy/server/site.caddy.template");
+  const setup = read("deploy/server/setup.sh");
+
+  it("pins Caddy and the scanner to an exact build that Dependabot proposes updates for", () => {
+    const images = [...base.matchAll(/^\s*image:\s*(\S+)/gm)].map((m) => m[1]);
+    expect(images).toHaveLength(2);
+    for (const image of images) expect(image).toMatch(/:[\w.-]+@sha256:[0-9a-f]{64}$/);
+    const dependabot = read(".github/dependabot.yml");
+    expect(dependabot).toMatch(/package-ecosystem:\s*docker-compose/);
+    expect(dependabot).toMatch(/directory:\s*\/deploy\/server/);
+  });
+
+  it("downloads the pinned images before restarting the shared services", () => {
+    const pull = setup.indexOf("compose.base.yaml\" pull");
+    expect(pull).toBeGreaterThan(-1);
+    expect(pull).toBeLessThan(setup.indexOf("compose.base.yaml\" up -d"));
+  });
+
+  it("runs Caddy with only the right to bind its ports, and neither service can gain privileges", () => {
+    expect(base).toMatch(/cap_drop: \[ALL\]\s*\n\s*cap_add: \[NET_BIND_SERVICE\]/);
+    expect(base.match(/no-new-privileges:true/g)).toHaveLength(2);
+  });
+
+  it("requires an address for certificate notices", () => {
+    const result = spawnSync("bash", [join(process.cwd(), "deploy/server/setup.sh"), "/nonexistent"], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, NODE_ENV: "test", ACME_EMAIL: "" },
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("ACME_EMAIL (the certificate notice address) is required.");
+    expect(setup).toContain("printf '{\\n\\temail %s\\n}\\n\\n' \"$ACME_EMAIL\"");
+  });
+
+  it("gives each request an ID the app, the browser and the log all see", () => {
+    expect(site).toContain("request_header X-Request-Id {http.request.uuid}");
+    expect(site).toContain("header X-Request-Id {http.request.uuid}");
+  });
+
+  it("writes the access log without codes or tokens from web addresses", () => {
+    expect(site).toMatch(/log \{\s*output stdout\s*format filter \{\s*wrap json/);
+    for (const name of ["code", "token", "token_hash", "access_token", "refresh_token", "id_token", "invite"]) {
+      expect(site).toMatch(new RegExp(`^\\s*delete ${name}$`, "m"));
+    }
+    expect(site).toMatch(/request>headers>Referer delete/);
+    expect(site).toMatch(/resp_headers>Location delete/);
+  });
+
+  it("caps every container's logs at 20 MB times ten files", () => {
+    for (const path of ["deploy/server/compose.base.yaml", "deploy/server/compose.app.yaml"]) {
+      expect(read(path)).toContain('options: { max-size: "20m", max-file: "10" }');
+    }
+    expect(setup).toContain('"max-size":"20m","max-file":"10"');
+  });
+});
+
+describe("deploy workflows run from main only and prove signed-in reads", () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  /** Each job's block of a workflow file, by job id. */
+  function jobs(path: string): Map<string, string> {
+    const body = read(path).split(/^jobs:\n/m)[1];
+    const parts = body.split(/^ {2}(?=[\w-]+:\n)/m).filter((part) => /^[\w-]+:\n/.test(part));
+    return new Map(parts.map((part) => [part.slice(0, part.indexOf(":")), part]));
+  }
+  const condition = (job: string) => /^ {4}if: (.+)$/m.exec(job)?.[1] ?? "";
+  const main = "github.ref == 'refs/heads/main'";
+
+  it("Rollback and Server setup run every job only from main, and say so from any other branch", () => {
+    for (const path of [".github/workflows/rollback.yml", ".github/workflows/server-setup.yml", ".github/workflows/deploy.yml"]) {
+      const all = jobs(path);
+      const guard = all.get("branch");
+      expect(guard, path).toBeDefined();
+      expect(condition(guard!), path).toBe("github.ref != 'refs/heads/main'");
+      expect(guard, path).toMatch(/::error::.*runs? from main only|publishes main only/);
+      expect(guard, path).toContain("exit 1");
+      if (path.endsWith("deploy.yml")) continue;
+      for (const [id, job] of all) {
+        if (id !== "branch") expect(condition(job), `${path} ${id}`).toContain(main);
+      }
+    }
+  });
+
+  it("Deploy publishes from main only: every job after the gates waits for the main-only evidence job", () => {
+    const all = jobs(".github/workflows/deploy.yml");
+    expect(condition(all.get("evidence")!)).toBe(main);
+    for (const id of ["migrate", "build"]) expect(all.get(id), id).toMatch(/^ {4}needs: evidence$/m);
+    expect(all.get("release")).toMatch(/^ {4}needs: \[migrate, build\]$/m);
+  });
+
+  it("signs in as the environment's smoke user after the swap, in the same job as the release", () => {
+    const release = jobs(".github/workflows/deploy.yml").get("release")!;
+    const swap = release.indexOf("name: Swap to the new image");
+    const smoke = release.indexOf("node scripts/ci/smoke-signed-in.mjs");
+    expect(swap).toBeGreaterThan(-1);
+    expect(smoke).toBeGreaterThan(swap);
+    expect(release).toContain("SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}");
+    expect(release).toContain("SMOKE_EMAIL: ${{ vars.SMOKE_EMAIL }}");
+    // Only the public project address and key go to the check, never the service key.
+    const step = release.slice(release.indexOf("name: A signed-in person can read data"));
+    expect(step).toContain("get NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    expect(step).not.toContain("SERVICE_ROLE");
+    // Third-party code runs here: the server key is gone first, and the check
+    // sees only what it needs, not APP_ENV's service key.
+    expect(release.indexOf("rm -f ~/.ssh/qbbe ~/.ssh/config")).toBeGreaterThan(swap);
+    expect(release.indexOf("rm -f ~/.ssh/qbbe ~/.ssh/config")).toBeLessThan(release.indexOf("actions/setup-node"));
+    expect(step).toMatch(/env -i PATH="\$PATH" HOME="\$HOME" SUPABASE_URL=/);
+    expect(release).toContain("persist-credentials: false");
+    // The public checks still run when the signed-in check fails after the swap.
+    expect(jobs(".github/workflows/deploy.yml").get("smoke")).toContain("if: always() && needs.release.outputs.site != ''");
+    // Missing smoke credentials stop a production deploy.
+    expect(step).toMatch(/production \]; then echo "::error::\$\{message\}"; exit 1; fi/);
+  });
+});
+
 /**
  * release.sh run end to end against a stand-in docker
  * (tests/fixtures/fake-docker.sh): the swap, the automatic restore when the

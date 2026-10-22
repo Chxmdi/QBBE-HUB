@@ -24,7 +24,7 @@ on:
         type: boolean
         default: false
       acme_email:
-        description: Address Let's Encrypt writes to about certificates (optional)
+        description: Address Let's Encrypt writes to about certificates (defaults to the ACME_EMAIL variable)
         type: string
         required: false
         default: ""
@@ -41,9 +41,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Runs from main only, and says so: without this job a run from another
+  # branch would show everything skipped. A branch can edit its own copy of
+  # this file, so the control that holds is the environment's "Deployment
+  # branches and tags" rule (main only; hosting.md, "Deploy access").
+  branch:
+    name: Runs from main only
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: |
+          echo "::error::Server setup runs from main only. Choose 'main' under 'Use workflow from' and run it again."
+          exit 1
+
   host-key:
     name: Show the server's host key
-    if: inputs.show_host_key
+    if: github.ref == 'refs/heads/main' && inputs.show_host_key
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: server-admin
@@ -71,7 +85,7 @@ jobs:
 
   setup:
     name: Prepare the server
-    if: ${{ !inputs.show_host_key }}
+    if: github.ref == 'refs/heads/main' && !inputs.show_host_key
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: server-admin
@@ -87,7 +101,8 @@ jobs:
 
       - name: Install and start the shared services
         env:
-          ACME_EMAIL: ${{ inputs.acme_email }}
+          # The run's address, or the server-admin variable ACME_EMAIL.
+          ACME_EMAIL: ${{ inputs.acme_email || vars.ACME_EMAIL }}
           # Public keys only (variables on server-admin): each is installed
           # for its own environment's deploy user.
           STAGING_DEPLOY_PUBKEY: ${{ vars.STAGING_DEPLOY_PUBKEY }}
@@ -98,7 +113,7 @@ jobs:
           LEGACY_DEPLOY_USER: ${{ vars.DEPLOY_USER || 'ubuntu' }}
           REMOVE_LEGACY: ${{ inputs.remove_legacy_deploy_access && '1' || '0' }}
         run: |
-          [[ -z "$ACME_EMAIL" || "$ACME_EMAIL" =~ ^[^[:space:]\'\"]+@[^[:space:]\'\"]+$ ]] || { echo "::error::'${ACME_EMAIL}' is not an email address."; exit 1; }
+          [[ "$ACME_EMAIL" =~ ^[^[:space:]\'\"]+@[^[:space:]\'\"]+$ ]] || { echo "::error::Set the ACME_EMAIL variable on server-admin (or give an address) for certificate notices; '${ACME_EMAIL}' is not an email address."; exit 1; }
           [[ "$LEGACY_DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || { echo "::error::DEPLOY_USER is not a user name."; exit 1; }
           image_repository="ghcr.io/${GITHUB_REPOSITORY,,}"
           for key in "$STAGING_DEPLOY_PUBKEY" "$PRODUCTION_DEPLOY_PUBKEY" "$ADMIN_PUBKEY"; do
