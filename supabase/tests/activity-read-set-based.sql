@@ -113,7 +113,6 @@ begin
   insert into public.project (organization_id, program_id, name, owner_id, created_by)
   values (v_org, v_closed_program, 'Activity closed', v_owner, v_owner)
   returning id into v_closed_project;
-
   -- Project and program rows, written the way the app writes them.
   insert into public.activity_event (organization_id, verb, source_type, source_id, project_id, program_id, summary)
   select organization_id, 'updated', 'project', id, id, program_id, 'act: project ' || name
@@ -165,6 +164,14 @@ begin
   returning id into v_moved_task;
   insert into public.activity_event (organization_id, verb, source_type, source_id, project_id, program_id, summary)
   values (v_org, 'updated', 'task', v_moved_task, v_closed_project, v_closed_program, 'act: moved task, old row');
+
+  -- A project that has moved from the program the volunteer leads to the
+  -- closed one: its older row still names the led program. Leading that
+  -- program must not open a row about a project the volunteer cannot read
+  -- (the program branch applies only to rows with no project).
+  insert into public.activity_event (organization_id, verb, source_type, source_id, project_id, program_id, summary)
+  values (v_org, 'updated', 'project', v_closed_project, v_closed_project, v_led_program,
+          'act: moved project, old program');
 
   -- A task-sourced row whose task no longer exists.
   insert into public.activity_event (organization_id, verb, source_type, source_id, project_id, summary)
@@ -230,8 +237,8 @@ begin
     v_people := v_people + 1;
   end loop;
 
-  -- This file alone writes 22 rows; the seed may add more.
-  perform tests.ok(v_people >= 5 and v_rows >= 22,
+  -- This file alone writes 23 rows; the seed may add more.
+  perform tests.ok(v_people >= 5 and v_rows >= 23,
     format('compared %s people against %s activity rows', v_people, v_rows));
 
   -- The fixture exercises both sides of every branch.
@@ -258,8 +265,10 @@ begin
     exists (select 1 from public.activity_event where summary = 'act: program-only Activity led')
       and exists (select 1 from public.activity_event where summary = 'act: task act: reviewer column')
       and exists (select 1 from public.activity_event where summary = 'act: task act: approver column')
-      and not exists (select 1 from public.activity_event where summary = 'act: program-only Activity closed'),
-    'a program lead reads the program''s activity and their review tasks, not a closed program'
+      and not exists (select 1 from public.activity_event where summary = 'act: program-only Activity closed')
+      and not exists (select 1 from public.activity_event where summary = 'act: moved project, old program'),
+    'a program lead reads the program''s activity and their review tasks, not a closed program '
+    'or a row about a project that moved out of their program'
   );
   perform tests.authenticate(v_owner, 'aal1');
   perform tests.ok(
