@@ -1,4 +1,5 @@
 import { mapGmailListToRows, type GmailListMessage, type GmailHubRow } from "@/features/inbox/services/gmail-ingest";
+import { googleFetch } from "./google-fetch";
 
 const GMAIL_LIST = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
 const GMAIL_PAGE_SIZE = "500";
@@ -60,7 +61,7 @@ export function parseGmailPushNotification(data: string): GmailPushNotification 
 }
 
 export async function fetchGmailProfile(accessToken: string): Promise<{ emailAddress: string; historyId: string | null }> {
-  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+  const res = await googleFetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error(`Gmail profile failed (${res.status}).`);
@@ -73,11 +74,11 @@ export async function fetchGmailProfile(accessToken: string): Promise<{ emailAdd
 }
 
 export async function createGmailInboxWatch(accessToken: string, topicName: string): Promise<GmailWatch> {
-  const res = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/watch", {
+  const res = await googleFetch("https://gmail.googleapis.com/gmail/v1/users/me/watch", {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({ topicName, labelIds: ["INBOX"], labelFilterBehavior: "INCLUDE" }),
-  });
+  }, { retryUnsafe: true });
   const payload = (await res.json().catch(() => null)) as { historyId?: unknown; expiration?: unknown } | null;
   if (!res.ok) throw new Error(`Gmail watch failed (${res.status}).`);
   if (typeof payload?.historyId !== "string" || typeof payload.expiration !== "string") {
@@ -102,7 +103,7 @@ export async function fetchGmailHistory(accessToken: string, startHistoryId: str
     url.searchParams.set("labelId", "INBOX");
     url.searchParams.set("maxResults", GMAIL_PAGE_SIZE);
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const res = await googleFetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (res.status === 404) throw new Error("Gmail history cursor expired; a full synchronization is required.");
     if (!res.ok) throw new Error(`Gmail history failed (${res.status}).`);
     const payload = (await res.json()) as GmailHistoryPage;
@@ -152,7 +153,7 @@ async function fetchGmailMessageMetadata(accessToken: string, id: string): Promi
   url.searchParams.set("format", "metadata");
   url.searchParams.set("metadataHeaders", "From");
   url.searchParams.append("metadataHeaders", "Subject");
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const res = await googleFetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Gmail message metadata failed (${res.status}).`);
   const message = (await res.json()) as GmailListMessage & { labelIds?: string[] };
@@ -183,7 +184,7 @@ export async function fetchGmailMetadata(accessToken: string): Promise<GmailHubR
     url.searchParams.set("maxResults", GMAIL_PAGE_SIZE);
     url.searchParams.set("labelIds", "INBOX");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const listRes = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const listRes = await googleFetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!listRes.ok) throw new Error(`Gmail list failed (${listRes.status}).`);
     const list = (await listRes.json()) as {
       messages?: { id?: unknown }[];
@@ -269,7 +270,7 @@ export async function fetchCalendarOverlay(accessToken: string, syncToken?: stri
     if (syncToken) url.searchParams.set("syncToken", syncToken);
     if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const res = await googleFetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (res.status === 410) throw new Error("Google Calendar sync token expired; a full synchronization is required.");
     if (!res.ok) throw new Error(`Calendar list failed (${res.status}).`);
     const payload = (await res.json()) as GoogleCalendarPage;
@@ -336,7 +337,7 @@ function mapGoogleDriveFile(file: GoogleDriveFile): GoogleDriveHubRow | null {
 }
 
 async function fetchGoogleDriveStartPageToken(accessToken: string): Promise<string> {
-  const res = await fetch("https://www.googleapis.com/drive/v3/changes/startPageToken", {
+  const res = await googleFetch("https://www.googleapis.com/drive/v3/changes/startPageToken", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error(`Google Drive start-page-token request failed (${res.status}).`);
@@ -355,7 +356,7 @@ async function fetchGoogleDriveFullMetadata(accessToken: string): Promise<Google
     url.searchParams.set("q", "trashed = false");
     url.searchParams.set("fields", `nextPageToken,files(${DRIVE_FILE_FIELDS})`);
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const res = await googleFetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) throw new Error(`Google Drive list failed (${res.status}).`);
     const payload = (await res.json()) as { files?: GoogleDriveFile[]; nextPageToken?: unknown };
     for (const file of payload.files ?? []) {
@@ -385,7 +386,7 @@ export async function fetchGoogleDriveSync(accessToken: string, savedPageToken?:
     url.searchParams.set("pageSize", "1000");
     url.searchParams.set("includeRemoved", "true");
     url.searchParams.set("fields", `nextPageToken,newStartPageToken,changes(fileId,removed,file(${DRIVE_FILE_FIELDS}))`);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const res = await googleFetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (res.status === 410) throw new Error("Google Drive page token expired; a full synchronization is required.");
     if (!res.ok) throw new Error(`Google Drive changes failed (${res.status}).`);
     const payload = (await res.json()) as {
@@ -415,7 +416,7 @@ export async function refreshGoogleAccessToken(refreshToken: string): Promise<{
   expires_in?: number;
 } | null> {
   if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) return null;
-  const res = await fetch("https://oauth2.googleapis.com/token", {
+  const res = await googleFetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -424,7 +425,7 @@ export async function refreshGoogleAccessToken(refreshToken: string): Promise<{
       refresh_token: refreshToken,
       grant_type: "refresh_token",
     }),
-  });
+  }, { retryUnsafe: true });
   if (!res.ok) return null;
   return (await res.json()) as { access_token: string; expires_in?: number };
 }

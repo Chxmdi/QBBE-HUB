@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getReportSnapshot } from "@/features/reports/services/report.queries";
 import { buildReportCsv } from "@/features/reports/report-csv";
 import { getT } from "@/lib/i18n/server";
+import { auditUnavailableResponse, recordAudit } from "@/lib/audit-write";
 
 /**
  * CSV export of a report snapshot (P0-RPT-04). Access is enforced by RLS on
@@ -45,7 +46,7 @@ export async function GET(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  await supabase.from("audit_event").insert({
+  const audited = await recordAudit(supabase, {
     organization_id: report.organization_id,
     actor_id: user?.id ?? null,
     event_type: "reporting",
@@ -53,6 +54,8 @@ export async function GET(
     object_type: "report_instance",
     object_id: report.id,
   });
+  // No file without a record of who took it.
+  if (!audited) return auditUnavailableResponse();
 
   return new NextResponse(csv, {
     headers: {

@@ -72,6 +72,8 @@ export const accountFrCA: typeof accountEn = {
       title: "Authentification multifacteur",
       accountantHeading: "Protégez votre accès de comptable",
       adminHeading: "Protégez votre compte administrateur",
+      ledgerReaderHeading: "Protégez votre accès aux livres",
+      ledgerReaderBody: "QBBE Hub exige un code d’authentificateur avant d’ouvrir la paie et les dons.",
       accountantBody: "QBBE Hub exige un code d’authentificateur avant d’ouvrir les livres.",
       adminBody:
         "QBBE Hub exige un code d’authentificateur pour les propriétaires et les administrateurs.",
@@ -184,6 +186,9 @@ export const accountFrCA: typeof accountEn = {
       cancel: "Annuler",
       verified: "Authentificateur vérifié",
       addAnotherFirst: "Ajoutez un autre authentificateur avant de retirer celui-ci.",
+      secondFactorTitle: "Ajoutez un deuxième authentificateur",
+      secondFactorBody:
+        "Si vous perdez votre seul authentificateur, vous ne pourrez plus ouvrir le Hub tant que deux autres administrateurs n’auront pas approuvé une réinitialisation. Un deuxième (un autre téléphone ou un gestionnaire de mots de passe) vous évite cette situation.",
       remove: "Retirer",
       lostAll:
         "Vous avez perdu tous vos authentificateurs? Communiquez avec le gardien des identifiants de QBBE. Une réinitialisation exige une vérification d’identité, un deuxième opérateur autorisé et une entrée au journal d’audit.",

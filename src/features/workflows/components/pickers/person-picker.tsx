@@ -41,6 +41,8 @@ export function PersonPicker({
     peopleByIds([value]).then((found) => {
       if (cancelled || found.length === 0) return;
       setNames((current) => ({ ...current, [found[0].id]: found[0].label }));
+    }).catch(() => {
+      // The name is a nicety; the id is still shown and still saved.
     });
     return () => {
       cancelled = true;

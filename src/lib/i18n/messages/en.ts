@@ -240,6 +240,8 @@ export const en = {
     workspaceBody:
       "The page hit an unexpected error. Your data is safe — try again, and if this keeps happening let an administrator know",
     reference: " (reference: {digest})",
+    auditUnavailable:
+      "This export was stopped because the record of who downloaded it could not be saved. Nothing was downloaded. Try again in a moment, and if this keeps happening let an administrator know.",
     notFoundTitle: "Not found — or not yours to see",
     notFoundBody:
       "This record doesn't exist, was archived, or your access doesn't include it. Deep links always re-check authorization.",
@@ -258,6 +260,8 @@ export const en = {
     breadcrumb: "Breadcrumb",
     loadFailed: "This couldn't be loaded.",
     somethingWrong: "Something went wrong. Try again.",
+    actionUnreachable: "Could not reach the Hub. Check your connection, then try again.",
+    actionOutdated: "The Hub was updated since this page opened. Reloading so you can try again.",
     fieldErrors: {
       summary: "Check the highlighted fields.",
       required: "Fill this in.",

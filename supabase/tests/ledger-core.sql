@@ -132,7 +132,9 @@ begin
   perform tests.ok(exists (select 1 from public.ledger_reader where user_id = v_staff and granted_by = v_admin),
     'the grantor is recorded by the database');
 
-  perform tests.authenticate(v_staff, 'aal1');
+  -- Ledger readers read the books only with MFA.
+  perform tests.ensure_verified_mfa_factor(v_staff);
+  perform tests.authenticate(v_staff, 'aal2');
   select count(*) into v_rows from public.ledger_account where organization_id = v_org;
   perform tests.ok(v_rows >= 50, 'a named ledger reader reads the chart');
   select count(*) into v_rows from public.ledger_account where organization_id = v_other_org;
@@ -397,7 +399,7 @@ begin
   perform public.ledger_delete_draft(v_entry2);
   perform tests.clear_auth(); reset role;
 
-  perform tests.authenticate(v_staff, 'aal1');
+  perform tests.authenticate(v_staff, 'aal2');
   perform tests.ledger_raises(format('select public.ledger_set_period_status(%L, ''open'')', v_period),
     'administrator', 'a ledger reader cannot reopen a period');
   perform tests.clear_auth(); reset role;
@@ -405,7 +407,7 @@ begin
   -- ---------------------------------------------------------------------
   -- Reports
   -- ---------------------------------------------------------------------
-  perform tests.authenticate(v_staff, 'aal1');
+  perform tests.authenticate(v_staff, 'aal2');
   select coalesce(sum(debit_cents), 0), coalesce(sum(credit_cents), 0)
     into v_sum, v_sum2 from public.ledger_trial_balance(v_org, date '2027-09-30');
   perform tests.ok(v_sum = v_sum2 and v_sum > 0,

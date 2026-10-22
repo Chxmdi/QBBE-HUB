@@ -428,11 +428,12 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
     return this;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   or(expression: string) {
-    // The one `or` in the handlers filters expired announcements, which the
-    // fixtures never produce. Left permissive on purpose rather than
-    // half-implementing PostgREST's expression grammar.
+    // PostgREST's flat `column.op.value,...` form, with nested and(...) /
+    // or(...) groups, and the operators is.null, eq, gt, gte, lt and lte.
+    // ISO timestamps compare as strings. Anything else throws.
+    const test = parseOrGroup(expression, "or");
+    this.filters.push(test);
     return this;
   }
 
@@ -604,4 +605,50 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function asClient(db: FakeSupabase): any {
   return db;
+}
+
+/** Splits on commas that are not inside parentheses. */
+function splitTopLevel(expression: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of expression) {
+    if (char === "(") depth += 1;
+    if (char === ")") depth -= 1;
+    if (char === "," && depth === 0) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  parts.push(current);
+  return parts;
+}
+
+function parseOrGroup(expression: string, mode: "and" | "or"): (row: Row) => boolean {
+  const tests = splitTopLevel(expression).map((part): ((row: Row) => boolean) => {
+    const group = /^(and|or)\((.*)\)$/.exec(part);
+    if (group) return parseOrGroup(group[2], group[1] as "and" | "or");
+    const [column, op, ...rest] = part.split(".");
+    const value = rest.join(".");
+    return (row: Row) => {
+      const actual = row[column];
+      if (op === "is" && value === "null") return actual === null || actual === undefined;
+      if (actual === null || actual === undefined) return false;
+      const a = String(actual);
+      const numeric = typeof actual === "number";
+      switch (op) {
+        case "eq": return a === value;
+        case "gt": return numeric ? actual > Number(value) : a > value;
+        case "gte": return numeric ? actual >= Number(value) : a >= value;
+        case "lt": return numeric ? actual < Number(value) : a < value;
+        case "lte": return numeric ? actual <= Number(value) : a <= value;
+        default: throw new Error(`fake or(): unsupported operator ${op} in ${part}`);
+      }
+    };
+  });
+  return mode === "and"
+    ? (row) => tests.every((test) => test(row))
+    : (row) => tests.some((test) => test(row));
 }

@@ -72,6 +72,8 @@ export const accountEn = {
       title: "Multi-factor authentication",
       accountantHeading: "Protect your accountant access",
       adminHeading: "Protect your administrator account",
+      ledgerReaderHeading: "Protect your access to the books",
+      ledgerReaderBody: "QBBE Hub requires an authenticator code before payroll and gifts open.",
       accountantBody: "QBBE Hub requires an authenticator code before the books open.",
       adminBody: "QBBE Hub requires an authenticator code for owners and administrators.",
       memberHeading: "Confirm it is you",
@@ -175,6 +177,9 @@ export const accountEn = {
       cancel: "Cancel",
       verified: "Verified authenticator",
       addAnotherFirst: "Add another authenticator before removing this one.",
+      secondFactorTitle: "Add a second authenticator",
+      secondFactorBody:
+        "If you lose your only authenticator, you cannot open the Hub until two other administrators approve a reset. A second one (another phone, or a password manager) avoids that.",
       remove: "Remove",
       lostAll:
         "Lost every authenticator? Contact the QBBE credential custodian. A reset requires identity verification, a second authorized operator, and an audit entry.",

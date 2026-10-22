@@ -196,6 +196,41 @@ describe("retry-failed-emails", () => {
     expect(db.queue("notifications")).toHaveLength(0);
   });
 
+  it("leaves an email that is waiting for its next attempt alone", async () => {
+    const db = new FakeSupabase(new Date("2026-08-19T18:00:00Z"));
+    workspace(db);
+    db.rows("email_delivery").push({
+      id: "d1",
+      organization_id: ORG,
+      recipient: "amara@example.org",
+      subject: "Waiting",
+      dedupe_key: "email:waiting",
+      status: "queued",
+      attempt: 3,
+      scheduled_for: new Date("2026-08-19T18:20:00Z").toISOString(),
+      updated_at: new Date("2026-08-19T17:44:00Z").toISOString(),
+    }, {
+      id: "d2",
+      organization_id: ORG,
+      recipient: "amara@example.org",
+      subject: "Lost",
+      dedupe_key: "email:lost",
+      status: "queued",
+      attempt: 3,
+      scheduled_for: new Date("2026-08-19T17:45:00Z").toISOString(),
+      updated_at: new Date("2026-08-19T17:44:00Z").toISOString(),
+    });
+
+    const result = await retryFailedEmails({
+      db: asClient(db),
+      definition: definition({ name: "retry-failed-emails" }),
+      now: db.now(),
+    });
+
+    expect(result.processed).toBe(1);
+    expect(db.queue("notifications").map((m) => m.message.delivery_id)).toEqual(["d2"]);
+  });
+
   it("gives up visibly once the attempts are spent", async () => {
     const db = new FakeSupabase(new Date("2026-08-19T18:00:00Z"));
     workspace(db);

@@ -162,11 +162,26 @@ provider retries as safe as their transports allow:
 - Nothing is acknowledged before its outcome is written. A worker killed
   mid-send leaves the message on the queue with the ledger row still `sending`;
   the visibility timeout re-delivers it and the attempt resumes.
-- A retryable failure (network, 429, 5xx) is left on the queue — the visibility
-  timeout is the backoff. A permanent one (bad address, 4xx) is archived
-  immediately rather than burning attempts.
-- After `max_attempts`, the message is archived to the dead-letter table and
-  the ledger row is marked `failed`. Both are visible in Admin → Jobs.
+- A retryable failure (network, 429, 5xx) is queued again by delivery id with
+  a growing delay: 1, 4 and 16 minutes, then hourly. The ledger row stays
+  `queued` with `scheduled_for` set to when the next attempt is due; the
+  `retry-failed-emails` sweep leaves it alone until ten minutes after that.
+  A notification email's retry goes back through the notification path, so
+  quiet hours, the person's email settings and a deleted notification are
+  checked again. A permanent failure
+  (bad address, 4xx) is archived immediately rather than burning attempts.
+- After `max_attempts` (8, about four hours of retries), the message is
+  archived to the dead-letter table and the ledger row is marked `failed`.
+  Both are visible in Admin → Jobs.
+- After an outage longer than that, an administrator clicks **Send failed
+  email again** in Admin → Jobs. It re-queues the organization's `failed`
+  email from the last seven days (up to 500 at a time; click again for more),
+  each with a fresh set of attempts, and records an audit event. Bounced and
+  suppressed email is never re-queued, nor email the sweep gave up on
+  ("Gave up after N attempts", which may have gone out before a worker died),
+  nor a notification email whose notification was deleted or already read. The delivery id is the provider's
+  idempotency key, so an email the provider did accept in the last 24 hours
+  is not sent twice.
 
 ## Transports
 
@@ -277,7 +292,7 @@ Service-role only; there is deliberately no PostgREST route for either.
 | Unacknowledged message returns after the visibility timeout | Hand-run SQL, once — **not repeated** |
 | Archive moves a message to the dead-letter table | Hand-run SQL, once — **not repeated** |
 | Crash mid-send delivers exactly once on recovery | `tests/unit/drain-notifications.test.ts` |
-| Five failures dead-letter and mark the row failed | `tests/unit/drain-notifications.test.ts` |
+| Retries wait longer each time; the last failure dead-letters and marks the row failed | `tests/unit/drain-notifications.test.ts` |
 | Quiet hours defer and later release | `tests/unit/drain-notifications.test.ts` |
 | Required announcements ignore quiet hours and opt-outs | `tests/unit/delivery-rules.test.ts` |
 | One digest per person per local day; none when empty | `tests/unit/job-handlers.test.ts` |

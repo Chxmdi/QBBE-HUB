@@ -285,6 +285,7 @@ export const adminEn = {
           zeffy_sync_requested: "Zeffy sync requested",
           mfa_enrollment_completed: "mfa enrollment completed",
           mfa_break_glass_reset: "authenticators reset by an operator (break-glass)",
+          failed_emails_requeued: "failed email sent again",
           gift_list_viewed: "gift list viewed",
           user_provisioned: "user provisioned",
           account_created: "account created",
@@ -789,6 +790,7 @@ export const adminEn = {
       removeAssignmentFailed: "Could not remove the team assignment.",
       disconnectFailed: "Could not disconnect.",
       vmsCleanupFailed: "VMS disconnected, but linked identity cleanup failed.",
+      googleCleanupFailed: "Disconnected, but the copies Hub kept from this account could not be removed. Ask an administrator to remove them.",
       vmsNotConfigured:
         "Volunteer Management System is not configured. Set VMS_API_URL (and VMS_API_KEY) first.",
       vmsResponded: "VMS responded {status}. Connection was not recorded.",

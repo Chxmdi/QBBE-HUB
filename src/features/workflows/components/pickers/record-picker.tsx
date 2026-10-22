@@ -50,6 +50,8 @@ export function RecordPicker({
     let cancelled = false;
     recordTitle({ type, id: value }).then((title) => {
       if (!cancelled && title) setChosen({ id: value, label: title });
+    }).catch(() => {
+      // The title is a nicety; the id is still shown and still saved.
     });
     return () => {
       cancelled = true;

@@ -8,19 +8,26 @@ import { Label, Select } from "@/components/ui/input";
 import { linkToGoal, setGoalStatus, unlinkFromGoal } from "../services/goal.commands";
 import type { GoalStatus } from "../services/goal.queries";
 import { useGoalsT } from "./use-goals-t";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 type Option = { id: string; name: string };
 
 function useRun() {
   const router = useRouter();
   const t = useGoalsT();
+  const shellT = useT();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   async function run(action: () => Promise<{ ok: boolean; error?: string }>, success?: string) {
-    setBusy(true);
-    setMessage(null);
-    const result = await action();
-    setBusy(false);
+    // Busy always clears; a failed request shows a translated message.
+    const result = await runServerAction(action, {
+      setBusy,
+      setError: (text) => setMessage(text ? { ok: false, text } : null),
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) setMessage({ ok: false, text: result.error ?? t("links.error") });
     else {
       if (success) setMessage({ ok: true, text: success });
@@ -49,7 +56,7 @@ export function GoalStatusForm({ goalId, status }: { goalId: string; status: Goa
       className="flex flex-wrap items-end gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        run(() => setGoalStatus({ goalId, status: value }), t("status_form.saved"));
+        void run(() => setGoalStatus({ goalId, status: value }), t("status_form.saved"));
       }}
     >
       <div>
@@ -74,7 +81,7 @@ export function GoalLinkForm({ goalId, kind, options }: { goalId: string; kind: 
       className="flex flex-wrap items-end gap-2"
       onSubmit={(e) => {
         e.preventDefault();
-        if (chosen) run(() => linkToGoal({ goalId, kind, refId: chosen }));
+        if (chosen) void run(() => linkToGoal({ goalId, kind, refId: chosen }));
       }}
     >
       <div className="min-w-48 flex-1">
@@ -102,7 +109,7 @@ export function UnlinkButton({ goalId, kind, refId, name }: { goalId: string; ki
         className="inline-flex size-7 items-center justify-center rounded-full text-muted hover:bg-surface-soft"
         aria-label={t("links.unlink", { name })}
         disabled={busy}
-        onClick={() => run(() => unlinkFromGoal({ goalId, kind, refId }))}
+        onClick={() => void run(() => unlinkFromGoal({ goalId, kind, refId }))}
       >
         <X className="size-4" aria-hidden />
       </button>

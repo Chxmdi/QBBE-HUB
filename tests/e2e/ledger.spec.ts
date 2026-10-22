@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { signIn, signOut } from "./auth";
+import { completeMfa, signIn, signOut } from "./auth";
 import { sql } from "./db";
 import { clickWhenInteractive } from "./interactive";
 
@@ -8,7 +8,7 @@ import { clickWhenInteractive } from "./interactive";
  * opens the fiscal year, cannot post an unbalanced entry, posts a balanced
  * one, sees it on the trial balance and in the CSV, and corrects it with a
  * reversal. Staff see nothing until an admin names them a ledger reader, and
- * then only read. Posted entries are permanent by design, so each run uses a
+ * then, after MFA, only read. Posted entries are permanent by design, so each run uses a
  * unique memo rather than cleaning up.
  */
 test("the owner posts a balanced entry, reports it and reverses it; staff only read with a grant", async ({ page }) => {
@@ -97,6 +97,12 @@ test("the owner posts a balanced entry, reports it and reverses it; staff only r
     expect((await page.request.get("/api/finance/ledger/trial-balance")).status()).toBe(403);
 
     sql(`insert into ledger_reader (organization_id, user_id) values ('${orgId}', '${staffId}')`);
+    // Payroll and gifts are behind MFA for readers too.
+    await page.goto("/finance/ledger/journal");
+    await expect(page.getByRole("heading", { name: "Protect your access to the books", exact: true })).toBeVisible();
+    await completeMfa(page, "staff");
+    await page.waitForURL((url) => url.pathname === "/finance/ledger", { timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Ledger", exact: true })).toBeVisible();
     await page.goto("/finance/ledger/journal");
     await expect(page.getByRole("link", { name: marker, exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "New entry" })).toHaveCount(0);
@@ -104,6 +110,7 @@ test("the owner posts a balanced entry, reports it and reverses it; staff only r
     await expect(page.getByRole("button", { name: "Reverse entry" })).toHaveCount(0);
   } finally {
     sql(`delete from ledger_reader where user_id = '${staffId}'`);
+    sql(`delete from auth.mfa_factors where user_id = '${staffId}'`);
   }
 });
 
