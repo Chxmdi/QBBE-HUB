@@ -59,7 +59,9 @@ export default async function StatementPage({
   }
 
   // Donors who gave that year, to choose from. The database audits this read.
-  const { data: donorData } = await supabase.rpc("gift_donor_list", {
+  // The whole list comes back as one JSON value, so it is not cut off at
+  // 1,000 donors, and a donor past the 1,000th can still be chosen (DATA-003).
+  const { data: donorData } = await supabase.rpc("gift_donor_list_all", {
     p_organization: session.organizationId,
     p_from: `${year}-01-01`,
     p_to: `${year}-12-31`,

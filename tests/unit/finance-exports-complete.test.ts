@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { GL_EXPORT_LIMIT, GL_SCREEN_LIMIT, generalLedger } from "@/features/ledger/services/ledger.reports";
 import { LINE_LIMIT, TAX_EXPORT_LINE_LIMIT, filteredTotals, listTaxLines } from "@/features/sales-tax/services/sales-tax.queries";
@@ -165,5 +167,31 @@ describe("GST/QST line totals come from SQL, not the capped list (DATA-003)", ()
       itc: 0,
       itr: 0,
     });
+  });
+});
+
+describe("donor pickers read the whole donor list, not the capped one (DATA-003)", () => {
+  // public.gift_donor_list is set-returning, so a call through the API stops
+  // at 1,000 donors. The app must call gift_donor_list_all, which returns the
+  // same rows as one JSON value. On the annual-statement page the capped list
+  // also hid donors past the 1,000th from a direct ?donor= link.
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) return sourceFiles(path);
+      return /\.(ts|tsx)$/.test(entry.name) ? [path] : [];
+    });
+  }
+
+  it("no app code calls the capped gift_donor_list through the API", () => {
+    const callers = sourceFiles(join(process.cwd(), "src")).filter((file) =>
+      /rpc\(\s*["'`]gift_donor_list["'`]/.test(readFileSync(file, "utf8")),
+    );
+    expect(callers).toEqual([]);
+  });
+
+  it("the annual-statement page reads gift_donor_list_all", () => {
+    const page = readFileSync(join(process.cwd(), "src/app/(workspace)/finance/gifts/statement/page.tsx"), "utf8");
+    expect(page).toMatch(/rpc\(\s*"gift_donor_list_all"/);
   });
 });
