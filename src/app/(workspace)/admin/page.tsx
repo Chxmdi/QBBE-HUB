@@ -8,6 +8,7 @@ import { AdminNav } from "@/features/admin/components/admin-nav";
 import {
   MemberActiveToggle,
   MemberRoleSelect,
+  NewInvitationLinkButton,
   RevokeInvitationButton,
 } from "@/features/admin/components/member-controls";
 import { InviteUserDialog } from "@/features/admin/components/invite-user-dialog";
@@ -23,7 +24,10 @@ import {
   integrationHealthTone,
 } from "@/features/admin/services/integration-health";
 import { requireAdminAal2 } from "@/lib/auth";
-import { transactionalEmailIsLive } from "@/features/notifications/services/email-provider";
+import {
+  activeTransport,
+  transactionalEmailIsLive,
+} from "@/features/notifications/services/email-provider";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getFormatters, getT } from "@/lib/i18n/server";
 import { labelOr, roleCodeLabel, triggerEventLabel } from "@/features/admin/labels";
@@ -42,6 +46,8 @@ interface InvitationRow {
   accepted_at: string | null;
   revoked_at: string | null;
   created_at: string;
+  /** Read only to know whether a link exists; never rendered. */
+  token_hash: string | null;
 }
 
 interface AuditRow {
@@ -131,7 +137,7 @@ export default async function AdminPage({
     supabase
       .from("invitation")
       .select(
-        "id, email, intended_role, expires_at, accepted_at, revoked_at, created_at",
+        "id, email, intended_role, expires_at, accepted_at, revoked_at, created_at, token_hash",
       )
       .order("created_at", { ascending: false })
       .limit(20),
@@ -204,6 +210,9 @@ export default async function AdminPage({
     ((integrations ?? []) as IntegrationRow[]).map((i) => [i.provider, i]),
   );
   const emailConfigured = transactionalEmailIsLive();
+  // Whether an invitation is actually emailed: the same choice sendEmail makes,
+  // so an SMTP-only server is not told that nothing will be sent.
+  const invitationsEmailed = activeTransport() !== "log";
   const googleConfigured = Boolean(
     process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
   );
@@ -238,7 +247,7 @@ export default async function AdminPage({
         eyebrow={t("admin.eyebrow")}
         title={t("admin.workspace.title")}
         description={t("admin.workspace.description")}
-        actions={<InviteUserDialog emailConfigured={emailConfigured} />}
+        actions={<InviteUserDialog emailConfigured={invitationsEmailed} />}
       />
       <AdminNav />
 
@@ -396,7 +405,7 @@ export default async function AdminPage({
           <h2 id="admin-invitations" className="section-heading mb-3">
             {t("admin.workspace.invitations.heading")}
           </h2>
-          {!emailConfigured ? (
+          {!invitationsEmailed ? (
             <p className="mb-3 rounded-(--radius-sm) bg-warning/10 px-3 py-2 text-[13px] text-warning-fg">
               {t("admin.workspace.invitations.emailNotConfigured")}
             </p>
@@ -415,7 +424,9 @@ export default async function AdminPage({
                     ? "revoked"
                     : expired
                       ? "expired"
-                      : "pending";
+                      : invitation.token_hash
+                        ? "pending"
+                        : "noLink";
                 return (
                   <li
                     key={invitation.id}
@@ -431,6 +442,11 @@ export default async function AdminPage({
                           when: format.relative(invitation.created_at),
                         })}
                       </span>
+                      {state === "noLink" ? (
+                        <span className="meta block text-warning-fg">
+                          {t("admin.workspace.invitations.noLinkHint")}
+                        </span>
+                      ) : null}
                     </span>
                     <Badge
                       tone={
@@ -438,12 +454,17 @@ export default async function AdminPage({
                           ? "success"
                           : state === "pending"
                             ? "info"
-                            : "neutral"
+                            : state === "noLink"
+                              ? "warning"
+                              : "neutral"
                       }
                     >
                       {t(`admin.workspace.invitations.states.${state}`)}
                     </Badge>
-                    {state === "pending" ? (
+                    {state === "pending" || state === "expired" || state === "noLink" ? (
+                      <NewInvitationLinkButton invitationId={invitation.id} email={invitation.email} />
+                    ) : null}
+                    {state === "pending" || state === "noLink" ? (
                       <RevokeInvitationButton invitationId={invitation.id} />
                     ) : null}
                   </li>

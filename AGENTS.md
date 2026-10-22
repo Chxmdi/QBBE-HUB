@@ -68,7 +68,8 @@ the Docker daemon does not auto-start and Supabase must be started manually:
   `npx playwright install` unless `QA_CHROME_PATH` is set (Cursor Cloud
   sandbox only). GitHub Actions CI does **not** set `QA_CHROME_PATH`.
 - Database/RLS tests: `npm run test:db` against local Supabase
-  (`postgresql://postgres:postgres@127.0.0.1:54322/postgres`). Requires
+  (the `postgres` database on `127.0.0.1:54322`, the local stack's default
+  `postgres` user). Requires
   `supabase start`. Falls back to `sudo docker` when the daemon socket is
   root-owned (typical on this VM).
 - Notification email job (Unit 9): `GET` or `POST /api/jobs/notification-email`
@@ -81,8 +82,12 @@ the Docker daemon does not auto-start and Supabase must be started manually:
 - Scheduled announcements: `GET`/`POST /api/jobs/scheduled-announcements`.
 - Gmail/calendar refresh: `GET`/`POST /api/jobs/gmail-sync`.
 - Deactivated members are sent to `/account-inactive`, not a sign-in loop.
-- After the first organization exists, `/sign-up` is invite-only
-  (`signup_allowed` RPC).
+- After the first organization exists, an account can only be created from an
+  invitation link (`/sign-up?invite=<secret>`), and the membership waits for
+  the address to be confirmed. The database enforces it in
+  `app.handle_new_user` (SEC-001,
+  `supabase/migrations/20261116010000_invitations_need_their_token.sql`);
+  the sign-up page's checks only choose which screen to show.
 - Channel history loads the **newest** page first (`CHANNEL_HISTORY_PAGE_SIZE`);
   use **Load older messages** for prior pages. A `.limit(N)` with
   `created_at` ascending would have returned the oldest N instead.

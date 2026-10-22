@@ -21,18 +21,38 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
 3. In Supabase Auth settings:
    - Configure the site URL to the production domain and add
      `https://<domain>/auth/callback` to redirect URLs.
-   - Enable email confirmation.
-   - **Restrict signup**: either disable public signup once the Primary
-     Owner exists, or restrict to invited emails. The database also enforces
-     this: `app.handle_new_user` refuses any sign-up without a live invitation
-     once an organization exists, and the refusal aborts the account creation.
+   - **Turn on email confirmation** (Authentication → Sign In / Providers →
+     Email → **Confirm email** on) and set up the project's SMTP sender so the
+     confirmation email actually arrives. Since 2026-10-22 (SEC-001) an invited
+     person gets no membership until their address is confirmed; with
+     confirmation off, the emailed invitation link is the only proof.
+   - **Leave "Allow new users to sign up" on.** Invited people create their
+     account through the sign-up form; turning sign-up off in Supabase would
+     refuse them too. The database decides who may join: once an organization
+     exists, `app.handle_new_user` refuses an account that does not carry a
+     valid invitation link for that exact address, and the refusal aborts the
+     account creation. Before 2026-10-22 it matched the invitation on the
+     address alone, so anyone who knew an invited address could take the seat.
+     Two other ways in still need an open invitation for the address: Google
+     sign-in, when Google says it has verified the address (the seat follows
+     once Auth confirms it), and an operator creating the account through the
+     Auth admin API with the link's secret in `user_metadata.invite_token`
+     (as `scripts/qa/perf-staging.mjs` does). A marker in `app_metadata` does
+     not work through the admin API: Auth adds it only after the check.
      Until 2026-09-02 this line claimed the enforcement came from
      `signup_allowed`. It did not. That function was called only from the
      sign-up form — a check in the visitor's own browser — while the trigger
      that grants the membership never consulted it and defaulted to an active
      **staff** account. Anyone could obtain one with a single API call using the
-     publishable key. Provider-side signup restriction is still worth setting;
-     it is defence in depth rather than the only line.
+     publishable key.
+   - The invitation secret travels in the link's address
+     (`/sign-up?invite=…`), so it can appear in the invitee's browser history
+     and in the server's access logs for `/sign-up`. It works once, only for
+     the invited address, for 14 days, and is removed from the account as
+     soon as it is used. Do not send access logs for `/sign-up` to third
+     parties. If a link may have leaked, open Admin, Invitations, click
+     **New link** on that row, then **Create new link**: the old link stops
+     working.
 4. Set up the QBBE server and each environment's settings as
    [`hosting.md`](hosting.md) describes: the server, its open ports, the
    GitHub environment variables and secrets (`APP_ENV` holds the app's
@@ -41,10 +61,39 @@ without shared daily credentials (ENV-002). No paid plans or automatic upgrades.
    in a `NEXT_PUBLIC_*` variable.
 5. Deploy. Sign up the Primary Owner account **first** — the bootstrap
    trigger provisions the organization and mandatory channels.
-6. Complete encrypted daily database **and uploaded-file** backups to QBBE
-   Drive and rehearse restoration before entering pilot data. Do not enable
-   paid backups or Point-in-Time Recovery. See `backup-recovery.md`; automation
-   and restore evidence are still pending.
+
+   On a project that already had invitations before 2026-10-22: those have
+   no link, so nobody can create a password account from them. After the
+   deploy, list them in the Supabase SQL editor:
+
+   ```sql
+   select email, intended_role, expires_at
+   from invitation
+   where token_hash is null and accepted_at is null
+     and revoked_at is null and expires_at > now();
+   ```
+
+   For each address, open Admin, Invitations, find the row marked
+   **no link yet**, click **New link**, then **Create new link**. You should
+   see "Invitation sent to …", or, where email is not set up, the link to pass
+   on yourself. Run the query again: when it returns no rows, every open
+   invitation has a working link.
+6. Set up the nightly encrypted backup of the database **and uploaded files**
+   (the **Backup** workflow) and run the hosted restore drill before entering
+   pilot data. The one-time setup and the drill are in `backup-recovery.md`;
+   until both are done there is no backup. Three things to know first:
+   - Apply the `main` protection in "Branches and gates" below **before**
+     setup step 7 there. The `backup-production` environment holds
+     production's database password and a Supabase secret key that bypasses
+     row-level security, with no approval step; its only protection is that
+     it accepts runs from `main`.
+   - Each of `backup-staging` and `backup-production` needs its own
+     `BACKUP_INDEX_KEY` (make it with `openssl rand -base64 32`: one line
+     of 44 characters; a key typed by hand is refused).
+   - The nightly run backs up production only. Staging is backed up every
+     night only when the repository variable `BACKUP_STAGING_NIGHTLY` is
+     `on`, to stay inside Supabase's free 5 GB of monthly traffic; otherwise
+     run it by hand at least every 30 days.
 7. Enroll at least two named TOTP factors for the Primary Owner and every
    Workspace Admin, then complete the hosted MFA checks in
    `staging-provisioning.md`. Application and database enforcement are

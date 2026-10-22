@@ -1514,12 +1514,22 @@ begin
   end;
   reset role;
 
-  -- Invite-only: with an organization present, signup_allowed is false without an invite.
-  perform tests.clear_auth();
+  -- Invite-only: with an organization present, signup_allowed is false without
+  -- an invite. It is no longer callable by anonymous visitors at all, because
+  -- answering "is this address invited?" for any address told strangers whom
+  -- to impersonate (SEC-001); the sign-up page asks invitation_preview(token)
+  -- instead, which answers only for the holder of the link.
   perform tests.ok(
     public.signup_allowed('nobody@example.com') = false,
     'signup is invite-only after an organization exists'
   );
+  perform tests.clear_auth();
+  begin
+    perform public.signup_allowed('nobody@example.com');
+    perform tests.ok(false, 'anonymous visitors must not be able to call signup_allowed');
+  exception when insufficient_privilege then
+    perform tests.ok(true, 'anonymous visitors cannot call signup_allowed');
+  end;
 
   -- -----------------------------------------------------------------------
   -- The unscoped membership helpers must not reappear.

@@ -18,8 +18,11 @@ The header is `x-job-secret`, not `Authorization: Bearer` — the route reads
 only the former, so a bearer request is refused before the job name is even
 looked at. Set `CRON_JOB_SECRET`; there is no second secret. Job routes skip
 login middleware.
-Admin invitations always say **Invite recorded — email not sent** until a
-production mail client is actually wired (`transactionalEmailIsLive()`).
+Invitation emails go out through the same transport as every other email
+(`activeTransport()`): the provider when `EMAIL_PROVIDER_API_KEY` is set,
+otherwise SMTP when `SMTP_HOST` is set. With neither, nothing is sent: Admin,
+Invitations says so, and the administrator gets the invitation link to pass
+on themselves.
 
 ## Gmail (gated)
 

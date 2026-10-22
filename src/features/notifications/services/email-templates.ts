@@ -139,7 +139,12 @@ function shell(
   footerNote: string,
   locale: Locale,
   t: TranslateFn,
+  options: { manageLink?: boolean; footerHtml?: string } = {},
 ): string {
+  // Someone who is not a member yet has no notification settings to manage.
+  const manage = options.manageLink === false
+    ? ""
+    : ` <a href="${safeLink("/settings/notifications")}" style="color:${BRAND};">${escapeHtml(t("notifications.email.manage"))}</a>.`;
   return `<!doctype html>
 <html lang="${htmlLang(locale)}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -155,7 +160,7 @@ function shell(
 ${inner}
 </td></tr>
 <tr><td style="padding:16px 24px;border-top:1px solid ${LINE};font:400 12px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${MUTED};">
-${escapeHtml(footerNote)} <a href="${safeLink("/settings/notifications")}" style="color:${BRAND};">${escapeHtml(t("notifications.email.manage"))}</a>.
+${options.footerHtml ?? escapeHtml(footerNote)}${manage}
 </td></tr>
 </table>
 </td></tr></table>
@@ -403,5 +408,85 @@ ${button(safeLink("/people/overview"), t("jobs.teamDigest.openOverview"))}`;
       locale,
       t,
     ),
+  };
+}
+
+export interface InvitationEmailInput {
+  /** The absolute link carrying the invitation secret. */
+  link: string;
+  email: string;
+  organizationName: string;
+  inviterName: string;
+  /** Organization role code: admin, leadership_viewer, staff, volunteer, guest. */
+  role: string;
+  expiresAt: string;
+  /** The organization's zone, so "until 5 November" names the right day. */
+  timeZone: string;
+}
+
+const INVITATION_ROLE_KEYS: Record<string, MessageKey> = {
+  admin: "admin.roles.workspaceAdmin",
+  leadership_viewer: "admin.roles.leadership_viewer",
+  staff: "admin.roles.staff",
+  volunteer: "admin.roles.volunteer",
+  guest: "admin.roles.readOnlyGuest",
+};
+
+/**
+ * The invitation itself (SEC-001). The person has no account and so no saved
+ * language: the message is in French, then English, as a Quebec organization
+ * writes to someone it has not met. The link is the only way in for a
+ * password sign-up, so it is printed in full as well as behind the button,
+ * for mail clients that strip buttons.
+ */
+export function renderInvitationEmail(input: InvitationEmailInput): EmailBody {
+  const versions = (["fr-CA", "en"] as const).map((locale) => {
+    const t = createTranslator(locale);
+    const date = formattersFor(locale).date(input.expiresAt, input.timeZone);
+    const role = INVITATION_ROLE_KEYS[input.role] ? t(INVITATION_ROLE_KEYS[input.role]) : input.role;
+    return {
+      locale,
+      subject: t("admin.invite.message.subject"),
+      heading: t("admin.invite.message.heading", {
+        inviter: input.inviterName,
+        organization: input.organizationName,
+      }),
+      body: t("admin.invite.message.body", { role, email: input.email, date }),
+      button: t("admin.invite.message.button"),
+      linkText: t("admin.invite.message.linkText", { url: input.link }),
+      ignore: t("admin.invite.message.ignore"),
+      footer: t("admin.invite.message.footer", { organization: input.organizationName }),
+    };
+  });
+  const [fr, en] = versions;
+  const subject = `${fr.subject} · ${en.subject}`;
+
+  const text = versions
+    .map((v) => [v.heading, "", v.body, "", v.linkText, "", v.ignore].join("\n"))
+    .join("\n\n— — —\n\n")
+    .concat(`\n\n${fr.footer} / ${en.footer}`);
+
+  const block = (v: (typeof versions)[number]) => `
+<div lang="${htmlLang(v.locale)}">
+<p style="margin:0 0 10px;font:600 18px/1.35 -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">${escapeHtml(v.heading)}</p>
+<p style="margin:0;">${escapeHtml(v.body)}</p>
+${button(escapeHtml(input.link), v.button)}
+<p style="margin:12px 0 0;font-size:13px;color:${MUTED};word-break:break-all;">${escapeHtml(v.linkText)}</p>
+<p style="margin:12px 0 0;font-size:13px;color:${MUTED};">${escapeHtml(v.ignore)}</p>
+</div>`;
+
+  const inner = `${block(fr)}
+<hr style="border:0;border-top:1px solid ${LINE};margin:24px 0;">
+${block(en)}`;
+
+  const footerT = createTranslator("fr-CA");
+  return {
+    subject,
+    text,
+    html: shell(subject, inner, `${fr.footer} / ${en.footer}`, "fr-CA", footerT, {
+      manageLink: false,
+      // The page is French; the English half is marked so it is read as English.
+      footerHtml: `${escapeHtml(fr.footer)} / <span lang="en">${escapeHtml(en.footer)}</span>`,
+    }),
   };
 }

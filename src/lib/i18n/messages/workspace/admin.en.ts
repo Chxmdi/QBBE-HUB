@@ -77,14 +77,23 @@ export const adminEn = {
       invitations: {
         heading: "Invitations",
         emailNotConfigured:
-          "Invite recorded — email not sent, until EMAIL_PROVIDER_API_KEY is configured. The row still assigns the intended role on sign-up.",
-        empty: "No invitations yet. Invited users get their intended role on sign-up.",
+          "Email is not set up, so invitations are not emailed. Use New link and share the link with the person yourself.",
+        empty: "No invitations yet. Invited people get their role when they create an account from their invitation link.",
+        newLink: "New link",
+        newLinkFor: "New invitation link for {email}",
+        newLinkFailed: "Could not create a new link.",
+        creatingLink: "Creating a new link…",
+        newLinkConfirm:
+          "The current link for {email} will stop working. A new link is created and, if email is set up, sent to them.",
+        newLinkCreate: "Create new link",
+        noLinkHint: "Created before invitation links. Use New link to give this person one.",
         invited: "{role} · invited {when}",
         states: {
           accepted: "accepted",
           revoked: "revoked",
           expired: "expired",
           pending: "pending",
+          noLink: "no link yet",
         },
       },
       integrations: {
@@ -269,6 +278,7 @@ export const adminEn = {
           status: "status",
           suppress: "suppress",
           user_invited: "user invited",
+          invitation_link_reissued: "invitation link reissued",
           vms_connected: "vms connected",
           zeffy_connected: "Zeffy connected",
           zeffy_sync_requested: "Zeffy sync requested",
@@ -337,15 +347,30 @@ export const adminEn = {
       button: "Invite user",
       title: "Invite a user",
       emailNotConfigured:
-        "Transactional email is not configured. The invitation row will be saved; the recipient will not receive an email until EMAIL_PROVIDER_API_KEY is set.",
+        "Email is not set up, so no invitation email will be sent. You will get a link to share with the person yourself.",
       email: "Email",
       role: "Role",
       roleHelp:
-        "When this person signs up with the invited email, the role is applied automatically. Leadership viewers receive portfolio read access without operational write access.",
+        "The person joins with this role when they create their account from the invitation link. Leadership viewers receive portfolio read access without operational write access.",
       close: "Close",
       submit: "Create invitation",
-      queued: "Invitation recorded and queued for email.",
-      notSent: "Invite recorded — email not sent",
+      sent: "Invitation sent to {email}.",
+      notSent: "Invitation created. No email was sent: share the link below with {email} yourself.",
+      linkLabel: "Invitation link",
+      linkHelp:
+        "Works once, only for {email}, until {date}. Anyone holding this link can create the account, so share it only with this person.",
+      copy: "Copy link",
+      copied: "Link copied.",
+      copyFailed: "Select the link and copy it.",
+      message: {
+        subject: "You're invited to QBBE Hub",
+        heading: "{inviter} invited you to join {organization} on QBBE Hub",
+        body: "Role: {role}. Create your account with the button below. The link works once, only for {email}, until {date}.",
+        button: "Create my account",
+        linkText: "Or open this link: {url}",
+        ignore: "If you were not expecting this invitation, you can ignore this email.",
+        footer: "Sent by QBBE Hub on behalf of {organization}.",
+      },
     },
     teamControls: {
       updateFailed: "Update failed.",
