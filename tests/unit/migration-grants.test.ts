@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -118,5 +119,23 @@ describe("migration grants", () => {
       .filter((f) => f.endsWith(".sql") && !baseline.has(f) && f !== GENERATED)
       .flatMap((f) => ungranted(readFileSync(join(MIGRATIONS, f), "utf8")).map((o) => `${f}: ${o}`));
     expect(problems).toEqual([]);
+  });
+
+  it("was generated after every migration ordered before it", () => {
+    // The grants migration restates every grant as it stood when generated.
+    // A migration merged in before it later would have its grants undone, so
+    // the migration must be regenerated (see scripts/db/generate-grants.mjs).
+    const version = GENERATED.split("_")[0];
+    const recorded = /^-- generated-after-migrations: (.+)$/m.exec(
+      readFileSync(join(MIGRATIONS, GENERATED), "utf8"),
+    )?.[1];
+    const earlier = readdirSync(MIGRATIONS)
+      .filter((f) => f.endsWith(".sql") && f.split("_")[0] < version)
+      .sort();
+    const hash = createHash("sha256");
+    for (const f of earlier) hash.update(f).update("\0").update(readFileSync(join(MIGRATIONS, f))).update("\0");
+    expect(recorded, "regenerate 20261119100000_explicit_api_grants.sql: earlier migrations changed").toBe(
+      `${earlier.length} ${hash.digest("hex").slice(0, 16)}`,
+    );
   });
 });
