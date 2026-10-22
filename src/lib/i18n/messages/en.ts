@@ -259,6 +259,8 @@ export const en = {
     breadcrumb: "Breadcrumb",
     loadFailed: "This couldn't be loaded.",
     somethingWrong: "Something went wrong. Try again.",
+    actionUnreachable: "Could not reach the Hub. Check your connection, then try again.",
+    actionOutdated: "The Hub was updated since this page opened. Reloading so you can try again.",
     fieldErrors: {
       summary: "Check the highlighted fields.",
       required: "Fill this in.",

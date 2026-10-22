@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Label, Select } from "@/components/ui/input";
 import { addDecisionParticipant, removeDecisionParticipant } from "../services/decision-v2.commands";
 import { useDecisionsV2T } from "./use-dv2-t";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 type Person = { id: string; name: string };
 
@@ -22,6 +24,7 @@ export function ParticipantsEditor({
   canManage: boolean;
 }) {
   const t = useDecisionsV2T();
+  const shellT = useT();
   const router = useRouter();
   const id = useId();
   const [chosen, setChosen] = useState("");
@@ -30,10 +33,9 @@ export function ParticipantsEditor({
   const present = new Set(participants.map((p) => p.id));
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>) {
-    setBusy(true);
-    setError(null);
-    const result = await action();
-    setBusy(false);
+    // Busy always clears; a failed request shows a translated message.
+    const result = await runServerAction(action, { setBusy, setError, t: shellT, reload: () => window.location.reload() });
+    if (!result) return;
     if (!result.ok) setError(result.error ?? t("participants.error"));
     else router.refresh();
   }
@@ -53,7 +55,7 @@ export function ParticipantsEditor({
                   className="ml-1 inline-flex size-6 items-center justify-center rounded-full text-muted hover:bg-surface-soft"
                   aria-label={t("participants.remove", { name: p.name })}
                   disabled={busy}
-                  onClick={() => run(() => removeDecisionParticipant({ decisionId, userId: p.id }))}
+                  onClick={() => void run(() => removeDecisionParticipant({ decisionId, userId: p.id }))}
                 >
                   <X className="size-3.5" aria-hidden />
                 </button>
@@ -67,7 +69,7 @@ export function ParticipantsEditor({
           className="flex flex-wrap items-end gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (chosen) run(() => addDecisionParticipant({ decisionId, userId: chosen }));
+            if (chosen) void run(() => addDecisionParticipant({ decisionId, userId: chosen }));
           }}
         >
           <div className="min-w-48 flex-1">

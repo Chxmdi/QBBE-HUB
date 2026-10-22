@@ -262,6 +262,8 @@ export const frCA: Messages = {
     breadcrumb: "Fil d’Ariane",
     loadFailed: "Impossible de charger ce contenu.",
     somethingWrong: "Une erreur s’est produite. Réessayez.",
+    actionUnreachable: "Impossible de joindre le Hub. Vérifiez votre connexion, puis réessayez.",
+    actionOutdated: "Le Hub a été mis à jour depuis l’ouverture de cette page. Rechargement pour que vous puissiez réessayer.",
     fieldErrors: {
       summary: "Vérifiez les champs signalés.",
       required: "Remplissez ce champ.",
