@@ -86,13 +86,20 @@ export async function publishAnnouncement(
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data: channel } = await supabase
+  // One per organization (a unique index guarantees it); a lookup error is
+  // a failure to report, not a missing channel.
+  const { data: channel, error: channelError } = await supabase
     .from("channel")
     .select("id")
+    .eq("organization_id", session.organizationId)
     .eq("type", "announcements")
     .eq("is_mandatory", true)
     .maybeSingle();
 
+  if (channelError) {
+    console.error(JSON.stringify({ event: "announcements.channel_lookup_failed", error: channelError.message }));
+    return { ok: false, error: t("announcements.errors.publishFailed") };
+  }
   if (!channel) return { ok: false, error: t("announcements.errors.noChannel") };
 
   // A scheduled announcement keeps its text on its own row until the publish
