@@ -37,6 +37,10 @@ export function Dialog({
     <dialog
       ref={ref}
       onClose={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
       onClick={(e) => {
         // Click on the backdrop closes.
         if (e.target === ref.current) onClose();

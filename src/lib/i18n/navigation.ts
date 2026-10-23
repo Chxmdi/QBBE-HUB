@@ -85,6 +85,16 @@ const ITEM_KEYS: Record<string, MessageKey> = {
 };
 
 const GROUP_KEYS: Record<string, MessageKey> = {
+  "Today": "nav.groups.today",
+  "Messages": "nav.groups.messages",
+  "Programs & Projects": "nav.groups.programsProjects",
+  "Knowledge": "nav.groups.knowledge",
+  "Calendar": "nav.groups.calendar",
+  "Relationships": "nav.groups.relationships",
+  "Finance": "nav.groups.finance",
+  "Reports & Views": "nav.groups.reportsViews",
+  "Utilities": "nav.groups.utilities",
+
   Work: "nav.groups.work",
   Communication: "nav.groups.communication",
   Organization: "nav.groups.organization",
@@ -117,6 +127,8 @@ export function navItemLabel(
 }
 
 const CREATE_KEYS: Record<string, MessageKey> = {
+  "/pages?create=1": "topbar.create.page",
+  "/lenses/my-work?create=task": "topbar.create.task",
   "/my-work?create=task": "topbar.create.task",
   "/requests?create=1": "topbar.create.proposal",
   "/projects?create=1": "topbar.create.project",

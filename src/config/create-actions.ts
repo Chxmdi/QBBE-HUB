@@ -1,3 +1,5 @@
+import { navHref, type NavSwitches } from "@/config/navigation";
+
 /**
  * What a person can create from anywhere (P0-QC-01, P0-CMD-01). One list,
  * read by the topbar's quick create and by the command palette, so the two
@@ -9,9 +11,10 @@ export interface CreateAction {
   href: string;
 }
 
-export function createActions(role: { isAdmin: boolean; isStaff: boolean }): CreateAction[] {
+export function createActions(role: { isAdmin: boolean; isStaff: boolean }, switches?: NavSwitches): CreateAction[] {
   return [
-    { label: "Task", href: "/my-work?create=task" },
+    { label: "Task", href: `${navHref("/my-work", switches)}?create=task` },
+    ...(switches?.wos_pages && (role.isStaff || role.isAdmin) ? [{ label: "Page", href: "/pages?create=1" }] : []),
     // Member-level, like /requests itself: the one thing a volunteer or
     // member can start that becomes someone else's decision.
     { label: "Project proposal", href: "/requests?create=1" },
@@ -31,4 +34,13 @@ export function createActions(role: { isAdmin: boolean; isStaff: boolean }): Cre
       : []),
     ...(role.isAdmin ? [{ label: "Announcement", href: "/channels?create=announcement" }] : []),
   ];
+}
+
+/** Keep the common actions short without removing specialist creation paths. */
+export function splitCreateActions(actions: CreateAction[]): { common: CreateAction[]; more: CreateAction[] } {
+  const commonNames = new Set(["Task", "Page", "Meeting", "Project", "Project proposal"]);
+  return {
+    common: actions.filter((action) => commonNames.has(action.label)),
+    more: actions.filter((action) => !commonNames.has(action.label)),
+  };
 }

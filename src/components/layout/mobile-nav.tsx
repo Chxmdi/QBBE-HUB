@@ -17,8 +17,8 @@ import { navGroupLabel, navItemLabel } from "@/lib/i18n/navigation";
  * The tabs are drawn from the same `visibleNav` output as the sidebar, so a
  * tab follows the sidebar: while a Workspace OS switch is on, Home, My Work
  * and Calendar open the new screen (epic #199, plan §9), and with the
- * consolidated menu (`wos_home`) the tabs are Home, My Work, Pages and
- * Communication, each opening its group's first screen.
+ * consolidated menu (`wos_home`) the tabs are Today, My Work, Messages and
+ * Calendar, each opening its configured destination.
  */
 export function MobileNav({
   isAdmin,

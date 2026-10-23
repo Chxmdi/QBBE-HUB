@@ -80,7 +80,7 @@ export function CommandPalette({
     .toLowerCase()
     .replace(/^(new|create|add|nouvel|nouvelle|nouveau|créer|ajouter)\s+/, "");
   const createMatches = query.trim()
-    ? createActions({ isAdmin, isStaff }).filter(
+    ? createActions({ isAdmin, isStaff }, switches).filter(
         (action) =>
           action.label.toLowerCase().includes(needle) ||
           createActionLabel(t, action).toLowerCase().includes(needle),

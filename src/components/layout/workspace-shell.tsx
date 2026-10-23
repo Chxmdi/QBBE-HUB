@@ -105,6 +105,7 @@ export function WorkspaceShell({
           isAdmin={isAdmin}
           isStaff={isStaff}
           unreadCount={unreadCount}
+          switches={navSwitches}
           density={density}
           onOpenNav={() => setNavOpen(true)}
           onOpenPalette={() => setPaletteOpen(true)}

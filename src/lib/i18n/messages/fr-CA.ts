@@ -82,9 +82,20 @@ export const frCA: Messages = {
     reviewNote: "La formulation française doit encore être révisée par une personne francophone.",
   },
   nav: {
+    allTools: "Tous les outils",
     main: "Navigation principale",
     primary: "Principale",
     groups: {
+      today: "Aujourd’hui",
+      messages: "Messages",
+      programsProjects: "Programmes et projets",
+      knowledge: "Connaissances",
+      calendar: "Calendrier",
+      relationships: "Relations",
+      finance: "Finances",
+      reportsViews: "Rapports et vues",
+      utilities: "Outils",
+
       work: "Travail",
       communication: "Communication",
       organization: "Organisation",
@@ -155,7 +166,7 @@ export const frCA: Messages = {
       commands: "Commandes",
       apps: "Applications",
       templates: "Modèles",
-      blueprints: "Plans de l’espace",
+      blueprints: "Créateur d’espace de travail",
       pageLayouts: "Mises en page",
       trash: "Corbeille",
       upkeep: "Entretien de l’espace",
@@ -184,7 +195,9 @@ export const frCA: Messages = {
   topbar: {
     searchPlaceholder: "Rechercher ou aller à…",
     quickCreate: "Création rapide",
+    createMore: "Autres options de création",
     create: {
+      page: "Nouvelle page",
       task: "Nouvelle tâche",
       proposal: "Nouvelle proposition de projet",
       project: "Nouveau projet",

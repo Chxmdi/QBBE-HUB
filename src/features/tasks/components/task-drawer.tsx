@@ -1,5 +1,6 @@
 "use client";
 
+import { taskDrawerHref } from "@/features/tasks/task-url";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -245,13 +246,8 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
   }, [taskId, load]);
 
   function close() {
-    // Drop only the task param; other filters in the URL survive.
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("task");
-    const query = params.toString();
-    router.replace(query ? `?${query}` : window.location.pathname, {
-      scroll: false,
-    });
+    // A drawer-only URL change keeps the list mounted and its scroll intact.
+    window.history.replaceState(null, "", taskDrawerHref(window.location.pathname, window.location.search, null) + window.location.hash);
   }
 
   async function handleFieldSave(patch: Record<string, unknown>) {

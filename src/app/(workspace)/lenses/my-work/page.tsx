@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/shared/page-header";
+import { TaskCreateDialog } from "@/features/tasks/components/task-create-dialog";
+import { TaskDrawer } from "@/features/tasks/components/task-drawer";
 import { TaskFilterBar } from "@/features/tasks/components/task-filter-bar";
 import { parseTaskFilters } from "@/features/tasks/filters";
 import { getPickerOptions } from "@/features/tasks/services/task.queries";
@@ -33,7 +35,8 @@ export default async function LensMyWorkPage({
   await requireLensesEnabled();
   const session = await requireSession();
   const t = await getLensT();
-  const filters = parseTaskFilters(await searchParams);
+  const params = await searchParams;
+  const filters = parseTaskFilters(params);
   const today = calendarDateInZone(new Date(), session.timeZone) ?? "";
   const owned = myOwnedSpec(filters, today);
   const review = myReviewSpec(filters, today);
@@ -60,7 +63,9 @@ export default async function LensMyWorkPage({
 
   return (
     <div>
-      <PageHeader eyebrow={t("types.task")} title={t("myWork.title")} description={t("myWork.description")} />
+      <PageHeader eyebrow={t("types.task")} title={t("myWork.title")} description={t("myWork.description")} actions={
+        <TaskCreateDialog projects={options.projects} people={options.people} milestones={options.milestones} defaultOpen={params.create === "task"} />
+      } />
       <LensChips lenses={saved} label={t("saved.chips")} />
       <Suspense fallback={<div className="mb-5 h-9" />}>
         <TaskFilterBar filters={filters} options={options} basePath="/lenses/my-work" showOwner={false} />
@@ -71,12 +76,13 @@ export default async function LensMyWorkPage({
         </p>
       ) : null}
       {ownedResult && reviewResult ? (
-        <ListLens sections={sections} timeZone={session.timeZone} />
+        <ListLens taskDrawer sections={sections} timeZone={session.timeZone} />
       ) : (
         <p role="alert" className="text-[13.5px] text-danger-fg">
           {t("common.loadFailed")}
         </p>
       )}
+      <Suspense fallback={null}><TaskDrawer people={options.people} isStaff={session.isStaff} /></Suspense>
     </div>
   );
 }
