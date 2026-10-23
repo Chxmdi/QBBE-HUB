@@ -39,9 +39,8 @@ on:
         type: boolean
         default: false
 
-permissions:
-  contents: read
-  packages: read
+# No permissions by default: each job names the ones it uses.
+permissions: {}
 
 concurrency:
   group: deploy-${{ inputs.environment }}
@@ -53,6 +52,7 @@ jobs:
   # this file, so the control that holds is the environment's "Deployment
   # branches and tags" rule (main only; hosting.md, "Deploy access").
   branch:
+    permissions: {}
     name: Runs from main only
     if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -63,6 +63,10 @@ jobs:
           exit 1
 
   rollback:
+    # The server pulls the release image from ghcr.io with this run's token.
+    permissions:
+      contents: read
+      packages: read
     name: Restore an earlier release
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -79,7 +83,7 @@ jobs:
           test -n "$SITE_URL" || { echo "::error::SITE_URL is not set for this environment."; exit 1; }
           echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}:${TARGET_ENVIRONMENT}-${COMMIT}" >> "$GITHUB_ENV"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Deploy access (docs/runbooks/hosting.md, "Deploy access"). With the
       # environment variable DEPLOY_MODE=isolated, this environment's own

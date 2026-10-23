@@ -11,3 +11,22 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - dependencies
+
+  # Every third-party action in a workflow is pinned to a full commit SHA,
+  # with its version in a trailing comment (SEC-017; checked by
+  # tests/unit/action-pins.test.ts). This proposes a pull request moving the
+  # pin, SHA and comment together, when a new version is released.
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/local-supabase
+      - /.github/actions/qbbe-ssh
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      github-actions:
+        patterns:
+          - "*"
