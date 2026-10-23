@@ -481,7 +481,7 @@ Use preview deployments for pull requests.
 Prepare:
 
 * production Supabase
-* production Vercel
+* production hosting (the QBBE server; docs/runbooks/hosting.md)
 * QBBE-owned accounts
 * domain/DNS
 * environment variables

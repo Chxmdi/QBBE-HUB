@@ -17,7 +17,7 @@ account reported on that date.
 | Repository | `Chxmdi/QBBE-HUB`, **public**, personal account, not in an organization |
 | GitHub environments | `staging` and `copilot` exist. **`production` does not.** (2026-09-23; the connector cannot read environments) |
 | Repository variables | none set (2026-09-23) |
-| Secrets the deploy reads | `NETLIFY_AUTH_TOKEN`; since #128 also `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` per environment |
+| Secrets the deploy reads | `APP_ENV` and the server's SSH deploy key (see [`hosting.md`](hosting.md)); since #128 also `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` per environment |
 | Deploy gate | `vars.RELEASE_ENABLED` must equal `true`; see `scripts/check-deploy-environment.sh` |
 | Netlify site IDs (retired) | were registered in the deploy check: staging `2169b17a-8dc3-49de-a466-4281e1285de2`, production `a34499c8-0d84-47d5-bfb2-502c2b9b9071` |
 | Supabase | **one** project, `qbbe-hub` (ref `xvxahcbwydsnllqbjnlr`, ca-central-1, healthy), in the Supabase organization **"BMF"**, not a QBBE organization. There is no second project, so staging and production cannot yet be isolated. |
@@ -31,7 +31,6 @@ expects:
 | Provider | Variables | Blocking |
 |---|---|---|
 | Supabase | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | everything |
-| Netlify | `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID` | deployment |
 | Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`, `GOOGLE_GMAIL_PUBSUB_*` | #43, #44, #45 |
 | Email | `EMAIL_PROVIDER_API_KEY`, `EMAIL_FROM_ADDRESS`, `SMTP_HOST`, `SMTP_PORT` | #47 |
 | Malware scanning | `CLAMAV_SOCKET`, or `CLAMAV_HOST` and `CLAMAV_PORT` | #35 P1-FIL-02 |
@@ -89,7 +88,7 @@ somebody's personal account.
 Create, under a QBBE-controlled email:
 
 - Supabase organization
-- Netlify team
+- Oracle Cloud account for the server (see [`hosting.md`](hosting.md)); the old Netlify team only until its sites are deleted
 - Google Cloud project for OAuth and Gmail Pub/Sub
 - Email provider account
 - Error monitoring account

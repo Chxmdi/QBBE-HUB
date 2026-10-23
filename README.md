@@ -23,9 +23,9 @@ header explains the consequence for anyone auditing coverage.
 | Authorization | Postgres RLS is the final boundary on every table; UI gates are UX only |
 | Validation | Zod schemas at every server-action trust boundary |
 | Testing | Vitest (unit) · Playwright (e2e scaffold) |
-| Hosting | Vercel (app) + Supabase (data), QBBE-owned accounts |
+| Hosting | Docker containers on QBBE's Oracle Cloud server behind Caddy (`docs/runbooks/hosting.md`) + Supabase (data), QBBE-owned accounts |
 
-**Runtime:** Node.js 20.9 or newer is required. The production build uses
+**Runtime:** Node.js 22.13 or newer is required (the container image uses Node 22). The production build uses
 Next.js 16's supported Webpack opt-out (`next build --webpack`) while the
 development server retains Turbopack by default.
 

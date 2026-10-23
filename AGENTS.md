@@ -102,15 +102,18 @@ the Docker daemon does not auto-start and Supabase must be started manually:
   After fixing some, run the script with `--update`. Exports of personal or
   financial data write their audit row with `recordAudit` from
   `src/lib/audit-write.ts` and refuse the file if it fails.
-- Notification email job (Unit 9): `GET` or `POST /api/jobs/notification-email`
-  with `Authorization: Bearer $CRON_JOB_SECRET` (or Vercel `CRON_SECRET`).
-  `/api/jobs/*` is excluded from session middleware so cron can run.
-  Local Mailpit SMTP is `127.0.0.1:54325` (UI `:54324`). Do not mark
-  production email “connected” — no production mail client is wired yet.
+- Background jobs: every job runs through `POST /api/jobs/<name>` with the
+  header `x-job-secret: $CRON_JOB_SECRET`; `GET` answers 405 and a missing or
+  wrong secret 403. In production pg_cron calls it (docs/runbooks/jobs.md has
+  every job, its schedule and what it does). To run one by hand:
+  `npm run jobs:run -- <name>` with `CRON_JOB_SECRET` set. `/api/jobs/*` is
+  excluded from session middleware.
+- Email: `drain-notifications` sends through Resend when
+  `EMAIL_PROVIDER_API_KEY` is set, through SMTP when `SMTP_HOST` is (locally,
+  Mailpit at `127.0.0.1:54325`, UI `:54324`), and otherwise only records it.
 - Gmail/VMS: OAuth Connect syncs Gmail metadata immediately when credentials
-  exist. VMS Connect probes the API and refuses if it is unreachable.
-- Scheduled announcements: `GET`/`POST /api/jobs/scheduled-announcements`.
-- Gmail/calendar refresh: `GET`/`POST /api/jobs/gmail-sync`.
+  exist; `google-sync` keeps Gmail, Calendar and Drive current every 15
+  minutes. VMS Connect probes the API and refuses if it is unreachable.
 - Deactivated members are sent to `/account-inactive`, not a sign-in loop.
 - After the first organization exists, an account can only be created from an
   invitation link (`/sign-up?invite=<secret>`), and the membership waits for
