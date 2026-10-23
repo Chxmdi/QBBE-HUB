@@ -11,6 +11,7 @@ import { isContentSnapshot } from "../content";
 import { versionsText, type VersionsText } from "../messages";
 import { objectRefSchema } from "../schema";
 import { isObjectLocked } from "@/features/collab/lock";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Versions and trash appear in the collaboration pages (wos_editor) and on object record
@@ -68,7 +69,10 @@ export async function saveNamedVersion(input: unknown): Promise<VersionActionRes
     p_properties: snapshot.properties,
     p_label: label || null,
   });
-  if (error) return { ok: false, error: translate(error.message, m) };
+  if (error) {
+    logActionFailure("version.saveNamedVersion", error);
+    return { ok: false, error: translate(error.message, m) };
+  }
   revalidatePath("/collab", "layout");
   return { ok: true, id: data as string };
 }
@@ -114,7 +118,7 @@ export async function autosaveObjectContent(input: unknown): Promise<VersionActi
     p_label: null,
   });
   // The content itself is saved; a refused snapshot is not the editor's problem.
-  if (error) console.error("automatic snapshot failed", error.message);
+  if (error) logActionFailure("version.auto_snapshot", error);
   return { ok: true, id: (data as string | null) ?? null };
 }
 
@@ -134,7 +138,10 @@ export async function trashObject(input: unknown): Promise<VersionActionResult> 
     p_type: object.type,
     p_title: title,
   });
-  if (error) return { ok: false, error: translate(error.message, m) };
+  if (error) {
+    logActionFailure("version.trashObject", error);
+    return { ok: false, error: translate(error.message, m) };
+  }
   revalidatePath("/collab", "layout");
   return { ok: true, id: data as string };
 }
@@ -148,7 +155,10 @@ export async function restoreObject(objectId: unknown): Promise<VersionActionRes
   if (!id.success) return { ok: false, error: m.errors.notInTrash };
   const db = await createSupabaseServerClient();
   const { error } = await db.rpc("restore_object", { p_object: id.data });
-  if (error) return { ok: false, error: translate(error.message, m) };
+  if (error) {
+    logActionFailure("version.restoreObject", error);
+    return { ok: false, error: translate(error.message, m) };
+  }
   revalidatePath("/collab", "layout");
   return { ok: true, id: id.data };
 }

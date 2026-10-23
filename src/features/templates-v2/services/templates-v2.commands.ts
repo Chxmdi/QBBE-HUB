@@ -18,6 +18,7 @@ import {
   type PageBody,
   type TemplateTypeKey,
 } from "@/features/templates-v2/template";
+import { logActionFailure } from "@/lib/server-log";
 
 export type TemplatesV2Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -230,7 +231,10 @@ export async function createTemplateV2(input: {
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: m.errors.generic };
+  if (error || !data) {
+    if (error) logActionFailure("templates_v2.createTemplateV2", error);
+    return { ok: false, error: m.errors.generic };
+  }
   revalidatePath("/templates-v2");
   return { ok: true, data: { id: data.id as string } };
 }

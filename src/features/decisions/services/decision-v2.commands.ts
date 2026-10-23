@@ -9,6 +9,7 @@ import { decisionsV2Enabled } from "../flag";
 import { decisionsV2T } from "../i18n";
 import { parseOptions } from "../revisit";
 import { isCalendarDate } from "@/lib/schema";
+import { logActionFailure } from "@/lib/server-log";
 
 export interface CommandResult {
   ok: boolean;
@@ -65,7 +66,10 @@ export async function saveDecisionRecord(input: unknown): Promise<CommandResult>
     })
     .eq("id", data.decisionId)
     .select("id, project_id");
-  if (error || !updated || updated.length === 0) return { ok: false, error: t("form.error") };
+  if (error || !updated || updated.length === 0) {
+    if (error) logActionFailure("decision_v2.saveDecisionRecord", error);
+    return { ok: false, error: t("form.error") };
+  }
   revalidatePath(`/decisions/${data.decisionId}`);
   const projectId = updated[0].project_id as string | null;
   if (projectId) revalidatePath(`/decisions/trail/${projectId}`);
@@ -86,7 +90,10 @@ export async function addDecisionParticipant(input: unknown): Promise<CommandRes
     .from("decision_participant")
     .insert({ decision_id: parsed.data.decisionId, user_id: parsed.data.userId });
   // Adding someone already there is not an error worth showing.
-  if (error && error.code !== "23505") return { ok: false, error: t("participants.error") };
+  if (error && error.code !== "23505") {
+    if (error) logActionFailure("decision_v2.addDecisionParticipant", error);
+    return { ok: false, error: t("participants.error") };
+  }
   revalidatePath(`/decisions/${parsed.data.decisionId}`);
   return { ok: true };
 }
@@ -105,7 +112,10 @@ export async function removeDecisionParticipant(input: unknown): Promise<Command
     .eq("decision_id", parsed.data.decisionId)
     .eq("user_id", parsed.data.userId)
     .select("user_id");
-  if (error || !data || data.length === 0) return { ok: false, error: t("participants.error") };
+  if (error || !data || data.length === 0) {
+    if (error) logActionFailure("decision_v2.removeDecisionParticipant", error);
+    return { ok: false, error: t("participants.error") };
+  }
   revalidatePath(`/decisions/${parsed.data.decisionId}`);
   return { ok: true };
 }

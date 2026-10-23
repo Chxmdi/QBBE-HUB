@@ -13,6 +13,7 @@ import { base64ToByteaHex, MAX_STATE_BASE64 } from "@/features/editor/adapter/st
 import { getDocumentDownloadUrl, registerUploadedDocument } from "@/features/documents/services/document.commands";
 import { isEditorDocumentType } from "@/features/versions/adapters/registry";
 import { recordAutomaticVersion } from "@/features/versions/services/auto-version";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Saving editor content and the files placed in it (M4b). Runs as the
@@ -88,7 +89,10 @@ async function writeDocument(
     .eq("object_id", objectId)
     .eq("version", baseVersion)
     .select("version");
-  if (error) return { ok: false, reason: error.code === "42501" ? "forbidden" : "failed" };
+  if (error) {
+    logActionFailure("editor_document.writeDocument", error);
+    return { ok: false, reason: error.code === "42501" ? "forbidden" : "failed" };
+  }
   if (data && data.length === 1) return { ok: true, version: data[0].version as number };
   return currentConflict(supabase, objectId);
 }

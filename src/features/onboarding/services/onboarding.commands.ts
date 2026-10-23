@@ -10,6 +10,7 @@ import type { TranslateFn } from "@/lib/i18n/translator";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { PRIVACY_NOTICE_VERSION } from "@/config/privacy";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { logActionFailure } from "@/lib/server-log";
 
 /** Built per call so the validation message is in the person's language. */
 function profileSchema(t: TranslateFn) {
@@ -51,7 +52,10 @@ export async function saveOnboardingProfile(
     })
     .eq("id", session.userId);
 
-  if (error) return { ok: false, error: t("onboarding.errors.profileFailed") };
+  if (error) {
+    logActionFailure("onboarding.saveOnboardingProfile", error);
+    return { ok: false, error: t("onboarding.errors.profileFailed") };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -70,12 +74,18 @@ export async function completeOnboarding(): Promise<ActionResult> {
       { user_id: session.userId, notice_version: PRIVACY_NOTICE_VERSION },
       { onConflict: "user_id,notice_version", ignoreDuplicates: true },
     );
-  if (ackError) return { ok: false, error: t("onboarding.errors.completeFailed") };
+  if (ackError) {
+    logActionFailure("onboarding.completeOnboarding", ackError);
+    return { ok: false, error: t("onboarding.errors.completeFailed") };
+  }
   const { error } = await supabase
     .from("user_profile")
     .update({ onboarded_at: new Date().toISOString() })
     .eq("id", session.userId);
-  if (error) return { ok: false, error: t("onboarding.errors.completeFailed") };
+  if (error) {
+    logActionFailure("onboarding.completeOnboarding", error);
+    return { ok: false, error: t("onboarding.errors.completeFailed") };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -95,7 +105,10 @@ export async function setReduceMotion(input: unknown): Promise<ActionResult> {
     .from("user_profile")
     .update({ reduce_motion: parsed.data })
     .eq("id", session.userId);
-  if (error) return { ok: false, error: t("onboarding.errors.settingFailed") };
+  if (error) {
+    logActionFailure("onboarding.setReduceMotion", error);
+    return { ok: false, error: t("onboarding.errors.settingFailed") };
+  }
 
   revalidatePath("/", "layout");
   return { ok: true };
@@ -115,7 +128,10 @@ export async function setDisplayDensity(input: unknown): Promise<ActionResult> {
     .from("user_profile")
     .update({ display_density: parsed.data })
     .eq("id", session.userId);
-  if (error) return { ok: false, error: t("onboarding.errors.settingFailed") };
+  if (error) {
+    logActionFailure("onboarding.setDisplayDensity", error);
+    return { ok: false, error: t("onboarding.errors.settingFailed") };
+  }
 
   revalidatePath("/", "layout");
   return { ok: true };

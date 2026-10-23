@@ -10,6 +10,7 @@ import { createNotifications, notificationDedupeKey } from "@/features/jobs/serv
 import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
+import { logActionFailure } from "@/lib/server-log";
 
 const parentTypes = [
   "project",
@@ -164,7 +165,7 @@ export async function addRecordComment(input: unknown): Promise<ActionResult> {
     try {
       await createNotifications(db, drafts);
     } catch (notifyError) {
-      console.error("comment notification failed", notifyError);
+      logActionFailure("comment.notify", notifyError);
     }
   }
 

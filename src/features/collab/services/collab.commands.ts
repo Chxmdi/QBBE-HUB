@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isCursor, type PresenceCursor, type PresenceEntry } from "../presence";
+import { logActionFailure } from "@/lib/server-log";
 
 const objectId = z.string().uuid();
 
@@ -78,7 +79,10 @@ export async function setObjectLock(id: unknown, locked: boolean, reason?: strin
   const { error } = locked
     ? await db.rpc("lock_object", { p_object: parsed.data, p_reason: why.data || null })
     : await db.rpc("unlock_object", { p_object: parsed.data });
-  if (error) return { ok: false };
+  if (error) {
+    logActionFailure("collab.setObjectLock", error);
+    return { ok: false };
+  }
   revalidatePath("/collab", "layout");
   return { ok: true };
 }

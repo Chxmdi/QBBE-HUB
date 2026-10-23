@@ -18,6 +18,7 @@ import {
 } from "@/features/forms/fields";
 import { dbErrorMessage } from "@/lib/db-error";
 import { FORM_DB_ERRORS } from "@/features/forms/db-error-rules";
+import { logActionFailure } from "@/lib/server-log";
 
 const fieldSchema = z
   .object({
@@ -100,7 +101,10 @@ export async function createForm(input: unknown): Promise<ActionResult> {
     .insert({ organization_id: auth.session.organizationId, ...formRow(parsed.data) })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: (await getT())("forms.errors.saveFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("form.createForm", error);
+    return { ok: false, error: (await getT())("forms.errors.saveFailed") };
+  }
   await audit(supabase, auth.session, "form_created", "form_definition", data.id);
   revalidatePath("/forms");
   return { ok: true, id: data.id as string };
@@ -179,7 +183,10 @@ export async function deleteDraftForm(formId: string): Promise<ActionResult> {
     .eq("status", "draft")
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: (await getT())("forms.errors.onlyDraftDelete") };
+  if (error || !data) {
+    if (error) logActionFailure("form.deleteDraftForm", error);
+    return { ok: false, error: (await getT())("forms.errors.onlyDraftDelete") };
+  }
   await audit(supabase, auth.session, "form_draft_deleted", "form_definition", formId);
   revalidatePath("/forms");
   return { ok: true, id: formId };
@@ -259,7 +266,10 @@ export async function openFormFile(fileId: string): Promise<ActionResult & { url
   const { data: signed, error } = await supabase.storage
     .from("form-files")
     .createSignedUrl(file.storage_path as string, 60);
-  if (error || !signed) return { ok: false, error: (await getT())("forms.errors.openFailed") };
+  if (error || !signed) {
+    if (error) logActionFailure("form.openFormFile", error);
+    return { ok: false, error: (await getT())("forms.errors.openFailed") };
+  }
   await audit(supabase, session, "form_file_opened", "form_file", fileId);
   return { ok: true, url: signed.signedUrl };
 }

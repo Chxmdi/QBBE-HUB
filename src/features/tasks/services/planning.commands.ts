@@ -15,6 +15,7 @@ import {
   taskSeriesSchema,
   translateTaskError,
 } from "@/features/tasks/schemas";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Advanced planning commands (#31).
@@ -45,7 +46,10 @@ export async function addMilestoneDependency(input: unknown): Promise<ActionResu
       .order("blocked_milestone_id"),
     "blocking_milestone_id",
   );
-  if (readError) return { ok: false, error: t("tasks.errors.checkDependencies") };
+  if (readError) {
+    logActionFailure("planning.addMilestoneDependency", readError);
+    return { ok: false, error: t("tasks.errors.checkDependencies") };
+  }
 
   // The readable answer, from the edges this person is allowed to see. The
   // trigger repeats the walk over the whole graph, including edges hidden by
@@ -64,8 +68,14 @@ export async function addMilestoneDependency(input: unknown): Promise<ActionResu
   });
   // Adding an edge that is already there is what the person asked for.
   if (error?.code === "23505") return { ok: true };
-  if (error?.code === "23514") return { ok: false, error: t("tasks.errors.cycle") };
-  if (error) return { ok: false, error: t("tasks.errors.saveDependency") };
+  if (error?.code === "23514") {
+    if (error) logActionFailure("planning.addMilestoneDependency", error);
+    return { ok: false, error: t("tasks.errors.cycle") };
+  }
+  if (error) {
+    logActionFailure("planning.addMilestoneDependency", error);
+    return { ok: false, error: t("tasks.errors.saveDependency") };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -82,7 +92,10 @@ export async function removeMilestoneDependency(
     .delete()
     .eq("blocking_milestone_id", blockingMilestoneId)
     .eq("blocked_milestone_id", blockedMilestoneId);
-  if (error) return { ok: false, error: t("tasks.errors.removeDependency") };
+  if (error) {
+    logActionFailure("planning.removeMilestoneDependency", error);
+    return { ok: false, error: t("tasks.errors.removeDependency") };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -123,7 +136,10 @@ export async function createTaskSeries(input: unknown): Promise<ActionResult> {
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: t("tasks.errors.createSeries") };
+  if (error || !data) {
+    if (error) logActionFailure("planning.createTaskSeries", error);
+    return { ok: false, error: t("tasks.errors.createSeries") };
+  }
 
   // The first occurrence, so a new series is visible as work rather than as a
   // setting that will produce work later.
@@ -188,7 +204,10 @@ export async function stopTaskSeries(seriesId: string): Promise<ActionResult> {
     .eq("id", seriesId)
     .is("stopped_at", null)
     .select("id");
-  if (error) return { ok: false, error: t("tasks.errors.stopSeries") };
+  if (error) {
+    logActionFailure("planning.stopTaskSeries", error);
+    return { ok: false, error: t("tasks.errors.stopSeries") };
+  }
   // Already stopped, or not this caller's to stop. Both are "nothing changed",
   // and the policy has already decided which.
   if (!data?.length) return { ok: true };
@@ -214,7 +233,10 @@ export async function detachSeriesOccurrence(taskId: string): Promise<ActionResu
     .eq("id", taskId)
     .not("series_id", "is", null)
     .select("id");
-  if (error) return { ok: false, error: t("tasks.errors.updateOccurrence") };
+  if (error) {
+    logActionFailure("planning.detachSeriesOccurrence", error);
+    return { ok: false, error: t("tasks.errors.updateOccurrence") };
+  }
   if (!data?.length) return { ok: false, error: t("tasks.errors.notInSeries") };
   revalidatePath("/", "layout");
   return { ok: true };
@@ -254,7 +276,10 @@ export async function rescheduleCalendarItem(input: unknown): Promise<ActionResu
     .update({ [column]: date })
     .eq("id", id)
     .select("id");
-  if (error) return { ok: false, error: t("tasks.errors.moveItem") };
+  if (error) {
+    logActionFailure("planning.rescheduleCalendarItem", error);
+    return { ok: false, error: t("tasks.errors.moveItem") };
+  }
   if (!data?.length) {
     return { ok: false, error: t("tasks.errors.noReschedulePermission") };
   }

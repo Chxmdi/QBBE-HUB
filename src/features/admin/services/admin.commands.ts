@@ -17,6 +17,7 @@ import {
   hashInvitationToken,
   invitationLink,
 } from "./invitation-link";
+import { logActionFailure } from "@/lib/server-log";
 
 const inviteSchema = (t: TranslateFn) => z.object({
   email: z.string().trim().email(t("admin.errors.validEmail")),
@@ -122,7 +123,10 @@ export async function inviteUser(input: unknown): Promise<InviteResult> {
     })
     .select("id")
     .single();
-  if (error || !invitation) return { ok: false, error: t("admin.errors.inviteFailed") };
+  if (error || !invitation) {
+    if (error) logActionFailure("admin.inviteUser", error);
+    return { ok: false, error: t("admin.errors.inviteFailed") };
+  }
 
   const delivery = await deliverInvitation({
     token,
@@ -248,7 +252,10 @@ export async function changeMemberRole(input: unknown): Promise<ActionResult> {
     .eq("id", membershipId)
     .select("id")
     .maybeSingle();
-  if (error || !updated) return { ok: false, error: t("admin.errors.roleChangeFailed") };
+  if (error || !updated) {
+    if (error) logActionFailure("admin.changeMemberRole", error);
+    return { ok: false, error: t("admin.errors.roleChangeFailed") };
+  }
 
   revalidatePath("/admin");
   revalidatePath("/people");
@@ -272,7 +279,10 @@ async function setSignInAllowed(userId: string, allowed: boolean): Promise<{ ok:
         .eq("user_id", userId)
         .eq("status", "active")
         .limit(1);
-      if (othersError) return { ok: false };
+      if (othersError) {
+        logActionFailure("admin.setSignInAllowed", othersError);
+        return { ok: false };
+      }
       if ((others ?? []).length > 0) return { ok: true };
     }
     const { error } = await admin.auth.admin.updateUserById(userId, {
@@ -316,7 +326,10 @@ export async function setMemberActive(
     .eq("id", membershipId)
     .select("id")
     .maybeSingle();
-  if (error || !updated) return { ok: false, error: t("admin.errors.accountUpdateFailed") };
+  if (error || !updated) {
+    if (error) logActionFailure("admin.setMemberActive", error);
+    return { ok: false, error: t("admin.errors.accountUpdateFailed") };
+  }
 
   // The database ends the member's integrations and sessions in this
   // organization on deactivation. Sign-in itself is blocked (or allowed
@@ -344,7 +357,10 @@ export async function revokeInvitation(invitationId: string): Promise<ActionResu
     .is("accepted_at", null)
     .select("id")
     .maybeSingle();
-  if (error || !revoked) return { ok: false, error: t("admin.errors.revokeFailed") };
+  if (error || !revoked) {
+    if (error) logActionFailure("admin.revokeInvitation", error);
+    return { ok: false, error: t("admin.errors.revokeFailed") };
+  }
   revalidatePath("/admin");
   return { ok: true };
 }
@@ -371,7 +387,10 @@ export async function transferOwnership(targetMembershipId: string): Promise<Act
   const { error } = await supabase.rpc("transfer_organization_ownership", {
     p_target_membership: targetMembershipId,
   });
-  if (error) return { ok: false, error: t("admin.errors.transferFailed") };
+  if (error) {
+    logActionFailure("admin.transferOwnership", error);
+    return { ok: false, error: t("admin.errors.transferFailed") };
+  }
 
   revalidatePath("/admin");
   revalidatePath("/people");

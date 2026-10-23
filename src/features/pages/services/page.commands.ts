@@ -21,6 +21,7 @@ import {
   positionForStep,
 } from "@/features/pages/tree";
 import { PAGE_COLUMNS, toPageRow, type PageRecordRow } from "./page.queries";
+import { logActionFailure, logEvent } from "@/lib/server-log";
 
 /**
  * Page writes (M4a). Every write runs as the signed-in person, so the page
@@ -95,7 +96,10 @@ async function updatePage(
     .update(patch)
     .eq("id", pageId)
     .select("id");
-  if (error) return { ok: false, error: refusal(t, error) };
+  if (error) {
+    logActionFailure("page.updatePage", error);
+    return { ok: false, error: refusal(t, error) };
+  }
   if (!data || data.length === 0) return { ok: false, error: t("errors.notAllowed") };
   refresh(pageId);
   return { ok: true, id: pageId };
@@ -135,7 +139,10 @@ export async function createPage(input: unknown): Promise<PageActionResult> {
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: refusal(t, error) };
+  if (error || !data) {
+    if (error) logActionFailure("page.createPage", error);
+    return { ok: false, error: refusal(t, error) };
+  }
   refresh();
   return { ok: true, id: data.id as string };
 }
@@ -238,7 +245,10 @@ export async function duplicatePage(input: unknown): Promise<PageActionResult> {
     })
     .select("id")
     .single();
-  if (error || !copy) return { ok: false, error: refusal(t, error) };
+  if (error || !copy) {
+    if (error) logActionFailure("page.duplicatePage", error);
+    return { ok: false, error: refusal(t, error) };
+  }
   refresh();
   return { ok: true, id: copy.id as string };
 }
@@ -267,7 +277,10 @@ export async function setFavourite(input: unknown, favourite: boolean): Promise<
         .from("page_favourite")
         .upsert({ user_id: session.userId, page_id: pageId, position: Date.now() }, { onConflict: "user_id,page_id" })
     : await supabase.from("page_favourite").delete().eq("user_id", session.userId).eq("page_id", pageId);
-  if (error) return { ok: false, error: refusal(t, error) };
+  if (error) {
+    logActionFailure("page.setFavourite", error);
+    return { ok: false, error: refusal(t, error) };
+  }
   refresh(pageId);
   return { ok: true, id: pageId };
 }
@@ -287,7 +300,7 @@ export async function recordPageVisit(pageId: string): Promise<void> {
         { user_id: session.userId, page_id: pageId, visited_at: new Date().toISOString() },
         { onConflict: "user_id,page_id" },
       );
-    if (error) console.warn("page visit not recorded", error.code);
+    if (error) logEvent("page.visit_not_recorded", { code: error.code }, "warn");
   } catch {
     // A missed Recent entry is not worth failing the page for.
   }

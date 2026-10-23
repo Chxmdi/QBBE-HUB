@@ -11,6 +11,7 @@ import { findConflicts } from "../plan";
 import { validateBlueprint, type Blueprint, type BlueprintIssue } from "../schema";
 import { applyBlueprintBuild, undoBlueprintChanges, type BuildFailure } from "./blueprint.build";
 import { existingKeys, getBlueprint } from "./blueprint.queries";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Blueprint writes (V2-2). Each runs as the signed-in person, so RLS and the
@@ -99,7 +100,10 @@ export async function saveBlueprint(
         .insert({ ...row, organization_id: session.organizationId })
         .select("id")
         .single();
-  if (error) return { ok: false, error: databaseError(messages, error) };
+  if (error) {
+    logActionFailure("blueprint.saveBlueprint", error);
+    return { ok: false, error: databaseError(messages, error) };
+  }
   if (!data) return { ok: false, error: messages.errors.forbidden };
   refresh(data.id);
   return { ok: true, value: { id: data.id as string, issues } };
@@ -114,7 +118,10 @@ export async function approveBlueprint(id: string): Promise<BlueprintResult> {
   if (!validation.ok) return { ok: false, error: messages.approve.fixFirst, issues: validation.issues };
 
   const { error } = await supabase.rpc("blueprint_approve", { p_blueprint: id });
-  if (error) return { ok: false, error: databaseError(messages, error) };
+  if (error) {
+    logActionFailure("blueprint.approveBlueprint", error);
+    return { ok: false, error: databaseError(messages, error) };
+  }
   refresh(id);
   return { ok: true, value: null };
 }
@@ -188,7 +195,10 @@ export async function deleteBlueprint(id: string): Promise<BlueprintResult> {
   const { supabase, messages, enabled } = await context();
   if (!enabled) return { ok: false, error: messages.errors.disabled };
   const { data, error } = await supabase.from("blueprint").delete().eq("id", id).select("id");
-  if (error) return { ok: false, error: databaseError(messages, error) };
+  if (error) {
+    logActionFailure("blueprint.deleteBlueprint", error);
+    return { ok: false, error: databaseError(messages, error) };
+  }
   if (!data?.length) return { ok: false, error: messages.errors.forbidden };
   refresh();
   return { ok: true, value: null };

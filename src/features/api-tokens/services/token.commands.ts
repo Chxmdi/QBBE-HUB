@@ -10,6 +10,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { apiTokenMessages } from "../i18n";
 import { apiScopes, generateToken, MAX_TOKEN_DAYS } from "../token";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Making and revoking API tokens (V2-8), through the person's own session so
@@ -56,7 +57,10 @@ export async function createApiToken(input: unknown): Promise<CreateTokenResult>
     scopes: [...new Set(parsed.data.scopes)],
     expires_at: new Date(Date.now() + parsed.data.days * 86_400_000).toISOString(),
   });
-  if (error) return { ok: false, error: m.errors.createFailed };
+  if (error) {
+    logActionFailure("token.createApiToken", error);
+    return { ok: false, error: m.errors.createFailed };
+  }
   revalidatePath("/api-tokens");
   return { ok: true, token };
 }
@@ -70,7 +74,10 @@ export async function revokeApiToken(input: unknown): Promise<{ ok: true } | { o
   if (!parsed.success) return { ok: false, error: m.errors.revokeFailed };
   const db = await createSupabaseServerClient();
   const { error } = await db.rpc("revoke_api_token", { p_token: parsed.data.id });
-  if (error) return { ok: false, error: m.errors.revokeFailed };
+  if (error) {
+    logActionFailure("token.revokeApiToken", error);
+    return { ok: false, error: m.errors.revokeFailed };
+  }
   revalidatePath("/api-tokens");
   return { ok: true };
 }

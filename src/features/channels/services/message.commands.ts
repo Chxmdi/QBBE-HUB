@@ -15,6 +15,7 @@ import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { reportError } from "@/lib/observability";
+import { logActionFailure } from "@/lib/server-log";
 
 const sendMessageSchema = (t: TranslateFn) => z.object({
   channelId: z.string().uuid().optional(),
@@ -320,7 +321,10 @@ export async function toggleSavedMessage(
       .delete()
       .eq("user_id", session.userId)
       .eq("message_id", messageId);
-    if (error) return { ok: false, error: t("messages.errors.unsaveFailed") };
+    if (error) {
+      logActionFailure("message.toggleSavedMessage", error);
+      return { ok: false, error: t("messages.errors.unsaveFailed") };
+    }
     revalidatePath("/saved");
     return { ok: true, saved: false };
   }
@@ -329,7 +333,10 @@ export async function toggleSavedMessage(
     user_id: session.userId,
     message_id: messageId,
   });
-  if (error) return { ok: false, error: t("messages.errors.saveFailed") };
+  if (error) {
+    logActionFailure("message.toggleSavedMessage", error);
+    return { ok: false, error: t("messages.errors.saveFailed") };
+  }
   revalidatePath("/saved");
   return { ok: true, saved: true };
 }
@@ -371,7 +378,10 @@ export async function editMessage(input: unknown): Promise<ActionResult> {
     .from("message")
     .update({ body, edited_at: new Date().toISOString() })
     .eq("id", messageId);
-  if (error) return { ok: false, error: t("messages.errors.editFailed") };
+  if (error) {
+    logActionFailure("message.editMessage", error);
+    return { ok: false, error: t("messages.errors.editFailed") };
+  }
 
   return { ok: true };
 }
@@ -412,7 +422,10 @@ export async function convertMessageToAgendaItem(
     sort_key: (count ?? 0) + 1,
     status: session.isStaff ? "accepted" : "proposed",
   });
-  if (error) return { ok: false, error: t("messages.errors.agendaFailed") };
+  if (error) {
+    logActionFailure("message.convertMessageToAgendaItem", error);
+    return { ok: false, error: t("messages.errors.agendaFailed") };
+  }
 
   revalidatePath(`/meetings/${meetingId}`);
   return { ok: true, id: meetingId };
@@ -453,7 +466,10 @@ export async function convertMessageToDecision(
     })
     .select("id")
     .single();
-  if (error || !decision) return { ok: false, error: t("messages.errors.decisionFailed") };
+  if (error || !decision) {
+    if (error) logActionFailure("message.convertMessageToDecision", error);
+    return { ok: false, error: t("messages.errors.decisionFailed") };
+  }
 
   revalidatePath("/", "layout");
   return { ok: true, id: decision.id as string };
@@ -505,7 +521,10 @@ export async function unpinResource(
     .from("pinned_resource")
     .delete()
     .eq("id", resourceId);
-  if (error) return { ok: false, error: t("messages.errors.unpinFailed") };
+  if (error) {
+    logActionFailure("message.unpinResource", error);
+    return { ok: false, error: t("messages.errors.unpinFailed") };
+  }
   revalidatePath(`/channels/${channelId}`);
   return { ok: true };
 }

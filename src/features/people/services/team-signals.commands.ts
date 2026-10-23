@@ -10,6 +10,7 @@ import {
   teamSignalSettingsSchema,
   THRESHOLD_LIMITS,
 } from "@/features/people/team-signals";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Saving Admin, Team signals. The authorization here gives a clear sentence;
@@ -49,7 +50,10 @@ export async function saveTeamSignalSettings(input: unknown): Promise<ActionResu
     },
     { onConflict: "organization_id" },
   );
-  if (error) return { ok: false, error: t("teamSignals.errors.generic") };
+  if (error) {
+    logActionFailure("team_signals.saveTeamSignalSettings", error);
+    return { ok: false, error: t("teamSignals.errors.generic") };
+  }
 
   // Who is told about whom is a governance decision, so it is audited.
   await supabase.from("audit_event").insert({

@@ -10,6 +10,7 @@ import { parseMoneyToCents } from "@/features/finance/money";
 import { requiredText, isCalendarDate } from "@/lib/schema";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translator";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Validation messages are catalogue keys, translated when the action returns
@@ -140,7 +141,10 @@ export async function setReceiptReviewed(
   if (error?.code === "42501") {
     return { ok: false, error: t("finance.receipts.errors.adminOnly") };
   }
-  if (error || !data) return { ok: false, error: t("finance.receipts.errors.updateFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("receipt.setReceiptReviewed", error);
+    return { ok: false, error: t("finance.receipts.errors.updateFailed") };
+  }
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
@@ -176,7 +180,10 @@ export async function openReceiptFile(
   const { data: signed, error } = await supabase.storage
     .from("receipts")
     .createSignedUrl(receipt.storage_path as string, 60);
-  if (error || !signed) return { ok: false, error: t("finance.receipts.errors.openFailed") };
+  if (error || !signed) {
+    if (error) logActionFailure("receipt.openReceiptFile", error);
+    return { ok: false, error: t("finance.receipts.errors.openFailed") };
+  }
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
@@ -210,6 +217,9 @@ export async function saveReceiptText(input: unknown): Promise<ActionResult> {
     p_text: parsed.data.text,
     p_source: parsed.data.source,
   });
-  if (error) return { ok: false, error: "Could not store the receipt's text." };
+  if (error) {
+    logActionFailure("receipt.saveReceiptText", error);
+    return { ok: false, error: "Could not store the receipt's text." };
+  }
   return { ok: true, id: parsed.data.id };
 }

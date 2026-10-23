@@ -17,6 +17,7 @@ import { reactionKeys } from "../reactions";
 import { commentTargetFor, objectCommentsPath } from "../target";
 import { objectCommentsText, type ObjectCommentsText } from "../messages";
 import { findMentionCandidates, type MentionCandidate } from "./object-comment.queries";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Object comments appear in the collaboration pages (wos_editor) and on object record
@@ -139,7 +140,7 @@ async function syncMentions(
   } catch (notifyError) {
     // The comment and its mentions are saved; a failed notice is not the
     // author's to retry.
-    console.error("object comment notification failed", notifyError);
+    logActionFailure("object_comment.notify", notifyError);
   }
 }
 
@@ -185,7 +186,7 @@ export async function addObjectComment(input: unknown): Promise<CommentActionRes
       link: objectCommentsPath(data.object, commentId, target.blockId),
     });
   } catch (mentionError) {
-    console.error("object comment mentions failed", mentionError);
+    logActionFailure("object_comment.mentions", mentionError);
   }
   revalidatePath("/collab", "layout");
   return { ok: true, id: commentId };
@@ -213,7 +214,10 @@ export async function editObjectComment(input: unknown): Promise<CommentActionRe
     .update({ body: parsed.data.body })
     .eq("id", parsed.data.commentId)
     .select("id, parent_type, parent_id, block_id");
-  if (error) return { ok: false, error: translateError(error.message, m.errors.saveFailed, m) };
+  if (error) {
+    logActionFailure("object_comment.editObjectComment", error);
+    return { ok: false, error: translateError(error.message, m.errors.saveFailed, m) };
+  }
   const row = data?.[0] as { id: string; parent_type: string; parent_id: string; block_id: string | null } | undefined;
   if (!row) return { ok: false, error: m.errors.notFound };
   try {
@@ -227,7 +231,7 @@ export async function editObjectComment(input: unknown): Promise<CommentActionRe
       link: objectCommentsPath(parsed.data.object, row.id, row.block_id),
     });
   } catch (mentionError) {
-    console.error("object comment mentions failed", mentionError);
+    logActionFailure("object_comment.mentions", mentionError);
   }
   revalidatePath("/collab", "layout");
   return { ok: true, id: row.id };
@@ -248,7 +252,10 @@ async function updateComment(
     .update(patch)
     .eq("id", id.data)
     .select("id");
-  if (error) return { ok: false, error: translateError(error.message, m.errors.saveFailed, m) };
+  if (error) {
+    logActionFailure("object_comment.updateComment", error);
+    return { ok: false, error: translateError(error.message, m.errors.saveFailed, m) };
+  }
   if (!data || data.length === 0) return { ok: false, error: m.errors.notFound };
   revalidatePath("/collab", "layout");
   return { ok: true, id: id.data };
@@ -297,7 +304,10 @@ export async function setObjectCommentReaction(input: unknown): Promise<CommentA
         .eq("comment_id", commentId)
         .eq("user_id", session.userId)
         .eq("reaction", reaction);
-  if (error) return { ok: false, error: translateError(error.message, m.errors.reactionFailed, m) };
+  if (error) {
+    logActionFailure("object_comment.setObjectCommentReaction", error);
+    return { ok: false, error: translateError(error.message, m.errors.reactionFailed, m) };
+  }
   revalidatePath("/collab", "layout");
   return { ok: true, id: commentId };
 }

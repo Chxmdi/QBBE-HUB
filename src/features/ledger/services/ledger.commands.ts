@@ -16,6 +16,7 @@ import {
 } from "@/features/ledger/money";
 import { dbErrorMessage } from "@/lib/db-error";
 import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Bookkeeping actions (#148, #149). Every write is for owners and admins who
@@ -237,7 +238,10 @@ export async function saveFund(input: unknown): Promise<ActionResult> {
     .from("ledger_fund_program")
     .select("program_id")
     .eq("fund_id", fundId);
-  if (readError) return { ok: false, error: t("finance.ledger.errors.fundPrograms") };
+  if (readError) {
+    logActionFailure("ledger.saveFund", readError);
+    return { ok: false, error: t("finance.ledger.errors.fundPrograms") };
+  }
   const have = new Set((current ?? []).map((r) => r.program_id as string));
   const remove = [...have].filter((id) => !wanted.has(id));
   const add = [...wanted].filter((id) => !have.has(id));
@@ -247,7 +251,10 @@ export async function saveFund(input: unknown): Promise<ActionResult> {
       .delete()
       .eq("fund_id", fundId)
       .in("program_id", remove);
-    if (removeError) return { ok: false, error: t("finance.ledger.errors.fundPrograms") };
+    if (removeError) {
+      logActionFailure("ledger.saveFund", removeError);
+      return { ok: false, error: t("finance.ledger.errors.fundPrograms") };
+    }
   }
   if (add.length > 0) {
     const { error: addError } = await supabase.from("ledger_fund_program").insert(
@@ -257,7 +264,10 @@ export async function saveFund(input: unknown): Promise<ActionResult> {
         program_id: programId,
       })),
     );
-    if (addError) return { ok: false, error: dbMessage(t, addError, t("finance.ledger.errors.fundPrograms")) };
+    if (addError) {
+      logActionFailure("ledger.saveFund", addError);
+      return { ok: false, error: dbMessage(t, addError, t("finance.ledger.errors.fundPrograms")) };
+    }
   }
   revalidatePath(LEDGER, "layout");
   return { ok: true, id: fundId };

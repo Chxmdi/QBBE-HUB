@@ -17,6 +17,7 @@ import {
   type PresetQueryKey,
   type RuleChoice,
 } from "@/features/following/rules";
+import { logActionFailure } from "@/lib/server-log";
 
 export type FollowingResult = { ok: true } | { ok: false; error: string };
 
@@ -63,7 +64,10 @@ export async function followPresetQuery(key: PresetQueryKey): Promise<FollowingR
   const { error } = await supabase
     .from("follow_v2")
     .insert({ organization_id: session.organizationId, query_spec: PRESET_QUERIES[key], label: key });
-  if (error) return { ok: false, error: m.errors.generic };
+  if (error) {
+    logActionFailure("following.followPresetQuery", error);
+    return { ok: false, error: m.errors.generic };
+  }
   revalidatePath("/following");
   return { ok: true };
 }
@@ -75,7 +79,10 @@ export async function unfollow(followId: string): Promise<FollowingResult> {
   if (!uuid.safeParse(followId).success) return { ok: false, error: m.errors.generic };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.from("follow_v2").delete().eq("id", followId).select("id");
-  if (error || !data?.length) return { ok: false, error: m.errors.generic };
+  if (error || !data?.length) {
+    if (error) logActionFailure("following.unfollow", error);
+    return { ok: false, error: m.errors.generic };
+  }
   revalidatePath("/following");
   return { ok: true };
 }
@@ -93,7 +100,10 @@ export async function saveFollowRules(choices: Partial<Record<EventKind, RuleCho
   if (rows.length === 0) return { ok: false, error: m.errors.generic };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.from("follow_rule_v2").upsert(rows, { onConflict: "user_id,event_kind" });
-  if (error) return { ok: false, error: m.errors.generic };
+  if (error) {
+    logActionFailure("following.saveFollowRules", error);
+    return { ok: false, error: m.errors.generic };
+  }
   revalidatePath("/following");
   return { ok: true };
 }

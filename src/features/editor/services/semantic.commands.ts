@@ -12,6 +12,7 @@ import { parseStoredSpec, toQueryBlockRow, type QueryBlockRow } from "@/features
 import { contentToPlainText, normalizeContent, type EditorBlock } from "@/features/editor/adapter/content";
 import { createPage } from "@/features/pages/services/page.commands";
 import { isCalendarDate } from "@/lib/schema";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Data for semantic blocks (M5). Every read runs as the signed-in person, so
@@ -297,7 +298,10 @@ export async function turnIntoPage(input: unknown): Promise<{ ok: true; page: Ob
     content_text: contentToPlainText(content).slice(0, 500000),
     created_by: context.session.userId,
   });
-  if (error) return { ok: false };
+  if (error) {
+    logActionFailure("semantic.turnIntoPage", error);
+    return { ok: false };
+  }
   const [page] = await read(context.supabase, "page", [created.id]);
   return page ? { ok: true, page } : { ok: false };
 }

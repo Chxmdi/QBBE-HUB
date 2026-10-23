@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { goalsEnabled } from "../flag";
 import { goalsT } from "../i18n";
 import { isCalendarDate } from "@/lib/schema";
+import { logActionFailure } from "@/lib/server-log";
 
 export interface CommandResult {
   ok: boolean;
@@ -56,7 +57,10 @@ export async function createGoal(input: unknown): Promise<CommandResult> {
     })
     .select("id")
     .single();
-  if (error || !row) return { ok: false, error: t("create.error") };
+  if (error || !row) {
+    if (error) logActionFailure("goal.createGoal", error);
+    return { ok: false, error: t("create.error") };
+  }
   revalidatePath("/goals");
   return { ok: true, id: row.id as string };
 }
@@ -76,7 +80,10 @@ export async function setGoalStatus(input: unknown): Promise<CommandResult> {
     .update({ status: parsed.data.status })
     .eq("id", parsed.data.goalId)
     .select("id");
-  if (error || !data || data.length === 0) return { ok: false, error: t("errors.notFound") };
+  if (error || !data || data.length === 0) {
+    if (error) logActionFailure("goal.setGoalStatus", error);
+    return { ok: false, error: t("errors.notFound") };
+  }
   revalidatePath(`/goals/${parsed.data.goalId}`);
   revalidatePath("/goals");
   return { ok: true };
@@ -101,7 +108,10 @@ export async function linkToGoal(input: unknown): Promise<CommandResult> {
     kind === "project"
       ? await supabase.from("goal_project").insert({ goal_id: goalId, project_id: refId })
       : await supabase.from("goal_metric").insert({ goal_id: goalId, metric_id: refId });
-  if (error && error.code !== "23505") return { ok: false, error: t("links.error") };
+  if (error && error.code !== "23505") {
+    if (error) logActionFailure("goal.linkToGoal", error);
+    return { ok: false, error: t("links.error") };
+  }
   revalidatePath(`/goals/${goalId}`);
   return { ok: true };
 }
@@ -119,7 +129,10 @@ export async function unlinkFromGoal(input: unknown): Promise<CommandResult> {
     kind === "project"
       ? await supabase.from("goal_project").delete().eq("goal_id", goalId).eq("project_id", refId).select("goal_id")
       : await supabase.from("goal_metric").delete().eq("goal_id", goalId).eq("metric_id", refId).select("goal_id");
-  if (error || !data || data.length === 0) return { ok: false, error: t("links.error") };
+  if (error || !data || data.length === 0) {
+    if (error) logActionFailure("goal.unlinkFromGoal", error);
+    return { ok: false, error: t("links.error") };
+  }
   revalidatePath(`/goals/${goalId}`);
   return { ok: true };
 }

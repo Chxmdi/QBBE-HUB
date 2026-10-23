@@ -9,6 +9,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
 import { calendarDateInZone } from "@/lib/time";
 import type { TranslateFn } from "@/lib/i18n/translator";
+import { logActionFailure } from "@/lib/server-log";
 
 const KINDS = ["task", "event", "update", "report"] as const;
 
@@ -51,7 +52,10 @@ export async function setProjectTemplateApproval(
     .eq("organization_id", authorization.session.organizationId)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: t("admin.errors.updateTemplateFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("template_catalog.setProjectTemplateApproval", error);
+    return { ok: false, error: t("admin.errors.updateTemplateFailed") };
+  }
   revalidateCatalog();
   return { ok: true, id: templateId };
 }
@@ -90,7 +94,10 @@ export async function createAgendaTemplate(input: unknown): Promise<ActionResult
     })
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: t("admin.errors.saveAgendaFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("template_catalog.createAgendaTemplate", error);
+    return { ok: false, error: t("admin.errors.saveAgendaFailed") };
+  }
   revalidateCatalog();
   return { ok: true, id: data.id as string };
 }
@@ -120,7 +127,10 @@ export async function setAgendaTemplateApproval(
     .eq("organization_id", authorization.session.organizationId)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: t("admin.errors.updateAgendaFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("template_catalog.setAgendaTemplateApproval", error);
+    return { ok: false, error: t("admin.errors.updateAgendaFailed") };
+  }
   revalidateCatalog();
   return { ok: true, id: templateId };
 }
@@ -165,7 +175,10 @@ export async function createRecordTemplate(input: unknown): Promise<ActionResult
     })
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: t("admin.errors.saveTemplateFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("template_catalog.createRecordTemplate", error);
+    return { ok: false, error: t("admin.errors.saveTemplateFailed") };
+  }
   revalidateCatalog();
   return { ok: true, id: data.id as string };
 }
@@ -195,7 +208,10 @@ export async function setRecordTemplateApproval(
     .eq("organization_id", authorization.session.organizationId)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: t("admin.errors.updateTemplateFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("template_catalog.setRecordTemplateApproval", error);
+    return { ok: false, error: t("admin.errors.updateTemplateFailed") };
+  }
   revalidateCatalog();
   return { ok: true, id: templateId };
 }
@@ -285,7 +301,10 @@ export async function instantiateRecordTemplate(input: unknown): Promise<ActionR
       })
       .select("id")
       .maybeSingle();
-    if (error || !data) return { ok: false, error: t("admin.errors.createEventFailed") };
+    if (error || !data) {
+      if (error) logActionFailure("template_catalog.instantiateRecordTemplate", error);
+      return { ok: false, error: t("admin.errors.createEventFailed") };
+    }
     revalidatePath("/events");
     return { ok: true, id: data.id as string };
   }
@@ -298,7 +317,10 @@ export async function instantiateRecordTemplate(input: unknown): Promise<ActionR
       health: "on_track",
       progress_summary: structure.progressSummary || title,
     });
-    if (error) return { ok: false, error: t("admin.errors.createUpdateFailed") };
+    if (error) {
+      logActionFailure("template_catalog.instantiateRecordTemplate", error);
+      return { ok: false, error: t("admin.errors.createUpdateFailed") };
+    }
     revalidatePath(`/projects/${projectId}`);
     return { ok: true };
   }
@@ -322,7 +344,10 @@ export async function instantiateRecordTemplate(input: unknown): Promise<ActionR
     })
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: t("admin.errors.createReportFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("template_catalog.instantiateRecordTemplate", error);
+    return { ok: false, error: t("admin.errors.createReportFailed") };
+  }
   revalidatePath("/reports");
   return { ok: true, id: data.id as string };
 }

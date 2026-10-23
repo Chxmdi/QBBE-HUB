@@ -11,6 +11,7 @@ import type { SubmitToCapture } from "@/features/google-objects/capture-contract
 import { parseDriveLink } from "@/features/google-objects/drive";
 import { GOOGLE_OBJECTS_FLAG } from "@/features/google-objects/gate";
 import { googleObjectsText } from "@/features/google-objects/messages";
+import { logActionFailure } from "@/lib/server-log";
 
 export type GoogleResult<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -61,9 +62,15 @@ export async function addEventAsMeeting(linkId: string, projectId: string | null
     ends_at: event.ends_at,
     meeting_link: event.html_link,
   });
-  if (error) return { ok: false, error: error.code === "42501" ? m.errors.meeting : m.errors.generic };
+  if (error) {
+    logActionFailure("google_objects.addEventAsMeeting", error);
+    return { ok: false, error: error.code === "42501" ? m.errors.meeting : m.errors.generic };
+  }
   const { error: linkError } = await supabase.rpc("google_link_event_meeting", { p_link_id: linkId, p_meeting_id: meetingId });
-  if (linkError) return { ok: false, error: m.errors.generic };
+  if (linkError) {
+    logActionFailure("google_objects.addEventAsMeeting", linkError);
+    return { ok: false, error: m.errors.generic };
+  }
   revalidatePath("/google");
   return { ok: true, data: { meetingId } };
 }

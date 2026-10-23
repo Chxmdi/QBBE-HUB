@@ -20,6 +20,7 @@ import { renderTextPdf } from "@/features/documents/templates/pdf";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { calendarDateInZone } from "@/lib/time";
+import { logActionFailure } from "@/lib/server-log";
 
 // Templates (#147). Owners and admins with MFA write them (checked here for a
 // clear message, and by row-level security underneath). Staff generate from
@@ -85,9 +86,18 @@ export async function saveTemplate(input: unknown): Promise<ActionResult> {
         .select("id")
         .single();
 
-  if (error?.code === "23505") return { ok: false, error: t("documents.errors.templateExists") };
-  if (error?.code === "42501") return { ok: false, error: t("documents.errors.templateMfa") };
-  if (error || !saved) return { ok: false, error: t("documents.errors.saveTemplate") };
+  if (error?.code === "23505") {
+    if (error) logActionFailure("template.saveTemplate", error);
+    return { ok: false, error: t("documents.errors.templateExists") };
+  }
+  if (error?.code === "42501") {
+    if (error) logActionFailure("template.saveTemplate", error);
+    return { ok: false, error: t("documents.errors.templateMfa") };
+  }
+  if (error || !saved) {
+    if (error) logActionFailure("template.saveTemplate", error);
+    return { ok: false, error: t("documents.errors.saveTemplate") };
+  }
 
   revalidatePath("/documents/templates");
   return { ok: true, id: saved.id as string };
@@ -108,7 +118,10 @@ export async function archiveTemplate(templateId: string): Promise<ActionResult>
     .is("archived_at", null)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: t("documents.errors.archiveTemplate") };
+  if (error || !data) {
+    if (error) logActionFailure("template.archiveTemplate", error);
+    return { ok: false, error: t("documents.errors.archiveTemplate") };
+  }
   revalidatePath("/documents/templates");
   return { ok: true, id: templateId };
 }
@@ -295,7 +308,10 @@ export async function generateFromTemplate(input: unknown): Promise<ActionResult
   const { error: uploadError } = await supabase.storage
     .from("documents")
     .upload(path, pdf, { contentType: "application/pdf" });
-  if (uploadError) return { ok: false, error: t("documents.errors.saveGeneratedFile") };
+  if (uploadError) {
+    logActionFailure("template.generateFromTemplate", uploadError);
+    return { ok: false, error: t("documents.errors.saveGeneratedFile") };
+  }
 
   const { data: doc, error } = await supabase
     .from("document")
