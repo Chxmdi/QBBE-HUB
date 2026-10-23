@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 import path from "path";
+import { randomBytes } from "node:crypto";
 
 /**
  * Lowest line coverage each area may fall to (percent, unit tests only).
@@ -26,7 +27,9 @@ export default defineConfig({
     environment: "node",
     // Unit tests decide each switch themselves (vi.stubEnv); a developer's
     // shell with the Workspace OS switches on must not leak into them.
-    env: { WORKSPACE_OS_FLAGS: "" },
+    // A fresh Google token key for each run (PRIV-011): code that seals tokens
+    // works, and no key is ever written down.
+    env: { WORKSPACE_OS_FLAGS: "", GOOGLE_TOKEN_KEY: randomBytes(32).toString("base64") },
     // `npm run test:coverage` (CI's Verify job) measures the unit suite and
     // fails when a folder falls below its floor. The floors are what the
     // suite reached when they were set, so they only stop coverage falling;

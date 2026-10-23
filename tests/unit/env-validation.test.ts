@@ -11,6 +11,8 @@ const good = {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: jwt({ ref: REF, role: "anon" }),
   SUPABASE_SERVICE_ROLE_KEY: jwt({ ref: REF, role: "service_role" }),
   CRON_JOB_SECRET: "s".repeat(40),
+  // 32 bytes in base64 (the Google token key, PRIV-011).
+  GOOGLE_TOKEN_KEY: Buffer.alloc(32, 7).toString("base64"),
   NEXT_PUBLIC_APP_URL: "https://hub.example.org",
 };
 

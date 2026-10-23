@@ -187,6 +187,7 @@ the deploy writes it to the server as the app's environment. The
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the **staging** anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | the **staging** service-role key |
 | `CRON_JOB_SECRET` | 32+ random characters (`openssl rand -base64 48`); the same value goes into step 5b |
+| `GOOGLE_TOKEN_KEY` | the key Google tokens are encrypted with: make a new one for each environment as in `integrations.md`, "Google token key". Never copy production's into staging. A deploy without it is refused |
 | `EMAIL_RECIPIENT_ALLOWLIST` | QBBE test addresses, e.g. `@qbbe.org`; never blank on staging |
 | `WORKSPACE_OS_FLAGS` | Workspace OS modules to switch on for staging: `all`, or a comma-separated list such as `wos_objects,wos_lenses`. **Staging only; a production deploy refuses it** (see 4d) |
 

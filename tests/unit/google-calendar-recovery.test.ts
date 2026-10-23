@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeSupabase } from "../support/fake-supabase";
+import { isSealed, openToken } from "@/features/inbox/services/google-token-crypto";
 
 // The Calendar write service builds its own privileged client; hand it the
 // in-memory double instead, so every read and write below is observable.
@@ -116,7 +117,10 @@ describe("Calendar token expiry", () => {
     const [refresh, create] = calls(fetchMock);
     expect(refresh.url).toBe("https://oauth2.googleapis.com/token");
     expect(create).toMatchObject({ method: "POST", auth: "Bearer fresh-token" });
-    expect(db.rows("integration_secret")[0]).toMatchObject({ access_token: "fresh-token" });
+    // Stored sealed (PRIV-011), and it opens to the refreshed token.
+    const stored = db.rows("integration_secret")[0].access_token as string;
+    expect(isSealed(stored)).toBe(true);
+    expect(openToken(stored, CONNECTION)).toBe("fresh-token");
     expect(db.rows("calendar_event_link")).toEqual([
       expect.objectContaining({ meeting_id: MEETING, external_id: EXTERNAL_ID }),
     ]);

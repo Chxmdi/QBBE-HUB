@@ -1,3 +1,4 @@
+import { tokenKeyProblem } from "@/features/inbox/services/google-token-crypto";
 /**
  * Server-side environment access.
  *
@@ -100,6 +101,9 @@ export function serverEnvProblems(env: Record<string, string | undefined> = proc
     if (!env[name]) problems.push(`${name} is not set.`);
   }
   if ((env.CRON_JOB_SECRET ?? "").length < 32) problems.push("CRON_JOB_SECRET is missing or shorter than 32 characters.");
+  // Google tokens are encrypted with this key before they are stored (PRIV-011).
+  const tokenKey = tokenKeyProblem(env);
+  if (tokenKey) problems.push(tokenKey);
   // Deployed sites are served over https; a local run may use http.
   const addressShape = env.QBBE_ENV ? /^https:\/\/[^/]+\/?$/ : /^https?:\/\/[^/]+\/?$/;
   if (!addressShape.test(env.NEXT_PUBLIC_APP_URL ?? "")) problems.push("NEXT_PUBLIC_APP_URL must be this site's address (https:// once deployed).");

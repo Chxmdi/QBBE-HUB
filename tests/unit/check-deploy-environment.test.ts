@@ -14,6 +14,8 @@ const PRODUCTION_REF = "productionrefbbbbbbb";
 const STAGING_SITE = "https://staging.hub.example.org";
 const PRODUCTION_SITE = "https://hub.example.org";
 const SECRET = "x".repeat(48);
+// 32 bytes in base64 (the Google token key, PRIV-011).
+const TOKEN_KEY = Buffer.alloc(32, 9).toString("base64");
 
 function appEnv(ref: string, site: string, extra = "") {
   return [
@@ -22,6 +24,7 @@ function appEnv(ref: string, site: string, extra = "") {
     "SUPABASE_SERVICE_ROLE_KEY=service",
     `NEXT_PUBLIC_APP_URL=${site}`,
     `CRON_JOB_SECRET=${SECRET}`,
+    `GOOGLE_TOKEN_KEY=${TOKEN_KEY}`,
     extra,
   ].join("\n");
 }
@@ -108,6 +111,16 @@ describe("check-deploy-environment.sh", () => {
     }
     const short = appEnv(STAGING_REF, STAGING_SITE).replace(SECRET, "short");
     expect(run({ APP_ENV: short }).output).toContain("CRON_JOB_SECRET of at least 32 characters");
+  });
+
+  it("refuses an environment without a Google token key of 32 bytes", () => {
+    const missing = appEnv(STAGING_REF, STAGING_SITE).split("\n").filter((l) => !l.startsWith("GOOGLE_TOKEN_KEY=")).join("\n");
+    expect(run({ APP_ENV: missing }).output).toContain("needs a GOOGLE_TOKEN_KEY of 32 bytes in base64");
+    const short = appEnv(STAGING_REF, STAGING_SITE).replace(TOKEN_KEY, Buffer.alloc(16, 9).toString("base64"));
+    const result = run({ APP_ENV: short });
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("needs a GOOGLE_TOKEN_KEY");
+    expect(result.output).not.toContain(Buffer.alloc(16, 9).toString("base64"));
   });
 
   it("refuses Workspace OS switch overrides on production, even empty", () => {

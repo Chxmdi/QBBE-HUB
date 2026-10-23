@@ -199,4 +199,24 @@ describe("disconnecting an integration", () => {
     // The disconnect itself happened, so it is still recorded.
     expect(writesOf().some((c) => c.table === "audit_event")).toBe(true);
   });
+  it("deletes the stored Google tokens, which queues them to be revoked, and revokes them at once (PRIV-011)", async () => {
+    const { disconnectIntegration } = await import("@/features/admin/services/integration.commands");
+    answer = (call) => (call.action === "update" ? { data: { id: ID }, error: null } : { data: null, error: null });
+    expect((await disconnectIntegration("google_calendar")).ok).toBe(true);
+    const deleted = writesOf().find((c) => c.table === "integration_secret" && c.action === "delete");
+    expect(deleted?.filters).toEqual([{ op: "eq", column: "connection_id", value: ID }]);
+    const drained = recorded.flat().find((c) => c.table === "google_token_revocation" && c.action === "select");
+    expect(drained?.filters).toContainEqual({ op: "eq", column: "connection_id", value: ID });
+  });
+  it("says so when the stored Google tokens cannot be deleted", async () => {
+    const { disconnectIntegration } = await import("@/features/admin/services/integration.commands");
+    answer = (call) =>
+      call.action === "update"
+        ? { data: { id: ID }, error: null }
+        : call.table === "integration_secret" && call.action === "delete"
+          ? { data: null, error: { message: "boom" } }
+          : { data: null, error: null };
+    expect((await disconnectIntegration("google_drive")).ok).toBe(false);
+    expect(writesOf().some((c) => c.table === "audit_event")).toBe(true);
+  });
 });
