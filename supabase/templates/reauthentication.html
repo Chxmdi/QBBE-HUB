@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr-CA">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Votre code de confirmation / Your confirmation code</title>
+</head>
+<body style="margin: 0; padding: 24px; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.5; color: #1a1a1a; background: #ffffff">
+  <div lang="fr-CA" style="margin: 0 0 24px">
+    <h1 style="font-size: 20px; margin: 0 0 12px">Votre code de confirmation</h1>
+    <p style="margin: 0 0 12px">Entrez ce code dans QBBE Hub pour confirmer qu’il s’agit bien de vous :</p>
+    <p style="margin: 0 0 12px; font-size: 24px; font-weight: bold; letter-spacing: 4px">{{ .Token }}</p>
+    <p style="margin: 0 0 12px; color: #555555">Ce code expire dans une heure.</p>
+    <p style="margin: 0 0 12px; color: #555555">Si vous n’avez pas demandé ce code, quelqu’un connaît peut-être votre mot de passe : changez-le et prévenez un administrateur de votre organisme.</p>
+  </div>
+  <hr style="border: 0; border-top: 1px solid #dddddd; margin: 0 0 24px">
+  <div lang="en" style="margin: 0 0 24px">
+    <h1 style="font-size: 20px; margin: 0 0 12px">Your confirmation code</h1>
+    <p style="margin: 0 0 12px">Enter this code in QBBE Hub to confirm it is you:</p>
+    <p style="margin: 0 0 12px; font-size: 24px; font-weight: bold; letter-spacing: 4px">{{ .Token }}</p>
+    <p style="margin: 0 0 12px; color: #555555">This code expires in one hour.</p>
+    <p style="margin: 0 0 12px; color: #555555">If you did not ask for this code, someone may know your password: change it, and tell an administrator of your organization.</p>
+  </div>
+</body>
+</html>

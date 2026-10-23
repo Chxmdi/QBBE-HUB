@@ -214,7 +214,7 @@ export const en = {
       compactTitle: "Compact",
     },
     toggleTheme: "Toggle color theme",
-    accountMenu: "Account menu",
+    accountMenuNamed: "{initials}, Account menu",
     accountSettings: "Account settings",
     emailPreferences: "Email preferences",
     signOut: "Sign out",

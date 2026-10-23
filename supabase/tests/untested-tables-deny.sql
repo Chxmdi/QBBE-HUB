@@ -86,7 +86,12 @@ begin
     'ledger_accountant_session', 'notification_delivery', 'record_retention_report',
     'scoped_access_backfill_issue', 'vms_assignment_reference'
   ] loop
-    execute format('select count(*) from public.%I', v_table) into n;
+    -- No grant at all (integration_secret since 20261121150000) reads as none.
+    begin
+      execute format('select count(*) from public.%I', v_table) into n;
+    exception when insufficient_privilege then
+      n := 0;
+    end;
     perform tests.ok(n = 0, format('a guest reads no %s rows', v_table));
   end loop;
   perform tests.refused_ok(format($q$insert into agenda_template (organization_id, name, kind) values (%L, 'Guest agenda', 'meeting')$q$, v_org),

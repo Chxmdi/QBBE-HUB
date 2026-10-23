@@ -20,6 +20,8 @@ import { renderTextPdf } from "@/features/documents/templates/pdf";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { calendarDateInZone } from "@/lib/time";
+import { storagePathFor } from "@/features/editor/adapter/files";
+import { discardOwnUpload } from "@/features/documents/services/discard-upload";
 
 // Templates (#147). Owners and admins with MFA write them (checked here for a
 // clear message, and by row-level security underneath). Staff generate from
@@ -291,7 +293,8 @@ export async function generateFromTemplate(input: unknown): Promise<ActionResult
       .replace(/[^a-zA-Z0-9._-]+/g, "_")
       .replace(/^_+|_+$/g, "")
       .slice(0, 80) || "document";
-  const path = `${crypto.randomUUID()}/${safeName}.pdf`;
+  // Under the person's own folder, the only place the bucket takes it.
+  const path = storagePathFor(`${session.organizationId}/${session.userId}`, `${safeName}.pdf`, crypto.randomUUID());
   const { error: uploadError } = await supabase.storage
     .from("documents")
     .upload(path, pdf, { contentType: "application/pdf" });
@@ -319,7 +322,7 @@ export async function generateFromTemplate(input: unknown): Promise<ActionResult
     .select("id")
     .single();
   if (error || !doc) {
-    await supabase.storage.from("documents").remove([path]);
+    await discardOwnUpload(path);
     return {
       ok: false,
       error:

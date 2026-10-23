@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fakeDb, type TableCall } from "@/lib/objects/testing/fake-db";
+import { isSealed, openToken } from "@/features/inbox/services/google-token-crypto";
 
 /**
  * Refreshing a Gmail token writes with service rights, so no row-level policy
@@ -52,7 +53,10 @@ describe("Gmail token refresh", () => {
       ]),
     );
     const update = calls.find((c) => c.table === "integration_secret" && c.action === "update");
-    expect(update?.payload).toMatchObject({ access_token: "fresh" });
+    // Stored sealed (PRIV-011), and it opens to the refreshed token.
+    const stored = (update?.payload as { access_token: string }).access_token;
+    expect(isSealed(stored)).toBe(true);
+    expect(openToken(stored, MY_CONNECTION)).toBe("fresh");
     expect(update?.filters).toEqual([{ op: "eq", column: "connection_id", value: MY_CONNECTION }]);
   });
 });

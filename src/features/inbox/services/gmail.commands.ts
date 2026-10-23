@@ -10,6 +10,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translator";
 import { googleFetch } from "./google-fetch";
+import { openToken, sealToken } from "@/features/inbox/services/google-token-crypto";
 
 interface GmailHeader { name?: string; value?: string }
 interface GmailPayload { body?: { data?: string }; parts?: GmailPayload[]; headers?: GmailHeader[] }
@@ -47,14 +48,14 @@ async function gmailAccess() {
   const { data: secret } = await supabase.from("integration_secret")
     .select("access_token, refresh_token, token_expires_at").eq("connection_id", connection.id).maybeSingle();
   if (!secret?.access_token) throw new GmailUserError(t("inbox.errors.expired"));
-  let accessToken = secret.access_token as string;
+  let accessToken = openToken(secret.access_token as string, connection.id) as string;
   const expiry = secret.token_expires_at ? new Date(secret.token_expires_at as string).getTime() : 0;
   if (expiry && expiry < Date.now() + 60_000 && secret.refresh_token) {
-    const refreshed = await refreshGoogleAccessToken(secret.refresh_token as string);
+    const refreshed = await refreshGoogleAccessToken(openToken(secret.refresh_token as string, connection.id) as string);
     if (!refreshed?.access_token) throw new GmailUserError(t("inbox.errors.expired"));
     accessToken = refreshed.access_token;
     await supabase.from("integration_secret").update({
-      access_token: accessToken,
+      access_token: sealToken(accessToken, connection.id),
       token_expires_at: refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null,
     }).eq("connection_id", connection.id);
   }

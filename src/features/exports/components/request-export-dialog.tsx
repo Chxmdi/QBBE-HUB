@@ -12,16 +12,19 @@ import { requestExport } from "@/features/exports/services/export.commands";
 /**
  * Requesting an export.
  *
- * The person field is always shown rather than revealed by the kind, because a
- * select that changes the shape of the form beneath it is harder to use than
- * one extra optional field — and the hint says exactly when it is needed. The
- * schema and the database both refuse a person export without a subject, so
- * leaving it blank produces a sentence rather than a broken export.
+ * The person and contact fields are always shown rather than revealed by the
+ * kind, because a select that changes the shape of the form beneath it is
+ * harder to use than one extra optional field — and each hint says exactly
+ * when it is needed. The schema and the database both refuse a person or
+ * contact export without its subject, so leaving it blank produces a sentence
+ * rather than a broken export.
  */
 export function RequestExportDialog({
   people,
+  contacts,
 }: {
   people: { value: string; label: string }[];
+  contacts: { value: string; label: string }[];
 }) {
   const t = useT();
   return (
@@ -51,6 +54,13 @@ export function RequestExportDialog({
           type: "select",
           options: people,
           hint: t("exports.request.personHint"),
+        },
+        {
+          name: "subjectContactId",
+          label: t("exports.request.contact"),
+          type: "select",
+          options: contacts,
+          hint: t("exports.request.contactHint"),
         },
       ]}
     />

@@ -20,7 +20,7 @@ begin
   insert into public.integration_connection (organization_id, user_id, provider, status)
   values (org, staff_user, 'gmail', 'connected') returning id into v_conn;
   insert into public.integration_secret (connection_id, access_token, refresh_token)
-  values (v_conn, 'access-dra', 'refresh-dra');
+  values (v_conn, 'enc:v1:00000000:iv:tag:access-dra', 'enc:v1:00000000:iv:tag:refresh-dra');
   insert into public.gmail_message (organization_id, user_id, connection_id, external_id, subject, snippet, from_address, received_at)
   values (org, staff_user, v_conn, 'dra-1', 'DRA subject', 'DRA snippet', 'someone@example.com', now());
   insert into public.calendar_event_link (organization_id, user_id, connection_id, external_id, title, starts_at)

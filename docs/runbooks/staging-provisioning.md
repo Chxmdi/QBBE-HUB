@@ -67,6 +67,50 @@ Nothing in this file can be completed from a developer machine alone.
    setting no longer changes anything. If `signed_in_read` is false, the
    migration chain did not finish: run `supabase db push` again.
 
+7. Paste the Auth emails. Hosted projects do not read `supabase/config.toml`,
+   so without this step every sign-up, recovery and confirmation email goes
+   out in Supabase's English default. The four files are French first, then
+   English, and use only Supabase's own variables, so the same text works on
+   staging and production.
+
+   > **Before you paste:** the French wording is waiting for the owner's
+   > review. Paste the reviewed version; if it changes, update the files in
+   > `supabase/templates/` in the same change so the repository stays the
+   > source.
+
+   1. In the Supabase dashboard, open the `qbbe-hub-staging` project, then
+      **Authentication → URL Configuration**. Check that **Site URL** is the
+      staging address and that **Redirect URLs** include
+      `https://<staging-host>/auth/callback`. The links in these emails are
+      `{{ .ConfirmationURL }}`, which Supabase builds from those settings.
+   2. Open **Authentication → Emails → Templates**. For each row below, open
+      the tab, paste the **Subject** from `supabase/config.toml` (the
+      `subject =` line of that template) into **Subject heading**, paste the
+      whole file into **Message body** (the source view), and press **Save**:
+
+      | Dashboard tab | File | Subject (from config.toml) |
+      |---|---|---|
+      | Confirm sign up | `supabase/templates/confirmation.html` | `[auth.email.template.confirmation]` |
+      | Reset password | `supabase/templates/recovery.html` | `[auth.email.template.recovery]` |
+      | Change email address | `supabase/templates/email_change.html` | `[auth.email.template.email_change]` |
+      | Reauthentication | `supabase/templates/reauthentication.html` | `[auth.email.template.reauthentication]` |
+
+      Leave **Invite user** and **Magic link** as they are: invitations are
+      sent by the app, and magic links are not used.
+
+      **You should see** "Successfully updated settings" after each **Save**,
+      and the preview showing the French text above the English text.
+   3. Send yourself a password reset from the staging sign-in page
+      (**Forgot your password?**). **You should see** an email titled
+      "Récupérer votre compte / Recover your account", French first, whose
+      button opens the staging site's "Choose a new password" page.
+      **If it is still in English**, the template was not saved: repeat step 2
+      for that tab. **If the button opens the wrong site**, the Site URL in
+      step 1 is wrong.
+   4. Production: when the release is promoted, repeat steps 1 to 3 in the
+      production project, with the production address in step 1. Only the
+      owner pastes into production.
+
 **Failure to watch for:** `db push` refusing because the remote has migrations
 the repository does not. That means the project is not empty — most likely you
 linked production. Stop, run `supabase projects list`, and confirm the ref.
@@ -143,6 +187,7 @@ the deploy writes it to the server as the app's environment. The
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the **staging** anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | the **staging** service-role key |
 | `CRON_JOB_SECRET` | 32+ random characters (`openssl rand -base64 48`); the same value goes into step 5b |
+| `GOOGLE_TOKEN_KEY` | the key Google tokens are encrypted with: make a new one for each environment as in `integrations.md`, "Google token key". Never copy production's into staging. A deploy without it is refused |
 | `EMAIL_RECIPIENT_ALLOWLIST` | QBBE test addresses, e.g. `@qbbe.org`; never blank on staging |
 | `WORKSPACE_OS_FLAGS` | Workspace OS modules to switch on for staging: `all`, or a comma-separated list such as `wos_objects,wos_lenses`. **Staging only; a production deploy refuses it** (see 4d) |
 

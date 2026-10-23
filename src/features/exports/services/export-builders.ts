@@ -17,6 +17,7 @@ import { readAll, type PagedQuery } from "@/lib/supabase/read-all";
 export interface BuildRequest {
   organizationId: string;
   subjectUserId: string | null;
+  subjectContactId?: string | null;
   params: Record<string, unknown>;
   requestedBy?: string;
 }
@@ -105,7 +106,7 @@ async function personData(
   if (error) throw new Error(`could not verify export subject: ${error.message}`);
   if (!membership) throw new Error("export subject does not belong to this organization");
 
-  return Promise.all([
+  const [sections, registry] = await Promise.all([Promise.all([
     section(db, "profile", db
       .from("user_profile")
       .select("id, full_name, email, title, timezone, created_at")
@@ -140,7 +141,40 @@ async function personData(
       .select("id, subject, status, created_at, sent_at")
       .eq("organization_id", organizationId)
       .eq("recipient_user_id", subjectUserId)),
-  ]);
+  ]), registrySections(db, "person_data_export", { p_organization: organizationId, p_subject: subjectUserId })]);
+  return [...sections, ...registry];
+}
+
+/**
+ * The sections the database builds from app.person_data_registry: one per
+ * column that names the subject, scoped to the organization (PRIV-015). A
+ * table added later that names a person fails the registry test until it is
+ * listed, so the export cannot quietly fall behind the schema.
+ */
+async function registrySections(
+  db: SupabaseClient,
+  fn: "person_data_export" | "contact_data_export",
+  args: Record<string, string>,
+): Promise<ExportSection[]> {
+  const { data, error } = await db.rpc(fn, args);
+  if (error) throw new Error(`could not read the ${fn} sections: ${error.message}`);
+  return Object.entries((data ?? {}) as Record<string, Record<string, unknown>[]>).map(([name, rows]) => ({
+    name,
+    rows: rows ?? [],
+  }));
+}
+
+/**
+ * Everything held about one CRM contact: the contact and every row that names
+ * it. Administrators with MFA alone may ask for it (export_job_request): it
+ * carries sensitive notes.
+ */
+async function contactData(
+  db: SupabaseClient,
+  { organizationId, subjectContactId }: BuildRequest,
+): Promise<ExportSection[]> {
+  if (!subjectContactId) throw new Error("a contact export needs a contact");
+  return registrySections(db, "contact_data_export", { p_organization: organizationId, p_contact: subjectContactId });
 }
 
 async function crmContacts(
@@ -261,6 +295,7 @@ const BUILDERS: Record<
   crm_contacts: crmContacts,
   task_history: taskHistory,
   report_bundle: reportBundle,
+  contact_data: contactData,
 };
 
 export const EXPORT_KINDS = Object.keys(BUILDERS);

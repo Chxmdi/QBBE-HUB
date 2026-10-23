@@ -14,10 +14,13 @@ describe("file references", () => {
     expect(documentIdFromRef(null)).toBeNull();
   });
 
-  it("make safe storage paths", () => {
-    const path = storagePathFor("Rapport d'été (final).pdf", "r");
-    expect(path.startsWith("r/Rapport_d_")).toBe(true);
-    expect(path).toMatch(/^r\/[A-Za-z0-9._-]+\.pdf$/);
-    expect(storagePathFor("", "r")).toBe("r/file");
+  it("make safe storage paths under the uploader's folder", () => {
+    const path = storagePathFor("org/user", "Rapport d'été (final).pdf", "r");
+    expect(path.startsWith("org/user/r/Rapport_d_")).toBe(true);
+    expect(path).toMatch(/^org\/user\/r\/[A-Za-z0-9._-]+\.pdf$/);
+    expect(storagePathFor("org/user", "", "r")).toBe("org/user/r/file");
+    // The bucket refuses a name starting with a dot (".", "..").
+    expect(storagePathFor("org/user", "..", "r")).toBe("org/user/r/_.");
+    expect(storagePathFor("org/user", "../../x", "r")).toBe("org/user/r/_._.._x");
   });
 });

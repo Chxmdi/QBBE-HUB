@@ -92,9 +92,9 @@ begin
   -- A file document has no URL to approve and must be unaffected, or the guard
   -- would have broken uploads to fix links.
   insert into storage.objects(bucket_id, name, owner_id)
-    values ('documents', 'link-guard/file.txt', u::text);
+    values ('documents', org || '/' || u || '/00000000-0000-4000-8000-00000000f11e/file.txt', u::text);
   insert into public.document(organization_id, title, kind, storage_path, owner_id, created_by)
-    values(org, 'Untouched upload', 'file', 'link-guard/file.txt', u, u);
+    values(org, 'Untouched upload', 'file', org || '/' || u || '/00000000-0000-4000-8000-00000000f11e/file.txt', u, u);
   perform tests.ok(true, 'an uploaded file is unaffected by the link guard');
 
   -- Approval is per organization, not global. Another organization's allowlist

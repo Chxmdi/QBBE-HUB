@@ -23,8 +23,14 @@ export function documentIdFromRef(ref: string | null | undefined): string | null
 /** Same limit as the document library's own upload dialog. */
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
-/** A storage path that cannot collide and never carries the file name's odd characters. */
-export function storagePathFor(fileName: string, random: string): string {
-  const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "file";
-  return `${random}/${safe}`;
+/**
+ * Where an upload goes in the documents bucket: under the uploader's own
+ * folder (`<organization id>/<user id>`, from documentUploadFolder), then a
+ * random part so it cannot collide. The bucket refuses any other shape
+ * (SEC-016), so the name keeps only plain characters and never starts with
+ * a dot.
+ */
+export function storagePathFor(folder: string, fileName: string, random: string): string {
+  const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80).replace(/^\./, "_") || "file";
+  return `${folder}/${random}/${safe}`;
 }

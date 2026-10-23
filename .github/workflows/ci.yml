@@ -292,6 +292,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Make a Google token key for this run
+        # The app seals Google tokens with GOOGLE_TOKEN_KEY (PRIV-011). A
+        # fresh key per run, masked, never written down.
+        run: |
+          key="$(openssl rand -base64 32)"
+          echo "::add-mask::${key}"
+          echo "GOOGLE_TOKEN_KEY=${key}" >> "$GITHUB_ENV"
+
       - uses: ./.github/actions/local-supabase
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

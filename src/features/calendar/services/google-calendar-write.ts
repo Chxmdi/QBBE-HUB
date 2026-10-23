@@ -3,6 +3,7 @@ import { classifyIntegrationFailure } from "@/features/admin/services/integratio
 import { refreshGoogleAccessToken } from "@/features/inbox/services/gmail-sync";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { googleFetch } from "@/features/inbox/services/google-fetch";
+import { openToken, sealToken } from "@/features/inbox/services/google-token-crypto";
 
 type LinkedHubRecord =
   | { kind: "meeting"; id: string }
@@ -129,17 +130,17 @@ async function calendarAccessToken(
     throw new Error("Google Calendar authorization is unavailable. Reconnect Calendar.");
   }
 
-  let token = secret.access_token as string;
+  let token = openToken(secret.access_token as string, connectionId) as string;
   const expiry = secret.token_expires_at ? new Date(secret.token_expires_at as string).getTime() : 0;
   if (expiry && expiry < Date.now() + 60_000) {
     if (!secret.refresh_token) throw new Error("Google Calendar authorization expired. Reconnect Calendar.");
-    const refreshed = await refreshGoogleAccessToken(secret.refresh_token as string);
+    const refreshed = await refreshGoogleAccessToken(openToken(secret.refresh_token as string, connectionId) as string);
     if (!refreshed?.access_token) throw new Error("Google Calendar authorization expired. Reconnect Calendar.");
     token = refreshed.access_token;
     const { error } = await supabase
       .from("integration_secret")
       .update({
-        access_token: token,
+        access_token: sealToken(token, connectionId),
         token_expires_at: refreshed.expires_in
           ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
           : null,

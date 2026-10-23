@@ -26,6 +26,7 @@ interface ExportRow {
   organization_id: string;
   kind: string;
   subject_user_id: string | null;
+  subject_contact_id: string | null;
   params: Record<string, unknown>;
   requested_by: string;
 }
@@ -43,7 +44,7 @@ export async function runExports({ db, definition, now }: JobContext): Promise<J
 
   const { data: queued, error } = await db
     .from("export_job")
-    .select("id, organization_id, kind, subject_user_id, params, requested_by")
+    .select("id, organization_id, kind, subject_user_id, subject_contact_id, params, requested_by")
     .eq("status", "queued")
     .gt("expires_at", now.toISOString())
     .order("created_at", { ascending: true })
@@ -69,6 +70,7 @@ export async function runExports({ db, definition, now }: JobContext): Promise<J
       const built = await buildExport(db, row.kind, {
         organizationId: row.organization_id,
         subjectUserId: row.subject_user_id,
+        subjectContactId: row.subject_contact_id,
         params: row.params ?? {},
         requestedBy: row.requested_by,
       });
@@ -77,6 +79,7 @@ export async function runExports({ db, definition, now }: JobContext): Promise<J
         kind: row.kind,
         organization_id: row.organization_id,
         subject_user_id: row.subject_user_id,
+        subject_contact_id: row.subject_contact_id,
         generated_at: now.toISOString(),
         rows: built.rowCount,
       });

@@ -11,6 +11,8 @@ import { localized, typedAnswers, visibleFields, type FormV2Property } from "@/f
 import { registerFormFile, type FormFileScan } from "@/features/forms-v2/services/form-file.commands";
 import { submitFormV2 } from "@/features/forms-v2/services/forms-v2.commands";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { documentUploadFolder } from "@/features/documents/services/document.commands";
+import { discardOwnUpload } from "@/features/documents/services/discard-upload";
 
 type Answer = string | boolean;
 
@@ -234,7 +236,7 @@ function FileField({
     }
     setBusy(true);
     const supabase = createSupabaseBrowserClient();
-    const path = storagePathFor(file.name, `forms-v2/${crypto.randomUUID()}`);
+    const path = storagePathFor(await documentUploadFolder(), file.name, crypto.randomUUID());
     const { error } = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined });
     if (error) {
       setBusy(false);
@@ -250,7 +252,7 @@ function FileField({
     });
     setBusy(false);
     if (!result.ok || !result.data) {
-      await supabase.storage.from("documents").remove([path]);
+      await discardOwnUpload(path);
       onError(result.ok ? text.errors.fileUploadFailed : result.error);
       e.target.value = "";
       return;

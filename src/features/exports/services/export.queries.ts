@@ -24,12 +24,14 @@ export interface ExportRow {
   completed_at: string | null;
   requester: { id: string; full_name: string } | null;
   subject: { id: string; full_name: string } | null;
+  contact: { id: string; full_name: string } | null;
 }
 
 const SELECT =
   "id, kind, status, params, row_count, byte_size, error, expires_at, " +
   "downloaded_at, download_count, created_at, completed_at, " +
-  "requester:requested_by(id, full_name), subject:subject_user_id(id, full_name)";
+  "requester:requested_by(id, full_name), subject:subject_user_id(id, full_name), " +
+  "contact:subject_contact_id(id, full_name)";
 
 export async function getExports(limit = 50): Promise<ExportRow[]> {
   const supabase = await createSupabaseServerClient();

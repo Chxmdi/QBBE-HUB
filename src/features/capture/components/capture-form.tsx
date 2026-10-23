@@ -9,6 +9,9 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { captureFile, captureItem } from "../actions";
 import { captureT } from "../i18n";
+import { documentUploadFolder } from "@/features/documents/services/document.commands";
+import { storagePathFor } from "@/features/editor/adapter/files";
+import { discardOwnUpload } from "@/features/documents/services/discard-upload";
 
 const KINDS = ["text", "link", "file", "photo", "email"] as const;
 type Kind = (typeof KINDS)[number];
@@ -50,9 +53,8 @@ export function CaptureForm() {
       }
     }
     const supabase = createSupabaseBrowserClient();
-    // A random prefix, as the document library does; the path is never the authorization.
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "file";
-    const path = `${crypto.randomUUID()}/${safeName}`;
+    // Under the uploader's own folder, the only place the bucket takes it.
+    const path = storagePathFor(await documentUploadFolder(), file.name, crypto.randomUUID());
     const { error } = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined });
     if (error) return { ok: false, error: t("errors.uploadFailed") };
     const result = await captureFile({
@@ -63,7 +65,7 @@ export function CaptureForm() {
       sizeBytes: file.size,
       text: text?.trim().slice(0, 20000) || undefined,
     });
-    if (!result.ok) await supabase.storage.from("documents").remove([path]);
+    if (!result.ok) await discardOwnUpload(path);
     return result;
   }
 

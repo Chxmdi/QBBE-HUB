@@ -674,6 +674,7 @@ export const adminFrCA: typeof adminEn = {
         crm_contacts: "Relations et contacts",
         task_history: "Historique des tâches",
         report_bundle: "Rapports et approbations",
+        contact_data: "Tout ce qui concerne un contact",
       },
       statuses: {
         queued: "En file d’attente",

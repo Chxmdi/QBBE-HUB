@@ -8,6 +8,7 @@ import { recordJobRun } from "@/lib/job-observability";
 import type { JobContext, JobResult } from "../runner";
 import { logEvent } from "@/lib/server-log";
 import { withActiveOwners } from "../active-owners";
+import { openToken, sealToken } from "@/features/inbox/services/google-token-crypto";
 
 /**
  * Renews Gmail push subscriptions before they lapse.
@@ -42,15 +43,15 @@ export async function gmailWatchRenew({ db }: JobContext): Promise<JobResult> {
       if (!secret?.access_token) throw new Error("Missing token for Gmail integration.");
       if (!gmailWatchNeedsRenewal(secret.gmail_watch_expiration_at as string | null)) { skipped += 1; continue; }
 
-      let accessToken = secret.access_token as string;
+      let accessToken = openToken(secret.access_token as string, connection.id) as string;
       const expiry = secret.token_expires_at ? new Date(secret.token_expires_at as string).getTime() : 0;
       if (expiry && expiry < Date.now() + 60_000) {
         if (!secret.refresh_token) throw new Error("Google access token expired and no refresh token is available.");
-        const refreshed = await refreshGoogleAccessToken(secret.refresh_token as string);
+        const refreshed = await refreshGoogleAccessToken(openToken(secret.refresh_token as string, connection.id) as string);
         if (!refreshed?.access_token) throw new Error("Google access token expired and could not be refreshed.");
         accessToken = refreshed.access_token;
         const { error } = await db.from("integration_secret").update({
-          access_token: accessToken,
+          access_token: sealToken(accessToken, connection.id),
           token_expires_at: refreshed.expires_in
             ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
             : null,
