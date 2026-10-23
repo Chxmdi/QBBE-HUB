@@ -6,6 +6,7 @@ import { createProjectFromTemplate } from "@/features/admin/services/workflow.co
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /**
  * Choosing a template only selects it; Create makes the project. The select
@@ -31,11 +32,14 @@ export function CreateFromTemplateButton({
   async function create() {
     if (!templateId || running.current) return;
     running.current = true;
-    setBusy(true);
-    setError(null);
-    const result = await createProjectFromTemplate(templateId);
+    const result = await runServerAction(() => createProjectFromTemplate(templateId), {
+      setBusy,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
     running.current = false;
-    setBusy(false);
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("projects.fromTemplate.error"));
       return;

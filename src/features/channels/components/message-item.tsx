@@ -34,6 +34,7 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useFormatters, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { Message } from "@/types/entities";
 
 const QUICK_EMOJI = ["👍", "✅", "🎉", "❤️", "👀"];
@@ -147,14 +148,22 @@ export const MessageItem = memo(function MessageItem({
     setDialog("agenda");
   }
 
+  function toastError(text: string | null) {
+    if (text) toast(text, { tone: "error" });
+  }
+
   async function handleAgendaSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const meetingId = new FormData(e.currentTarget).get("meetingId") as string;
     if (!meetingId) return;
-    setSaving(true);
-    const result = await convertMessageToAgendaItem(message.id, meetingId);
-    setSaving(false);
+    const result = await runServerAction(() => convertMessageToAgendaItem(message.id, meetingId), {
+      setBusy: setSaving,
+      setError: toastError,
+      t,
+      reload: () => window.location.reload(),
+    });
     setDialog(null);
+    if (!result) return;
     if (result.ok) toast(t("messages.item.agendaAdded"));
     else toast(result.error ?? t("messages.item.agendaFailed"), { tone: "error" });
   }
@@ -162,10 +171,14 @@ export const MessageItem = memo(function MessageItem({
   async function handleDecisionSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const detail = new FormData(e.currentTarget).get("detail") as string;
-    setSaving(true);
-    const result = await convertMessageToDecision(message.id, detail);
-    setSaving(false);
+    const result = await runServerAction(() => convertMessageToDecision(message.id, detail), {
+      setBusy: setSaving,
+      setError: toastError,
+      t,
+      reload: () => window.location.reload(),
+    });
     setDialog(null);
+    if (!result) return;
     if (result.ok) toast(t("messages.item.decisionRecorded"));
     else toast(result.error ?? t("messages.item.decisionFailed"), { tone: "error" });
   }
@@ -174,10 +187,14 @@ export const MessageItem = memo(function MessageItem({
     e.preventDefault();
     if (!channelId) return;
     const title = new FormData(e.currentTarget).get("title") as string;
-    setSaving(true);
-    const result = await pinMessage(message.id, channelId, title);
-    setSaving(false);
+    const result = await runServerAction(() => pinMessage(message.id, channelId, title), {
+      setBusy: setSaving,
+      setError: toastError,
+      t,
+      reload: () => window.location.reload(),
+    });
     setDialog(null);
+    if (!result) return;
     if (result.ok) {
       toast(t("messages.item.pinned"));
       onChanged(message.id);
@@ -192,9 +209,13 @@ export const MessageItem = memo(function MessageItem({
       setDraft(message.body);
       return;
     }
-    setSaving(true);
-    const result = await editMessage({ messageId: message.id, body: draft });
-    setSaving(false);
+    const result = await runServerAction(() => editMessage({ messageId: message.id, body: draft }), {
+      setBusy: setSaving,
+      setError: toastError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("messages.item.editFailed"), { tone: "error" });
       return;

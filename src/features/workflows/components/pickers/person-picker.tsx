@@ -52,10 +52,16 @@ export function PersonPicker({
   const onQuery = React.useCallback(async (query: string) => {
     const call = ++latest.current;
     setLoading(true);
-    const found = await searchPeople({ query });
-    if (call !== latest.current) return;
-    setOptions(found);
-    setLoading(false);
+    try {
+      const found = await searchPeople({ query });
+      if (call !== latest.current) return;
+      setOptions(found);
+    } catch {
+      // A failed search just offers nothing; the id field still works.
+    } finally {
+      // An older search must not end a newer one's spinner.
+      if (call === latest.current) setLoading(false);
+    }
   }, []);
 
   const groups: ComboboxGroup[] = options.length

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label, Select } from "@/components/ui/input";
 import { transferTeamOwnership } from "@/features/admin/services/team.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function TeamOwnerControl({
   teamId,
@@ -24,10 +25,13 @@ export function TeamOwnerControl({
   const inputId = `team-owner-${teamId}`;
 
   async function save() {
-    setSaving(true);
-    setError(null);
-    const result = await transferTeamOwnership(teamId, ownerId);
-    setSaving(false);
+    const result = await runServerAction(() => transferTeamOwnership(teamId, ownerId), {
+      setBusy: setSaving,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("admin.teamControls.transferFailed"));
       return;

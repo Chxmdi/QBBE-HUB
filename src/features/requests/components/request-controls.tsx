@@ -11,6 +11,7 @@ import {
   type ProjectRequestStatus,
 } from "@/features/requests/schemas";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { MessageKey } from "@/lib/i18n/translator";
 import {
   decideApproval,
@@ -25,10 +26,13 @@ function useRowAction() {
   const [error, setError] = React.useState<string | null>(null);
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>) {
-    setBusy(true);
-    setError(null);
-    const result = await action();
-    setBusy(false);
+    const result = await runServerAction(action, {
+      setBusy,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return false;
     if (!result.ok) {
       setError(result.error ?? t("requests.errors.generic"));
       return false;

@@ -22,11 +22,16 @@ export function GoogleSignInButton({ label, next = "/" }: { label: string; next?
       onClick={async () => {
         setPending(true);
         const redirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
-        const { error } = await createSupabaseBrowserClient().auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo },
-        });
-        if (error) setPending(false);
+        try {
+          const { error } = await createSupabaseBrowserClient().auth.signInWithOAuth({
+            provider: "google",
+            options: { redirectTo },
+          });
+          if (error) setPending(false);
+        } catch {
+          // Success leaves the page for Google, so busy clears only on failure.
+          setPending(false);
+        }
       }}
     >
       {label}

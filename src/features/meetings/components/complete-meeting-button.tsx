@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { completeMeeting } from "@/features/meetings/services/meeting.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function CompleteMeetingButton({ meetingId }: { meetingId: string }) {
   const router = useRouter();
@@ -19,9 +20,13 @@ export function CompleteMeetingButton({ meetingId }: { meetingId: string }) {
       )
     )
       return;
-    setSaving(true);
-    const result = await completeMeeting(meetingId);
-    setSaving(false);
+    const result = await runServerAction(() => completeMeeting(meetingId), {
+      setBusy: setSaving,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("meetings.completeMeeting.error"));
       return;
@@ -31,7 +36,7 @@ export function CompleteMeetingButton({ meetingId }: { meetingId: string }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button onClick={handleComplete} loading={saving}>
+      <Button onClick={() => void handleComplete()} loading={saving}>
         {t("meetings.completeMeeting.button")}
       </Button>
       {error ? (

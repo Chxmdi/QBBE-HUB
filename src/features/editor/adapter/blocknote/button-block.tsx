@@ -140,11 +140,14 @@ function ButtonBlock({
       return;
     }
     setBusy(true);
-    const result = await api.run(actionKey as ButtonActionKey, args).catch(() => null);
-    setBusy(false);
-    if (!result) setOutcome({ kind: "error", message: t("button.errors.failed") });
-    else if (result.ok) setOutcome({ kind: "done", message: result.message, href: result.href, changeSetId: result.changeSetId });
-    else setOutcome({ kind: "error", message: result.error });
+    try {
+      const result = await api.run(actionKey as ButtonActionKey, args).catch(() => null);
+      if (!result) setOutcome({ kind: "error", message: t("button.errors.failed") });
+      else if (result.ok) setOutcome({ kind: "done", message: result.message, href: result.href, changeSetId: result.changeSetId });
+      else setOutcome({ kind: "error", message: result.error });
+    } finally {
+      setBusy(false);
+    }
   };
 
   const confirmText =
@@ -160,14 +163,17 @@ function ButtonBlock({
     // Name the item before anyone agrees to change it; one the clicker
     // cannot see cannot be changed by them either.
     setBusy(true);
-    const title = await handlers.current?.actions?.describe(args.objectId ?? "").catch(() => null);
-    setBusy(false);
-    if (!title) {
-      setOutcome({ kind: "error", message: t("button.errors.forbidden") });
-      return;
+    try {
+      const title = await handlers.current?.actions?.describe(args.objectId ?? "").catch(() => null);
+      if (!title) {
+        setOutcome({ kind: "error", message: t("button.errors.forbidden") });
+        return;
+      }
+      setTarget(title);
+      setConfirming(true);
+    } finally {
+      setBusy(false);
     }
-    setTarget(title);
-    setConfirming(true);
   };
 
   return (

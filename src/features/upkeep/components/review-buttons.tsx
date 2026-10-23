@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { fill, type UpkeepText } from "@/features/upkeep/messages";
 import { reviewStalePage } from "@/features/upkeep/services/upkeep.commands";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function ReviewButtons({
   objectType,
@@ -20,12 +22,17 @@ export function ReviewButtons({
 }) {
   const router = useRouter();
   const { toast } = useToast();
+  const shellT = useT();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   async function run(decision: "current" | "archive") {
-    setBusy(true);
-    const result = await reviewStalePage(objectType, objectId, decision);
-    setBusy(false);
+    const result = await runServerAction(() => reviewStalePage(objectType, objectId, decision), {
+      setBusy,
+      setError: (error) => setMessage(error ? { ok: false, text: error } : null),
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     // The reviewed row leaves the list on refresh, so success is confirmed in
     // the page-level toast, which outlives it; an error stays next to the row.
     if (result.ok) {
@@ -39,11 +46,11 @@ export function ReviewButtons({
   return (
     <div className="space-y-1">
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="secondary" disabled={busy} onClick={() => run("current")}>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void run("current")}>
           {fill(text.stillCurrent, { title })}
         </Button>
         {objectType === "document" ? (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => run("archive")}>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("archive")}>
             {fill(text.archive, { title })}
           </Button>
         ) : null}

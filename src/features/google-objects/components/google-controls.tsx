@@ -12,6 +12,8 @@ import {
   forwardToCapture,
   linkDriveFile,
 } from "@/features/google-objects/services/google-objects.commands";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 type Message = { ok: boolean; text: string; href?: string; hrefText?: string } | null;
 
@@ -43,6 +45,7 @@ export function EventToMeeting({
   const id = useId();
   const router = useRouter();
   const { toast } = useToast();
+  const shellT = useT();
   const [project, setProject] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message>(null);
@@ -51,9 +54,13 @@ export function EventToMeeting({
       className="flex flex-wrap items-end gap-3"
       onSubmit={async (e) => {
         e.preventDefault();
-        setBusy(true);
-        const result = await addEventAsMeeting(linkId, project || null);
-        setBusy(false);
+        const result = await runServerAction(() => addEventAsMeeting(linkId, project || null), {
+          setBusy,
+          setError: (error) => setMessage(error ? { ok: false, text: error } : null),
+          t: shellT,
+          reload: () => window.location.reload(),
+        });
+        if (!result) return;
         if (!result.ok) return setMessage({ ok: false, text: result.error });
         // The event leaves this list on refresh (it is a Hub meeting now), taking
         // this form with it, so success is confirmed in the page-level toast.
@@ -88,6 +95,7 @@ export function EventToMeeting({
 
 export function DriveLinkForm({ projects, text }: { projects: { id: string; name: string }[]; text: GoogleObjectsText }) {
   const id = useId();
+  const shellT = useT();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message>(null);
   return (
@@ -97,13 +105,21 @@ export function DriveLinkForm({ projects, text }: { projects: { id: string; name
         e.preventDefault();
         const form = e.currentTarget;
         const data = new FormData(form);
-        setBusy(true);
-        const result = await linkDriveFile({
-          url: String(data.get("url") ?? ""),
-          title: String(data.get("title") ?? ""),
-          projectId: String(data.get("project") ?? "") || null,
-        });
-        setBusy(false);
+        const result = await runServerAction(
+          () =>
+            linkDriveFile({
+              url: String(data.get("url") ?? ""),
+              title: String(data.get("title") ?? ""),
+              projectId: String(data.get("project") ?? "") || null,
+            }),
+          {
+            setBusy,
+            setError: (error) => setMessage(error ? { ok: false, text: error } : null),
+            t: shellT,
+            reload: () => window.location.reload(),
+          },
+        );
+        if (!result) return;
         if (!result.ok) return setMessage({ ok: false, text: result.error });
         setMessage({ ok: true, text: text.fileLinked });
         form.reset();
@@ -141,6 +157,7 @@ export function DriveLinkForm({ projects, text }: { projects: { id: string; name
 export function ForwardToCapture({ messageId, name, text }: { messageId: string; name: string; text: GoogleObjectsText }) {
   const router = useRouter();
   const { toast } = useToast();
+  const shellT = useT();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<Message>(null);
   return (
@@ -150,9 +167,13 @@ export function ForwardToCapture({ messageId, name, text }: { messageId: string;
         variant="secondary"
         loading={busy}
         onClick={async () => {
-          setBusy(true);
-          const result = await forwardToCapture(messageId);
-          setBusy(false);
+          const result = await runServerAction(() => forwardToCapture(messageId), {
+            setBusy,
+            setError: (error) => setMessage(error ? { ok: false, text: error } : null),
+            t: shellT,
+            reload: () => window.location.reload(),
+          });
+          if (!result) return;
           // The forwarded mail leaves the list on refresh, so success is
           // confirmed in the page-level toast; an error stays here.
           if (result.ok) {

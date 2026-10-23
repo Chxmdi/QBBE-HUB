@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cancelMeeting } from "@/features/meetings/services/meeting.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function CancelMeetingButton({ meetingId }: { meetingId: string }) {
   const router = useRouter();
@@ -18,9 +19,13 @@ export function CancelMeetingButton({ meetingId }: { meetingId: string }) {
         t("meetings.cancelMeeting.confirm"),
       )
     ) return;
-    setSaving(true);
-    const result = await cancelMeeting({ meetingId });
-    setSaving(false);
+    const result = await runServerAction(() => cancelMeeting({ meetingId }), {
+      setBusy: setSaving,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("meetings.cancelMeeting.error"));
       return;
@@ -30,7 +35,7 @@ export function CancelMeetingButton({ meetingId }: { meetingId: string }) {
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button variant="secondary" onClick={handleCancel} loading={saving}>
+      <Button variant="secondary" onClick={() => void handleCancel()} loading={saving}>
         {t("meetings.cancelMeeting.button")}
       </Button>
       {error ? <p role="alert" className="text-[12px] text-danger-fg">{error}</p> : null}

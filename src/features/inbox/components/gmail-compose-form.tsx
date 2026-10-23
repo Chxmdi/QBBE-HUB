@@ -7,6 +7,7 @@ import { Input, Label, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { sendGmailMessage } from "@/features/inbox/services/gmail.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function GmailComposeForm() {
   const [to, setTo] = useState("");
@@ -18,9 +19,15 @@ export function GmailComposeForm() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setSending(true);
-    const result = await sendGmailMessage({ to, subject, body });
-    setSending(false);
+    const result = await runServerAction(() => sendGmailMessage({ to, subject, body }), {
+      setBusy: setSending,
+      setError: (error) => {
+        if (error) toast(error, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("inbox.compose.failed"), { tone: "error" });
       return;

@@ -44,43 +44,48 @@ export function SignUpForm({ invitation }: { invitation: SignUpInvitation | null
       return;
     }
     setLoading(true);
-    const supabase = createSupabaseBrowserClient();
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: invitation?.email ?? email,
-      password,
-      options: {
-        data: invitation
-          ? { full_name: fullName, invite_token: invitation.token }
-          : { full_name: fullName },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-    setLoading(false);
-    if (signUpError) {
-      // The database refuses an unusable invitation by aborting the insert,
-      // which Supabase Auth reports as a generic "Database error saving new
-      // user". With an invitation, that means the link; without one (the very
-      // first account) it can only be a fault, so it is not blamed on a link.
-      // Auth's own refusal of a weak password is shown in the reader's language.
-      const databaseRefused = /database error/i.test(signUpError.message);
-      setError(
-        databaseRefused
-          ? invitation
-            ? t("auth.signUp.inviteRejected")
-            : t("auth.signUp.failed")
-          : signUpError.code === "weak_password"
-            ? t("auth.password.hint", { min: MIN_PASSWORD_LENGTH })
-            : signUpError.message,
-      );
-      return;
-    }
-    if (data.session) {
-      router.push("/");
-      router.refresh();
-    } else {
-      // Email confirmation is enabled on the Supabase project; the membership
-      // is granted when the link in that email is followed.
-      setNeedsConfirmation(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: invitation?.email ?? email,
+        password,
+        options: {
+          data: invitation
+            ? { full_name: fullName, invite_token: invitation.token }
+            : { full_name: fullName },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (signUpError) {
+        // The database refuses an unusable invitation by aborting the insert,
+        // which Supabase Auth reports as a generic "Database error saving new
+        // user". With an invitation, that means the link; without one (the very
+        // first account) it can only be a fault, so it is not blamed on a link.
+        // Auth's own refusal of a weak password is shown in the reader's language.
+        const databaseRefused = /database error/i.test(signUpError.message);
+        setError(
+          databaseRefused
+            ? invitation
+              ? t("auth.signUp.inviteRejected")
+              : t("auth.signUp.failed")
+            : signUpError.code === "weak_password"
+              ? t("auth.password.hint", { min: MIN_PASSWORD_LENGTH })
+              : signUpError.message,
+        );
+        return;
+      }
+      if (data.session) {
+        router.push("/");
+        router.refresh();
+      } else {
+        // Email confirmation is enabled on the Supabase project; the membership
+        // is granted when the link in that email is followed.
+        setNeedsConfirmation(true);
+      }
+    } catch {
+      setError(t("ui.actionUnreachable"));
+    } finally {
+      setLoading(false);
     }
   }
 

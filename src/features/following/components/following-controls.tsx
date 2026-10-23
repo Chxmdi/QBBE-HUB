@@ -19,15 +19,22 @@ import {
   saveFollowRules,
   unfollow,
 } from "@/features/following/services/following.commands";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 function useAction(text: FollowingText) {
   const router = useRouter();
+  const shellT = useT();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   async function run(action: () => Promise<{ ok: boolean; error?: string }>, done: string) {
-    setBusy(true);
-    const result = await action();
-    setBusy(false);
+    const result = await runServerAction(action, {
+      setBusy,
+      setError: (error) => setMessage(error ? { ok: false, text: error } : null),
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     setMessage(result.ok ? { ok: true, text: done } : { ok: false, text: result.error ?? text.errors.generic });
     if (result.ok) router.refresh();
   }
@@ -57,7 +64,7 @@ export function FollowButton({
   const { busy, run, feedback } = useAction(text);
   return (
     <div className="space-y-2">
-      <Button size="sm" loading={busy} onClick={() => run(() => followObject(objectId, objectType), fill(text.followed, { name }))}>
+      <Button size="sm" loading={busy} onClick={() => void run(() => followObject(objectId, objectType), fill(text.followed, { name }))}>
         <Bell className="size-4" aria-hidden />
         {text.follow}
       </Button>
@@ -70,7 +77,7 @@ export function UnfollowButton({ followId, name, text }: { followId: string; nam
   const { busy, run, feedback } = useAction(text);
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" variant="secondary" disabled={busy} onClick={() => run(() => unfollow(followId), text.unfollowed)}>
+      <Button size="sm" variant="secondary" disabled={busy} onClick={() => void run(() => unfollow(followId), text.unfollowed)}>
         {fill(text.unfollow, { name })}
       </Button>
       {feedback}

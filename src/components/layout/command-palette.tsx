@@ -131,18 +131,27 @@ export function CommandPalette({
   useEffect(() => {
     if (!query || query.length < 2) return;
     let cancelled = false;
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      const supabase = createSupabaseBrowserClient();
-      const { data, error } = await supabase.rpc("global_search", {
-        p_query: query,
-        p_limit: 12,
-      });
-      if (cancelled) return;
-      setSearchFailed(Boolean(error));
-      setResults(error ? [] : ((data as SearchResult[] | null) ?? []));
-      setActiveIndex(0);
-      setLoading(false);
+    const timer = setTimeout(() => {
+      void (async () => {
+        setLoading(true);
+        try {
+          const supabase = createSupabaseBrowserClient();
+          const { data, error } = await supabase.rpc("global_search", {
+            p_query: query,
+            p_limit: 12,
+          });
+          if (cancelled) return;
+          setSearchFailed(Boolean(error));
+          setResults(error ? [] : ((data as SearchResult[] | null) ?? []));
+          setActiveIndex(0);
+        } catch {
+          if (cancelled) return;
+          setSearchFailed(true);
+          setResults([]);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
     }, 200);
     return () => {
       cancelled = true;

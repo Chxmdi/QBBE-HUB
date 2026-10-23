@@ -62,10 +62,16 @@ export function RecordPicker({
     if (!searchable) return;
     const call = ++latest.current;
     setLoading(true);
-    const found = await searchRecords({ type, query });
-    if (call !== latest.current) return;
-    setOptions(found);
-    setLoading(false);
+    try {
+      const found = await searchRecords({ type, query });
+      if (call !== latest.current) return;
+      setOptions(found);
+    } catch {
+      // A failed search just offers nothing; the id field still works.
+    } finally {
+      // An older search must not end a newer one's spinner.
+      if (call === latest.current) setLoading(false);
+    }
   }, [searchable, type]);
 
   const groups: ComboboxGroup[] = [{

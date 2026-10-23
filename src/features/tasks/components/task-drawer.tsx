@@ -21,6 +21,7 @@ import type { TaskRole } from "@/features/tasks/schemas";
 import type { TaskFieldChange } from "@/features/tasks/services/task.history";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useFormatters, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import type { Task, TaskComment, TaskPriority } from "@/types/entities";
 import { TaskDescriptionField } from "@/features/editor/components/task-description-field";
@@ -106,136 +107,141 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
     // nothing says why. That is #93, and it is a real defect for anybody
     // working a checklist by keyboard, not only for the test that caught it.
     if (shownTaskId.current !== id) setLoading(true);
-    setNotFound(false);
-    const supabase = createSupabaseBrowserClient();
-    const [
-      { data: taskRow },
-      { data: commentRows },
-      { data: checkRows },
-      { data: depRows },
-      { data: taskOptions },
-      { data: roleRows },
-      { data: labelRows },
-      { data: labelOptions },
-      { data: collaborate },
-      { data: historyRows, error: historyError },
-    ] = await Promise.all([
-      supabase
-        .from("task")
-        .select(
-          DETAIL_SELECT +
-            ", recurrence_rule, series_id, occurrence_date, series_edited_at, " +
-            "series:series_id(id, title, recurrence_rule, stopped_at, owner_id)",
-        )
-        .eq("id", id)
-        .maybeSingle(),
-      supabase
-        .from("task_comment")
-        .select(
-          "id, task_id, author_id, body, created_at, author:author_id(id, full_name, email, avatar_url, title, timezone)",
-        )
-        .eq("task_id", id)
-        .is("deleted_at", null)
-        .order("created_at"),
-      supabase
-        .from("checklist_item")
-        .select("id, title, completed_at")
-        .eq("task_id", id)
-        .order("sort_key"),
-      supabase
-        .from("task_dependency")
-        .select("blocking_task_id, blocking:blocking_task_id(title)")
-        .eq("blocked_task_id", id),
-      supabase.from("task").select("id, title").is("archived_at", null).limit(50),
-      supabase
-        .from("task_assignment")
-        .select("user_id, role, user_profile:user_id(id, full_name, avatar_url)")
-        .eq("task_id", id),
-      supabase
-        .from("task_label")
-        .select("label:label_id(id, name, color)")
-        .eq("task_id", id),
-      supabase.from("label").select("id, name, color").order("name"),
-      // Ask the database what this person may do rather than inferring it
-      // from their organization role. `task_label` insert and delete are
-      // gated on manage-or-collaborate, so a task's own assignee may tag it
-      // while never being staff. Guessing `isStaff` here would hide a control
-      // the server would have allowed, which is the quieter half of the same
-      // mistake as showing one it refuses.
-      supabase.rpc("has_task_capability", {
-        p_task: id,
-        p_capability: "collaborate",
-      }),
-      supabase
-        .from("activity_event")
-        .select(
-          "id, verb, summary, metadata, created_at, actor:actor_id(id, full_name, avatar_url)",
-        )
-        .eq("source_type", "task")
-        .eq("source_id", id)
-        .order("created_at", { ascending: false })
-        .limit(50),
-    ]);
-    setLoading(false);
-    shownTaskId.current = id;
-    setHistoryFailed(Boolean(historyError));
-    if (!taskRow) {
-      // RLS filtered it out, or it does not exist — same message either way.
-      setNotFound(true);
-      setTask(null);
-      return;
+    try {
+      setNotFound(false);
+      const supabase = createSupabaseBrowserClient();
+      const [
+        { data: taskRow },
+        { data: commentRows },
+        { data: checkRows },
+        { data: depRows },
+        { data: taskOptions },
+        { data: roleRows },
+        { data: labelRows },
+        { data: labelOptions },
+        { data: collaborate },
+        { data: historyRows, error: historyError },
+      ] = await Promise.all([
+        supabase
+          .from("task")
+          .select(
+            DETAIL_SELECT +
+              ", recurrence_rule, series_id, occurrence_date, series_edited_at, " +
+              "series:series_id(id, title, recurrence_rule, stopped_at, owner_id)",
+          )
+          .eq("id", id)
+          .maybeSingle(),
+        supabase
+          .from("task_comment")
+          .select(
+            "id, task_id, author_id, body, created_at, author:author_id(id, full_name, email, avatar_url, title, timezone)",
+          )
+          .eq("task_id", id)
+          .is("deleted_at", null)
+          .order("created_at"),
+        supabase
+          .from("checklist_item")
+          .select("id, title, completed_at")
+          .eq("task_id", id)
+          .order("sort_key"),
+        supabase
+          .from("task_dependency")
+          .select("blocking_task_id, blocking:blocking_task_id(title)")
+          .eq("blocked_task_id", id),
+        supabase.from("task").select("id, title").is("archived_at", null).limit(50),
+        supabase
+          .from("task_assignment")
+          .select("user_id, role, user_profile:user_id(id, full_name, avatar_url)")
+          .eq("task_id", id),
+        supabase
+          .from("task_label")
+          .select("label:label_id(id, name, color)")
+          .eq("task_id", id),
+        supabase.from("label").select("id, name, color").order("name"),
+        // Ask the database what this person may do rather than inferring it
+        // from their organization role. `task_label` insert and delete are
+        // gated on manage-or-collaborate, so a task's own assignee may tag it
+        // while never being staff. Guessing `isStaff` here would hide a control
+        // the server would have allowed, which is the quieter half of the same
+        // mistake as showing one it refuses.
+        supabase.rpc("has_task_capability", {
+          p_task: id,
+          p_capability: "collaborate",
+        }),
+        supabase
+          .from("activity_event")
+          .select(
+            "id, verb, summary, metadata, created_at, actor:actor_id(id, full_name, avatar_url)",
+          )
+          .eq("source_type", "task")
+          .eq("source_id", id)
+          .order("created_at", { ascending: false })
+          .limit(50),
+      ]);
+      shownTaskId.current = id;
+      setHistoryFailed(Boolean(historyError));
+      if (!taskRow) {
+        // RLS filtered it out, or it does not exist — same message either way.
+        setNotFound(true);
+        setTask(null);
+        return;
+      }
+      setTask(taskRow as unknown as TaskDetail);
+      setComments((commentRows ?? []) as unknown as TaskComment[]);
+      setChecklist((checkRows ?? []) as { id: string; title: string; completed_at: string | null }[]);
+      setBlockers(
+        ((depRows ?? []) as unknown as { blocking_task_id: string; blocking: { title: string } | null }[]).map((d) => ({
+          blocking_task_id: d.blocking_task_id,
+          title: d.blocking?.title ?? tRef.current("tasks.drawer.task"),
+        })),
+      );
+      setPeopleTasks((taskOptions ?? []) as { id: string; title: string }[]);
+      setLabels(
+        ((labelRows ?? []) as unknown as { label: TaskLabel | null }[])
+          .map((row) => row.label)
+          .filter((label): label is TaskLabel => label !== null),
+      );
+      setAllLabels((labelOptions ?? []) as unknown as TaskLabel[]);
+      setCanCollaborate(collaborate === true);
+
+      type RoleRow = {
+        user_id: string;
+        role: TaskRole;
+        user_profile: { full_name: string; avatar_url: string | null } | null;
+      };
+      setRoles(
+        ((roleRows ?? []) as unknown as RoleRow[]).map((row) => ({
+          userId: row.user_id,
+          role: row.role,
+          fullName: row.user_profile?.full_name ?? tRef.current("tasks.unknown"),
+          avatarUrl: row.user_profile?.avatar_url ?? null,
+        })),
+      );
+
+      type HistoryRow = {
+        id: string;
+        verb: string;
+        summary: string;
+        created_at: string;
+        metadata: { changes?: TaskFieldChange[] } | null;
+        actor: { full_name: string; avatar_url: string | null } | null;
+      };
+      setHistory(
+        ((historyRows ?? []) as unknown as HistoryRow[]).map((row) => ({
+          id: row.id,
+          verb: row.verb,
+          summary: row.summary,
+          createdAt: row.created_at,
+          actorName: row.actor?.full_name ?? null,
+          actorAvatar: row.actor?.avatar_url ?? null,
+          changes: row.metadata?.changes ?? [],
+        })),
+      );
+    } catch {
+      // A background read: leave the drawer as it was rather than spin forever.
+    } finally {
+      setLoading(false);
     }
-    setTask(taskRow as unknown as TaskDetail);
-    setComments((commentRows ?? []) as unknown as TaskComment[]);
-    setChecklist((checkRows ?? []) as { id: string; title: string; completed_at: string | null }[]);
-    setBlockers(
-      ((depRows ?? []) as unknown as { blocking_task_id: string; blocking: { title: string } | null }[]).map((d) => ({
-        blocking_task_id: d.blocking_task_id,
-        title: d.blocking?.title ?? tRef.current("tasks.drawer.task"),
-      })),
-    );
-    setPeopleTasks((taskOptions ?? []) as { id: string; title: string }[]);
-    setLabels(
-      ((labelRows ?? []) as unknown as { label: TaskLabel | null }[])
-        .map((row) => row.label)
-        .filter((label): label is TaskLabel => label !== null),
-    );
-    setAllLabels((labelOptions ?? []) as unknown as TaskLabel[]);
-    setCanCollaborate(collaborate === true);
-
-    type RoleRow = {
-      user_id: string;
-      role: TaskRole;
-      user_profile: { full_name: string; avatar_url: string | null } | null;
-    };
-    setRoles(
-      ((roleRows ?? []) as unknown as RoleRow[]).map((row) => ({
-        userId: row.user_id,
-        role: row.role,
-        fullName: row.user_profile?.full_name ?? tRef.current("tasks.unknown"),
-        avatarUrl: row.user_profile?.avatar_url ?? null,
-      })),
-    );
-
-    type HistoryRow = {
-      id: string;
-      verb: string;
-      summary: string;
-      created_at: string;
-      metadata: { changes?: TaskFieldChange[] } | null;
-      actor: { full_name: string; avatar_url: string | null } | null;
-    };
-    setHistory(
-      ((historyRows ?? []) as unknown as HistoryRow[]).map((row) => ({
-        id: row.id,
-        verb: row.verb,
-        summary: row.summary,
-        createdAt: row.created_at,
-        actorName: row.actor?.full_name ?? null,
-        actorAvatar: row.actor?.avatar_url ?? null,
-        changes: row.metadata?.changes ?? [],
-      })),
-    );
   }, []);
 
   useEffect(() => {
@@ -256,9 +262,15 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
 
   async function handleFieldSave(patch: Record<string, unknown>) {
     if (!taskId) return;
-    setSaving(true);
-    const result = await updateTask({ taskId, ...patch });
-    setSaving(false);
+    const result = await runServerAction(() => updateTask({ taskId, ...patch }), {
+      setBusy: setSaving,
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("tasks.drawer.saveFailed"), { tone: "error" });
       return;
@@ -271,9 +283,15 @@ export function TaskDrawer({ people, isStaff = false }: { people: Option[]; isSt
   async function handleComment(e: React.FormEvent) {
     e.preventDefault();
     if (!taskId || !comment.trim()) return;
-    setPosting(true);
-    const result = await addTaskComment(taskId, comment);
-    setPosting(false);
+    const result = await runServerAction(() => addTaskComment(taskId, comment), {
+      setBusy: setPosting,
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("tasks.drawer.commentFailed"), { tone: "error" });
       return;

@@ -40,6 +40,7 @@ import {
 } from "@/features/payroll/services/payroll.commands";
 import type { AccountMapRow, Allocation, PayrollOptions } from "@/features/payroll/services/payroll.queries";
 import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 function FormError({ error }: { error: string | null }) {
   return error ? (
@@ -62,10 +63,13 @@ function useAction() {
     success: string | ((result: T) => string),
     then?: (result: T) => void,
   ) {
-    setPending(key);
-    setError(null);
-    const result = await action();
-    setPending(null);
+    const result = await runServerAction(action, {
+      setBusy: (busy) => setPending(busy ? key : null),
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return false;
     if (!result.ok) {
       setError(result.error ?? t("finance.payroll.errors.generic"));
       return false;

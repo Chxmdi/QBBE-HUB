@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Textarea } from "@/components/ui/input";
-import { useLocale } from "@/lib/i18n/client";
+import { useLocale, useT } from "@/lib/i18n/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { captureFile, captureItem } from "../actions";
@@ -23,6 +23,7 @@ const OCR_TIMEOUT_MS = 60_000;
 export function CaptureForm() {
   const locale = useLocale();
   const t = captureT(locale);
+  const shellT = useT();
   const router = useRouter();
   const id = useId();
   const formRef = useRef<HTMLFormElement>(null);
@@ -73,16 +74,22 @@ export function CaptureForm() {
     setBusy(true);
     setMessage(null);
     let result: { ok: boolean; error?: string };
-    if (kind === "file" || kind === "photo") {
-      const file = form.get("file") as File | null;
-      result = file && file.size > 0 ? await uploadAndRecord(file) : { ok: false, error: t("errors.fileRequired") };
-    } else if (kind === "link") {
-      result = await captureItem({ kind, url: String(form.get("url") ?? ""), note: String(form.get("note") ?? "") || undefined });
-    } else {
-      result = await captureItem({ kind, text: String(form.get("text") ?? "") });
+    try {
+      if (kind === "file" || kind === "photo") {
+        const file = form.get("file") as File | null;
+        result = file && file.size > 0 ? await uploadAndRecord(file) : { ok: false, error: t("errors.fileRequired") };
+      } else if (kind === "link") {
+        result = await captureItem({ kind, url: String(form.get("url") ?? ""), note: String(form.get("note") ?? "") || undefined });
+      } else {
+        result = await captureItem({ kind, text: String(form.get("text") ?? "") });
+      }
+    } catch {
+      setMessage({ ok: false, text: shellT("ui.actionUnreachable") });
+      return;
+    } finally {
+      setBusy(false);
+      setProgress(null);
     }
-    setBusy(false);
-    setProgress(null);
     setMessage(result.ok ? { ok: true, text: t("form.captured") } : { ok: false, text: result.error ?? t("errors.saveFailed") });
     if (result.ok) {
       formRef.current?.reset();

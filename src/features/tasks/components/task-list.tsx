@@ -19,6 +19,7 @@ import { StatusSelect } from "@/features/tasks/components/status-select";
 import { bulkUpdateTasks } from "@/features/tasks/services/task.commands";
 import { BULK_STATUSES } from "@/features/tasks/schemas";
 import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { cn, dueLabelWith } from "@/lib/utils";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import type { Task, TaskPriority } from "@/types/entities";
@@ -92,16 +93,26 @@ export function TaskList({
     e.preventDefault();
     if (!bulkAction) return;
     const form = new FormData(e.currentTarget);
-    setApplying(true);
-    const result = await bulkUpdateTasks({
-      taskIds: Array.from(selected),
-      action: bulkAction,
-      status: (form.get("status") as string) || undefined,
-      assigneeId: bulkAction === "assignee" ? (form.get("assigneeId") as string) || null : undefined,
-      priority: (form.get("priority") as string) || undefined,
-      dueAt: bulkAction === "due" ? (form.get("dueAt") as string) || null : undefined,
-    });
-    setApplying(false);
+    const result = await runServerAction(
+      () =>
+        bulkUpdateTasks({
+          taskIds: Array.from(selected),
+          action: bulkAction,
+          status: (form.get("status") as string) || undefined,
+          assigneeId: bulkAction === "assignee" ? (form.get("assigneeId") as string) || null : undefined,
+          priority: (form.get("priority") as string) || undefined,
+          dueAt: bulkAction === "due" ? (form.get("dueAt") as string) || null : undefined,
+        }),
+      {
+        setBusy: setApplying,
+        setError: (text) => {
+          if (text) toast(text, { tone: "error" });
+        },
+        t,
+        reload: () => window.location.reload(),
+      },
+    );
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("tasks.list.bulkFailed"), { tone: "error" });
       return;

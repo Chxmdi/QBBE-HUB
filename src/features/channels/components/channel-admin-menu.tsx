@@ -40,7 +40,7 @@ export function ChannelAdminMenu({
       items={[
         {
           label: archived ? t("channels.admin.restore") : t("channels.admin.archive"),
-          onSelect: toggleArchive,
+          onSelect: () => void toggleArchive(),
           icon: archived ? (
             <ArchiveRestore className="size-4" aria-hidden />
           ) : (

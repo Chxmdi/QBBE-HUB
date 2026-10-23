@@ -10,6 +10,7 @@ import {
   setProgramTemplateApproval,
 } from "@/features/programs/services/program-template.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 type ProgramTemplate = {
   id: string;
@@ -39,10 +40,13 @@ export function ProgramTemplateManager({
   const [error, setError] = useState<string | null>(null);
 
   async function run(key: string, work: () => Promise<{ ok: boolean; error?: string }>) {
-    setPending(key);
-    setError(null);
-    const result = await work();
-    setPending(null);
+    const result = await runServerAction(work, {
+      setBusy: (busy) => setPending(busy ? key : null),
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("programs.templates.error"));
       return;

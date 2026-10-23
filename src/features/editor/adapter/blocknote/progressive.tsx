@@ -104,16 +104,18 @@ export function TurnIntoTasksDialog({
           event.preventDefault();
           setBusy(true);
           setError(null);
-          for (const line of lines) {
-            const task = await handlers.createTask(line.title, chosen || null).catch(() => null);
-            if (!task) {
-              setBusy(false);
-              setError(t("semantic.failed"));
-              return;
+          try {
+            for (const line of lines) {
+              const task = await handlers.createTask(line.title, chosen || null).catch(() => null);
+              if (!task) {
+                setError(t("semantic.failed"));
+                return;
+              }
+              editor.insertBlocks([objectBlock("task", task.id)], line.block.id, "after");
             }
-            editor.insertBlocks([objectBlock("task", task.id)], line.block.id, "after");
+          } finally {
+            setBusy(false);
           }
-          setBusy(false);
           announce(t("progressive.tasksDone"));
           onClose();
           requestAnimationFrame(() => editor.focus());
@@ -275,10 +277,14 @@ function SuggestDialog({
           event.preventDefault();
           setBusy(true);
           setError(null);
-          const task = await handlers
-            .createTask(title.trim(), chosen || null, { assigneeId: item.suggestion.personId, dueAt: due || undefined })
-            .catch(() => null);
-          setBusy(false);
+          let task: Awaited<ReturnType<EditorSemanticHandlers["createTask"]>> | null;
+          try {
+            task = await handlers
+              .createTask(title.trim(), chosen || null, { assigneeId: item.suggestion.personId, dueAt: due || undefined })
+              .catch(() => null);
+          } finally {
+            setBusy(false);
+          }
           if (!task) {
             setError(t("semantic.failed"));
             return;

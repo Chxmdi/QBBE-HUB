@@ -13,6 +13,7 @@ import {
   type UnresolvedWork,
 } from "@/features/projects/services/project.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /**
  * Closure flow that surfaces unresolved work before confirmation
@@ -47,18 +48,20 @@ export function CloseProjectDialog({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await closeProject({
-      projectId,
-      results: form.get("results"),
-      lessons: (form.get("lessons") as string) || undefined,
-      evidenceLinks: (form.get("evidenceLinks") as string) || undefined,
-      evidenceDocumentIds: evidenceIds,
-      archiveOpenTasks: archiveOpen,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        closeProject({
+          projectId,
+          results: form.get("results"),
+          lessons: (form.get("lessons") as string) || undefined,
+          evidenceLinks: (form.get("evidenceLinks") as string) || undefined,
+          evidenceDocumentIds: evidenceIds,
+          archiveOpenTasks: archiveOpen,
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("projects.close.error"));
       return;

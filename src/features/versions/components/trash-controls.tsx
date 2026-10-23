@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
-import { useFormatters, useLocale } from "@/lib/i18n/client";
+import { useFormatters, useLocale, useT } from "@/lib/i18n/client";
 import type { ObjectRef } from "@/lib/objects/contracts";
 import { fill } from "@/features/collab/i18n";
 import { versionsText } from "../messages";
@@ -13,10 +13,12 @@ import { restoreObject, trashObject } from "../services/version.commands";
 import { restorePage } from "@/features/pages/services/page.commands";
 import type { TrashEntry } from "../services/version.queries";
 import { daysLeft } from "../trash";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** "Move to trash" for an object the person can manage. */
 export function DeleteObjectButton({ object, title }: { object: ObjectRef; title: string }) {
   const m = versionsText(useLocale());
+  const shellT = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,10 +29,13 @@ export function DeleteObjectButton({ object, title }: { object: ObjectRef; title
         loading={busy}
         onClick={async () => {
           if (!window.confirm(fill(m.trash.confirmDelete, { title }))) return;
-          setBusy(true);
-          setError(null);
-          const result = await trashObject(object);
-          setBusy(false);
+          const result = await runServerAction(() => trashObject(object), {
+            setBusy,
+            setError,
+            t: shellT,
+            reload: () => window.location.reload(),
+          });
+          if (!result) return;
           if (result.ok) router.push("/collab/trash");
           else setError(result.error ?? m.errors.failed);
         }}
@@ -50,6 +55,7 @@ export function DeleteObjectButton({ object, title }: { object: ObjectRef; title
 export function TrashTable({ entries }: { entries: TrashEntry[] }) {
   const m = versionsText(useLocale());
   const format = useFormatters();
+  const shellT = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -111,13 +117,19 @@ export function TrashTable({ entries }: { entries: TrashEntry[] }) {
                       loading={busy === entry.objectId}
                       aria-label={fill(m.trash.restoreNamed, { title })}
                       onClick={async () => {
-                        setBusy(entry.objectId);
-                        setMessage(null);
-                        const result =
-                          entry.kind === "page"
-                            ? await restorePage({ pageId: entry.objectId })
-                            : await restoreObject(entry.objectId);
-                        setBusy(null);
+                        const result = await runServerAction(
+                          async () =>
+                            entry.kind === "page"
+                              ? await restorePage({ pageId: entry.objectId })
+                              : await restoreObject(entry.objectId),
+                          {
+                            setBusy: (on) => setBusy(on ? entry.objectId : null),
+                            setError: (text) => setMessage(text ? { ok: false, text } : null),
+                            t: shellT,
+                            reload: () => window.location.reload(),
+                          },
+                        );
+                        if (!result) return;
                         // The restored row (and with the last one, the table)
                         // leaves on refresh, so success goes to the page-level toast.
                         if (result.ok) {

@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useFormatters, useLocale } from "@/lib/i18n/client";
+import { useFormatters, useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { ObjectRef } from "@/lib/objects/contracts";
 import { fill } from "@/features/collab/i18n";
 import { objectCommentsText, type ObjectCommentsText } from "../messages";
@@ -125,13 +126,17 @@ export function ObjectCommentsPanel({
 
 function useRunner(m: ObjectCommentsText) {
   const router = useRouter();
+  const shellT = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function run(action: () => Promise<CommentActionResult>): Promise<boolean> {
-    setBusy(true);
-    setError(null);
-    const result = await action();
-    setBusy(false);
+    const result = await runServerAction(action, {
+      setBusy,
+      setError,
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return false;
     if (!result.ok) {
       setError(result.error ?? m.errors.saveFailed);
       return false;

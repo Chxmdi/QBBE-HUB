@@ -16,6 +16,7 @@ import {
 } from "@/features/admin/services/access-grant.commands";
 import { scopeRoleLabel } from "@/features/admin/labels";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 type Option = { id: string; name: string };
 type ProgramGrant = { program_id: string; user_id: string; role: ProgramAccessRole };
@@ -52,54 +53,62 @@ export function DirectAccessManager({
 
   async function saveProgram(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending("program");
-    setError(null);
-    const result = await setDirectProgramAccess({
-      programId,
-      userId: programMember,
-      role: programRole,
-    });
-    setPending(null);
+    const result = await runServerAction(
+      () =>
+        setDirectProgramAccess({
+          programId,
+          userId: programMember,
+          role: programRole,
+        }),
+      { setBusy: (busy) => setPending(busy ? "program" : null), setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) return setError(result.error ?? t("admin.access.direct.updateFailed"));
     router.refresh();
   }
 
   async function saveProject(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending("project");
-    setError(null);
-    const result = await setDirectProjectAccess({
-      projectId,
-      userId: projectMember,
-      role: projectRole,
-    });
-    setPending(null);
+    const result = await runServerAction(
+      () =>
+        setDirectProjectAccess({
+          projectId,
+          userId: projectMember,
+          role: projectRole,
+        }),
+      { setBusy: (busy) => setPending(busy ? "project" : null), setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) return setError(result.error ?? t("admin.access.direct.updateFailed"));
     router.refresh();
   }
 
   async function removeProgram(grant: ProgramGrant) {
-    setPending("program");
-    setError(null);
-    const result = await setDirectProgramAccess({
-      programId: grant.program_id,
-      userId: grant.user_id,
-      role: null,
-    });
-    setPending(null);
+    const result = await runServerAction(
+      () =>
+        setDirectProgramAccess({
+          programId: grant.program_id,
+          userId: grant.user_id,
+          role: null,
+        }),
+      { setBusy: (busy) => setPending(busy ? "program" : null), setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) return setError(result.error ?? t("admin.access.direct.removeFailed"));
     router.refresh();
   }
 
   async function removeProject(grant: ProjectGrant) {
-    setPending("project");
-    setError(null);
-    const result = await setDirectProjectAccess({
-      projectId: grant.project_id,
-      userId: grant.user_id,
-      role: null,
-    });
-    setPending(null);
+    const result = await runServerAction(
+      () =>
+        setDirectProjectAccess({
+          projectId: grant.project_id,
+          userId: grant.user_id,
+          role: null,
+        }),
+      { setBusy: (busy) => setPending(busy ? "project" : null), setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) return setError(result.error ?? t("admin.access.direct.removeFailed"));
     router.refresh();
   }
@@ -143,7 +152,7 @@ export function DirectAccessManager({
             rows={programGrants.map((grant) => ({
               key: `${grant.program_id}:${grant.user_id}`,
               label: `${memberNames.get(grant.user_id) ?? t("admin.access.direct.unknownMember")} · ${programNames.get(grant.program_id) ?? t("admin.access.direct.unknownProgram")} · ${scopeRoleLabel(grant.role, t)}`,
-              remove: () => removeProgram(grant),
+              remove: () => void removeProgram(grant),
             }))}
             disabled={pending !== null}
           />
@@ -179,7 +188,7 @@ export function DirectAccessManager({
             rows={projectGrants.map((grant) => ({
               key: `${grant.project_id}:${grant.user_id}`,
               label: `${memberNames.get(grant.user_id) ?? t("admin.access.direct.unknownMember")} · ${projectNames.get(grant.project_id) ?? t("admin.access.direct.unknownProject")} · ${scopeRoleLabel(grant.role, t)}`,
-              remove: () => removeProject(grant),
+              remove: () => void removeProject(grant),
             }))}
             disabled={pending !== null}
           />

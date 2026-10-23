@@ -34,11 +34,13 @@ export function CommandBar({ autoFocus = false }: { autoFocus?: boolean }) {
 
   useEffect(() => {
     let cancelled = false;
-    const timer = setTimeout(async () => {
-      const next = await suggestCommands(value);
-      if (cancelled) return;
-      setSuggestions(next);
-      setActive(-1);
+    const timer = setTimeout(() => {
+      void (async () => {
+        const next = await suggestCommands(value);
+        if (cancelled) return;
+        setSuggestions(next);
+        setActive(-1);
+      })();
     }, 150);
     return () => {
       cancelled = true;
