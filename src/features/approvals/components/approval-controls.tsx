@@ -7,6 +7,7 @@ import { Label, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/translator";
+import { runServerAction } from "@/lib/use-server-action";
 import {
   commentOnApproval,
   decideApproval,
@@ -47,16 +48,17 @@ export function ApprovalActions({
   const noteId = `approval-note-${itemId}`;
 
   async function run(action: Action) {
-    setBusy(action);
-    setError(null);
     const trimmed = note.trim();
-    const result =
-      action === "approve" || action === "reject"
-        ? await decideApproval({ itemId, decision: action, note: trimmed || undefined })
-        : action === "comment"
-          ? await commentOnApproval({ itemId, note: trimmed })
-          : await withdrawApproval({ itemId, note: trimmed || undefined });
-    setBusy(null);
+    const result = await runServerAction(
+      () =>
+        action === "approve" || action === "reject"
+          ? decideApproval({ itemId, decision: action, note: trimmed || undefined })
+          : action === "comment"
+            ? commentOnApproval({ itemId, note: trimmed })
+            : withdrawApproval({ itemId, note: trimmed || undefined }),
+      { setBusy: (on) => setBusy(on ? action : null), setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("finance.approvals.errors.generic"));
       return;
@@ -86,14 +88,14 @@ export function ApprovalActions({
       <div className="flex flex-wrap gap-2">
         {canDecide ? (
           <>
-            <Button size="sm" disabled={busy !== null} onClick={() => run("approve")}>
+            <Button size="sm" disabled={busy !== null} onClick={() => void run("approve")}>
               {t("finance.approvals.actions.approve")}
             </Button>
             <Button
               size="sm"
               variant="danger"
               disabled={busy !== null}
-              onClick={() => run("reject")}
+              onClick={() => void run("reject")}
             >
               {t("finance.approvals.actions.reject")}
             </Button>
@@ -103,7 +105,7 @@ export function ApprovalActions({
           size="sm"
           variant="secondary"
           disabled={busy !== null || note.trim() === ""}
-          onClick={() => run("comment")}
+          onClick={() => void run("comment")}
         >
           {canDecide ? t("finance.approvals.actions.askQuestion") : t("finance.approvals.actions.postComment")}
         </Button>
@@ -112,7 +114,7 @@ export function ApprovalActions({
             size="sm"
             variant="ghost"
             disabled={busy !== null}
-            onClick={() => run("withdraw")}
+            onClick={() => void run("withdraw")}
           >
             {t("finance.approvals.actions.withdraw")}
           </Button>
@@ -127,11 +129,13 @@ export function RuleControls({ ruleId, active }: { ruleId: string; active: boole
   const toast = useToast();
   const t = useT();
   const [busy, setBusy] = React.useState(false);
+  const showError = (text: string | null) => {
+    if (text) toast.toast(text, { tone: "error" });
+  };
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>, done: string) {
-    setBusy(true);
-    const result = await action();
-    setBusy(false);
+    const result = await runServerAction(action, { setBusy, setError: showError, t, reload: () => window.location.reload() });
+    if (!result) return;
     if (!result.ok) {
       toast.toast(result.error ?? t("finance.approvals.errors.generic"), { tone: "error" });
       return;
@@ -147,7 +151,7 @@ export function RuleControls({ ruleId, active }: { ruleId: string; active: boole
         variant="secondary"
         disabled={busy}
         onClick={() =>
-          run(
+          void run(
             () => setApprovalRuleActive(ruleId, !active),
             active ? t("finance.approvals.rules.switchedOff") : t("finance.approvals.rules.switchedOn"),
           )
@@ -176,11 +180,18 @@ export function EndDelegationButton({ delegationId, label }: { delegationId: str
   const toast = useToast();
   const t = useT();
   const [busy, setBusy] = React.useState(false);
+  const showError = (text: string | null) => {
+    if (text) toast.toast(text, { tone: "error" });
+  };
 
   async function end() {
-    setBusy(true);
-    const result = await endApprovalDelegation(delegationId);
-    setBusy(false);
+    const result = await runServerAction(() => endApprovalDelegation(delegationId), {
+      setBusy,
+      setError: showError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       toast.toast(result.error ?? t("finance.approvals.errors.generic"), { tone: "error" });
       return;

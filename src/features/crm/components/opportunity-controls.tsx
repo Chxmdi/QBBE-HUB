@@ -12,6 +12,7 @@ import {
 import { updateOpportunity } from "@/features/crm/services/opportunity.commands";
 import { stageLabel } from "@/features/crm/labels";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /**
  * Moving one bid along the pipeline.
@@ -62,30 +63,34 @@ export function OpportunityControls({
   return (
     <form
       className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2"
-      onSubmit={async (event) => {
+      onSubmit={(event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
         const amount = String(form.get("amountAwarded") ?? "").trim();
         const note = String(form.get("outcomeNote") ?? "").trim();
         const decided = String(form.get("decidedAt") ?? "").trim();
 
-        setBusy(true);
-        setError(null);
-        const result = await updateOpportunity({
-          opportunityId,
-          stage: nextStage,
-          ...(awarding && amount ? { amountAwarded: Number(amount) } : {}),
-          ...(refusing && note ? { outcomeNote: note } : {}),
-          ...(settling ? { decidedAt: decided || today } : {}),
-        });
-        setBusy(false);
+        void (async () => {
+          const result = await runServerAction(
+            () =>
+              updateOpportunity({
+                opportunityId,
+                stage: nextStage,
+                ...(awarding && amount ? { amountAwarded: Number(amount) } : {}),
+                ...(refusing && note ? { outcomeNote: note } : {}),
+                ...(settling ? { decidedAt: decided || today } : {}),
+              }),
+            { setBusy, setError, t, reload: () => window.location.reload() },
+          );
+          if (!result) return;
 
-        if (!result.ok) {
-          setError(result.error ?? t("crm.pipeline.controls.failed"));
-          return;
-        }
-        setOpen(false);
-        router.refresh();
+          if (!result.ok) {
+            setError(result.error ?? t("crm.pipeline.controls.failed"));
+            return;
+          }
+          setOpen(false);
+          router.refresh();
+        })();
       }}
     >
       <div>

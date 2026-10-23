@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { deleteDraftForm, setFormStatus } from "@/features/forms/services/form.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** Publish, close, reopen or delete a form. The database enforces each step. */
 export function FormAdminActions({
@@ -22,9 +23,15 @@ export function FormAdminActions({
   const [busy, setBusy] = useState(false);
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>, done: string, to?: string) {
-    setBusy(true);
-    const result = await action();
-    setBusy(false);
+    const result = await runServerAction(action, {
+      setBusy,
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("forms.admin.changeFailed"), { tone: "error" });
       return;

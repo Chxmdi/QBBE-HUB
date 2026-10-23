@@ -3,25 +3,33 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Check } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 import { completeFollowUp } from "@/features/crm/services/crm.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function CompleteFollowUpButton({ followUpId }: { followUpId: string }) {
   const router = useRouter();
+  const { toast } = useToast();
   const t = useT();
   const [saving, setSaving] = useState(false);
 
   async function handleComplete() {
-    setSaving(true);
-    const result = await completeFollowUp(followUpId);
-    setSaving(false);
-    if (result.ok) router.refresh();
+    const result = await runServerAction(() => completeFollowUp(followUpId), {
+      setBusy: setSaving,
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (result?.ok) router.refresh();
   }
 
   return (
     <button
       type="button"
-      onClick={handleComplete}
+      onClick={() => void handleComplete()}
       disabled={saving}
       aria-label={t("crm.followUps.markDoneLabel")}
       title={t("crm.followUps.markDone")}

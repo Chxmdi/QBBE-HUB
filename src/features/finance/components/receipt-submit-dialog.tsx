@@ -192,34 +192,39 @@ export function ReceiptSubmitDialog({
     // and this person; the random segment avoids collisions.
     const path = `${organizationId}/${userId}/${crypto.randomUUID()}/${safeName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from("receipts")
-      .upload(path, file, { contentType: file.type || undefined });
-    if (uploadError) {
+    let result: Awaited<ReturnType<typeof registerReceipt>>;
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from("receipts")
+        .upload(path, file, { contentType: file.type || undefined });
+      if (uploadError) {
+        setError(t("finance.receipts.submit.uploadFailed"));
+        return;
+      }
+
+      setProgress(t("finance.receipts.submit.saving"));
+      result = await registerReceipt({
+        kind: form.get("kind") || "receipt",
+        documentDate: values.documentDate,
+        vendor: values.vendor,
+        total: values.total,
+        gst: values.gst,
+        qst: values.qst,
+        programId: (form.get("programId") as string) || undefined,
+        projectId: (form.get("projectId") as string) || undefined,
+        note: (form.get("note") as string) || undefined,
+        storagePath: path,
+        fileName: file.name.slice(-200) || safeName,
+        mimeType: file.type || undefined,
+        sizeBytes: file.size,
+      });
+    } catch {
+      setError(t("ui.actionUnreachable"));
+      return;
+    } finally {
       setSaving(false);
       setProgress(null);
-      setError(t("finance.receipts.submit.uploadFailed"));
-      return;
     }
-
-    setProgress(t("finance.receipts.submit.saving"));
-    const result = await registerReceipt({
-      kind: form.get("kind") || "receipt",
-      documentDate: values.documentDate,
-      vendor: values.vendor,
-      total: values.total,
-      gst: values.gst,
-      qst: values.qst,
-      programId: (form.get("programId") as string) || undefined,
-      projectId: (form.get("projectId") as string) || undefined,
-      note: (form.get("note") as string) || undefined,
-      storagePath: path,
-      fileName: file.name.slice(-200) || safeName,
-      mimeType: file.type || undefined,
-      sizeBytes: file.size,
-    });
-    setSaving(false);
-    setProgress(null);
 
     if (!result.ok) {
       await supabase.storage.from("receipts").remove([path]);
@@ -231,13 +236,18 @@ export function ReceiptSubmitDialog({
     if (result.id) {
       setSaving(true);
       setProgress(t("finance.receipts.submit.progressWords"));
-      const [photoText, pdfText] = await Promise.all([reader.result(), pdfReader.result()]);
-      const found = photoText
-        ? { text: normalizeExtractedText(photoText), source: "ocr" as const }
-        : pdfText;
-      if (found?.text) await saveReceiptText({ id: result.id, ...found });
-      setSaving(false);
-      setProgress(null);
+      try {
+        const [photoText, pdfText] = await Promise.all([reader.result(), pdfReader.result()]);
+        const found = photoText
+          ? { text: normalizeExtractedText(photoText), source: "ocr" as const }
+          : pdfText;
+        if (found?.text) await saveReceiptText({ id: result.id, ...found });
+      } catch {
+        // The receipt is saved; it is only missing its words.
+      } finally {
+        setSaving(false);
+        setProgress(null);
+      }
     }
     toast(t("finance.receipts.submit.submitted"));
     setOpen(false);

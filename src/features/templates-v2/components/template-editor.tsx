@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { fill, type TemplatesV2Text } from "@/features/templates-v2/messages";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { updatePageTemplateV2 } from "@/features/templates-v2/services/template-versions.commands";
 import {
   editableDocument,
@@ -55,25 +57,28 @@ export function TemplateEditor({
   const [tasks, setTasks] = useState<DraftHubTask[]>(drafts.tasks);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shellT = useT();
 
   // The editor reads its content when it mounts; switching language mounts
   // the other one with whatever was last typed there.
   const content = (lang: "en" | "fr"): EditorContent => ({ version: CONTENT_VERSION, blocks: document[lang] });
 
   async function save() {
-    setError(null);
-    setBusy(true);
-    const result = await updatePageTemplateV2({
-      id: templateId,
-      version,
-      name: names,
-      description,
-      title: titles,
-      document,
-      milestones,
-      tasks,
-    });
-    setBusy(false);
+    const result = await runServerAction(
+      () =>
+        updatePageTemplateV2({
+          id: templateId,
+          version,
+          name: names,
+          description,
+          title: titles,
+          document,
+          milestones,
+          tasks,
+        }),
+      { setBusy, setError, t: shellT, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error);
       return;

@@ -7,6 +7,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { eraseCrmContact } from "@/features/crm/services/crm.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** Administrators: erase a contact at their request, after confirming. */
 export function EraseContactButton({ contactId, name }: { contactId: string; name: string }) {
@@ -18,10 +19,13 @@ export function EraseContactButton({ contactId, name }: { contactId: string; nam
   const [saving, setSaving] = useState(false);
 
   async function erase() {
-    setError(null);
-    setSaving(true);
-    const result = await eraseCrmContact(contactId);
-    setSaving(false);
+    const result = await runServerAction(() => eraseCrmContact(contactId), {
+      setBusy: setSaving,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("crm.erase.failed"));
       return;
@@ -49,7 +53,7 @@ export function EraseContactButton({ contactId, name }: { contactId: string; nam
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
               {t("crm.erase.cancel")}
             </Button>
-            <Button type="button" variant="danger" loading={saving} onClick={erase}>
+            <Button type="button" variant="danger" loading={saving} onClick={() => void erase()}>
               {t("crm.erase.confirm")}
             </Button>
           </div>

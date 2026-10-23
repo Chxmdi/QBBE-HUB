@@ -23,6 +23,7 @@ import {
   type RecordType,
 } from "@/features/documents/templates/merge";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import {
   folderLabel,
   groupFolders,
@@ -108,19 +109,21 @@ export function TemplateEditorDialog({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await saveTemplate({
-      id: template?.id,
-      name: form.get("name"),
-      kind: form.get("kind"),
-      language: form.get("language"),
-      recordType: form.get("recordType"),
-      body: form.get("body"),
-      folderId: (form.get("folderId") as string) || undefined,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        saveTemplate({
+          id: template?.id,
+          name: form.get("name"),
+          kind: form.get("kind"),
+          language: form.get("language"),
+          recordType: form.get("recordType"),
+          body: form.get("body"),
+          folderId: (form.get("folderId") as string) || undefined,
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("documents.templates.editor.saveFailed"));
       return;
@@ -240,9 +243,15 @@ export function TemplateArchiveButton({ template }: { template: TemplateRow }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
   async function archive() {
-    setBusy(true);
-    const result = await archiveTemplate(template.id);
-    setBusy(false);
+    const result = await runServerAction(() => archiveTemplate(template.id), {
+      setBusy,
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("documents.templates.archive.failed"), { tone: "error" });
       return;
@@ -278,15 +287,17 @@ export function GenerateDialog({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await generateFromTemplate({
-      templateId: template.id,
-      recordId: form.get("recordId"),
-      folderId: (form.get("folderId") as string) || undefined,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        generateFromTemplate({
+          templateId: template.id,
+          recordId: form.get("recordId"),
+          folderId: (form.get("folderId") as string) || undefined,
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("documents.templates.generate.failed"));
       return;

@@ -28,6 +28,7 @@ import {
 } from "@/features/sales-tax/services/sales-tax.commands";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 function useAction() {
   const router = useRouter();
@@ -36,10 +37,8 @@ function useAction() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function run<T extends ActionResult>(action: () => Promise<T>, success: string | ((r: T) => string)) {
-    setPending(true);
-    setError(null);
-    const result = await action();
-    setPending(false);
+    const result = await runServerAction(action, { setBusy: setPending, setError, t, reload: () => window.location.reload() });
+    if (!result) return false;
     if (!result.ok) {
       setError(result.error ?? t("finance.salesTax.genericError"));
       return false;

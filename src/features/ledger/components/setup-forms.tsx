@@ -14,6 +14,7 @@ import {
 } from "@/features/ledger/services/ledger.commands";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 function useAction() {
   const router = useRouter();
@@ -22,10 +23,8 @@ function useAction() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function run(action: () => Promise<ActionResult>, success: string) {
-    setPending(true);
-    setError(null);
-    const result = await action();
-    setPending(false);
+    const result = await runServerAction(action, { setBusy: setPending, setError, t, reload: () => window.location.reload() });
+    if (!result) return false;
     if (!result.ok) {
       setError(result.error ?? t("finance.ledger.setup.genericError"));
       return false;

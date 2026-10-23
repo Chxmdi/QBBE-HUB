@@ -7,6 +7,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import {
   issueAnnualStatement,
   issueGiftAcknowledgement,
@@ -36,19 +37,20 @@ export function AcknowledgeForm({ target, defaultEmail }: { target: Target; defa
       aria-label={t(target.kind === "gift" ? "finance.gifts.ackForm.formLabelGift" : "finance.gifts.ackForm.formLabelStatement")}
       onSubmit={async (e) => {
         e.preventDefault();
-        setError(null);
-        setSaving(true);
         const form = new FormData(e.currentTarget);
         const delivery = {
           language: form.get("language"),
           channel,
           recipientEmail: channel === "email" ? form.get("recipientEmail") ?? undefined : undefined,
         };
-        const result =
-          target.kind === "gift"
-            ? await issueGiftAcknowledgement({ ...delivery, giftId: target.giftId })
-            : await issueAnnualStatement({ ...delivery, donor: target.donor, year: target.year });
-        setSaving(false);
+        const result = await runServerAction(
+          () =>
+            target.kind === "gift"
+              ? issueGiftAcknowledgement({ ...delivery, giftId: target.giftId })
+              : issueAnnualStatement({ ...delivery, donor: target.donor, year: target.year }),
+          { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+        );
+        if (!result) return;
         if (!result.ok) {
           setError(result.error ?? t("finance.gifts.ackForm.couldNotIssue"));
           if (result.id) router.refresh();
@@ -120,9 +122,15 @@ export function ResendButton({ ackId }: { ackId: string }) {
       variant="secondary"
       loading={pending}
       onClick={async () => {
-        setPending(true);
-        const result = await resendAcknowledgement(ackId);
-        setPending(false);
+        const result = await runServerAction(() => resendAcknowledgement(ackId), {
+          setBusy: setPending,
+          setError: (text) => {
+            if (text) toast(text, { tone: "error" });
+          },
+          t,
+          reload: () => window.location.reload(),
+        });
+        if (!result) return;
         toast(result.ok ? t("finance.gifts.ackForm.emailed") : (result.error ?? t("finance.gifts.ackForm.couldNotSend")), {
           tone: result.ok ? "success" : "error",
         });
@@ -152,11 +160,12 @@ export function VoidGiftDialog({ giftId, today }: { giftId: string; today: strin
           className="space-y-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            setError(null);
-            setSaving(true);
             const form = new FormData(e.currentTarget);
-            const result = await voidGift({ giftId, voidOn: form.get("voidOn"), reason: form.get("reason") });
-            setSaving(false);
+            const result = await runServerAction(
+              () => voidGift({ giftId, voidOn: form.get("voidOn"), reason: form.get("reason") }),
+              { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+            );
+            if (!result) return;
             if (!result.ok) {
               setError(result.error ?? t("finance.gifts.voidDialog.couldNotVoid"));
               return;

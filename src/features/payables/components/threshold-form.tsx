@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { centsToDecimal, formatCents } from "@/features/ledger/money";
 import { setBillApprovalThreshold } from "@/features/payables/services/payables.commands";
 import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** The bill total at or above which a bill needs an approval before posting. */
 export function ThresholdForm({ thresholdCents, canEdit }: { thresholdCents: number | null; canEdit: boolean }) {
@@ -32,19 +33,22 @@ export function ThresholdForm({ thresholdCents, canEdit }: { thresholdCents: num
     <form
       className="card mt-6 flex flex-wrap items-end gap-3 p-4"
       aria-label={t("finance.payables.threshold.ariaLabel")}
-      onSubmit={async (e) => {
+      onSubmit={(e) => {
         e.preventDefault();
-        setSaving(true);
-        setError(null);
         const form = new FormData(e.currentTarget);
-        const result = await setBillApprovalThreshold({ threshold: String(form.get("threshold") ?? "") });
-        setSaving(false);
-        if (!result.ok) {
-          setError(result.error ?? t("finance.payables.threshold.couldNotSave"));
-          return;
-        }
-        toast(t("finance.payables.threshold.saved"), { tone: "success" });
-        router.refresh();
+        void (async () => {
+          const result = await runServerAction(
+            () => setBillApprovalThreshold({ threshold: String(form.get("threshold") ?? "") }),
+            { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+          );
+          if (!result) return;
+          if (!result.ok) {
+            setError(result.error ?? t("finance.payables.threshold.couldNotSave"));
+            return;
+          }
+          toast(t("finance.payables.threshold.saved"), { tone: "success" });
+          router.refresh();
+        })();
       }}
     >
       <div>

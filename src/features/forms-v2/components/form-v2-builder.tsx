@@ -22,6 +22,8 @@ import {
   typedAnswers,
 } from "@/features/forms-v2/properties";
 import { createFormV2 } from "@/features/forms-v2/services/forms-v2.commands";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** A condition as edited: which earlier question (by its id), how, and the typed value. */
 interface ShowIfDraft {
@@ -197,6 +199,7 @@ export function FormV2Builder({
   projects: { id: string; name: string }[];
 }) {
   const router = useRouter();
+  const shellT = useT();
   const idBase = useId();
   const [creates, setCreates] = useState<"task" | "custom">("task");
   const [typeKey, setTypeKey] = useState("");
@@ -285,19 +288,21 @@ export function FormV2Builder({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     const data = new FormData(e.currentTarget);
     const value = (name: string) => String(data.get(name) ?? "").trim();
-    setSaving(true);
-    const result = await createFormV2({
-      typeKey: creates === "task" ? "task" : typeKey.trim(),
-      targetProjectId: creates === "task" && value("project") ? value("project") : null,
-      title: { en: value("titleEn"), fr: value("titleFr") },
-      description: { en: value("descriptionEn"), fr: value("descriptionFr") },
-      audience: value("audience") === "staff" ? "staff" : "members",
-      properties: properties() as never,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        createFormV2({
+          typeKey: creates === "task" ? "task" : typeKey.trim(),
+          targetProjectId: creates === "task" && value("project") ? value("project") : null,
+          title: { en: value("titleEn"), fr: value("titleFr") },
+          description: { en: value("descriptionEn"), fr: value("descriptionFr") },
+          audience: value("audience") === "staff" ? "staff" : "members",
+          properties: properties() as never,
+        }),
+      { setBusy: setSaving, setError, t: shellT, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error);
       return;
@@ -323,7 +328,7 @@ export function FormV2Builder({
       ) : null}
 
       {/* Hidden, not unmounted, while previewing: the typed titles live in the fields. */}
-      <form onSubmit={handleSubmit} className="space-y-8" noValidate hidden={preview}>
+      <form onSubmit={(e) => void handleSubmit(e)} className="space-y-8" noValidate hidden={preview}>
       <fieldset className="card space-y-4 p-5">
         <legend className="px-1 text-[15px] font-semibold">{text.sectionBasics}</legend>
         <div className="grid gap-4 md:grid-cols-2">

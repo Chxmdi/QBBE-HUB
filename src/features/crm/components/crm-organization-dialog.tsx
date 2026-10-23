@@ -16,6 +16,7 @@ import {
 } from "@/features/crm/services/crm.commands";
 import { categoryLabel } from "@/features/crm/labels";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 const CATEGORIES = [
   "funder", "sponsor", "school", "university", "community",
@@ -70,7 +71,6 @@ export function CrmOrganizationDialog({
       return;
     }
 
-    setSaving(true);
     const payload = {
       name: form.get("name"),
       category: form.get("category"),
@@ -80,10 +80,14 @@ export function CrmOrganizationDialog({
       // Present only when the field is shown; an empty value clears the note.
       sensitiveNotes: form.has("sensitiveNotes") ? String(form.get("sensitiveNotes")) : undefined,
     };
-    const result = editing && organization
-      ? await updateCrmOrganization({ id: organization.id, ...payload })
-      : await createCrmOrganization(payload);
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        editing && organization
+          ? updateCrmOrganization({ id: organization.id, ...payload })
+          : createCrmOrganization(payload),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("crm.orgDialog.saveFailed"));
       return;
@@ -105,7 +109,7 @@ export function CrmOrganizationDialog({
         onClose={() => setOpen(false)}
         title={editing ? t("crm.orgDialog.editTitle") : t("crm.orgDialog.addTitle")}
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
           <div>
             <Label htmlFor="crm-name">{t("crm.orgDialog.name")}</Label>
             <Input

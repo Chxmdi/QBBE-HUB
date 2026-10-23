@@ -26,6 +26,7 @@ import {
   type LibraryFolder,
 } from "@/features/documents/services/library";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { useFormatters, useT } from "@/lib/i18n/client";
 import type { TranslateFn } from "@/lib/i18n/translator";
 
@@ -65,9 +66,15 @@ export function VersionHistory({
   const [busyId, setBusyId] = useState<string | null>(null);
 
   async function open(version: VersionRow) {
-    setBusyId(version.id);
-    const result = await getDocumentDownloadUrl(version.id);
-    setBusyId(null);
+    const result = await runServerAction(() => getDocumentDownloadUrl(version.id), {
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+      setBusy: (busy) => setBusyId(busy ? version.id : null),
+    });
+    if (!result) return;
     if (!result.ok || !result.url) {
       toast(result.error ?? t("documents.versions.openFailed"), { tone: "error" });
       return;
@@ -162,47 +169,52 @@ export function NewVersionDialog({
       return;
     }
     setSaving(true);
-    const supabase = createSupabaseBrowserClient();
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
-    const path = `${crypto.randomUUID()}/${safeName}`;
-    const { error: uploadError } = await supabase.storage
-      .from("documents")
-      .upload(path, file, { contentType: file.type || undefined });
-    if (uploadError) {
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+      const path = `${crypto.randomUUID()}/${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(path, file, { contentType: file.type || undefined });
+      if (uploadError) {
+        setError(t("documents.upload.uploadFailed"));
+        return;
+      }
+      const result = await addDocumentVersion({
+        kind: "file",
+        supersedesId: currentId,
+        storagePath: path,
+        mimeType: file.type || undefined,
+        sizeBytes: file.size,
+      });
+      if (!result.ok) {
+        await supabase.storage.from("documents").remove([path]);
+        setError(result.error ?? t("documents.versions.saveFailed"));
+        return;
+      }
+      // The file's words, once the version exists. Never fails the upload.
+      try {
+        const found = result.id ? await reader.result() : null;
+        if (found && result.id) await saveDocumentText({ id: result.id, ...found });
+      } catch {
+        // The version is saved; search simply lacks its words.
+      }
+      finish(result.id, t("documents.versions.uploadedToast"));
+    } catch {
+      setError(t("ui.actionUnreachable"));
+    } finally {
       setSaving(false);
-      setError(t("documents.upload.uploadFailed"));
-      return;
     }
-    const result = await addDocumentVersion({
-      kind: "file",
-      supersedesId: currentId,
-      storagePath: path,
-      mimeType: file.type || undefined,
-      sizeBytes: file.size,
-    });
-    if (!result.ok) {
-      setSaving(false);
-      await supabase.storage.from("documents").remove([path]);
-      setError(result.error ?? t("documents.versions.saveFailed"));
-      return;
-    }
-    // The file's words, once the version exists. Never fails the upload.
-    const found = result.id ? await reader.result() : null;
-    if (found && result.id) await saveDocumentText({ id: result.id, ...found });
-    setSaving(false);
-    finish(result.id, t("documents.versions.uploadedToast"));
   }
 
   async function handleLink(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
-    const result = await addDocumentVersion({
-      kind: "link",
-      supersedesId: currentId,
-      url: new FormData(e.currentTarget).get("url"),
-    });
-    setSaving(false);
+    const url = new FormData(e.currentTarget).get("url");
+    const result = await runServerAction(
+      () => addDocumentVersion({ kind: "link", supersedesId: currentId, url }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("documents.versions.saveFailed"));
       return;
@@ -307,18 +319,20 @@ export function DocumentDetailsForm({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await updateDocumentDetails({
-      documentId,
-      folderId: (form.get("folderId") as string) || undefined,
-      tags: (form.get("tags") as string) ?? "",
-      requiresAcknowledgement: canRequireReading
-        ? form.get("requiresAcknowledgement") === "on"
-        : requiresAcknowledgement,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        updateDocumentDetails({
+          documentId,
+          folderId: (form.get("folderId") as string) || undefined,
+          tags: (form.get("tags") as string) ?? "",
+          requiresAcknowledgement: canRequireReading
+            ? form.get("requiresAcknowledgement") === "on"
+            : requiresAcknowledgement,
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("documents.details.saveFailed"));
       return;
@@ -393,9 +407,15 @@ export function AcknowledgeButton({ documentId }: { documentId: string }) {
   const [saving, setSaving] = useState(false);
 
   async function confirm() {
-    setSaving(true);
-    const result = await acknowledgeDocument(documentId);
-    setSaving(false);
+    const result = await runServerAction(() => acknowledgeDocument(documentId), {
+      setBusy: setSaving,
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("documents.acknowledge.failed"), { tone: "error" });
       return;

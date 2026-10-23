@@ -23,6 +23,7 @@ import {
   type LibraryFolder,
 } from "@/features/documents/services/library";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -90,44 +91,49 @@ export function DocumentUploadDialog({
 
     setSaving(true);
     setProgress(t("documents.upload.uploading"));
-    const supabase = createSupabaseBrowserClient();
-    // Random prefix avoids collisions; the path is never the authorization.
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
-    const path = `${crypto.randomUUID()}/${safeName}`;
+    try {
+      const supabase = createSupabaseBrowserClient();
+      // Random prefix avoids collisions; the path is never the authorization.
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+      const path = `${crypto.randomUUID()}/${safeName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from("documents")
-      .upload(path, file, { contentType: file.type || undefined });
+      const { error: uploadError } = await supabase.storage
+        .from("documents")
+        .upload(path, file, { contentType: file.type || undefined });
 
-    if (uploadError) {
+      if (uploadError) {
+        setError(t("documents.upload.uploadFailed"));
+        return;
+      }
+
+      setProgress(t("documents.upload.savingRecord"));
+      const result = await registerUploadedDocument({
+        title: (form.get("title") as string) || file.name,
+        storagePath: path,
+        mimeType: file.type || undefined,
+        sizeBytes: file.size,
+        ...contextFields(form),
+      });
       setSaving(false);
       setProgress(null);
-      setError(t("documents.upload.uploadFailed"));
-      return;
-    }
 
-    setProgress(t("documents.upload.savingRecord"));
-    const result = await registerUploadedDocument({
-      title: (form.get("title") as string) || file.name,
-      storagePath: path,
-      mimeType: file.type || undefined,
-      sizeBytes: file.size,
-      ...contextFields(form),
-    });
-    setSaving(false);
-    setProgress(null);
-
-    if (!result.ok) {
-      // Registration can fail after Storage accepted the bytes. The matching
-      // policy permits owners to remove only their own unregistered uploads.
-      await supabase.storage.from("documents").remove([path]);
-      setError(result.error ?? t("documents.upload.saveRecordFailed"));
-      return;
+      if (!result.ok) {
+        // Registration can fail after Storage accepted the bytes. The matching
+        // policy permits owners to remove only their own unregistered uploads.
+        await supabase.storage.from("documents").remove([path]);
+        setError(result.error ?? t("documents.upload.saveRecordFailed"));
+        return;
+      }
+      await storeText(result.id);
+      toast(t("documents.upload.uploaded"));
+      close();
+      router.refresh();
+    } catch {
+      setError(t("ui.actionUnreachable"));
+    } finally {
+      setSaving(false);
+      setProgress(null);
     }
-    await storeText(result.id);
-    toast(t("documents.upload.uploaded"));
-    close();
-    router.refresh();
   }
 
   /** Saves the file's words once its record exists. Never fails the upload. */
@@ -135,23 +141,30 @@ export function DocumentUploadDialog({
     if (!documentId) return;
     setSaving(true);
     setProgress(t("documents.upload.readingWords"));
-    const found = await reader.result();
-    if (found) await saveDocumentText({ id: documentId, ...found });
-    setSaving(false);
-    setProgress(null);
+    try {
+      const found = await reader.result();
+      if (found) await saveDocumentText({ id: documentId, ...found });
+    } catch {
+      // The document is saved; search simply lacks its words.
+    } finally {
+      setSaving(false);
+      setProgress(null);
+    }
   }
 
   async function handleLink(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await createDocumentLink({
-      title: form.get("title"),
-      url: form.get("url"),
-      ...contextFields(form),
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        createDocumentLink({
+          title: form.get("title"),
+          url: form.get("url"),
+          ...contextFields(form),
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("documents.upload.saveResourceFailed"));
       return;
