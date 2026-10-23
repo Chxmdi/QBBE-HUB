@@ -440,6 +440,77 @@ describe("scheduled-announcements", () => {
   });
 });
 
+describe("scheduled-announcements fan-out", () => {
+  it("notifies the readers of 120 due announcements once each, 50 a run, and never re-opens what they read", async () => {
+    const db = new FakeSupabase(new Date("2026-08-19T12:00:00Z"));
+    db.seed(
+      "announcement",
+      Array.from({ length: 120 }, (_, i) => ({
+        id: `ann-${String(i).padStart(3, "0")}`,
+        organization_id: ORG,
+        title: `Notice ${i}`,
+        priority: "normal",
+        created_by: USER,
+        publish_at: new Date(Date.parse("2026-08-19T11:00:00Z") + i * 1000).toISOString(),
+        message_id: `msg-${i}`,
+        fanned_out_at: null,
+      })),
+    );
+    db.seed("organization_membership", [
+      { organization_id: ORG, user_id: USER, status: "active" },
+      { organization_id: ORG, user_id: "user-2", status: "active" },
+    ]);
+    db.seed("user_profile", [{ id: "user-2", locale: "en" }]);
+    db.seed("notification", []);
+    db.seed("background_job_run", []);
+    const context = () => ({
+      db: asClient(db),
+      definition: definition({ name: "scheduled-announcements", batch_size: 50 }),
+      now: db.now(),
+    });
+
+    const passes = [];
+    for (let run = 0; run < 4; run += 1) {
+      passes.push((await scheduledAnnouncements(context())).processed);
+      // The reader reads everything they have so far.
+      for (const row of db.rows("notification")) row.read_at = "2026-08-19T12:01:00Z";
+    }
+    expect(passes).toEqual([50, 50, 20, 0]);
+
+    // One notification per announcement, each sent once and still read.
+    const notifications = db.rows("notification");
+    expect(notifications).toHaveLength(120);
+    expect(new Set(notifications.map((n) => n.source_id)).size).toBe(120);
+    expect(notifications.every((n) => n.read_at !== null)).toBe(true);
+    const sends = db.rpcCalls.filter((call) => call.name === "fan_out_announcement");
+    expect(sends).toHaveLength(120);
+    expect(new Set(sends.map((call) => call.args.p_announcement)).size).toBe(120);
+    expect(db.rows("announcement").every((a) => a.fanned_out_at)).toBe(true);
+  });
+
+  it("tries a failed announcement again on the next run", async () => {
+    const db = new FakeSupabase(new Date("2026-08-19T12:00:00Z"));
+    db.seed("announcement", [
+      { id: "ann-1", organization_id: ORG, title: "Notice", priority: "normal", created_by: USER,
+        publish_at: "2026-08-19T11:00:00Z", message_id: "msg-1", fanned_out_at: null },
+    ]);
+    db.seed("organization_membership", [
+      { organization_id: ORG, user_id: USER, status: "active" },
+      { organization_id: ORG, user_id: "user-2", status: "active" },
+    ]);
+    db.seed("user_profile", [{ id: "user-2", locale: "en" }]);
+    db.seed("notification", []);
+    db.seed("background_job_run", []);
+    const context = () => ({ db: asClient(db), definition: definition({ name: "scheduled-announcements" }), now: db.now() });
+    let failed = false;
+    db.fail((op) => op.kind === "rpc" && op.name === "fan_out_announcement" && !failed && (failed = true));
+    expect((await scheduledAnnouncements(context())).failed).toBe(1);
+    expect(db.rows("announcement")[0].fanned_out_at).toBeNull();
+    expect((await scheduledAnnouncements(context())).processed).toBe(1);
+    expect(db.rows("announcement")[0].fanned_out_at).not.toBeNull();
+  });
+});
+
 describe("isoWeekKey", () => {
   it("gives every day of a week the same key", () => {
     const monday = isoWeekKey(new Date("2026-08-17T00:00:00Z"));

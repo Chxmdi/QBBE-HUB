@@ -172,3 +172,16 @@ test("a row with a bad date is reported and skipped [switches on]", async ({ pag
   expect(sql(`select count(*) from public.task where title = '${RUN} dated bad'`)).toBe("0");
   expect(sql(`select string_agg(due_at::text, ',' order by title) from public.task where title like '${RUN} dated%'`)).toBe("2027-01-15,2027-01-15");
 });
+
+test("an import of more tasks than a person may create in a minute goes through whole (SEC-024) [switches on]", async ({ page }) => {
+  test.setTimeout(240_000);
+  await signIn(page, "owner");
+  const count = 150;
+  const csv = ["Title", ...Array.from({ length: count }, (_, i) => `${RUN} bulk ${i + 1}`)].join("\r\n");
+  await upload(page, "bulk.csv", csv);
+  await page.getByRole("button", { name: "Preview" }).click();
+  await expect(page.getByTestId("import-summary")).toHaveText(`Ready to import: ${count}. With a problem: 0.`);
+  await page.getByRole("button", { name: `Import ${count} rows` }).click();
+  await expect(page.getByTestId("import-result")).toContainText(`${count} records created.`, { timeout: 180_000 });
+  expect(sql(`select count(*) from public.task where title like '${RUN} bulk %'`)).toBe(String(count));
+});

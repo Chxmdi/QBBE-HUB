@@ -21,6 +21,7 @@ import {
   saveOnboardingProfile,
 } from "@/features/onboarding/services/onboarding.commands";
 import { useT } from "@/lib/i18n/client";
+import { useHydrated } from "@/lib/use-hydrated";
 import { runServerAction } from "@/lib/use-server-action";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,9 @@ export function OnboardingFlow({
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
+  // The first step is in the server's markup: its button waits for the page,
+  // so an early submit is neither lost nor sent with the fields in the URL.
+  const hydrated = useHydrated();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -218,7 +222,7 @@ export function OnboardingFlow({
                 {error}
               </p>
             ) : null}
-            <Button type="submit" loading={saving} className="w-full">
+            <Button type="submit" loading={saving} disabled={!hydrated} className="w-full">
               {t("onboarding.continue")} <ArrowRight className="size-4" aria-hidden />
             </Button>
           </form>
@@ -266,7 +270,7 @@ export function OnboardingFlow({
               >
                 {t("onboarding.skip")}
               </Button>
-              <Button type="submit" loading={saving} className="flex-1">
+              <Button type="submit" loading={saving} disabled={!hydrated} className="flex-1">
                 {t("onboarding.continue")}
               </Button>
             </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useHydrated } from "@/lib/use-hydrated";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { safeRedirectPath } from "@/lib/safe-redirect";
@@ -13,13 +14,17 @@ function SignInFormInner() {
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // Uncontrolled fields, read on submit: what a person types before the
+  // page's scripts have run stays typed when React takes the form over.
+  const hydrated = useHydrated();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("email") ?? "");
+    const password = String(form.get("password") ?? "");
     setError(null);
     setLoading(true);
     try {
@@ -52,22 +57,20 @@ function SignInFormInner() {
         <Label htmlFor="email">{t("common.email")}</Label>
         <Input
           id="email"
+          name="email"
           type="email"
           autoComplete="email"
           required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
         />
       </div>
       <div>
         <Label htmlFor="password">{t("common.password")}</Label>
         <Input
           id="password"
+          name="password"
           type="password"
           autoComplete="current-password"
           required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
         />
       </div>
       {error ? (
@@ -75,7 +78,8 @@ function SignInFormInner() {
           {error}
         </p>
       ) : null}
-      <Button type="submit" loading={loading} className="w-full">
+      {/* Disabled until the page can handle it, so a click is never lost. */}
+      <Button type="submit" loading={loading} disabled={!hydrated} className="w-full">
         {t("auth.signIn.submit")}
       </Button>
       <p className="text-center text-sm">

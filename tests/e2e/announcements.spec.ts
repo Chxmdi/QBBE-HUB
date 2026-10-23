@@ -4,6 +4,24 @@ import { sql } from "./db";
 
 const JOB_SECRET = process.env.CRON_JOB_SECRET ?? "";
 
+// Each test publishes as the owner, and the app allows 20 publishes an hour
+// per person ("announcement:publish", in the app and the database). Runs
+// repeated within the hour would
+// meet that limit and fail on it, so each test starts with the owner's count
+// cleared: the refusal itself is tested in
+// src/features/announcements/tests/announcement.commands.test.ts.
+test.beforeEach(() => {
+  sql(`delete from public.rate_limit_counter where bucket like '%announcement:publish:%'`);
+});
+
+// Each test removes its own announcement. The scheduled-announcements job
+// looks at every announcement due in the last two days, 50 at a time, so
+// announcements left by repeated runs pile up until a new one is never
+// reached and its readers are never notified.
+function removeAnnouncement(title: string) {
+  sql(`delete from public.announcement where title = '${title}';`);
+}
+
 // A datetime-local value a few days ahead, in the browser's wall-clock time.
 function daysAhead(days: number): string {
   const at = new Date(Date.now() + days * 86_400_000);
@@ -61,6 +79,7 @@ test("an administrator publishes an announcement that staff read and acknowledge
   } finally {
     await adminContext.close();
     await staffContext.close();
+    removeAnnouncement(title);
   }
 });
 
@@ -154,5 +173,7 @@ test("a scheduled announcement stays hidden until the job posts it at its publis
   } finally {
     await adminContext.close();
     await staffContext.close();
+    removeAnnouncement(title);
+    sql(`delete from public.workflow_rule where name = 'Announcement relay ${stamp}';`);
   }
 });

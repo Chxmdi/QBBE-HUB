@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n/client";
+import { useHydrated } from "@/lib/use-hydrated";
 import {
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
@@ -14,6 +15,9 @@ import {
 
 export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
   const t = useT();
+  // The fields keep what is typed early; the button waits for the page, so
+  // an early submit is never sent by the browser with the fields in the URL.
+  const hydrated = useHydrated();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -76,7 +80,7 @@ export function PasswordRecoveryForm({ mode }: { mode: "request" | "reset" }) {
         </>}
         {error ? <p role="alert" className="text-sm text-danger-fg">{error}</p> : null}
         {needsMfa ? <Link href="/mfa?next=%2Freset-password" className="text-sm text-brand-fg hover:underline">{t("auth.recovery.verifyFirst")}</Link> : null}
-        <Button type="submit" loading={busy} disabled={busy} className="w-full">{mode === "request" ? t("auth.recovery.sendLink") : t("auth.recovery.savePassword")}</Button>
+        <Button type="submit" loading={busy} disabled={busy || !hydrated} className="w-full">{mode === "request" ? t("auth.recovery.sendLink") : t("auth.recovery.savePassword")}</Button>
       </form>}
     <Link className="inline-block text-sm text-brand-fg hover:underline" href="/sign-in">{t("common.backToSignIn")}</Link>
   </div>;

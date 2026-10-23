@@ -22,14 +22,15 @@ name: Release candidate
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
-  packages: read
-  actions: read
-  security-events: write
+# No permissions by default: each job names the ones it uses.
+permissions: {}
 
 jobs:
   ci:
+    # What each called workflow's jobs use; a called workflow cannot hold more.
+    permissions:
+      contents: read
+      packages: read
     name: CI (all browsers)
     uses: ./.github/workflows/ci.yml
     with:
@@ -53,6 +54,9 @@ jobs:
   # three app instances, and it misses the 2 s target on its own. The gate is
   # the same test on staging, below.
   performance:
+    permissions:
+      contents: read
+      packages: read
     name: Performance (local, informational)
     uses: ./.github/workflows/perf.yml
     with:
@@ -61,6 +65,8 @@ jobs:
   # The acceptance figure: the same 50 people on the staging site, which must
   # be running this commit (deploy to staging first).
   performance_staging:
+    permissions:
+      contents: read
     name: Performance (staging)
     uses: ./.github/workflows/perf-staging.yml
     with:
@@ -68,6 +74,7 @@ jobs:
     secrets: inherit
 
   evidence:
+    permissions: {}
     name: Evidence
     needs: [ci, security, performance, performance_staging]
     if: always()
@@ -106,7 +113,7 @@ jobs:
           cat "$file" >> "$GITHUB_STEP_SUMMARY"
           echo "EVIDENCE_FILE=$file" >> "$GITHUB_ENV"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: qa-evidence-${{ github.sha }}
           path: ${{ env.EVIDENCE_FILE }}

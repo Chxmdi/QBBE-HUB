@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expect, type Page } from "@playwright/test";
-import { clickWhenInteractive } from "./interactive";
+import { clickWhenInteractive, whenInteractive } from "./interactive";
 
 export type QaAccount =
   | "owner"
@@ -94,6 +94,7 @@ export async function completeMfa(page: Page, account: TotpAccount) {
     throw new Error(`The QA ${account} already has an MFA factor whose test secret is unavailable`);
   }
 
+  await whenInteractive(codeInput);
   // Avoid submitting a code at the edge of its 30-second validity window.
   const secondsRemaining = 30 - (Math.floor(Date.now() / 1000) % 30);
   if (secondsRemaining <= 2) await page.waitForTimeout((secondsRemaining + 1) * 1000);
@@ -106,8 +107,15 @@ export async function completeMfa(page: Page, account: TotpAccount) {
 /** Sign into the synthetic local account, including the owner's real MFA UI. */
 export async function signIn(page: Page, account: QaAccount) {
   await page.goto("/sign-in");
-  await page.getByLabel("Email", { exact: true }).fill(`qa-${account}@example.com`);
-  await page.getByLabel("Password", { exact: true }).fill("QaTest!2026");
+  const email = page.getByLabel("Email", { exact: true });
+  const password = page.getByLabel("Password", { exact: true });
+  // Typed before React takes the form over, the email is wiped (see
+  // whenInteractive) and the submit goes nowhere.
+  await whenInteractive(email);
+  await email.fill(`qa-${account}@example.com`);
+  await password.fill("QaTest!2026");
+  await expect(email, "the email typed into the sign-in form was wiped").toHaveValue(`qa-${account}@example.com`);
+  await expect(password, "the password typed into the sign-in form was wiped").toHaveValue("QaTest!2026");
   // Not a plain click: the sign-in form's submit handler is attached by React
   // after `goto` has already resolved, and a click that lands before that is
   // lost with no error anywhere. It surfaces much later as the 60s

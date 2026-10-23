@@ -10,12 +10,15 @@ on:
     - cron: "0 6 * * *"
   workflow_dispatch:
 
-permissions:
-  contents: read
-  packages: read
+# No permissions by default: each job names the ones it uses.
+permissions: {}
 
 jobs:
   all-browsers:
+    # What ci.yml's jobs use; a called workflow cannot hold more.
+    permissions:
+      contents: read
+      packages: read
     uses: ./.github/workflows/ci.yml
     with:
       browsers: chromium firefox webkit

@@ -35,19 +35,18 @@ concurrency:
 
 permissions:
   contents: read
-  # Pulling the Supabase service images from ghcr.io as an authenticated
-  # caller rather than anonymously. See the login step in the database job.
-  packages: read
 
 jobs:
   verify:
+    permissions:
+      contents: read
     name: Verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -69,7 +68,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
 
       - name: Reuse the previous build's cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .next/cache
           key: next-verify-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'next.config.*') }}
@@ -85,7 +84,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
 
       - name: Reuse downloaded test browsers
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -107,22 +106,24 @@ jobs:
 
       - name: Preserve browser failure evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: public-browser-failures
           path: test-results/
           retention-days: 7
 
   audit:
+    permissions:
+      contents: read
     # Its own job, so a failing browser check earlier in Verify can no longer
     # skip it (#51).
     name: Dependency audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -149,6 +150,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   image:
+    permissions:
+      contents: read
     # The container the QBBE server runs (docs/runbooks/hosting.md). Built
     # here, for this runner's processor, so a broken Dockerfile fails a pull
     # request instead of a deploy. Placeholder public values only.
@@ -156,12 +159,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Build the image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           load: true
@@ -196,11 +199,16 @@ jobs:
   # with its own throwaway local Supabase, and one final job keeps the
   # "Database security" name that branch protection requires (#199, W0-1).
   database-core:
+    # Pulling the Supabase service images from ghcr.io as an authenticated
+    # caller rather than anonymously. See the login step in local-supabase.
+    permissions:
+      contents: read
+      packages: read
     name: "Database security: RLS, advisor, realtime"
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: ./.github/actions/local-supabase
         with:
@@ -230,6 +238,7 @@ jobs:
         run: supabase stop
 
   browser-list:
+    permissions: {}
     # The browsers input as a JSON list, so each browser can be a job of its
     # own below (GitHub expressions cannot split a string).
     name: Browser list
@@ -244,6 +253,11 @@ jobs:
         run: echo "json=$(printf '%s\n' $BROWSERS | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
 
   browsers:
+    # Pulling the Supabase service images from ghcr.io as an authenticated
+    # caller rather than anonymously. See the login step in local-supabase.
+    permissions:
+      contents: read
+      packages: read
     # Every signed-in spec runs: the list is built from the folder, so a new
     # feature's spec is picked up without editing this file. The specs are
     # split across four machines by measured time (scripts/ci/spec-groups.mjs),
@@ -295,7 +309,7 @@ jobs:
       # same one, and nothing outside this runner ever sees it.
       CRON_JOB_SECRET: ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Make a Google token key for this run
         # The app seals Google tokens with GOOGLE_TOKEN_KEY (PRIV-011). A
@@ -316,7 +330,7 @@ jobs:
         run: npm run db:seed
 
       - name: Reuse the previous build's cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .next/cache
           key: next-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'next.config.*') }}
@@ -327,7 +341,7 @@ jobs:
         run: npm run build
 
       - name: Reuse downloaded test browsers
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -346,7 +360,7 @@ jobs:
 
       - name: Reuse downloaded virus signatures
         if: matrix.shard.suite == 'signed-in' && matrix.browser == 'chromium'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/clamav-db
           key: clamav-db-${{ steps.clamav-week.outputs.week }}
@@ -403,7 +417,7 @@ jobs:
 
       - name: Preserve authenticated failure evidence
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.evidence.outputs.name }}
           path: |
@@ -416,6 +430,7 @@ jobs:
         run: supabase stop
 
   database-security:
+    permissions: {}
     # The check branch protection requires (scripts/protect-main.sh). It passes
     # only when every part above passed; a skipped, cancelled or failed part
     # fails it.

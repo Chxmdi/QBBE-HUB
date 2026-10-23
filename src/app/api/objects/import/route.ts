@@ -3,7 +3,8 @@ import { z } from "zod";
 import { getSessionContext } from "@/lib/auth";
 import { isEnabled } from "@/lib/feature-flags";
 import type { LocalizedText } from "@/lib/objects/contracts";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit, grantWriteAllowance } from "@/lib/rate-limit";
+import { getT } from "@/lib/i18n/server";
 import { crossSiteResponse, isSameOriginRequest } from "@/lib/same-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { loadCatalog } from "@/lib/query/run";
@@ -106,6 +107,18 @@ export async function POST(request: Request) {
       { status },
     );
   if (validation.rows.length === 0) return respond(0, null);
+  // The database holds each person to "task:create" per minute, and to its
+  // notification limit (one per assigned row): an import gets room for its
+  // rows first, or stops before writing any.
+  if (
+    typeKey === "task" &&
+    !(
+      (await grantWriteAllowance("task:create", session.userId, validation.rows.length)) &&
+      (await grantWriteAllowance("notification:create", session.userId, validation.rows.length))
+    )
+  ) {
+    return NextResponse.json({ error: "unavailable", message: (await getT())("shell.rateLimit.importUnavailable") }, { status: 503 });
+  }
 
   const { registry, context } = await createRequestActionRegistry(session.userId);
   const importRows: ImportRow[] = validation.rows.map((r) => ({ row: r.row, input: toCreateInput(typeKey, r.values) }));

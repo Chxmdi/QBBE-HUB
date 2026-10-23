@@ -298,6 +298,18 @@ export class FakeSupabase {
         return { data: created, error: null };
       }
 
+      // fan_out_announcement: mark the announcement and notify, together;
+      // nothing when it is already marked, as the database does.
+      case "fan_out_announcement": {
+        const announcement = this.rows("announcement").find((row) => row.id === args.p_announcement);
+        if (!announcement) return { data: null, error: { code: "22023", message: "There is no such announcement" } };
+        if (announcement.fanned_out_at) return { data: null, error: null };
+        const sent = await this.rpc("create_notifications", { p_rows: args.p_rows });
+        if (sent.error) return sent;
+        announcement.fanned_out_at = this.now().toISOString();
+        return sent;
+      }
+
       default: {
         const answer = this.rpcAnswers.get(name);
         if (answer) return { data: answer(args), error: null };

@@ -11,6 +11,8 @@ export const shellEn = {
       minuteOne: "{count} minute",
       minuteOther: "{count} minutes",
       later: "You're doing that too quickly. Try again in about {wait}.",
+      tooManyChanges: "Too many changes in a short time. Wait a moment and try again.",
+      importUnavailable: "The Hub could not prepare this import. Nothing was imported. Try again in a moment.",
     },
     optional: "(optional)",
     loading: {

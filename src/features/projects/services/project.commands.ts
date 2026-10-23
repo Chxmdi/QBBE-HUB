@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requiredText } from "@/lib/schema";
 import { authorizeAdminAction, requireSession } from "@/lib/auth";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit, grantWriteAllowance } from "@/lib/rate-limit";
 import { hasProgramCapability, hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { logActionFailure } from "@/lib/server-log";
@@ -412,6 +412,8 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
   ].filter((userId) => userId !== session.userId);
 
   if (recipients.length > 0) {
+    // One notification each, however many people: room past the per-minute limit.
+    await grantWriteAllowance("notification:create", session.userId, recipients.length);
     const translatorFor = await recipientTranslators(supabase, recipients);
     await createNotifications(
       supabase,

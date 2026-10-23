@@ -33,8 +33,8 @@ on:
         type: boolean
         default: false
 
-permissions:
-  contents: read
+# No permissions by default: each job names the ones it uses.
+permissions: {}
 
 concurrency:
   group: server-setup
@@ -46,6 +46,7 @@ jobs:
   # this file, so the control that holds is the environment's "Deployment
   # branches and tags" rule (main only; hosting.md, "Deploy access").
   branch:
+    permissions: {}
     name: Runs from main only
     if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -56,6 +57,7 @@ jobs:
           exit 1
 
   host-key:
+    permissions: {}
     name: Show the server's host key
     if: github.ref == 'refs/heads/main' && inputs.show_host_key
     runs-on: ubuntu-latest
@@ -84,13 +86,15 @@ jobs:
           echo "$line"
 
   setup:
+    permissions:
+      contents: read
     name: Prepare the server
     if: github.ref == 'refs/heads/main' && !inputs.show_host_key
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: server-admin
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - uses: ./.github/actions/qbbe-ssh
         with:

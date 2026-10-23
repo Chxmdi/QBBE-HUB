@@ -28,14 +28,28 @@ import { expect, type Locator } from "@playwright/test";
  * rather than quietly going green.
  */
 export async function clickWhenInteractive(control: Locator, timeout = 15_000) {
+  await whenInteractive(control, timeout);
+  await control.click();
+}
+
+/**
+ * Wait until React has taken a control over, before typing into it.
+ *
+ * Most inputs here are controlled: React holds their value. Text typed into
+ * the server's markup before hydration is replaced by React's own (empty)
+ * value when it takes over. Measured on the sign-in form: the email was
+ * filled, the password filled 90ms later, and the trace's snapshot after the
+ * password shows the email empty again. The submit then went nowhere, since
+ * the browser refuses a form with an empty required field without a word,
+ * and the test waited 60 seconds for a page that could not come.
+ */
+export async function whenInteractive(control: Locator, timeout = 15_000) {
   await expect
     .poll(() => isHydrated(control), {
       timeout,
-      message:
-        "React never hydrated this control, so clicking it would have done nothing",
+      message: "React never hydrated this control, so typing into or clicking it would have been lost",
     })
     .toBe(true);
-  await control.click();
 }
 
 /**

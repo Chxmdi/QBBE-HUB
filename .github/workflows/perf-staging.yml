@@ -41,11 +41,13 @@ on:
         required: false
         default: true
 
-permissions:
-  contents: read
+# No permissions by default: each job names the ones it uses.
+permissions: {}
 
 jobs:
   load:
+    permissions:
+      contents: read
     name: 50-user load test on staging
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -64,9 +66,9 @@ jobs:
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SITE_URL: ${{ vars.SITE_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -157,7 +159,7 @@ jobs:
       - name: Put the fixture in place and sign in the 50 people
         run: node scripts/qa/perf-staging.mjs prepare "$RUNNER_TEMP/perf-sessions.json"
 
-      - uses: grafana/setup-k6-action@v1
+      - uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1.2.2
 
       - name: 50 people for ${{ inputs.duration || '2m' }}
         run: |
@@ -174,7 +176,7 @@ jobs:
 
       - name: Keep the measurements
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: perf-summary-staging
           path: perf-summary-staging.json
