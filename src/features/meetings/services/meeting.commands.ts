@@ -20,6 +20,7 @@ import { wallTimeToInstant } from "@/lib/time";
 import { composeMeetingSummary } from "./meeting.summary";
 import { getLocale, getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translator";
+import { logActionFailure } from "@/lib/server-log";
 
 /** Validation messages are catalogue keys, translated when the action returns. */
 const K = (key: MessageKey): string => key;
@@ -155,8 +156,11 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
     };
   });
   const meeting = { id: occurrences[0].id };
-  const { error } = await supabase.from("meeting").insert(
-    occurrences.map((occurrence) => ({
+  // Every occurrence, its organizer as attendee and its agenda are saved
+  // together, or not at all. Calendar sync below stays outside: Google being
+  // down must not stop a meeting from being created.
+  const { error } = await supabase.rpc("create_meeting_series", {
+    p_meetings: occurrences.map((occurrence) => ({
       id: occurrence.id,
       organization_id: session.organizationId,
       project_id: projectId ?? null,
@@ -170,30 +174,25 @@ export async function createMeeting(input: unknown): Promise<ActionResult> {
       series_id: seriesId,
       recurrence_rule: seriesId ? `${repeat};count=${count}` : null,
     })),
-  );
-
-  if (error) return { ok: false, error: await tr("meetings.errors.createFailed") };
-
-  await supabase.from("meeting_attendee").insert(
-    occurrences.map((occurrence) => ({
+    p_attendees: occurrences.map((occurrence) => ({
       meeting_id: occurrence.id,
       user_id: session.userId,
     })),
-  );
-
-  if (agendaItems.length > 0) {
     // Every occurrence of a series starts from the same template agenda.
-    await supabase.from("agenda_item").insert(
-      occurrences.flatMap((occurrence) =>
-        agendaItems.map((item, index) => ({
-          meeting_id: occurrence.id,
-          title: (item.title || defaultAgendaTitle).slice(0, 200),
-          desired_outcome: item.notes || null,
-          sort_key: index + 1,
-          proposed_by: session.userId,
-        })),
-      ),
-    );
+    p_agenda: occurrences.flatMap((occurrence) =>
+      agendaItems.map((item, index) => ({
+        meeting_id: occurrence.id,
+        title: (item.title || defaultAgendaTitle).slice(0, 200),
+        desired_outcome: item.notes || null,
+        sort_key: index + 1,
+        proposed_by: session.userId,
+      })),
+    ),
+  });
+
+  if (error) {
+    logActionFailure("meeting.createMeeting", error);
+    return { ok: false, error: await tr("meetings.errors.createFailed") };
   }
 
   // Calendar sync is additive: local operations stay available if Google is
@@ -381,7 +380,10 @@ export async function updateMeeting(input: unknown): Promise<ActionResult> {
     })
     .eq("id", data.meetingId)
     .select("id");
-  if (error) return { ok: false, error: await tr("meetings.errors.updateFailed") };
+  if (error) {
+    logActionFailure("meeting.updateMeeting", error);
+    return { ok: false, error: await tr("meetings.errors.updateFailed") };
+  }
   if (!changed || changed.length === 0) {
     return { ok: false, error: await tr("meetings.errors.rescheduleDenied") };
   }
@@ -451,7 +453,10 @@ export async function cancelMeeting(input: unknown): Promise<ActionResult> {
     .update({ status: "cancelled", meeting_link: null })
     .eq("id", existing.id)
     .select("id");
-  if (error) return { ok: false, error: await tr("meetings.errors.cancelFailed") };
+  if (error) {
+    logActionFailure("meeting.cancelMeeting", error);
+    return { ok: false, error: await tr("meetings.errors.cancelFailed") };
+  }
   // A refused cancel changes nothing here; it must not delete the organizer's
   // Calendar event below, which runs with the organizer's stored connection.
   if (!changed || changed.length === 0) {
@@ -584,7 +589,10 @@ export async function addAgendaItem(input: unknown): Promise<ActionResult> {
     desired_outcome: desiredOutcome || null,
     ...linkColumns(link || undefined),
   });
-  if (error) return { ok: false, error: await tr("meetings.errors.addAgendaFailed") };
+  if (error) {
+    logActionFailure("meeting.addAgendaItem", error);
+    return { ok: false, error: await tr("meetings.errors.addAgendaFailed") };
+  }
 
   revalidatePath(`/meetings/${meetingId}`);
   return { ok: true };
@@ -803,7 +811,10 @@ export async function recordDecision(input: unknown): Promise<ActionResult> {
     detail: detail || null,
     decided_by: session.userId,
   });
-  if (error) return { ok: false, error: await tr("meetings.errors.decisionFailed") };
+  if (error) {
+    logActionFailure("meeting.recordDecision", error);
+    return { ok: false, error: await tr("meetings.errors.decisionFailed") };
+  }
 
   revalidatePath(`/meetings/${meetingId}`);
   return { ok: true };
