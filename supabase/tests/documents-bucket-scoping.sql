@@ -82,6 +82,12 @@ begin
   -- new file, stays within it. The storage server checks once before the
   -- bytes arrive (no size yet) and again with the size.
   v_quota := app.document_upload_quota_bytes();
+  -- Start from an empty folder: files left by browser runs would count
+  -- towards the quota and the waiting-upload limit. Undone by the rollback.
+  perform set_config('storage.allow_delete_query', 'true', true);
+  delete from storage.objects where bucket_id = 'documents' and name like v_org || '/' || v_staff || '/%';
+  delete from storage.s3_multipart_uploads where bucket_id = 'documents' and key like v_org || '/' || v_staff || '/%';
+  perform set_config('storage.allow_delete_query', 'false', true);
   insert into storage.objects (bucket_id, name, owner_id, metadata)
   values ('documents', v_org || '/' || v_staff || '/' || gen_random_uuid() || '/big.bin', v_staff::text,
           jsonb_build_object('size', v_quota - 100));
