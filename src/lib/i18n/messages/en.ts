@@ -252,6 +252,15 @@ export const en = {
     today: "Due today",
     tomorrow: "Due tomorrow",
   },
+  files: {
+    quarantine: {
+      passwordProtected:
+        "This file is password-protected, so it could not be checked for viruses. Remove the password and upload it again.",
+      virus: "A virus was found in this file. It is blocked and cannot be opened.",
+      tooLarge: "This file is larger than 25 MB, so it was not accepted. Upload a smaller file.",
+      deleted: "This file was blocked, and an administrator deleted it.",
+    },
+  },
   ui: {
     closeDialog: "Close dialog",
     closePanel: "Close panel",

@@ -46,6 +46,37 @@ path, or overwrite/delete registered bytes. Archive resources through the app;
 trusted retention jobs handle physical deletion. Existing uploaded files default
 to pending and must pass scanning before download.
 
+## Blocked files
+
+Each scan job stores ClamAV's verdict name in `scan_note` (for example
+`Heuristics.Encrypted.PDF` or `Eicar-Test-Signature`), writes a
+`file_quarantined` (or `file_rejected`, over 25 MB) audit event, and counts
+blocked files in the run's metadata. The uploader sees why the file cannot be
+opened, in their language: password-protected (remove the password and upload
+again), a virus, or too large.
+
+**Admin → Jobs → Blocked files** lists them for owners and administrators who
+completed MFA:
+
+- **Release** is offered only for a heuristic verdict (`Heuristics.*`, which is
+  how ClamAV reports password-protected PDFs and archives it cannot read).
+  Check the file with the person who sent it, then give the reason; the file
+  becomes downloadable. A virus signature can never be released.
+- **Delete file** records the deletion, then removes the bytes from Storage.
+  The row stays, marked as deleted, so links and history still explain what
+  happened. If the bytes could not be removed the page says so; the deletion
+  is already recorded, and the file stays blocked.
+
+Both are `quarantine_released` / `quarantine_purged` audit events with the
+verdict name (database functions `release_quarantined_file` and
+`purge_quarantined_file`).
+
+**Password-protected PDFs.** With `AlertEncrypted yes` (the server default)
+every password-protected PDF or archive is blocked, because ClamAV cannot read
+inside it. That is the safe choice; the release step above is the way through
+for a file someone vouches for. Turning `AlertEncrypted` off would let such
+files through unscanned, which is an owner decision; record it here if made.
+
 Verify: upload a harmless file and confirm it becomes downloadable; use the
 standard EICAR test file and confirm it remains quarantined; disconnect the
 scanner and confirm files remain pending and the job records failure. Repeat

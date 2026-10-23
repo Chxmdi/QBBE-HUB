@@ -8,6 +8,7 @@ import { openFormFile } from "@/features/forms/services/form.commands";
 import { openSigningDocument } from "@/features/forms/services/signature.commands";
 import { useT } from "@/lib/i18n/client";
 import { runServerAction } from "@/lib/use-server-action";
+import { QuarantineReasonText } from "@/features/documents/components/quarantine-reason-text";
 
 const scanLabel = {
   pending: "forms.files.scan.pending",
@@ -21,18 +22,25 @@ export function OpenFileButton({
   id,
   fileName,
   scanStatus,
+  scanNote,
 }: {
   kind: "form-file" | "signing-document";
   id: string;
   fileName: string;
   scanStatus: "pending" | "clean" | "quarantined" | "rejected";
+  scanNote?: string | null;
 }) {
   const { toast } = useToast();
   const t = useT();
   const [busy, setBusy] = useState(false);
 
   if (scanStatus !== "clean") {
-    return <Badge tone={scanStatus === "pending" ? "neutral" : "danger"}>{t(scanLabel[scanStatus])}</Badge>;
+    return (
+      <>
+        <Badge tone={scanStatus === "pending" ? "neutral" : "danger"}>{t(scanLabel[scanStatus])}</Badge>
+        <QuarantineReasonText scanStatus={scanStatus} scanNote={scanNote} />
+      </>
+    );
   }
 
   async function open() {

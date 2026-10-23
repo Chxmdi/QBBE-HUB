@@ -31,8 +31,8 @@ function fixture() {
 describe("form file and signing document quarantine worker", () => {
   it("scans both kinds from their own buckets and records each file's SHA-256", async () => {
     const { db, buckets, context } = fixture();
-    vi.mocked(scanDocumentBytes).mockResolvedValue("clean");
-    expect(await scanFormFiles(context)).toEqual({ processed: 2, failed: 0 });
+    vi.mocked(scanDocumentBytes).mockResolvedValue({ verdict: "clean", signature: null });
+    expect(await scanFormFiles(context)).toEqual({ processed: 2, failed: 0, metadata: { quarantined: 0 } });
     expect(buckets).toEqual(["form-files", "signing-documents"]);
     const expected = createHash("sha256").update(BYTES).digest("hex");
     for (const table of ["form_file", "signing_document"]) {
@@ -43,7 +43,7 @@ describe("form file and signing document quarantine worker", () => {
 
   it("persists a quarantined verdict", async () => {
     const { db, context } = fixture();
-    vi.mocked(scanDocumentBytes).mockResolvedValue("quarantined");
+    vi.mocked(scanDocumentBytes).mockResolvedValue({ verdict: "quarantined", signature: "Heuristics.Encrypted.PDF" });
     await scanFormFiles(context);
     expect(db.rows("signing_document")[0].scan_status).toBe("quarantined");
     expect(db.rows("signing_document")[0].quarantined_at).not.toBeNull();

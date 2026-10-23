@@ -74,7 +74,7 @@ export default async function DocumentPage({
     supabase
       .from("document")
       .select(
-        "id, version_number, kind, scan_status, size_bytes, created_at, superseded_at, archived_at, " +
+        "id, version_number, kind, scan_status, scan_note, size_bytes, created_at, superseded_at, archived_at, " +
           "title, description, owner_id, visibility, tags, requires_acknowledgement, " +
           "project_id, program_id, meeting_id, event_id, crm_organization_id, " +
           "creator:created_by(full_name), folder:folder_id(id, category, name, visibility)",

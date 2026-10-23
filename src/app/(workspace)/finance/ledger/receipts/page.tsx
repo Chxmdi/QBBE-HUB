@@ -66,7 +66,7 @@ export default async function LedgerReceiptsPage({
   const year = pickYear(years, params.year, todayIn(session.timeZone));
   let query = supabase
     .from("finance_receipt")
-    .select("id, kind, document_date, vendor, total_cents, gst_cents, qst_cents, status, scan_status, file_name")
+    .select("id, kind, document_date, vendor, total_cents, gst_cents, qst_cents, status, scan_status, scan_note, file_name")
     .eq("organization_id", session.organizationId);
   if (year) query = query.gte("document_date", year.startsOn).lte("document_date", year.endsOn);
   const { data, error } = await query.order("document_date", { ascending: false }).limit(LIMIT);

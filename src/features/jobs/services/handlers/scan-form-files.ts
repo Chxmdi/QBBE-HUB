@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { MAX_DOCUMENT_BYTES, SCANNER_REQUIREMENT, isScannerConfigured, scanDocumentBytes } from "@/features/documents/services/clamav";
+import { SCANNER_REQUIREMENT, isScannerConfigured } from "@/features/documents/services/clamav";
+import { auditQuarantine, scanVerdict } from "./scan-verdict";
 import type { JobContext, JobResult } from "../runner";
 
 /**
@@ -20,9 +21,10 @@ export async function scanFormFiles({ db, definition, now }: JobContext): Promis
   if (!isScannerConfigured()) throw new Error(`Form file scanning requires ${SCANNER_REQUIREMENT}`);
   let processed = 0;
   let failed = 0;
+  let quarantined = 0;
   for (const { table, bucket } of SOURCES) {
     const { data: rows, error } = await db.from(table)
-      .select("id, storage_path")
+      .select("id, organization_id, storage_path")
       .eq("scan_status", "pending")
       .order("scan_attempted_at", { ascending: true, nullsFirst: true })
       .limit(Math.min(definition.batch_size, 2));
@@ -35,19 +37,21 @@ export async function scanFormFiles({ db, definition, now }: JobContext): Promis
         const { data: file, error: downloadError } = await db.storage.from(bucket).download(row.storage_path);
         if (downloadError || !file) throw new Error("Could not read file for scanning");
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const verdict = bytes.byteLength > MAX_DOCUMENT_BYTES ? "rejected" : await scanDocumentBytes(bytes);
+        const verdict = await scanVerdict(bytes);
         const { error: saveError } = await db.from(table).update({
-          scan_status: verdict,
-          scan_note: verdict === "rejected" ? "File exceeds 25 MB" : "ClamAV scan completed",
-          quarantined_at: verdict === "clean" ? null : now.toISOString(),
+          scan_status: verdict.status,
+          scan_note: verdict.note,
+          quarantined_at: verdict.status === "clean" ? null : now.toISOString(),
           content_sha256: createHash("sha256").update(bytes).digest("hex"),
         }).eq("id", row.id).eq("storage_path", row.storage_path).eq("scan_status", "pending");
         if (saveError) throw new Error("Could not save scan verdict");
+        await auditQuarantine(db, verdict, { organizationId: row.organization_id, objectType: table, objectId: row.id });
+        if (verdict.status !== "clean") quarantined += 1;
         processed += 1;
       } catch {
         failed += 1;
       }
     }
   }
-  return { processed, failed };
+  return { processed, failed, metadata: { quarantined } };
 }

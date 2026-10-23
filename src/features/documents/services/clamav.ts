@@ -34,18 +34,37 @@ export function isScannerConfigured(env: ScannerEnv = process.env): boolean {
   return scannerAddress(env) !== null;
 }
 
-/** Only an explicit ClamAV clean verdict releases a file. */
-export function parseScanReply(reply: string): "clean" | "quarantined" {
-  if (reply === "stream: OK\0") return "clean";
-  if (/^stream: [^\0\r\n]+ FOUND\0$/.test(reply)) return "quarantined";
+export type ScanResult = { verdict: "clean" | "quarantined"; signature: string | null };
+
+/**
+ * Only an explicit ClamAV clean verdict releases a file. A quarantine keeps
+ * the name of what the scanner found (Heuristics.Encrypted.PDF for a
+ * password-protected PDF, a virus name otherwise), so the uploader can be
+ * told why and an administrator can tell a heuristic from a virus.
+ */
+export function parseScanResult(reply: string): ScanResult {
+  if (reply === "stream: OK\0") return { verdict: "clean", signature: null };
+  const found = /^stream: ([^\0\r\n]+) FOUND\0$/.exec(reply);
+  if (found) return { verdict: "quarantined", signature: found[1].slice(0, 200) };
   throw new Error("Scanner did not return a valid verdict");
+}
+
+export function parseScanReply(reply: string): "clean" | "quarantined" {
+  return parseScanResult(reply).verdict;
+}
+
+/** The scan_note a verdict is stored with. */
+export function scanNote(result: ScanResult | "rejected"): string {
+  if (result === "rejected") return "File exceeds 25 MB";
+  if (result.verdict === "clean") return "ClamAV scan completed";
+  return result.signature ?? "ClamAV reported a threat";
 }
 
 /** INSTREAM to clamd; the scanner never receives a file path. */
 export async function scanDocumentBytes(
   bytes: Uint8Array,
   address: ScannerAddress | null = scannerAddress(),
-): Promise<"clean" | "quarantined"> {
+): Promise<ScanResult> {
   if (!address) throw new Error(`Scanning requires ${SCANNER_REQUIREMENT}`);
   if (bytes.byteLength > MAX_DOCUMENT_BYTES) throw new Error("File exceeds the scan limit");
   const options: NetConnectOpts = "path" in address ? { path: address.path } : { host: address.host, port: address.port };
@@ -63,7 +82,7 @@ export async function scanDocumentBytes(
       if (reply.length > 4096) socket.destroy(new Error("Scanner response exceeded the limit"));
     });
     socket.on("end", () => {
-      try { resolve(parseScanReply(reply)); } catch (error) { reject(error); }
+      try { resolve(parseScanResult(reply)); } catch (error) { reject(error); }
       socket.destroy();
     });
     socket.on("connect", () => {

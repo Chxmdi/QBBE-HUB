@@ -26,7 +26,7 @@ export default async function SigningDocumentPage({ params }: { params: Promise<
   const supabase = await createSupabasePageClient();
   const { data: doc } = await supabase
     .from("signing_document")
-    .select("id, title, message, file_name, storage_path, scan_status, content_sha256, created_at, uploader:uploaded_by(full_name)")
+    .select("id, title, message, file_name, storage_path, scan_status, scan_note, content_sha256, created_at, uploader:uploaded_by(full_name)")
     .eq("id", id)
     .maybeSingle();
   if (!doc) notFound();
@@ -37,6 +37,7 @@ export default async function SigningDocumentPage({ params }: { params: Promise<
     file_name: string;
     storage_path: string;
     scan_status: ScanStatus;
+    scan_note: string | null;
     content_sha256: string | null;
     created_at: string;
     uploader: { full_name: string } | null;
@@ -89,7 +90,7 @@ export default async function SigningDocumentPage({ params }: { params: Promise<
         </h2>
         <p className="flex flex-wrap items-center gap-2 text-[14px]">
           {document.file_name}
-          <OpenFileButton kind="signing-document" id={document.id} fileName={document.file_name} scanStatus={document.scan_status} />
+          <OpenFileButton kind="signing-document" id={document.id} fileName={document.file_name} scanStatus={document.scan_status} scanNote={document.scan_note} />
         </p>
         <p className="meta">
           {t("signatures.doc.shaChecked")}{" "}

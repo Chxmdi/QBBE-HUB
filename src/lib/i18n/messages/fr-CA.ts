@@ -255,6 +255,15 @@ export const frCA: Messages = {
     today: "Échéance aujourd’hui",
     tomorrow: "Échéance demain",
   },
+  files: {
+    quarantine: {
+      passwordProtected:
+        "Ce fichier est protégé par un mot de passe, alors il n’a pas pu être vérifié contre les virus. Retirez le mot de passe et téléversez-le de nouveau.",
+      virus: "Un virus a été détecté dans ce fichier. Il est bloqué et ne peut pas être ouvert.",
+      tooLarge: "Ce fichier dépasse 25 Mo, alors il n’a pas été accepté. Téléversez un fichier plus petit.",
+      deleted: "Ce fichier a été bloqué, puis supprimé par un administrateur.",
+    },
+  },
   ui: {
     closeDialog: "Fermer la boîte de dialogue",
     closePanel: "Fermer le panneau",

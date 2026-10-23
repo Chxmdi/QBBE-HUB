@@ -32,6 +32,7 @@ import { useFormatters, useT } from "@/lib/i18n/client";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { storagePathFor } from "@/features/editor/adapter/files";
 import { discardOwnUpload } from "@/features/documents/services/discard-upload";
+import { QuarantineReasonText } from "@/features/documents/components/quarantine-reason-text";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -40,6 +41,7 @@ export interface VersionRow {
   version_number: number;
   kind: "file" | "link";
   scan_status: "pending" | "clean" | "quarantined" | "rejected";
+  scan_note?: string | null;
   size_bytes: number | null;
   created_at: string;
   superseded_at: string | null;
@@ -107,6 +109,7 @@ export function VersionHistory({
             {label ? (
               <Badge tone={v.scan_status === "pending" ? "warning" : "danger"}>{label}</Badge>
             ) : null}
+            <QuarantineReasonText scanStatus={v.scan_status} scanNote={v.scan_note} />
             <span className="meta">
               {t("documents.versions.added", { date: format.date(v.created_at) })}
               {v.creator?.full_name

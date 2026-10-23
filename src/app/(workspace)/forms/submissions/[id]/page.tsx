@@ -43,7 +43,7 @@ export default async function SubmissionPage({ params }: { params: Promise<{ id:
   const [{ data: files }, { data: signatures }, { data: verification }] = await Promise.all([
     supabase
       .from("form_file")
-      .select("id, field_key, file_name, scan_status, content_sha256")
+      .select("id, field_key, file_name, scan_status, scan_note, content_sha256")
       .eq("submission_id", id),
     supabase
       .from("signature")
@@ -53,7 +53,7 @@ export default async function SubmissionPage({ params }: { params: Promise<{ id:
     supabase.rpc("verify_form_submission", { p_submission_id: id }),
   ]);
   const fileByKey = new Map(
-    ((files ?? []) as { id: string; field_key: string; file_name: string; scan_status: ScanStatus; content_sha256: string | null }[])
+    ((files ?? []) as { id: string; field_key: string; file_name: string; scan_status: ScanStatus; scan_note: string | null; content_sha256: string | null }[])
       .map((f) => [f.field_key, f]),
   );
   const [t, format, locale] = await Promise.all([getT(), getFormatters(), getLocale()]);
@@ -96,7 +96,7 @@ export default async function SubmissionPage({ params }: { params: Promise<{ id:
                   {file ? (
                     <span className="flex flex-wrap items-center gap-2">
                       {file.file_name}
-                      <OpenFileButton kind="form-file" id={file.id} fileName={file.file_name} scanStatus={file.scan_status} />
+                      <OpenFileButton kind="form-file" id={file.id} fileName={file.file_name} scanStatus={file.scan_status} scanNote={file.scan_note} />
                     </span>
                   ) : (
                     answerText(f, row.answers[f.key], false, t, locale) || (
