@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
+import { useHydrated } from "@/lib/use-hydrated";
 import {
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
@@ -28,15 +29,21 @@ export interface SignUpInvitation {
 export function SignUpForm({ invitation }: { invitation: SignUpInvitation | null }) {
   const t = useT();
   const router = useRouter();
-  const [fullName, setFullName] = useState("");
+  // Uncontrolled fields, read on submit: what a person types before the
+  // page's scripts have run stays typed when React takes the form over.
+  const hydrated = useHydrated();
   const [email, setEmail] = useState(invitation?.email ?? "");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const fullName = String(form.get("fullName") ?? "");
+    const password = String(form.get("password") ?? "");
+    const typedEmail = invitation?.email ?? String(form.get("email") ?? "");
+    setEmail(typedEmail);
     setError(null);
     const problem = passwordProblem(password);
     if (problem) {
@@ -46,7 +53,7 @@ export function SignUpForm({ invitation }: { invitation: SignUpInvitation | null
     setLoading(true);
     const supabase = createSupabaseBrowserClient();
     const { data, error: signUpError } = await supabase.auth.signUp({
-      email: invitation?.email ?? email,
+      email: typedEmail,
       password,
       options: {
         data: invitation
@@ -106,10 +113,9 @@ export function SignUpForm({ invitation }: { invitation: SignUpInvitation | null
         <Label htmlFor="fullName">{t("auth.signUp.fullName")}</Label>
         <Input
           id="fullName"
+          name="fullName"
           autoComplete="name"
           required
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
         />
       </div>
       <div>
@@ -119,10 +125,10 @@ export function SignUpForm({ invitation }: { invitation: SignUpInvitation | null
           type="email"
           autoComplete="email"
           required
+          name="email"
           readOnly={Boolean(invitation)}
           aria-describedby={invitation ? "email-locked" : undefined}
-          value={invitation?.email ?? email}
-          onChange={(e) => setEmail(e.target.value)}
+          defaultValue={invitation?.email ?? ""}
           className={invitation ? "bg-surface-soft" : undefined}
         />
         {invitation ? (
@@ -140,9 +146,8 @@ export function SignUpForm({ invitation }: { invitation: SignUpInvitation | null
           required
           minLength={MIN_PASSWORD_LENGTH}
           maxLength={MAX_PASSWORD_LENGTH}
+          name="password"
           aria-describedby="password-hint"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
         />
         <FieldHint id="password-hint">
           {t("auth.password.hint", { min: MIN_PASSWORD_LENGTH })}
@@ -168,7 +173,7 @@ export function SignUpForm({ invitation }: { invitation: SignUpInvitation | null
           );
         })()}
       </p>
-      <Button type="submit" loading={loading} className="w-full">
+      <Button type="submit" loading={loading} disabled={!hydrated} className="w-full">
         {t("auth.signUp.submit")}
       </Button>
       <p className="text-center text-[13px] text-muted">

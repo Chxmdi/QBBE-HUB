@@ -229,4 +229,4 @@ export const test = base.extend({
 });
 
 export { expect };
-export type { Browser, Locator, Page, Request, Response } from "@playwright/test";
+export type { Browser, Locator, Page, Request, Response, Route } from "@playwright/test";
