@@ -27,6 +27,7 @@ let switchRow: { data: { enabled: boolean } | null; error: { message: string } |
 let summary: { bucket_id: string; files: number; bytes: number; oldest: string }[];
 let audits: Record<string, unknown>[];
 let auditError: { message: string } | null;
+let expireError: { message: string } | null;
 
 function db() {
   return {
@@ -52,6 +53,9 @@ function db() {
     rpc: async (fn: string, args: Record<string, unknown>) => {
       rpcCalls.push({ fn, args });
       if (fn === "unregistered_uploads_summary") return { data: summary, error: null };
+      if (fn === "expire_unfinished_uploads") {
+        return expireError ? { data: null, error: expireError } : { data: args.p_apply ? 3 : 4, error: null };
+      }
       return { data: listError ? null : listed, error: listError };
     },
     storage: {
@@ -75,6 +79,7 @@ beforeEach(() => {
   removed = [];
   audits = [];
   auditError = null;
+  expireError = null;
   switchRow = { data: { enabled: true }, error: null };
   summary = [
     { bucket_id: "documents", files: 2, bytes: 1500, oldest: "2026-09-01T00:00:00Z" },
@@ -95,8 +100,9 @@ describe("the purge-unregistered-uploads job, switch off", () => {
     expect(removed).toEqual([]);
     expect(rpcCalls).toEqual([
       { fn: "unregistered_uploads_summary", args: { p_before: "2026-10-19T12:00:00.000Z" } },
+      { fn: "expire_unfinished_uploads", args: { p_before: "2026-10-19T12:00:00.000Z", p_limit: 200, p_apply: false } },
     ]);
-    const report = { mode: "report", buckets: summary };
+    const report = { mode: "report", buckets: summary, unfinished_multipart: 4 };
     expect(result).toEqual({ processed: 0, failed: 0, metadata: report });
     expect(audits).toEqual([
       expect.objectContaining({
@@ -135,6 +141,7 @@ describe("the purge-unregistered-uploads job, switch on", () => {
     await run();
     expect(rpcCalls).toEqual([
       { fn: "unregistered_uploads", args: { p_before: "2026-10-19T12:00:00.000Z", p_limit: 200 } },
+      { fn: "expire_unfinished_uploads", args: { p_before: "2026-10-19T12:00:00.000Z", p_limit: 200, p_apply: true } },
     ]);
   });
 
@@ -145,20 +152,20 @@ describe("the purge-unregistered-uploads job, switch on", () => {
       { bucket: "receipts", names: ["org/u1/r.pdf"] },
       { bucket: "signing-documents", names: ["org/u3/s.pdf"] },
     ]);
-    const deleted = { mode: "delete", deleted: { documents: 2, receipts: 1, "signing-documents": 1 } };
-    expect(result).toEqual({ processed: 4, failed: 0, metadata: deleted });
+    const deleted = { mode: "delete", deleted: { documents: 2, receipts: 1, "signing-documents": 1 }, expired_multipart: 3 };
+    expect(result).toEqual({ processed: 7, failed: 0, metadata: deleted });
     expect(audits).toEqual([
       expect.objectContaining({ action: "unregistered_uploads_deleted", metadata: { ...deleted, failed: 0 } }),
     ]);
   });
 
-  it("does nothing when nothing is unregistered", async () => {
+  it("deletes no files when nothing is unregistered, still expiring unfinished uploads", async () => {
     listed = [];
-    expect(await run()).toEqual({ processed: 0, failed: 0, metadata: { mode: "delete", deleted: {} } });
+    expect(await run()).toEqual({ processed: 3, failed: 0, metadata: { mode: "delete", deleted: {}, expired_multipart: 3 } });
     expect(removed).toEqual([]);
     // Audited all the same, so a quiet run is told apart from a broken one.
     expect(audits).toEqual([
-      expect.objectContaining({ action: "unregistered_uploads_deleted", metadata: { mode: "delete", deleted: {}, failed: 0 } }),
+      expect.objectContaining({ action: "unregistered_uploads_deleted", metadata: { mode: "delete", deleted: {}, expired_multipart: 3, failed: 0 } }),
     ]);
   });
 
@@ -166,9 +173,22 @@ describe("the purge-unregistered-uploads job, switch on", () => {
     removeErrors = { documents: { message: "storage unavailable" } };
     const result = await run();
     expect(removed.map((r) => r.bucket)).toEqual(["documents", "receipts", "signing-documents"]);
-    expect(result).toMatchObject({ processed: 2, failed: 2 });
+    expect(result).toMatchObject({ processed: 5, failed: 2 });
     expect(audits[0]).toMatchObject({ metadata: { failed: 2 } });
     expect(logged.some((l) => l.event === "storage.purge_unregistered_failed" && l.fields.bucket === "documents")).toBe(true);
+  });
+
+  it("still audits the files it deleted when unfinished uploads cannot be expired", async () => {
+    expireError = { message: "storage busy" };
+    const result = await run();
+    expect(result).toMatchObject({ processed: 4, failed: 1 });
+    expect(audits).toEqual([
+      expect.objectContaining({
+        action: "unregistered_uploads_deleted",
+        metadata: { mode: "delete", deleted: { documents: 2, receipts: 1, "signing-documents": 1 }, expired_multipart: 0, failed: 1 },
+      }),
+    ]);
+    expect(logged.some((l) => l.event === "storage.expire_unfinished_failed")).toBe(true);
   });
 
   it("fails the run when the list cannot be read", async () => {

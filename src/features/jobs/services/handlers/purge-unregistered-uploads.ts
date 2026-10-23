@@ -18,6 +18,11 @@ import type { JobContext, JobResult } from "../runner";
  * it would delete, their total size and the oldest date, and deletes
  * nothing. A switch it cannot read counts as off.
  *
+ * Multipart uploads left unfinished for over 24 hours are counted in the
+ * report and, with the switch on, their upload records are removed so they
+ * can no longer be finished. (Resumable uploads expire on the storage
+ * server's side.)
+ *
  * A bucket that cannot be cleaned is logged and counted as failed, and the
  * rest still are; its files are listed again next run.
  */
@@ -38,6 +43,12 @@ async function audited(db: JobContext["db"], action: string, metadata: Record<st
   if (!stored) throw new Error(`could not audit ${action}`);
 }
 
+async function unfinishedUploads(db: JobContext["db"], before: string, limit: number, apply: boolean): Promise<number> {
+  const { data, error } = await db.rpc("expire_unfinished_uploads", { p_before: before, p_limit: limit, p_apply: apply });
+  if (error) throw new Error(`could not ${apply ? "expire" : "count"} unfinished uploads: ${error.message}`);
+  return Number(data ?? 0);
+}
+
 export async function purgeUnregisteredUploads({ db, definition, now }: JobContext): Promise<JobResult> {
   const before = new Date(now.getTime() - AGE_MS).toISOString();
 
@@ -49,7 +60,8 @@ export async function purgeUnregisteredUploads({ db, definition, now }: JobConte
   if (switchError || switchRow?.enabled !== true) {
     const { data: buckets, error } = await db.rpc("unregistered_uploads_summary", { p_before: before });
     if (error) throw new Error(`could not report unregistered uploads: ${error.message}`);
-    const report = { mode: "report", buckets: buckets ?? [] };
+    const unfinished = await unfinishedUploads(db, before, definition.batch_size, false);
+    const report = { mode: "report", buckets: buckets ?? [], unfinished_multipart: unfinished };
     logEvent("storage.purge_unregistered_report", { ...report, switch_unreadable: Boolean(switchError) }, "info");
     await audited(db, "unregistered_uploads_reported", report);
     return { processed: 0, failed: 0, metadata: report };
@@ -80,10 +92,20 @@ export async function purgeUnregisteredUploads({ db, definition, now }: JobConte
     processed += names.length;
     deleted[bucket] = names.length;
   }
-  const metadata = { mode: "delete", deleted, failed };
+  // The files above are gone already: a failure here is counted and logged,
+  // and the run is still audited.
+  let expired = 0;
+  try {
+    expired = await unfinishedUploads(db, before, definition.batch_size, true);
+  } catch (error) {
+    failed += 1;
+    logEvent("storage.expire_unfinished_failed", { error: error instanceof Error ? error.message : String(error) }, "error");
+  }
+  processed += expired;
+  const metadata = { mode: "delete", deleted, expired_multipart: expired, failed };
   // Every deleting run is audited, also one that found nothing or failed, so
   // the operator can tell a quiet run from a broken one. The files are gone
   // by now: if this write fails, the run fails and the log line remains.
   await audited(db, "unregistered_uploads_deleted", metadata);
-  return { processed, failed, metadata: { mode: "delete", deleted } };
+  return { processed, failed, metadata: { mode: "delete", deleted, expired_multipart: expired } };
 }

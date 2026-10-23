@@ -268,7 +268,9 @@ without touching cron.
 `purge-unregistered-uploads` starts in **report mode**: every hour it counts,
 per bucket (`documents`, `receipts`, `form-files`, `signing-documents`), the
 files nobody registered that are over 24 hours old, their total size and the
-oldest date. It logs and audits that count and **deletes nothing**. Deleting
+oldest date, and the multipart uploads (`unfinished_multipart`) left
+unfinished for over 24 hours. It logs and audits that count and **deletes
+nothing**. Deleting
 needs the owner's OK, given once per environment through an operator switch.
 
 **This is hard to undo.** Files it deletes are gone from storage; only a
@@ -293,7 +295,8 @@ storage backup brings them back. Do the steps in order.
    ```
 
    *Worked:* one row whose `metadata.buckets` lists each bucket with `files`,
-   `bytes` and `oldest`. *Failed:* no row; open **Admin**, **Jobs** in the Hub
+   `bytes` and `oldest`, and whose `metadata.unfinished_multipart` counts
+   unfinished multipart uploads over a day old (normally `0`). *Failed:* no row; open **Admin**, **Jobs** in the Hub
    and check `purge-unregistered-uploads` ran.
    Check the numbers make sense: a few files or a few megabytes is normal. If
    a bucket shows thousands of files or an `oldest` date from before the Hub
@@ -317,9 +320,11 @@ storage backup brings them back. Do the steps in order.
    order by created_at desc limit 1;
    ```
 
-   *Worked:* `metadata.deleted` lists a count per bucket and
-   `metadata.failed` is `0`. Each run deletes at most 200 files, so a
-   larger count from step 3 takes several hourly runs to clear.
+   *Worked:* `metadata.deleted` lists a count per bucket,
+   `metadata.expired_multipart` the unfinished uploads removed, and
+   `metadata.failed` is `0`. Each run deletes at most 200 files and 200
+   unfinished uploads, so a larger count from step 3 takes several hourly
+   runs to clear.
    *Failed:* `metadata.failed` is above `0`, or there is no row at all. Open
    **Admin**, **Jobs** in the Hub, select `purge-unregistered-uploads`, and
    read the latest run's error; the server log has a
@@ -327,6 +332,23 @@ storage backup brings them back. Do the steps in order.
    cleaned. Files that were not deleted are tried again next run.
 
 To go back to report mode at any time, run the step 4 query with `false`.
+
+Separately, the documents bucket refuses a new upload from a person who
+already has 50 uploads from the last day waiting (not yet filed, or not yet
+scanned; captures count too). Someone who sees "The file
+could not be uploaded. Try again." after a large batch can try again the
+next day, or once the scanner has caught up; see
+[document scanning](document-scanning.md).
+
+**Required, once per environment: turn off the storage S3 protocol.** The
+Hub never uses it, and uploads through it are only partly held to the
+limits above. In the Supabase dashboard of the project, open **Storage**,
+then **Settings** (on some dashboards: **Project Settings**, **Storage**),
+find **S3 Connection**, turn off **Enable connection via S3 protocol**, and
+**Save**. *Worked:* after a page reload the toggle is still off, and the
+page no longer lists S3 access keys as usable. *Failed:* the setting is not
+there or will not save; note it on the owner list and ask Supabase support.
+The Hub's own uploads do not use it, so nothing in the app changes.
 
 ### Changing a schedule
 
