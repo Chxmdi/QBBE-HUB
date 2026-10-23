@@ -5,12 +5,13 @@ import { sql } from "./db";
 const JOB_SECRET = process.env.CRON_JOB_SECRET ?? "";
 
 // Each test publishes as the owner, and the app allows 20 publishes an hour
-// per person ("announcement:publish"). Runs repeated within the hour would
+// per person ("announcement:publish", in the app and the database). Runs
+// repeated within the hour would
 // meet that limit and fail on it, so each test starts with the owner's count
 // cleared: the refusal itself is tested in
 // src/features/announcements/tests/announcement.commands.test.ts.
 test.beforeEach(() => {
-  sql(`delete from public.rate_limit_counter where bucket like 'announcement:publish:%'`);
+  sql(`delete from public.rate_limit_counter where bucket like '%announcement:publish:%'`);
 });
 
 // Each test removes its own announcement. The scheduled-announcements job

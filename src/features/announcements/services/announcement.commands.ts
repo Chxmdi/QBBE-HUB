@@ -8,7 +8,7 @@ import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
-import { createNotifications, notificationDedupeKey } from "@/features/jobs/services/notify";
+import { fanOutAnnouncement, notificationDedupeKey } from "@/features/jobs/services/notify";
 import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
@@ -162,10 +162,15 @@ export async function publishAnnouncement(
         .map((m) => m.user_id as string)
         .filter((id) => id !== session.userId);
 
-  if (recipients.length > 0) {
+  // Published now: notified and marked fanned out together, so the publish
+  // job does not send it again (it would re-open what people had read).
+  if (!isScheduled) {
     const recipientT = await recipientTranslators(supabase, recipients);
-    await createNotifications(
+    // The announcement is out either way: a failed fan-out is logged and
+    // the publish job sends it on its next run.
+    await fanOutAnnouncement(
       supabase,
+      announcement.id as string,
       recipients.map((userId) => ({
         user_id: userId,
         organization_id: session.organizationId,
@@ -183,6 +188,11 @@ export async function publishAnnouncement(
         context: title,
         dedupe_key: notificationDedupeKey("announcement", announcement.id as string, userId),
       })),
+    ).catch((error: unknown) =>
+      logEvent("announcement.fan_out_failed", {
+        announcement_id: announcement.id,
+        error: error instanceof Error ? error.message : String(error),
+      }, "warn"),
     );
   }
 

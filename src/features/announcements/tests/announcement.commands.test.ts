@@ -11,7 +11,7 @@ let tableCalls: TableCall[] = [];
 let answer: (call: TableCall) => Answer;
 let isAdmin = true;
 let limited: { ok: false; error: string } | null = null;
-const createNotifications = vi.fn();
+const fanOutAnnouncement = vi.fn<(...args: unknown[]) => Promise<number | null>>(async () => 0);
 const fireWorkflows = vi.fn();
 
 vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
@@ -33,7 +33,7 @@ vi.mock("@/features/channels/recipient-locale", async () => {
   return { recipientTranslators: async () => () => createTranslator("en") };
 });
 vi.mock("@/features/jobs/services/notify", () => ({
-  createNotifications: (...a: unknown[]) => createNotifications(...a),
+  fanOutAnnouncement: (...a: unknown[]) => fanOutAnnouncement(...a),
   notificationDedupeKey: (...parts: string[]) => parts.join(":"),
 }));
 vi.mock("@/features/admin/services/workflow.runtime", () => ({
@@ -75,7 +75,7 @@ describe("publishAnnouncement", () => {
     expect(await publishAnnouncement(post)).toEqual({ ok: true, id: ANNOUNCEMENT });
     expect(inserted("message")).toMatchObject({ channel_id: CHANNEL, author_id: ME, body: post.body });
     expect(inserted("announcement")).toMatchObject({ message_id: "msg-1", body: null, channel_id: null, priority: "important", requires_ack: true });
-    const [, rows] = createNotifications.mock.calls[0] as [unknown, { user_id: string; urgency: string }[]];
+    const [, , rows] = fanOutAnnouncement.mock.calls[0] as [unknown, string, { user_id: string; urgency: string }[]];
     expect(rows.map((r) => r.user_id)).toEqual([OTHER]);
     // An announcement that needs acknowledging is raised above normal.
     expect(rows[0].urgency).toBe("high");
@@ -85,7 +85,7 @@ describe("publishAnnouncement", () => {
 
   it("marks a critical announcement critical", async () => {
     await publishAnnouncement({ ...post, priority: "critical", requiresAck: false });
-    const [, rows] = createNotifications.mock.calls[0] as [unknown, { urgency: string }[]];
+    const [, , rows] = fanOutAnnouncement.mock.calls[0] as [unknown, string, { urgency: string }[]];
     expect(rows[0].urgency).toBe("critical");
   });
 
@@ -100,7 +100,7 @@ describe("publishAnnouncement", () => {
       channel_id: CHANNEL,
       publish_at: "2099-01-05T14:00:00.000Z",
     });
-    expect(createNotifications).not.toHaveBeenCalled();
+    expect(fanOutAnnouncement).not.toHaveBeenCalled();
     expect(fireWorkflows).not.toHaveBeenCalled();
   });
 
@@ -139,7 +139,7 @@ describe("publishAnnouncement", () => {
     const denied = await publishAnnouncement(post);
     expect(denied.ok).toBe(false);
     expect(inserted("announcement")).toBeUndefined();
-    expect(createNotifications).not.toHaveBeenCalled();
+    expect(fanOutAnnouncement).not.toHaveBeenCalled();
   });
 });
 

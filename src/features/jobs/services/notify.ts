@@ -158,3 +158,21 @@ export async function createNotifications(
   }
   return created;
 }
+
+/**
+ * Notifies an announcement's readers and marks it fanned out, in one
+ * transaction (public.fan_out_announcement): all its rows go in one call,
+ * so a failure leaves neither. Null when it was already fanned out.
+ */
+export async function fanOutAnnouncement(
+  db: SupabaseClient,
+  announcementId: string,
+  drafts: NotificationDraft[],
+): Promise<number | null> {
+  const { data, error } = await db.rpc("fan_out_announcement", {
+    p_announcement: announcementId,
+    p_rows: collapseDrafts(drafts).map(rowPayload),
+  });
+  if (error) throw new Error(`could not fan out the announcement: ${error.message}`);
+  return data === null ? null : Number(data);
+}

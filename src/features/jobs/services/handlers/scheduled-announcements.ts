@@ -1,7 +1,7 @@
 import { recordJobRun } from "@/lib/job-observability";
 import { fireWorkflows } from "@/features/admin/services/workflow.runtime";
 import { recipientTranslators } from "@/features/channels/recipient-locale";
-import { createNotifications, notificationDedupeKey } from "../notify";
+import { fanOutAnnouncement, notificationDedupeKey } from "../notify";
 import type { JobContext, JobResult } from "../runner";
 
 /**
@@ -12,10 +12,13 @@ import type { JobContext, JobResult } from "../runner";
  * readable before it is due. The first step posts the waiting message of
  * every due announcement, whatever its age, so an outage only delays it.
  *
- * The window looks back two days rather than only at the current minute, so an
- * outage in the runtime delays an announcement instead of losing it. Repeats
- * are harmless: the dedupe key is the announcement and the recipient, so a
- * second pass inserts nothing.
+ * The second step notifies the readers of each due announcement not yet
+ * fanned out, oldest first. public.fan_out_announcement marks it and creates
+ * its notifications in one transaction: a run that fails leaves it for the
+ * next, and one that succeeded is never sent again. (Sending again would
+ * re-open what people had read, unread and emailed once more.) The window
+ * looks back two days, so an outage delays an announcement instead of
+ * losing it.
  */
 
 interface AnnouncementRow {
@@ -83,9 +86,11 @@ export async function scheduledAnnouncements({
     .from("announcement")
     .select("id, organization_id, title, priority, created_by, publish_at")
     .not("message_id", "is", null)
+    .is("fanned_out_at", null)
     .lte("publish_at", now.toISOString())
     .gte("publish_at", new Date(now.getTime() - LOOKBACK_MS).toISOString())
     .order("publish_at", { ascending: true })
+    .order("id", { ascending: true })
     .limit(definition.batch_size);
 
   if (error) throw new Error(`could not load announcements: ${error.message}`);
@@ -106,14 +111,14 @@ export async function scheduledAnnouncements({
       .map((member) => member.user_id)
       .filter((id) => id !== announcement.created_by);
 
-    if (recipients.length === 0) continue;
-
     let count = 0;
     try {
       // Each person reads the notification in their own saved language.
       const translatorFor = await recipientTranslators(db, recipients);
-      count = await createNotifications(
+      // With nobody to tell, this still marks the announcement done.
+      const sent = await fanOutAnnouncement(
         db,
+        announcement.id,
         recipients.map((userId) => ({
           user_id: userId,
           organization_id: announcement.organization_id,
@@ -132,6 +137,8 @@ export async function scheduledAnnouncements({
           dedupe_key: notificationDedupeKey("announcement", announcement.id, userId),
         })),
       );
+      // Null: another run fanned it out first.
+      count = sent ?? 0;
     } catch (error) {
       failed += 1;
       await recordJobRun(db, {
@@ -146,10 +153,7 @@ export async function scheduledAnnouncements({
     }
 
     fanned += count;
-    // Every pass re-reads two days of announcements and, rightly, notifies
-    // nobody twice. Recording those empty passes wrote one ledger row per
-    // announcement every five minutes (OPS-001); only a pass that reached
-    // someone is worth a row.
+    // Only a pass that reached someone is worth a ledger row (OPS-001).
     if (count === 0) continue;
     await recordJobRun(db, {
       organizationId: announcement.organization_id,
