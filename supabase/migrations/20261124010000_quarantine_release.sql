@@ -312,6 +312,15 @@ begin
   if v_status not in ('quarantined', 'rejected') then
     raise exception 'Only a quarantined or rejected file can be deleted here' using errcode = '22023';
   end if;
+  -- The bytes removed are the row's own: never a file filed under another
+  -- organization's folder. (Files stored before folders began with the
+  -- organization id start with a random id, which names no organization.)
+  if exists (
+    select 1 from public.organization o
+    where o.id::text = split_part(v_path, '/', 1) and o.id <> v_org
+  ) then
+    raise exception 'The stored file is outside this organization''s folder' using errcode = '42501';
+  end if;
 
   -- Deleting again (the storage removal failed) returns the path again.
   if coalesce(v_note, '') not like 'Deleted by an administrator%' then

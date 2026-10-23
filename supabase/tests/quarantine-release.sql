@@ -17,6 +17,8 @@ declare
   v_virus uuid;
   v_receipt uuid;
   v_limits uuid;
+  v_foreign uuid;
+  v_other_org uuid;
   v_bucket text;
   v_path text;
   v_row record;
@@ -41,6 +43,13 @@ begin
   values (v_org, 'Nested archive', 'file', v_org || '/' || v_staff || '/q4/deep.zip', v_staff, v_staff,
           'quarantined', 'Heuristics.Limits.Exceeded.MaxRecursion', now())
   returning id into v_limits;
+
+  insert into organization (name, slug) values ('Folder fixture org', 'folder-' || gen_random_uuid()::text)
+  returning id into v_other_org;
+  insert into public.document (organization_id, title, kind, storage_path, owner_id, created_by, scan_status, scan_note, quarantined_at)
+  values (v_org, 'Foreign path', 'file', v_other_org || '/' || v_staff || '/q5/x.pdf', v_staff, v_staff,
+          'quarantined', 'Eicar-Test-Signature', now())
+  returning id into v_foreign;
 
   perform tests.ok(not has_function_privilege('anon', 'public.release_quarantined_file(text, uuid, text)', 'execute')
       and not has_function_privilege('anon', 'public.purge_quarantined_file(text, uuid)', 'execute'),
@@ -80,6 +89,8 @@ begin
 
   perform public.release_quarantined_file('document', v_encrypted, 'Board minutes; the treasurer confirmed the password');
   perform public.release_quarantined_file('receipt', v_receipt, 'Vendor sends password-protected receipts');
+  perform tests.ok(tests.permission_denied(format('select * from public.purge_quarantined_file(%L, %L)', 'document', v_foreign)),
+    'a deletion never returns a file stored in another organization''s folder');
   select * into v_bucket, v_path from public.purge_quarantined_file('document', v_virus);
   perform tests.clear_auth(); reset role;
 
