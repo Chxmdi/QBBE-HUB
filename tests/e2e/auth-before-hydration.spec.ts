@@ -1,4 +1,6 @@
 import { expect, test, type Page, type Route } from "./fixtures";
+import { signIn } from "./auth";
+import { sql } from "./db";
 
 /**
  * A person can start typing before the page's scripts have run: on a slow
@@ -57,4 +59,26 @@ test("a password reset requested before the page's scripts run keeps its address
   await expect(email).toHaveValue("qa-staff@example.com");
   // Never sent in the address bar by a submit the page could not handle.
   expect(page.url()).not.toContain("qa-staff");
+});
+
+test("the welcome form waits for the page before it can be sent, and keeps what was typed", async ({ page }) => {
+  const volunteer = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3";
+  const onboarded = sql(`select coalesce(onboarded_at::text, '') from public.user_profile where id = '${volunteer}';`).trim();
+  await signIn(page, "volunteer");
+  sql(`update public.user_profile set onboarded_at = null where id = '${volunteer}';`);
+  try {
+    const release = await holdScripts(page);
+    await page.goto("/welcome", { waitUntil: "domcontentloaded" });
+    const name = page.getByLabel("Full name", { exact: true });
+    const submit = page.getByRole("button", { name: "Continue" });
+    await name.fill("Rae Volunteer");
+    await expect(submit).toBeDisabled();
+    await release();
+    await expect(submit).toBeEnabled({ timeout: 30_000 });
+    await expect(name).toHaveValue("Rae Volunteer");
+    // Never sent by the browser with the fields in the address bar.
+    expect(page.url()).not.toContain("Rae");
+  } finally {
+    sql(`update public.user_profile set onboarded_at = ${onboarded ? `'${onboarded}'` : "now()"} where id = '${volunteer}';`);
+  }
 });
