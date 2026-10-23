@@ -10,6 +10,7 @@ import { Tabs, TabPanel } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import {
   createDocumentLink,
+  documentUploadFolder,
   registerUploadedDocument,
   saveDocumentText,
 } from "@/features/documents/services/document.commands";
@@ -23,6 +24,8 @@ import {
   type LibraryFolder,
 } from "@/features/documents/services/library";
 import { useT } from "@/lib/i18n/client";
+import { storagePathFor } from "@/features/editor/adapter/files";
+import { discardOwnUpload } from "@/features/documents/services/discard-upload";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -91,9 +94,8 @@ export function DocumentUploadDialog({
     setSaving(true);
     setProgress(t("documents.upload.uploading"));
     const supabase = createSupabaseBrowserClient();
-    // Random prefix avoids collisions; the path is never the authorization.
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
-    const path = `${crypto.randomUUID()}/${safeName}`;
+    // Under the uploader's own folder, the only place the bucket takes it.
+    const path = storagePathFor(await documentUploadFolder(), file.name, crypto.randomUUID());
 
     const { error: uploadError } = await supabase.storage
       .from("documents")
@@ -120,7 +122,7 @@ export function DocumentUploadDialog({
     if (!result.ok) {
       // Registration can fail after Storage accepted the bytes. The matching
       // policy permits owners to remove only their own unregistered uploads.
-      await supabase.storage.from("documents").remove([path]);
+      await discardOwnUpload(path);
       setError(result.error ?? t("documents.upload.saveRecordFailed"));
       return;
     }

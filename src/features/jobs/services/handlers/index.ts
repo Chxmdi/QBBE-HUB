@@ -15,6 +15,7 @@ import { googleTokenUpkeep } from "./google-token-upkeep";
 import { grantReportReminders } from "./grant-report-reminders";
 import { opsWatchdog } from "./ops-watchdog";
 import { purgeJobHistory } from "./purge-job-history";
+import { purgeUnregisteredUploads } from "./purge-unregistered-uploads";
 import { reportRecordRetention } from "./report-record-retention";
 import { retryFailedEmails } from "./retry-failed-emails";
 import { retryWorkflowExecutions } from "./retry-workflow-executions";
@@ -81,6 +82,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
 
   // Housekeeping
   "purge-job-history": purgeJobHistory,
+  "purge-unregistered-uploads": purgeUnregisteredUploads,
   "apply-retention": applyRetention,
   "report-record-retention": reportRecordRetention,
 };

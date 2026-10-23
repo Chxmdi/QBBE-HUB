@@ -317,7 +317,7 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
   private headOnly = false;
   private wantCount = false;
   private limitValue: number | null = null;
-  private orderBy: { column: string; ascending: boolean } | null = null;
+  private orderBy: { column: string; ascending: boolean }[] = [];
   private singleMode: "one" | "maybe" | null = null;
   private onConflict: string[] | null = null;
   private ignoreDuplicates = false;
@@ -438,7 +438,8 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
   }
 
   order(column: string, options?: { ascending?: boolean }) {
-    this.orderBy = { column, ascending: options?.ascending ?? true };
+    // Each call adds a key after the earlier ones, as in PostgREST.
+    this.orderBy.push({ column, ascending: options?.ascending ?? true });
     return this;
   }
 
@@ -472,12 +473,15 @@ class QueryBuilder implements PromiseLike<Result<Row[] | Row | null>> {
   private shape(rows: Row[]): Result<Row[] | Row | null> {
     let output = rows;
 
-    if (this.orderBy) {
-      const { column, ascending } = this.orderBy;
+    if (this.orderBy.length) {
       output = [...output].sort((a, b) => {
-        const left = String(a[column] ?? "");
-        const right = String(b[column] ?? "");
-        return ascending ? left.localeCompare(right) : right.localeCompare(left);
+        for (const { column, ascending } of this.orderBy) {
+          const left = String(a[column] ?? "");
+          const right = String(b[column] ?? "");
+          const compared = ascending ? left.localeCompare(right) : right.localeCompare(left);
+          if (compared !== 0) return compared;
+        }
+        return 0;
       });
     }
     if (this.limitValue !== null) output = output.slice(0, this.limitValue);

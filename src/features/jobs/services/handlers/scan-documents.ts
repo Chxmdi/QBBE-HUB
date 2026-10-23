@@ -7,6 +7,8 @@ export async function scanDocuments({ db, definition, now }: JobContext): Promis
     .select("id, storage_path")
     .eq("kind", "file").eq("scan_status", "pending").is("archived_at", null)
     .order("scan_attempted_at", { ascending: true, nullsFirst: true })
+    // Files never tried all lack an attempt time: break the tie by id so the order is stable.
+    .order("id", { ascending: true })
     .limit(Math.min(definition.batch_size, 2));
   if (error) throw new Error("Could not load files awaiting scanning");
   let processed = 0;
