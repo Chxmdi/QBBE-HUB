@@ -16,6 +16,7 @@ declare
   v_encrypted uuid;
   v_virus uuid;
   v_receipt uuid;
+  v_limits uuid;
   v_bucket text;
   v_path text;
   v_row record;
@@ -32,9 +33,14 @@ begin
   returning id into v_virus;
   insert into public.finance_receipt (organization_id, submitted_by, document_date, vendor, total_cents, storage_path, file_name,
                                       scan_status, scan_note, quarantined_at)
-  values (v_org, v_staff, date '2026-10-01', 'Locked vendor', 1000, v_org || '/' || v_staff || '/q3/receipt.zip', 'receipt.zip',
-          'quarantined', 'Heuristics.Encrypted.Zip', now())
+  values (v_org, v_staff, date '2026-10-01', 'Locked vendor', 1000, v_org || '/' || v_staff || '/q3/receipt.pdf', 'receipt.pdf',
+          'quarantined', 'Heuristics.Encrypted.PDF', now())
   returning id into v_receipt;
+
+  insert into public.document (organization_id, title, kind, storage_path, owner_id, created_by, scan_status, scan_note, quarantined_at)
+  values (v_org, 'Nested archive', 'file', v_org || '/' || v_staff || '/q4/deep.zip', v_staff, v_staff,
+          'quarantined', 'Heuristics.Limits.Exceeded.MaxRecursion', now())
+  returning id into v_limits;
 
   perform tests.ok(not has_function_privilege('anon', 'public.release_quarantined_file(text, uuid, text)', 'execute')
       and not has_function_privilege('anon', 'public.purge_quarantined_file(text, uuid)', 'execute'),
@@ -60,6 +66,12 @@ begin
     perform tests.ok(sqlstate = '22023', format('a file with a virus signature cannot be released (%s)', sqlstate));
   end;
   begin
+    perform public.release_quarantined_file('document', v_limits, 'looks fine');
+    perform tests.ok(false, 'a file the scanner could not open fully cannot be released');
+  exception when others then
+    perform tests.ok(sqlstate = '22023', format('a file the scanner could not open fully cannot be released (%s)', sqlstate));
+  end;
+  begin
     perform public.release_quarantined_file('document', v_encrypted, '   ');
     perform tests.ok(false, 'a release needs a reason');
   exception when others then
@@ -67,9 +79,22 @@ begin
   end;
 
   perform public.release_quarantined_file('document', v_encrypted, 'Board minutes; the treasurer confirmed the password');
-  perform public.release_quarantined_file('receipt', v_receipt, 'Vendor sends zipped receipts');
+  perform public.release_quarantined_file('receipt', v_receipt, 'Vendor sends password-protected receipts');
   select * into v_bucket, v_path from public.purge_quarantined_file('document', v_virus);
   perform tests.clear_auth(); reset role;
+
+  -- The guards no longer trust a session setting: even a forged one lets
+  -- nobody change a scan result themselves.
+  perform tests.authenticate(v_staff, 'aal2');
+  perform set_config('app.quarantine_release', 'document:' || v_limits, true);
+  perform tests.ok(tests.permission_denied(format(
+      'update public.document set scan_status = %L, scan_note = %L where id = %L',
+      'clean', 'Released by an administrator; the scanner reported x', v_limits)),
+    'a forged release setting does not let the uploader clear their own file');
+  perform set_config('app.quarantine_release', '', true);
+  perform tests.clear_auth(); reset role;
+  perform tests.ok(not has_table_privilege('authenticated', 'app.quarantine_release_token', 'insert'),
+    'nobody but the release functions can write a release token');
 
   select scan_status, scan_note, quarantined_at into v_row from public.document where id = v_encrypted;
   perform tests.ok(v_row.scan_status = 'clean' and v_row.quarantined_at is null

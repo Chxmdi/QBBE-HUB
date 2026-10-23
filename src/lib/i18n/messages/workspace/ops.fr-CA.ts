@@ -51,7 +51,7 @@ export const opsFrCA: typeof opsEn = {
     deadLettered: "Messages mis de côté ({count})",
     quarantine: {
       title: "Fichiers bloqués",
-      body: "Les téléversements bloqués par l’antivirus, du plus récent au plus ancien. Un fichier bloqué seulement parce qu’il est protégé par un mot de passe peut être débloqué après vérification auprès de la personne qui l’a envoyé; un fichier contenant un virus peut seulement être supprimé. Les deux actions sont consignées au journal d’audit.",
+      body: "Les téléversements bloqués par l’antivirus, du plus récent au plus ancien. Un PDF protégé par un mot de passe peut être débloqué après vérification auprès de la personne qui l’a envoyé; tout autre fichier bloqué peut seulement être supprimé. Les deux actions sont consignées au journal d’audit.",
       empty: "Aucun fichier bloqué.",
       kinds: {
         document: "Document",
@@ -63,10 +63,12 @@ export const opsFrCA: typeof opsEn = {
       reasonLabel: "Pourquoi il est sûr de le débloquer",
       release: "Débloquer",
       delete: "Supprimer le fichier",
+      deleteAgain: "Retirer le fichier de nouveau",
+      deletedBadge: "Supprimé",
       confirmDelete: "Supprimer ce fichier définitivement? Cette action est irréversible.",
       released: "Fichier débloqué.",
       deleted: "Fichier supprimé.",
-      notReleasable: "Ce fichier ne peut pas être débloqué : seul un fichier protégé par un mot de passe peut l’être. Supprimez-le plutôt.",
+      notReleasable: "Ce fichier ne peut pas être débloqué : seul un PDF protégé par un mot de passe peut l’être. Supprimez-le plutôt.",
       bytesNotRemoved: "La suppression est consignée, mais le fichier lui-même n’a pas encore pu être retiré. Réessayez dans un instant.",
       failed: "Cela n’a pas fonctionné. Réessayez dans un instant.",
     },

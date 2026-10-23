@@ -41,6 +41,18 @@ describe("document quarantine worker", () => {
     expect(result.metadata).toMatchObject({ quarantined: 1 });
   });
 
+  it("audits nothing when another worker saved the verdict first", async () => {
+    const { db, context } = fixture();
+    db.seed("audit_event", []);
+    vi.mocked(scanDocumentBytes).mockImplementation(async () => {
+      db.rows("document")[0].scan_status = "clean";
+      return { verdict: "quarantined", signature: "Eicar-Test-Signature" };
+    });
+    const result = await scanDocuments(context);
+    expect(db.rows("audit_event")).toEqual([]);
+    expect(result.metadata).toMatchObject({ quarantined: 0 });
+  });
+
   it("takes files never tried in a stable order", async () => {
     const { db, context, download } = fixture();
     db.seed("document", [

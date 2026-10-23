@@ -38,13 +38,16 @@ export async function scanFormFiles({ db, definition, now }: JobContext): Promis
         if (downloadError || !file) throw new Error("Could not read file for scanning");
         const bytes = new Uint8Array(await file.arrayBuffer());
         const verdict = await scanVerdict(bytes);
-        const { error: saveError } = await db.from(table).update({
+        const { data: saved, error: saveError } = await db.from(table).update({
           scan_status: verdict.status,
           scan_note: verdict.note,
           quarantined_at: verdict.status === "clean" ? null : now.toISOString(),
           content_sha256: createHash("sha256").update(bytes).digest("hex"),
-        }).eq("id", row.id).eq("storage_path", row.storage_path).eq("scan_status", "pending");
+        }).eq("id", row.id).eq("storage_path", row.storage_path).eq("scan_status", "pending").select("id");
         if (saveError) throw new Error("Could not save scan verdict");
+        // Only a verdict this run actually saved (another worker may have
+        // got there first) is audited and counted.
+        if ((saved ?? []).length === 0) continue;
         await auditQuarantine(db, verdict, { organizationId: row.organization_id, objectType: table, objectId: row.id });
         if (verdict.status !== "clean") quarantined += 1;
         processed += 1;

@@ -23,12 +23,15 @@ export async function scanDocuments({ db, definition, now }: JobContext): Promis
       const { data: file, error: downloadError } = await db.storage.from("documents").download(document.storage_path);
       if (downloadError || !file) throw new Error("Could not read file for scanning");
       const verdict = await scanVerdict(file);
-      const { error: saveError } = await db.from("document").update({
+      const { data: saved, error: saveError } = await db.from("document").update({
         scan_status: verdict.status,
         scan_note: verdict.note,
         quarantined_at: verdict.status === "clean" ? null : now.toISOString(),
-      }).eq("id", document.id).eq("storage_path", document.storage_path).eq("scan_status", "pending");
+      }).eq("id", document.id).eq("storage_path", document.storage_path).eq("scan_status", "pending").select("id");
       if (saveError) throw new Error("Could not save scan verdict");
+      // Only a verdict this run actually saved (another worker may have got
+      // there first) is audited and counted.
+      if ((saved ?? []).length === 0) continue;
       await auditQuarantine(db, verdict, { organizationId: document.organization_id, objectType: "document", objectId: document.id });
       if (verdict.status !== "clean") quarantined += 1;
       processed += 1;

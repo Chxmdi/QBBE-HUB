@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseScanReply, parseScanResult, scanNote } from "../services/clamav";
-import { quarantineReason } from "../quarantine-reason";
+import { isReleasable, quarantineReason } from "../quarantine-reason";
 
 describe("ClamAV verdict validation", () => {
   it("accepts only an explicit clean response", () => {
@@ -78,5 +78,13 @@ describe("what a quarantine records and tells the uploader", () => {
     expect(quarantineReason("rejected", "File exceeds 25 MB")).toBe("tooLarge");
     expect(quarantineReason("quarantined", "Deleted by an administrator; the scanner reported Eicar-Test-Signature")).toBe("deleted");
     expect(quarantineReason("clean", "Released by an administrator; the scanner reported Heuristics.Encrypted.PDF")).toBeNull();
+  });
+
+  it("offers release only for a password-protected PDF", () => {
+    expect(isReleasable("quarantined", "Heuristics.Encrypted.PDF")).toBe(true);
+    expect(isReleasable("quarantined", "Heuristics.Encrypted.Zip")).toBe(false);
+    expect(isReleasable("quarantined", "Heuristics.Limits.Exceeded.MaxRecursion")).toBe(false);
+    expect(isReleasable("quarantined", "Eicar-Test-Signature")).toBe(false);
+    expect(isReleasable("rejected", "Heuristics.Encrypted.PDF")).toBe(false);
   });
 });

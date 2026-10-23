@@ -8,12 +8,45 @@
 --
 -- The scan jobs now store the scanner's verdict name in scan_note.
 -- release_quarantined_file lets an owner or administrator with the second
--- factor release a heuristic verdict (never a virus signature) with a
--- reason; purge_quarantined_file records the deletion of a quarantined or
+-- factor release a password-protected PDF (Heuristics.Encrypted.PDF, never
+-- a virus or any other heuristic) with a reason; purge_quarantined_file records the deletion of a quarantined or
 -- oversized file and returns where its bytes are, which the server then
 -- removes from storage. Both are audited. The scan-result guards on
--- documents, receipts and signing documents let exactly the row being
--- released through, and nothing else.
+-- documents, receipts and signing documents let through only the row a
+-- release or deletion names, through a token in a private table for that
+-- transaction (no session setting a caller could forge), and only a change
+-- to the scan columns.
+
+create table app.quarantine_release_token (
+  txid bigint not null,
+  target text not null,
+  primary key (txid, target)
+);
+alter table app.quarantine_release_token enable row level security;
+revoke all on table app.quarantine_release_token from public, anon, authenticated;
+
+-- True only inside a release or deletion of this row, in this transaction,
+-- when nothing but the scan columns changes and the note is one of the two
+-- those functions write.
+create or replace function app.quarantine_release_allowed(p_table text, p_id uuid, p_old jsonb, p_new jsonb)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+      select 1 from app.quarantine_release_token t
+      where t.txid = txid_current() and t.target = p_table || ':' || p_id::text
+    )
+    and (p_old - array['scan_status', 'scan_note', 'quarantined_at', 'updated_at'])
+      = (p_new - array['scan_status', 'scan_note', 'quarantined_at', 'updated_at'])
+    and (
+      p_new ->> 'scan_note' like 'Released by an administrator; %'
+      or p_new ->> 'scan_note' like 'Deleted by an administrator; %'
+    );
+$$;
+revoke all on function app.quarantine_release_allowed(text, uuid, jsonb, jsonb) from public, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION app.protect_document_scan()
  RETURNS trigger
@@ -23,9 +56,10 @@ CREATE OR REPLACE FUNCTION app.protect_document_scan()
 AS $function$
 begin
   -- An administrator's audited release or deletion of this one quarantined
-  -- row (public.release_quarantined_file / purge_quarantined_file).
-  if tg_op = 'UPDATE'
-     and coalesce(current_setting('app.quarantine_release', true), '') = tg_table_name || ':' || old.id::text then
+  -- row (public.release_quarantined_file / purge_quarantined_file), which
+  -- leaves a token for this transaction and row. Even then only the scan
+  -- columns change, to a note those functions write.
+  if tg_op = 'UPDATE' and app.quarantine_release_allowed(tg_table_name, old.id, to_jsonb(old), to_jsonb(new)) then
     return new;
   end if;
   if current_setting('role', true) in ('authenticated', 'anon')
@@ -59,13 +93,14 @@ CREATE OR REPLACE FUNCTION app.protect_finance_receipt()
  SET search_path TO ''
 AS $function$
 begin
+  new.updated_at := now();
   -- An administrator's audited release or deletion of this one quarantined
-  -- row (public.release_quarantined_file / purge_quarantined_file).
-  if tg_op = 'UPDATE'
-     and coalesce(current_setting('app.quarantine_release', true), '') = tg_table_name || ':' || old.id::text then
+  -- row (public.release_quarantined_file / purge_quarantined_file), which
+  -- leaves a token for this transaction and row. Even then only the scan
+  -- columns change, to a note those functions write.
+  if tg_op = 'UPDATE' and app.quarantine_release_allowed(tg_table_name, old.id, to_jsonb(old), to_jsonb(new)) then
     return new;
   end if;
-  new.updated_at := now();
   if current_setting('role', true) in ('authenticated', 'anon')
      or coalesce(auth.jwt()->>'role', '') in ('authenticated', 'anon') then
     if tg_op = 'INSERT' then
@@ -141,9 +176,10 @@ CREATE OR REPLACE FUNCTION app.protect_signing_document()
 AS $function$
 begin
   -- An administrator's audited release or deletion of this one quarantined
-  -- row (public.release_quarantined_file / purge_quarantined_file).
-  if tg_op = 'UPDATE'
-     and coalesce(current_setting('app.quarantine_release', true), '') = tg_table_name || ':' || old.id::text then
+  -- row (public.release_quarantined_file / purge_quarantined_file), which
+  -- leaves a token for this transaction and row. Even then only the scan
+  -- columns change, to a note those functions write.
+  if tg_op = 'UPDATE' and app.quarantine_release_allowed(tg_table_name, old.id, to_jsonb(old), to_jsonb(new)) then
     return new;
   end if;
   if current_setting('role', true) in ('authenticated', 'anon')
@@ -207,7 +243,8 @@ declare
   v_org uuid;
   v_status text;
   v_note text;
-  v_reason text := btrim(coalesce(p_reason, ''));
+  v_reason text := btrim(regexp_replace(coalesce(p_reason, ''), '[[:cntrl:]]+', ' ', 'g'));
+  v_count integer;
 begin
   select * into v_target from app.quarantine_target(p_kind);
   if v_target.tbl is null then
@@ -218,19 +255,28 @@ begin
   if v_org is null or not app.is_org_admin(v_org) then
     raise exception 'Only an administrator of this organization can release a file' using errcode = '42501';
   end if;
-  if v_status <> 'quarantined' or coalesce(v_note, '') !~ '^Heuristics\.' then
-    raise exception 'Only a file quarantined by a heuristic can be released' using errcode = '22023';
+  -- Only a password-protected PDF: ClamAV cannot read inside it, and the
+  -- person who sent it can vouch for it. Other heuristics (archives too deep
+  -- to scan, phishing, macros, broken executables) mean nothing was checked.
+  if v_status <> 'quarantined' or coalesce(v_note, '') <> 'Heuristics.Encrypted.PDF' then
+    raise exception 'Only a password-protected PDF can be released' using errcode = '22023';
   end if;
   if v_reason = '' or length(v_reason) > 500 then
     raise exception 'A release needs a reason of at most 500 characters' using errcode = '22023';
   end if;
 
-  perform set_config('app.quarantine_release', v_target.tbl || ':' || p_id::text, true);
+  insert into app.quarantine_release_token (txid, target) values (txid_current(), v_target.tbl || ':' || p_id::text)
+  on conflict do nothing;
   execute format(
-    'update public.%I set scan_status = ''clean'', quarantined_at = null, scan_note = $2 where id = $1',
+    'update public.%I set scan_status = ''clean'', quarantined_at = null, scan_note = $2
+     where id = $1 and scan_status = ''quarantined'' and scan_note = $3',
     v_target.tbl)
-  using p_id, 'Released by an administrator; the scanner reported ' || v_note;
-  perform set_config('app.quarantine_release', '', true);
+  using p_id, 'Released by an administrator; the scanner reported ' || v_note, v_note;
+  get diagnostics v_count = row_count;
+  delete from app.quarantine_release_token where txid = txid_current() and target = v_target.tbl || ':' || p_id::text;
+  if v_count <> 1 then
+    raise exception 'The file changed while it was being released' using errcode = '40001';
+  end if;
 
   insert into public.audit_event (organization_id, actor_id, actor_type, event_type, action, object_type, object_id, metadata)
   values (v_org, auth.uid(), 'user', 'documents', 'quarantine_released', p_kind, p_id,
@@ -252,6 +298,7 @@ declare
   v_status text;
   v_note text;
   v_path text;
+  v_count integer;
 begin
   select * into v_target from app.quarantine_target(p_kind);
   if v_target.tbl is null then
@@ -268,10 +315,17 @@ begin
 
   -- Deleting again (the storage removal failed) returns the path again.
   if coalesce(v_note, '') not like 'Deleted by an administrator%' then
-    perform set_config('app.quarantine_release', v_target.tbl || ':' || p_id::text, true);
-    execute format('update public.%I set scan_note = $2 where id = $1', v_target.tbl)
+    insert into app.quarantine_release_token (txid, target) values (txid_current(), v_target.tbl || ':' || p_id::text)
+    on conflict do nothing;
+    execute format(
+      'update public.%I set scan_note = $2 where id = $1 and scan_status in (''quarantined'', ''rejected'')',
+      v_target.tbl)
     using p_id, 'Deleted by an administrator; the scanner reported ' || coalesce(v_note, v_status);
-    perform set_config('app.quarantine_release', '', true);
+    get diagnostics v_count = row_count;
+    delete from app.quarantine_release_token where txid = txid_current() and target = v_target.tbl || ':' || p_id::text;
+    if v_count <> 1 then
+      raise exception 'The file changed while it was being deleted' using errcode = '40001';
+    end if;
     insert into public.audit_event (organization_id, actor_id, actor_type, event_type, action, object_type, object_id, metadata)
     values (v_org, auth.uid(), 'user', 'documents', 'quarantine_purged', p_kind, p_id,
             jsonb_build_object('signature', coalesce(v_note, v_status)));

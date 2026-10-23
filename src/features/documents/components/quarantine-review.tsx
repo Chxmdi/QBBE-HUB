@@ -54,7 +54,7 @@ function QuarantinedRow({ file }: { file: QuarantinedFile }) {
   }
 
   async function remove() {
-    if (!window.confirm(t("jobs.quarantine.confirmDelete"))) return;
+    if (!file.deleted && !window.confirm(t("jobs.quarantine.confirmDelete"))) return;
     const result = await runServerAction(() => deleteQuarantinedFile({ kind: file.kind, id: file.id }), options("delete"));
     if (!result) return;
     if (!result.ok) return setError(result.error);
@@ -68,6 +68,7 @@ function QuarantinedRow({ file }: { file: QuarantinedFile }) {
         <span className="text-[13.5px] font-medium">{file.name}</span>
         <Badge tone="neutral">{t(`jobs.quarantine.kinds.${file.kind}`)}</Badge>
         <span className="meta">{t("jobs.quarantine.found", { signature: file.signature })}</span>
+        {file.deleted ? <Badge tone="warning">{t("jobs.quarantine.deletedBadge")}</Badge> : null}
       </div>
       <form
         className="mt-2 flex flex-wrap items-end gap-2"
@@ -76,7 +77,7 @@ function QuarantinedRow({ file }: { file: QuarantinedFile }) {
           void release();
         }}
       >
-        {file.releasable ? (
+        {file.releasable && !file.deleted ? (
           <>
             <div className="min-w-56 flex-1">
               <Label htmlFor={reasonId}>{t("jobs.quarantine.reasonLabel")}</Label>
@@ -88,7 +89,7 @@ function QuarantinedRow({ file }: { file: QuarantinedFile }) {
           </>
         ) : null}
         <Button type="button" variant="danger" loading={busy === "delete"} disabled={busy !== null} onClick={() => void remove()}>
-          {t("jobs.quarantine.delete")}
+          {t(file.deleted ? "jobs.quarantine.deleteAgain" : "jobs.quarantine.delete")}
         </Button>
       </form>
       {error ? <p role="alert" className="mt-2 text-sm text-danger-fg">{error}</p> : null}

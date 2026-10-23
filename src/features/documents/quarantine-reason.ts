@@ -15,7 +15,15 @@ export function quarantineReason(scanStatus: string | null | undefined, scanNote
   return "virus";
 }
 
-/** A quarantine an administrator may release: a heuristic, never a virus. */
+/**
+ * A quarantine an administrator may release: a password-protected PDF only.
+ * Other heuristics (archives too deep to scan, phishing, macros) mean the
+ * contents were never checked. The database enforces the same rule.
+ */
 export function isReleasable(scanStatus: string | null | undefined, scanNote: string | null | undefined): boolean {
-  return scanStatus === "quarantined" && /^Heuristics\./.test(scanNote ?? "");
+  return scanStatus === "quarantined" && scanNote === "Heuristics.Encrypted.PDF";
+}
+
+export function isDeletedByAdministrator(scanNote: string | null | undefined): boolean {
+  return (scanNote ?? "").startsWith("Deleted by an administrator");
 }

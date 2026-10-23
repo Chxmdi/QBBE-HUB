@@ -26,12 +26,15 @@ export async function scanReceipts({ db, definition, now }: JobContext): Promise
       const { data: file, error: downloadError } = await db.storage.from("receipts").download(receipt.storage_path);
       if (downloadError || !file) throw new Error("Could not read receipt for scanning");
       const verdict = await scanVerdict(file);
-      const { error: saveError } = await db.from("finance_receipt").update({
+      const { data: saved, error: saveError } = await db.from("finance_receipt").update({
         scan_status: verdict.status,
         scan_note: verdict.note,
         quarantined_at: verdict.status === "clean" ? null : now.toISOString(),
-      }).eq("id", receipt.id).eq("storage_path", receipt.storage_path).eq("scan_status", "pending");
+      }).eq("id", receipt.id).eq("storage_path", receipt.storage_path).eq("scan_status", "pending").select("id");
       if (saveError) throw new Error("Could not save scan verdict");
+      // Only a verdict this run actually saved (another worker may have got
+      // there first) is audited and counted.
+      if ((saved ?? []).length === 0) continue;
       await auditQuarantine(db, verdict, { organizationId: receipt.organization_id, objectType: "receipt", objectId: receipt.id });
       if (verdict.status !== "clean") quarantined += 1;
       processed += 1;

@@ -51,7 +51,7 @@ export const opsEn = {
     deadLettered: "Dead-lettered messages ({count})",
     quarantine: {
       title: "Blocked files",
-      body: "Uploads the virus scanner blocked, newest first. A file blocked only because it is password-protected can be released once you have checked it with the person who sent it; a file with a virus can only be deleted. Both are recorded in the audit log.",
+      body: "Uploads the virus scanner blocked, newest first. A password-protected PDF can be released once you have checked it with the person who sent it; any other blocked file can only be deleted. Both are recorded in the audit log.",
       empty: "No blocked files.",
       kinds: {
         document: "Document",
@@ -63,10 +63,12 @@ export const opsEn = {
       reasonLabel: "Why it is safe to release",
       release: "Release",
       delete: "Delete file",
+      deleteAgain: "Remove the file again",
+      deletedBadge: "Deleted",
       confirmDelete: "Delete this file for good? This cannot be undone.",
       released: "File released.",
       deleted: "File deleted.",
-      notReleasable: "This file cannot be released: only a password-protected file can be. Delete it instead.",
+      notReleasable: "This file cannot be released: only a password-protected PDF can be. Delete it instead.",
       bytesNotRemoved: "The deletion is recorded, but the file itself could not be removed yet. Try again in a moment.",
       failed: "That did not work. Try again in a moment.",
     },
