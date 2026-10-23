@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useLocale } from "@/lib/i18n/client";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { fill } from "../i18n";
 import { collabText } from "../messages";
 import { setObjectLock } from "../services/collab.commands";
@@ -21,6 +22,7 @@ export function LockControl({
   canManage: boolean;
 }) {
   const m = collabText(useLocale()).lock;
+  const shellT = useT();
   const router = useRouter();
   const reasonId = useId();
   const [reason, setReason] = useState("");
@@ -28,10 +30,13 @@ export function LockControl({
   const [error, setError] = useState(false);
 
   async function change(locked: boolean) {
-    setBusy(true);
-    setError(false);
-    const result = await setObjectLock(objectId, locked, reason);
-    setBusy(false);
+    const result = await runServerAction(() => setObjectLock(objectId, locked, reason), {
+      setBusy,
+      setError: (text) => setError(text !== null),
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) setError(true);
     else {
       setReason("");

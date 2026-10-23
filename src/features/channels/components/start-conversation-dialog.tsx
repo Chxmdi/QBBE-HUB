@@ -9,6 +9,7 @@ import type { Option } from "@/features/tasks/components/task-create-dialog";
 import { startConversation } from "@/features/channels/services/message.commands";
 import { Checkbox } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function StartConversationDialog({ people }: { people: Option[] }) {
   const router = useRouter();
@@ -28,10 +29,13 @@ export function StartConversationDialog({ people }: { people: Option[] }) {
   }
 
   async function handleStart() {
-    setError(null);
-    setSaving(true);
-    const result = await startConversation({ memberIds: Array.from(selected) });
-    setSaving(false);
+    const result = await runServerAction(() => startConversation({ memberIds: Array.from(selected) }), {
+      setBusy: setSaving,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("messages.errors.somethingWrong"));
       return;

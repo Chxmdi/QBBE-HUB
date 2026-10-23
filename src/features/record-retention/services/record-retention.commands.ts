@@ -16,6 +16,7 @@ import {
 } from "@/features/record-retention/schemas";
 import { dbErrorMessage, type DbError } from "@/lib/db-error";
 import { RECORD_DB_ERRORS } from "@/features/record-retention/db-error-rules";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Records retention and legal hold.
@@ -104,7 +105,10 @@ export async function saveFiscalYearEnd(input: unknown): Promise<ActionResult> {
     },
     { onConflict: "organization_id" },
   );
-  if (error) return { ok: false, error: (await getT())("records.errors.yearEndNotSaved") };
+  if (error) {
+    logActionFailure("record_retention.saveFiscalYearEnd", error);
+    return { ok: false, error: (await getT())("records.errors.yearEndNotSaved") };
+  }
 
   revalidatePath(PATH);
   return { ok: true };

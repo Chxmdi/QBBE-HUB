@@ -53,33 +53,37 @@ export function SendForSignatureDialog({
       return;
     }
     setSaving(true);
-    const supabase = createSupabaseBrowserClient();
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "document.pdf";
-    const path = `${organizationId}/${userId}/${crypto.randomUUID()}/${safeName}`;
-    const { error: uploadError } = await supabase.storage
-      .from("signing-documents")
-      .upload(path, file, { contentType: "application/pdf" });
-    if (uploadError) {
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "document.pdf";
+      const path = `${organizationId}/${userId}/${crypto.randomUUID()}/${safeName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("signing-documents")
+        .upload(path, file, { contentType: "application/pdf" });
+      if (uploadError) {
+        setError(t("signatures.send.uploadFailed"));
+        return;
+      }
+      const result = await createSigningDocument({
+        title: form.get("title"),
+        message: (form.get("message") as string) || undefined,
+        storagePath: path,
+        fileName: file.name.slice(-200) || safeName,
+        signerIds,
+      });
+      if (!result.ok || !result.id) {
+        await supabase.storage.from("signing-documents").remove([path]);
+        setError(result.error ?? t("signatures.send.sendFailed"));
+        return;
+      }
+      toast(t("signatures.send.sent"));
+      setOpen(false);
+      router.push(`/signatures/${result.id}`);
+    } catch {
+      setError(t("ui.actionUnreachable"));
+    } finally {
       setSaving(false);
-      setError(t("signatures.send.uploadFailed"));
-      return;
     }
-    const result = await createSigningDocument({
-      title: form.get("title"),
-      message: (form.get("message") as string) || undefined,
-      storagePath: path,
-      fileName: file.name.slice(-200) || safeName,
-      signerIds,
-    });
-    setSaving(false);
-    if (!result.ok || !result.id) {
-      await supabase.storage.from("signing-documents").remove([path]);
-      setError(result.error ?? t("signatures.send.sendFailed"));
-      return;
-    }
-    toast(t("signatures.send.sent"));
-    setOpen(false);
-    router.push(`/signatures/${result.id}`);
   }
 
   return (

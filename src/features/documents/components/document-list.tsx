@@ -26,6 +26,7 @@ import {
   useSort,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
+import { runServerAction } from "@/lib/use-server-action";
 import {
   archiveDocument,
   getDocumentDownloadUrl,
@@ -113,10 +114,21 @@ export function DocumentList({
     "created_at",
   );
 
+  // A rejected request clears the busy row and says why, in a toast.
+  const unreachable = {
+    setError: (text: string | null) => {
+      if (text) toast(text, { tone: "error" });
+    },
+    t,
+    reload: () => window.location.reload(),
+  };
+
   async function open(doc: DocumentRow) {
-    setBusyId(doc.id);
-    const result = await getDocumentDownloadUrl(doc.id);
-    setBusyId(null);
+    const result = await runServerAction(() => getDocumentDownloadUrl(doc.id), {
+      ...unreachable,
+      setBusy: (busy) => setBusyId(busy ? doc.id : null),
+    });
+    if (!result) return;
     if (!result.ok || !result.url) {
       toast(result.error ?? t("documents.list.openFailed"), { tone: "error" });
       return;
@@ -125,7 +137,8 @@ export function DocumentList({
   }
 
   async function restore(doc: DocumentRow) {
-    const result = await restoreDocument(doc.id);
+    const result = await runServerAction(() => restoreDocument(doc.id), { ...unreachable, setBusy: () => {} });
+    if (!result) return;
     if (result.ok) {
       toast(t("documents.list.restored"));
       router.refresh();
@@ -136,7 +149,8 @@ export function DocumentList({
 
   async function archive(doc: DocumentRow) {
     if (!window.confirm(t("documents.list.confirmArchive", { title: doc.title }))) return;
-    const result = await archiveDocument(doc.id);
+    const result = await runServerAction(() => archiveDocument(doc.id), { ...unreachable, setBusy: () => {} });
+    if (!result) return;
     if (result.ok) {
       toast(t("documents.list.archivedToast"));
       router.refresh();
@@ -309,7 +323,7 @@ export function DocumentList({
                         doc.kind === "link"
                           ? t("documents.list.openLink")
                           : t("documents.list.download"),
-                      onSelect: () => open(doc),
+                      onSelect: () => void open(doc),
                       disabled: fileUnavailable,
                       icon:
                         doc.kind === "link" ? (
@@ -327,7 +341,7 @@ export function DocumentList({
                       ? [
                           {
                             label: archived ? t("documents.list.restore") : t("documents.list.archive"),
-                            onSelect: () => (archived ? restore(doc) : archive(doc)),
+                            onSelect: () => void (archived ? restore(doc) : archive(doc)),
                             destructive: !archived,
                           },
                         ]

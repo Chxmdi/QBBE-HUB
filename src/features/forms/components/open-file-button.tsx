@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { openFormFile } from "@/features/forms/services/form.commands";
 import { openSigningDocument } from "@/features/forms/services/signature.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 const scanLabel = {
   pending: "forms.files.scan.pending",
@@ -35,9 +36,15 @@ export function OpenFileButton({
   }
 
   async function open() {
-    setBusy(true);
-    const result = kind === "form-file" ? await openFormFile(id) : await openSigningDocument(id);
-    setBusy(false);
+    const result = await runServerAction(() => (kind === "form-file" ? openFormFile(id) : openSigningDocument(id)), {
+      setBusy,
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok || !result.url) {
       toast(result.error ?? t("forms.errors.openFailed"), { tone: "error" });
       return;

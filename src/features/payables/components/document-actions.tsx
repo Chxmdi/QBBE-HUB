@@ -19,6 +19,7 @@ import {
   voidDocument,
 } from "@/features/payables/services/payables.commands";
 import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 function ErrorLine({ error }: { error: string | null }) {
   return error ? (
@@ -67,23 +68,28 @@ export function DraftActions({
               variant="danger"
               loading={pending === "delete"}
               disabled={pending !== null}
-              onClick={async () => {
-                const question = isBill
-                  ? t("finance.payables.actions.confirmDeleteBill")
-                  : t("finance.payables.actions.confirmDeleteInvoice");
-                if (!window.confirm(question)) return;
-                setPending("delete");
-                setError(null);
-                const result = await deleteDraft({ kind, id });
-                setPending(null);
-                if (!result.ok) {
-                  setError(result.error ?? t("finance.payables.actions.couldNotDelete"));
-                  return;
-                }
-                toast(t("finance.payables.actions.draftDeleted"), { tone: "success" });
-                router.push(listPath(kind));
-                router.refresh();
-              }}
+              onClick={() =>
+                void (async () => {
+                  const question = isBill
+                    ? t("finance.payables.actions.confirmDeleteBill")
+                    : t("finance.payables.actions.confirmDeleteInvoice");
+                  if (!window.confirm(question)) return;
+                  const result = await runServerAction(() => deleteDraft({ kind, id }), {
+                    setBusy: (busy) => setPending(busy ? "delete" : null),
+                    setError,
+                    t,
+                    reload: () => window.location.reload(),
+                  });
+                  if (!result) return;
+                  if (!result.ok) {
+                    setError(result.error ?? t("finance.payables.actions.couldNotDelete"));
+                    return;
+                  }
+                  toast(t("finance.payables.actions.draftDeleted"), { tone: "success" });
+                  router.push(listPath(kind));
+                  router.refresh();
+                })()
+              }
             >
               {t("finance.payables.actions.deleteDraft")}
             </Button>
@@ -94,18 +100,23 @@ export function DraftActions({
             variant="secondary"
             loading={pending === "approval"}
             disabled={pending !== null}
-            onClick={async () => {
-              setPending("approval");
-              setError(null);
-              const result = await requestBillApproval(id);
-              setPending(null);
-              if (!result.ok) {
-                setError(result.error ?? t("finance.payables.actions.couldNotSendForApproval"));
-                return;
-              }
-              toast(t("finance.payables.actions.sentForApproval"), { tone: "success" });
-              router.refresh();
-            }}
+            onClick={() =>
+              void (async () => {
+                const result = await runServerAction(() => requestBillApproval(id), {
+                  setBusy: (busy) => setPending(busy ? "approval" : null),
+                  setError,
+                  t,
+                  reload: () => window.location.reload(),
+                });
+                if (!result) return;
+                if (!result.ok) {
+                  setError(result.error ?? t("finance.payables.actions.couldNotSendForApproval"));
+                  return;
+                }
+                toast(t("finance.payables.actions.sentForApproval"), { tone: "success" });
+                router.refresh();
+              })()
+            }
           >
             {t("finance.payables.actions.sendForApproval")}
           </Button>
@@ -114,25 +125,30 @@ export function DraftActions({
           <Button
             loading={pending === "post"}
             disabled={pending !== null}
-            onClick={async () => {
-              const question = isBill
-                ? t("finance.payables.actions.confirmPostBill")
-                : t("finance.payables.actions.confirmPostInvoice");
-              if (!window.confirm(question)) return;
-              setPending("post");
-              setError(null);
-              const result = await postDocument({ kind, id });
-              setPending(null);
-              if (!result.ok) {
-                setError(result.error ?? t("finance.payables.actions.couldNotPost"));
-                return;
-              }
-              toast(
-                isBill ? t("finance.payables.actions.billPosted") : t("finance.payables.actions.invoicePosted"),
-                { tone: "success" },
-              );
-              router.refresh();
-            }}
+            onClick={() =>
+              void (async () => {
+                const question = isBill
+                  ? t("finance.payables.actions.confirmPostBill")
+                  : t("finance.payables.actions.confirmPostInvoice");
+                if (!window.confirm(question)) return;
+                const result = await runServerAction(() => postDocument({ kind, id }), {
+                  setBusy: (busy) => setPending(busy ? "post" : null),
+                  setError,
+                  t,
+                  reload: () => window.location.reload(),
+                });
+                if (!result) return;
+                if (!result.ok) {
+                  setError(result.error ?? t("finance.payables.actions.couldNotPost"));
+                  return;
+                }
+                toast(
+                  isBill ? t("finance.payables.actions.billPosted") : t("finance.payables.actions.invoicePosted"),
+                  { tone: "success" },
+                );
+                router.refresh();
+              })()
+            }
           >
             {isBill ? t("finance.payables.actions.postBill") : t("finance.payables.actions.postInvoice")}
           </Button>
@@ -175,28 +191,32 @@ export function PaymentDialog({
       <Dialog open={open} onClose={() => setOpen(false)} title={title}>
         <form
           className="space-y-4"
-          onSubmit={async (e) => {
+          onSubmit={(e) => {
             e.preventDefault();
-            setSaving(true);
-            setError(null);
             const form = new FormData(e.currentTarget);
-            const result = await recordPayment({
-              kind,
-              documentId,
-              paidOn: String(form.get("paidOn") ?? ""),
-              amount: String(form.get("amount") ?? ""),
-              bankAccountId: String(form.get("bankAccountId") ?? ""),
-              method: String(form.get("method") ?? ""),
-              reference: String(form.get("reference") ?? ""),
-            });
-            setSaving(false);
-            if (!result.ok) {
-              setError(result.error ?? t("finance.payables.actions.couldNotRecordPayment"));
-              return;
-            }
-            toast(t("finance.payables.actions.paymentRecorded"), { tone: "success" });
-            setOpen(false);
-            router.refresh();
+            void (async () => {
+              const result = await runServerAction(
+                () =>
+                  recordPayment({
+                    kind,
+                    documentId,
+                    paidOn: String(form.get("paidOn") ?? ""),
+                    amount: String(form.get("amount") ?? ""),
+                    bankAccountId: String(form.get("bankAccountId") ?? ""),
+                    method: String(form.get("method") ?? ""),
+                    reference: String(form.get("reference") ?? ""),
+                  }),
+                { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+              );
+              if (!result) return;
+              if (!result.ok) {
+                setError(result.error ?? t("finance.payables.actions.couldNotRecordPayment"));
+                return;
+              }
+              toast(t("finance.payables.actions.paymentRecorded"), { tone: "success" });
+              setOpen(false);
+              router.refresh();
+            })();
           }}
         >
           <p className="text-[13.5px] text-muted">
@@ -300,27 +320,31 @@ export function VoidDialog({
       >
         <form
           className="space-y-4"
-          onSubmit={async (e) => {
+          onSubmit={(e) => {
             e.preventDefault();
-            setSaving(true);
-            setError(null);
             const form = new FormData(e.currentTarget);
-            const result = await voidDocument({
-              kind,
-              id,
-              date: String(form.get("date") ?? ""),
-              reason: String(form.get("reason") ?? ""),
-            });
-            setSaving(false);
-            if (!result.ok) {
-              setError(result.error ?? t("finance.payables.actions.couldNotVoid"));
-              return;
-            }
-            toast(isBill ? t("finance.payables.actions.billVoided") : t("finance.payables.actions.invoiceVoided"), {
-              tone: "success",
-            });
-            setOpen(false);
-            router.refresh();
+            void (async () => {
+              const result = await runServerAction(
+                () =>
+                  voidDocument({
+                    kind,
+                    id,
+                    date: String(form.get("date") ?? ""),
+                    reason: String(form.get("reason") ?? ""),
+                  }),
+                { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+              );
+              if (!result) return;
+              if (!result.ok) {
+                setError(result.error ?? t("finance.payables.actions.couldNotVoid"));
+                return;
+              }
+              toast(isBill ? t("finance.payables.actions.billVoided") : t("finance.payables.actions.invoiceVoided"), {
+                tone: "success",
+              });
+              setOpen(false);
+              router.refresh();
+            })();
           }}
         >
           <p className="text-[13.5px] text-muted">
@@ -375,24 +399,28 @@ export function ReversePaymentButton({
       <Dialog open={open} onClose={() => setOpen(false)} title={t("finance.payables.actions.reverseTitle")}>
         <form
           className="space-y-4"
-          onSubmit={async (e) => {
+          onSubmit={(e) => {
             e.preventDefault();
-            setSaving(true);
-            setError(null);
             const form = new FormData(e.currentTarget);
-            const result = await reversePayment({
-              paymentId,
-              date: String(form.get("date") ?? ""),
-              reason: String(form.get("reason") ?? ""),
-            });
-            setSaving(false);
-            if (!result.ok) {
-              setError(result.error ?? t("finance.payables.actions.couldNotReverse"));
-              return;
-            }
-            toast(t("finance.payables.actions.paymentReversed"), { tone: "success" });
-            setOpen(false);
-            router.refresh();
+            void (async () => {
+              const result = await runServerAction(
+                () =>
+                  reversePayment({
+                    paymentId,
+                    date: String(form.get("date") ?? ""),
+                    reason: String(form.get("reason") ?? ""),
+                  }),
+                { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+              );
+              if (!result) return;
+              if (!result.ok) {
+                setError(result.error ?? t("finance.payables.actions.couldNotReverse"));
+                return;
+              }
+              toast(t("finance.payables.actions.paymentReversed"), { tone: "success" });
+              setOpen(false);
+              router.refresh();
+            })();
           }}
         >
           <p className="text-[13.5px] text-muted">{t("finance.payables.actions.reverseNote")}</p>

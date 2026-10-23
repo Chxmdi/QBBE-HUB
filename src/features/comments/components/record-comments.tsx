@@ -11,6 +11,7 @@ import {
   resolveRecordComment,
 } from "../services/comment.commands";
 import { useFormatters, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export interface CommentView {
   id: string;
@@ -146,10 +147,13 @@ function CommentItem({
   const isAuthor = comment.author_id === currentUserId;
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>) {
-    setBusy(true);
-    setError(null);
-    const result = await action();
-    setBusy(false);
+    const result = await runServerAction(action, {
+      setBusy,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return false;
     if (!result.ok) {
       setError(result.error ?? t("comments.didNotWork"));
       return false;
@@ -321,18 +325,20 @@ function CommentForm({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setPending(true);
-    setError(null);
-    const result = await addRecordComment({
-      parentType,
-      parentId,
-      parentCommentId,
-      body,
-      mentionIds,
-      linkUrl,
-      documentId,
-    });
-    setPending(false);
+    const result = await runServerAction(
+      () =>
+        addRecordComment({
+          parentType,
+          parentId,
+          parentCommentId,
+          body,
+          mentionIds,
+          linkUrl,
+          documentId,
+        }),
+      { setBusy: setPending, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("comments.errors.saveFailed"));
       return;

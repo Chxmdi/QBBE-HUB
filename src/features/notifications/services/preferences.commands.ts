@@ -10,6 +10,7 @@ import { isEnabled } from "@/lib/feature-flags";
 import { isRealTimeZone } from "@/lib/time";
 import { HUB_CATEGORIES } from "@/features/notifications/categories";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Notification preferences.
@@ -146,7 +147,10 @@ export async function saveNotificationPreferences(
     .from("notification_preference")
     .upsert(patch, { onConflict: "user_id" });
 
-  if (error) return { ok: false, error: t("notifications.errors.saveFailed") };
+  if (error) {
+    logActionFailure("preferences.saveNotificationPreferences", error);
+    return { ok: false, error: t("notifications.errors.saveFailed") };
+  }
 
   revalidatePath("/settings/notifications");
   revalidatePath("/", "layout");
@@ -181,7 +185,10 @@ export async function setThreadMuted(
     },
     { onConflict: "user_id" },
   );
-  if (error) return { ok: false, error: t("notifications.errors.threadFailed") };
+  if (error) {
+    logActionFailure("preferences.setThreadMuted", error);
+    return { ok: false, error: t("notifications.errors.threadFailed") };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }

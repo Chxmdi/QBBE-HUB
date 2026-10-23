@@ -9,6 +9,7 @@ import { calendarDateInZone } from "@/lib/time";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
+import { logActionFailure } from "@/lib/server-log";
 
 const saveViewSchema = (t: TranslateFn) => z.object({
   name: requiredText(t("admin.errors.nameView"), 80),
@@ -37,7 +38,10 @@ export async function saveView(input: unknown): Promise<ActionResult> {
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: t("admin.errors.saveViewFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("workflow.saveView", error);
+    return { ok: false, error: t("admin.errors.saveViewFailed") };
+  }
   revalidatePath(parsed.data.path);
   return { ok: true, id: data.id as string };
 }
@@ -51,7 +55,10 @@ export async function deleteSavedView(id: string, path = "/my-work"): Promise<Ac
     .delete()
     .eq("id", id)
     .eq("user_id", session.userId);
-  if (error) return { ok: false, error: t("admin.errors.deleteViewFailed") };
+  if (error) {
+    logActionFailure("workflow.deleteSavedView", error);
+    return { ok: false, error: t("admin.errors.deleteViewFailed") };
+  }
   revalidatePath(path);
   return { ok: true };
 }
@@ -107,7 +114,10 @@ export async function createWorkflowRule(input: unknown): Promise<ActionResult> 
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: t("admin.errors.createRuleFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("workflow.createWorkflowRule", error);
+    return { ok: false, error: t("admin.errors.createRuleFailed") };
+  }
   revalidatePath("/admin");
   return { ok: true, id: data.id as string };
 }
@@ -126,7 +136,10 @@ export async function setWorkflowRuleEnabled(
     .eq("id", id)
     .select("id")
     .maybeSingle();
-  if (error || !updated) return { ok: false, error: t("admin.errors.updateRuleFailed") };
+  if (error || !updated) {
+    if (error) logActionFailure("workflow.setWorkflowRuleEnabled", error);
+    return { ok: false, error: t("admin.errors.updateRuleFailed") };
+  }
   revalidatePath("/admin");
   return { ok: true };
 }
@@ -155,7 +168,10 @@ export async function createProjectTemplate(input: unknown): Promise<ActionResul
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: t("admin.errors.saveTemplateFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("workflow.createProjectTemplate", error);
+    return { ok: false, error: t("admin.errors.saveTemplateFailed") };
+  }
   revalidatePath("/projects");
   return { ok: true, id: data.id as string };
 }
@@ -199,7 +215,10 @@ export async function addProjectTemplateItem(input: unknown): Promise<ActionResu
     .select("id")
     .maybeSingle();
 
-  if (error || !data) return { ok: false, error: t("admin.errors.addItemFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("workflow.addProjectTemplateItem", error);
+    return { ok: false, error: t("admin.errors.addItemFailed") };
+  }
   revalidatePath("/projects");
   return { ok: true, id: data.id as string };
 }

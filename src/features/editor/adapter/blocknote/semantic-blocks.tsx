@@ -245,15 +245,18 @@ function Picker({
                 if (!api || missingOwnerOrDue) return;
                 setBusy(true);
                 setError(null);
-                const created = await api
-                  .createTask(query.trim(), projectId || null, {
-                    ...(ownerId ? { assigneeId: ownerId } : {}),
-                    ...(dueAt ? { dueAt } : {}),
-                  })
-                  .catch(() => null);
-                setBusy(false);
-                if (created) onPick(created);
-                else setError(t("semantic.failed"));
+                try {
+                  const created = await api
+                    .createTask(query.trim(), projectId || null, {
+                      ...(ownerId ? { assigneeId: ownerId } : {}),
+                      ...(dueAt ? { dueAt } : {}),
+                    })
+                    .catch(() => null);
+                  if (created) onPick(created);
+                  else setError(t("semantic.failed"));
+                } finally {
+                  setBusy(false);
+                }
               }}
             >
               <Plus className="size-4" aria-hidden />
@@ -545,9 +548,12 @@ function ObjectCard({
           aria-label={t("semantic.file.open", { title: summary.title })}
           onClick={async () => {
             setOpening(true);
-            const url = await handlers.current?.openFile(summary.id).catch(() => null);
-            setOpening(false);
-            if (url) window.open(url, "_blank", "noopener,noreferrer");
+            try {
+              const url = await handlers.current?.openFile(summary.id).catch(() => null);
+              if (url) window.open(url, "_blank", "noopener,noreferrer");
+            } finally {
+              setOpening(false);
+            }
           }}
         >
           <ExternalLink className="size-4" aria-hidden />

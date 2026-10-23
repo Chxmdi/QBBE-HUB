@@ -10,6 +10,7 @@ import {
 } from "@/features/meetings/services/meeting.commands";
 import { Select } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export interface Attendee {
   userId: string;
@@ -52,10 +53,16 @@ export function AttendeeList({
       setError(t("meetings.attendeeList.choosePerson"));
       return;
     }
-    setError(null);
-    setPending(userId);
-    const result = await addMeetingAttendee({ meetingId, userId });
-    setPending(null);
+    const result = await runServerAction(
+      () => addMeetingAttendee({ meetingId, userId }),
+      {
+        setBusy: (busy) => setPending(busy ? userId : null),
+        setError,
+        t,
+        reload: () => window.location.reload(),
+      },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("meetings.attendeeList.addError"));
       return;
@@ -69,10 +76,16 @@ export function AttendeeList({
         t("meetings.attendeeList.confirmRemove", { name: attendee.name }),
       )
     ) return;
-    setError(null);
-    setPending(attendee.userId);
-    const result = await removeMeetingAttendee({ meetingId, userId: attendee.userId });
-    setPending(null);
+    const result = await runServerAction(
+      () => removeMeetingAttendee({ meetingId, userId: attendee.userId }),
+      {
+        setBusy: (busy) => setPending(busy ? attendee.userId : null),
+        setError,
+        t,
+        reload: () => window.location.reload(),
+      },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("meetings.attendeeList.removeError"));
       return;
@@ -99,7 +112,7 @@ export function AttendeeList({
                 <Button
                   variant="ghost"
                   className="ml-auto"
-                  onClick={() => remove(attendee)}
+                  onClick={() => void remove(attendee)}
                   loading={pending === attendee.userId}
                   aria-label={t("meetings.attendeeList.removeAria", { name: attendee.name })}
                 >

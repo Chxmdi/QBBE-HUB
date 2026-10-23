@@ -15,6 +15,7 @@ import {
 } from "@/features/risks/services/decision.commands";
 import type { DecisionRequestRow, DecisionRow } from "@/features/risks/services/decision.queries";
 import { useFormatters, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { TranslateFn } from "@/lib/i18n/translator";
 
 const decisionFields = (t: TranslateFn) => [
@@ -201,10 +202,13 @@ function DecisionItem({
             loading={busy}
             disabled={busy}
             onClick={async () => {
-              setBusy(true);
-              setError(null);
-              const result = await reopenDecision({ decisionId: decision.id });
-              setBusy(false);
+              const result = await runServerAction(() => reopenDecision({ decisionId: decision.id }), {
+                setBusy,
+                setError,
+                t,
+                reload: () => window.location.reload(),
+              });
+              if (!result) return;
               if (!result.ok) {
                 setError(result.error ?? t("risks.decisions.reopenError"));
                 return;
@@ -268,10 +272,13 @@ function RequestItem({
             loading={busy}
             disabled={busy}
             onClick={async () => {
-              setBusy(true);
-              setError(null);
-              const result = await declineDecisionRequest({ requestId: request.id });
-              setBusy(false);
+              const result = await runServerAction(() => declineDecisionRequest({ requestId: request.id }), {
+                setBusy,
+                setError,
+                t,
+                reload: () => window.location.reload(),
+              });
+              if (!result) return;
               if (!result.ok) {
                 setError(result.error ?? t("risks.decisions.declineError"));
                 return;

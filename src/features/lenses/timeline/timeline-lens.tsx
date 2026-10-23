@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { useLocale } from "@/lib/i18n/client";
+import { useLocale, useT } from "@/lib/i18n/client";
 import { intlLocale } from "@/lib/i18n/config";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -50,6 +50,7 @@ const TITLE_WIDTH = 240;
  */
 export function TimelineLens({ bars, edges, today }: { bars: TimelineBar[]; edges: Edge[]; today: string }) {
   const t = useLensT();
+  const shellT = useT();
   const locale = useLocale();
   const router = useRouter();
   const [pending, setPending] = React.useState<Pending | null>(null);
@@ -82,12 +83,19 @@ export function TimelineLens({ bars, edges, today }: { bars: TimelineBar[]; edge
 
   const save = async (moves: Move[]) => {
     setBusy(true);
-    const { error } = await createSupabaseBrowserClient().rpc("lens_shift_tasks", { p_moves: moves });
-    setBusy(false);
+    let failure: string | null = null;
+    try {
+      const { error } = await createSupabaseBrowserClient().rpc("lens_shift_tasks", { p_moves: moves });
+      if (error) failure = t("timeline.failed", { reason: queryErrorFrom(error).message });
+    } catch {
+      failure = shellT("ui.actionUnreachable");
+    } finally {
+      setBusy(false);
+    }
     setPending(null);
     setConfirm(null);
-    if (error) {
-      setAnnouncement(t("timeline.failed", { reason: queryErrorFrom(error).message }));
+    if (failure !== null) {
+      setAnnouncement(failure);
       return;
     }
     setAnnouncement(moves.length === 1 ? t("timeline.movedOne", { title: byId.get(moves[0].id)?.title ?? "" }) : t("timeline.moved", { count: moves.length }));

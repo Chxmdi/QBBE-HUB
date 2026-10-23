@@ -16,7 +16,7 @@ import {
 import { getT } from "@/lib/i18n/server";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { recordAudit } from "@/lib/audit-write";
-import { logActionFailure } from "@/lib/server-log";
+import { logActionFailure, logEvent } from "@/lib/server-log";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { revokeQueuedGoogleTokens } from "@/features/inbox/services/google-revoke";
 
@@ -56,7 +56,10 @@ export async function disconnectIntegration(
     .select("id")
     .maybeSingle();
 
-  if (error || !disconnected) return { ok: false, error: t("admin.errors.disconnectFailed") };
+  if (error || !disconnected) {
+    if (error) logActionFailure("integration.disconnectIntegration", error);
+    return { ok: false, error: t("admin.errors.disconnectFailed") };
+  }
 
   // What Hub copied from the account goes with it. A failed delete leaves
   // that copy behind: the disconnect is still recorded, and the person is
@@ -186,7 +189,10 @@ export async function connectVolunteerSystem(): Promise<ActionResult> {
         status: "connected",
         last_sync_at: null,
       });
-      if (insertError) return { ok: false, error: t("admin.errors.vmsRecordFailed") };
+      if (insertError) {
+        logActionFailure("integration.connectVolunteerSystem", insertError);
+        return { ok: false, error: t("admin.errors.vmsRecordFailed") };
+      }
     }
   }
   await supabase.from("audit_event").insert({
@@ -247,12 +253,10 @@ function runZeffySyncAfterResponse(): void {
     try {
       const outcome = await runJob("zeffy-sync");
       if (outcome.status === "failed") {
-        console.error("Zeffy sync failed", { runId: outcome.runId, error: outcome.error });
+        logEvent("integration.zeffy_sync_failed", { runId: outcome.runId, error: outcome.error }, "error");
       }
     } catch (cause) {
-      console.error("Zeffy sync could not start", {
-        error: cause instanceof Error ? cause.message : String(cause),
-      });
+      logActionFailure("integration.zeffy_sync_start", cause);
     }
   });
 }
@@ -273,7 +277,10 @@ export async function connectZeffy(): Promise<ActionResult> {
   try {
     await new ZeffyClient(config).listPage("campaigns", { limit: 1 });
   } catch (cause) {
-    if (cause instanceof ZeffyRateLimitedError) return { ok: false, error: t("admin.errors.zeffyBusy") };
+    if (cause instanceof ZeffyRateLimitedError) {
+      if (ZeffyRateLimitedError) logActionFailure("integration.connectZeffy", ZeffyRateLimitedError);
+      return { ok: false, error: t("admin.errors.zeffyBusy") };
+    }
     if (cause instanceof ZeffyApiError && (cause.status === 401 || cause.status === 403)) {
       return { ok: false, error: t("admin.errors.zeffyKeyRejected", { status: cause.status }) };
     }

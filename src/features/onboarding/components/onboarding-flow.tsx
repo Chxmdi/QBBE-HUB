@@ -21,6 +21,7 @@ import {
   saveOnboardingProfile,
 } from "@/features/onboarding/services/onboarding.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { cn } from "@/lib/utils";
 
 const STEPS = [
@@ -65,9 +66,13 @@ export function OnboardingFlow({
   const [error, setError] = useState<string | null>(null);
 
   async function finish() {
-    setSaving(true);
-    const result = await completeOnboarding();
-    setSaving(false);
+    const result = await runServerAction(() => completeOnboarding(), {
+      setBusy: setSaving,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("onboarding.errors.finishFailed"));
       return;
@@ -79,15 +84,17 @@ export function OnboardingFlow({
 
   async function handleProfile(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await saveOnboardingProfile({
-      fullName: form.get("fullName"),
-      title: (form.get("title") as string) || undefined,
-      timezone: (form.get("timezone") as string) || undefined,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        saveOnboardingProfile({
+          fullName: form.get("fullName"),
+          title: (form.get("title") as string) || undefined,
+          timezone: (form.get("timezone") as string) || undefined,
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("onboarding.errors.profileFailed"));
       return;
@@ -97,14 +104,16 @@ export function OnboardingFlow({
 
   async function handleNotifications(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await saveNotificationPreferences({
-      emailCritical: form.get("emailCritical") === "on",
-      emailDigest: form.get("emailDigest") === "on",
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        saveNotificationPreferences({
+          emailCritical: form.get("emailCritical") === "on",
+          emailDigest: form.get("emailDigest") === "on",
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("onboarding.errors.prefsFailed"));
       return;
@@ -163,7 +172,7 @@ export function OnboardingFlow({
         </h1>
 
         {step === 0 ? (
-          <form onSubmit={handleProfile} className="mt-4 space-y-4">
+          <form onSubmit={(e) => void handleProfile(e)} className="mt-4 space-y-4">
             <p className="text-[13.5px] text-muted">
               {t("onboarding.profileIntro")}
             </p>
@@ -216,7 +225,7 @@ export function OnboardingFlow({
         ) : null}
 
         {step === 1 ? (
-          <form onSubmit={handleNotifications} className="mt-4 space-y-4">
+          <form onSubmit={(e) => void handleNotifications(e)} className="mt-4 space-y-4">
             <p className="text-[13.5px] text-muted">
               {t("onboarding.notificationsIntro")}
             </p>
@@ -331,7 +340,7 @@ export function OnboardingFlow({
                 {error}
               </p>
             ) : null}
-            <Button onClick={finish} loading={saving} className="w-full">
+            <Button onClick={() => void finish()} loading={saving} className="w-full">
               {t("onboarding.enter")} <ArrowRight className="size-4" aria-hidden />
             </Button>
           </div>

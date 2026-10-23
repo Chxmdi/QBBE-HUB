@@ -16,6 +16,7 @@ import {
   updateIssueSchema,
   updateRiskSchema,
 } from "@/features/risks/schemas";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Writes to the project risk and issue log.
@@ -154,7 +155,10 @@ export async function updateRisk(input: unknown): Promise<ActionResult> {
     .select("id, title, project_id, owner_id")
     .maybeSingle();
 
-  if (error || !updated) return { ok: false, error: t("risks.errors.riskUpdateFailed") };
+  if (error || !updated) {
+    if (error) logActionFailure("risk.updateRisk", error);
+    return { ok: false, error: t("risks.errors.riskUpdateFailed") };
+  }
 
   if (fields.ownerId) {
     await notifyOwner(supabase, {
@@ -265,7 +269,10 @@ export async function updateIssue(input: unknown): Promise<ActionResult> {
     .select("id, title, project_id")
     .maybeSingle();
 
-  if (error || !updated) return { ok: false, error: t("risks.errors.issueUpdateFailed") };
+  if (error || !updated) {
+    if (error) logActionFailure("risk.updateIssue", error);
+    return { ok: false, error: t("risks.errors.issueUpdateFailed") };
+  }
 
   if (fields.ownerId) {
     await notifyOwner(supabase, {

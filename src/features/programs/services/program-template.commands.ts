@@ -11,6 +11,7 @@ import { requiredText } from "@/lib/schema";
 import { calendarDateInZone } from "@/lib/time";
 import { expandProjectTemplate } from "@/features/projects/services/template-expansion";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { logActionFailure } from "@/lib/server-log";
 
 const createSchema = z.object({
   name: requiredText("A template needs a name.", 200),
@@ -39,7 +40,10 @@ export async function createProgramTemplate(input: unknown): Promise<ActionResul
     })
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: t("programs.errors.templateSaveFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("program_template.createProgramTemplate", error);
+    return { ok: false, error: t("programs.errors.templateSaveFailed") };
+  }
   revalidatePath("/programs");
   return { ok: true, id: data.id as string };
 }
@@ -71,7 +75,10 @@ export async function setProgramTemplateApproval(
     .eq("organization_id", session.organizationId)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: t("programs.errors.templateUpdateFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("program_template.setProgramTemplateApproval", error);
+    return { ok: false, error: t("programs.errors.templateUpdateFailed") };
+  }
   revalidatePath("/programs");
   return { ok: true, id: templateId };
 }
@@ -239,7 +246,10 @@ export async function removeProjectTemplateFromProgram(input: unknown): Promise<
     .delete()
     .eq("program_template_id", parsed.data.programTemplateId)
     .eq("project_template_id", parsed.data.projectTemplateId);
-  if (error) return { ok: false, error: t("programs.errors.removeTemplateFailed") };
+  if (error) {
+    logActionFailure("program_template.removeProjectTemplateFromProgram", error);
+    return { ok: false, error: t("programs.errors.removeTemplateFailed") };
+  }
   revalidatePath("/programs");
   return { ok: true };
 }

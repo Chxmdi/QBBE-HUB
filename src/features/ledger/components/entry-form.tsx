@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatCents, lineTotals, parseMoneyToCents } from "@/features/ledger/money";
 import { saveEntry } from "@/features/ledger/services/ledger.commands";
 import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export interface Choice {
   id: string;
@@ -97,9 +98,7 @@ export function EntryForm({
   }
 
   async function submit(post: boolean) {
-    setError(null);
-    setSaving(post ? "post" : "draft");
-    const result = await saveEntry({
+    const result = await runServerAction(() => saveEntry({
       entryId: initial.entryId,
       entryDate,
       memo,
@@ -114,8 +113,13 @@ export function EntryForm({
         debit: l.debit,
         credit: l.credit,
       })),
+    }), {
+      setError,
+      t,
+      reload: () => window.location.reload(),
+      setBusy: (busy) => setSaving(busy ? (post ? "post" : "draft") : null),
     });
-    setSaving(null);
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("finance.ledger.entryForm.saveFailed"));
       if (result.id) {

@@ -8,9 +8,8 @@ import { describe, expect, it } from "vitest";
  * may carry personal information and cannot be matched to a request.
  *
  * ALLOWED lists the files that may still call console directly: the logger
- * and error reporter themselves, browser-only code, and command files whose
- * error handling is being reworked in another change (remove each one as it
- * moves to logActionFailure). A new file here needs a reason.
+ * and error reporter themselves, and browser-only code. A new file here
+ * needs a reason.
  */
 const ALLOWED = new Set([
   "src/lib/server-log.ts",
@@ -26,14 +25,6 @@ const ALLOWED = new Set([
   "src/features/editor/spike/editor-spike-inner.tsx",
   "src/features/editor/spike/yjs-broadcast-provider.ts",
   "src/lib/query/spike/bench.dbtest.ts",
-  // Pending: command files and the API handler move with the shared
-  // database-error mapper.
-  "src/features/object-comments/services/object-comment.commands.ts",
-  "src/features/comments/services/comment.commands.ts",
-  "src/features/pages/services/page.commands.ts",
-  "src/features/versions/services/version.commands.ts",
-  "src/features/admin/services/integration.commands.ts",
-  "src/features/api-tokens/services/api-handler.ts",
 ]);
 
 function files(dir: string): string[] {

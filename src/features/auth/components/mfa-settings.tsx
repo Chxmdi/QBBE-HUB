@@ -50,38 +50,41 @@ export function MfaSettings({
     setError(null);
     setNotice(null);
     setCode("");
-    const supabase = createSupabaseBrowserClient();
-    const { data: existing, error: listError } = await supabase.auth.mfa.listFactors();
-    if (listError) {
-      setError(mfaErrorMessage(listError.message, t));
-      setBusy(false);
-      return;
-    }
-
-    for (const factorId of unverifiedTotpFactorIds(existing.all)) {
-      const { error: removeError } = await supabase.auth.mfa.unenroll({ factorId });
-      if (removeError) {
-        setError(mfaErrorMessage(removeError.message, t));
-        setBusy(false);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: existing, error: listError } = await supabase.auth.mfa.listFactors();
+      if (listError) {
+        setError(mfaErrorMessage(listError.message, t));
         return;
       }
-    }
 
-    const { data, error: enrollError } = await supabase.auth.mfa.enroll({
-      factorType: "totp",
-      friendlyName: t("settings.mfa.friendlyName", { number: factors.length + 1 }),
-      issuer: "QBBE Hub",
-    });
-    setBusy(false);
-    if (enrollError) {
-      setError(mfaErrorMessage(enrollError.message, t));
-      return;
+      for (const factorId of unverifiedTotpFactorIds(existing.all)) {
+        const { error: removeError } = await supabase.auth.mfa.unenroll({ factorId });
+        if (removeError) {
+          setError(mfaErrorMessage(removeError.message, t));
+          return;
+        }
+      }
+
+      const { data, error: enrollError } = await supabase.auth.mfa.enroll({
+        factorType: "totp",
+        friendlyName: t("settings.mfa.friendlyName", { number: factors.length + 1 }),
+        issuer: "QBBE Hub",
+      });
+      if (enrollError) {
+        setError(mfaErrorMessage(enrollError.message, t));
+        return;
+      }
+      setEnrollment({
+        factorId: data.id,
+        qrCode: data.totp.qr_code.trim(),
+        secret: data.totp.secret.trim(),
+      });
+    } catch {
+      setError(t("ui.actionUnreachable"));
+    } finally {
+      setBusy(false);
     }
-    setEnrollment({
-      factorId: data.id,
-      qrCode: data.totp.qr_code.trim(),
-      secret: data.totp.secret.trim(),
-    });
   }
 
   async function finishEnrollment(event: React.FormEvent<HTMLFormElement>) {
@@ -93,26 +96,29 @@ export function MfaSettings({
 
     setBusy(true);
     setError(null);
-    const supabase = createSupabaseBrowserClient();
-    const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
-      factorId: enrollment.factorId,
-      code,
-    });
-    if (verifyError) {
-      setCode("");
-      setError(mfaErrorMessage(verifyError.message, t));
-      setBusy(false);
-      return;
-    }
-
-    await recordMfaSecurityEvent("mfa_enrollment_completed");
     try {
-      await reloadFactors();
-      setEnrollment(null);
-      setCode("");
-      setNotice(t("settings.mfa.added"));
-    } catch (reloadError) {
-      setError(mfaErrorMessage((reloadError as Error).message, t));
+      const supabase = createSupabaseBrowserClient();
+      const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
+        factorId: enrollment.factorId,
+        code,
+      });
+      if (verifyError) {
+        setCode("");
+        setError(mfaErrorMessage(verifyError.message, t));
+        return;
+      }
+
+      await recordMfaSecurityEvent("mfa_enrollment_completed");
+      try {
+        await reloadFactors();
+        setEnrollment(null);
+        setCode("");
+        setNotice(t("settings.mfa.added"));
+      } catch (reloadError) {
+        setError(mfaErrorMessage((reloadError as Error).message, t));
+      }
+    } catch {
+      setError(t("ui.actionUnreachable"));
     } finally {
       setBusy(false);
     }
@@ -129,24 +135,26 @@ export function MfaSettings({
     setBusy(true);
     setError(null);
     setNotice(null);
-    const supabase = createSupabaseBrowserClient();
-    const { error: removeError } = await supabase.auth.mfa.unenroll({
-      factorId: removeFactor.id,
-    });
-    if (removeError) {
-      setError(mfaErrorMessage(removeError.message, t));
-      setBusy(false);
-      setRemoveFactor(null);
-      return;
-    }
-
-    await supabase.auth.refreshSession();
-    await recordMfaSecurityEvent("mfa_factor_removed");
     try {
-      await reloadFactors();
-      setNotice(t("settings.mfa.removed"));
-    } catch (reloadError) {
-      setError(mfaErrorMessage((reloadError as Error).message, t));
+      const supabase = createSupabaseBrowserClient();
+      const { error: removeError } = await supabase.auth.mfa.unenroll({
+        factorId: removeFactor.id,
+      });
+      if (removeError) {
+        setError(mfaErrorMessage(removeError.message, t));
+        return;
+      }
+
+      await supabase.auth.refreshSession();
+      await recordMfaSecurityEvent("mfa_factor_removed");
+      try {
+        await reloadFactors();
+        setNotice(t("settings.mfa.removed"));
+      } catch (reloadError) {
+        setError(mfaErrorMessage((reloadError as Error).message, t));
+      }
+    } catch {
+      setError(t("ui.actionUnreachable"));
     } finally {
       setBusy(false);
       setRemoveFactor(null);

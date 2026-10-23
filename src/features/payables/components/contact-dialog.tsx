@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { saveContact } from "@/features/payables/services/payables.commands";
 import type { ContactRow } from "@/features/payables/services/payables.queries";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** Add a vendor or customer, or edit one. */
 export function ContactDialog({ contact }: { contact?: ContactRow }) {
@@ -48,37 +49,41 @@ export function ContactDialog({ contact }: { contact?: ContactRow }) {
       >
         <form
           className="space-y-4"
-          onSubmit={async (e) => {
+          onSubmit={(e) => {
             e.preventDefault();
-            setError(null);
-            setSaving(true);
             const form = new FormData(e.currentTarget);
             const text = (name: string) => String(form.get(name) ?? "");
-            const result = await saveContact({
-              id: contact?.id,
-              name: text("name"),
-              isVendor: form.get("isVendor") === "on",
-              isCustomer: form.get("isCustomer") === "on",
-              email: text("email"),
-              phone: text("phone"),
-              address: text("address"),
-              language: text("language"),
-              gstNumber: text("gstNumber"),
-              qstNumber: text("qstNumber"),
-              notes: text("notes"),
-              isActive: form.get("isActive") === "on",
-            });
-            setSaving(false);
-            if (!result.ok) {
-              setError(result.error ?? t("finance.payables.contactDialog.couldNotSave"));
-              return;
-            }
-            toast(
-              contact ? t("finance.payables.contactDialog.saved") : t("finance.payables.contactDialog.added"),
-              { tone: "success" },
-            );
-            setOpen(false);
-            router.refresh();
+            void (async () => {
+              const result = await runServerAction(
+                () =>
+                  saveContact({
+                    id: contact?.id,
+                    name: text("name"),
+                    isVendor: form.get("isVendor") === "on",
+                    isCustomer: form.get("isCustomer") === "on",
+                    email: text("email"),
+                    phone: text("phone"),
+                    address: text("address"),
+                    language: text("language"),
+                    gstNumber: text("gstNumber"),
+                    qstNumber: text("qstNumber"),
+                    notes: text("notes"),
+                    isActive: form.get("isActive") === "on",
+                  }),
+                { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+              );
+              if (!result) return;
+              if (!result.ok) {
+                setError(result.error ?? t("finance.payables.contactDialog.couldNotSave"));
+                return;
+              }
+              toast(
+                contact ? t("finance.payables.contactDialog.saved") : t("finance.payables.contactDialog.added"),
+                { tone: "success" },
+              );
+              setOpen(false);
+              router.refresh();
+            })();
           }}
         >
           <div>

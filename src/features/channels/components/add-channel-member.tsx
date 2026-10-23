@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Label, Select } from "@/components/ui/input";
 import { addChannelMember } from "@/features/channels/services/channel.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function AddChannelMemberDialog({
   channelId,
@@ -24,11 +25,14 @@ export function AddChannelMemberDialog({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setSaving(true);
-    setError(null);
     const form = new FormData(e.currentTarget);
-    const result = await addChannelMember(channelId, form.get("userId") as string);
-    setSaving(false);
+    const result = await runServerAction(() => addChannelMember(channelId, form.get("userId") as string), {
+      setBusy: setSaving,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("channels.addMember.failed"));
       return;

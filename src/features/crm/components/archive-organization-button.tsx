@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { setCrmOrganizationStatus } from "@/features/crm/services/crm.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function ArchiveOrganizationButton({
   organizationId,
@@ -21,12 +22,18 @@ export function ArchiveOrganizationButton({
   const inactive = status === "inactive";
 
   async function toggle() {
-    setSaving(true);
-    const result = await setCrmOrganizationStatus(
-      organizationId,
-      inactive ? "active" : "inactive",
+    const result = await runServerAction(
+      () => setCrmOrganizationStatus(organizationId, inactive ? "active" : "inactive"),
+      {
+        setBusy: setSaving,
+        setError: (text) => {
+          if (text) toast(text, { tone: "error" });
+        },
+        t,
+        reload: () => window.location.reload(),
+      },
     );
-    setSaving(false);
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("crm.archive.statusFailed"));
       return;
@@ -36,7 +43,7 @@ export function ArchiveOrganizationButton({
   }
 
   return (
-    <Button variant="secondary" onClick={toggle} loading={saving}>
+    <Button variant="secondary" onClick={() => void toggle()} loading={saving}>
       {inactive ? t("crm.archive.restore") : t("crm.archive.archive")}
     </Button>
   );

@@ -27,6 +27,7 @@ import { createReadReceipt } from "@/features/channels/read-receipt";
 import { authorizeRealtime, createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { Message } from "@/types/entities";
 
 const MESSAGE_SELECT =
@@ -55,10 +56,13 @@ export function Composer({
   async function submit() {
     const trimmed = body.trim();
     if (!trimmed || sending) return;
-    setSending(true);
-    setError(null);
-    const result = await onSend(trimmed);
-    setSending(false);
+    const result = await runServerAction(() => onSend(trimmed), {
+      setBusy: setSending,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       // Never show success for a rejected send (Appendix B: Optimistic UI).
       setError(result.error ?? t("messages.composer.notSent"));

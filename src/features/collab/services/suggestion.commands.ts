@@ -10,6 +10,7 @@ import { contentAdapterFor } from "@/features/versions/adapters/registry";
 import { objectRefSchema } from "@/features/versions/schema";
 import { collabText, type CollabText } from "../messages";
 import { applySuggestion } from "../suggestions";
+import { logActionFailure } from "@/lib/server-log";
 
 export interface SuggestionResult {
   ok: boolean;
@@ -64,7 +65,10 @@ export async function suggestEdit(input: unknown): Promise<SuggestionResult> {
     proposed_text: proposed,
     author_id: session.userId,
   });
-  if (error) return { ok: false, error: refusal(error.message, m) };
+  if (error) {
+    logActionFailure("suggestion.suggestEdit", error);
+    return { ok: false, error: refusal(error.message, m) };
+  }
   revalidatePath("/collab", "layout");
   return { ok: true };
 }
@@ -126,7 +130,10 @@ export async function decideSuggestion(input: unknown): Promise<SuggestionResult
     p_suggestion: parsed.data.id,
     p_decision: parsed.data.decision,
   });
-  if (error) return { ok: false, error: refusal(error.message, m) };
+  if (error) {
+    logActionFailure("suggestion.decideSuggestion", error);
+    return { ok: false, error: refusal(error.message, m) };
+  }
 
   if (suggestion && nextText !== null) {
     const object = { id: suggestion.object_id, type: suggestion.object_type };

@@ -8,6 +8,7 @@ import type { TranslateFn } from "@/lib/i18n/translate";
 import { requiredText } from "@/lib/schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { logActionFailure } from "@/lib/server-log";
 
 // A person corrects their own name and title in Settings; an administrator
 // with MFA corrects a member's through public.rectify_member_profile, which
@@ -34,7 +35,10 @@ export async function updateOwnProfile(input: unknown): Promise<ActionResult> {
     .update({ full_name: parsed.data.fullName, title: parsed.data.title || null })
     .eq("id", session.userId)
     .select("id");
-  if (error || !data?.length) return { ok: false, error: t("settings.profile.saveFailed") };
+  if (error || !data?.length) {
+    if (error) logActionFailure("profile.updateOwnProfile", error);
+    return { ok: false, error: t("settings.profile.saveFailed") };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }

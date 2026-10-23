@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { SemanticBlockKind } from "../editor-adapter";
 import type { ReviewChoice } from "../review";
 import { applyMeetingReview } from "../services/meeting-v2.commands";
@@ -19,6 +21,7 @@ export interface OpenCapture {
 /** One approve-or-dismiss choice per open capture, applied together. */
 export function ReviewForm({ meetingId, captures }: { meetingId: string; captures: OpenCapture[] }) {
   const t = useMeetingsV2T();
+  const shellT = useT();
   const router = useRouter();
   const [choices, setChoices] = useState<Record<string, ReviewChoice>>(
     Object.fromEntries(captures.map((c) => [c.id, "approve" as const])),
@@ -29,18 +32,21 @@ export function ReviewForm({ meetingId, captures }: { meetingId: string; capture
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setSaving(true);
-    const result = await applyMeetingReview({
-      meetingId,
-      choices: Object.fromEntries(captures.map((c) => [c.id, choiceFor(c.id)])),
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        applyMeetingReview({
+          meetingId,
+          choices: Object.fromEntries(captures.map((c) => [c.id, choiceFor(c.id)])),
+        }),
+      { setBusy: setSaving, setError: (text) => setStatus(text ? { ok: false, text } : null), t: shellT, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     setStatus({ ok: result.ok, text: result.ok ? (result.message ?? "") : (result.error ?? t("review.error")) });
     router.refresh();
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form onSubmit={(event) => void submit(event)} className="space-y-3">
       {captures.length === 0 ? <p className="text-sm text-muted">{t("review.nothingOpen")}</p> : null}
       <ul className="space-y-3">
         {captures.map((capture) => (

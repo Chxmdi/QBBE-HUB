@@ -156,10 +156,13 @@ function SyncedPicker({
           if (!api) return;
           setBusy(true);
           setError(false);
-          const created = await api.create(blockId, emptyContent()).catch(() => null);
-          setBusy(false);
-          if (created) onChoose(created, "source");
-          else setError(true);
+          try {
+            const created = await api.create(blockId, emptyContent()).catch(() => null);
+            if (created) onChoose(created, "source");
+            else setError(true);
+          } finally {
+            setBusy(false);
+          }
         }}
       >
         <Plus className="size-4" aria-hidden />
@@ -373,10 +376,13 @@ function EditDialog({
             if (!api) return;
             setBusy(true);
             setError(false);
-            const ok = await api.update(id, latest.current).catch(() => false);
-            setBusy(false);
-            if (ok) onClose(true);
-            else setError(true);
+            try {
+              const ok = await api.update(id, latest.current).catch(() => false);
+              if (ok) onClose(true);
+              else setError(true);
+            } finally {
+              setBusy(false);
+            }
           }}
         >
           {t("syncedBlock.save")}
@@ -427,10 +433,13 @@ function AccessRequest({
               if (!api) return;
               setBusy(true);
               setError(false);
-              const ok = await api.requestAccess(id).catch(() => false);
-              setBusy(false);
-              if (ok) setState("requested");
-              else setError(true);
+              try {
+                const ok = await api.requestAccess(id).catch(() => false);
+                if (ok) setState("requested");
+                else setError(true);
+              } finally {
+                setBusy(false);
+              }
             }}
           >
             {t("syncedBlock.requestAccess")}

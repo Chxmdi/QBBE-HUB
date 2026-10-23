@@ -15,6 +15,7 @@ import {
   taskDependencySchema,
   translateTaskError,
 } from "@/features/tasks/schemas";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * The four checklist commands below do not revalidate anything, and that is
@@ -46,7 +47,10 @@ export async function addChecklistItem(input: unknown): Promise<ActionResult> {
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: t("tasks.errors.addChecklistItem") };
+  if (error || !data) {
+    if (error) logActionFailure("checklist.addChecklistItem", error);
+    return { ok: false, error: t("tasks.errors.addChecklistItem") };
+  }
   return { ok: true, id: data.id as string };
 }
 
@@ -82,7 +86,10 @@ export async function removeChecklistItem(itemId: string): Promise<ActionResult>
     .delete()
     .eq("id", itemId)
     .select("id");
-  if (error) return { ok: false, error: t("tasks.errors.removeChecklistItem") };
+  if (error) {
+    logActionFailure("checklist.removeChecklistItem", error);
+    return { ok: false, error: t("tasks.errors.removeChecklistItem") };
+  }
   if (!data?.length) return { ok: false, error: t("tasks.errors.checklistNotYours") };
   return { ok: true };
 }
@@ -110,7 +117,10 @@ export async function reorderChecklist(input: unknown): Promise<ActionResult> {
     .from("checklist_item")
     .select("id")
     .eq("task_id", taskId);
-  if (readError) return { ok: false, error: t("tasks.errors.reorderChecklist") };
+  if (readError) {
+    logActionFailure("checklist.reorderChecklist", readError);
+    return { ok: false, error: t("tasks.errors.reorderChecklist") };
+  }
 
   const ownedIds = new Set((owned ?? []).map(row => row.id as string));
   const ordered = itemIds.filter(id => ownedIds.has(id));
@@ -142,7 +152,10 @@ export async function addTaskDependency(input: unknown): Promise<ActionResult> {
     .from("task_dependency")
     .select("blocking_task_id, blocked_task_id")
     .order("blocked_task_id"), "blocking_task_id");
-  if (readError) return { ok: false, error: t("tasks.errors.checkDependencies") };
+  if (readError) {
+    logActionFailure("checklist.addTaskDependency", readError);
+    return { ok: false, error: t("tasks.errors.checkDependencies") };
+  }
   const cycle = circularDependencyError(
     blockingTaskId,
     blockedTaskId,
@@ -155,8 +168,14 @@ export async function addTaskDependency(input: unknown): Promise<ActionResult> {
     blocked_task_id: blockedTaskId,
   });
   if (error?.code === "23505") return { ok: true };
-  if (error?.code === "23514") return { ok: false, error: t("tasks.errors.cycle") };
-  if (error) return { ok: false, error: t("tasks.errors.saveDependency") };
+  if (error?.code === "23514") {
+    if (error) logActionFailure("checklist.addTaskDependency", error);
+    return { ok: false, error: t("tasks.errors.cycle") };
+  }
+  if (error) {
+    logActionFailure("checklist.addTaskDependency", error);
+    return { ok: false, error: t("tasks.errors.saveDependency") };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -173,7 +192,10 @@ export async function removeTaskDependency(
     .delete()
     .eq("blocking_task_id", blockingTaskId)
     .eq("blocked_task_id", blockedTaskId);
-  if (error) return { ok: false, error: t("tasks.errors.removeDependency") };
+  if (error) {
+    logActionFailure("checklist.removeTaskDependency", error);
+    return { ok: false, error: t("tasks.errors.removeDependency") };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -202,7 +224,10 @@ export async function setTaskRecurrence(input: unknown): Promise<ActionResult> {
         : null,
     })
     .eq("id", parsed.data.taskId);
-  if (error) return { ok: false, error: t("tasks.errors.setRecurrence") };
+  if (error) {
+    logActionFailure("checklist.setTaskRecurrence", error);
+    return { ok: false, error: t("tasks.errors.setRecurrence") };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }

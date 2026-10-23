@@ -10,6 +10,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { tagsSchemaFor } from "@/features/documents/services/library";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
+import { logActionFailure } from "@/lib/server-log";
 
 const linkSchema = (t: TranslateFn) => z.object({
   title: requiredText(t("documents.errors.linkTitle"), 200),
@@ -101,7 +102,10 @@ export async function createDocumentLink(input: unknown): Promise<ActionResult> 
     .select("id")
     .single();
 
-  if (error || !doc) return { ok: false, error: t("documents.errors.saveResource") };
+  if (error || !doc) {
+    if (error) logActionFailure("document.createDocumentLink", error);
+    return { ok: false, error: t("documents.errors.saveResource") };
+  }
 
   revalidatePath("/documents");
   return { ok: true, id: doc.id as string };
@@ -169,7 +173,10 @@ export async function registerUploadedDocument(
     .select("id")
     .single();
 
-  if (error || !doc) return { ok: false, error: t("documents.errors.recordUpload") };
+  if (error || !doc) {
+    if (error) logActionFailure("document.registerUploadedDocument", error);
+    return { ok: false, error: t("documents.errors.recordUpload") };
+  }
 
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
@@ -284,6 +291,9 @@ export async function saveDocumentText(input: unknown): Promise<ActionResult> {
     p_text: parsed.data.text,
     p_source: parsed.data.source,
   });
-  if (error) return { ok: false, error: (await getT())("documents.errors.storeText") };
+  if (error) {
+    logActionFailure("document.saveDocumentText", error);
+    return { ok: false, error: (await getT())("documents.errors.storeText") };
+  }
   return { ok: true, id: parsed.data.id };
 }

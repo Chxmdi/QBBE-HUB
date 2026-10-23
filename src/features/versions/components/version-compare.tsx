@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useLocale } from "@/lib/i18n/client";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { fill } from "@/features/collab/i18n";
 import type { SnapshotDiff, TextPart } from "../diff";
 import { versionsText, type VersionsText } from "../messages";
@@ -65,6 +66,7 @@ export function VersionCompare({
 }) {
   const t = versionsText(useLocale());
   const m = t.compare;
+  const shellT = useT();
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -72,10 +74,14 @@ export function VersionCompare({
 
   async function restore(key: string, request: { scope: "all" } | { scope: "block" | "property"; key: string }) {
     if (!restoreVersionId) return;
-    setBusy(key);
-    setMessage(null);
-    const result = await restoreFromVersion({ ...request, versionId: restoreVersionId });
-    setBusy(null);
+    const versionId = restoreVersionId;
+    const result = await runServerAction(() => restoreFromVersion({ ...request, versionId }), {
+      setBusy: (on) => setBusy(on ? key : null),
+      setError: (text) => setMessage(text ? { ok: false, text } : null),
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     setMessage(result.ok ? { ok: true, text: m.restored } : { ok: false, text: result.error ?? t.errors.failed });
     if (result.ok) router.refresh();
   }

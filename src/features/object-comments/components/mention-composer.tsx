@@ -58,12 +58,14 @@ export function MentionComposer({
   useEffect(() => {
     if (!active || dismissed) return;
     let cancelled = false;
-    const timer = setTimeout(async () => {
-      const found = await searchMentionTargets(active.query);
-      if (!cancelled) {
-        setOptions(found);
-        setHighlight(0);
-      }
+    const timer = setTimeout(() => {
+      void (async () => {
+        const found = await searchMentionTargets(active.query);
+        if (!cancelled) {
+          setOptions(found);
+          setHighlight(0);
+        }
+      })();
     }, 150);
     return () => {
       cancelled = true;

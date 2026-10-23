@@ -28,8 +28,13 @@ export default defineConfig({
     // Unit tests decide each switch themselves (vi.stubEnv); a developer's
     // shell with the Workspace OS switches on must not leak into them.
     // A fresh Google token key for each run (PRIV-011): code that seals tokens
-    // works, and no key is ever written down.
-    env: { WORKSPACE_OS_FLAGS: "", GOOGLE_TOKEN_KEY: randomBytes(32).toString("base64") },
+    // works, and no key is ever written down. Google retries happen without
+    // their real 1-30 s waits.
+    env: {
+      WORKSPACE_OS_FLAGS: "",
+      GOOGLE_TOKEN_KEY: randomBytes(32).toString("base64"),
+      GOOGLE_FETCH_DELAY_SCALE: "0",
+    },
     // `npm run test:coverage` (CI's Verify job) measures the unit suite and
     // fails when a folder falls below its floor. The floors are what the
     // suite reached when they were set, so they only stop coverage falling;

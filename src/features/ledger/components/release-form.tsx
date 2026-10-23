@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatCents } from "@/features/ledger/money";
 import { fundAvailableOn, releaseRestricted } from "@/features/ledger/services/ledger.commands";
 import { useFormatters, useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export interface ReleaseFundOption {
   id: string;
@@ -76,16 +77,18 @@ export function ReleaseForm({
         e.preventDefault();
         const formEl = e.currentTarget;
         const form = new FormData(formEl);
-        setPending(true);
-        setError(null);
-        const result = await releaseRestricted({
-          fromFundId: form.get("fromFundId") || undefined,
-          toFundId: form.get("toFundId") || undefined,
-          amount: form.get("amount"),
-          releaseDate: form.get("releaseDate"),
-          condition: form.get("condition"),
-        });
-        setPending(false);
+        const result = await runServerAction(
+          () =>
+            releaseRestricted({
+              fromFundId: form.get("fromFundId") || undefined,
+              toFundId: form.get("toFundId") || undefined,
+              amount: form.get("amount"),
+              releaseDate: form.get("releaseDate"),
+              condition: form.get("condition"),
+            }),
+          { setBusy: setPending, setError, t, reload: () => window.location.reload() },
+        );
+        if (!result) return;
         if (!result.ok) {
           setError(result.error ?? t("finance.ledger.release.form.failed"));
           return;

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { convertFollowUpToTask } from "@/features/crm/services/crm.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function FollowUpTaskButton({
   followUpId,
@@ -33,17 +34,22 @@ export function FollowUpTaskButton({
         variant="secondary"
         loading={busy}
         disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setError(null);
-          const result = await convertFollowUpToTask(followUpId);
-          setBusy(false);
-          if (!result.ok) {
-            setError(result.error ?? t("crm.followUps.createTaskFailed"));
-            return;
-          }
-          router.refresh();
-        }}
+        onClick={() =>
+          void (async () => {
+            const result = await runServerAction(() => convertFollowUpToTask(followUpId), {
+              setBusy,
+              setError,
+              t,
+              reload: () => window.location.reload(),
+            });
+            if (!result) return;
+            if (!result.ok) {
+              setError(result.error ?? t("crm.followUps.createTaskFailed"));
+              return;
+            }
+            router.refresh();
+          })()
+        }
       >
         {t("crm.followUps.createTask")}
       </Button>

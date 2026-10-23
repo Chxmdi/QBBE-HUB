@@ -10,6 +10,7 @@ import {
   removeAgendaItem,
 } from "@/features/meetings/services/meeting.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 interface Option {
   id: string;
@@ -43,10 +44,13 @@ export function AgendaItemControls({
   const unfinished = !["done", "declined", "combined"].includes(status);
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>) {
-    setBusy(true);
-    setError(null);
-    const result = await action();
-    setBusy(false);
+    const result = await runServerAction(action, {
+      setBusy,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("meetings.itemControls.failed"));
       return;

@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { linkVmsIdentity } from "@/features/admin/services/integration.commands";
 import { labelOr } from "@/features/admin/labels";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function VmsIdentityLinkControl({
   userId,
@@ -23,9 +24,15 @@ export function VmsIdentityLinkControl({
   const t = useT();
 
   async function save() {
-    setSaving(true);
-    const result = await linkVmsIdentity(userId, value);
-    setSaving(false);
+    const result = await runServerAction(() => linkVmsIdentity(userId, value), {
+      setBusy: setSaving,
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("admin.vmsControl.failed"), { tone: "error" });
       return;

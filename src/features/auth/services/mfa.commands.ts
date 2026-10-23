@@ -5,6 +5,7 @@ import { authorizeAdminAction } from "@/lib/auth";
 import { getT } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { logActionFailure } from "@/lib/server-log";
 
 const eventSchema = z.enum([
   "mfa_enrollment_completed",
@@ -37,7 +38,10 @@ export async function recordMfaSecurityEvent(input: unknown): Promise<ActionResu
     .gte("created_at", new Date(Date.now() - 60_000).toISOString())
     .limit(1)
     .maybeSingle();
-  if (recentError) return { ok: false, error: t("auth.mfa.audit.verifyFailed") };
+  if (recentError) {
+    logActionFailure("mfa.recordMfaSecurityEvent", recentError);
+    return { ok: false, error: t("auth.mfa.audit.verifyFailed") };
+  }
   if (recent) return { ok: true, id: recent.id as string };
 
   const { data: event, error } = await supabase
@@ -54,6 +58,9 @@ export async function recordMfaSecurityEvent(input: unknown): Promise<ActionResu
     .select("id")
     .single();
 
-  if (error || !event) return { ok: false, error: t("auth.mfa.audit.recordFailed") };
+  if (error || !event) {
+    if (error) logActionFailure("mfa.recordMfaSecurityEvent", error);
+    return { ok: false, error: t("auth.mfa.audit.recordFailed") };
+  }
   return { ok: true, id: event.id as string };
 }

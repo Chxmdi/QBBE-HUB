@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { SignatureFields } from "@/features/forms/components/signature-fields";
 import { signDocument } from "@/features/forms/services/signature.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function SignDocumentForm({ documentId }: { documentId: string }) {
   const router = useRouter();
@@ -18,15 +19,17 @@ export function SignDocumentForm({ documentId }: { documentId: string }) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     const form = new FormData(e.currentTarget);
-    setSaving(true);
-    const result = await signDocument({
-      documentId,
-      signerName: form.get("signerName"),
-      consent: form.get("consent") === "on",
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        signDocument({
+          documentId,
+          signerName: form.get("signerName"),
+          consent: form.get("consent") === "on",
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("signatures.sign.failed"));
       return;

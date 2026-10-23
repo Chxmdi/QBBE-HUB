@@ -7,6 +7,7 @@ import { Label, Select, Textarea, Input, FieldHint } from "@/components/ui/input
 import { publishStatusUpdate } from "@/features/projects/services/project.commands";
 import { healthLabel } from "@/components/shared/status-badges";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /**
  * Structured project status update (P0-PRJ-05). At-risk / off-track health
@@ -24,20 +25,22 @@ export function StatusUpdateForm({ projectId }: { projectId: string }) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await publishStatusUpdate({
-      projectId,
-      health,
-      progressSummary: form.get("progressSummary"),
-      nextSteps: (form.get("nextSteps") as string) || undefined,
-      blockers: (form.get("blockers") as string) || undefined,
-      decisionsNeeded: (form.get("decisionsNeeded") as string) || undefined,
-      helpRequested: (form.get("helpRequested") as string) || undefined,
-      healthReason: (form.get("healthReason") as string) || undefined,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        publishStatusUpdate({
+          projectId,
+          health,
+          progressSummary: form.get("progressSummary"),
+          nextSteps: (form.get("nextSteps") as string) || undefined,
+          blockers: (form.get("blockers") as string) || undefined,
+          decisionsNeeded: (form.get("decisionsNeeded") as string) || undefined,
+          helpRequested: (form.get("helpRequested") as string) || undefined,
+          healthReason: (form.get("healthReason") as string) || undefined,
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("projects.statusUpdate.error"));
       return;

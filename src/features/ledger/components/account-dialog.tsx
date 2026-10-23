@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { ACCOUNT_TYPES, ACCOUNT_TYPE_KEY, type AccountType } from "@/features/ledger/money";
 import { saveAccount } from "@/features/ledger/services/ledger.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export interface AccountFormValue {
   id: string;
@@ -48,18 +49,20 @@ export function AccountDialog({ account }: { account?: AccountFormValue }) {
           className="space-y-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            setError(null);
-            setSaving(true);
             const form = new FormData(e.currentTarget);
-            const result = await saveAccount({
-              id: account?.id,
-              code: form.get("code"),
-              name: form.get("name"),
-              accountType: form.get("accountType"),
-              description: form.get("description") ?? undefined,
-              isActive: form.get("isActive") === "on",
-            });
-            setSaving(false);
+            const result = await runServerAction(
+              () =>
+                saveAccount({
+                  id: account?.id,
+                  code: form.get("code"),
+                  name: form.get("name"),
+                  accountType: form.get("accountType"),
+                  description: form.get("description") ?? undefined,
+                  isActive: form.get("isActive") === "on",
+                }),
+              { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+            );
+            if (!result) return;
             if (!result.ok) {
               setError(result.error ?? t("finance.ledger.accountDialog.saveFailed"));
               return;

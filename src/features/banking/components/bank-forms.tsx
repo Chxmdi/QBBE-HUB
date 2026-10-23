@@ -24,6 +24,7 @@ import {
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { INSTITUTION_KEY } from "@/features/banking/labels";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export interface Choice {
   id: string;
@@ -37,10 +38,13 @@ function useAction() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function run<T extends ActionResult>(action: () => Promise<T>, success: string | ((r: T) => string)) {
-    setPending(true);
-    setError(null);
-    const result = await action();
-    setPending(false);
+    const result = await runServerAction(action, {
+      setBusy: setPending,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return null;
     if (!result.ok) {
       setError(result.error ?? t("ui.somethingWrong"));
       router.refresh();

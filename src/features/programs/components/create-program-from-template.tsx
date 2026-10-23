@@ -5,6 +5,7 @@ import { useState } from "react";
 import { createProgramFromTemplate } from "@/features/programs/services/program-template.commands";
 import { Select } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function CreateProgramFromTemplateButton({
   templates,
@@ -20,12 +21,15 @@ export function CreateProgramFromTemplateButton({
 
   async function handleChange(templateId: string) {
     if (!templateId) return;
-    setBusy(true);
-    setError(null);
     // Expanding a template writes a program, its projects, their milestones and
     // their tasks, so this is slower than it looks and must not be double-fired.
-    const result = await createProgramFromTemplate(templateId);
-    setBusy(false);
+    const result = await runServerAction(() => createProgramFromTemplate(templateId), {
+      setBusy,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("programs.fromTemplate.error"));
       return;

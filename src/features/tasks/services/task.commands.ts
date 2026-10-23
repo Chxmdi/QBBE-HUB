@@ -39,6 +39,7 @@ import {
   taskUpdateChanges,
 } from "@/features/tasks/services/task.change-sets";
 import { SET_PROPERTY_ACTION } from "@/features/objects/actions/set-property";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Task commands — durable server mutations (WORK-002). Validation happens
@@ -392,7 +393,10 @@ export async function updateTask(input: unknown): Promise<ActionResult> {
     .select("id, title, assignee_id, project_id, program_id, due_at, status, priority, milestone_id, reviewer_id, approver_id, completion_criteria, blocked_reason")
     .maybeSingle();
 
-  if (error || !updated) return { ok: false, error: t("tasks.errors.updateTask") };
+  if (error || !updated) {
+    if (error) logActionFailure("task.updateTask", error);
+    return { ok: false, error: t("tasks.errors.updateTask") };
+  }
 
   // What the drawer changed, as a change set (M13): one update per registered
   // property whose value moved, so the undo route can put each one back.
@@ -614,7 +618,10 @@ export async function removeTaskRole(input: unknown): Promise<ActionResult> {
     .eq("user_id", userId)
     .eq("role", role);
 
-  if (error) return { ok: false, error: t("tasks.errors.removeRole") };
+  if (error) {
+    logActionFailure("task.removeTaskRole", error);
+    return { ok: false, error: t("tasks.errors.removeRole") };
+  }
 
   revalidatePath("/", "layout");
   return { ok: true };
@@ -822,7 +829,10 @@ export async function addTaskComment(
     author_id: session.userId,
     body: trimmed,
   }).select("id").single();
-  if (error || !comment) return { ok: false, error: t("tasks.errors.commentFailed") };
+  if (error || !comment) {
+    if (error) logActionFailure("task.addTaskComment", error);
+    return { ok: false, error: t("tasks.errors.commentFailed") };
+  }
 
   const { data: task } = await supabase
     .from("task")

@@ -9,6 +9,8 @@ import {
   deleteDraftFormV2,
   setFormV2Status,
 } from "@/features/forms-v2/services/forms-v2.commands";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** Open, close or delete one form (owners and admins). */
 export function FormV2StatusActions({
@@ -21,13 +23,18 @@ export function FormV2StatusActions({
   text: FormsV2Text;
 }) {
   const router = useRouter();
+  const shellT = useT();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>, done: string, then?: string) {
-    setBusy(true);
-    const result = await action();
-    setBusy(false);
+    const result = await runServerAction(action, {
+      setBusy,
+      setError: (error) => setMessage(error ? { ok: false, text: error } : null),
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     setMessage(result.ok ? { ok: true, text: done } : { ok: false, text: result.error ?? text.errors.generic });
     if (result.ok) {
       if (then) router.push(then);
@@ -40,21 +47,21 @@ export function FormV2StatusActions({
       <div className="flex flex-wrap gap-2">
         {status === "draft" ? (
           <>
-            <Button size="sm" loading={busy} onClick={() => run(() => setFormV2Status(formId, "published"), text.published)}>
+            <Button size="sm" loading={busy} onClick={() => void run(() => setFormV2Status(formId, "published"), text.published)}>
               {text.publish}
             </Button>
             <Button
               size="sm"
               variant="secondary"
               disabled={busy}
-              onClick={() => run(() => deleteDraftFormV2(formId), text.saved, "/forms-v2")}
+              onClick={() => void run(() => deleteDraftFormV2(formId), text.saved, "/forms-v2")}
             >
               {text.deleteDraft}
             </Button>
           </>
         ) : null}
         {status === "published" ? (
-          <Button size="sm" variant="secondary" loading={busy} onClick={() => run(() => setFormV2Status(formId, "closed"), text.closed)}>
+          <Button size="sm" variant="secondary" loading={busy} onClick={() => void run(() => setFormV2Status(formId, "closed"), text.closed)}>
             {text.close}
           </Button>
         ) : null}
@@ -71,13 +78,18 @@ export function FormV2StatusActions({
 /** Copies the original builder's forms into this model, or removes the copies. */
 export function LegacyConversion({ text }: { text: FormsV2Text }) {
   const router = useRouter();
+  const shellT = useT();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function run(direction: "convert" | "revert") {
-    setBusy(true);
-    const result = await convertLegacyForms(direction);
-    setBusy(false);
+    const result = await runServerAction(() => convertLegacyForms(direction), {
+      setBusy,
+      setError: (error) => setMessage(error ? { ok: false, text: error } : null),
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setMessage({ ok: false, text: result.error });
       return;
@@ -91,10 +103,10 @@ export function LegacyConversion({ text }: { text: FormsV2Text }) {
     <div className="space-y-2">
       <p className="meta max-w-prose">{text.convertHelp}</p>
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="secondary" disabled={busy} onClick={() => run("convert")}>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void run("convert")}>
           {text.convert}
         </Button>
-        <Button size="sm" variant="ghost" disabled={busy} onClick={() => run("revert")}>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run("revert")}>
           {text.revert}
         </Button>
       </div>

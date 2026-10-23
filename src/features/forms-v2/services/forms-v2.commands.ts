@@ -18,6 +18,7 @@ import {
   propertiesProblem,
   type FormV2Property,
 } from "@/features/forms-v2/properties";
+import { logActionFailure } from "@/lib/server-log";
 
 export type FormsV2Result<T = undefined> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -95,7 +96,10 @@ export async function createFormV2(input: FormV2Input): Promise<FormsV2Result<{ 
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: m.errors.generic };
+  if (error || !data) {
+    if (error) logActionFailure("forms_v2.createFormV2", error);
+    return { ok: false, error: m.errors.generic };
+  }
   revalidatePath("/forms-v2");
   return { ok: true, data: { id: data.id as string } };
 }
@@ -112,7 +116,10 @@ export async function setFormV2Status(
   if (!z.string().uuid().safeParse(formId).success) return { ok: false, error: m.errors.generic };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.from("form_v2").update({ status }).eq("id", formId).select("id");
-  if (error || !data?.length) return { ok: false, error: m.errors.generic };
+  if (error || !data?.length) {
+    if (error) logActionFailure("forms_v2.setFormV2Status", error);
+    return { ok: false, error: m.errors.generic };
+  }
   revalidatePath("/forms-v2");
   revalidatePath(`/forms-v2/${formId}`);
   return { ok: true };
@@ -127,7 +134,10 @@ export async function deleteDraftFormV2(formId: string): Promise<FormsV2Result> 
   if (!z.string().uuid().safeParse(formId).success) return { ok: false, error: m.errors.generic };
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.from("form_v2").delete().eq("id", formId).select("id");
-  if (error || !data?.length) return { ok: false, error: m.errors.generic };
+  if (error || !data?.length) {
+    if (error) logActionFailure("forms_v2.deleteDraftFormV2", error);
+    return { ok: false, error: m.errors.generic };
+  }
   revalidatePath("/forms-v2");
   return { ok: true };
 }
@@ -190,7 +200,10 @@ export async function convertLegacyForms(direction: "convert" | "revert"): Promi
     direction === "convert" ? "forms_v2_convert_legacy" : "forms_v2_revert_legacy",
     { p_organization_id: auth.session.organizationId },
   );
-  if (error) return { ok: false, error: m.errors.generic };
+  if (error) {
+    logActionFailure("forms_v2.convertLegacyForms", error);
+    return { ok: false, error: m.errors.generic };
+  }
   revalidatePath("/forms-v2");
   return { ok: true, data: { count: Number(data ?? 0) } };
 }

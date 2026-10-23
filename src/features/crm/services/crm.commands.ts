@@ -10,6 +10,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { crmMessage } from "@/features/crm/labels";
 import { getT } from "@/lib/i18n/server";
 import { peopleEn } from "@/lib/i18n/messages/workspace/people.en";
+import { logActionFailure } from "@/lib/server-log";
 
 /** English validation text from the catalogue, translated by `crmMessage`. */
 const V = peopleEn.crm.validation;
@@ -134,7 +135,10 @@ export async function createCrmOrganization(input: unknown): Promise<ActionResul
     })
     .select("id")
     .single();
-  if (error || !org) return { ok: false, error: t("crm.errors.saveOrg") };
+  if (error || !org) {
+    if (error) logActionFailure("crm.createCrmOrganization", error);
+    return { ok: false, error: t("crm.errors.saveOrg") };
+  }
 
   if (sensitiveNotes) {
     const saved = await saveSensitiveNote(supabase, session.organizationId, org.id as string, sensitiveNotes);
@@ -163,7 +167,10 @@ export async function updateCrmOrganization(input: unknown): Promise<ActionResul
     next_action_at: nextActionAt || null,
   };
   const { error } = await supabase.from("crm_organization").update(patch).eq("id", id);
-  if (error) return { ok: false, error: t("crm.errors.updateOrg") };
+  if (error) {
+    logActionFailure("crm.updateCrmOrganization", error);
+    return { ok: false, error: t("crm.errors.updateOrg") };
+  }
   if (sensitiveNotes !== undefined) {
     const saved = await saveSensitiveNote(supabase, session.organizationId, id, sensitiveNotes);
     if (!saved) {
@@ -233,7 +240,10 @@ export async function createCrmAgreement(input: unknown): Promise<ActionResult> 
     })
     .select("id")
     .single();
-  if (error || !row) return { ok: false, error: t("crm.errors.saveAgreement") };
+  if (error || !row) {
+    if (error) logActionFailure("crm.createCrmAgreement", error);
+    return { ok: false, error: t("crm.errors.saveAgreement") };
+  }
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   return { ok: true, id: row.id as string };
 }
@@ -270,7 +280,10 @@ export async function createCrmContact(input: unknown): Promise<ActionResult> {
     status: data.status ?? "active",
     owner_id: session.userId,
   });
-  if (error) return { ok: false, error: t("crm.errors.saveContact") };
+  if (error) {
+    logActionFailure("crm.createCrmContact", error);
+    return { ok: false, error: t("crm.errors.saveContact") };
+  }
 
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   return { ok: true };
@@ -309,7 +322,10 @@ export async function updateCrmContact(input: unknown): Promise<ActionResult> {
     })
     .eq("id", data.contactId)
     .select("id");
-  if (error || !updated?.length) return { ok: false, error: t("crm.errors.saveContact") };
+  if (error || !updated?.length) {
+    if (error) logActionFailure("crm.updateCrmContact", error);
+    return { ok: false, error: t("crm.errors.saveContact") };
+  }
   revalidatePath(`/crm/contacts/${data.contactId}`);
   return { ok: true };
 }
@@ -326,7 +342,10 @@ export async function eraseCrmContact(contactId: string): Promise<ActionResult> 
   if (!z.string().uuid().safeParse(contactId).success) return { ok: false, error: t("crm.erase.failed") };
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.rpc("erase_crm_contact", { p_contact: contactId });
-  if (error) return { ok: false, error: t("crm.erase.failed") };
+  if (error) {
+    logActionFailure("crm.eraseCrmContact", error);
+    return { ok: false, error: t("crm.erase.failed") };
+  }
   revalidatePath(`/crm/contacts/${contactId}`);
   revalidatePath("/crm/supporters");
   return { ok: true };
@@ -362,7 +381,10 @@ export async function recordInteraction(input: unknown): Promise<ActionResult> {
     next_steps: data.nextSteps || null,
     document_id: data.documentId || null,
   });
-  if (error) return { ok: false, error: t("crm.errors.recordInteraction") };
+  if (error) {
+    logActionFailure("crm.recordInteraction", error);
+    return { ok: false, error: t("crm.errors.recordInteraction") };
+  }
 
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   return { ok: true };
@@ -386,7 +408,10 @@ export async function createFollowUp(input: unknown): Promise<ActionResult> {
     title: data.title,
     due_at: data.dueAt,
   });
-  if (error) return { ok: false, error: t("crm.errors.createFollowUp") };
+  if (error) {
+    logActionFailure("crm.createFollowUp", error);
+    return { ok: false, error: t("crm.errors.createFollowUp") };
+  }
 
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   revalidatePath("/crm");
@@ -402,7 +427,10 @@ export async function completeFollowUp(followUpId: string): Promise<ActionResult
     .from("crm_follow_up")
     .update({ status: "done", completed_at: new Date().toISOString() })
     .eq("id", followUpId);
-  if (error) return { ok: false, error: t("crm.errors.completeFollowUp") };
+  if (error) {
+    logActionFailure("crm.completeFollowUp", error);
+    return { ok: false, error: t("crm.errors.completeFollowUp") };
+  }
   revalidatePath("/crm");
   return { ok: true };
 }
@@ -449,7 +477,10 @@ export async function createCrmLink(input: unknown): Promise<ActionResult> {
     opportunity_id: data.opportunityId || null,
     agreement_id: data.agreementId || null,
   });
-  if (error) return { ok: false, error: t("crm.errors.linkFailed") };
+  if (error) {
+    logActionFailure("crm.createCrmLink", error);
+    return { ok: false, error: t("crm.errors.linkFailed") };
+  }
   revalidatePath(`/crm/${data.crmOrganizationId}`);
   return { ok: true };
 }

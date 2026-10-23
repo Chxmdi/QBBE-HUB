@@ -9,6 +9,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSpacesT } from "../i18n";
 import { bitsFromCapabilities, roleKeyFromName } from "./roles";
 import type { SpaceActionState } from "./spaces.commands";
+import { logActionFailure } from "@/lib/server-log";
 
 const name = z.string().trim().min(1).max(80);
 const roleSchema = z.object({
@@ -49,7 +50,10 @@ export async function createRole(_previous: SpaceActionState, form: FormData): P
     name_fr: parsed.data.nameFr,
     caps: bitsFromCapabilities(parsed.data.capabilities),
   });
-  if (error) return { ok: false, message: t("roles.errors.failed") };
+  if (error) {
+    logActionFailure("roles.createRole", error);
+    return { ok: false, message: t("roles.errors.failed") };
+  }
   revalidatePath("/spaces/roles");
   return { ok: true, message: t("roles.created") };
 }
@@ -73,7 +77,10 @@ export async function updateRole(_previous: SpaceActionState, form: FormData): P
     .eq("id", id.data)
     .eq("builtin", false)
     .select("id");
-  if (error || !data?.length) return { ok: false, message: t("roles.errors.failed") };
+  if (error || !data?.length) {
+    if (error) logActionFailure("roles.updateRole", error);
+    return { ok: false, message: t("roles.errors.failed") };
+  }
   revalidatePath("/spaces/roles");
   return { ok: true, message: t("roles.saved") };
 }

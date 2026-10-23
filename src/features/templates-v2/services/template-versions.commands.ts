@@ -10,6 +10,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { TEMPLATES_FLAG } from "@/features/templates-v2/gate";
 import { templatesV2Text } from "@/features/templates-v2/messages";
 import { buildHub, findPageVariables, type PageBody, type PageDocument } from "@/features/templates-v2/template";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Templates that build hubs, with versions (T1), behind the `wos_pages`
@@ -58,7 +59,10 @@ export async function templateDetailsV2(templateId: unknown): Promise<TemplateVe
     .select("id, version, created_by, organization_id, name_en, name_fr, description_en, description_fr")
     .eq("id", id.data)
     .maybeSingle();
-  if (error) return { ok: false, error: m.errors.generic };
+  if (error) {
+    logActionFailure("template_versions.templateDetailsV2", error);
+    return { ok: false, error: m.errors.generic };
+  }
   if (!template) return { ok: false, error: m.errors.unavailable };
   const [{ data: versions, error: versionsError }, { data: pages, error: pagesError }] = await Promise.all([
     supabase
@@ -70,7 +74,10 @@ export async function templateDetailsV2(templateId: unknown): Promise<TemplateVe
     // Counted in the database, as the reader: pages they cannot open are not counted.
     supabase.rpc("template_v2_version_pages", { p_template: id.data }),
   ]);
-  if (versionsError || pagesError) return { ok: false, error: m.errors.generic };
+  if (versionsError || pagesError) {
+    if (versionsError) logActionFailure("template_versions.templateDetailsV2", versionsError);
+    return { ok: false, error: m.errors.generic };
+  }
   const counts = new Map<number, number>();
   for (const row of (pages ?? []) as { version: number; pages: number }[]) counts.set(row.version, Number(row.pages));
   const sameOrganization = template.organization_id === session.organizationId;
@@ -221,7 +228,10 @@ export async function listHubProgramsV2(): Promise<TemplateVersionsResult<HubPro
     .eq("organization_id", session.organizationId)
     .order("name")
     .limit(500);
-  if (error) return { ok: false, error: m.errors.generic };
+  if (error) {
+    logActionFailure("template_versions.listHubProgramsV2", error);
+    return { ok: false, error: m.errors.generic };
+  }
   return {
     ok: true,
     data: { programs: (data ?? []) as { id: string; name: string }[], outsideProgram: session.isAdmin },

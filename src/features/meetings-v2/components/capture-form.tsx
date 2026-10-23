@@ -4,6 +4,8 @@ import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { semanticBlockKinds, type SemanticBlockKind } from "../editor-adapter";
 import { captureItem } from "../services/meeting-v2.commands";
 import { useMeetingsV2T } from "./use-mv2-t";
@@ -18,6 +20,7 @@ export function CaptureForm({
   agenda: { id: string; title: string }[];
 }) {
   const t = useMeetingsV2T();
+  const shellT = useT();
   const router = useRouter();
   const id = useId();
   const [kind, setKind] = useState<SemanticBlockKind>("task");
@@ -29,16 +32,19 @@ export function CaptureForm({
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    setSaving(true);
-    const result = await captureItem({
-      meetingId,
-      kind,
-      body: String(form.get("body") ?? ""),
-      ownerId: takesOwner ? String(form.get("ownerId") ?? "") : "",
-      dueOn: takesOwner ? String(form.get("dueOn") ?? "") : "",
-      agendaItemId: String(form.get("agendaItemId") ?? ""),
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        captureItem({
+          meetingId,
+          kind,
+          body: String(form.get("body") ?? ""),
+          ownerId: takesOwner ? String(form.get("ownerId") ?? "") : "",
+          dueOn: takesOwner ? String(form.get("dueOn") ?? "") : "",
+          agendaItemId: String(form.get("agendaItemId") ?? ""),
+        }),
+      { setBusy: setSaving, setError: (text) => setStatus(text ? { ok: false, text } : null), t: shellT, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     setStatus({ ok: result.ok, text: result.ok ? (result.message ?? t("capture.added")) : (result.error ?? t("capture.error")) });
     if (result.ok) {
       formElement.reset();
@@ -47,7 +53,7 @@ export function CaptureForm({
   }
 
   return (
-    <form onSubmit={submit} className="card grid gap-3 p-4 sm:grid-cols-2" aria-label={t("capture.add")}>
+    <form onSubmit={(event) => void submit(event)} className="card grid gap-3 p-4 sm:grid-cols-2" aria-label={t("capture.add")}>
       <div>
         <Label htmlFor={`${id}-kind`}>{t("capture.kindLabel")}</Label>
         <Select id={`${id}-kind`} value={kind} onChange={(e) => setKind(e.target.value as SemanticBlockKind)}>

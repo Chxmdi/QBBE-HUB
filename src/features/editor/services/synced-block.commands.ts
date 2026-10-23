@@ -11,6 +11,7 @@ import {
   type EditorBlock,
   type EditorContent,
 } from "@/features/editor/adapter/content";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Synced blocks (U5b): a group of blocks kept once in `synced_block` and shown
@@ -84,7 +85,10 @@ export async function createSyncedBlock(input: unknown): Promise<{ ok: true; id:
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false };
+  if (error || !data) {
+    if (error) logActionFailure("synced_block.createSyncedBlock", error);
+    return { ok: false };
+  }
   return { ok: true, id: data.id as string };
 }
 

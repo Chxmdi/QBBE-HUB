@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import {
   addGrantReport,
   deleteGrantReport,
@@ -75,30 +76,32 @@ export function GrantDialog({ grant, options }: { grant?: GrantFormValue; option
             className="space-y-4"
             onSubmit={async (e) => {
               e.preventDefault();
-              setError(null);
-              setSaving(true);
               const form = new FormData(e.currentTarget);
               const str = (name: string) => {
                 const v = form.get(name);
                 return typeof v === "string" ? v : undefined;
               };
-              const result = await saveGrant({
-                id: grant?.id,
-                funderId: str("funderId"),
-                funderContactId: str("funderContactId"),
-                title: str("title"),
-                funderReference: str("funderReference"),
-                amount: str("amount"),
-                awardedOn: str("awardedOn"),
-                startsOn: str("startsOn"),
-                endsOn: str("endsOn"),
-                fundId: str("fundId"),
-                programId: str("programId"),
-                restrictions: str("restrictions"),
-                responsibleUserId: str("responsibleUserId"),
-                status: str("status") ?? "active",
-              });
-              setSaving(false);
+              const result = await runServerAction(
+                () =>
+                  saveGrant({
+                    id: grant?.id,
+                    funderId: str("funderId"),
+                    funderContactId: str("funderContactId"),
+                    title: str("title"),
+                    funderReference: str("funderReference"),
+                    amount: str("amount"),
+                    awardedOn: str("awardedOn"),
+                    startsOn: str("startsOn"),
+                    endsOn: str("endsOn"),
+                    fundId: str("fundId"),
+                    programId: str("programId"),
+                    restrictions: str("restrictions"),
+                    responsibleUserId: str("responsibleUserId"),
+                    status: str("status") ?? "active",
+                  }),
+                { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+              );
+              if (!result) return;
               if (!result.ok) {
                 setError(result.error ?? t("finance.gifts.grantDialog.couldNotSave"));
                 return;
@@ -246,11 +249,12 @@ export function AddReportForm({ grantId }: { grantId: string }) {
       onSubmit={async (e) => {
         e.preventDefault();
         const formEl = e.currentTarget;
-        setError(null);
-        setSaving(true);
         const form = new FormData(formEl);
-        const result = await addGrantReport({ grantId, title: form.get("title"), dueOn: form.get("dueOn") });
-        setSaving(false);
+        const result = await runServerAction(
+          () => addGrantReport({ grantId, title: form.get("title"), dueOn: form.get("dueOn") }),
+          { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+        );
+        if (!result) return;
         if (!result.ok) {
           setError(result.error ?? t("finance.gifts.reportForm.couldNotAdd"));
           return;
@@ -294,9 +298,15 @@ export function ReportControls({
   const t = useT();
   const [pending, setPending] = useState(false);
   const run = async (fn: () => Promise<{ ok: boolean; error?: string }>, done: string) => {
-    setPending(true);
-    const result = await fn();
-    setPending(false);
+    const result = await runServerAction(fn, {
+      setBusy: setPending,
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     toast(result.ok ? done : (result.error ?? t("finance.gifts.reportForm.couldNotUpdate")), { tone: result.ok ? "success" : "error" });
     router.refresh();
   };

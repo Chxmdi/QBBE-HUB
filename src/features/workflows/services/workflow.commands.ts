@@ -14,6 +14,7 @@ import { fill, workflowMessages } from "../i18n";
 import { describeTestStep, type TestStepDetail } from "../test-run-detail";
 import { activityRowToEvent, type ActivityEventRow } from "../trigger";
 import { executeWorkflowRun, retryRunFromStep, webhookSecret, type GraphRule } from "./run";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Saving and test-running workflows (M14c). Admins only, at the two-step
@@ -90,7 +91,10 @@ export async function saveWorkflow(input: unknown): Promise<WorkflowCommandResul
       .update({ ...row, definition_version: (current.definition_version as number) + 1 })
       .eq("id", parsed.data.id)
       .eq("organization_id", checked.organizationId);
-    if (error) return { ok: false, error: m.errors.saveFailed };
+    if (error) {
+      logActionFailure("workflow.saveWorkflow", error);
+      return { ok: false, error: m.errors.saveFailed };
+    }
     revalidatePath("/workflows");
     return { ok: true, id: parsed.data.id };
   }
@@ -109,7 +113,10 @@ export async function saveWorkflow(input: unknown): Promise<WorkflowCommandResul
     })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: m.errors.saveFailed };
+  if (error || !data) {
+    if (error) logActionFailure("workflow.saveWorkflow", error);
+    return { ok: false, error: m.errors.saveFailed };
+  }
   revalidatePath("/workflows");
   return { ok: true, id: data.id as string };
 }
@@ -212,7 +219,10 @@ export async function setWorkflowStopped(input: unknown): Promise<WorkflowComman
     .eq("engine", "graph_v2")
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: checked.m.errors.stopFailed };
+  if (error || !data) {
+    if (error) logActionFailure("workflow.setWorkflowStopped", error);
+    return { ok: false, error: checked.m.errors.stopFailed };
+  }
   revalidatePath(`/workflows/${parsed.data.id}`);
   revalidatePath("/workflows");
   return { ok: true, id: parsed.data.id };
@@ -260,7 +270,10 @@ export async function decideWorkflowReview(input: unknown): Promise<WorkflowComm
     p_decision: parsed.data.decision,
     p_comment: parsed.data.comment || null,
   });
-  if (error) return { ok: false, error: m.review.failed };
+  if (error) {
+    logActionFailure("workflow.decideWorkflowReview", error);
+    return { ok: false, error: m.review.failed };
+  }
   revalidatePath(`/workflows/reviews/${parsed.data.id}`);
   return { ok: true, id: parsed.data.id };
 }

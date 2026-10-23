@@ -9,6 +9,7 @@ import { FieldHint, Input, Label } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { deleteDraft, postEntry, reverseEntry } from "@/features/ledger/services/ledger.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** Post, edit or delete a draft. */
 export function DraftActions({ entryId }: { entryId: string }) {
@@ -33,10 +34,13 @@ export function DraftActions({ entryId }: { entryId: string }) {
           disabled={pending !== null}
           onClick={async () => {
             if (!window.confirm(t("finance.ledger.entryActions.deleteConfirm"))) return;
-            setPending("delete");
-            setError(null);
-            const result = await deleteDraft(entryId);
-            setPending(null);
+            const result = await runServerAction(() => deleteDraft(entryId), {
+              setBusy: (on) => setPending(on ? "delete" : null),
+              setError,
+              t,
+              reload: () => window.location.reload(),
+            });
+            if (!result) return;
             if (!result.ok) {
               setError(result.error ?? t("finance.ledger.entryActions.deleteFailed"));
               return;
@@ -55,10 +59,13 @@ export function DraftActions({ entryId }: { entryId: string }) {
             if (!window.confirm(t("finance.ledger.entryActions.postConfirm"))) {
               return;
             }
-            setPending("post");
-            setError(null);
-            const result = await postEntry(entryId);
-            setPending(null);
+            const result = await runServerAction(() => postEntry(entryId), {
+              setBusy: (on) => setPending(on ? "post" : null),
+              setError,
+              t,
+              reload: () => window.location.reload(),
+            });
+            if (!result) return;
             if (!result.ok) {
               setError(result.error ?? t("finance.ledger.entryActions.postFailed"));
               return;
@@ -108,15 +115,17 @@ export function ReverseEntryButton({
           className="space-y-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            setSaving(true);
-            setError(null);
             const form = new FormData(e.currentTarget);
-            const result = await reverseEntry({
-              entryId,
-              entryDate: form.get("entryDate"),
-              memo: form.get("memo") ?? undefined,
-            });
-            setSaving(false);
+            const result = await runServerAction(
+              () =>
+                reverseEntry({
+                  entryId,
+                  entryDate: form.get("entryDate"),
+                  memo: form.get("memo") ?? undefined,
+                }),
+              { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+            );
+            if (!result) return;
             if (!result.ok || !result.id) {
               setError(result.error ?? t("finance.ledger.entryActions.reverseFailed"));
               return;

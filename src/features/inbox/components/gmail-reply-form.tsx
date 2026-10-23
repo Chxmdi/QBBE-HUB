@@ -7,6 +7,7 @@ import { Label, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { sendGmailMessage } from "@/features/inbox/services/gmail.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function GmailReplyForm({ to, subject, threadId, messageId }: { to: string; subject: string; threadId: string | null; messageId: string | null }) {
   const [body, setBody] = useState("");
@@ -14,9 +15,12 @@ export function GmailReplyForm({ to, subject, threadId, messageId }: { to: strin
   const { toast } = useToast();
   const t = useT();
   async function submit(event: React.FormEvent) {
-    event.preventDefault(); setSending(true);
-    const result = await sendGmailMessage({ to, subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`, body, threadId: threadId ?? undefined, inReplyTo: messageId ?? undefined });
-    setSending(false);
+    event.preventDefault();
+    const result = await runServerAction(
+      () => sendGmailMessage({ to, subject: subject.startsWith("Re:") ? subject : `Re: ${subject}`, body, threadId: threadId ?? undefined, inReplyTo: messageId ?? undefined }),
+      { setBusy: setSending, setError: (error) => { if (error) toast(error, { tone: "error" }); }, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) { toast(result.error ?? t("inbox.reply.failed"), { tone: "error" }); return; }
     setBody(""); toast(t("inbox.reply.sent"));
   }
