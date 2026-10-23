@@ -387,7 +387,10 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
   });
   if (closeError || !closureId) {
     logActionFailure("project.closeProject", closeError);
-    return { ok: false, error: t("projects.errors.closeFailed") };
+    // Evidence filed under another project now refuses the whole close
+    // (before, the close went through and that evidence was dropped).
+    const foreignEvidence = closeError?.code === "23514" && /same project/.test(closeError.message);
+    return { ok: false, error: t(foreignEvidence ? "projects.errors.closeEvidenceElsewhere" : "projects.errors.closeFailed") };
   }
   const { data: project } = await supabase
     .from("project")

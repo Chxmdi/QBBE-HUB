@@ -9,8 +9,13 @@ Two-step sign-in rules still apply after a Google sign-in.
 Nothing here is done in code: it is set up in Google Cloud and in the
 Supabase dashboard, once per environment (staging first, then production).
 The code side is ready: `supabase/config.toml` has the provider (off
-locally), and `GoogleSignInButton` (`src/features/spaces/admin/`) appears on
-the sign-in page only when the site sets `NEXT_PUBLIC_GOOGLE_SIGN_IN=on`.
+locally), and `GoogleSignInButton` (`src/features/spaces/admin/`) renders only
+when the site sets `NEXT_PUBLIC_GOOGLE_SIGN_IN=on`.
+
+> **Pending owner decision.** The button is not yet placed on the sign-in
+> page, so setting `NEXT_PUBLIC_GOOGLE_SIGN_IN=on` has no visible effect
+> today. Whether to offer Google sign-in is the owner's call; once decided,
+> placing the button is a one-line change on the sign-in page.
 
 ## What you need before starting
 

@@ -146,6 +146,16 @@ describe("closeProject", () => {
     expect(calls().some((c) => c.table === "task" && c.action === "update")).toBe(false);
   });
 
+  it("says when evidence filed under another project stopped the close", async () => {
+    answer = db(true);
+    rpcAnswer = (call) =>
+      call.fn === "close_project_with_evidence"
+        ? { data: null, error: { code: "23514", message: "Closure evidence must be a document filed against the same project" } }
+        : { data: true, error: null };
+    const result = await closeProject({ projectId: ID, results: "Delivered the fair.", archiveOpenTasks: false });
+    expect(result).toEqual({ ok: false, error: expect.stringMatching(/filed under another project/) });
+  });
+
   it("asks for open tasks to be archived as part of the close", async () => {
     answer = (call) =>
       call.table === "project" && call.action === "select" ? { data: { name: "Fair", program_id: null }, error: null } : db(true)(call);

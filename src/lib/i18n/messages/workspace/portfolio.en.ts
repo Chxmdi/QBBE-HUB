@@ -350,6 +350,7 @@ export const portfolioEn = {
         "Close or reassign open milestones and blocked work before completing the project.",
       closingUpdateFailed: "Could not record the closing update.",
       closeFailed: "Could not close the project.",
+      closeEvidenceElsewhere: "One of the chosen evidence documents is filed under another project. Remove it, or file it under this project, then close again. Nothing was changed.",
       closureRecordFailed:
         "The project is closed, but its closure record could not be saved. Add the results again from the project page.",
       programCreateFailed: "Could not create the program.",

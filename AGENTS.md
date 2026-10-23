@@ -37,9 +37,9 @@ the Docker daemon does not auto-start and Supabase must be started manually:
 
 - `sudo -E supabase db reset` recreates the DB and re-applies
   `supabase/migrations/*.sql` in order. Use it to get a clean state.
-- After adding or changing a migration, regenerate the database types on a
-  freshly reset local database: `npm run db:types`, and commit
-  `src/types/database.ts`. CI fails (`npm run db:types:check`) when they no
+- Every commit that adds or changes a migration must also commit the
+  regenerated database types: on a freshly reset local database run
+  `npm run db:types` and commit `src/types/database.ts`. CI fails (`npm run db:types:check`) when they no
   longer match. Only the service client is typed so far
   (`SupabaseClient<Database>`); the session clients follow module by module.
 - The **first** sign-up bootstraps the workspace (creates the organization,
