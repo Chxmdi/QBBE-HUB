@@ -265,14 +265,14 @@ isOneToOne: false
                   ]
                 },"announcement": {
                   Row: {
-                    "ack_deadline": string | null,"body": string | null,"channel_id": string | null,"created_at": string,"created_by": string,"expires_at": string | null,"id": string,"message_id": string | null,"organization_id": string,"pinned_until": string | null,"priority": Database["public"]['Enums']["announcement_priority"],"publish_at": string,"requires_ack": boolean,"title": string
+                    "ack_deadline": string | null,"body": string | null,"channel_id": string | null,"created_at": string,"created_by": string,"expires_at": string | null,"fanned_out_at": string | null,"id": string,"message_id": string | null,"organization_id": string,"pinned_until": string | null,"priority": Database["public"]['Enums']["announcement_priority"],"publish_at": string,"requires_ack": boolean,"title": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "ack_deadline"?: string | null,"body"?: string | null,"channel_id"?: string | null,"created_at"?: string,"created_by": string,"expires_at"?: string | null,"id"?: string,"message_id"?: string | null,"organization_id": string,"pinned_until"?: string | null,"priority"?: Database["public"]['Enums']["announcement_priority"],"publish_at"?: string,"requires_ack"?: boolean,"title": string
+                    "ack_deadline"?: string | null,"body"?: string | null,"channel_id"?: string | null,"created_at"?: string,"created_by": string,"expires_at"?: string | null,"fanned_out_at"?: string | null,"id"?: string,"message_id"?: string | null,"organization_id": string,"pinned_until"?: string | null,"priority"?: Database["public"]['Enums']["announcement_priority"],"publish_at"?: string,"requires_ack"?: boolean,"title": string
                   }
                   Update: {
-                    "ack_deadline"?: string | null,"body"?: string | null,"channel_id"?: string | null,"created_at"?: string,"created_by"?: string,"expires_at"?: string | null,"id"?: string,"message_id"?: string | null,"organization_id"?: string,"pinned_until"?: string | null,"priority"?: Database["public"]['Enums']["announcement_priority"],"publish_at"?: string,"requires_ack"?: boolean,"title"?: string
+                    "ack_deadline"?: string | null,"body"?: string | null,"channel_id"?: string | null,"created_at"?: string,"created_by"?: string,"expires_at"?: string | null,"fanned_out_at"?: string | null,"id"?: string,"message_id"?: string | null,"organization_id"?: string,"pinned_until"?: string | null,"priority"?: Database["public"]['Enums']["announcement_priority"],"publish_at"?: string,"requires_ack"?: boolean,"title"?: string
                   }
                   Relationships: [
                     {
@@ -8212,6 +8212,9 @@ isOneToOne: false
 "expire_unfinished_uploads":
 { Args: { "p_apply": boolean,"p_before": string,"p_limit": number }; Returns: number
                            },
+"fan_out_announcement":
+{ Args: { "p_announcement": string,"p_rows": Json }; Returns: number
+                           },
 "finance_aging":
 { Args: { "p_as_of": string,"p_kind": string,"p_organization": string }; Returns: {
               "bucket": string,"contact_id": string,"contact_name": string,"control_account_id": string,"days_past_due": number,"document_date": string,"document_id": string,"due_date": string,"open_cents": number,"reference": string,"total_cents": number
@@ -8316,6 +8319,9 @@ isOneToOne: false
                            },
 "google_link_event_meeting":
 { Args: { "p_link_id": string,"p_meeting_id": string }; Returns: undefined
+                           },
+"grant_write_allowance":
+{ Args: { "p_action": string,"p_count": number,"p_seconds": number,"p_user": string }; Returns: undefined
                            },
 "has_program_capability":
 { Args: { "p_capability": string,"p_program": string }; Returns: boolean
