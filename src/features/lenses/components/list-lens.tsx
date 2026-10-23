@@ -19,10 +19,12 @@ export function ListLens({
   sections,
   timeZone,
   hideEmpty = true,
+  taskDrawer = false,
 }: {
   sections: ListSection[];
   timeZone: string;
   hideEmpty?: boolean;
+  taskDrawer?: boolean;
 }) {
   const t = useLensT();
   const shown = hideEmpty ? sections.filter((s) => s.rows.length > 0) : sections;
@@ -49,7 +51,7 @@ export function ListLens({
                   return (
                     <li key={row.id} data-lens-row={row.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5">
                       <div className="min-w-0 flex-1 basis-52">
-                        <TaskTitleLink row={row} className="block truncate text-[14px] font-medium" />
+                        <TaskTitleLink inPlace={taskDrawer} row={row} className="block truncate text-[14px] font-medium" />
                         <span className="meta flex flex-wrap gap-x-2">
                           <span className="truncate">{project?.label ?? t("list.noProject")}</span>
                           {reason ? <span className="text-danger-fg">{reason}</span> : null}

@@ -16,6 +16,7 @@ export const pagesEn = {
     emptyTitle: "No pages yet",
     emptyBody: "Create a page to start writing. Pages can hold other pages.",
   },
+  create: { visibility: "Who can see this page?" },
   sidebar: {
     label: "Pages",
     /** Below desktop width the tree folds behind this button while a page is open. */

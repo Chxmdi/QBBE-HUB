@@ -79,9 +79,20 @@ export const en = {
     reviewNote: "French wording is awaiting review by a fluent speaker.",
   },
   nav: {
+    allTools: "All tools",
     main: "Main navigation",
     primary: "Primary",
     groups: {
+      today: "Today",
+      messages: "Messages",
+      programsProjects: "Programs & Projects",
+      knowledge: "Knowledge",
+      calendar: "Calendar",
+      relationships: "Relationships",
+      finance: "Finance",
+      reportsViews: "Reports & Views",
+      utilities: "Utilities",
+
       work: "Work",
       communication: "Communication",
       organization: "Organization",
@@ -134,7 +145,7 @@ export const en = {
       capture: "Capture",
       goals: "Goals",
       following: "Following",
-      savedLenses: "Saved lenses",
+      savedLenses: "Saved views",
       table: "Table",
       timeline: "Timeline",
       gallery: "Gallery",
@@ -152,7 +163,7 @@ export const en = {
       commands: "Commands",
       apps: "Apps",
       templates: "Templates",
-      blueprints: "Blueprints",
+      blueprints: "Workspace builder",
       pageLayouts: "Page layouts",
       trash: "Trash",
       upkeep: "Workspace upkeep",
@@ -181,7 +192,9 @@ export const en = {
   topbar: {
     searchPlaceholder: "Search or jump to…",
     quickCreate: "Quick create",
+    createMore: "More creation options",
     create: {
+      page: "New page",
       task: "New task",
       proposal: "New project proposal",
       project: "New project",

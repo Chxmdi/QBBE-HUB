@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -38,9 +38,12 @@ export function TaskCreateDialog({
 }) {
   const t = useT();
   const router = useRouter();
-  const [open, setOpen] = useState(defaultOpen);
+  const searchParams = useSearchParams();
+  const [manualOpen, setOpen] = useState(defaultOpen);
+  const open = manualOpen || searchParams.get("create") === "task";
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const submitting = useRef(false);
   const [projectId, setProjectId] = useState(defaultProjectId ?? "");
   // A repeating task is still a task, so it is made here rather than behind a
   // separate "new recurring task" entry point nobody would find. Held in state
@@ -53,61 +56,70 @@ export function TaskCreateDialog({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setError(null);
     setSaving(true);
-    const form = new FormData(e.currentTarget);
+    try {
+      const form = new FormData(e.currentTarget);
 
-    // A recurring task is created as a series, so it has an owner who is
-    // answerable for it and a switch that stops it. The series carries the
-    // rest of the form onto its first occurrence rather than discarding it.
-    if (repeats) {
-      const ownerId = (form.get("assigneeId") as string) || "";
-      if (!ownerId) {
+      // A recurring task is created as a series, so it has an owner who is
+      // answerable for it and a switch that stops it. The series carries the
+      // rest of the form onto its first occurrence rather than discarding it.
+      if (repeats) {
+        const ownerId = (form.get("assigneeId") as string) || "";
+        if (!ownerId) {
+          setSaving(false);
+          setError(t("tasks.create.needsAssignee"));
+          return;
+        }
+        const seriesResult = await createTaskSeries({
+          title: form.get("title"),
+          projectId: (form.get("projectId") as string) || undefined,
+          milestoneId: (form.get("milestoneId") as string) || undefined,
+          description: (form.get("description") as string) || undefined,
+          priority: form.get("priority"),
+          recurrenceRule: repeats,
+          ownerId,
+          startsOn: (form.get("dueAt") as string) || undefined,
+        });
         setSaving(false);
-        setError(t("tasks.create.needsAssignee"));
+        if (!seriesResult.ok) {
+          setError(seriesResult.error ?? t("tasks.create.genericError"));
+          return;
+        }
+        setRepeats("");
+        closeDialog();
+        router.refresh();
         return;
       }
-      const seriesResult = await createTaskSeries({
+
+      const result = await createTask({
         title: form.get("title"),
+        description: (form.get("description") as string) || undefined,
         projectId: (form.get("projectId") as string) || undefined,
         milestoneId: (form.get("milestoneId") as string) || undefined,
-        description: (form.get("description") as string) || undefined,
+        assigneeId: (form.get("assigneeId") as string) || undefined,
         priority: form.get("priority"),
-        recurrenceRule: repeats,
-        ownerId,
-        startsOn: (form.get("dueAt") as string) || undefined,
+        status: (form.get("status") as string) || undefined,
+        dueAt: (form.get("dueAt") as string) || undefined,
+        completionCriteria: (form.get("completionCriteria") as string) || undefined,
+        reviewerId: (form.get("reviewerId") as string) || undefined,
+        approverId: (form.get("approverId") as string) || undefined,
       });
       setSaving(false);
-      if (!seriesResult.ok) {
-        setError(seriesResult.error ?? t("tasks.create.genericError"));
+      if (!result.ok) {
+        setError(result.error ?? t("tasks.create.genericError"));
         return;
       }
-      setRepeats("");
       closeDialog();
       router.refresh();
-      return;
+    } catch {
+      setError(t("tasks.create.genericError"));
+    } finally {
+      submitting.current = false;
+      setSaving(false);
     }
-
-    const result = await createTask({
-      title: form.get("title"),
-      description: (form.get("description") as string) || undefined,
-      projectId: (form.get("projectId") as string) || undefined,
-      milestoneId: (form.get("milestoneId") as string) || undefined,
-      assigneeId: (form.get("assigneeId") as string) || undefined,
-      priority: form.get("priority"),
-      status: (form.get("status") as string) || undefined,
-      dueAt: (form.get("dueAt") as string) || undefined,
-      completionCriteria: (form.get("completionCriteria") as string) || undefined,
-      reviewerId: (form.get("reviewerId") as string) || undefined,
-      approverId: (form.get("approverId") as string) || undefined,
-    });
-    setSaving(false);
-    if (!result.ok) {
-      setError(result.error ?? t("tasks.create.genericError"));
-      return;
-    }
-    closeDialog();
-    router.refresh();
   }
 
   /**
@@ -126,7 +138,7 @@ export function TaskCreateDialog({
     // navigation still in flight would leave the parameter in the address if
     // the page were reloaded in the meantime — which is the exact refresh this
     // is meant to survive.
-    window.history.replaceState(null, "", `${url.pathname}${url.search}`);
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }
 
   return (
@@ -135,17 +147,11 @@ export function TaskCreateDialog({
         <Plus className="size-4" aria-hidden />
         {triggerLabel ?? t("tasks.create.trigger")}
       </Button>
-      <Dialog open={open} onClose={closeDialog} title={t("tasks.create.title")}>
+      <Dialog open={open} onClose={() => { if (!submitting.current) closeDialog(); }} title={t("tasks.create.title")}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="task-title">{t("tasks.create.fieldTitle")}</Label>
             <Input id="task-title" name="title" required maxLength={300} autoFocus />
-          </div>
-          <div>
-            <Label htmlFor="task-description">
-              {t("tasks.create.description")} <span className="font-normal text-muted">{t("tasks.create.optional")}</span>
-            </Label>
-            <Textarea id="task-description" name="description" maxLength={5000} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
@@ -164,6 +170,37 @@ export function TaskCreateDialog({
                 ))}
               </Select>
             </div>
+            <div>
+              <Label htmlFor="task-assignee">{t("tasks.create.assignee")}</Label>
+              <Select id="task-assignee" name="assigneeId" defaultValue="">
+                <option value="">{t("tasks.unassigned")}</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="task-due">{repeats ? t("tasks.create.firstDue") : t("tasks.create.due")}</Label>
+              <Input id="task-due" name="dueAt" type="date" />
+              {repeats ? (
+                <p className="mt-1 text-[12.5px] text-muted">
+                  {t("tasks.create.firstDueHint")}
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <details className="rounded-(--radius-md) border border-line p-3">
+            <summary className="cursor-pointer text-[13px] font-semibold text-brand-fg">{t("tasks.create.moreDetails")}</summary>
+            <div className="mt-4 space-y-4">
+          <div>
+            <Label htmlFor="task-description">
+              {t("tasks.create.description")} <span className="font-normal text-muted">{t("tasks.create.optional")}</span>
+            </Label>
+            <Textarea id="task-description" name="description" maxLength={5000} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="task-milestone">
                 {t("tasks.create.milestone")} <span className="font-normal text-muted">{t("tasks.create.optional")}</span>
@@ -189,17 +226,6 @@ export function TaskCreateDialog({
               </Select>
             </div>
             <div>
-              <Label htmlFor="task-assignee">{t("tasks.create.assignee")}</Label>
-              <Select id="task-assignee" name="assigneeId" defaultValue="">
-                <option value="">{t("tasks.unassigned")}</option>
-                {people.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div>
               <Label htmlFor="task-priority">{t("tasks.create.priority")}</Label>
               <Select id="task-priority" name="priority" defaultValue="medium">
                 {(["low", "medium", "high", "critical"] as const).map((p) => (
@@ -208,15 +234,6 @@ export function TaskCreateDialog({
                   </option>
                 ))}
               </Select>
-            </div>
-            <div>
-              <Label htmlFor="task-due">{repeats ? t("tasks.create.firstDue") : t("tasks.create.due")}</Label>
-              <Input id="task-due" name="dueAt" type="date" />
-              {repeats ? (
-                <p className="mt-1 text-[12.5px] text-muted">
-                  {t("tasks.create.firstDueHint")}
-                </p>
-              ) : null}
             </div>
             <div>
               <Label htmlFor="task-repeats">{t("tasks.create.repeats")}</Label>
@@ -291,13 +308,15 @@ export function TaskCreateDialog({
               {t("tasks.create.criteriaHint")}
             </p>
           </div>
+            </div>
+          </details>
           {error ? (
             <p role="alert" className="text-[13px] text-danger-fg">
               {error}
             </p>
           ) : null}
           <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="secondary" onClick={closeDialog}>
+            <Button type="button" variant="secondary" disabled={saving} onClick={closeDialog}>
               {t("common.cancel")}
             </Button>
             <Button type="submit" loading={saving}>

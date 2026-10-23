@@ -14,6 +14,7 @@ export const pagesFrCA: PagesMessages = {
     emptyTitle: "Aucune page pour l’instant",
     emptyBody: "Créez une page pour commencer à écrire. Une page peut en contenir d’autres.",
   },
+  create: { visibility: "Qui peut voir cette page?" },
   sidebar: {
     label: "Pages",
     allPages: "Toutes les pages",

@@ -231,7 +231,7 @@ describe("visibleNav with every switch on", () => {
     const groups = visibleNav(ADMIN, ALL_SWITCHES);
     const classic = groups[groups.length - 1];
     expect(classic.label).toBe(CLASSIC_GROUP_LABEL);
-    expect(classic.items.map((i) => i.href)).toEqual(["/", "/my-work", "/board", "/calendar", "/forms"]);
+    expect(classic.items.map((i) => i.href)).toEqual(["/", "/my-work", "/board", "/forms", "/calendar"]);
   });
 
   it("moves the My Work count to the lens version and never shows a count twice", () => {
@@ -257,14 +257,8 @@ describe("visibleNav with every switch on", () => {
 
   it("with wos_home on, the groups are the consolidated ones, then Classic screens", () => {
     expect(visibleNav(ADMIN, ALL_SWITCHES).map((g) => g.label)).toEqual([
-      "Home",
-      "My Work",
-      "Pages",
-      "Data",
-      "Communication",
-      "Programs",
-      "More",
-      "Setup",
+      "Today", "My Work", "Messages", "Programs & Projects", "Knowledge", "Calendar",
+      "Relationships", "Finance", "Reports & Views", "Utilities", "Setup",
       CLASSIC_GROUP_LABEL,
     ]);
   });
@@ -342,7 +336,7 @@ describe("labels", () => {
   it("translates every new group and entry into French", () => {
     const en = createTranslator("en");
     const fr = createTranslator("fr-CA");
-    const same = new Set(["Communication", "Pages"]);
+    const same = new Set(["Communication", "Pages", "Messages"]);
     for (const group of visibleNav(ADMIN, ALL_SWITCHES)) {
       if (!same.has(group.label)) expect(navGroupLabel(fr, group), group.label).not.toBe(navGroupLabel(en, group));
       for (const item of group.items) {

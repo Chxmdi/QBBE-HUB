@@ -1,3 +1,6 @@
+import { Suspense } from "react";
+import { PageCreateDialog } from "@/features/pages/components/page-create-dialog";
+import { canCreatePrivatePages, canCreateWorkspacePages } from "@/features/pages/access";
 import type { Metadata } from "next";
 import { FileText } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
@@ -21,7 +24,7 @@ export default async function PagesHome() {
 
   return (
     <PagesShell session={session} sidebar={sidebar}>
-      <PageHeader eyebrow={t("home.eyebrow")} title={t("home.title")} description={t("home.description")} />
+      <PageHeader eyebrow={t("home.eyebrow")} title={t("home.title")} description={t("home.description")} actions={<Suspense fallback={null}><PageCreateDialog canCreatePrivate={canCreatePrivatePages({ userId: session.userId, role: session.role })} canCreateWorkspace={canCreateWorkspacePages({ userId: session.userId, role: session.role })} /></Suspense>} />
       {sidebar.pages.length === 0 ? (
         <EmptyState icon={<FileText />} title={t("home.emptyTitle")} description={t("home.emptyBody")} />
       ) : null}

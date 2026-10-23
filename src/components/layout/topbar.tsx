@@ -20,7 +20,8 @@ import { useFormatters, useT } from "@/lib/i18n/client";
 import { createActionLabel } from "@/lib/i18n/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Notification } from "@/types/entities";
-import { createActions } from "@/config/create-actions";
+import type { NavSwitches } from "@/config/navigation";
+import { createActions, splitCreateActions } from "@/config/create-actions";
 import { ErrorState } from "@/components/ui/error-state";
 
 const ACTIONABLE_CATEGORIES = new Set([
@@ -62,6 +63,7 @@ export function Topbar({
   isAdmin,
   isStaff,
   unreadCount,
+  switches,
   density = "comfortable",
   onOpenNav,
   onOpenPalette,
@@ -71,6 +73,7 @@ export function Topbar({
   isAdmin: boolean;
   isStaff: boolean;
   unreadCount: number;
+  switches?: NavSwitches;
   density?: "comfortable" | "compact";
   onOpenNav: () => void;
   onOpenPalette: () => void;
@@ -127,7 +130,7 @@ export function Topbar({
     );
   }
 
-  const createLinks = createActions({ isAdmin, isStaff });
+  const createLinks = splitCreateActions(createActions({ isAdmin, isStaff }, switches));
 
   return (
     <header className="sticky top-0 z-(--z-chrome) flex h-16 items-center gap-2 border-b border-line bg-surface/92 px-3 shadow-[0_1px_0_rgb(42_60_144_/_0.03)] backdrop-blur md:px-5">
@@ -173,7 +176,7 @@ export function Topbar({
               id="topbar-create-panel"
               className="absolute right-0 mt-2 w-44 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)"
             >
-              {createLinks.map((l) => (
+              {createLinks.common.map((l) => (
                 <Link
                   key={l.href}
                   href={l.href}
@@ -183,6 +186,12 @@ export function Topbar({
                   {createActionLabel(t, l)}
                 </Link>
               ))}
+              {createLinks.more.length > 0 ? (
+                <details className="border-t border-line">
+                  <summary className="cursor-pointer px-3 py-2 text-[13px] font-medium">{t("topbar.createMore")}</summary>
+                  {createLinks.more.map((action) => <Link key={action.href} href={action.href} onClick={() => setOpenMenu(null)} className="block px-3 py-1.5 text-[13.5px] hover:bg-brand-soft/60">{createActionLabel(t, action)}</Link>)}
+                </details>
+              ) : null}
             </div>
           ) : null}
         </div>

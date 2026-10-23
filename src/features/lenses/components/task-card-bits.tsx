@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+import { taskDrawerHref } from "@/features/tasks/task-url";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { PriorityBadge } from "@/components/shared/status-badges";
@@ -26,9 +28,16 @@ export function taskHref(id: string): string {
   return `/my-work?task=${id}`;
 }
 
-export function TaskTitleLink({ row, className }: { row: LensRow; className?: string }) {
+export function TaskTitleLink({ row, className, inPlace = false }: { row: LensRow; className?: string; inPlace?: boolean }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const href = inPlace ? taskDrawerHref(pathname, searchParams.toString(), row.id) : taskHref(row.id);
   return (
-    <Link href={taskHref(row.id)} className={cn("font-semibold text-ink hover:text-brand-fg", className)}>
+    <Link href={href} scroll={false} onClick={(event) => {
+      if (!inPlace || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      window.history.pushState(null, "", href + window.location.hash);
+    }} className={cn("font-semibold text-ink hover:text-brand-fg", className)}>
       {row.title}
     </Link>
   );

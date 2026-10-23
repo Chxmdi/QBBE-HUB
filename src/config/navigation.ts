@@ -310,80 +310,17 @@ function pick(...hrefs: string[]): NavItem[] {
  * tools gather under Setup.
  */
 export const NAV_GROUPS_V2: NavGroup[] = [
-  { label: "Home", items: pick("/", "/home", "/home/world", "/capture", "/home/commands") },
-  { label: "My Work", items: pick("/my-work", "/lenses/my-work", "/board", "/lenses/board", "/approvals") },
-  { label: "Pages", items: pick("/pages", "/spaces", "/templates-v2", "/apps", "/collab/trash") },
-  {
-    label: "Data",
-    items: pick(
-      "/lenses",
-      "/lenses/table",
-      "/lenses/timeline",
-      "/lenses/gallery",
-      "/lenses/feed",
-      "/lenses/dashboard",
-      "/lenses/find",
-      "/insight/dashboards",
-      "/insight/operations",
-      "/insight/graph",
-      "/insight/map",
-      "/insight/process",
-      "/insight/what-if",
-    ),
-  },
-  {
-    label: "Communication",
-    items: pick(
-      "/inbox",
-      "/channels",
-      "/messages",
-      "/saved",
-      "/announcements",
-      "/following",
-      "/meetings",
-      "/meetings-v2",
-      "/calendar",
-      "/lenses/calendar",
-      "/schedule",
-      "/events",
-    ),
-  },
-  { label: "Programs", items: pick("/programs", "/projects", "/goals", "/people", "/crm") },
-  {
-    label: "More",
-    items: pick(
-      "/documents",
-      "/forms",
-      "/forms-v2",
-      "/requests",
-      "/signatures",
-      "/finance/ledger",
-      "/finance/budgets",
-      "/finance/sales-tax",
-      "/finance/bank",
-      "/finance/receipts",
-      "/finance/gifts",
-      "/finance/payables",
-      "/finance/payroll",
-      "/reports",
-      "/offline",
-      "/m",
-      "/admin",
-    ),
-  },
-  {
-    label: "Setup",
-    items: pick(
-      "/builder",
-      "/collab/layouts",
-      "/workflows",
-      "/api-tokens",
-      "/upkeep",
-      "/spaces/admin",
-      "/spaces/roles",
-      "/spaces/publish",
-    ),
-  },
+  { label: "Today", items: pick("/", "/home", "/home/world", "/capture") },
+  { label: "My Work", items: pick("/my-work", "/lenses/my-work", "/board", "/lenses/board", "/approvals", "/requests", "/forms", "/forms-v2", "/signatures") },
+  { label: "Messages", items: pick("/channels", "/messages", "/announcements", "/saved", "/people") },
+  { label: "Programs & Projects", items: pick("/programs", "/projects", "/goals") },
+  { label: "Knowledge", items: pick("/pages", "/documents", "/spaces", "/templates-v2", "/apps", "/collab/trash") },
+  { label: "Calendar", items: pick("/calendar", "/lenses/calendar", "/schedule", "/meetings", "/meetings-v2", "/events") },
+  { label: "Relationships", items: pick("/crm") },
+  { label: "Finance", items: pick("/finance/receipts", "/finance/payables", "/finance/ledger", "/finance/budgets", "/finance/sales-tax", "/finance/bank", "/finance/gifts", "/finance/payroll") },
+  { label: "Reports & Views", items: pick("/reports", "/lenses", "/lenses/table", "/lenses/timeline", "/lenses/gallery", "/lenses/feed", "/lenses/dashboard", "/insight/dashboards", "/insight/operations", "/insight/graph", "/insight/map", "/insight/process", "/insight/what-if") },
+  { label: "Utilities", items: pick("/inbox", "/following", "/lenses/find", "/home/commands", "/offline", "/m") },
+  { label: "Setup", items: pick("/admin", "/builder", "/collab/layouts", "/workflows", "/api-tokens", "/upkeep", "/spaces/admin", "/spaces/roles", "/spaces/publish") },
 ];
 
 /** The grouping this request's switches select: consolidated while `wos_home` is on. */
@@ -505,15 +442,15 @@ export interface MobileTab {
 export const MOBILE_TAB_HREFS = ["/", "/my-work", "/channels", "/calendar"] as const;
 
 /**
- * With the consolidated menu: Home, My Work, Pages, Communication, then More.
+ * With the consolidated menu: Today, My Work, Messages, Calendar, then More.
  * Each tab opens its group's own screen (following its replacement), never
- * whichever entry happens to come first, so "Pages" never opens Spaces.
+ * whichever entry happens to come first.
  */
 export const MOBILE_TAB_GROUPS_V2 = [
-  { group: "Home", href: "/" },
+  { group: "Today", href: "/" },
   { group: "My Work", href: "/my-work" },
-  { group: "Pages", href: "/pages" },
-  { group: "Communication", href: "/inbox" },
+  { group: "Messages", href: "/channels" },
+  { group: "Calendar", href: "/calendar" },
 ] as const;
 
 /**

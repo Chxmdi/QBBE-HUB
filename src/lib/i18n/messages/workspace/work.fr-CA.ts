@@ -281,6 +281,7 @@ export const workFrCA: typeof workEn = {
       markBlocked: "Marquer comme bloquée",
     },
     create: {
+      moreDetails: "Plus de détails",
       trigger: "Nouvelle tâche",
       title: "Créer une tâche",
       fieldTitle: "Titre",

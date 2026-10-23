@@ -281,6 +281,7 @@ export const workEn = {
       markBlocked: "Mark blocked",
     },
     create: {
+      moreDetails: "More details",
       trigger: "New task",
       title: "Create task",
       fieldTitle: "Title",

@@ -120,9 +120,9 @@ describe("the consolidated grouping", () => {
     expect(navGroupsFor(V1_SWITCHES)).toBe(NAV_GROUPS);
     expect(navGroupsFor({ wos_home: true })).toBe(NAV_GROUPS_V2);
     expect(visibleNav(ADMIN, { wos_home: true }).map((g) => g.label)).toEqual([
-      "Home", "My Work", "Communication", "Programs", "More", CLASSIC_GROUP_LABEL,
+      "Today", "My Work", "Messages", "Programs & Projects", "Knowledge", "Calendar", "Relationships", "Finance", "Reports & Views", "Utilities", "Setup", CLASSIC_GROUP_LABEL,
     ]);
-    expect(NAV_GROUPS_V2.map((g) => g.label)).toEqual(["Home", "My Work", "Pages", "Data", "Communication", "Programs", "More", "Setup"]);
+    expect(NAV_GROUPS_V2.map((g) => g.label)).toEqual(["Today", "My Work", "Messages", "Programs & Projects", "Knowledge", "Calendar", "Relationships", "Finance", "Reports & Views", "Utilities", "Setup"]);
   });
 
   it("keeps each replacement right after the screen it replaces", () => {
@@ -137,7 +137,7 @@ describe("the consolidated grouping", () => {
   it("gathers the builders and administration tools under Setup", () => {
     const setup = NAV_GROUPS_V2.find((g) => g.label === "Setup")!;
     expect(hrefs([setup])).toEqual([
-      "/builder", "/collab/layouts", "/workflows", "/api-tokens", "/upkeep", "/spaces/admin", "/spaces/roles", "/spaces/publish",
+      "/admin", "/builder", "/collab/layouts", "/workflows", "/api-tokens", "/upkeep", "/spaces/admin", "/spaces/roles", "/spaces/publish",
     ]);
     expect(setup.items.every((i) => i.access !== "member")).toBe(true);
   });
@@ -177,11 +177,11 @@ describe("the phone tabs", () => {
     ]);
   });
 
-  it("are Home, My Work, Pages and Communication with the consolidated menu, keeping the live counts", () => {
+  it("are Today, My Work, Messages and Calendar with the consolidated menu, keeping the live counts", () => {
     const tabs = mobileTabs(visibleNav(VOLUNTEER, ALL_SWITCHES), ALL_SWITCHES);
     expect(tabs.map((t) => t.group?.label)).toEqual(MOBILE_TAB_GROUPS_V2.map((t) => t.group));
-    expect(tabs.map((t) => t.item.href)).toEqual(["/home", "/lenses/my-work", "/pages", "/inbox"]);
-    expect(tabs.map((t) => t.item.badge)).toEqual([undefined, "myWork", undefined, "inbox"]);
+    expect(tabs.map((t) => t.item.href)).toEqual(["/home", "/lenses/my-work", "/channels", "/lenses/calendar"]);
+    expect(tabs.map((t) => t.item.badge)).toEqual([undefined, "myWork", undefined, undefined]);
   });
 
   it("name groups the consolidated menu has", () => {
@@ -190,17 +190,17 @@ describe("the phone tabs", () => {
     }
   });
 
-  it("never name a group after a screen it does not open: no Pages tab while Pages is off", () => {
+  it("keep essential phone tabs available while optional Knowledge modules are off", () => {
     const switches: NavSwitches = { wos_home: true, wos_spaces: true };
     const tabs = mobileTabs(visibleNav(VOLUNTEER, switches), switches);
-    expect(tabs.map((t) => t.group?.label)).toEqual(["Home", "My Work", "Communication"]);
+    expect(tabs.map((t) => t.group?.label)).toEqual(["Today", "My Work", "Messages", "Calendar"]);
   });
 
   it("leave out a group with nothing to show rather than point at a hidden page", () => {
     const switches: NavSwitches = { wos_home: true };
     const tabs = mobileTabs(visibleNav(VOLUNTEER, switches), switches);
-    expect(tabs.map((t) => t.group?.label)).toEqual(["Home", "My Work", "Communication"]);
-    expect(tabs.map((t) => t.item.href)).toEqual(["/home", "/my-work", "/inbox"]);
+    expect(tabs.map((t) => t.group?.label)).toEqual(["Today", "My Work", "Messages", "Calendar"]);
+    expect(tabs.map((t) => t.item.href)).toEqual(["/home", "/my-work", "/channels", "/calendar"]);
   });
 
   it("mark the staff menu the same way", () => {

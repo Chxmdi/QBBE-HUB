@@ -82,6 +82,12 @@ export function Sidebar({
   // One current entry, the most specific one: "/lenses/board" marks Board,
   // not Board and Saved lenses together.
   const activeHref = activeNavHref(groups, pathname);
+  const compact = switches?.wos_home === true;
+  const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
+  const utilityLabels = new Set(["Reports & Views", "Utilities", "Setup", "Classic screens"]);
+  const firstUtility = groups.find((group) => utilityLabels.has(group.label));
+  const utilityActive = groups.some((group) => utilityLabels.has(group.label) && group.items.some((item) => item.href === activeHref));
+  const toolsOpen = expanded[`${pathname}:tools`] ?? utilityActive;
 
   const nav = (
     <nav aria-label={t("nav.main")} className="relative flex h-full flex-col overflow-hidden">
@@ -105,23 +111,45 @@ export function Sidebar({
         </p>
       </div>
 
-      <div className="relative flex-1 space-y-5 overflow-y-auto px-2.5 pb-4">
-        {groups.map((group, groupIndex) => (
-          <div key={group.label}>
-            <p
-              className={cn(
-                "px-2 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] uppercase",
-                groupIndex % 3 === 0
-                  ? "text-nav-label-gold"
-                  : groupIndex % 3 === 1
-                    ? "text-nav-label-blue"
-                    : "text-white/72",
-              )}
-            >
-              {navGroupLabel(t, group)}
-            </p>
-            <ul className="space-y-0.5">
-              {group.items.map((item) => {
+      <div className="relative flex-1 space-y-2 overflow-y-auto px-2.5 pb-4">
+        {groups.map((group) => {
+          const current = group.items.some((item) => item.href === activeHref);
+          const expandedKey = `${pathname}:${group.label}`;
+          const isExpanded = !compact || (expanded[expandedKey] ?? current);
+          const primary = group.items[0];
+          return (
+          <React.Fragment key={group.label}>
+          {compact && group === firstUtility ? (
+            <button type="button" aria-expanded={toolsOpen}
+              onClick={() => setExpanded((value) => ({ ...value, [`${pathname}:tools`]: !toolsOpen }))}
+              className="flex min-h-11 w-full items-center justify-between rounded-(--radius-sm) px-2 text-[13px] font-semibold text-white/80 hover:bg-white/8">
+              {t("nav.allTools")}<ChevronRight className={cn("size-4", toolsOpen && "rotate-90")} aria-hidden />
+            </button>
+          ) : null}
+          <div hidden={compact && utilityLabels.has(group.label) && !toolsOpen}>
+            {compact ? (
+              <div className="flex items-center gap-1">
+                <Link href={primary.href} onClick={onMobileClose}
+                  aria-current={primary.href === activeHref ? "page" : undefined}
+                  className={cn("flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-(--radius-sm) px-2 text-[13px] font-semibold", current ? "bg-white/12 text-white" : "text-white/80 hover:bg-white/8")}>
+                  <primary.icon className="size-4 shrink-0" aria-hidden />
+                  <span>{navGroupLabel(t, group)}</span>
+                  {navBadge(primary, counts) > 0 ? <span className="ml-auto text-accent">{navBadge(primary, counts)}<span className="sr-only">{t("common.openItems")}</span></span> : null}
+                </Link>
+                {group.items.length > 1 ? (
+                  <button type="button" aria-expanded={isExpanded}
+                    aria-label={navGroupLabel(t, group)}
+                    onClick={() => setExpanded((value) => ({ ...value, [expandedKey]: !isExpanded }))}
+                    className="flex size-11 shrink-0 items-center justify-center rounded-(--radius-sm) text-white/75 hover:bg-white/8">
+                    <ChevronRight className={cn("size-4", isExpanded && "rotate-90")} aria-hidden />
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <p className="px-2 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] text-nav-label-gold uppercase">{navGroupLabel(t, group)}</p>
+            )}
+            <ul hidden={!isExpanded} className="space-y-0.5">
+              {group.items.filter((item) => !compact || item !== primary).map((item) => {
                 const active = item.href === activeHref;
                 const badge = navBadge(item, counts);
                 return (
@@ -165,9 +193,10 @@ export function Sidebar({
               })}
             </ul>
           </div>
-        ))}
+          </React.Fragment>
+        );})}
 
-        {channels.length > 0 ? (
+        {channels.length > 0 && (!compact || pathname.startsWith("/channels") || pathname.startsWith("/messages")) ? (
           <div>
             <p className="px-2 pb-1.5 text-[10.5px] font-bold tracking-[0.12em] text-nav-label-blue uppercase">
               {t("nav.channelsHeading")}
@@ -332,7 +361,7 @@ function MobileNavDrawer({
         return;
       }
       if (e.key !== "Tab" || !panel) return;
-      const stops = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+      const stops = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((element) => element.getClientRects().length > 0);
       if (stops.length === 0) return;
       const first = stops[0];
       const last = stops[stops.length - 1];
