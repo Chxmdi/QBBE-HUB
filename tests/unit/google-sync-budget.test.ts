@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { FakeSupabase } from "../support/fake-supabase";
 
+// The first test loads the whole job handler, which takes seconds on a busy machine.
+vi.setConfig({ testTimeout: 20_000 });
+
 /**
  * google-sync handles at most batch_size connections per run, least recently
  * touched first, so a large or slow set of accounts is spread over several

@@ -25,8 +25,9 @@ export default defineConfig({
     include: ["src/**/*.test.ts", "tests/unit/**/*.test.ts"],
     environment: "node",
     // Unit tests decide each switch themselves (vi.stubEnv); a developer's
-    // shell with the Workspace OS switches on must not leak into them.
-    env: { WORKSPACE_OS_FLAGS: "" },
+    // shell with the Workspace OS switches on must not leak into them. Google
+    // retries happen without their real 1-30 s waits.
+    env: { WORKSPACE_OS_FLAGS: "", GOOGLE_FETCH_DELAY_SCALE: "0" },
     // `npm run test:coverage` (CI's Verify job) measures the unit suite and
     // fails when a folder falls below its floor. The floors are what the
     // suite reached when they were set, so they only stop coverage falling;

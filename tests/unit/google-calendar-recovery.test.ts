@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeSupabase } from "../support/fake-supabase";
 
+// The first test loads the whole job handler, which takes seconds on a busy machine.
+vi.setConfig({ testTimeout: 20_000 });
+
 // The Calendar write service builds its own privileged client; hand it the
 // in-memory double instead, so every read and write below is observable.
 let db: FakeSupabase;
