@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { setDisplayDensity } from "@/features/onboarding/services/onboarding.commands";
 import { Avatar } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
+import { cn, initials } from "@/lib/utils";
 import { useFormatters, useT } from "@/lib/i18n/client";
 import { createActionLabel } from "@/lib/i18n/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -24,6 +24,14 @@ import type { Notification } from "@/types/entities";
 import { createActions } from "@/config/create-actions";
 import { ErrorState } from "@/components/ui/error-state";
 import { inAppLink } from "@/lib/safe-redirect";
+
+/**
+ * Where a top-bar panel opens. On a phone, hung from its button it ran off the
+ * left of the screen (the buttons to its right push it there), so below sm it
+ * sits under the bar against the right edge; from sm up it hangs from its
+ * button.
+ */
+const PANEL_PLACEMENT = "fixed right-2 top-[4.5rem] z-(--z-overlay) sm:absolute sm:top-auto sm:right-0 sm:mt-2";
 
 const ACTIONABLE_CATEGORIES = new Set([
   "assignment",
@@ -190,7 +198,7 @@ export function Topbar({
           {openMenu === "create" ? (
             <div
               id="topbar-create-panel"
-              className="absolute right-0 mt-2 w-44 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)"
+              className={cn(PANEL_PLACEMENT, "w-44 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)")}
             >
               {createLinks.map((l) => (
                 <Link
@@ -231,7 +239,10 @@ export function Topbar({
               id="topbar-notifications-panel"
               role="region"
               aria-label={t("topbar.notifications")}
-              className="absolute right-0 mt-2 w-80 rounded-(--radius-md) border border-line bg-surface shadow-(--shadow-pop)"
+              className={cn(
+                PANEL_PLACEMENT,
+                "left-2 max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-(--radius-md) border border-line bg-surface shadow-(--shadow-pop) sm:left-auto sm:w-80",
+              )}
             >
               <div className="flex items-center justify-between border-b border-line px-3.5 py-2.5">
                 <p className="section-heading text-[15px]">{t("topbar.notifications")}</p>
@@ -371,7 +382,9 @@ export function Topbar({
           <button
             type="button"
             onClick={() => setOpenMenu(openMenu === "profile" ? null : "profile")}
-            aria-label={t("topbar.accountMenu")}
+            // The button shows the initials, so its spoken name starts with
+            // them: what a voice-control user reads is what they can say.
+            aria-label={t("topbar.accountMenuNamed", { initials: initials(name || "?") })}
             aria-expanded={openMenu === "profile"}
             aria-controls="topbar-account-panel"
             className="ml-1 flex items-center rounded-full ring-2 ring-transparent transition-shadow hover:ring-accent/35"
@@ -381,7 +394,7 @@ export function Topbar({
           {openMenu === "profile" ? (
             <div
               id="topbar-account-panel"
-              className="absolute right-0 mt-2 w-48 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)"
+              className={cn(PANEL_PLACEMENT, "w-48 rounded-(--radius-sm) border border-line bg-surface py-1 shadow-(--shadow-pop)")}
             >
               <p className="truncate border-b border-line px-3 py-2 text-[13px] font-bold text-brand-fg">
                 {name}

@@ -201,7 +201,7 @@ export function CommandPalette({
           }
           // No outline-none: the global focus ring is this input's only
           // visible focus indicator (WCAG 2.4.7).
-          className="h-12 flex-1 bg-transparent text-[14.5px] placeholder:text-muted/60"
+          className="h-12 flex-1 bg-transparent text-[14.5px] placeholder:text-muted"
         />
         {loading && query.length >= 2 ? (
           <span className="meta" aria-live="polite">
@@ -260,7 +260,9 @@ export function CommandPalette({
               onMouseEnter={() => setActiveIndex(i)}
               className={cn(
                 "flex w-full cursor-pointer items-center gap-3 px-4 py-2 text-left text-[13.5px]",
-                i === activeIndex && "bg-surface-soft",
+                // A tint alone is too faint to find the active result; the
+                // edge marker contrasts at least 3:1 in both themes.
+                i === activeIndex && "bg-surface-soft shadow-[inset_3px_0_0_var(--color-brand-fg)]",
               )}
             >
               <span className="text-muted">{item.icon}</span>

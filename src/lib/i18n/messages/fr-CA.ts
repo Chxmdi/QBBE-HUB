@@ -217,7 +217,7 @@ export const frCA: Messages = {
       compactTitle: "compact",
     },
     toggleTheme: "Changer le thème de couleur",
-    accountMenu: "Menu du compte",
+    accountMenuNamed: "{initials}, Menu du compte",
     accountSettings: "Paramètres du compte",
     emailPreferences: "Préférences de courriel",
     signOut: "Se déconnecter",
