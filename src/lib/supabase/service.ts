@@ -1,3 +1,4 @@
+import type { Database } from "@/types/database";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { serviceRoleKey } from "@/lib/env";
 
@@ -18,8 +19,8 @@ import { serviceRoleKey } from "@/lib/env";
  *     signature-verified sender;
  *   - never construct it in a module that a client component can import.
  */
-export function createSupabaseServiceClient(): SupabaseClient {
-  return createClient(
+export function createSupabaseServiceClient(): SupabaseClient<Database> {
+  return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     serviceRoleKey(),
     {

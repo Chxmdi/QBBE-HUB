@@ -23,7 +23,8 @@ export async function getJobRunnerStatus(): Promise<JobRunnerStatus> {
   try {
     const { data, error } = await createSupabaseServiceClient().rpc("job_runner_status", {
       p_site_origin: appUrl(),
-      p_app_secret: secret,
+      // No secret (null) is a state the function reports, not an error.
+      p_app_secret: secret as string,
     });
     if (error || typeof data !== "string") return "unknown";
     return data as JobRunnerStatus;

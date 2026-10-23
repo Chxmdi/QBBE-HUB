@@ -209,6 +209,11 @@ jobs:
       - name: RLS allow/deny matrix
         run: npm run test:db
 
+      # src/types/database.ts is generated from the schema these migrations
+      # build; a migration committed without regenerating it fails here.
+      - name: Database types match the migrations
+        run: npm run db:types:check
+
       - name: Database security advisor
         run: supabase db advisors --local --type security --fail-on error
 
