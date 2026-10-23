@@ -348,6 +348,7 @@ export const portfolioFrCA: typeof portfolioEn = {
         "Fermez ou réattribuez les jalons ouverts et le travail bloqué avant de terminer le projet.",
       closingUpdateFailed: "Impossible d’enregistrer la mise à jour de clôture.",
       closeFailed: "Impossible de fermer le projet.",
+      closeEvidenceElsewhere: "L’un des documents choisis comme preuve est classé dans un autre projet. Retirez-le, ou classez-le dans ce projet, puis fermez de nouveau. Rien n’a été modifié.",
       closureRecordFailed:
         "Le projet est fermé, mais son bilan de clôture n’a pas pu être enregistré. Ajoutez de nouveau les résultats à partir de la page du projet.",
       programCreateFailed: "Impossible de créer le programme.",

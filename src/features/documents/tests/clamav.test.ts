@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseScanReply } from "../services/clamav";
+import { parseScanReply, parseScanResult, scanNote } from "../services/clamav";
+import { isReleasable, quarantineReason } from "../quarantine-reason";
 
 describe("ClamAV verdict validation", () => {
   it("accepts only an explicit clean response", () => {
@@ -45,9 +46,10 @@ describe("scanning over TCP", () => {
     const port = (server.address() as { port: number }).port;
     const address = { host: "127.0.0.1", port };
     try {
-      expect(await scanDocumentBytes(new TextEncoder().encode("hello"), address)).toBe("clean");
+      expect(await scanDocumentBytes(new TextEncoder().encode("hello"), address)).toEqual({ verdict: "clean", signature: null });
       seen.length = 0;
-      expect(await scanDocumentBytes(new TextEncoder().encode("X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR"), address)).toBe("quarantined");
+      expect(await scanDocumentBytes(new TextEncoder().encode("X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR"), address))
+        .toEqual({ verdict: "quarantined", signature: "Eicar-Test-Signature" });
       expect(Buffer.concat(seen).subarray(0, 10).toString("latin1")).toBe("zINSTREAM\0");
     } finally {
       server.close();
@@ -56,5 +58,33 @@ describe("scanning over TCP", () => {
   it("refuses to scan when no scanner is configured", async () => {
     const { scanDocumentBytes } = await import("../services/clamav");
     await expect(scanDocumentBytes(new Uint8Array(1), null)).rejects.toThrow(/CLAMAV_SOCKET/);
+  });
+});
+
+describe("what a quarantine records and tells the uploader", () => {
+  it("keeps the scanner's verdict name", () => {
+    expect(parseScanResult("stream: Heuristics.Encrypted.PDF FOUND\0"))
+      .toEqual({ verdict: "quarantined", signature: "Heuristics.Encrypted.PDF" });
+    expect(scanNote({ verdict: "quarantined", signature: "Heuristics.Encrypted.Zip" })).toBe("Heuristics.Encrypted.Zip");
+    expect(scanNote({ verdict: "clean", signature: null })).toBe("ClamAV scan completed");
+    expect(scanNote("rejected")).toBe("File exceeds 25 MB");
+  });
+
+  it("explains a password-protected file, a virus, a file too large and a deleted file differently", () => {
+    expect(quarantineReason("quarantined", "Heuristics.Encrypted.PDF")).toBe("passwordProtected");
+    expect(quarantineReason("quarantined", "Heuristics.Encrypted.Zip")).toBe("passwordProtected");
+    expect(quarantineReason("quarantined", "Eicar-Test-Signature")).toBe("virus");
+    expect(quarantineReason("quarantined", "ClamAV scan completed")).toBe("virus");
+    expect(quarantineReason("rejected", "File exceeds 25 MB")).toBe("tooLarge");
+    expect(quarantineReason("quarantined", "Deleted by an administrator; the scanner reported Eicar-Test-Signature")).toBe("deleted");
+    expect(quarantineReason("clean", "Released by an administrator; the scanner reported Heuristics.Encrypted.PDF")).toBeNull();
+  });
+
+  it("offers release only for a password-protected PDF", () => {
+    expect(isReleasable("quarantined", "Heuristics.Encrypted.PDF")).toBe(true);
+    expect(isReleasable("quarantined", "Heuristics.Encrypted.Zip")).toBe(false);
+    expect(isReleasable("quarantined", "Heuristics.Limits.Exceeded.MaxRecursion")).toBe(false);
+    expect(isReleasable("quarantined", "Eicar-Test-Signature")).toBe(false);
+    expect(isReleasable("rejected", "Heuristics.Encrypted.PDF")).toBe(false);
   });
 });

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { getT } from "@/lib/i18n/server";
 import { PageHeader } from "@/components/shared/page-header";
 import { AdminNav } from "@/features/admin/components/admin-nav";
+import { QuarantineReview } from "@/features/documents/components/quarantine-review";
+import { getQuarantinedFiles } from "@/features/documents/services/quarantine.queries";
 import { JobHealthPanel } from "@/features/jobs/components/job-health-panel";
 import { getJobHealth } from "@/features/jobs/services/jobs.queries";
 import { getJobRunnerStatus } from "@/features/jobs/services/runner-status";
@@ -15,7 +17,12 @@ export const dynamic = "force-dynamic";
 /** Admin → Jobs: the health of the background runtime (JOB-004, §14.2). */
 export default async function AdminJobsPage() {
   await requireAdminAal2();
-  const [t, health, runner] = await Promise.all([getT(), getJobHealth(), getJobRunnerStatus()]);
+  const [t, health, runner, quarantined] = await Promise.all([
+    getT(),
+    getJobHealth(),
+    getJobRunnerStatus(),
+    getQuarantinedFiles(),
+  ]);
 
   return (
     <div>
@@ -44,6 +51,7 @@ export default async function AdminJobsPage() {
         </div>
       ) : null}
       <JobHealthPanel {...health} />
+      <QuarantineReview files={quarantined} />
     </div>
   );
 }

@@ -20,6 +20,7 @@ import {
   openReceiptFile,
   setReceiptReviewed,
 } from "@/features/finance/services/receipt.commands";
+import { QuarantineReasonText } from "@/features/documents/components/quarantine-reason-text";
 
 export interface ReceiptRow {
   id: string;
@@ -32,6 +33,7 @@ export interface ReceiptRow {
   note: string | null;
   file_name: string;
   scan_status: "pending" | "clean" | "quarantined" | "rejected";
+  scan_note?: string | null;
   status: "submitted" | "reviewed";
   submitted_by: string;
   submitter: { full_name: string } | null;
@@ -168,9 +170,12 @@ export function ReceiptList({
                   {t("finance.receipts.list.open")}
                 </Button>
               ) : (
-                <Badge tone={r.scan_status === "pending" ? "neutral" : "danger"}>
-                  {t(scanLabel[r.scan_status])}
-                </Badge>
+                <>
+                  <Badge tone={r.scan_status === "pending" ? "neutral" : "danger"}>
+                    {t(scanLabel[r.scan_status])}
+                  </Badge>
+                  <QuarantineReasonText scanStatus={r.scan_status} scanNote={r.scan_note} />
+                </>
               )}
             </TableCell>
           </TableRow>

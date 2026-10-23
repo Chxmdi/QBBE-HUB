@@ -99,7 +99,7 @@ export default async function DocumentsPage({
     let list = supabase
       .from("document")
       .select(
-        "id, title, description, kind, mime_type, size_bytes, scan_status, visibility, created_at, " +
+        "id, title, description, kind, mime_type, size_bytes, scan_status, scan_note, visibility, created_at, " +
           "tags, version_number, requires_acknowledgement, " +
           "owner:owner_id(full_name), project:project_id(id, name), program:program_id(id, name), " +
           "folder:folder_id(id, category, name, visibility)",

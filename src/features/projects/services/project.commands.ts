@@ -7,6 +7,7 @@ import { authorizeAdminAction, requireSession } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { hasProgramCapability, hasProjectCapability } from "@/lib/access-capabilities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { logActionFailure } from "@/lib/server-log";
 import { parseLabelledLinks } from "@/lib/links";
 import { slugify } from "@/lib/utils";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
@@ -38,9 +39,11 @@ export async function createProject(input: unknown): Promise<ActionResult> {
     return { ok: false, error: t("projects.errors.independentAdminOnly") };
   }
   const projectId = crypto.randomUUID();
-  const { error } = await supabase
-    .from("project")
-    .insert({
+  // The project, its manager and its channel are saved together, or not at
+  // all. The channel slug ends with part of the project id, so two projects
+  // with the same name each get one.
+  const { error } = await supabase.rpc("create_project_with_channel", {
+    p_project: {
       id: projectId,
       organization_id: session.organizationId,
       program_id: programId ?? null,
@@ -57,41 +60,19 @@ export async function createProject(input: unknown): Promise<ActionResult> {
       start_date: startDate || null,
       target_date: targetDate || null,
       created_by: session.userId,
-    });
-
-  if (error) return { ok: false, error: t("projects.errors.createFailed") };
-
-  await supabase.from("project_membership").insert({
-    project_id: projectId,
-    user_id: ownerId ?? session.userId,
-    role: "manager",
+    },
+    p_channel_name: name,
+    p_slug_base: slugify(name).slice(0, 60),
+    p_channel_purpose: t("projects.projectChannelPurpose", { name }),
   });
 
-  const channelSlug = `project-${slugify(name) || projectId.slice(0, 8)}`;
-  const { data: channel } = await supabase
-    .from("channel")
-    .insert({
-      organization_id: session.organizationId,
-      name,
-      slug: channelSlug,
-      type: "project",
-      privacy: "public",
-      purpose: t("projects.projectChannelPurpose", { name }),
-      project_id: projectId,
-      program_id: programId ?? null,
-      owner_id: ownerId ?? session.userId,
-      created_by: session.userId,
-    })
-    .select("id")
-    .maybeSingle();
-  if (channel) {
-    await supabase.rpc("add_channel_member", {
-      p_channel_id: channel.id,
-      p_user_id: ownerId ?? session.userId,
-    });
+  if (error) {
+    logActionFailure("project.createProject", error);
+    return { ok: false, error: t("projects.errors.createFailed") };
   }
 
-  await supabase.from("activity_event").insert({
+  // The activity line is a convenience; the project is saved either way.
+  const { error: activityError } = await supabase.from("activity_event").insert({
     organization_id: session.organizationId,
     actor_id: session.userId,
     verb: "created",
@@ -101,6 +82,7 @@ export async function createProject(input: unknown): Promise<ActionResult> {
     program_id: programId ?? null,
     summary: `created project “${name}”`,
   });
+  if (activityError) logActionFailure("project.createProject.activity", activityError);
 
   revalidatePath("/projects");
   return { ok: true, id: projectId };
@@ -153,7 +135,10 @@ export async function publishStatusUpdate(input: unknown): Promise<ActionResult>
     decisions_needed: data.decisionsNeeded || null,
     help_requested: data.helpRequested || null,
   });
-  if (updateError) return { ok: false, error: t("projects.errors.publishFailed") };
+  if (updateError) {
+    logActionFailure("project.publishStatusUpdate", updateError);
+    return { ok: false, error: t("projects.errors.publishFailed") };
+  }
 
   const { data: project } = await supabase
     .from("project")
@@ -234,7 +219,10 @@ export async function updateProjectStage(input: unknown): Promise<ActionResult> 
     .select("name, program_id")
     .maybeSingle();
 
-  if (error || !project) return { ok: false, error: t("projects.errors.stageFailed") };
+  if (error || !project) {
+    if (error) logActionFailure("project.updateProjectStage", error);
+    return { ok: false, error: t("projects.errors.stageFailed") };
+  }
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,
@@ -379,88 +367,37 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
     };
   }
 
-  // Final update is required before closure.
-  const { error: updateError } = await supabase
-    .from("project_status_update")
-    .insert({
-      project_id: projectId,
-      author_id: session.userId,
+  // The final update, the stage move, archiving open tasks, the closure
+  // record and its evidence are saved together, or not at all.
+  const { data: closureId, error: closeError } = await supabase.rpc("close_project_with_evidence", {
+    p_project: projectId,
+    p_update: {
       health: "on_track",
       progress_summary: t("projects.closingUpdate", { results }),
       next_steps: lessons ? t("projects.closingLessons", { lessons }) : null,
-    });
-  if (updateError) {
-    return { ok: false, error: t("projects.errors.closingUpdateFailed") };
+    },
+    p_closure: {
+      organization_id: session.organizationId,
+      results,
+      lessons: lessons || null,
+      evidence_links: parseLabelledLinks(evidenceLinks),
+    },
+    p_document_ids: evidenceDocumentIds,
+    p_archive_open_tasks: archiveOpenTasks,
+  });
+  if (closeError || !closureId) {
+    logActionFailure("project.closeProject", closeError);
+    // Evidence filed under another project now refuses the whole close
+    // (before, the close went through and that evidence was dropped).
+    const foreignEvidence = closeError?.code === "23514" && /same project/.test(closeError.message);
+    return { ok: false, error: t(foreignEvidence ? "projects.errors.closeEvidenceElsewhere" : "projects.errors.closeFailed") };
   }
-
-  const { data: project, error } = await supabase
+  const { data: project } = await supabase
     .from("project")
-    .update({
-      stage: "completed",
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", projectId)
     .select("name, program_id")
+    .eq("id", projectId)
     .maybeSingle();
-
-  if (error || !project) return { ok: false, error: t("projects.errors.closeFailed") };
-
-  // Only once the project is closed: archiving first left a still-open project
-  // with its open tasks hidden whenever the stage move failed.
-  if (archiveOpenTasks) {
-    await supabase
-      .from("task")
-      .update({ archived_at: new Date().toISOString() })
-      .eq("project_id", projectId)
-      .is("archived_at", null)
-      .in("status", [
-        "not_started", "ready", "in_progress", "waiting", "blocked", "in_review",
-      ]);
-  }
-
-  // The closure record, and the evidence for it. Written after the stage move
-  // so a failed close leaves no closure claiming a project that is still open.
-  // Upserted on project_id: closing a reopened project replaces the old record
-  // rather than failing on the unique constraint.
-  const { data: closure, error: closureError } = await supabase
-    .from("project_closure")
-    .upsert(
-      {
-        organization_id: session.organizationId,
-        project_id: projectId,
-        results,
-        lessons: lessons || null,
-        evidence_links: parseLabelledLinks(evidenceLinks),
-        closed_by: session.userId,
-        closed_at: new Date().toISOString(),
-      },
-      { onConflict: "project_id" },
-    )
-    .select("id")
-    .single();
-
-  if (closureError || !closure) {
-    return {
-      ok: false,
-      error: t("projects.errors.closureRecordFailed"),
-    };
-  }
-
-  if (evidenceDocumentIds.length > 0) {
-    await supabase
-      .from("project_closure_document")
-      .delete()
-      .eq("closure_id", closure.id);
-    // The trigger refuses a document filed against another project, so a
-    // rejected row here means the list was tampered with, not that the close
-    // failed. The closure itself is already saved.
-    await supabase.from("project_closure_document").insert(
-      evidenceDocumentIds.map((documentId) => ({
-        closure_id: closure.id as string,
-        document_id: documentId,
-      })),
-    );
-  }
+  if (!project) return { ok: false, error: t("projects.errors.closeFailed") };
 
   // Everyone who could see the project is told it ended — including the people
   // whose access came from a team or an inherited program grant, who are
@@ -553,9 +490,9 @@ export async function createProgram(input: unknown): Promise<ActionResult> {
   const programId = crypto.randomUUID();
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase
-    .from("program")
-    .insert({
+  // The program and its channel are saved together, or not at all.
+  const { error } = await supabase.rpc("create_program_with_channel", {
+    p_program: {
       id: programId,
       organization_id: session.organizationId,
       name,
@@ -563,31 +500,15 @@ export async function createProgram(input: unknown): Promise<ActionResult> {
       description: description || null,
       lead_id: leadId ?? session.userId,
       created_by: session.userId,
-    });
+    },
+    p_channel_name: name,
+    p_slug_base: slug,
+    p_channel_purpose: t("projects.programChannelPurpose", { name }),
+  });
 
-  if (error) return { ok: false, error: t("projects.errors.programCreateFailed") };
-
-  const channelSlug = `program-${slug || programId.slice(0, 8)}`;
-  const { data: channel } = await supabase
-    .from("channel")
-    .insert({
-      organization_id: session.organizationId,
-      name,
-      slug: channelSlug,
-      type: "program",
-      privacy: "public",
-      purpose: t("projects.programChannelPurpose", { name }),
-      program_id: programId,
-      owner_id: leadId ?? session.userId,
-      created_by: session.userId,
-    })
-    .select("id")
-    .maybeSingle();
-  if (channel) {
-    await supabase.rpc("add_channel_member", {
-      p_channel_id: channel.id,
-      p_user_id: leadId ?? session.userId,
-    });
+  if (error) {
+    logActionFailure("project.createProgram", error);
+    return { ok: false, error: t("projects.errors.programCreateFailed") };
   }
 
   revalidatePath("/programs");

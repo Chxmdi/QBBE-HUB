@@ -96,6 +96,11 @@ Migrations are never reversed automatically.
 - If the old website must run against the new schema, it can only do so when
   the migration was additive. That is why schema changes go
   expand, migrate, contract (`deployment.md`, CICD-002).
+- Every commit that adds or changes a migration also commits the
+  regenerated database types: reset the local database, run
+  `npm run db:types`, and commit `src/types/database.ts` with the migration.
+  CI's "Database types match the migrations" step fails otherwise and names
+  that command.
 - CI enforces the contract step. A migration that drops a table or column,
   renames one, or changes a column's type fails `npm test`
   (`tests/unit/migration-contract.test.ts`, `scripts/ci/migration-contract.mjs`)

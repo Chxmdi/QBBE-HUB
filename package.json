@@ -26,6 +26,7 @@
     "db:seed": "node scripts/seed-local.mjs",
     "jobs:run": "node scripts/run-job.mjs",
     "db:types": "supabase gen types typescript --local > src/types/database.ts",
+    "db:types:check": "node scripts/db/check-types.mjs",
     "qa:perf-sessions": "node scripts/qa/perf-sessions.mjs",
     "qa:realtime-latency": "node scripts/qa/realtime-latency.mjs"
   },

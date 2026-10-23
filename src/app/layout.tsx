@@ -28,11 +28,11 @@ export const viewport: Viewport = {
 /**
  * Applies the persisted theme before paint to avoid a flash.
  *
- * It first removes any comment a host slipped into <head> ahead of it. Netlify
- * adds "This site is hosted on Netlify" right after the charset tag on
- * *.netlify.app addresses; React then finds that comment where it expects this
- * script and fails hydration (error #418) on every page. This runs while the
- * page is still parsing, before React hydrates.
+ * It first removes any comment a host slipped into <head> ahead of it. A host
+ * that adds one right after the charset tag (Netlify did, when the app ran
+ * there) leaves React finding that comment where it expects this script, and
+ * hydration fails (error #418) on every page. This runs while the page is
+ * still parsing, before React hydrates.
  */
 const themeScript = `
 try {

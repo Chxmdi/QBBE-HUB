@@ -29,12 +29,12 @@ As of 2026-09-29.
   `qbbe-hub-staging`, region Canada (Central), generated database password
   saved in the password manager. If Supabase refuses because of the free
   project limit, pause `nulia-dev` or tell Claude.
-- [ ] **Netlify.** Confirm the two sites `qbbe-hub-staging`
-  (`2169b17a-8dc3-49de-a466-4281e1285de2`) and `qbbe-hub-production`
-  (`a34499c8-0d84-47d5-bfb2-502c2b9b9071`) sit in a Netlify team QBBE controls
-  (Site configuration → General shows the Site ID). If not, tell Claude.
+- [ ] **Netlify (retired).** The app moved to the QBBE server in October 2026
+  (docs/runbooks/hosting.md). Once staging and production both run there,
+  delete the Netlify sites `qbbe-hub-staging`, `qbbe-hub-production` and
+  `qbbe-hub-review` and the Netlify personal access token.
 - [ ] **Custodians.** Fill in `docs/runbooks/provider-custody.md`: for GitHub,
-  Supabase, Netlify, Google, email, scanning, monitoring and backups, a primary
+  Supabase, the Oracle Cloud server, Google, email, scanning, monitoring and backups, a primary
   and a backup person, a QBBE recovery address, and MFA enforced.
 
 ## 2. Staging (#55)
@@ -48,8 +48,9 @@ Follow `docs/runbooks/staging-provisioning.md`. In short:
   in step 4a, with `RELEASE_ENABLED` = `true`.
 - [ ] GitHub → Settings → Secrets and variables → Actions → Variables:
   `STAGING_SUPABASE_PROJECT_REF` and `PRODUCTION_SUPABASE_PROJECT_REF` (step 4b).
-- [ ] Netlify staging site → Site configuration → Environment variables: the
-  app settings in step 4c, including a 32+ character `CRON_JOB_SECRET`.
+- [ ] GitHub → Settings → Environments → `staging` → the `APP_ENV` secret: the
+  app settings in step 4c, including a 32+ character `CRON_JOB_SECRET` and a
+  `GOOGLE_TOKEN_KEY` (`openssl rand -base64 32`).
 - [ ] Run the deploy (Actions → Deploy → `staging`), or ask Claude to. The server it
   deploys to is set up first: docs/runbooks/hosting.md.
 - [ ] In the staging project's SQL editor, wire background jobs (step 5b).

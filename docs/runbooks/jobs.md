@@ -103,12 +103,24 @@ All times are UTC, because pg_cron evaluates in UTC.
 | `vms-sync` | 08:00 | Refreshes volunteer availability from the Volunteer Management System. |
 | `zeffy-sync` | every 15 min | Pulls payments, supporters and campaigns from Zeffy into the CRM; skipped without `ZEFFY_API_KEY`. |
 | `zeffy-events` | every minute | Applies the payment and supporter changes Zeffy reported by webhook. |
+| `gmail-push-sync` | every minute | Reconciles Gmail history right after an authenticated Pub/Sub push notification. |
+| `google-token-upkeep` | every 5 min | Seals Google tokens stored in the clear or under an old key, and revokes deleted tokens at Google. |
 | `scan-documents` | every minute | Scans pending private uploads; only a clean ClamAV verdict releases a download. |
+| `scan-receipts` | every minute | Scans pending receipt uploads; a blocked file records ClamAV's verdict name and an audit event (see document-scanning.md). |
+| `scan-form-files` | every minute | Scans form attachments and documents sent for signature, and records each file's SHA-256. |
 | `purge-unregistered-uploads` | hourly at :23 | Reports uploads nobody registered (a closed tab, a failed save) older than 24 hours in the four upload buckets. Deletes them only once an owner has turned its switch on; see [Turning on the upload cleanup](#turning-on-the-upload-cleanup). |
 | `purge-job-history` | 06:00 | Trims `job_run`, `background_job_run`, `email_delivery` and `rate_limit_counter` past retention (see [Retention](#retention)). |
+| `run-exports` | every 5 min | Builds queued data exports into the private exports bucket (see [Data exports](#data-exports)). |
+| `expire-exports` | 03:17 | Expires exports past their date and deletes the files behind them. |
+| `apply-retention` | 02:40 | Applies enabled retention policies; records each run in `retention_run` and stops if that record cannot be written. |
+| `report-record-retention` | 02:50 | Reports classified records whose retention period has ended. Deletes nothing. |
 | `purge-cron-history` | 05:47 | Not an app job: plain SQL inside the database that deletes pg_cron's own run log (`cron.job_run_details`) older than 7 days. Not shown in Admin → Jobs. |
 | `retry-workflow-executions` | every 15 min | Retries workflow-rule notifications that failed to record, without sending a second copy. |
 | `decision-revisit-reminders` | 11:10 | Reminds the decider and participants when a decision reaches its revisit date (only does anything with decisions v2 on). |
+| `grant-report-reminders` | 12:10 | Reminds the people responsible for a grant report before, on and after its due date. |
+| `follow-events` | every 5 min | Tells followers about changes to what they follow (only does anything with wos_objects on). |
+| `workflow-events` | every minute | Runs step-graph workflows for new events (only does anything with wos_workflows_v2 on). |
+| `workflow-resume` | every minute | Resumes waiting step-graph workflow runs whose time has come, and stops those of stopped workflows (wos_workflows_v2). |
 | `team-signal-reminders` | 13:20 | Where Admin, Team signals has reminders on: records each person's open work signals and sends one gentle notification per new signal (#136). |
 | `team-signal-digest` | Mondays 12:40 | Where Admin, Team signals has the digest on: emails owners and admins the people with open work signals; no email when there are none (#136). |
 | `ops-watchdog` | every 15 min | Alerts owners and admins (in the app and by email, once per condition per day) when a job is overdue or fails three times in a row, a queue message waits over 15 minutes, webhooks are refused ten times in an hour, or the database reaches 70% of its limit. See [Alerts](#alerts). |

@@ -22,7 +22,7 @@ describe("receipt quarantine worker", () => {
   for (const verdict of ["clean", "quarantined"] as const) {
     it(`persists an explicit ${verdict} verdict`, async () => {
       const { db, context } = fixture();
-      vi.mocked(scanDocumentBytes).mockResolvedValue(verdict);
+      vi.mocked(scanDocumentBytes).mockResolvedValue({ verdict, signature: verdict === "quarantined" ? "Eicar-Test-Signature" : null });
       expect((await scanReceipts(context)).processed).toBe(1);
       expect(db.rows("finance_receipt")[0].scan_status).toBe(verdict);
     });
@@ -42,7 +42,7 @@ describe("receipt quarantine worker", () => {
   });
   it("reports a failed verdict write and retains quarantine", async () => {
     const { db, context } = fixture();
-    vi.mocked(scanDocumentBytes).mockResolvedValue("clean");
+    vi.mocked(scanDocumentBytes).mockResolvedValue({ verdict: "clean", signature: null });
     db.fail((op) => op.name === "finance_receipt" && op.kind === "update" && op.args.scan_status === "clean");
     expect((await scanReceipts(context)).failed).toBe(1);
     expect(db.rows("finance_receipt")[0].scan_status).toBe("pending");

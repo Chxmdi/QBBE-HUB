@@ -3,6 +3,7 @@ import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { sanitizeJobError } from "@/lib/job-observability";
 import { reportError } from "@/lib/observability";
 import { JOB_HANDLERS } from "./handlers";
+import type { Json } from "@/types/database";
 
 /**
  * Executes one scheduled job and records what happened.
@@ -149,7 +150,7 @@ export async function runJob(jobName: string): Promise<RunOutcome> {
         duration_ms: durationMs,
         processed_count: result.processed,
         failed_count: result.failed,
-        metadata: result.metadata ?? {},
+        metadata: (result.metadata ?? {}) as NonNullable<Json>,
       })
       .eq("id", runId);
 
@@ -198,7 +199,7 @@ export async function runJob(jobName: string): Promise<RunOutcome> {
         duration_ms: durationMs,
         processed_count: processed,
         failed_count: failed,
-        metadata: partial?.metadata ?? {},
+        metadata: (partial?.metadata ?? {}) as NonNullable<Json>,
         error: message.slice(0, 2000),
       })
       .eq("id", runId);

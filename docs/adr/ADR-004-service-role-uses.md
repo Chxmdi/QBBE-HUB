@@ -41,6 +41,7 @@ like a policy change.
 | `src/features/admin/services/admin.commands.ts` | Ending a deactivated person's sessions needs the Auth admin API. | Runs only after an RLS-checked admin update of the membership; signs out that one user. |
 | `src/features/admin/services/integration.commands.ts` | Disconnecting Google deletes the person's stored tokens and asks Google to revoke them; no user may read or delete `integration_secret` or the revocation queue (PRIV-011). | Runs only after the RLS-checked update of the caller's own connection; deletes and revokes that one connection's tokens. |
 | `src/features/workflows/services/workflow.commands.ts` | A workflow test run and its signing secret act as the workflow, which may touch records the admin cannot see directly. | Behind the workflow admin guard; the rule is first read through the admin's session (RLS); the run is recorded as a test. |
+| `src/features/documents/services/quarantine.commands.ts` | Storage objects cannot be deleted from SQL; a blocked upload's bytes are removed through the Storage API. | Behind `authorizeAdminAction()`; the deletion is first recorded and authorized by `purge_quarantined_file` through the administrator's own session (owner or admin with MFA, own organization, quarantined or rejected rows only), and only the path that function returns is removed. |
 
 Operator scripts outside `src/` read the key from the operator's own
 terminal, never from the app:

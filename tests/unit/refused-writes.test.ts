@@ -37,14 +37,17 @@ vi.mock("@/features/jobs/services/notify", () => ({
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => {
-    const fake = fakeDb({ table: (call) => answer(call) });
+    const fake = fakeDb({ table: (call) => answer(call), rpc: (call) => rpcAnswer(call) });
     // An action may open more than one client; keep every client's calls.
     recorded.push(fake.tableCalls);
+    recordedRpc.push(fake.rpcCalls);
     return fake.db;
   },
 }));
 const recorded: TableCall[][] = [];
 const calls = () => recorded.flat();
+const recordedRpc: { fn: string; args: Record<string, unknown> }[][] = [];
+let rpcAnswer: (call: { fn: string; args: Record<string, unknown> }) => Answer = () => ({ data: null, error: null });
 
 const { deleteMessage } = await import("@/features/channels/services/message.commands");
 const { setChannelArchived } = await import("@/features/channels/services/channel.commands");
@@ -63,6 +66,7 @@ function db(allowed: boolean, reads: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
+  rpcAnswer = () => ({ data: null, error: null });
   vi.clearAllMocks();
   recorded.length = 0;
 });
@@ -130,20 +134,37 @@ describe("updateOpportunity", () => {
 });
 
 describe("closeProject", () => {
-  it("leaves open tasks alone when the project could not be closed", async () => {
-    answer = (call) => (call.table === "project" && call.action === "update" ? { data: null, error: null } : db(true)(call));
+  // The close, archiving open tasks and the closure record are one database
+  // transaction (close_project_with_evidence; supabase/tests/atomic-saves.sql
+  // proves a refused step changes nothing).
+  it("reports a refused close and archives nothing on the side", async () => {
+    answer = db(true);
+    rpcAnswer = (call) =>
+      call.fn === "close_project_with_evidence" ? { data: null, error: { message: "refused" } } : { data: true, error: null };
     const result = await closeProject({ projectId: ID, results: "Delivered the fair.", archiveOpenTasks: true });
     expect(result.ok).toBe(false);
     expect(calls().some((c) => c.table === "task" && c.action === "update")).toBe(false);
   });
 
-  it("archives open tasks after the project is closed", async () => {
+  it("says when evidence filed under another project stopped the close", async () => {
+    answer = db(true);
+    rpcAnswer = (call) =>
+      call.fn === "close_project_with_evidence"
+        ? { data: null, error: { code: "23514", message: "Closure evidence must be a document filed against the same project" } }
+        : { data: true, error: null };
+    const result = await closeProject({ projectId: ID, results: "Delivered the fair.", archiveOpenTasks: false });
+    expect(result).toEqual({ ok: false, error: expect.stringMatching(/filed under another project/) });
+  });
+
+  it("asks for open tasks to be archived as part of the close", async () => {
     answer = (call) =>
-      call.table === "project" && call.action === "update" ? { data: { name: "Fair", program_id: null }, error: null } : db(true)(call);
+      call.table === "project" && call.action === "select" ? { data: { name: "Fair", program_id: null }, error: null } : db(true)(call);
+    rpcAnswer = (call) =>
+      call.fn === "close_project_with_evidence" ? { data: "closure-1", error: null } : { data: true, error: null };
     await closeProject({ projectId: ID, results: "Delivered the fair.", archiveOpenTasks: true });
-    const order = calls().filter((c) => c.action === "update").map((c) => c.table);
-    expect(order.indexOf("project")).toBeGreaterThanOrEqual(0);
-    expect(order.indexOf("task")).toBeGreaterThan(order.indexOf("project"));
+    const close = recordedRpc.flat().find((c) => c.fn === "close_project_with_evidence");
+    expect(close?.args).toMatchObject({ p_project: ID, p_archive_open_tasks: true });
+    expect(calls().some((c) => c.table === "task" && c.action === "update")).toBe(false);
   });
 });
 

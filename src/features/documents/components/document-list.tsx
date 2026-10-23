@@ -37,6 +37,7 @@ import type { Formatters } from "@/lib/i18n/format-core";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { folderLabel, type LibraryFolder } from "@/features/documents/services/library";
 import { SearchSnippet } from "@/features/documents/components/search-snippet";
+import { QuarantineReasonText } from "@/features/documents/components/quarantine-reason-text";
 
 export interface DocumentRow {
   id: string;
@@ -46,6 +47,7 @@ export interface DocumentRow {
   mime_type: string | null;
   size_bytes: number | null;
   scan_status: "pending" | "clean" | "quarantined" | "rejected";
+  scan_note?: string | null;
   visibility: string;
   created_at: string;
   owner: { full_name: string } | null;
@@ -308,6 +310,7 @@ export function DocumentList({
                     >
                       {scanLabel}
                     </Badge>
+                    <QuarantineReasonText scanStatus={doc.scan_status} scanNote={doc.scan_note} />
                   </span>
                 ) : null}
               </TableCell>
