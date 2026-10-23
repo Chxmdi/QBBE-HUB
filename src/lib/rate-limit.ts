@@ -17,6 +17,11 @@ import { createTranslator, type TranslateFn } from "@/lib/i18n/translate";
  *
  * Authentication is deliberately not limited here — sign-in and sign-up go from
  * the browser straight to Supabase Auth, which applies its own limits.
+ *
+ * The database holds people to the same limits, under the same names, on
+ * the tables they can insert into directly (SEC-024: app_limits.rule, kept
+ * equal to RATE_LIMITS by tests/unit/rate-limit-shared.test.ts). Its
+ * counters are its own, so a write through the app is not counted twice.
  */
 
 export interface RateLimitRule {
@@ -41,6 +46,8 @@ export interface RateLimitResult {
 export const RATE_LIMITS = {
   "message:create": { limit: 120, windowSeconds: 60 },
   "task:create": { limit: 120, windowSeconds: 60 },
+  // One bulk-bar change to up to 200 tasks.
+  "task:bulk": { limit: 60, windowSeconds: 3600 },
   "invitation:create": { limit: 30, windowSeconds: 3600 },
   "access-grant:program": { limit: 120, windowSeconds: 3600 },
   "access-grant:project": { limit: 120, windowSeconds: 3600 },
@@ -96,6 +103,10 @@ export const RATE_LIMITS = {
   // Browser crash reports (/api/client-errors), per address: a crash loop
   // must not flood the logs or the monitoring quota.
   "client-error:report": { limit: 20, windowSeconds: 60 },
+  // Enforced only in the database, on notifications a person's own session
+  // inserts (mentions, assignments, group messages). Bulk actions are given
+  // room first with grantWriteAllowance.
+  "notification:create": { limit: 600, windowSeconds: 60 },
 } as const;
 
 export type RateLimitedAction = keyof typeof RATE_LIMITS;
@@ -158,6 +169,33 @@ export function rateLimitMessage(
           count: Math.ceil(seconds / 60),
         });
   return t("shell.rateLimit.later", { wait });
+}
+
+/**
+ * Room for `count` more inserts under `action` in the database, for ten
+ * minutes: for an import, which creates up to 2000 rows as the person after
+ * its own "import:run" check. False when it could not be granted.
+ */
+export async function grantWriteAllowance(action: RateLimitedAction, subject: string, count: number): Promise<boolean> {
+  try {
+    const { error } = await createSupabaseServiceClient().rpc("grant_write_allowance", {
+      p_user: subject,
+      p_action: action,
+      p_count: count,
+      p_seconds: 600,
+    });
+    if (error) throw new Error(error.message);
+    return true;
+  } catch (cause) {
+    console.error(
+      JSON.stringify({
+        event: "rate_limit.allowance_failed",
+        action,
+        error: cause instanceof Error ? cause.message : String(cause),
+      }),
+    );
+    return false;
+  }
 }
 
 /**

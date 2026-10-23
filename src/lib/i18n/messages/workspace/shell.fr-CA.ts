@@ -10,6 +10,8 @@ export const shellFrCA: typeof shellEn = {
       minuteOne: "{count} minute",
       minuteOther: "{count} minutes",
       later: "Vous faites cela trop rapidement. Réessayez dans environ {wait}.",
+      tooManyChanges: "Trop de modifications en peu de temps. Attendez un instant, puis réessayez.",
+      importUnavailable: "Le Hub n’a pas pu préparer cette importation. Rien n’a été importé. Réessayez dans un instant.",
     },
     optional: "(facultatif)",
     loading: {

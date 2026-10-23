@@ -28,7 +28,7 @@ vi.mock("@/lib/auth", () => ({
   }),
 }));
 vi.mock("@/lib/i18n/server", () => ({ getT: async () => (key: string) => key, getLocale: async () => "en" }));
-vi.mock("@/lib/rate-limit", () => ({ enforceRateLimit: async () => null }));
+vi.mock("@/lib/rate-limit", () => ({ enforceRateLimit: async () => null, grantWriteAllowance: async () => true }));
 vi.mock("@/features/tasks/services/recurring-successor", () => ({
   spawnRecurringSuccessor: async (_db: unknown, _actor: unknown, taskId: string) => {
     spawned.push(taskId);

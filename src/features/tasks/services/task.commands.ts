@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { TaskStatus } from "@/types/entities";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit, grantWriteAllowance } from "@/lib/rate-limit";
 import {
   createUniversalTask,
   universalTaskInputSchema,
@@ -630,6 +630,8 @@ export async function bulkUpdateTasks(
 ): Promise<ActionResult & { updated?: number }> {
   const session = await requireSession();
   const t = await getT();
+  const limited = await enforceRateLimit("task:bulk", session.userId);
+  if (limited) return limited;
   const parsed = bulkSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -671,7 +673,7 @@ export async function bulkUpdateTasks(
   // change to each task, and each one owes its own history entry (P0-TSK-05).
   const { data: beforeRows } = await supabase
     .from("task")
-    .select("id, assignee_id, due_at, status, priority, project_id, blocked_reason")
+    .select("id, assignee_id, due_at, status, priority, project_id, blocked_reason, recurrence_rule")
     .in("id", taskIds);
   const priorById = new Map<string, TaskFieldValues>(
     (beforeRows ?? []).map((row) => [row.id as string, row as TaskFieldValues]),
@@ -735,6 +737,13 @@ export async function bulkUpdateTasks(
     // A recurring task completed from the bulk bar makes its next occurrence
     // exactly as one completed from its drawer does.
     if (action === "status" && status === "completed") {
+      // Up to 200 successors at once: room past the per-minute task limit, for
+      // the recurring tasks this completes and no others.
+      const spawning = rows.filter((row) => {
+        const prior = priorById.get(row.id as string) as (TaskFieldValues & { recurrence_rule?: string | null }) | undefined;
+        return prior?.status !== "completed" && Boolean(prior?.recurrence_rule);
+      }).length;
+      if (spawning > 0) await grantWriteAllowance("task:create", session.userId, spawning);
       for (const row of rows) {
         if (priorById.get(row.id as string)?.status === "completed") continue;
         await spawnRecurringSuccessor(supabase, recurrenceActor(session), row.id as string);
@@ -743,6 +752,8 @@ export async function bulkUpdateTasks(
 
     // One deduplicated notification per newly assigned person.
     if (action === "assignee" && assigneeId && assigneeId !== session.userId) {
+      const newlyAssigned = rows.filter((row) => priorById.get(row.id as string)?.assignee_id !== assigneeId).length;
+      if (newlyAssigned > 0) await grantWriteAllowance("notification:create", session.userId, newlyAssigned);
       const tFor = await recipientTranslators(supabase, [assigneeId]);
       await createNotifications(
         supabase,

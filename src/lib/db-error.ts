@@ -31,8 +31,12 @@ export type DbErrorRule = {
 // might otherwise match it.
 const INTERNAL = /row-level security|permission denied/i;
 
+// The database refuses a write past a person's limit with this code (SEC-024).
+const RATE_LIMITED = "RL429";
+
 /** The translated sentence for a listed refusal, or null. */
 export function knownDbErrorMessage(t: TranslateFn, error: DbError, rules: readonly DbErrorRule[]): string | null {
+  if (error?.code === RATE_LIMITED) return t("shell.rateLimit.tooManyChanges");
   if (!error?.message || INTERNAL.test(error.message)) return null;
   for (const rule of rules) {
     const match = rule.pattern.exec(error.message);
