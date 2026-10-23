@@ -15,6 +15,7 @@ import {
 } from "@/features/retention/schemas";
 import { dbErrorMessage } from "@/lib/db-error";
 import { RETENTION_DB_ERRORS } from "@/features/retention/db-error-rules";
+import { recordAudit } from "@/lib/audit-write";
 
 /**
  * Setting what the organization keeps.
@@ -93,7 +94,7 @@ export async function saveRetentionPolicy(input: unknown): Promise<ActionResult>
 
   // Retention is a governance decision, so it is auditable whether or not it
   // ever deletes anything.
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "governance",

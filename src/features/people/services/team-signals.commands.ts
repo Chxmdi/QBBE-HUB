@@ -11,6 +11,7 @@ import {
   THRESHOLD_LIMITS,
 } from "@/features/people/team-signals";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 /**
  * Saving Admin, Team signals. The authorization here gives a clear sentence;
@@ -56,7 +57,7 @@ export async function saveTeamSignalSettings(input: unknown): Promise<ActionResu
   }
 
   // Who is told about whom is a governance decision, so it is audited.
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "governance",

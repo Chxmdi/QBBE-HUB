@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fakeDb, type Answer, type TableCall } from "@/lib/objects/testing/fake-db";
+import { fakeDb, type Answer, type RpcCall, type TableCall } from "@/lib/objects/testing/fake-db";
 
 const ORG = "44444444-4444-4444-8444-444444444444";
 const ME = "55555555-5555-4555-8555-555555555555";
@@ -8,6 +8,7 @@ const CHANNEL = "77777777-7777-4777-8777-777777777777";
 const ANNOUNCEMENT = "88888888-8888-4888-8888-888888888888";
 
 let tableCalls: TableCall[] = [];
+let rpcCalls: RpcCall[] = [];
 let answer: (call: TableCall) => Answer;
 let isAdmin = true;
 let limited: { ok: false; error: string } | null = null;
@@ -43,6 +44,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => {
     const fake = fakeDb({ table: (call) => answer(call) });
     tableCalls = fake.tableCalls;
+    rpcCalls = fake.rpcCalls;
     return fake.db;
   },
 }));
@@ -79,7 +81,7 @@ describe("publishAnnouncement", () => {
     expect(rows.map((r) => r.user_id)).toEqual([OTHER]);
     // An announcement that needs acknowledging is raised above normal.
     expect(rows[0].urgency).toBe("high");
-    expect(inserted("audit_event")).toMatchObject({ action: "announcement_published", object_id: ANNOUNCEMENT });
+    expect(rpcCalls.find((c) => c.fn === "record_audit_event")?.args).toMatchObject({ p_action: "announcement_published", p_object_id: ANNOUNCEMENT });
     expect(fireWorkflows).toHaveBeenCalledOnce();
   });
 

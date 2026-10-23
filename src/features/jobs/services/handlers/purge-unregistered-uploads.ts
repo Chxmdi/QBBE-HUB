@@ -1,4 +1,4 @@
-import { recordAudit } from "@/lib/audit-write";
+import { recordServerAudit } from "@/lib/audit-write";
 import { logEvent } from "@/lib/server-log";
 import type { JobContext, JobResult } from "../runner";
 
@@ -32,7 +32,7 @@ const UPLOAD_BUCKETS = new Set(["documents", "receipts", "form-files", "signing-
 const AGE_MS = 24 * 60 * 60 * 1000;
 
 async function audited(db: JobContext["db"], action: string, metadata: Record<string, unknown>) {
-  const stored = await recordAudit(db, {
+  const stored = await recordServerAudit(db, {
     organization_id: null,
     actor_id: null,
     actor_type: "system",

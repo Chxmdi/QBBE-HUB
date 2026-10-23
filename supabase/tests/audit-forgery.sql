@@ -126,10 +126,17 @@ begin
   perform tests.ok(refused, 'a member cannot add mentions to someone else''s message');
 
   -- What the app writes still works, and the time is the time of writing.
-  insert into public.audit_event (organization_id, actor_id, event_type, action, object_type, created_at)
-  values (org, staff_user, 'data_export', 'export_downloaded', 'export_job', now() - interval '90 days');
-  get diagnostics n = row_count;
-  perform tests.ok(n = 1, 'a member can write an audit entry in their own name');
+  -- Audit entries go through record_audit_event: a direct insert, even in
+  -- the member's own name, is refused.
+  refused := false;
+  begin
+    insert into public.audit_event (organization_id, actor_id, event_type, action, object_type, created_at)
+    values (org, staff_user, 'data_export', 'page_exported', 'page', now() - interval '90 days');
+  exception when insufficient_privilege then refused := true;
+  end;
+  perform tests.ok(refused, 'a member cannot insert an audit entry directly');
+  perform tests.ok(public.record_audit_event(org, 'data_export', 'page_exported', 'page', gen_random_uuid(), '{}') is not null,
+    'a member can record an audit entry in their own name');
 
   insert into public.activity_event (organization_id, actor_id, verb, source_type, source_id, summary, created_at)
   values (org, staff_user, 'created', 'milestone', gen_random_uuid(), 'added milestone', now() - interval '90 days');
@@ -150,7 +157,7 @@ begin
 
   reset role;
   select created_at into stamped from public.audit_event
-  where actor_id = staff_user and action = 'export_downloaded' order by created_at desc limit 1;
+  where actor_id = staff_user and action = 'page_exported' order by created_at desc limit 1;
   perform tests.ok(stamped > now() - interval '1 minute', 'a member cannot backdate an audit entry');
   select created_at into stamped from public.activity_event
   where actor_id = staff_user and summary = 'added milestone' order by created_at desc limit 1;

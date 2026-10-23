@@ -21,6 +21,7 @@ import { dbErrorMessage, knownDbErrorMessage } from "@/lib/db-error";
 import { APPROVAL_DB_ERRORS } from "@/features/approvals/db-error-rules";
 import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 /**
  * Approval writes (#143).
@@ -208,7 +209,7 @@ async function auditRule(
   ruleId: string,
   metadata: Record<string, unknown> = {},
 ) {
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: organizationId,
     actor_id: actorId,
     event_type: "approval",

@@ -18,6 +18,7 @@ import {
   invitationLink,
 } from "./invitation-link";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 const inviteSchema = (t: TranslateFn) => z.object({
   email: z.string().trim().email(t("admin.errors.validEmail")),
@@ -139,7 +140,7 @@ export async function inviteUser(input: unknown): Promise<InviteResult> {
     invitationId: invitation.id,
   });
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "access",
@@ -202,7 +203,7 @@ export async function reissueInvitation(invitationId: string): Promise<InviteRes
     invitationId: invitation.id,
   });
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: invitation.organization_id,
     actor_id: session.userId,
     event_type: "access",

@@ -11,6 +11,7 @@ import { createPagesT } from "@/features/pages/i18n";
 import { PAGE_COLUMNS, toPageRow, type PageRecordRow } from "@/features/pages/services/page.queries";
 import { buildPageExport } from "@/features/pages/transfer/transfer";
 import { exportViews } from "@/features/pages/transfer/views.server";
+import { recordAudit } from "@/lib/audit-write";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,7 +64,7 @@ export async function POST(request: Request, context: { params: Promise<{ pageId
   const file = buildPageExport({ title: page.title || t("page.untitled"), content, views });
 
   // The record comes before the bytes: an export nobody can account for is not made.
-  const { error: auditError } = await supabase.from("audit_event").insert({
+  const audited = await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "data_export",
@@ -76,7 +77,7 @@ export async function POST(request: Request, context: { params: Promise<{ pageId
       exportedViews: views.filter((view) => view.csv !== null).length,
     },
   });
-  if (auditError) return NextResponse.json({ error: "audit_failed" }, { status: 503 });
+  if (!audited) return NextResponse.json({ error: "audit_failed" }, { status: 503 });
 
   const bytes = typeof file.body === "string" ? new TextEncoder().encode(file.body) : file.body;
   return new Response(bytes as BodyInit, {

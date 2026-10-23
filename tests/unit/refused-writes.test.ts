@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fakeDb, type Answer, type TableCall } from "@/lib/objects/testing/fake-db";
+import { fakeDb, type Answer, type RpcCall, type TableCall } from "@/lib/objects/testing/fake-db";
 
 /**
  * Row-level security refuses a write by matching no row, which PostgREST
@@ -40,10 +40,14 @@ vi.mock("@/lib/supabase/server", () => ({
     const fake = fakeDb({ table: (call) => answer(call) });
     // An action may open more than one client; keep every client's calls.
     recorded.push(fake.tableCalls);
+    rpcs.push(fake.rpcCalls);
     return fake.db;
   },
 }));
 const recorded: TableCall[][] = [];
+const rpcs: RpcCall[][] = [];
+/** Audit entries, recorded through the database's record_audit_event. */
+const audits = () => rpcs.flat().filter((c) => c.fn === "record_audit_event");
 const calls = () => recorded.flat();
 
 const { deleteMessage } = await import("@/features/channels/services/message.commands");
@@ -65,13 +69,14 @@ function db(allowed: boolean, reads: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   recorded.length = 0;
+  rpcs.length = 0;
 });
 
 describe("deleteMessage", () => {
   it("records the deletion only when a message was deleted", async () => {
     answer = db(true);
     expect(await deleteMessage(ID)).toEqual({ ok: true });
-    expect(calls().some((c) => c.table === "audit_event")).toBe(true);
+    expect(audits().length > 0).toBe(true);
   });
 
   it("a refused deletion fails and leaves no audit record", async () => {
@@ -80,7 +85,7 @@ describe("deleteMessage", () => {
     expect(result.ok).toBe(false);
     // A sentence in the reader's language, not a catalogue key.
     expect(result.ok ? "" : result.error).not.toMatch(/^messages\./);
-    expect(calls().some((c) => c.table === "audit_event")).toBe(false);
+    expect(audits().length > 0).toBe(false);
   });
 });
 
@@ -90,13 +95,13 @@ describe("setChannelArchived", () => {
   it("a refused archive fails and leaves no audit record", async () => {
     answer = db(false, reads);
     expect(await setChannelArchived(ID, true)).toEqual({ ok: false, error: "Only the channel owner or an admin can do that." });
-    expect(calls().some((c) => c.table === "audit_event")).toBe(false);
+    expect(audits().length > 0).toBe(false);
   });
 
   it("an allowed archive is audited", async () => {
     answer = db(true, reads);
     expect((await setChannelArchived(ID, true)).ok).toBe(true);
-    expect(calls().find((c) => c.table === "audit_event")?.payload).toMatchObject({ action: "channel_archived" });
+    expect(audits()[0]?.args).toMatchObject({ p_action: "channel_archived" });
   });
 });
 

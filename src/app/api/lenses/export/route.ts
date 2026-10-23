@@ -11,6 +11,7 @@ import { loadCatalog, parseLensSpec, runLensAll } from "@/lib/query/run";
 import { LIMITS } from "@/lib/query/spec";
 import { csvFileName, lensToCsv } from "@/features/lenses/csv/export";
 import { createLensT } from "@/features/lenses/i18n";
+import { recordAudit } from "@/lib/audit-write";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
 
   // The record comes before the bytes: an export nobody can account for is
   // not made.
-  const { error: auditError } = await supabase.from("audit_event").insert({
+  const audited = await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "data_export",
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
     object_id: null,
     metadata: { type: spec.type, rows: result.rows.length, total: result.total, fields: fields ?? null },
   });
-  if (auditError) return NextResponse.json({ error: "audit_failed" }, { status: 503 });
+  if (!audited) return NextResponse.json({ error: "audit_failed" }, { status: 503 });
 
   const t = createLensT(locale);
   const typeName = spec.type === "task" || spec.type === "project" ? t(`types.${spec.type}`) : spec.type;

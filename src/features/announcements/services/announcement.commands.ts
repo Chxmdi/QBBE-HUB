@@ -13,6 +13,7 @@ import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { logActionFailure, logEvent } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 export async function acknowledgeAnnouncement(
   announcementId: string,
@@ -199,7 +200,7 @@ export async function publishAnnouncement(
     );
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "communication",

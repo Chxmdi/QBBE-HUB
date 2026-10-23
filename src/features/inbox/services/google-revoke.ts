@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordAudit } from "@/lib/audit-write";
+import { recordServerAudit } from "@/lib/audit-write";
 import { logEvent } from "@/lib/server-log";
 import { googleFetch, GoogleFetchError } from "@/features/inbox/services/google-fetch";
 import { openToken } from "@/features/inbox/services/google-token-crypto";
@@ -91,7 +91,7 @@ export async function revokeQueuedGoogleTokens(
       if (retryError) logEvent("google.token_revoke_retry_failed", { connection_id: row.connection_id, error: retryError.message }, "error");
       continue;
     }
-    const audited = await recordAudit(db, {
+    const audited = await recordServerAudit(db, {
       organization_id: row.organization_id,
       actor_id: row.user_id,
       actor_type: "system",

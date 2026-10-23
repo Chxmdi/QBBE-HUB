@@ -47,8 +47,9 @@ returns boolean
 language plpgsql
 as $$
 begin
-  insert into public.audit_event (organization_id, actor_id, event_type, action, object_type, object_id, metadata)
-  values (p_org, p_actor, 'data_export', 'page_exported', 'page', gen_random_uuid(), '{}');
+  -- Through the audit function, as the app records it; the actor is the session's.
+  -- p_actor is not sent: the function takes the actor from the session.
+  perform public.record_audit_event(p_org, 'data_export', 'page_exported', 'page', gen_random_uuid(), '{}');
   return true;
 exception when insufficient_privilege then
   return false;

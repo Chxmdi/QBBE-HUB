@@ -32,7 +32,7 @@ describe("setReceiptReviewed", () => {
   it("tells staff that only an administrator may review, when the database refuses them", async () => {
     receiptTable({ data: null, error: { code: "42501", message: "permission denied for table finance_receipt" } });
     expect(await receipts.setReceiptReviewed(ID, true)).toEqual({ ok: false, error: "finance.receipts.errors.adminOnly" });
-    expect(harness.tableCalls.some((c) => c.table === "audit_event")).toBe(false);
+    expect(harness.tableCalls.some((c) => c.table === "audit_event") || harness.rpcCalls.some((c) => c.fn === "record_audit_event")).toBe(false);
   });
 
   it("fails when the receipt was not changed, and audits nothing", async () => {
@@ -40,7 +40,7 @@ describe("setReceiptReviewed", () => {
     expect(await receipts.setReceiptReviewed(ID, true)).toEqual({ ok: false, error: "finance.receipts.errors.updateFailed" });
     receiptTable({ data: null, error: { message: "timeout" } });
     expect(await receipts.setReceiptReviewed(ID, false)).toEqual({ ok: false, error: "finance.receipts.errors.updateFailed" });
-    expect(harness.tableCalls.some((c) => c.table === "audit_event")).toBe(false);
+    expect(harness.tableCalls.some((c) => c.table === "audit_event") || harness.rpcCalls.some((c) => c.fn === "record_audit_event")).toBe(false);
     expect(harness.revalidated).toBe(0);
   });
 
@@ -49,8 +49,8 @@ describe("setReceiptReviewed", () => {
     expect(await receipts.setReceiptReviewed(ID, true)).toEqual({ ok: true, id: ID });
     const update = harness.tableCalls.find((c) => c.table === "finance_receipt");
     expect(update?.payload).toEqual({ status: "reviewed" });
-    const audit = harness.tableCalls.find((c) => c.table === "audit_event");
-    expect(audit?.payload).toMatchObject({ action: "receipt_reviewed", object_id: ID });
+    const audit = harness.rpcCalls.find((c) => c.fn === "record_audit_event");
+    expect(audit?.args).toMatchObject({ p_action: "receipt_reviewed", p_object_id: ID });
   });
 });
 
@@ -63,7 +63,7 @@ describe("openReceiptFile", () => {
       receiptTable({ data: { id: ID, storage_path: "r/1.pdf", scan_status: scan }, error: null });
       expect(await receipts.openReceiptFile(ID)).toEqual({ ok: false, error: "finance.receipts.errors.stillChecking" });
     }
-    expect(harness.tableCalls.some((c) => c.table === "audit_event")).toBe(false);
+    expect(harness.tableCalls.some((c) => c.table === "audit_event") || harness.rpcCalls.some((c) => c.fn === "record_audit_event")).toBe(false);
   });
 });
 
@@ -96,7 +96,10 @@ describe("registerReceipt", () => {
     expect(await receipts.registerReceipt({ ...receipt, submitted_by: "someone-else" })).toEqual({ ok: true, id: ID });
     const insert = harness.tableCalls.find((c) => c.table === "finance_receipt");
     expect(insert?.payload).toMatchObject({ submitted_by: ME, organization_id: ORG, total_cents: 11498, gst_cents: 500, qst_cents: 998 });
-    expect(harness.tableCalls.find((c) => c.table === "audit_event")?.payload).toMatchObject({ action: "receipt_submitted", actor_id: ME });
+    // The database takes the actor from the session; the app sends none.
+    const audit = harness.rpcCalls.find((c) => c.fn === "record_audit_event");
+    expect(audit?.args).toMatchObject({ p_action: "receipt_submitted", p_organization_id: ORG });
+    expect(audit?.args).not.toHaveProperty("p_actor_id");
     expect(harness.revalidated).toBeGreaterThan(0);
   });
 

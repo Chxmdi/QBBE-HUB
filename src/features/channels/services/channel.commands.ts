@@ -10,6 +10,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 const createChannelSchema = (t: TranslateFn) => z.object({
   name: requiredText(t("channels.errors.nameRequired"), 80),
@@ -69,7 +70,7 @@ export async function createChannel(input: unknown): Promise<ActionResult> {
     p_user_id: session.userId,
   });
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "communication",
@@ -215,7 +216,7 @@ export async function setChannelArchived(
     return { ok: false, error: t("channels.errors.ownerOrAdmin") };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "communication",

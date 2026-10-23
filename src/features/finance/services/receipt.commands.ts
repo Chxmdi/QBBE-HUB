@@ -11,6 +11,7 @@ import { requiredText, isCalendarDate } from "@/lib/schema";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translator";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 /**
  * Validation messages are catalogue keys, translated when the action returns
@@ -108,7 +109,7 @@ export async function registerReceipt(input: unknown): Promise<ActionResult> {
     };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "finance",
@@ -146,7 +147,7 @@ export async function setReceiptReviewed(
     return { ok: false, error: t("finance.receipts.errors.updateFailed") };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "finance",
@@ -185,7 +186,7 @@ export async function openReceiptFile(
     return { ok: false, error: t("finance.receipts.errors.openFailed") };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "finance",

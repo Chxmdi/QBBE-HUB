@@ -17,6 +17,7 @@ import { GIFT_SELECT, GIFT_TYPE_KEY, donorName, type GiftRow } from "@/features/
 import { recordGiftOptions } from "@/features/gifts/services/gift.options";
 import { getLocale, getT } from "@/lib/i18n/server";
 import { isCalendarYear } from "@/lib/schema";
+import { recordAudit } from "@/lib/audit-write";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: (await getT())("finance.gifts.list.metaTitle") };
@@ -76,7 +77,7 @@ export default async function GiftsPage({
   if (totalError) throw new Error(`Could not total the year's gifts: ${totalError.message}`);
   const gifts = (data ?? []) as unknown as GiftRow[];
   // Donor names on screen are a read of donor data: record who looked, and when.
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "gifts",

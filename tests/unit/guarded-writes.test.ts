@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fakeDb, type Answer, type TableCall } from "@/lib/objects/testing/fake-db";
+import { fakeDb, type Answer, type RpcCall, type TableCall } from "@/lib/objects/testing/fake-db";
 
 /**
  * The saves the refused-write review marked "Guarded": an app-side check runs
@@ -20,6 +20,9 @@ let canManageProject = true;
 let flagOn = true;
 let answer: (call: TableCall) => Answer = () => ({ data: null, error: null });
 const recorded: TableCall[][] = [];
+const rpcs: RpcCall[][] = [];
+/** Audit entries, recorded through the database's record_audit_event. */
+const audits = () => rpcs.flat().filter((c) => c.fn === "record_audit_event");
 const writesOf = () => recorded.flat().filter((c) => c.action !== "select");
 
 vi.mock("next/cache", () => ({ revalidatePath: () => undefined }));
@@ -49,6 +52,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => {
     const fake = fakeDb({ table: (call) => answer(call) });
     recorded.push(fake.tableCalls);
+    rpcs.push(fake.rpcCalls);
     return fake.db;
   },
 }));
@@ -56,6 +60,7 @@ vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceClient: () => {
     const fake = fakeDb({ table: (call) => answer(call) });
     recorded.push(fake.tableCalls);
+    rpcs.push(fake.rpcCalls);
     return fake.db;
   },
 }));
@@ -70,6 +75,7 @@ const { createProgramFromTemplate } = await import("@/features/programs/services
 
 beforeEach(() => {
   recorded.length = 0;
+  rpcs.length = 0;
   isStaff = true;
   isAdmin = true;
   canManageProject = true;
@@ -183,6 +189,7 @@ describe("disconnecting an integration", () => {
     expect(update?.filters).toEqual(expect.arrayContaining([{ op: "eq", column: "user_id", value: ME }]));
 
     recorded.length = 0;
+  rpcs.length = 0;
     answer = () => ({ data: null, error: null });
     expect((await disconnectIntegration("gmail")).ok).toBe(false);
   });
@@ -197,7 +204,7 @@ describe("disconnecting an integration", () => {
     const result = await disconnectIntegration("gmail");
     expect(result.ok).toBe(false);
     // The disconnect itself happened, so it is still recorded.
-    expect(writesOf().some((c) => c.table === "audit_event")).toBe(true);
+    expect(audits().length > 0).toBe(true);
   });
   it("deletes the stored Google tokens, which queues them to be revoked, and revokes them at once (PRIV-011)", async () => {
     const { disconnectIntegration } = await import("@/features/admin/services/integration.commands");
@@ -217,6 +224,6 @@ describe("disconnecting an integration", () => {
           ? { data: null, error: { message: "boom" } }
           : { data: null, error: null };
     expect((await disconnectIntegration("google_drive")).ok).toBe(false);
-    expect(writesOf().some((c) => c.table === "audit_event")).toBe(true);
+    expect(audits().length > 0).toBe(true);
   });
 });

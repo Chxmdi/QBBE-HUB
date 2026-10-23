@@ -6,10 +6,11 @@ vi.mock("@/lib/i18n/server", async () => {
   return { getT: async () => createTranslator("fr-CA") };
 });
 
-const { auditUnavailableResponse, recordAudit } = await import("@/lib/audit-write");
+const { auditUnavailableResponse, recordAudit, recordAuditId, recordServerAudit } = await import("@/lib/audit-write");
 
+/** A session client whose record_audit_event stores the entry, or fails. */
 const client = (error: { message: string } | null) =>
-  ({ from: () => ({ insert: async () => ({ error }) }) }) as never;
+  ({ rpc: async (fn: string) => (fn === "record_audit_event" && !error ? { data: "entry-1", error: null } : { data: null, error }) }) as never;
 
 const row = { organization_id: "o", actor_id: "u", event_type: "finance", action: "aging_exported" };
 
@@ -17,6 +18,20 @@ describe("recordAudit", () => {
   it("says whether the audit row was stored", async () => {
     expect(await recordAudit(client(null), row)).toBe(true);
     expect(await recordAudit(client({ message: "down" }), row)).toBe(false);
+  });
+
+  it("sends no actor: the database takes it from the session", async () => {
+    let sent: Record<string, unknown> = {};
+    const spy = { rpc: async (_fn: string, args: Record<string, unknown>) => ((sent = args), { data: "entry-1", error: null }) } as never;
+    expect(await recordAuditId(spy, row)).toBe("entry-1");
+    expect(sent).toMatchObject({ p_organization_id: "o", p_event_type: "finance", p_action: "aging_exported" });
+    expect(Object.keys(sent).some((key) => key.includes("actor"))).toBe(false);
+  });
+
+  it("writes server entries directly, with the service client", async () => {
+    const service = (error: { message: string } | null) => ({ from: () => ({ insert: async () => ({ error }) }) }) as never;
+    expect(await recordServerAudit(service(null), { ...row, actor_type: "system" })).toBe(true);
+    expect(await recordServerAudit(service({ message: "down" }), row)).toBe(false);
   });
 
   it("refuses an export with a 503, no file, and a reason in the person's language", async () => {
@@ -31,10 +46,10 @@ describe("ledger exports (general ledger, journal, trial balance, statements and
   it("hand over no file when the audit row cannot be stored", async () => {
     const { csvResponse } = await import("@/features/ledger/services/ledger.export");
     const session = { organizationId: "o", userId: "u" } as never;
-    const refused = await csvResponse(client({ message: "down" }), session, "gl_exported", "a,b", "gl.csv", {});
+    const refused = await csvResponse(client({ message: "down" }), session, "general_ledger_exported", "a,b", "gl.csv", {});
     expect(refused.status).toBe(503);
     expect(refused.headers.get("content-disposition")).toBeNull();
-    const served = await csvResponse(client(null), session, "gl_exported", "a,b", "gl.csv", {});
+    const served = await csvResponse(client(null), session, "general_ledger_exported", "a,b", "gl.csv", {});
     expect(await served.text()).toBe("a,b");
   });
 });

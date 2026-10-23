@@ -14,6 +14,7 @@ import { createNotifications, notificationDedupeKey } from "@/features/jobs/serv
 import { getT } from "@/lib/i18n/server";
 import { localizeIssue, recipientTranslators } from "@/features/projects/i18n";
 import { createProjectSchema, updateProjectSchema } from "@/features/projects/schemas";
+import { recordAudit } from "@/lib/audit-write";
 
 export async function createProject(input: unknown): Promise<ActionResult> {
   const t = await getT();
@@ -248,7 +249,7 @@ export async function updateProjectStage(input: unknown): Promise<ActionResult> 
   });
 
   // Auditable lifecycle transition history (P0-PRJ-02).
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "project",
@@ -510,7 +511,7 @@ export async function closeProject(input: unknown): Promise<ActionResult> {
     summary: `closed project “${project.name}”`,
   });
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "project",
@@ -678,7 +679,7 @@ export async function updateProject(input: unknown): Promise<ActionResult> {
   // Ownership and programme are access-bearing, so they are audited rather than
   // only recorded in the activity feed.
   if (before.owner_id !== ownerId || before.program_id !== nextProgramId) {
-    await db.from("audit_event").insert({
+    await recordAudit(db, {
       organization_id: session.organizationId,
       actor_id: session.userId,
       event_type: "project",

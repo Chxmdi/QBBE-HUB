@@ -10,6 +10,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translator";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 /** Schema messages below are catalogue keys; Zod's own wording passes through. */
 async function issueText(message: string | undefined, fallback: MessageKey): Promise<string> {
@@ -58,7 +59,7 @@ export async function createSigningDocument(input: unknown): Promise<ActionResul
           : t("signatures.errors.saveFailed"),
     };
   }
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: auth.session.organizationId,
     actor_id: auth.session.userId,
     event_type: "signature",
@@ -150,7 +151,7 @@ export async function openSigningDocument(
     if (error) logActionFailure("signature.openSigningDocument", error);
     return { ok: false, error: (await getT())("forms.errors.openFailed") };
   }
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "signature",

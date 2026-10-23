@@ -52,6 +52,7 @@ export const RATE_LIMITS = {
   "access-grant:program": { limit: 120, windowSeconds: 3600 },
   "access-grant:project": { limit: 120, windowSeconds: 3600 },
   "announcement:publish": { limit: 20, windowSeconds: 3600 },
+  "audit:record": { limit: 600, windowSeconds: 3600 },
   "document:upload": { limit: 60, windowSeconds: 3600 },
   "receipt:submit": { limit: 60, windowSeconds: 3600 },
   "form:submit": { limit: 60, windowSeconds: 3600 },

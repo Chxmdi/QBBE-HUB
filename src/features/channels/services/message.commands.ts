@@ -16,6 +16,7 @@ import type { TranslateFn } from "@/lib/i18n/translator";
 import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { reportError } from "@/lib/observability";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 const sendMessageSchema = (t: TranslateFn) => z.object({
   channelId: z.string().uuid().optional(),
@@ -497,7 +498,7 @@ export async function pinMessage(
     return { ok: false, error: t("messages.errors.pinFailed") };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "communication",
@@ -545,7 +546,7 @@ export async function deleteMessage(messageId: string): Promise<ActionResult> {
     return { ok: false, error: t("messages.errors.deleteFailed") };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "communication",

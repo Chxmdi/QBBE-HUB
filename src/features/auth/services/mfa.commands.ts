@@ -6,6 +6,7 @@ import { getT } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAuditId } from "@/lib/audit-write";
 
 const eventSchema = z.enum([
   "mfa_enrollment_completed",
@@ -44,23 +45,15 @@ export async function recordMfaSecurityEvent(input: unknown): Promise<ActionResu
   }
   if (recent) return { ok: true, id: recent.id as string };
 
-  const { data: event, error } = await supabase
-    .from("audit_event")
-    .insert({
-      organization_id: session.organizationId,
-      actor_id: session.userId,
-      event_type: "security",
-      action: parsed.data,
-      object_type: "user_profile",
-      object_id: session.userId,
-      metadata: { assurance_level: "aal2" },
-    })
-    .select("id")
-    .single();
-
-  if (error || !event) {
-    if (error) logActionFailure("mfa.recordMfaSecurityEvent", error);
-    return { ok: false, error: t("auth.mfa.audit.recordFailed") };
-  }
-  return { ok: true, id: event.id as string };
+  const id = await recordAuditId(supabase, {
+    organization_id: session.organizationId,
+    actor_id: session.userId,
+    event_type: "security",
+    action: parsed.data,
+    object_type: "user_profile",
+    object_id: session.userId,
+    metadata: { assurance_level: "aal2" },
+  });
+  if (!id) return { ok: false, error: t("auth.mfa.audit.recordFailed") };
+  return { ok: true, id };
 }

@@ -19,6 +19,7 @@ import {
 import { dbErrorMessage } from "@/lib/db-error";
 import { FORM_DB_ERRORS } from "@/features/forms/db-error-rules";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 const fieldSchema = z
   .object({
@@ -77,7 +78,7 @@ async function audit(
   objectId: string,
   metadata: Record<string, unknown> = {},
 ) {
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "forms",

@@ -195,7 +195,7 @@ export async function connectVolunteerSystem(): Promise<ActionResult> {
       }
     }
   }
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "integration",
@@ -316,7 +316,7 @@ export async function connectZeffy(): Promise<ActionResult> {
     return { ok: false, error: t("admin.errors.zeffyRecordFailed") };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "integration",
@@ -349,7 +349,7 @@ export async function syncZeffyNow(): Promise<ActionResult> {
     .maybeSingle();
   if (!connection) return { ok: false, error: t("admin.errors.zeffyNotConnected") };
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "integration",

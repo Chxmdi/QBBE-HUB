@@ -11,6 +11,7 @@ import { tagsSchemaFor } from "@/features/documents/services/library";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 const linkSchema = (t: TranslateFn) => z.object({
   title: requiredText(t("documents.errors.linkTitle"), 200),
@@ -178,7 +179,7 @@ export async function registerUploadedDocument(
     return { ok: false, error: t("documents.errors.recordUpload") };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "documents",
@@ -223,7 +224,7 @@ export async function getDocumentDownloadUrl(
     return { ok: false, error: t("documents.errors.downloadLink") };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "documents",

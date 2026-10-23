@@ -11,6 +11,7 @@ import { buildReportSnapshot } from "@/features/reports/services/report.snapshot
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { logActionFailure } from "@/lib/server-log";
+import { recordAudit } from "@/lib/audit-write";
 
 function generateSchema(t: TranslateFn) {
   return z.object({
@@ -84,7 +85,7 @@ export async function generateReport(input: unknown): Promise<ActionResult> {
     return { ok: false, error: t("reports.errors.versionNotRecorded") };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "reporting",
@@ -145,7 +146,7 @@ export async function regenerateReport(reportId: string): Promise<ActionResult> 
     return { ok: false, error: t("reports.errors.newVersionFailed") };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "reporting",
@@ -211,7 +212,7 @@ async function decideLatestVersion(
     };
   }
 
-  await supabase.from("audit_event").insert({
+  await recordAudit(supabase, {
     organization_id: session.organizationId,
     actor_id: session.userId,
     event_type: "reporting",
