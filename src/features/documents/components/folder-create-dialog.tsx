@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { createDocumentFolder } from "@/features/documents/services/library.commands";
 import { categoryLabel, FOLDER_CATEGORIES } from "@/features/documents/services/library";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** Administrators add library folders (#147). */
 export function FolderCreateDialog() {
@@ -22,15 +23,17 @@ export function FolderCreateDialog() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await createDocumentFolder({
-      category: form.get("category"),
-      name: form.get("name") || undefined,
-      visibility: form.get("visibility"),
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        createDocumentFolder({
+          category: form.get("category"),
+          name: form.get("name") || undefined,
+          visibility: form.get("visibility"),
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("documents.folder.failed"));
       return;

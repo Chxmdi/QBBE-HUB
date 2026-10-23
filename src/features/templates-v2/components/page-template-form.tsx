@@ -5,6 +5,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { fill, type TemplatesV2Text } from "@/features/templates-v2/messages";
+import { useT } from "@/lib/i18n/client";
 import { applyPageTemplateV2 } from "@/features/templates-v2/services/templates-v2.commands";
 import { listHubProgramsV2, type HubPrograms } from "@/features/templates-v2/services/template-versions.commands";
 import {
@@ -61,6 +62,7 @@ export function PageTemplateForm({
   const [variables, setVariables] = useState<PageVariables>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shellT = useT();
 
   const asked = useMemo(
     () => PAGE_VARIABLES.filter((name) => template.body.variables?.includes(name)),
@@ -114,15 +116,22 @@ export function PageTemplateForm({
       return;
     }
     setBusy(true);
-    const result = await applyPageTemplateV2({
-      templateId: template.id,
-      parentPageId: where === "workspace" ? null : where,
-      title,
-      start,
-      locale: language,
-      variables,
-      ...(hub ? { programId: programId === "none" ? null : programId } : {}),
-    });
+    let result: Awaited<ReturnType<typeof applyPageTemplateV2>>;
+    try {
+      result = await applyPageTemplateV2({
+        templateId: template.id,
+        parentPageId: where === "workspace" ? null : where,
+        title,
+        start,
+        locale: language,
+        variables,
+        ...(hub ? { programId: programId === "none" ? null : programId } : {}),
+      });
+    } catch {
+      setBusy(false);
+      setError(shellT("ui.actionUnreachable"));
+      return;
+    }
     if (!result.ok) {
       setBusy(false);
       setError(result.error);

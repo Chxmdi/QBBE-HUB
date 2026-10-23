@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useFormatters, useLocale } from "@/lib/i18n/client";
+import { useFormatters, useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { ObjectRef } from "@/lib/objects/contracts";
 import { versionsText } from "../messages";
 import { saveNamedVersion } from "../services/version.commands";
@@ -30,6 +31,7 @@ export function VersionHistory({
   const errors = versionsText(useLocale()).errors;
   const compare = versionsText(useLocale()).compare;
   const format = useFormatters();
+  const shellT = useT();
   const router = useRouter();
   const headingId = useId();
   const nameId = useId();
@@ -47,10 +49,13 @@ export function VersionHistory({
           className="mb-4 flex flex-wrap items-end gap-2"
           onSubmit={async (event) => {
             event.preventDefault();
-            setBusy(true);
-            setMessage(null);
-            const result = await saveNamedVersion({ object, label });
-            setBusy(false);
+            const result = await runServerAction(() => saveNamedVersion({ object, label }), {
+              setBusy,
+              setError: (text) => setMessage(text ? { ok: false, text } : null),
+              t: shellT,
+              reload: () => window.location.reload(),
+            });
+            if (!result) return;
             if (result.ok) {
               setLabel("");
               setMessage({ ok: true, text: m.saved });

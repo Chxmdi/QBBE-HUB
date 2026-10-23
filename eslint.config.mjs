@@ -36,14 +36,14 @@ const eslintConfig = [
   {
     // A promise nobody awaits or catches in a component is a failure nobody
     // sees: a save that rejects leaves its button busy and says nothing. Use
-    // useServerAction (src/lib/use-server-action.ts), or `void` a call whose
-    // failure is handled inside it. Warnings for now; the save-button sweep
-    // turns them into errors once the existing ones are fixed.
+    // useServerAction / runServerAction (src/lib/use-server-action.ts), or
+    // `void` a call whose failure is handled inside it.
+    // tests/unit/stuck-busy.test.ts checks the busy-flag side of the same bug.
     files: ["src/**/*.tsx"],
     languageOptions: { parserOptions: { projectService: true } },
     rules: {
-      "@typescript-eslint/no-floating-promises": "warn",
-      "@typescript-eslint/no-misused-promises": ["warn", { checksVoidReturn: { attributes: false } }],
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-misused-promises": ["error", { checksVoidReturn: { attributes: false } }],
     },
   },
   {

@@ -14,6 +14,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { formatCents } from "@/features/finance/money";
 import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { MessageKey } from "@/lib/i18n/translator";
 import {
   openReceiptFile,
@@ -58,9 +59,15 @@ export function ReceiptList({
   const [busy, setBusy] = useState<string | null>(null);
 
   async function openFile(id: string) {
-    setBusy(id);
-    const result = await openReceiptFile(id);
-    setBusy(null);
+    const result = await runServerAction(() => openReceiptFile(id), {
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+      setBusy: (busy) => setBusy(busy ? id : null),
+    });
+    if (!result) return;
     if (!result.ok || !result.url) {
       toast(result.error ?? t("finance.receipts.list.openFailed"), { tone: "error" });
       return;
@@ -69,9 +76,15 @@ export function ReceiptList({
   }
 
   async function toggleReviewed(row: ReceiptRow) {
-    setBusy(row.id);
-    const result = await setReceiptReviewed(row.id, row.status !== "reviewed");
-    setBusy(null);
+    const result = await runServerAction(() => setReceiptReviewed(row.id, row.status !== "reviewed"), {
+      setError: (text) => {
+        if (text) toast(text, { tone: "error" });
+      },
+      t,
+      reload: () => window.location.reload(),
+      setBusy: (busy) => setBusy(busy ? row.id : null),
+    });
+    if (!result) return;
     if (!result.ok) {
       toast(result.error ?? t("finance.receipts.list.updateFailed"), { tone: "error" });
       return;

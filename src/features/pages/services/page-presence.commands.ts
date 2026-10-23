@@ -6,6 +6,7 @@ import { isEnabled } from "@/lib/feature-flags";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { parsePresenceRows, type PagePresencePerson } from "./page-presence";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Who has a page open (wave 2, C1). Behind both wos_pages and wos_editor:
@@ -44,12 +45,18 @@ export async function touchPagePresence(input: unknown): Promise<PresenceResult>
     p_tab: parsed.data.tabId,
     p_editing: parsed.data.editing,
   });
-  if (error) return { ok: false, reason: error.code === "42501" ? "refused" : "failed" };
+  if (error) {
+    logActionFailure("page_presence.touchPagePresence", error);
+    return { ok: false, reason: error.code === "42501" ? "refused" : "failed" };
+  }
   return listPeople(db, parsed.data.pageId);
 }
 
 async function listPeople(db: Awaited<ReturnType<typeof createSupabaseServerClient>>, id: string): Promise<PresenceResult> {
   const { data, error } = await db.rpc("page_presence_list", { p_page: id });
-  if (error) return { ok: false, reason: "failed" };
+  if (error) {
+    logActionFailure("page_presence.listPeople", error);
+    return { ok: false, reason: "failed" };
+  }
   return { ok: true, people: parsePresenceRows(data) };
 }

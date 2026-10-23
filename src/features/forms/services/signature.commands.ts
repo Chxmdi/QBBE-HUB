@@ -9,6 +9,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
 import type { MessageKey } from "@/lib/i18n/translator";
+import { logActionFailure } from "@/lib/server-log";
 
 /** Schema messages below are catalogue keys; Zod's own wording passes through. */
 async function issueText(message: string | undefined, fallback: MessageKey): Promise<string> {
@@ -145,7 +146,10 @@ export async function openSigningDocument(
   const { data: signed, error } = await supabase.storage
     .from("signing-documents")
     .createSignedUrl(doc.storage_path as string, 60);
-  if (error || !signed) return { ok: false, error: (await getT())("forms.errors.openFailed") };
+  if (error || !signed) {
+    if (error) logActionFailure("signature.openSigningDocument", error);
+    return { ok: false, error: (await getT())("forms.errors.openFailed") };
+  }
   await supabase.from("audit_event").insert({
     organization_id: session.organizationId,
     actor_id: session.userId,

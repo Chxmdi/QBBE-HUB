@@ -13,6 +13,7 @@ import {
 } from "@/features/admin/services/admin.commands";
 import type { OrgRole } from "@/types/entities";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { InvitationLinkField } from "./invitation-link-field";
 
 export function MemberRoleSelect({
@@ -172,10 +173,13 @@ export function NewInvitationLinkButton({
 
   // Asked first, because the person may be about to use the current link.
   async function handleNewLink() {
-    setBusy(true);
-    setError(null);
-    const result = await reissueInvitation(invitationId);
-    setBusy(false);
+    const result = await runServerAction(() => reissueInvitation(invitationId), {
+      setBusy,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("admin.workspace.invitations.newLinkFailed"));
       return;

@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { createChannel } from "@/features/channels/services/channel.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function ChannelCreateDialog({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const router = useRouter();
@@ -18,17 +19,19 @@ export function ChannelCreateDialog({ defaultOpen = false }: { defaultOpen?: boo
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await createChannel({
-      name: form.get("name"),
-      purpose: (form.get("purpose") as string) || undefined,
-      privacy: form.get("privacy"),
-      type: form.get("type"),
-      postingPolicy: form.get("postingPolicy"),
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        createChannel({
+          name: form.get("name"),
+          purpose: (form.get("purpose") as string) || undefined,
+          privacy: form.get("privacy"),
+          type: form.get("type"),
+          postingPolicy: form.get("postingPolicy"),
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("channels.errors.somethingWrong"));
       return;

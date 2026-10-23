@@ -20,6 +20,7 @@ import {
 import { dbErrorMessage, knownDbErrorMessage } from "@/lib/db-error";
 import { APPROVAL_DB_ERRORS } from "@/features/approvals/db-error-rules";
 import { FINANCE_DB_ERRORS } from "@/features/finance/db-error-rules";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Approval writes (#143).
@@ -275,7 +276,10 @@ export async function setApprovalRuleActive(ruleId: string, active: boolean): Pr
     .update({ active })
     .eq("id", ruleId)
     .select("id");
-  if (error || !data?.length) return { ok: false, error: t("finance.approvals.errors.ruleUpdateFailed") };
+  if (error || !data?.length) {
+    if (error) logActionFailure("approval.setApprovalRuleActive", error);
+    return { ok: false, error: t("finance.approvals.errors.ruleUpdateFailed") };
+  }
   await auditRule(supabase, session.organizationId, session.userId,
     active ? "rule_enabled" : "rule_disabled", ruleId);
   revalidatePath("/admin/approvals");
@@ -292,7 +296,10 @@ export async function deleteApprovalRule(ruleId: string): Promise<ActionResult> 
   }
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.from("approval_rule").delete().eq("id", ruleId).select("id");
-  if (error || !data?.length) return { ok: false, error: t("finance.approvals.errors.ruleDeleteFailed") };
+  if (error || !data?.length) {
+    if (error) logActionFailure("approval.deleteApprovalRule", error);
+    return { ok: false, error: t("finance.approvals.errors.ruleDeleteFailed") };
+  }
   await auditRule(supabase, session.organizationId, session.userId, "rule_deleted", ruleId);
   revalidatePath("/admin/approvals");
   return { ok: true, id: ruleId };

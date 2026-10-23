@@ -20,6 +20,7 @@ import {
 } from "@/features/budgets/services/budget.commands";
 import type { BudgetLine, BudgetOptions } from "@/features/budgets/services/budget.queries";
 import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 function FormError({ error }: { error: string | null }) {
   return error ? (
@@ -42,10 +43,13 @@ function useAction() {
     success: string,
     then?: (result: T) => void,
   ) {
-    setPending(key);
-    setError(null);
-    const result = await action();
-    setPending(null);
+    const result = await runServerAction(action, {
+      setBusy: (busy) => setPending(busy ? key : null),
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return false;
     if (!result.ok) {
       setError(result.error ?? t("finance.budgets.genericError"));
       return false;

@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
-import { useLocale } from "@/lib/i18n/client";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { ObjectRef } from "@/lib/objects/contracts";
 import { addObjectComment } from "@/features/object-comments/services/object-comment.commands";
 import { fill } from "../i18n";
@@ -34,6 +35,7 @@ export function SelectionActions({
   canComment: boolean;
 }) {
   const m = collabText(useLocale()).suggest;
+  const shellT = useT();
   const router = useRouter();
   const proposedId = useId();
   const commentId = useId();
@@ -62,15 +64,23 @@ export function SelectionActions({
               className="mb-3 flex flex-wrap items-end gap-2"
               onSubmit={async (event) => {
                 event.preventDefault();
-                setBusy("suggest");
-                const result = await suggestEdit({
-                  object,
-                  blockId: selection.blockId,
-                  start: anchor.start,
-                  end: anchor.end,
-                  proposed,
-                });
-                setBusy(null);
+                const result = await runServerAction(
+                  () =>
+                    suggestEdit({
+                      object,
+                      blockId: selection.blockId,
+                      start: anchor.start,
+                      end: anchor.end,
+                      proposed,
+                    }),
+                  {
+                    setBusy: (on) => setBusy(on ? "suggest" : null),
+                    setError: (error) => setMessage(error ? { ok: false, text: error } : null),
+                    t: shellT,
+                    reload: () => window.location.reload(),
+                  },
+                );
+                if (!result) return;
                 setMessage(result.ok ? { ok: true, text: m.sent } : { ok: false, text: result.error ?? m.errors.failed });
                 if (result.ok) {
                   setProposed("");
@@ -94,14 +104,22 @@ export function SelectionActions({
               className="space-y-2"
               onSubmit={async (event) => {
                 event.preventDefault();
-                setBusy("comment");
-                const result = await addObjectComment({
-                  object,
-                  blockId: selection.blockId,
-                  anchor,
-                  body: comment,
-                });
-                setBusy(null);
+                const result = await runServerAction(
+                  () =>
+                    addObjectComment({
+                      object,
+                      blockId: selection.blockId,
+                      anchor,
+                      body: comment,
+                    }),
+                  {
+                    setBusy: (on) => setBusy(on ? "comment" : null),
+                    setError: (error) => setMessage(error ? { ok: false, text: error } : null),
+                    t: shellT,
+                    reload: () => window.location.reload(),
+                  },
+                );
+                if (!result) return;
                 setMessage(result.ok ? { ok: true, text: m.commented } : { ok: false, text: result.error ?? m.errors.failed });
                 if (result.ok) {
                   setComment("");
@@ -135,16 +153,20 @@ export function SuggestionList({
   canDecide: boolean;
 }) {
   const m = collabText(useLocale()).suggest;
+  const shellT = useT();
   const router = useRouter();
   const headingId = useId();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function decide(id: string, decision: "accepted" | "rejected" | "withdrawn") {
-    setBusy(`${id}:${decision}`);
-    setError(null);
-    const result = await decideSuggestion({ id, decision });
-    setBusy(null);
+    const result = await runServerAction(() => decideSuggestion({ id, decision }), {
+      setBusy: (on) => setBusy(on ? `${id}:${decision}` : null),
+      setError,
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) setError(result.error ?? m.errors.failed);
     else router.refresh();
   }

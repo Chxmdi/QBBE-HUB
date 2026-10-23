@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { FieldHint, Input, Label, Select, Textarea, Checkbox } from "@/components/ui/input";
 import { publishAnnouncement } from "@/features/announcements/services/announcement.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** Admin-only announcement composer for the mandatory channel (P0-ANN-02). */
 export function AnnouncementComposeDialog({ defaultOpen = false }: { defaultOpen?: boolean }) {
@@ -20,18 +21,20 @@ export function AnnouncementComposeDialog({ defaultOpen = false }: { defaultOpen
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await publishAnnouncement({
-      title: form.get("title"),
-      body: form.get("body"),
-      priority: form.get("priority"),
-      requiresAck,
-      ackDeadline: (form.get("ackDeadline") as string) || undefined,
-      publishAt: (form.get("publishAt") as string) || undefined,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        publishAnnouncement({
+          title: form.get("title"),
+          body: form.get("body"),
+          priority: form.get("priority"),
+          requiresAck,
+          ackDeadline: (form.get("ackDeadline") as string) || undefined,
+          publishAt: (form.get("publishAt") as string) || undefined,
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("announcements.errors.somethingWrong"));
       return;

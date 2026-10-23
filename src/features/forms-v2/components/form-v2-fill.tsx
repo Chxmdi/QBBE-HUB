@@ -10,9 +10,11 @@ import { MAX_UPLOAD_BYTES, storagePathFor } from "@/features/editor/adapter/file
 import { localized, typedAnswers, visibleFields, type FormV2Property } from "@/features/forms-v2/properties";
 import { registerFormFile, type FormFileScan } from "@/features/forms-v2/services/form-file.commands";
 import { submitFormV2 } from "@/features/forms-v2/services/forms-v2.commands";
+import { useT } from "@/lib/i18n/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { documentUploadFolder } from "@/features/documents/services/document.commands";
 import { discardOwnUpload } from "@/features/documents/services/discard-upload";
+import { runServerAction } from "@/lib/use-server-action";
 
 type Answer = string | boolean;
 
@@ -41,6 +43,7 @@ export function FormV2Fill({
   preview?: boolean;
 }) {
   const idBase = useId();
+  const shellT = useT();
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
   const [files, setFiles] = useState<Record<string, UploadedFile>>({});
   const [error, setError] = useState<string | null>(null);
@@ -62,9 +65,13 @@ export function FormV2Fill({
     for (const p of shown) {
       raw[p.key] = p.kind === "checkbox" ? answers[p.key] === true : String(answers[p.key] ?? "");
     }
-    setSaving(true);
-    const result = await submitFormV2(formId, raw);
-    setSaving(false);
+    const result = await runServerAction(() => submitFormV2(formId, raw), {
+      setBusy: setSaving,
+      setError,
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) {
       setError(result.error);
       return;
@@ -91,7 +98,7 @@ export function FormV2Fill({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card space-y-4 p-5" noValidate aria-label={preview ? text.preview : undefined}>
+    <form onSubmit={(e) => void handleSubmit(e)} className="card space-y-4 p-5" noValidate aria-label={preview ? text.preview : undefined}>
       {preview ? <p className="meta">{text.previewNotice}</p> : null}
       {shown.map((p) => {
         const id = `${idBase}-${p.key}`;
@@ -216,6 +223,7 @@ function FileField({
   onUploaded: (file: UploadedFile | null) => void;
   onError: (message: string | null) => void;
 }) {
+  const shellT = useT();
   const [busy, setBusy] = useState(false);
   // Remounting the input is the one reliable way to clear a chosen file.
   const [generation, setGeneration] = useState(0);
@@ -235,29 +243,34 @@ function FileField({
       return;
     }
     setBusy(true);
-    const supabase = createSupabaseBrowserClient();
-    const path = storagePathFor(await documentUploadFolder(), file.name, crypto.randomUUID());
-    const { error } = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined });
-    if (error) {
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const path = storagePathFor(await documentUploadFolder(), file.name, crypto.randomUUID());
+      const { error } = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined });
+      if (error) {
+        onError(text.errors.fileUploadFailed);
+        e.target.value = "";
+        return;
+      }
+      const result = await registerFormFile({
+        storagePath: path,
+        fileName: file.name.slice(0, 200) || "file",
+        mimeType: file.type || undefined,
+        sizeBytes: file.size,
+      });
+      if (!result.ok || !result.data) {
+        await discardOwnUpload(path);
+        onError(result.ok ? text.errors.fileUploadFailed : result.error);
+        e.target.value = "";
+        return;
+      }
+      onUploaded(result.data);
+    } catch {
+      onError(shellT("ui.actionUnreachable"));
+      e.target.value = "";
+    } finally {
       setBusy(false);
-      onError(text.errors.fileUploadFailed);
-      e.target.value = "";
-      return;
     }
-    const result = await registerFormFile({
-      storagePath: path,
-      fileName: file.name.slice(0, 200) || "file",
-      mimeType: file.type || undefined,
-      sizeBytes: file.size,
-    });
-    setBusy(false);
-    if (!result.ok || !result.data) {
-      await discardOwnUpload(path);
-      onError(result.ok ? text.errors.fileUploadFailed : result.error);
-      e.target.value = "";
-      return;
-    }
-    onUploaded(result.data);
   }
 
   return (
@@ -292,7 +305,7 @@ function FileField({
         disabled={busy}
         aria-describedby={`${id}-hint`}
         className={uploaded ? "sr-only" : "h-auto py-1.5"}
-        onChange={handleChange}
+        onChange={(e) => void handleChange(e)}
       />
       <span id={`${id}-hint`}>
         <FieldHint>{busy ? text.fileUploading : text.fileHint}</FieldHint>

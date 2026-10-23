@@ -9,6 +9,7 @@ import { Input, Label, Select, Textarea } from "@/components/ui/input";
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import { createProgram } from "@/features/projects/services/project.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function ProgramCreateDialog({
   people,
@@ -25,15 +26,17 @@ export function ProgramCreateDialog({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSaving(true);
     const form = new FormData(e.currentTarget);
-    const result = await createProgram({
-      name: form.get("name"),
-      description: (form.get("description") as string) || undefined,
-      leadId: (form.get("leadId") as string) || undefined,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        createProgram({
+          name: form.get("name"),
+          description: (form.get("description") as string) || undefined,
+          leadId: (form.get("leadId") as string) || undefined,
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("programs.create.error"));
       return;

@@ -15,6 +15,7 @@ import {
   reorderMilestoneSchema,
   updateMilestoneSchema,
 } from "@/features/projects/schemas";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Milestone writes.
@@ -131,7 +132,10 @@ export async function completeMilestone(input: unknown): Promise<ActionResult> {
         : { completed_at: null, evidence: null },
     )
     .eq("id", milestoneId);
-  if (error) return { ok: false, error: t("projects.errors.milestoneUpdateFailed") };
+  if (error) {
+    logActionFailure("milestone.completeMilestone", error);
+    return { ok: false, error: t("projects.errors.milestoneUpdateFailed") };
+  }
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,
@@ -204,7 +208,10 @@ export async function updateMilestone(input: unknown): Promise<ActionResult> {
     .eq("id", milestoneId)
     .select("id, project_id")
     .maybeSingle();
-  if (error || !row) return { ok: false, error: t("projects.errors.milestoneUpdateFailed") };
+  if (error || !row) {
+    if (error) logActionFailure("milestone.updateMilestone", error);
+    return { ok: false, error: t("projects.errors.milestoneUpdateFailed") };
+  }
 
   await supabase.from("activity_event").insert({
     organization_id: session.organizationId,

@@ -9,6 +9,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { layoutSchema, normalizeLayout } from "../layout";
 import { layoutsText } from "../messages";
 import { layoutCatalog } from "./layout.catalog";
+import { logActionFailure } from "@/lib/server-log";
 
 export interface LayoutResult {
   ok: boolean;
@@ -31,7 +32,10 @@ export async function saveObjectLayout(input: unknown): Promise<LayoutResult> {
   const { error } = await db
     .from("object_layout")
     .upsert({ organization_id: session.organizationId, type_id: type.id, layout }, { onConflict: "type_id" });
-  if (error) return { ok: false, error: error.message.includes("row-level security") ? m.forbidden : m.failed };
+  if (error) {
+    logActionFailure("layout.saveObjectLayout", error);
+    return { ok: false, error: error.message.includes("row-level security") ? m.forbidden : m.failed };
+  }
   revalidatePath("/collab/layouts", "layout");
   return { ok: true };
 }
@@ -45,7 +49,10 @@ export async function resetObjectLayout(typeId: unknown): Promise<LayoutResult> 
   if (!id.success) return { ok: false, error: m.failed };
   const db = await createSupabaseServerClient();
   const { data, error } = await db.from("object_layout").delete().eq("type_id", id.data).select("id");
-  if (error) return { ok: false, error: m.failed };
+  if (error) {
+    logActionFailure("layout.resetObjectLayout", error);
+    return { ok: false, error: m.failed };
+  }
   if (!data || data.length === 0) return { ok: false, error: m.forbidden };
   revalidatePath("/collab/layouts", "layout");
   return { ok: true };

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import {
   MONTHS,
   confirmerLabel,
@@ -36,10 +37,8 @@ function useSubmit() {
   const [error, setError] = React.useState<string | null>(null);
   const run = React.useCallback(
     async (action: () => Promise<ActionResult>, onDone?: () => void) => {
-      setBusy(true);
-      setError(null);
-      const result = await action();
-      setBusy(false);
+      const result = await runServerAction(action, { setBusy, setError, t, reload: () => window.location.reload() });
+      if (!result) return;
       if (!result.ok) {
         setError(result.error ?? t("records.errors.generic"));
         return;

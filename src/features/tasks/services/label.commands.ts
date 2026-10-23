@@ -10,6 +10,7 @@ import {
   translateTaskError,
 } from "@/features/tasks/schemas";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Label commands (P0-TSK-08).
@@ -98,7 +99,10 @@ export async function detachTaskLabel(input: unknown): Promise<ActionResult> {
     .eq("task_id", taskId)
     .eq("label_id", labelId);
 
-  if (error) return { ok: false, error: t("tasks.errors.removeLabel") };
+  if (error) {
+    logActionFailure("label.detachTaskLabel", error);
+    return { ok: false, error: t("tasks.errors.removeLabel") };
+  }
 
   await recordLabelChange(supabase, session, taskId, labelId, "removed");
   revalidatePath("/", "layout");

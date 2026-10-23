@@ -4,6 +4,8 @@ import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Textarea } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { saveDecisionRecord } from "../services/decision-v2.commands";
 import type { DecisionRecord } from "../services/decision-v2.queries";
 import { useDecisionsV2T } from "./use-dv2-t";
@@ -11,6 +13,7 @@ import { useDecisionsV2T } from "./use-dv2-t";
 /** Edits the full record. Shown only to people who can manage the decision. */
 export function DecisionRecordForm({ decision }: { decision: DecisionRecord }) {
   const t = useDecisionsV2T();
+  const shellT = useT();
   const router = useRouter();
   const id = useId();
   const [saving, setSaving] = useState(false);
@@ -19,17 +22,25 @@ export function DecisionRecordForm({ decision }: { decision: DecisionRecord }) {
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setSaving(true);
-    const result = await saveDecisionRecord({
-      decisionId: decision.id,
-      title: String(form.get("title") ?? ""),
-      problem: String(form.get("problem") ?? ""),
-      options: String(form.get("options") ?? ""),
-      evidence: String(form.get("evidence") ?? ""),
-      reasoning: String(form.get("reasoning") ?? ""),
-      revisitOn: String(form.get("revisitOn") ?? ""),
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        saveDecisionRecord({
+          decisionId: decision.id,
+          title: String(form.get("title") ?? ""),
+          problem: String(form.get("problem") ?? ""),
+          options: String(form.get("options") ?? ""),
+          evidence: String(form.get("evidence") ?? ""),
+          reasoning: String(form.get("reasoning") ?? ""),
+          revisitOn: String(form.get("revisitOn") ?? ""),
+        }),
+      {
+        setBusy: setSaving,
+        setError: (error) => setStatus(error ? { ok: false, text: error } : null),
+        t: shellT,
+        reload: () => window.location.reload(),
+      },
+    );
+    if (!result) return;
     setStatus({ ok: result.ok, text: result.ok ? t("form.saved") : (result.error ?? t("form.error")) });
     if (result.ok) router.refresh();
   }

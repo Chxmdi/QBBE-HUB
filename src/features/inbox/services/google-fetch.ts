@@ -42,6 +42,11 @@ export function retryAfterMs(header: string | null, now = Date.now()): number | 
   return Number.isNaN(at) ? null : Math.max(0, at - now);
 }
 
+function delayScale(): number {
+  const scale = Number(process.env.GOOGLE_FETCH_DELAY_SCALE ?? "1");
+  return Number.isFinite(scale) && scale >= 0 ? scale : 1;
+}
+
 export async function googleFetch(
   url: string | URL,
   init: RequestInit = {},
@@ -52,7 +57,8 @@ export async function googleFetch(
     retries = 2,
     retryUnsafe = false,
     maxDelayMs = 30_000,
-    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    // GOOGLE_FETCH_DELAY_SCALE=0 (the unit tests) retries without waiting.
+    sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms * delayScale())),
   } = options;
   const method = (init.method ?? "GET").toUpperCase();
   const mayRepeat = method === "GET" || retryUnsafe;

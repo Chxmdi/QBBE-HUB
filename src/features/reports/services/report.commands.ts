@@ -10,6 +10,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { buildReportSnapshot } from "@/features/reports/services/report.snapshot";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
+import { logActionFailure } from "@/lib/server-log";
 
 function generateSchema(t: TranslateFn) {
   return z.object({
@@ -66,7 +67,10 @@ export async function generateReport(input: unknown): Promise<ActionResult> {
     .select("id")
     .single();
 
-  if (error || !report) return { ok: false, error: t("reports.errors.saveFailed") };
+  if (error || !report) {
+    if (error) logActionFailure("report.generateReport", error);
+    return { ok: false, error: t("reports.errors.saveFailed") };
+  }
 
   // Version 1. The note is stored in English and shown in the reader's
   // language by the version history. The report row keeps a copy of the latest snapshot, but the

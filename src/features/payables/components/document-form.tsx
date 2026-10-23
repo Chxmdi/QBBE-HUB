@@ -12,6 +12,7 @@ import { addDays, type DocumentKind } from "@/features/payables/model";
 import { invoiceTaxDefaults, invoiceTaxProblem, type TaxRegistration } from "@/features/payables/invoice-tax";
 import { saveDocument } from "@/features/payables/services/payables.commands";
 import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { MessageKey } from "@/lib/i18n/translator";
 
 export interface DocumentLineValue {
@@ -121,9 +122,7 @@ export function DocumentForm({
   }
 
   async function submit(post: boolean) {
-    setError(null);
-    setSaving(post ? "post" : "draft");
-    const result = await saveDocument({
+    const result = await runServerAction(() => saveDocument({
       kind,
       id: value.id,
       contactId: value.contactId,
@@ -144,8 +143,13 @@ export function DocumentForm({
         description: l.description,
         amount: l.amount,
       })),
+    }), {
+      setError,
+      t,
+      reload: () => window.location.reload(),
+      setBusy: (busy) => setSaving(busy ? (post ? "post" : "draft") : null),
     });
-    setSaving(null);
+    if (!result) return;
     const base = isBill ? "/finance/payables/bills" : "/finance/payables/invoices";
     if (!result.ok) {
       setError(result.error ?? t("finance.payables.form.couldNotSave"));

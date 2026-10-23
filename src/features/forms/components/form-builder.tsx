@@ -16,6 +16,7 @@ import {
 } from "@/features/forms/fields";
 import { createForm, updateDraftForm } from "@/features/forms/services/form.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 interface DraftField {
   id: string;
@@ -92,9 +93,11 @@ export function FormBuilder({ initial }: { initial?: FormBuilderInitial }) {
         help: f.help.trim() || undefined,
       })),
     };
-    setSaving(true);
-    const result = initial ? await updateDraftForm(initial.id, payload) : await createForm(payload);
-    setSaving(false);
+    const result = await runServerAction(
+      () => (initial ? updateDraftForm(initial.id, payload) : createForm(payload)),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok || !result.id) {
       setError(result.error ?? t("forms.builder.saveFailed"));
       return;

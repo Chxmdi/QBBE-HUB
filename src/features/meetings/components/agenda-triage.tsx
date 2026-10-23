@@ -8,6 +8,7 @@ import {
   triageAgendaItem,
 } from "@/features/meetings/services/meeting.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 type Decision = "accepted" | "deferred" | "declined" | "done";
 
@@ -43,10 +44,11 @@ export function AgendaTriage({
       decision === "declined" &&
       !window.confirm(t("meetings.triage.confirmDecline", { title }))
     ) return;
-    setError(null);
-    setBusy(true);
-    const result = await triageAgendaItem({ agendaItemId, decision });
-    setBusy(false);
+    const result = await runServerAction(
+      () => triageAgendaItem({ agendaItemId, decision }),
+      { setBusy, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("meetings.triage.updateError"));
       return;
@@ -55,10 +57,11 @@ export function AgendaTriage({
   }
 
   async function move(direction: "up" | "down") {
-    setError(null);
-    setBusy(true);
-    const result = await moveAgendaItem({ agendaItemId, direction });
-    setBusy(false);
+    const result = await runServerAction(
+      () => moveAgendaItem({ agendaItemId, direction }),
+      { setBusy, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("meetings.triage.reorderError"));
       return;
@@ -84,7 +87,7 @@ export function AgendaTriage({
     <div className="flex items-center gap-1">
       <Button
         variant="ghost"
-        onClick={() => move("up")}
+        onClick={() => void move("up")}
         disabled={!canMoveUp || busy}
         aria-label={t("meetings.triage.moveUp", { title })}
       >
@@ -92,7 +95,7 @@ export function AgendaTriage({
       </Button>
       <Button
         variant="ghost"
-        onClick={() => move("down")}
+        onClick={() => void move("down")}
         disabled={!canMoveDown || busy}
         aria-label={t("meetings.triage.moveDown", { title })}
       >
@@ -102,7 +105,7 @@ export function AgendaTriage({
         <Button
           key={d.value}
           variant="ghost"
-          onClick={() => decide(d.value)}
+          onClick={() => void decide(d.value)}
           loading={busy}
           aria-label={t("meetings.triage.actionOn", { action: d.label, title })}
         >

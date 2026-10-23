@@ -10,6 +10,7 @@ import {
 } from "@/features/admin/services/integration.commands";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export function IntegrationActions({
   provider,
@@ -34,16 +35,17 @@ export function IntegrationActions({
   const [busyAction, setBusyAction] = useState<"connect" | "sync" | "disconnect" | null>(null);
 
   async function runZeffy(action: "connect" | "sync" | "disconnect") {
-    setBusyAction(action);
-    setError(null);
     setNotice(null);
-    const result =
-      action === "connect"
-        ? await connectZeffy()
-        : action === "sync"
-          ? await syncZeffyNow()
-          : await disconnectIntegration("zeffy");
-    setBusyAction(null);
+    const result = await runServerAction(
+      () =>
+        action === "connect"
+          ? connectZeffy()
+          : action === "sync"
+            ? syncZeffyNow()
+            : disconnectIntegration("zeffy"),
+      { setBusy: (busy) => setBusyAction(busy ? action : null), setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(
         result.error ??
@@ -63,19 +65,25 @@ export function IntegrationActions({
 
   async function disconnect() {
     if (provider === "email") return;
-    setBusy(true);
-    setError(null);
-    const result = await disconnectIntegration(provider);
-    setBusy(false);
+    const result = await runServerAction(() => disconnectIntegration(provider), {
+      setBusy,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) setError(result.error ?? t("admin.workspace.integrations.actions.disconnectFailed"));
     else router.refresh();
   }
 
   async function connectVms() {
-    setBusy(true);
-    setError(null);
-    const result = await connectVolunteerSystem();
-    setBusy(false);
+    const result = await runServerAction(() => connectVolunteerSystem(), {
+      setBusy,
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     if (!result.ok) setError(result.error ?? t("admin.workspace.integrations.actions.connectFailed"));
     else router.refresh();
   }
@@ -100,20 +108,20 @@ export function IntegrationActions({
         {linked ? (
           <>
             {needsKey ? (
-              <Button onClick={() => runZeffy("connect")} loading={busyAction === "connect"} disabled={!zeffyConfigured}>
+              <Button onClick={() => void runZeffy("connect")} loading={busyAction === "connect"} disabled={!zeffyConfigured}>
                 {t("admin.workspace.integrations.actions.reauthenticate")}
               </Button>
             ) : (
-              <Button onClick={() => runZeffy("sync")} loading={busyAction === "sync"} disabled={!zeffyConfigured}>
+              <Button onClick={() => void runZeffy("sync")} loading={busyAction === "sync"} disabled={!zeffyConfigured}>
                 {t("admin.workspace.integrations.actions.syncNow")}
               </Button>
             )}
-            <Button variant="secondary" onClick={() => runZeffy("disconnect")} loading={busyAction === "disconnect"}>
+            <Button variant="secondary" onClick={() => void runZeffy("disconnect")} loading={busyAction === "disconnect"}>
               {t("admin.workspace.integrations.actions.disconnect")}
             </Button>
           </>
         ) : (
-          <Button onClick={() => runZeffy("connect")} loading={busyAction === "connect"} disabled={!zeffyConfigured}>
+          <Button onClick={() => void runZeffy("connect")} loading={busyAction === "connect"} disabled={!zeffyConfigured}>
             {t("admin.workspace.integrations.actions.connect")}
           </Button>
         )}

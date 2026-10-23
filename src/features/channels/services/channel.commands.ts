@@ -9,6 +9,7 @@ import { slugify } from "@/lib/utils";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
+import { logActionFailure } from "@/lib/server-log";
 
 const createChannelSchema = (t: TranslateFn) => z.object({
   name: requiredText(t("channels.errors.nameRequired"), 80),
@@ -115,7 +116,10 @@ export async function leaveChannel(channelId: string): Promise<ActionResult> {
   const { error } = await supabase.rpc("leave_channel", {
     p_channel_id: channelId,
   });
-  if (error) return { ok: false, error: t("channels.errors.leaveFailed") };
+  if (error) {
+    logActionFailure("channel.leaveChannel", error);
+    return { ok: false, error: t("channels.errors.leaveFailed") };
+  }
   revalidatePath("/channels");
   return { ok: true };
 }
@@ -138,7 +142,10 @@ export async function setChannelMute(input: unknown): Promise<ActionResult> {
     .update({ muted_level: parsed.data.mutedLevel })
     .eq("channel_id", parsed.data.channelId)
     .eq("user_id", session.userId);
-  if (error) return { ok: false, error: t("channels.errors.preferenceFailed") };
+  if (error) {
+    logActionFailure("channel.setChannelMute", error);
+    return { ok: false, error: t("channels.errors.preferenceFailed") };
+  }
 
   revalidatePath("/settings");
   return { ok: true };

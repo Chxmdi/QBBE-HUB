@@ -4,6 +4,8 @@ import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { createGoal } from "../services/goal.commands";
 import { useGoalsT } from "./use-goals-t";
 
@@ -11,6 +13,7 @@ type Option = { id: string; name: string };
 
 export function GoalCreateForm({ programs, people }: { programs: Option[]; people: Option[] }) {
   const t = useGoalsT();
+  const shellT = useT();
   const router = useRouter();
   const id = useId();
   const [saving, setSaving] = useState(false);
@@ -19,16 +22,18 @@ export function GoalCreateForm({ programs, people }: { programs: Option[]; peopl
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setSaving(true);
-    setError(null);
-    const result = await createGoal({
-      title: String(form.get("title") ?? ""),
-      description: String(form.get("description") ?? ""),
-      programId: String(form.get("programId") ?? ""),
-      ownerId: String(form.get("ownerId") ?? ""),
-      targetOn: String(form.get("targetOn") ?? ""),
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        createGoal({
+          title: String(form.get("title") ?? ""),
+          description: String(form.get("description") ?? ""),
+          programId: String(form.get("programId") ?? ""),
+          ownerId: String(form.get("ownerId") ?? ""),
+          targetOn: String(form.get("targetOn") ?? ""),
+        }),
+      { setBusy: setSaving, setError, t: shellT, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok || !result.id) return setError(result.error ?? t("create.error"));
     router.push(`/goals/${result.id}`);
   }

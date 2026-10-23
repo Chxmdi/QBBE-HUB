@@ -159,12 +159,19 @@ export function MfaFlow() {
 
     setSubmitting(true);
     setError(null);
-    const supabase = createSupabaseBrowserClient();
-    const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
-      factorId,
-      code,
-    });
-    setSubmitting(false);
+    let verifyError: { message: string } | null;
+    try {
+      const supabase = createSupabaseBrowserClient();
+      ({ error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
+        factorId,
+        code,
+      }));
+    } catch {
+      setError(t("ui.actionUnreachable"));
+      return;
+    } finally {
+      setSubmitting(false);
+    }
 
     if (verifyError) {
       setCode("");

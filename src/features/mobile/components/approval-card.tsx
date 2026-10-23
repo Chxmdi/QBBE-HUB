@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label, Textarea } from "@/components/ui/input";
 import { decideApproval } from "@/features/approvals/services/approval.commands";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { usePhoneStatus } from "./phone-status";
 import { useMobileT } from "./use-mobile-t";
 
 /** One waiting approval, decided with the ordinary approval action. */
 export function ApprovalCard({ id, title, requester, amount }: { id: string; title: string; requester: string | null; amount: string | null }) {
   const t = useMobileT();
+  const shellT = useT();
   const router = useRouter();
   const fieldId = useId();
   const [rejecting, setRejecting] = useState(false);
@@ -24,9 +27,11 @@ export function ApprovalCard({ id, title, requester, amount }: { id: string; tit
   const status = phoneStatus ? null : localStatus;
 
   async function decide(decision: "approve" | "reject") {
-    setBusy(true);
-    const result = await decideApproval({ itemId: id, decision, note: decision === "reject" ? note : undefined });
-    setBusy(false);
+    const result = await runServerAction(
+      () => decideApproval({ itemId: id, decision, note: decision === "reject" ? note : undefined }),
+      { setBusy, setError: (text) => setStatus(text ? { ok: false, text } : null), t: shellT, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     setStatus({
       ok: result.ok,
       text: result.ok ? (decision === "approve" ? t("approvals.approved") : t("approvals.rejected")) : (result.error ?? t("approvals.error")),
@@ -47,13 +52,13 @@ export function ApprovalCard({ id, title, requester, amount }: { id: string; tit
         <div className="space-y-2">
           <Label htmlFor={fieldId}>{t("approvals.reasonLabel", { title })}</Label>
           <Textarea id={fieldId} value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} />
-          <Button variant="danger" className="h-11 w-full" disabled={!note.trim()} loading={busy} onClick={() => decide("reject")}>
+          <Button variant="danger" className="h-11 w-full" disabled={!note.trim()} loading={busy} onClick={() => void decide("reject")}>
             {t("approvals.confirmReject")}
           </Button>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-2">
-          <Button className="h-11" loading={busy} onClick={() => decide("approve")} aria-label={t("approvals.approve", { title })}>
+          <Button className="h-11" loading={busy} onClick={() => void decide("approve")} aria-label={t("approvals.approve", { title })}>
             {t("approvals.approveShort")}
           </Button>
           <Button variant="secondary" className="h-11" onClick={() => setRejecting(true)}>{t("approvals.reject")}</Button>

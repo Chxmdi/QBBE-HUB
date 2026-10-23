@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { FieldHint, Input, Label, Textarea } from "@/components/ui/input";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { ApprovableType } from "../contract";
 import { requestObjectApproval } from "../services/object-approval.commands";
 import { useObjectApprovalsT } from "./use-oa-t";
@@ -12,6 +14,7 @@ import { useObjectApprovalsT } from "./use-oa-t";
 /** The "Request approval" action on a record. */
 export function RequestApprovalForm({ type, id }: { type: ApprovableType; id: string }) {
   const t = useObjectApprovalsT();
+  const shellT = useT();
   const router = useRouter();
   const { toast } = useToast();
   const fieldId = useId();
@@ -22,14 +25,22 @@ export function RequestApprovalForm({ type, id }: { type: ApprovableType; id: st
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    setSaving(true);
-    const result = await requestObjectApproval({
-      type,
-      id,
-      title: String(form.get("title") ?? ""),
-      note: String(form.get("note") ?? ""),
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        requestObjectApproval({
+          type,
+          id,
+          title: String(form.get("title") ?? ""),
+          note: String(form.get("note") ?? ""),
+        }),
+      {
+        setBusy: setSaving,
+        setError: (text) => setStatus(text ? { ok: false, text } : null),
+        t: shellT,
+        reload: () => window.location.reload(),
+      },
+    );
+    if (!result) return;
     // Once a request is open the record shows it instead of this form, so
     // success is confirmed in the page-level toast; an error stays here.
     if (result.ok) {
@@ -43,7 +54,7 @@ export function RequestApprovalForm({ type, id }: { type: ApprovableType; id: st
   }
 
   return (
-    <form onSubmit={submit} className="card space-y-3 p-4" aria-labelledby={`${fieldId}-heading`}>
+    <form onSubmit={(event) => void submit(event)} className="card space-y-3 p-4" aria-labelledby={`${fieldId}-heading`}>
       <h2 id={`${fieldId}-heading`} className="section-heading">{t("request.heading")}</h2>
       <p className="text-[13px] text-muted">{t("request.hint")}</p>
       <div>

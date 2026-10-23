@@ -6,6 +6,8 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { fill, type TemplatesV2Text } from "@/features/templates-v2/messages";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { createTemplateV2 } from "@/features/templates-v2/services/templates-v2.commands";
 import { PAGE_VARIABLES, type DraftBlock, type DraftTask, type TemplateTypeKey } from "@/features/templates-v2/template";
 
@@ -26,6 +28,7 @@ export function TemplateBuilder({ text }: { text: TemplatesV2Text }) {
   const [blocks, setBlocks] = useState<DraftBlock[]>([{ kind: "heading", en: "", fr: "", due: "" }]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shellT = useT();
   /** The block text field last focused, so a chip knows where to insert. */
   const focused = useRef<{ index: number; lang: "en" | "fr"; element: HTMLInputElement } | null>(null);
 
@@ -47,21 +50,23 @@ export function TemplateBuilder({ text }: { text: TemplatesV2Text }) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     const data = new FormData(e.currentTarget);
     const value = (name: string) => String(data.get(name) ?? "");
-    setBusy(true);
-    const result = await createTemplateV2({
-      typeKey,
-      name: { en: value("nameEn"), fr: value("nameFr") },
-      description: { en: value("descriptionEn"), fr: value("descriptionFr") },
-      title: { en: value("titleEn") || value("nameEn"), fr: value("titleFr") || value("nameFr") },
-      duration: value("duration"),
-      tasks: typeKey === "project" ? tasks : [],
-      blocks: typeKey === "page" ? blocks : [],
-      publish: data.get("publish") === "on",
-    });
-    setBusy(false);
+    const result = await runServerAction(
+      () =>
+        createTemplateV2({
+          typeKey,
+          name: { en: value("nameEn"), fr: value("nameFr") },
+          description: { en: value("descriptionEn"), fr: value("descriptionFr") },
+          title: { en: value("titleEn") || value("nameEn"), fr: value("titleFr") || value("nameFr") },
+          duration: value("duration"),
+          tasks: typeKey === "project" ? tasks : [],
+          blocks: typeKey === "page" ? blocks : [],
+          publish: data.get("publish") === "on",
+        }),
+      { setBusy, setError, t: shellT, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error);
       return;

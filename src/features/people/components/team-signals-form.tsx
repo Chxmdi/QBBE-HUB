@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox, FieldHint, Input, Label } from "@/components/ui/input";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/translator";
+import { runServerAction } from "@/lib/use-server-action";
 import {
   THRESHOLD_LIMITS,
   type TeamSignalSettingsInput,
@@ -46,20 +47,22 @@ export function TeamSignalsForm({ initial }: { initial: TeamSignalSettingsInput 
       onSubmit={async (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
-        setBusy(true);
-        setError(null);
         setSaved(false);
-        const result = await saveTeamSignalSettings({
-          overdueCount: form.get("overdueCount"),
-          overdueAgeDays: form.get("overdueAgeDays"),
-          blockedNoUpdateDays: form.get("blockedNoUpdateDays"),
-          inProgressNoUpdateDays: form.get("inProgressNoUpdateDays"),
-          flagProjectReports: form.get("flagProjectReports") === "on",
-          flagOverdueDecisions: form.get("flagOverdueDecisions") === "on",
-          remindersEnabled: form.get("remindersEnabled") === "on",
-          digestEnabled: form.get("digestEnabled") === "on",
-        });
-        setBusy(false);
+        const result = await runServerAction(
+          () =>
+            saveTeamSignalSettings({
+              overdueCount: form.get("overdueCount"),
+              overdueAgeDays: form.get("overdueAgeDays"),
+              blockedNoUpdateDays: form.get("blockedNoUpdateDays"),
+              inProgressNoUpdateDays: form.get("inProgressNoUpdateDays"),
+              flagProjectReports: form.get("flagProjectReports") === "on",
+              flagOverdueDecisions: form.get("flagOverdueDecisions") === "on",
+              remindersEnabled: form.get("remindersEnabled") === "on",
+              digestEnabled: form.get("digestEnabled") === "on",
+            }),
+          { setBusy, setError, t, reload: () => window.location.reload() },
+        );
+        if (!result) return;
         if (!result.ok) {
           setError(result.error ?? t("teamSignals.errors.generic"));
           return;

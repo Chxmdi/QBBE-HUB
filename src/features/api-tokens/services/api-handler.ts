@@ -4,6 +4,7 @@ import { isEnabled } from "@/lib/feature-flags";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceClient } from "@/lib/supabase/service";
 import { bearerToken, hashToken, type ApiScope } from "../token";
+import { logEvent } from "@/lib/server-log";
 
 /**
  * Every /api/v1 route goes through `apiRoute` (V2-8):
@@ -115,7 +116,7 @@ export function apiRoute<P = Record<string, never>>(scope: ApiScope | null, hand
         response = apiJson({ error: { code: error.code, message: error.message } }, error.status, error.headers);
       } else {
         errorCode = "internal";
-        console.error(JSON.stringify({ event: "api.v1.failed", path: url.pathname, error: error instanceof Error ? error.message : String(error) }));
+        logEvent("api.v1.failed", { path: url.pathname, error: error instanceof Error ? error.message : String(error) }, "error");
         response = apiJson({ error: { code: "internal", message: "Something went wrong." } }, 500);
       }
     }
@@ -130,7 +131,7 @@ export function apiRoute<P = Record<string, never>>(scope: ApiScope | null, hand
       error_code: errorCode,
       duration_ms: Date.now() - started,
     });
-    if (logError) console.error(JSON.stringify({ event: "api.v1.audit_failed", error: logError.message }));
+    if (logError) logEvent("api.v1.audit_failed", { error: logError.message }, "error");
     return response;
   };
 }

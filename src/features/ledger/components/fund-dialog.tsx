@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { FUND_RESTRICTIONS, FUND_RESTRICTION_KEY, type FundRestriction } from "@/features/ledger/money";
 import { saveFund } from "@/features/ledger/services/ledger.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 export interface FundFormValue {
   id: string;
@@ -59,22 +60,24 @@ export function FundDialog({
           className="space-y-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            setError(null);
-            setSaving(true);
             const form = new FormData(e.currentTarget);
-            const result = await saveFund({
-              id: fund?.id,
-              code: String(form.get("code") ?? "").toUpperCase(),
-              name: form.get("name"),
-              restriction: form.get("restriction"),
-              funder: form.get("funder") ?? undefined,
-              startsOn: form.get("startsOn") ?? undefined,
-              endsOn: form.get("endsOn") ?? undefined,
-              description: form.get("description") ?? undefined,
-              isActive: form.get("isActive") === "on",
-              programIds: form.getAll("programIds").map(String),
-            });
-            setSaving(false);
+            const result = await runServerAction(
+              () =>
+                saveFund({
+                  id: fund?.id,
+                  code: String(form.get("code") ?? "").toUpperCase(),
+                  name: form.get("name"),
+                  restriction: form.get("restriction"),
+                  funder: form.get("funder") ?? undefined,
+                  startsOn: form.get("startsOn") ?? undefined,
+                  endsOn: form.get("endsOn") ?? undefined,
+                  description: form.get("description") ?? undefined,
+                  isActive: form.get("isActive") === "on",
+                  programIds: form.getAll("programIds").map(String),
+                }),
+              { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+            );
+            if (!result) return;
             if (!result.ok) {
               setError(result.error ?? t("finance.ledger.fundDialog.saveFailed"));
               return;

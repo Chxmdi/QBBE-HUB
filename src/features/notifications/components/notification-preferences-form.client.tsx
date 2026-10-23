@@ -9,6 +9,7 @@ import type { DeliveryMode } from "@/features/notifications/services/delivery-ru
 import { useLocale, useT } from "@/lib/i18n/client";
 import { intlLocale, type Locale } from "@/lib/i18n/config";
 import type { MessageKey } from "@/lib/i18n/translator";
+import { runServerAction } from "@/lib/use-server-action";
 import { usePagesT } from "@/features/pages/i18n/client";
 import type { PagesKey } from "@/features/pages/i18n";
 import {
@@ -189,13 +190,10 @@ export function NotificationPreferencesFormClient({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setSaving(true);
-    setMessage(null);
-
     const form = new FormData(event.currentTarget);
     const quietOn = form.get("quiet_enabled") === "on";
 
-    const result = await saveNotificationPreferences({
+    const input = {
       emailCritical: form.get("email_critical") === "on",
       categoryModes: {
         assignment: String(form.get("mode_assignment")) as DeliveryMode,
@@ -215,9 +213,16 @@ export function NotificationPreferencesFormClient({
       digestHour: Number(form.get("digest_hour")),
       digestWeekday: Number(form.get("digest_weekday")),
       timezone: String(form.get("timezone")),
+    };
+
+    const result = await runServerAction(() => saveNotificationPreferences(input), {
+      setBusy: setSaving,
+      setError: (text) => setMessage(text ? { tone: "error", text } : null),
+      t,
+      reload: () => window.location.reload(),
     });
 
-    setSaving(false);
+    if (!result) return;
     if (!result.ok) {
       setMessage({ tone: "error", text: result.error ?? t("notifications.form.saveFailed") });
       return;
@@ -227,7 +232,7 @@ export function NotificationPreferencesFormClient({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={(event) => void handleSubmit(event)} className="space-y-8">
       <section aria-labelledby="prefs-categories" className="card px-4 py-2">
         <h2 id="prefs-categories" className="sr-only">
           {t("notifications.form.whatToEmail")}

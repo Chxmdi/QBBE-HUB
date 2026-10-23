@@ -9,6 +9,7 @@ import {
   removeProjectTemplateItem,
 } from "@/features/admin/services/workflow.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 type TemplateItem = {
   id: string;
@@ -48,10 +49,13 @@ export function ProjectTemplateManager({
   const [error, setError] = useState<string | null>(null);
 
   async function run(key: string, work: () => Promise<{ ok: boolean; error?: string }>) {
-    setPending(key);
-    setError(null);
-    const result = await work();
-    setPending(null);
+    const result = await runServerAction(work, {
+      setBusy: (busy) => setPending(busy ? key : null),
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return false;
     if (!result.ok) {
       setError(result.error ?? t("projects.templates.error"));
       return false;

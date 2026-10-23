@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label, Select } from "@/components/ui/input";
 import { linkSupporterOrganization } from "@/features/crm/services/supporter.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** Links a supporter to one of the CRM's organizations, or to none. */
 export function SupporterOrganizationForm({
@@ -26,10 +27,16 @@ export function SupporterOrganizationForm({
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    setBusy(true);
-    setMessage(null);
-    const result = await linkSupporterOrganization({ contactId, crmOrganizationId: value || null });
-    setBusy(false);
+    const result = await runServerAction(
+      () => linkSupporterOrganization({ contactId, crmOrganizationId: value || null }),
+      {
+        setBusy,
+        setError: (text) => setMessage(text ? { ok: false, text } : null),
+        t,
+        reload: () => window.location.reload(),
+      },
+    );
+    if (!result) return;
     setMessage(
       result.ok
         ? { ok: true, text: t("crm.supporter.saved") }
@@ -39,7 +46,7 @@ export function SupporterOrganizationForm({
   }
 
   return (
-    <form onSubmit={save} className="mt-3">
+    <form onSubmit={(event) => void save(event)} className="mt-3">
       <Label htmlFor={id}>{t("crm.supporter.chooseOrganization")}</Label>
       <div className="flex flex-wrap items-center gap-2">
         <Select id={id} value={value} onChange={(event) => setValue(event.target.value)} className="max-w-xs">

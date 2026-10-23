@@ -19,6 +19,7 @@ import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { issueMessage, K, tr } from "./event.i18n";
 import { DEFAULT_LOCALE, isLocale } from "@/lib/i18n/config";
 import { createTranslator } from "@/lib/i18n/translate";
+import { logActionFailure } from "@/lib/server-log";
 
 const createEventSchema = z.object({
   name: requiredText(K("events.errors.nameRequired"), 200),
@@ -118,7 +119,10 @@ export async function createEvent(input: unknown): Promise<ActionResult> {
       created_by: session.userId,
     });
 
-  if (error) return { ok: false, error: await tr("events.errors.createFailed") };
+  if (error) {
+    logActionFailure("event.createEvent", error);
+    return { ok: false, error: await tr("events.errors.createFailed") };
+  }
   const event = { id: eventId };
 
   await supabase.from("activity_event").insert({
@@ -200,7 +204,10 @@ export async function updateEvent(input: unknown): Promise<ActionResult> {
     location: data.location || null,
     volunteer_need: data.volunteerNeed ?? null,
   }).eq("id", existing.id).select("id");
-  if (error) return { ok: false, error: await tr("events.errors.updateFailed") };
+  if (error) {
+    logActionFailure("event.updateEvent", error);
+    return { ok: false, error: await tr("events.errors.updateFailed") };
+  }
   if (!changed || changed.length === 0) return { ok: false, error: await tr("events.errors.manageDenied") };
 
   try {
@@ -331,7 +338,10 @@ export async function updateEventStatus(input: unknown): Promise<ActionResult> {
     .update({ status: parsed.data.status })
     .eq("id", existing.id)
     .select("id");
-  if (error) return { ok: false, error: await tr("events.errors.updateFailed") };
+  if (error) {
+    logActionFailure("event.updateEventStatus", error);
+    return { ok: false, error: await tr("events.errors.updateFailed") };
+  }
   // Without this, a reader's "cancel" changed nothing here yet still deleted
   // the owner's Google Calendar event below, which runs with service rights.
   if (!changed || changed.length === 0) {

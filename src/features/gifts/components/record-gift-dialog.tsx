@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Checkbox, FieldHint, Input, Label, Select, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { recordGift } from "@/features/gifts/services/gift.commands";
 
 export interface Option {
@@ -65,29 +66,31 @@ export function RecordGiftDialog({ options }: { options: RecordGiftOptions }) {
             className="space-y-4"
             onSubmit={async (e) => {
               e.preventDefault();
-              setError(null);
-              setSaving(true);
               const form = new FormData(e.currentTarget);
               const str = (name: string) => {
                 const v = form.get(name);
                 return typeof v === "string" ? v : undefined;
               };
-              const result = await recordGift({
-                giftType: type,
-                donor: type === "grant_payment" && grant ? `organization:${grant.funderId}` : str("donor"),
-                receivedOn: str("receivedOn"),
-                amount: str("amount"),
-                inKindDescription: str("inKindDescription"),
-                valueSuppliedByDonor: valueByDonor,
-                fundId: type === "grant_payment" ? undefined : str("fundId"),
-                programId: str("programId"),
-                donorRestriction: str("donorRestriction"),
-                grantId: type === "grant_payment" ? grantId : undefined,
-                debitAccountId: posts ? str("debitAccountId") : undefined,
-                creditAccountId: posts ? str("creditAccountId") : undefined,
-                note: str("note"),
-              });
-              setSaving(false);
+              const result = await runServerAction(
+                () =>
+                  recordGift({
+                    giftType: type,
+                    donor: type === "grant_payment" && grant ? `organization:${grant.funderId}` : str("donor"),
+                    receivedOn: str("receivedOn"),
+                    amount: str("amount"),
+                    inKindDescription: str("inKindDescription"),
+                    valueSuppliedByDonor: valueByDonor,
+                    fundId: type === "grant_payment" ? undefined : str("fundId"),
+                    programId: str("programId"),
+                    donorRestriction: str("donorRestriction"),
+                    grantId: type === "grant_payment" ? grantId : undefined,
+                    debitAccountId: posts ? str("debitAccountId") : undefined,
+                    creditAccountId: posts ? str("creditAccountId") : undefined,
+                    note: str("note"),
+                  }),
+                { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+              );
+              if (!result) return;
               if (!result.ok) {
                 setError(result.error ?? t("finance.gifts.recordDialog.couldNotRecord"));
                 return;

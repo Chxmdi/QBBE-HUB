@@ -8,6 +8,7 @@ import { setChannelMute } from "@/features/channels/services/channel.commands";
 import { saveNotificationPreferences } from "@/features/notifications/services/preferences.commands";
 import { useLocale, useT } from "@/lib/i18n/client";
 import type { Locale } from "@/lib/i18n/config";
+import { runServerAction } from "@/lib/use-server-action";
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
@@ -41,14 +42,24 @@ export function NotificationPreferencesForm({
     const data = new FormData(event.currentTarget);
     const start = data.get("quietHoursStart") as string;
     const end = data.get("quietHoursEnd") as string;
-    setSaving(true);
-    const result = await saveNotificationPreferences({
-      emailCritical: data.get("emailCritical") === "on",
-      emailDigest: data.get("emailDigest") === "on",
-      quietHoursStart: start === "" ? null : Number(start),
-      quietHoursEnd: end === "" ? null : Number(end),
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        saveNotificationPreferences({
+          emailCritical: data.get("emailCritical") === "on",
+          emailDigest: data.get("emailDigest") === "on",
+          quietHoursStart: start === "" ? null : Number(start),
+          quietHoursEnd: end === "" ? null : Number(end),
+        }),
+      {
+        setBusy: setSaving,
+        setError: (text) => {
+          if (text) toast(text, { tone: "error" });
+        },
+        t,
+        reload: () => window.location.reload(),
+      },
+    );
+    if (!result) return;
     if (result.ok) toast(t("settings.delivery.saved"));
     else toast(result.error ?? t("settings.delivery.saveFailed"), { tone: "error" });
   }
@@ -65,7 +76,7 @@ export function NotificationPreferencesForm({
 
   return (
     <div className="space-y-7">
-      <form onSubmit={submit} className="card max-w-2xl space-y-5 p-5">
+      <form onSubmit={(event) => void submit(event)} className="card max-w-2xl space-y-5 p-5">
         <div>
           <h2 className="section-heading">{t("settings.delivery.heading")}</h2>
           <p className="meta mt-1">{t("settings.delivery.intro")}</p>

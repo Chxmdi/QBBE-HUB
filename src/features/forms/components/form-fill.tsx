@@ -74,40 +74,44 @@ export function FormFill({
     }
 
     setSaving(true);
-    const supabase = createSupabaseBrowserClient();
-    const uploaded: string[] = [];
-    for (const { key, file } of files) {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "file";
-      // The database checks the first two segments are this organization and
-      // this person; the random segment avoids collisions.
-      const path = `${organizationId}/${userId}/${crypto.randomUUID()}/${safeName}`;
-      const { error: uploadError } = await supabase.storage
-        .from("form-files")
-        .upload(path, file, { contentType: file.type || undefined });
-      if (uploadError) {
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const uploaded: string[] = [];
+      for (const { key, file } of files) {
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80) || "file";
+        // The database checks the first two segments are this organization and
+        // this person; the random segment avoids collisions.
+        const path = `${organizationId}/${userId}/${crypto.randomUUID()}/${safeName}`;
+        const { error: uploadError } = await supabase.storage
+          .from("form-files")
+          .upload(path, file, { contentType: file.type || undefined });
+        if (uploadError) {
+          if (uploaded.length) await supabase.storage.from("form-files").remove(uploaded);
+          setError(t("forms.fill.uploadFailed"));
+          return;
+        }
+        uploaded.push(path);
+        answers[key] = { path, name: file.name.slice(-200) || safeName } satisfies FileAnswer;
+      }
+
+      const result = await submitForm({
+        formId,
+        answers,
+        signerName: requiresSignature ? String(form.get("signerName") ?? "") : undefined,
+        consent: requiresSignature ? form.get("consent") === "on" : false,
+      });
+      if (!result.ok || !result.id) {
         if (uploaded.length) await supabase.storage.from("form-files").remove(uploaded);
-        setSaving(false);
-        setError(t("forms.fill.uploadFailed"));
+        setError(result.error ?? t("forms.fill.submitFailed"));
         return;
       }
-      uploaded.push(path);
-      answers[key] = { path, name: file.name.slice(-200) || safeName } satisfies FileAnswer;
+      toast(requiresSignature ? t("forms.fill.submittedSigned") : t("forms.fill.submitted"));
+      router.push(`/forms/submissions/${result.id}`);
+    } catch {
+      setError(t("ui.actionUnreachable"));
+    } finally {
+      setSaving(false);
     }
-
-    const result = await submitForm({
-      formId,
-      answers,
-      signerName: requiresSignature ? String(form.get("signerName") ?? "") : undefined,
-      consent: requiresSignature ? form.get("consent") === "on" : false,
-    });
-    setSaving(false);
-    if (!result.ok || !result.id) {
-      if (uploaded.length) await supabase.storage.from("form-files").remove(uploaded);
-      setError(result.error ?? t("forms.fill.submitFailed"));
-      return;
-    }
-    toast(requiresSignature ? t("forms.fill.submittedSigned") : t("forms.fill.submitted"));
-    router.push(`/forms/submissions/${result.id}`);
   }
 
   return (

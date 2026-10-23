@@ -22,19 +22,25 @@ function SignInFormInner() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const supabase = createSupabaseBrowserClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    setLoading(false);
-    if (signInError) {
-      setError(
-        signInError.message === "Invalid login credentials"
-          ? t("auth.signIn.badCredentials")
-          : signInError.message,
-      );
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) {
+        setError(
+          signInError.message === "Invalid login credentials"
+            ? t("auth.signIn.badCredentials")
+            : signInError.message,
+        );
+        return;
+      }
+    } catch {
+      setError(t("ui.actionUnreachable"));
       return;
+    } finally {
+      setLoading(false);
     }
     router.push(safeRedirectPath(searchParams.get("next")));
     router.refresh();

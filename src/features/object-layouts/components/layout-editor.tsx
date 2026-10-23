@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { useLocale } from "@/lib/i18n/client";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { fill } from "@/features/collab/i18n";
 import {
   freshSectionId,
@@ -40,6 +41,7 @@ export function LayoutEditor({
 }) {
   const m = layoutsText(useLocale());
   const router = useRouter();
+  const shellT = useT();
   const [layout, setLayout] = useState<ObjectLayout>(initial);
   const [addKind, setAddKind] = useState<SectionKind>("properties");
   const [busy, setBusy] = useState<"save" | "reset" | null>(null);
@@ -157,10 +159,13 @@ export function LayoutEditor({
             <Button
               loading={busy === "save"}
               onClick={async () => {
-                setBusy("save");
-                setMessage(null);
-                const result = await saveObjectLayout({ typeId, layout });
-                setBusy(null);
+                const result = await runServerAction(() => saveObjectLayout({ typeId, layout }), {
+                  setBusy: (isBusy) => setBusy(isBusy ? "save" : null),
+                  setError: (text) => setMessage(text ? { ok: false, text } : null),
+                  t: shellT,
+                  reload: () => window.location.reload(),
+                });
+                if (!result) return;
                 setMessage(result.ok ? { ok: true, text: m.editor.saved } : { ok: false, text: result.error ?? m.errors.failed });
                 if (result.ok) router.refresh();
               }}
@@ -173,9 +178,13 @@ export function LayoutEditor({
                 loading={busy === "reset"}
                 onClick={async () => {
                   if (!window.confirm(m.editor.confirmReset)) return;
-                  setBusy("reset");
-                  const result = await resetObjectLayout(typeId);
-                  setBusy(null);
+                  const result = await runServerAction(() => resetObjectLayout(typeId), {
+                    setBusy: (isBusy) => setBusy(isBusy ? "reset" : null),
+                    setError: (text) => setMessage(text ? { ok: false, text } : null),
+                    t: shellT,
+                    reload: () => window.location.reload(),
+                  });
+                  if (!result) return;
                   setMessage(result.ok ? { ok: true, text: m.editor.wasReset } : { ok: false, text: result.error ?? m.errors.failed });
                   if (result.ok) router.refresh();
                 }}

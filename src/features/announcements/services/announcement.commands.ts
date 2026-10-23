@@ -12,7 +12,7 @@ import { createNotifications, notificationDedupeKey } from "@/features/jobs/serv
 import { recipientTranslators } from "@/features/channels/recipient-locale";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
-import { logEvent } from "@/lib/server-log";
+import { logActionFailure, logEvent } from "@/lib/server-log";
 
 export async function acknowledgeAnnouncement(
   announcementId: string,
@@ -32,7 +32,10 @@ export async function acknowledgeAnnouncement(
       { onConflict: "announcement_id,user_id", ignoreDuplicates: true },
     );
 
-  if (error) return { ok: false, error: t("announcements.errors.ackFailed") };
+  if (error) {
+    logActionFailure("announcement.acknowledgeAnnouncement", error);
+    return { ok: false, error: t("announcements.errors.ackFailed") };
+  }
 
   revalidatePath("/", "layout");
   return { ok: true };

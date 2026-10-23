@@ -10,6 +10,7 @@ import { localizeIssue } from "@/features/projects/i18n";
 import { requiredText } from "@/lib/schema";
 import { parseLabelledLinks } from "@/lib/links";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { logActionFailure } from "@/lib/server-log";
 
 const editSchema = z.object({
   id: z.string().uuid(),
@@ -67,7 +68,10 @@ export async function updateProgram(input: unknown): Promise<ActionResult> {
     .update(patch)
     .eq("id", id).eq("organization_id", session.organizationId)
     .select("id").maybeSingle();
-  if (error || !data) return { ok: false, error: t("programs.errors.saveFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("program.updateProgram", error);
+    return { ok: false, error: t("programs.errors.saveFailed") };
+  }
   revalidatePath("/", "layout");
   return { ok: true, id };
 }

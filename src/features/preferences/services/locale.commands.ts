@@ -10,6 +10,7 @@ import { createTranslator } from "@/lib/i18n/translate";
 import { getLocale } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { logActionFailure } from "@/lib/server-log";
 
 /** "auto" clears the choice so the browser's language applies again. */
 const localeChoiceSchema = z.enum([...LOCALES, "auto"]);
@@ -37,7 +38,10 @@ export async function setInterfaceLanguage(input: unknown): Promise<ActionResult
       .from("user_profile")
       .update({ locale: choice === "auto" ? null : choice })
       .eq("id", session.userId);
-    if (error) return { ok: false, error: t("language.saveError") };
+    if (error) {
+      logActionFailure("locale.setInterfaceLanguage", error);
+      return { ok: false, error: t("language.saveError") };
+    }
   }
 
   await writeLocaleCookie(choice === "auto" ? null : choice);

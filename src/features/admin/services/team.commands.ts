@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { getT } from "@/lib/i18n/server";
 import type { TranslateFn } from "@/lib/i18n/translator";
+import { logActionFailure } from "@/lib/server-log";
 
 const createTeamSchema = (t: TranslateFn) => z.object({
   name: requiredText(t("admin.errors.teamNeedsName"), 120),
@@ -167,7 +168,10 @@ export async function assignTeamToProgram(input: unknown): Promise<ActionResult>
     })
     .select("team_id")
     .maybeSingle();
-  if (error || !assignment) return { ok: false, error: t("admin.errors.programAssignFailed") };
+  if (error || !assignment) {
+    if (error) logActionFailure("team.assignTeamToProgram", error);
+    return { ok: false, error: t("admin.errors.programAssignFailed") };
+  }
   revalidatePath("/admin");
   revalidatePath("/admin/access");
   revalidatePath("/programs");
@@ -194,7 +198,10 @@ export async function assignTeamToProject(input: unknown): Promise<ActionResult>
     })
     .select("team_id")
     .maybeSingle();
-  if (error || !assignment) return { ok: false, error: t("admin.errors.projectAssignFailed") };
+  if (error || !assignment) {
+    if (error) logActionFailure("team.assignTeamToProject", error);
+    return { ok: false, error: t("admin.errors.projectAssignFailed") };
+  }
   revalidatePath("/admin");
   revalidatePath("/admin/access");
   revalidatePath("/projects");
@@ -229,7 +236,10 @@ export async function removeTeamAssignment(
     .eq(scopeColumn, parsed.data.scopeId)
     .select("team_id")
     .maybeSingle();
-  if (error || !removed) return { ok: false, error: t("admin.errors.removeAssignmentFailed") };
+  if (error || !removed) {
+    if (error) logActionFailure("team.removeTeamAssignment", error);
+    return { ok: false, error: t("admin.errors.removeAssignmentFailed") };
+  }
   revalidatePath("/admin");
   revalidatePath("/admin/access");
   revalidatePath("/programs");

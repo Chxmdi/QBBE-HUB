@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input, Label, Select } from "@/components/ui/input";
 import { Plus } from "lucide-react";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { InvitationLinkField } from "./invitation-link-field";
 
 export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean }) {
@@ -26,18 +27,20 @@ export function InviteUserDialog({ emailConfigured }: { emailConfigured: boolean
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     setNotice(null);
     setCreated(null);
-    setSaving(true);
     const formElement = e.currentTarget;
     const form = new FormData(formElement);
     const email = String(form.get("email") ?? "").trim().toLowerCase();
-    const result = await inviteUser({
-      email,
-      intendedRole: form.get("intendedRole"),
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        inviteUser({
+          email,
+          intendedRole: form.get("intendedRole"),
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("admin.errors.inviteFailed"));
       return;

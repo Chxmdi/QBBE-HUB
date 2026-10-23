@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Staff actions on supporters (individual CRM contacts, from Zeffy or entered
@@ -45,7 +46,10 @@ export async function linkSupporterOrganization(input: unknown): Promise<ActionR
     .eq("organization_id", session.organizationId)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: t("crm.supporter.saveFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("supporter.linkSupporterOrganization", error);
+    return { ok: false, error: t("crm.supporter.saveFailed") };
+  }
 
   revalidatePath(`/crm/contacts/${contactId}`);
   if (crmOrganizationId) revalidatePath(`/crm/${crmOrganizationId}`);
@@ -84,7 +88,10 @@ export async function recordSupporterInteraction(input: unknown): Promise<Action
     owner_id: session.userId,
     summary,
   });
-  if (error) return { ok: false, error: t("crm.errors.recordInteraction") };
+  if (error) {
+    logActionFailure("supporter.recordSupporterInteraction", error);
+    return { ok: false, error: t("crm.errors.recordInteraction") };
+  }
 
   revalidatePath(`/crm/contacts/${contactId}`);
   return { ok: true };
@@ -113,7 +120,10 @@ export async function resolveZeffyMatch(input: unknown): Promise<ActionResult> {
     p_match: parsed.data.matchId,
     p_contact: parsed.data.contactId,
   });
-  if (error || !data) return { ok: false, error: t("crm.zeffy.matchFailed") };
+  if (error || !data) {
+    if (error) logActionFailure("supporter.resolveZeffyMatch", error);
+    return { ok: false, error: t("crm.zeffy.matchFailed") };
+  }
 
   revalidatePath("/crm/zeffy");
   revalidatePath("/crm/supporters");

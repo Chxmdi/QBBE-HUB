@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/features/tasks/services/task.commands";
 import { issueMessage, K, tr } from "./event.i18n";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * The preparation checklist P0-EVT-01 asks an event to carry.
@@ -79,7 +80,10 @@ export async function toggleEventChecklistItem(
     .select("id")
     .maybeSingle();
 
-  if (error) return { ok: false, error: await tr("events.errors.checklistUpdateFailed") };
+  if (error) {
+    logActionFailure("event_checklist.toggleEventChecklistItem", error);
+    return { ok: false, error: await tr("events.errors.checklistUpdateFailed") };
+  }
   if (!data) return { ok: false, error: await tr("events.errors.checklistGone") };
   revalidatePath("/", "layout");
   return { ok: true };
@@ -95,7 +99,10 @@ export async function removeEventChecklistItem(itemId: string): Promise<ActionRe
     .select("id")
     .maybeSingle();
 
-  if (error) return { ok: false, error: await tr("events.errors.checklistRemoveFailed") };
+  if (error) {
+    logActionFailure("event_checklist.removeEventChecklistItem", error);
+    return { ok: false, error: await tr("events.errors.checklistRemoveFailed") };
+  }
   if (!data) return { ok: false, error: await tr("events.errors.checklistGone") };
   revalidatePath("/", "layout");
   return { ok: true };

@@ -5,6 +5,8 @@ import { useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { fill, type TemplatesV2Text } from "@/features/templates-v2/messages";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { applyTemplateV2 } from "@/features/templates-v2/services/templates-v2.commands";
 import { destinationFor, planTemplate, type PageBody, type TemplateRecord } from "@/features/templates-v2/template";
 import { PageTemplateForm, type ParentOption } from "./page-template-form";
@@ -47,6 +49,7 @@ export function TemplateUse({
   const [destination, setDestination] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const shellT = useT();
   const [created, setCreated] = useState<{ type: string; id: string }[] | null>(null);
   const plan = useMemo(() => planTemplate(template, start, language), [template, start, language]);
   const where = destinationFor(template);
@@ -76,16 +79,18 @@ export function TemplateUse({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    setBusy(true);
-    const result = await applyTemplateV2({
-      templateId: template.id,
-      start,
-      locale: language,
-      programId: where === "program" && destination ? destination : null,
-      projectId: where === "project" && destination ? destination : null,
-    });
-    setBusy(false);
+    const result = await runServerAction(
+      () =>
+        applyTemplateV2({
+          templateId: template.id,
+          start,
+          locale: language,
+          programId: where === "program" && destination ? destination : null,
+          projectId: where === "project" && destination ? destination : null,
+        }),
+      { setBusy, setError, t: shellT, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error);
       return;

@@ -25,6 +25,7 @@ import {
 import type { Option } from "@/features/tasks/components/task-create-dialog";
 import type { Milestone } from "@/types/entities";
 import { useFormatters, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 const STATUS_TONE: Record<MilestoneStatus, "neutral" | "info" | "success" | "danger"> = {
   planned: "neutral",
@@ -68,10 +69,13 @@ export function MilestoneRail({
   const [completing, setCompleting] = React.useState<Milestone | null>(null);
 
   async function run(key: string, work: () => Promise<{ ok: boolean; error?: string }>) {
-    setBusy(key);
-    setError(null);
-    const result = await work();
-    setBusy(null);
+    const result = await runServerAction(work, {
+      setBusy: (on) => setBusy(on ? key : null),
+      setError,
+      t,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return false;
     if (!result.ok) {
       setError(result.error ?? t("projects.milestones.error"));
       return false;

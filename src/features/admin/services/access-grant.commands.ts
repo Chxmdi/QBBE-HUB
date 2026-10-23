@@ -11,6 +11,7 @@ import { authorizeAdminAction } from "@/lib/auth";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getT } from "@/lib/i18n/server";
+import { logActionFailure } from "@/lib/server-log";
 
 const programGrantSchema = z.object({
   programId: z.string().uuid(),
@@ -45,7 +46,10 @@ export async function setDirectProgramAccess(input: unknown): Promise<ActionResu
         p_user: parsed.data.userId,
         p_role: parsed.data.role,
       });
-  if (error) return { ok: false, error: t("admin.errors.programGrantFailed") };
+  if (error) {
+    logActionFailure("access_grant.setDirectProgramAccess", error);
+    return { ok: false, error: t("admin.errors.programGrantFailed") };
+  }
 
   revalidatePath("/admin/access");
   revalidatePath(`/programs/${parsed.data.programId}`);
@@ -73,7 +77,10 @@ export async function setDirectProjectAccess(input: unknown): Promise<ActionResu
         p_user: parsed.data.userId,
         p_role: parsed.data.role,
       });
-  if (error) return { ok: false, error: t("admin.errors.projectGrantFailed") };
+  if (error) {
+    logActionFailure("access_grant.setDirectProjectAccess", error);
+    return { ok: false, error: t("admin.errors.projectGrantFailed") };
+  }
 
   revalidatePath("/admin/access");
   revalidatePath(`/projects/${parsed.data.projectId}`);

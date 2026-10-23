@@ -10,6 +10,7 @@ import {
   rejectReport,
 } from "@/features/reports/services/report.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /**
  * Deciding, or rebuilding, the report on screen.
@@ -35,10 +36,8 @@ export function ReportDecisionControls({
   const [rejecting, setRejecting] = React.useState(false);
 
   async function run(action: () => Promise<{ ok: boolean; error?: string }>) {
-    setBusy(true);
-    setError(null);
-    const result = await action();
-    setBusy(false);
+    const result = await runServerAction(action, { setBusy, setError, t, reload: () => window.location.reload() });
+    if (!result) return false;
     if (!result.ok) {
       setError(result.error ?? t("reports.decision.failed"));
       return false;

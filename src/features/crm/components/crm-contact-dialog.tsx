@@ -9,6 +9,7 @@ import { Input, Label } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { updateCrmContact } from "@/features/crm/services/crm.commands";
 import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 
 /** Staff: correct a contact's name, title, email or phone. */
 export function CrmContactDialog({
@@ -25,17 +26,19 @@ export function CrmContactDialog({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
     const form = new FormData(e.currentTarget);
-    setSaving(true);
-    const result = await updateCrmContact({
-      contactId: contact.id,
-      fullName: form.get("fullName"),
-      roleTitle: (form.get("roleTitle") as string) || undefined,
-      email: (form.get("email") as string) ?? "",
-      phone: (form.get("phone") as string) || undefined,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        updateCrmContact({
+          contactId: contact.id,
+          fullName: form.get("fullName"),
+          roleTitle: (form.get("roleTitle") as string) || undefined,
+          email: (form.get("email") as string) ?? "",
+          phone: (form.get("phone") as string) || undefined,
+        }),
+      { setBusy: setSaving, setError, t, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     if (!result.ok) {
       setError(result.error ?? t("crm.errors.saveContact"));
       return;
@@ -52,7 +55,7 @@ export function CrmContactDialog({
         {t("crm.contactDialog.edit")}
       </Button>
       <Dialog open={open} onClose={() => setOpen(false)} title={t("crm.contactDialog.title")}>
-        <form className="space-y-3" onSubmit={handleSubmit}>
+        <form className="space-y-3" onSubmit={(e) => void handleSubmit(e)}>
           <div>
             <Label htmlFor="contact-name">{t("crm.contactDialog.name")}</Label>
             <Input id="contact-name" name="fullName" defaultValue={contact.full_name} maxLength={200} required />

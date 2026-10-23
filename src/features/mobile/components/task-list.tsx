@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { updateTaskStatus } from "@/features/tasks/services/task.commands";
-import { useFormatters } from "@/lib/i18n/client";
+import { useFormatters, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import type { PhoneTask } from "../services/mobile.queries";
 import { usePhoneStatus } from "./phone-status";
 import { useMobileT } from "./use-mobile-t";
@@ -12,6 +13,7 @@ import { useMobileT } from "./use-mobile-t";
 /** Tasks with a large "done" button each, uses the ordinary task action. */
 export function TaskList({ tasks }: { tasks: PhoneTask[] }) {
   const t = useMobileT();
+  const shellT = useT();
   const format = useFormatters();
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -22,9 +24,13 @@ export function TaskList({ tasks }: { tasks: PhoneTask[] }) {
   const status = phoneStatus ? null : localStatus;
 
   async function done(task: PhoneTask) {
-    setBusy(task.id);
-    const result = await updateTaskStatus(task.id, "completed");
-    setBusy(null);
+    const result = await runServerAction(() => updateTaskStatus(task.id, "completed"), {
+      setBusy: (isBusy) => setBusy(isBusy ? task.id : null),
+      setError: (text) => setStatus(text ? { ok: false, text } : null),
+      t: shellT,
+      reload: () => window.location.reload(),
+    });
+    if (!result) return;
     setStatus({ ok: result.ok, text: result.ok ? t("tasks.marked") : (result.error ?? t("tasks.error")) });
     if (result.ok) router.refresh();
   }
@@ -36,7 +42,7 @@ export function TaskList({ tasks }: { tasks: PhoneTask[] }) {
           <li key={task.id} className="card flex items-center gap-3 p-3">
             <button
               type="button"
-              onClick={() => done(task)}
+              onClick={() => void done(task)}
               disabled={busy === task.id}
               aria-label={t("tasks.done", { title: task.title })}
               className="inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-line text-muted hover:bg-surface-soft disabled:opacity-50"

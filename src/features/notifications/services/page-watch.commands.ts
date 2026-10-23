@@ -7,6 +7,7 @@ import { isEnabled } from "@/lib/feature-flags";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPagesT } from "@/features/pages/i18n/server";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * Watching a page (wave 2, C3). The write runs as the signed-in person, so
@@ -43,7 +44,10 @@ export async function setPageWatch(input: unknown): Promise<PageWatchResult> {
     }
   } else {
     const { error } = await db.from("page_watch").delete().eq("page_id", pageId).eq("user_id", session.userId);
-    if (error) return { ok: false, error: t("units.c3.watch.failed") };
+    if (error) {
+      logActionFailure("page_watch.setPageWatch", error);
+      return { ok: false, error: t("units.c3.watch.failed") };
+    }
   }
   revalidatePath(`/pages/${pageId}`);
   return { ok: true, watching };

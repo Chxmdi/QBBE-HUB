@@ -21,6 +21,7 @@ import {
   type AppIssue,
 } from "../schema";
 import { canUseApp, getApp } from "./app.queries";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * App writes (V2-3). Each runs as the signed-in person: RLS on workspace_app
@@ -93,7 +94,10 @@ export async function createApp(input: { nameEn: string; nameFr: string; slug: s
     .insert({ organization_id: session.organizationId, slug, name_en: nameEn, name_fr: nameFr, definition: starterAppDefinition() })
     .select("id")
     .single();
-  if (error || !data) return { ok: false, error: databaseError(messages, error ?? {}) };
+  if (error || !data) {
+    if (error) logActionFailure("app.createApp", error);
+    return { ok: false, error: databaseError(messages, error ?? {}) };
+  }
   revalidatePath("/apps");
   return { ok: true, value: { id: data.id as string } };
 }
@@ -125,7 +129,10 @@ export async function saveApp(
     })
     .eq("id", id)
     .select("id");
-  if (error) return { ok: false, error: databaseError(messages, error) };
+  if (error) {
+    logActionFailure("app.saveApp", error);
+    return { ok: false, error: databaseError(messages, error) };
+  }
   if (!data?.length) return { ok: false, error: messages.errors.forbidden };
   revalidatePath("/apps", "layout");
   return { ok: true, value: null };
@@ -155,7 +162,10 @@ export async function saveRoleGrants(
     .delete()
     .eq("app_id", appId)
     .not("org_role", "is", null);
-  if (removeError) return { ok: false, error: databaseError(messages, removeError) };
+  if (removeError) {
+    logActionFailure("app.saveRoleGrants", removeError);
+    return { ok: false, error: databaseError(messages, removeError) };
+  }
   if (clean.length) {
     const { error } = await supabase.from("workspace_app_grant").insert(
       clean.map((g) => ({
@@ -165,7 +175,10 @@ export async function saveRoleGrants(
         capabilities: g.capabilities,
       })),
     );
-    if (error) return { ok: false, error: databaseError(messages, error) };
+    if (error) {
+      logActionFailure("app.saveRoleGrants", error);
+      return { ok: false, error: databaseError(messages, error) };
+    }
   }
   revalidatePath("/apps", "layout");
   return { ok: true, value: null };
@@ -178,7 +191,10 @@ export async function setAppPublished(appId: string, published: boolean): Promis
   if (limited) return limited;
   if (!uuid.safeParse(appId).success) return { ok: false, error: messages.errors.notFound };
   const { error } = await supabase.rpc("workspace_app_set_published", { p_app: appId, p_published: published === true });
-  if (error) return { ok: false, error: databaseError(messages, error) };
+  if (error) {
+    logActionFailure("app.setAppPublished", error);
+    return { ok: false, error: databaseError(messages, error) };
+  }
   revalidatePath("/apps", "layout");
   return { ok: true, value: null };
 }
@@ -190,7 +206,10 @@ export async function deleteApp(appId: string): Promise<AppResult> {
   if (limited) return limited;
   if (!uuid.safeParse(appId).success) return { ok: false, error: messages.errors.notFound };
   const { data, error } = await supabase.from("workspace_app").delete().eq("id", appId).select("id");
-  if (error) return { ok: false, error: databaseError(messages, error) };
+  if (error) {
+    logActionFailure("app.deleteApp", error);
+    return { ok: false, error: databaseError(messages, error) };
+  }
   if (!data?.length) return { ok: false, error: messages.errors.forbidden };
   revalidatePath("/apps");
   return { ok: true, value: null };

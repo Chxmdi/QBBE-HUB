@@ -18,6 +18,7 @@ import { planReview, summarizeSteps } from "../review";
 import { RECORDING_TAG } from "./meeting-v2.queries";
 import { meetingsV2Enabled } from "../flag";
 import { isCalendarDate } from "@/lib/schema";
+import { logActionFailure } from "@/lib/server-log";
 
 export interface CommandResult {
   ok: boolean;
@@ -83,7 +84,10 @@ export async function captureItem(input: unknown): Promise<CommandResult> {
     })
     .select("id")
     .single();
-  if (error || !row) return { ok: false, error: t("capture.error") };
+  if (error || !row) {
+    if (error) logActionFailure("meeting_v2.captureItem", error);
+    return { ok: false, error: t("capture.error") };
+  }
   revalidatePath(`/meetings-v2/${data.meetingId}`);
   return { ok: true, id: row.id as string, message: t("capture.added") };
 }
@@ -111,7 +115,10 @@ export async function saveNotesWithCaptures(input: unknown): Promise<CommandResu
     .update({ notes: notes || null, updated_at: new Date().toISOString() })
     .eq("id", meetingId)
     .select("id");
-  if (error || !updated || updated.length === 0) return { ok: false, error: t("notes.error") };
+  if (error || !updated || updated.length === 0) {
+    if (error) logActionFailure("meeting_v2.saveNotesWithCaptures", error);
+    return { ok: false, error: t("notes.error") };
+  }
 
   if (blocks.length > 0) {
     const { error: captureError } = await supabase.from("meeting_capture").insert(
@@ -122,7 +129,10 @@ export async function saveNotesWithCaptures(input: unknown): Promise<CommandResu
         created_by: session.userId,
       })),
     );
-    if (captureError) return { ok: false, error: t("capture.error") };
+    if (captureError) {
+      logActionFailure("meeting_v2.saveNotesWithCaptures", captureError);
+      return { ok: false, error: t("capture.error") };
+    }
   }
   revalidatePath(`/meetings-v2/${meetingId}`);
   return {
@@ -305,7 +315,10 @@ export async function attachMeetingRecording(input: unknown): Promise<CommandRes
     })
     .select("id")
     .single();
-  if (error || !doc) return { ok: false, error: t("recording.error") };
+  if (error || !doc) {
+    if (error) logActionFailure("meeting_v2.attachMeetingRecording", error);
+    return { ok: false, error: t("recording.error") };
+  }
   revalidatePath(`/meetings-v2/${data.meetingId}`);
   return { ok: true, id: doc.id as string, message: t("recording.uploaded") };
 }

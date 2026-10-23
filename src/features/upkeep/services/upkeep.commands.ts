@@ -8,6 +8,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { UPKEEP_FLAG } from "@/features/upkeep/gate";
 import { upkeepText } from "@/features/upkeep/messages";
+import { logActionFailure } from "@/lib/server-log";
 
 /**
  * An owner's review of a stale page: still current (resets its clock) or
@@ -30,14 +31,20 @@ export async function reviewStalePage(
   const { error } = await supabase
     .from("upkeep_review")
     .insert({ organization_id: session.organizationId, object_type: objectType, object_id: objectId, decision });
-  if (error) return { ok: false, error: error.code === "42501" ? m.errors.forbidden : m.errors.generic };
+  if (error) {
+    logActionFailure("upkeep.reviewStalePage", error);
+    return { ok: false, error: error.code === "42501" ? m.errors.forbidden : m.errors.generic };
+  }
   if (decision === "archive" && objectType === "document") {
     const { data, error: archiveError } = await supabase
       .from("document")
       .update({ archived_at: new Date().toISOString() })
       .eq("id", objectId)
       .select("id");
-    if (archiveError || !data?.length) return { ok: false, error: m.errors.forbidden };
+    if (archiveError || !data?.length) {
+      if (archiveError) logActionFailure("upkeep.reviewStalePage", archiveError);
+      return { ok: false, error: m.errors.forbidden };
+    }
   }
   revalidatePath("/upkeep");
   return { ok: true };

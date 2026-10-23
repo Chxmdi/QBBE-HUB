@@ -5,7 +5,7 @@ import { ArrowDownUp, ChevronDown, ChevronRight, Columns3, ListFilter, Search, X
 import { cn } from "@/lib/utils";
 import { Checkbox, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useFormatters, useLocale } from "@/lib/i18n/client";
+import { useFormatters, useLocale, useT } from "@/lib/i18n/client";
 import type { CatalogProperty, CatalogType } from "@/lib/query/catalog";
 import type { LensGroupCount, LensResult, LensRow, LensValue } from "@/lib/query/run";
 import { useLensT } from "@/features/lenses/i18n/client";
@@ -121,6 +121,7 @@ export function TableLens({
   bulkEditEnabled = false,
 }: Props) {
   const t = useLensT();
+  const shellT = useT();
   const locale = useLocale();
   const format = useFormatters();
   const gridId = React.useId();
@@ -414,13 +415,18 @@ export function TableLens({
         ),
       );
     apply(next);
-    const result = await updateLensCell({ type: type.key, id: row.id, property: key, value: raw });
-    if (result.ok) {
-      d1.onSaved?.(result);
-      setAnnouncement(t("table.saved"));
-    } else {
+    try {
+      const result = await updateLensCell({ type: type.key, id: row.id, property: key, value: raw });
+      if (result.ok) {
+        d1.onSaved?.(result);
+        setAnnouncement(t("table.saved"));
+      } else {
+        apply(before);
+        setAnnouncement(t("table.saveFailed", { reason: result.error ?? t("common.loadFailed") }));
+      }
+    } catch {
       apply(before);
-      setAnnouncement(t("table.saveFailed", { reason: result.error ?? t("common.loadFailed") }));
+      setAnnouncement(shellT("ui.actionUnreachable"));
     }
   };
 

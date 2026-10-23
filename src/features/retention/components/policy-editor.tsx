@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea, Checkbox } from "@/components/ui/input";
 import { useFormatters, useLocale, useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import {
   actionLabel,
   describeDuration as describeDays,
@@ -87,16 +88,18 @@ export function PolicyEditor({
           if (!confirmed) return;
         }
 
-        setBusy(true);
-        setError(null);
-        const result = await saveRetentionPolicy({
-          subjectKey: subject.key,
-          retainDays: parsedDays,
-          action,
-          enabled,
-          note: String(form.get("note") ?? "").trim() || undefined,
-        });
-        setBusy(false);
+        const result = await runServerAction(
+          () =>
+            saveRetentionPolicy({
+              subjectKey: subject.key,
+              retainDays: parsedDays,
+              action,
+              enabled,
+              note: String(form.get("note") ?? "").trim() || undefined,
+            }),
+          { setBusy, setError, t, reload: () => window.location.reload() },
+        );
+        if (!result) return;
 
         if (!result.ok) {
           setError(result.error ?? t("retention.errors.generic"));

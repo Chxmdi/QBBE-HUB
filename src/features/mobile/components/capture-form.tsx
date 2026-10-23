@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Select } from "@/components/ui/input";
 import { createTask } from "@/features/tasks/services/task.commands";
+import { useT } from "@/lib/i18n/client";
+import { runServerAction } from "@/lib/use-server-action";
 import { useMobileT } from "./use-mobile-t";
 
 /** Quick capture: a task for yourself, through the ordinary create-task action. */
 export function CaptureForm({ userId, projects }: { userId: string; projects: { id: string; name: string }[] }) {
   const t = useMobileT();
+  const shellT = useT();
   const router = useRouter();
   const id = useId();
   const [saving, setSaving] = useState(false);
@@ -19,15 +22,18 @@ export function CaptureForm({ userId, projects }: { userId: string; projects: { 
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    setSaving(true);
     const dueAt = String(form.get("dueAt") ?? "");
-    const result = await createTask({
-      title: String(form.get("title") ?? ""),
-      projectId: String(form.get("projectId") ?? "") || undefined,
-      assigneeId: userId,
-      dueAt: dueAt || undefined,
-    });
-    setSaving(false);
+    const result = await runServerAction(
+      () =>
+        createTask({
+          title: String(form.get("title") ?? ""),
+          projectId: String(form.get("projectId") ?? "") || undefined,
+          assigneeId: userId,
+          dueAt: dueAt || undefined,
+        }),
+      { setBusy: setSaving, setError: (text) => setStatus(text ? { ok: false, text } : null), t: shellT, reload: () => window.location.reload() },
+    );
+    if (!result) return;
     setStatus({ ok: result.ok, text: result.ok ? t("capture.added") : (result.error ?? "") });
     if (result.ok) {
       formElement.reset();
@@ -36,7 +42,7 @@ export function CaptureForm({ userId, projects }: { userId: string; projects: { 
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={(event) => void submit(event)} className="space-y-4">
       <div>
         <Label htmlFor={`${id}-title`}>{t("capture.titleLabel")}</Label>
         <Input id={`${id}-title`} name="title" required maxLength={300} className="h-12 text-base" />
