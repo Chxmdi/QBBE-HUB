@@ -1,8 +1,10 @@
 import type { Locale } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
 import { moduleTranslator, type ModuleTranslate } from "@/features/spaces/i18n/translator";
-import { sharingEn } from "./en";
-import { sharingFr } from "./fr-CA";
+import { catalogues } from "./catalogues";
+
+const sharingEn = catalogues.en;
+const sharingFr = catalogues["fr-CA"];
 
 export type SharingT = ModuleTranslate<typeof sharingEn>;
 

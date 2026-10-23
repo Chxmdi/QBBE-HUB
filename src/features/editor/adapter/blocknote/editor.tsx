@@ -25,6 +25,8 @@ import { useFormatters, useLocale, useT } from "@/lib/i18n/client";
 import type { Formatters } from "@/lib/i18n/format-core";
 import type { TranslateFn } from "@/lib/i18n/translator";
 import { useEditorT } from "@/features/editor/i18n/client";
+import { editorTextReady } from "@/features/editor/i18n";
+import { lensTextReady } from "@/features/lenses/i18n";
 import type { EditorT } from "@/features/editor/i18n";
 import { CONTENT_VERSION, type EditorBlock, type EditorContent } from "@/features/editor/adapter/content";
 import type { BlockEditorProps, EditorSemanticHandlers } from "@/features/editor/adapter/types";
@@ -457,6 +459,10 @@ export default function BlockNoteEditorImpl({
   onCommentBlock,
 }: BlockEditorProps) {
   const locale = useLocale();
+  // The blocks read their text inside the editor library's own rendering,
+  // where they cannot wait for it: it is loaded before the editor mounts.
+  editorTextReady(locale);
+  lensTextReady(locale);
   const t = useEditorT();
   const appT = useT();
   const format = useFormatters();

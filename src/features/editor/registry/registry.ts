@@ -64,7 +64,9 @@ type SemanticType = keyof typeof editorEn.semantic.items & keyof typeof editorFr
 type RequiredKeys = "icon" | "category";
 type Rest = Pick<BlockDefinition, RequiredKeys> & Partial<Omit<BlockDefinition, RequiredKeys | "type" | "label" | "schemaSource">>;
 
-const define = (type: string, label: { en: string; fr: string }, schemaSource: BlockDefinition["schemaSource"], rest: Rest) =>
+// The names are read when asked for, not when this module loads: in the
+// browser each language's text arrives on demand (lib/i18n/lazy-catalogues).
+const define = (type: string, label: () => { en: string; fr: string }, schemaSource: BlockDefinition["schemaSource"], rest: Rest) =>
   Object.freeze<BlockDefinition>({
     shortcuts: Object.freeze([]),
     turnInto: Object.freeze([]),
@@ -74,7 +76,14 @@ const define = (type: string, label: { en: string; fr: string }, schemaSource: B
     permission: "any",
     ...rest,
     type,
-    label: Object.freeze({ ...label }),
+    label: Object.freeze({
+      get en() {
+        return label().en;
+      },
+      get fr() {
+        return label().fr;
+      },
+    }),
     schemaSource,
     ...(rest.shortcuts ? { shortcuts: Object.freeze([...rest.shortcuts]) } : {}),
     ...(rest.turnInto ? { turnInto: Object.freeze([...rest.turnInto]) } : {}),
@@ -82,21 +91,21 @@ const define = (type: string, label: { en: string; fr: string }, schemaSource: B
 
 /** A BlockNote default block, named by `types.*`. */
 const defaultBlock = (type: DefaultType, rest: Rest) =>
-  define(type, { en: editorEn.types[type], fr: editorFrCA.types[type] }, "default", rest);
+  define(type, () => ({ en: editorEn.types[type], fr: editorFrCA.types[type] }), "default", rest);
 
 /** A workspace block (blocks.tsx), named by its slash item. */
 const workspaceBlock = (type: WorkspaceType, rest: Rest) =>
-  define(type, { en: editorEn.slash[type].title, fr: editorFrCA.slash[type].title }, "workspace", rest);
+  define(type, () => ({ en: editorEn.slash[type].title, fr: editorFrCA.slash[type].title }), "workspace", rest);
 
 /** A layout block (layout-blocks.tsx), named by its slash item. */
 const layoutBlock = (type: LayoutType, rest: Rest) =>
-  define(type, { en: editorEn.slash[type].title, fr: editorFrCA.slash[type].title }, "layout", rest);
+  define(type, () => ({ en: editorEn.slash[type].title, fr: editorFrCA.slash[type].title }), "layout", rest);
 
 /** A semantic block (semantic-blocks.tsx), named by its slash item; it needs the page's handlers to render. */
 const semanticBlock = (type: SemanticType, rest: Rest) =>
   define(
     type,
-    { en: editorEn.semantic.items[type].title, fr: editorFrCA.semantic.items[type].title },
+    () => ({ en: editorEn.semantic.items[type].title, fr: editorFrCA.semantic.items[type].title }),
     "semantic",
     { offlineSupport: false, permission: "editor", ...rest },
   );
@@ -105,7 +114,7 @@ const semanticBlock = (type: SemanticType, rest: Rest) =>
 const handledBlock = (type: "syncedBlock" | "button", schemaSource: "synced" | "action", rest: Rest) =>
   define(
     type,
-    { en: editorEn[type].slash.title, fr: editorFrCA[type].slash.title },
+    () => ({ en: editorEn[type].slash.title, fr: editorFrCA[type].slash.title }),
     schemaSource,
     { offlineSupport: false, permission: "editor", ...rest },
   );

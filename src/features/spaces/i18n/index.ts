@@ -1,8 +1,10 @@
 import type { Locale } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
-import { spacesEn } from "./en";
-import { spacesFr } from "./fr-CA";
+import { catalogues } from "./catalogues";
 import { moduleTranslator, type ModuleTranslate } from "./translator";
+
+const spacesEn = catalogues.en;
+const spacesFr = catalogues["fr-CA"];
 
 export type SpacesT = ModuleTranslate<typeof spacesEn>;
 

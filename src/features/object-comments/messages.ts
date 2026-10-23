@@ -1,7 +1,9 @@
 import type { Locale } from "@/lib/i18n/config";
 import { pickCatalogue } from "@/features/collab/i18n";
-import { objectCommentsEn } from "./messages.en";
-import { objectCommentsFr } from "./messages.fr-CA";
+import { catalogues } from "./catalogues";
+
+const objectCommentsEn = catalogues.en;
+const objectCommentsFr = catalogues["fr-CA"];
 
 export const objectCommentsCatalogues = { en: objectCommentsEn, "fr-CA": objectCommentsFr };
 

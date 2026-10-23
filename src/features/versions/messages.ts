@@ -1,7 +1,9 @@
 import type { Locale } from "@/lib/i18n/config";
 import { pickCatalogue } from "@/features/collab/i18n";
-import { versionsEn } from "./messages.en";
-import { versionsFr } from "./messages.fr-CA";
+import { catalogues } from "./catalogues";
+
+const versionsEn = catalogues.en;
+const versionsFr = catalogues["fr-CA"];
 
 export const versionsCatalogues = { en: versionsEn, "fr-CA": versionsFr };
 

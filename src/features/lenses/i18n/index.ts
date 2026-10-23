@@ -1,7 +1,11 @@
 import type { Locale } from "@/lib/i18n/config";
 import { interpolate, type MessageVars } from "@/lib/i18n/translator";
-import { lensesEn, type LensMessages } from "./en";
-import { lensesFrCA } from "./fr-CA";
+import { cataloguesReady } from "@/lib/i18n/lazy-catalogues";
+import { catalogues } from "./catalogues";
+import type { LensMessages } from "./en";
+
+const lensesEn = catalogues.en;
+const lensesFrCA = catalogues["fr-CA"];
 
 type Leaves<T, Prefix extends string = ""> = {
   [K in keyof T & string]: T[K] extends string ? `${Prefix}${K}` : Leaves<T[K], `${Prefix}${K}.`>;
@@ -28,3 +32,8 @@ export function createLensT(locale: Locale): LensT {
 }
 
 export { lensesEn, lensesFrCA };
+
+/** Waits, while rendering, until this module's text is loaded in `locale` (see cataloguesReady). */
+export function lensTextReady(locale: Locale): void {
+  cataloguesReady(locale, catalogues);
+}

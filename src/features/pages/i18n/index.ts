@@ -1,7 +1,10 @@
 import { interpolate, type MessageVars } from "@/lib/i18n/translator";
 import type { Locale } from "@/lib/i18n/config";
-import { pagesEn, type PagesMessages } from "./en";
-import { pagesFrCA } from "./fr-CA";
+import { catalogues } from "./catalogues";
+import type { PagesMessages } from "./en";
+
+const pagesEn = catalogues.en;
+const pagesFrCA = catalogues["fr-CA"];
 
 type Leaves<T, Prefix extends string = ""> = {
   [K in keyof T & string]: T[K] extends string

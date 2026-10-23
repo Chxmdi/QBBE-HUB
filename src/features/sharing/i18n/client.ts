@@ -3,8 +3,10 @@
 import { useMemo } from "react";
 import { useLocale } from "@/lib/i18n/client";
 import { moduleTranslator, type ModuleTranslate } from "@/features/spaces/i18n/translator";
-import { sharingEn } from "./en";
-import { sharingFr } from "./fr-CA";
+import { catalogues } from "./catalogues";
+
+const sharingEn = catalogues.en;
+const sharingFr = catalogues["fr-CA"];
 
 export function useSharingT(): ModuleTranslate<typeof sharingEn> {
   const locale = useLocale();

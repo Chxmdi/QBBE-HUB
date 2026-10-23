@@ -1,7 +1,9 @@
 import type { Locale } from "@/lib/i18n/config";
 import { moduleTranslator } from "@/features/universal-tasks/i18n/module-i18n";
-import { captureEn } from "./en";
-import { captureFrCA } from "./fr-CA";
+import { catalogues } from "./catalogues";
+
+const captureEn = catalogues.en;
+const captureFrCA = catalogues["fr-CA"];
 
 export const captureCatalogs = { en: captureEn, "fr-CA": captureFrCA };
 

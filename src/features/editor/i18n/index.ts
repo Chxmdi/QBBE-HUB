@@ -1,7 +1,11 @@
 import { interpolate, type MessageVars } from "@/lib/i18n/translator";
+import { cataloguesReady } from "@/lib/i18n/lazy-catalogues";
 import type { Locale } from "@/lib/i18n/config";
-import { editorEn, type EditorMessages } from "./en";
-import { editorFrCA } from "./fr-CA";
+import { catalogues } from "./catalogues";
+import type { EditorMessages } from "./en";
+
+const editorEn = catalogues.en;
+const editorFrCA = catalogues["fr-CA"];
 
 type Leaves<T, Prefix extends string = ""> = {
   [K in keyof T & string]: T[K] extends string ? `${Prefix}${K}` : Leaves<T[K], `${Prefix}${K}.`>;
@@ -28,3 +32,8 @@ export function createEditorT(locale: Locale): EditorT {
 }
 
 export { editorEn, editorFrCA };
+
+/** Waits, while rendering, until this module's text is loaded in `locale` (see cataloguesReady). */
+export function editorTextReady(locale: Locale): void {
+  cataloguesReady(locale, catalogues);
+}

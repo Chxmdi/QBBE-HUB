@@ -1,8 +1,10 @@
 import type { Locale } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
 import { moduleTranslator, type ModuleTranslate } from "@/features/spaces/i18n/translator";
-import { publicPagesEn } from "./en";
-import { publicPagesFr } from "./fr-CA";
+import { catalogues } from "./catalogues";
+
+const publicPagesEn = catalogues.en;
+const publicPagesFr = catalogues["fr-CA"];
 
 export type PublicPagesT = ModuleTranslate<typeof publicPagesEn>;
 

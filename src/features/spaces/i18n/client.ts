@@ -2,9 +2,11 @@
 
 import { useMemo } from "react";
 import { useLocale } from "@/lib/i18n/client";
-import { spacesEn } from "./en";
-import { spacesFr } from "./fr-CA";
+import { catalogues } from "./catalogues";
 import { moduleTranslator, type ModuleTranslate } from "./translator";
+
+const spacesEn = catalogues.en;
+const spacesFr = catalogues["fr-CA"];
 
 /** `t()` for spaces client components, in the reader's language. */
 export function useSpacesT(): ModuleTranslate<typeof spacesEn> {

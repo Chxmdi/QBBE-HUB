@@ -1,0 +1,50 @@
+import type { en } from "./messages.en";
+
+/** Français québécois (sorti de messages.ts pour ne charger qu’une langue, PERF-004). */
+export const frCA: typeof en = {
+  eyebrow: "Espace de travail",
+  title: "Suivis",
+  description: "Ce que vous suivez, et comment vous en êtes informé.",
+  followingHeading: "Ce que vous suivez",
+  nothingFollowed: "Vous ne suivez rien pour l’instant.",
+  unfollow: "Ne plus suivre {name}",
+  unfollowed: "Suivi retiré.",
+  follow: "Suivre",
+  following: "Suivi",
+  followed: "Vous suivez {name}.",
+  followThis: "Suivre {name}?",
+  followHelp: "Vous serez informé de ses changements selon vos règles ci-dessous.",
+  kinds: { task: "Tâche", project: "Projet", query: "Recherche enregistrée" },
+  queriesHeading: "Suivre une recherche enregistrée",
+  queriesHelp: "Soyez informé quand une tâche commence à correspondre, ou qu’une tâche correspondante change.",
+  presets: {
+    my_blocked: "Mes tâches bloquées",
+    due_this_week: "Mes tâches dues cette semaine",
+    i_requested: "Les tâches que j’ai demandées",
+  },
+  followQuery: "Suivre cette recherche",
+  rulesHeading: "Comment être informé des changements",
+  rulesHelp: "Les courriels respectent vos heures de tranquillité. Les résumés quotidien et hebdomadaire arrivent à votre heure de résumé.",
+  events: {
+    status: "Changements de statut",
+    assignment: "Changements d’attribution",
+    due: "Changements de date",
+    comment: "Nouveaux commentaires",
+    change: "Autres changements",
+  },
+  choices: {
+    none: "Ne pas m’informer",
+    hub: "Dans le Hub seulement",
+    immediate: "Dans le Hub et par courriel immédiatement",
+    daily: "Dans le Hub et dans le résumé quotidien",
+    weekly: "Dans le Hub et dans le résumé hebdomadaire",
+  },
+  saveRules: "Enregistrer mes règles",
+  rulesSaved: "Vos règles sont enregistrées.",
+  errors: {
+    generic: "Un problème est survenu. Veuillez réessayer.",
+    forbidden: "Vous ne pouvez pas faire ceci.",
+    cannotSee: "Vous pouvez seulement suivre ce que vous pouvez voir.",
+    already: "Vous suivez déjà ceci.",
+  },
+};

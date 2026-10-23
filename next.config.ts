@@ -34,6 +34,20 @@ const nextConfig: NextConfig = {
   // writes to .next/standalone. Only that build asks for it: `next start`,
   // which CI and local runs use, does not serve a standalone build.
   output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
+  // A feature's catalogues.ts imports its text in both languages, which
+  // server code reads synchronously. The browser gets its
+  // catalogues.browser.ts instead, which loads only the page's language
+  // (src/lib/i18n/lazy-catalogues.ts, PERF-004).
+  webpack(config, { isServer, webpack }) {
+    if (!isServer) {
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(/^\.\/catalogues$/, (resource: { context: string; request: string }) => {
+          if (/[\\/]src[\\/]features[\\/]/.test(resource.context)) resource.request = "./catalogues.browser";
+        }),
+      );
+    }
+    return config;
+  },
   async headers() {
     return [
       {

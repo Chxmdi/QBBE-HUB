@@ -1,0 +1,42 @@
+import type { en } from "./messages.en";
+
+/** Français québécois (sorti de messages.ts pour ne charger qu’une langue, PERF-004). */
+export const frCA: typeof en = {
+  eyebrow: "Espace de travail",
+  title: "Entretien de l’espace",
+  description: "Les pages que personne n’a consultées depuis un moment, les liens qui ne fonctionnent plus, ce qui n’a pas de place, les doublons possibles et ce que personne n’utilise. Vous voyez seulement ce que vous pouvez ouvrir.",
+  summary: "{count} éléments à examiner",
+  staleHeading: "Pages à réviser",
+  staleHelp: "Ni modifiées ni confirmées depuis au moins {days} jours. Les responsables confirment qu’une page est toujours juste, ou l’archivent.",
+  idleFor: "Inactive depuis {days} jours",
+  owner: "Responsable : {name}",
+  noOwner: "Aucun responsable",
+  thresholdLabel: "Inactive depuis au moins",
+  days: "{days} jours",
+  show: "Afficher",
+  stillCurrent: "Toujours à jour : {title}",
+  archive: "Archiver {title}",
+  reviewedCurrent: "Marquée comme toujours à jour.",
+  reviewedArchive: "Archivée.",
+  brokenHeading: "Liens brisés",
+  orphansHeading: "Éléments sans place",
+  duplicatesHeading: "Doublons possibles",
+  unusedHeading: "Inutilisés",
+  unusedHelp: "Les propriétés et les vues inutilisées apparaîtront ici lorsque les propriétés et les vues seront offertes.",
+  nothing: "Rien ici.",
+  open: "Ouvrir {title}",
+  issues: {
+    unapproved_host: "Pointe vers {detail}, qui n’est plus une source approuvée",
+    archived_project: "Toujours ouvert dans le projet archivé « {detail} »",
+    no_home_no_assignee: "Aucun projet, programme ni personne",
+    filed_nowhere: "Dans aucun projet, programme, réunion ni dossier",
+    type_without_objects: "Un type qui ne contient rien",
+    view_for_missing_project: "Une vue enregistrée pour un projet archivé ou supprimé",
+  },
+  kinds: { task: "Tâche", project: "Projet", document: "Document", page: "Page", type: "Type", view: "Vue enregistrée" },
+  sameAs: "{count} avec le même nom : {titles}",
+  errors: {
+    generic: "Un problème est survenu. Veuillez réessayer.",
+    forbidden: "Seul le responsable de la page ou une personne qui la gère peut la réviser.",
+  },
+};
