@@ -104,6 +104,7 @@ All times are UTC, because pg_cron evaluates in UTC.
 | `zeffy-sync` | every 15 min | Pulls payments, supporters and campaigns from Zeffy into the CRM; skipped without `ZEFFY_API_KEY`. |
 | `zeffy-events` | every minute | Applies the payment and supporter changes Zeffy reported by webhook. |
 | `scan-documents` | every minute | Scans pending private uploads; only a clean ClamAV verdict releases a download. |
+| `purge-unregistered-uploads` | hourly at :23 | Reports uploads nobody registered (a closed tab, a failed save) older than 24 hours in the four upload buckets. Deletes them only once an owner has turned its switch on; see [Turning on the upload cleanup](#turning-on-the-upload-cleanup). |
 | `purge-job-history` | 06:00 | Trims `job_run`, `background_job_run`, `email_delivery` and `rate_limit_counter` past retention (see [Retention](#retention)). |
 | `purge-cron-history` | 05:47 | Not an app job: plain SQL inside the database that deletes pg_cron's own run log (`cron.job_run_details`) older than 7 days. Not shown in Admin → Jobs. |
 | `retry-workflow-executions` | every 15 min | Retries workflow-rule notifications that failed to record, without sending a second copy. |
@@ -261,6 +262,93 @@ update job_definition set enabled = false where name = 'daily-digest';
 
 The dispatcher and the runner both check `enabled`, so this stops the work
 without touching cron.
+
+### Turning on the upload cleanup
+
+`purge-unregistered-uploads` starts in **report mode**: every hour it counts,
+per bucket (`documents`, `receipts`, `form-files`, `signing-documents`), the
+files nobody registered that are over 24 hours old, their total size and the
+oldest date, and the multipart uploads (`unfinished_multipart`) left
+unfinished for over 24 hours. It logs and audits that count and **deletes
+nothing**. Deleting
+needs the owner's OK, given once per environment through an operator switch.
+
+**This is hard to undo.** Files it deletes are gone from storage; only a
+storage backup brings them back. Do the steps in order.
+
+1. **Take a storage backup.** In GitHub, open **Actions**, **Backup**,
+   **Run workflow**, branch `main`, the environment you are turning this on
+   for, then **Run workflow** (see [the backup runbook](backup-recovery.md)).
+   *Worked:* the **Back up <environment>** job turns green and its summary
+   shows where the archive is stored. *Failed:* a red job; stop here and fix
+   the backup first.
+2. **Wait for one report.** The job runs at 23 minutes past each hour.
+3. **Read the report.** In the Supabase dashboard of that project, open
+   **SQL Editor**, **New query**, and run:
+
+   ```sql
+   select created_at, metadata
+   from audit_event
+   where action = 'unregistered_uploads_reported'
+   order by created_at desc
+   limit 1;
+   ```
+
+   *Worked:* one row whose `metadata.buckets` lists each bucket with `files`,
+   `bytes` and `oldest`, and whose `metadata.unfinished_multipart` counts
+   unfinished multipart uploads over a day old (normally `0`). *Failed:* no row; open **Admin**, **Jobs** in the Hub
+   and check `purge-unregistered-uploads` ran.
+   Check the numbers make sense: a few files or a few megabytes is normal. If
+   a bucket shows thousands of files or an `oldest` date from before the Hub
+   went live, stop and ask before going on.
+4. **Turn deletion on.** In the same **SQL Editor**, run:
+
+   ```sql
+   select public.set_operator_switch('purge-unregistered-uploads', true);
+   ```
+
+   *Worked:* the query returns one empty row, and
+   `select enabled, changed_via, changed_at from operator_switch;` shows
+   `true`, `database` and the time. The change is audited as
+   `operator_switch_changed`, with the database login it came from. *Failed:* an error saying only an owner can
+   change it means the query did not run in the dashboard's SQL editor.
+5. **Check the first deleting run.** After the next :23, run:
+
+   ```sql
+   select created_at, metadata from audit_event
+   where action = 'unregistered_uploads_deleted'
+   order by created_at desc limit 1;
+   ```
+
+   *Worked:* `metadata.deleted` lists a count per bucket,
+   `metadata.expired_multipart` the unfinished uploads removed, and
+   `metadata.failed` is `0`. Each run deletes at most 200 files and 200
+   unfinished uploads, so a larger count from step 3 takes several hourly
+   runs to clear.
+   *Failed:* `metadata.failed` is above `0`, or there is no row at all. Open
+   **Admin**, **Jobs** in the Hub, select `purge-unregistered-uploads`, and
+   read the latest run's error; the server log has a
+   `storage.purge_unregistered_failed` entry per bucket that could not be
+   cleaned. Files that were not deleted are tried again next run.
+
+To go back to report mode at any time, run the step 4 query with `false`.
+
+Separately, the documents bucket refuses a new upload from a person who
+already has 50 uploads from the last day waiting (not yet filed, or not yet
+scanned; captures count too). Someone who sees "The file
+could not be uploaded. Try again." after a large batch can try again the
+next day, or once the scanner has caught up; see
+[document scanning](document-scanning.md).
+
+**Required, once per environment: turn off the storage S3 protocol.** The
+Hub never uses it, and uploads through it are only partly held to the
+limits above. In the Supabase dashboard of the project, open **Storage**,
+then **Settings** (on some dashboards: **Project Settings**, **Storage**),
+find **S3 Connection**, turn off **Enable connection via S3 protocol**, and
+**Save**. *Worked:* after a page reload the toggle is still off, and the
+page no longer lists S3 access keys as usable. *Failed:* the setting is not
+there or will not save; note it on the owner list and ask Supabase support.
+The Hub's own uploads do not use it, so nothing in the app changes.
 
 ### Changing a schedule
 

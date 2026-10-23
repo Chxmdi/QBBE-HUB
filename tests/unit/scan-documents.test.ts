@@ -27,6 +27,17 @@ describe("document quarantine worker", () => {
       expect(db.rows("document")[0].scan_status).toBe(verdict);
     });
   }
+  it("takes files never tried in a stable order", async () => {
+    const { db, context, download } = fixture();
+    db.seed("document", [
+      { id: "doc-3", kind: "file", storage_path: "upload/3", scan_status: "pending", archived_at: null },
+      { id: "doc-0", kind: "file", storage_path: "upload/0", scan_status: "pending", archived_at: null },
+      { id: "doc-1", kind: "file", storage_path: "upload/1", scan_status: "pending", archived_at: null },
+    ]);
+    vi.mocked(scanDocumentBytes).mockResolvedValue("clean");
+    await scanDocuments(context);
+    expect(download.mock.calls.map(([path]) => path)).toEqual(["upload/0", "upload/1"]);
+  });
   it("leaves files pending on scanner failure", async () => {
     const { db, context } = fixture();
     vi.mocked(scanDocumentBytes).mockRejectedValue(new Error("scanner unavailable"));

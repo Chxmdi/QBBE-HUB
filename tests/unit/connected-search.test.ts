@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { searchConnectedApps } from "@/features/google-objects/search/connected-search.server";
 import { cleanTerm, driveQuery, gmailQuery, safeGoogleHref } from "@/features/google-objects/search/google-search";
 import { asClient, FakeSupabase } from "../support/fake-supabase";
+import { isSealed, openToken } from "@/features/inbox/services/google-token-crypto";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -104,7 +105,10 @@ describe("searchConnectedApps", () => {
     const searchFetch = vi.fn(async () => json({ files: [] }));
     const outcomes = await searchConnectedApps({ service: asClient(db), userId: "me", organizationId: "o1", term: "budget", now, fetchImpl: searchFetch as unknown as typeof fetch });
     expect(outcomes[0]).toEqual({ source: "drive", status: "ok", results: [] });
-    expect(db.rows("integration_secret").find((r) => r.connection_id === "c-me-drive")?.access_token).toBe("fresh");
+    // Stored sealed (PRIV-011), and it opens to the refreshed token.
+    const stored = db.rows("integration_secret").find((r) => r.connection_id === "c-me-drive")?.access_token as string;
+    expect(isSealed(stored)).toBe(true);
+    expect(openToken(stored, "c-me-drive")).toBe("fresh");
     vi.unstubAllEnvs();
   });
 });

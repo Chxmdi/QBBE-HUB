@@ -11,6 +11,7 @@ import { createUniversalTask } from "@/features/universal-tasks/create-task";
 import { parseForwardedEmail } from "./email";
 import { captureT } from "./i18n";
 import { CAPTURE_COLUMNS, type CaptureItem } from "./services/capture.queries";
+import { discardOwnUpload } from "@/features/documents/services/discard-upload";
 
 /** A row-level security or permission refusal, as opposed to any other failure. */
 function isRefusal(message: string | undefined): boolean {
@@ -256,8 +257,8 @@ export async function dismissCapture(itemId: string): Promise<CaptureResult> {
   if (!item) return { ok: false, error: t("errors.notFound") };
   const { error } = await db.from("capture_item").update({ status: "dismissed" }).eq("id", itemId);
   if (error) return { ok: false, error: t("errors.saveFailed") };
-  // The storage policy lets an owner remove their own unregistered upload.
-  if (item.storage_path) await db.storage.from("documents").remove([item.storage_path as string]);
+  // Only the person's own upload, registered nowhere, is removed.
+  if (item.storage_path) await discardOwnUpload(item.storage_path as string);
   revalidatePath("/capture");
   return { ok: true };
 }

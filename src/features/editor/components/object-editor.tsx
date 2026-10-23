@@ -47,6 +47,8 @@ import {
   updateSyncedBlock,
 } from "@/features/editor/services/synced-block.commands";
 import { describeButtonTarget, runButtonAction, undoButtonAction } from "@/features/editor/services/button-action.commands";
+import { documentUploadFolder } from "@/features/documents/services/document.commands";
+import { discardOwnUpload } from "@/features/documents/services/discard-upload";
 
 /** A task block cut and pasted elsewhere reappears within this time; only then is it "removed". */
 const REMOVAL_GRACE_MS = 1500;
@@ -249,7 +251,7 @@ export function ObjectEditor({
       upload: async (file) => {
         if (file.size > MAX_UPLOAD_BYTES) throw new Error(t("files.tooLarge"));
         const supabase = createSupabaseBrowserClient();
-        const path = storagePathFor(file.name, crypto.randomUUID());
+        const path = storagePathFor(await documentUploadFolder(), file.name, crypto.randomUUID());
         const { error } = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined });
         if (error) throw new Error(t("files.uploadFailed"));
         const result = await registerEditorUpload({
@@ -261,7 +263,7 @@ export function ObjectEditor({
           objectId,
         });
         if (!result.ok) {
-          await supabase.storage.from("documents").remove([path]);
+          await discardOwnUpload(path);
           throw new Error(result.error);
         }
         return result.ref;

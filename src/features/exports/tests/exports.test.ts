@@ -36,7 +36,8 @@ describe("kinds line up across three places", () => {
   });
 
   it("declares the same kinds and statuses the database does", () => {
-    for (const kind of EXPORT_KINDS) expect(sql).toContain(`'${kind}'`);
+    const kindSql = sql + migration("_contact_data_export_kind.sql");
+    for (const kind of EXPORT_KINDS) expect(kindSql).toContain(`'${kind}'`);
     for (const status of EXPORT_STATUSES) expect(sql).toContain(`'${status}'`);
   });
 
@@ -89,8 +90,22 @@ describe("requesting one", () => {
     ).toBe(true);
   });
 
+  it("refuses a contact export with no contact named, and accepts one with a contact", () => {
+    const result = requestExportSchema.safeParse({ kind: "contact_data" });
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0].message).toMatch(/contact this export is about/);
+    expect(requestExportSchema.safeParse({ kind: "contact_data", subjectContactId: PERSON }).success).toBe(true);
+  });
+
+  it("keeps the contact export for administrators", () => {
+    expect(STAFF_EXPORT_KINDS).not.toContain("contact_data");
+    const policy = migration("_contact_data_export.sql");
+    const staffBranch = policy.slice(policy.indexOf("app.is_org_staff(organization_id)"));
+    expect(staffBranch.slice(0, staffBranch.indexOf(")\n"))).not.toContain("contact_data");
+  });
+
   it("does not demand a subject for the other kinds", () => {
-    for (const kind of EXPORT_KINDS.filter((k) => k !== "person_data")) {
+    for (const kind of EXPORT_KINDS.filter((k) => k !== "person_data" && k !== "contact_data")) {
       expect(requestExportSchema.safeParse({ kind }).success).toBe(true);
     }
   });

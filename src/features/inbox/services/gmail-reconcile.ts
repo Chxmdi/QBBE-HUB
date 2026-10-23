@@ -6,6 +6,7 @@ import {
   fetchGmailProfile,
   refreshGoogleAccessToken,
 } from "@/features/inbox/services/gmail-sync";
+import { openToken, sealToken } from "@/features/inbox/services/google-token-crypto";
 
 export interface GmailConnectionRef {
   id: string;
@@ -38,7 +39,7 @@ async function loadAccessToken(
   if (error) throw new Error(`Could not load OAuth token: ${error.message}`);
   if (!secret?.access_token) throw new Error("Missing token for Gmail integration.");
 
-  let accessToken = secret.access_token as string;
+  let accessToken = openToken(secret.access_token as string, connectionId) as string;
   const expiresAt = secret.token_expires_at
     ? new Date(secret.token_expires_at as string).getTime()
     : 0;
@@ -47,7 +48,7 @@ async function loadAccessToken(
     if (!secret.refresh_token) {
       throw new Error("Google access token expired and no refresh token is available.");
     }
-    const refreshed = await refreshGoogleAccessToken(secret.refresh_token as string);
+    const refreshed = await refreshGoogleAccessToken(openToken(secret.refresh_token as string, connectionId) as string);
     if (!refreshed?.access_token) {
       throw new Error("Google access token expired and could not be refreshed.");
     }
@@ -55,7 +56,7 @@ async function loadAccessToken(
     const { error: updateError } = await db
       .from("integration_secret")
       .update({
-        access_token: refreshed.access_token,
+        access_token: sealToken(refreshed.access_token, connectionId),
         token_expires_at: refreshed.expires_in
           ? new Date(now.getTime() + refreshed.expires_in * 1000).toISOString()
           : null,

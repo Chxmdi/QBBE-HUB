@@ -523,15 +523,18 @@ export const knowledgeEn = {
       crm_contacts: "Relationships and contacts",
       task_history: "Task history",
       report_bundle: "Reports and approvals",
+      contact_data: "Everything about one contact",
     },
     kindDescriptions: {
       organization_data:
         "People, programs, projects, tasks, meetings, decisions, risks, issues and funding. For an audit or a move away.",
       person_data:
-        "A subject access request: the profile, memberships, assigned tasks, messages written, notifications and email records for one person.",
+        "A subject access request: everything this organization holds that names one person, from the profile and messages written to every record they are named on.",
       crm_contacts: "Funders, partners, contacts and the interaction history.",
       task_history: "Every task, with its dates, status and assignment.",
       report_bundle: "Reports with every version and the decisions taken on them.",
+      contact_data:
+        "Everything held about one donor, funder or partner contact: the contact, interactions, notes, gifts and agreements. Administrators with MFA only.",
     },
     statuses: {
       queued: "Queued",
@@ -548,9 +551,12 @@ export const knowledgeEn = {
       kind: "What to export",
       person: "About which person",
       personHint: "Required only for a subject access request.",
+      contact: "About which contact",
+      contactHint: "Required only for an export about one contact.",
     },
     errors: {
       choosePerson: "Choose the person this export is about.",
+      chooseContact: "Choose the contact this export is about.",
       invalidInput: "Invalid input.",
       notPermitted: "You don't have permission to request that export.",
       notFound: "Not found",
@@ -558,7 +564,6 @@ export const knowledgeEn = {
       expired: "That export has expired. Request a fresh one.",
       invalidFile: "Invalid export file.",
       countFailed: "Could not record download.",
-      auditFailed: "Could not audit download.",
       prepareFailed: "Could not prepare that download.",
     },
   },

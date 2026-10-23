@@ -33,8 +33,10 @@ Target design per GML-001..008. Do not mark done on stubs.
    (`gmail.readonly` + `gmail.send`; Hub does not request `gmail.modify`).
 2. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
    `GOOGLE_OAUTH_REDIRECT_URI` (`/api/integrations/google/callback`).
-3. Connect from Inbox or Admin. Tokens live in `integration_secret` (no
-   authenticated SELECT). Disconnect removes list ability.
+3. Connect from Inbox or Admin. Tokens live in `integration_secret`,
+   encrypted with `GOOGLE_TOKEN_KEY` (see "Google token key" below); no API
+   role can read them. Disconnecting deletes them and asks Google to revoke
+   them.
 4. Sync is idempotent on Gmail message ids; metadata only (SEC-006).
 5. For push synchronization, create a Pub/Sub topic in the **same Google Cloud
    project** as the OAuth client, grant Gmail publisher access as required by
@@ -57,6 +59,67 @@ Target design per GML-001..008. Do not mark done on stubs.
    Inbox mirror and then removes stale local metadata, so a transient provider
    failure cannot erase the last known good state. Do not put any value in
    browser-visible environment variables.
+
+## Google token key
+
+Gmail, Calendar and Drive tokens are encrypted before they are stored, with a
+key only the server holds: the `GOOGLE_TOKEN_KEY` setting in each
+environment's `APP_ENV` secret (32 random bytes in base64). The key is never
+in the database or the repository, so a database copy alone opens no Google
+account. A deployed server refuses to start without a valid key, and the
+deploy refuses an `APP_ENV` without one. When a token is deleted
+(disconnect, a member deactivated, a connection removed), the
+`google-token-upkeep` job (every 5 minutes) asks Google to revoke it and
+records the outcome in the audit log (`google_token_revoked` or
+`google_token_revoke_failed`).
+
+**Make a key** (owner step, once per environment; never reuse one between
+staging and production):
+
+1. On a trusted computer run:
+   ```bash
+   openssl rand -base64 32
+   ```
+   **You should see** one line of 44 characters ending in `=`.
+2. In GitHub, open **Settings → Environments → staging** (or **production**)
+   → **APP_ENV** → **Update secret**, and add a line
+   `GOOGLE_TOKEN_KEY=` followed by that value. Save, and store the value in
+   the password manager entry for that environment.
+3. Run the **Deploy** workflow for that environment. **You should see** the
+   deploy pass its environment check and the site start. If the deploy stops
+   with "APP_ENV ... needs a GOOGLE_TOKEN_KEY", the line is missing or the
+   value is not 44 base64 characters: repeat step 2.
+4. Tokens stored before encryption are sealed by the next upkeep run. **You
+   should see** in the SQL editor that
+   ```sql
+   select count(*) from public.integration_secret
+   where access_token !~ '^enc:v1:' or refresh_token !~ '^enc:v1:';
+   ```
+   returns `0` within ten minutes of the deploy.
+
+**Rotate the key** (owner step; for example after someone who held it
+leaves):
+
+1. Make a new key as above.
+2. In the environment's `APP_ENV`, rename the current line to
+   `GOOGLE_TOKEN_KEY_PREVIOUS=` (same value) and add the new value as
+   `GOOGLE_TOKEN_KEY=`. Deploy.
+3. Wait for the upkeep job to reseal every token (one batch of 200 every five
+   minutes). In the SQL editor, with the first 8 characters of the new key's
+   SHA-256 (`printf '%s' '<new key>' | base64 -d | sha256sum | cut -c1-8`):
+   ```sql
+   select count(*) from public.integration_secret
+   where access_token not like 'enc:v1:<those 8 characters>:%';
+   ```
+   **You should see** `0`.
+4. Remove the `GOOGLE_TOKEN_KEY_PREVIOUS` line and deploy again. Delete the
+   old value from the password manager.
+
+**If the key is lost**, the stored tokens cannot be opened: everyone
+reconnects Gmail, Calendar and Drive. Revocations still queued are recorded
+as `unreadable`; revoke those grants from the Google Workspace admin console
+if needed. A database restored into a new project keeps working only with
+the same key.
 
 ## Google Calendar overlay and linked meetings (P1-CAL-03)
 

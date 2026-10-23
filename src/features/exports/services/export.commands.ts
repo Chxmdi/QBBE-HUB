@@ -32,7 +32,7 @@ export async function requestExport(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? t("exports.errors.invalidInput") };
   }
-  const { kind, subjectUserId } = parsed.data;
+  const { kind, subjectUserId, subjectContactId } = parsed.data;
 
   const supabase = await createSupabaseServerClient();
   const { data: created, error } = await supabase
@@ -40,7 +40,9 @@ export async function requestExport(input: unknown): Promise<ActionResult> {
     .insert({
       organization_id: session.organizationId,
       kind,
-      subject_user_id: subjectUserId ?? null,
+      // Each kind names at most its own subject; the insert policy refuses the rest.
+      subject_user_id: kind === "person_data" ? (subjectUserId ?? null) : null,
+      subject_contact_id: kind === "contact_data" ? (subjectContactId ?? null) : null,
       requested_by: session.userId,
     })
     .select("id")

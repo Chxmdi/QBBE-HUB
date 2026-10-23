@@ -6,6 +6,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { requestOrigin } from "@/lib/request-origin";
 import { GOOGLE_PROVIDER_SCOPES, type GoogleIntegrationProvider } from "@/features/inbox/services/google-oauth";
 import { googleFetch } from "@/features/inbox/services/google-fetch";
+import { sealToken } from "@/features/inbox/services/google-token-crypto";
+import { logActionFailure } from "@/lib/server-log";
 
 export const dynamic = "force-dynamic";
 
@@ -93,12 +95,25 @@ export async function GET(request: Request) {
   // with this session matches nothing. The database stores them for the
   // connection's owner, and keeps the stored refresh token when Google sends
   // none on a reconnect.
-  const { error: secretError } = await supabase.rpc("store_integration_tokens", {
-    p_connection: connection.id,
-    p_access: tokens.access_token,
-    p_refresh: tokens.refresh_token ?? null,
-    p_expires: expires,
-  });
+  // Sealed here, before they leave the server (PRIV-011); a server without its
+  // token key stores nothing and reports the same failure as a refused store.
+  let sealed: { access: string; refresh: string | null } | null = null;
+  try {
+    sealed = {
+      access: sealToken(tokens.access_token, connection.id),
+      refresh: tokens.refresh_token ? sealToken(tokens.refresh_token, connection.id) : null,
+    };
+  } catch (cause) {
+    logActionFailure("google.callback_seal", cause, { provider });
+  }
+  const { error: secretError } = sealed
+    ? await supabase.rpc("store_integration_tokens", {
+        p_connection: connection.id,
+        p_access: sealed.access,
+        p_refresh: sealed.refresh,
+        p_expires: expires,
+      })
+    : { error: { message: "token key unavailable" } };
   if (secretError) {
     await supabase
       .from("integration_connection")

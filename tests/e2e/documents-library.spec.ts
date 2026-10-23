@@ -136,3 +136,65 @@ test("a volunteer is not shown a document filed in a staff-only folder", async (
   await expect(page.getByRole("heading", { name: /Not found/ })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(title)).toHaveCount(0);
 });
+
+test("an uploaded file is stored under the uploader's own folder, and the bucket refuses any other (SEC-016)", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const title = `Folder check ${Date.now()}`;
+  const staff = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2";
+  const volunteer = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3";
+
+  await signIn(page, "staff");
+  await page.goto("/documents");
+  await page.getByRole("button", { name: "Add resource" }).click();
+  const dialog = page.getByRole("dialog", { name: "Add a resource" });
+  await expect(dialog).toBeVisible({ timeout: 30_000 });
+  await dialog.getByLabel("File", { exact: true }).setInputFiles({
+    name: "../minutes.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Minutes of the board meeting."),
+  });
+  await dialog.getByLabel("Title", { exact: true }).fill(title);
+  await dialog.getByRole("button", { name: "Upload", exact: true }).click();
+  await expect(dialog).toBeHidden({ timeout: 60_000 });
+
+  const org = sql(`select organization_id from organization_membership where user_id = '${staff}' limit 1;`).trim();
+  await expect
+    .poll(
+      () =>
+        sql(
+          `select (d.storage_path like '${org}/${staff}/%') || '|' || o.owner_id
+             from document d join storage.objects o on o.bucket_id = 'documents' and o.name = d.storage_path
+            where d.title = '${quote(title)}';`,
+        ).trim(),
+      { timeout: 30_000 },
+    )
+    .toBe(`true|${staff}`);
+
+  // Straight to the storage server with the signed-in session: another
+  // person's folder, or a climb out of one's own, is refused; one's own
+  // folder is not.
+  const parts = (await page.context().cookies())
+    .filter((c) => /^sb-.+-auth-token(\.\d+)?$/.test(c.name))
+    .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }))
+    .map((c) => c.value)
+    .join("");
+  const session = JSON.parse(Buffer.from(parts.replace(/^base64-/, ""), "base64url").toString("utf8"));
+  const upload = (path: string) =>
+    page.request.post(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/documents/${path}`, {
+      headers: {
+        authorization: `Bearer ${session.access_token}`,
+        apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        "content-type": "text/plain",
+      },
+      data: "not theirs",
+    });
+  const random = () => crypto.randomUUID();
+  expect((await upload(`${org}/${volunteer}/${random()}/x.txt`)).ok()).toBe(false);
+  expect((await upload(`${random()}/x.txt`)).ok()).toBe(false);
+  expect((await upload(`${org}/${staff}/${random()}/%2e%2e`)).ok()).toBe(false);
+  const own = `${org}/${staff}/${random()}/mine.txt`;
+  expect((await upload(own)).ok()).toBe(true);
+  expect(sql(`select count(*) from storage.objects where bucket_id = 'documents' and name like '${org}/${volunteer}/%' and owner_id = '${staff}';`).trim()).toBe("0");
+});

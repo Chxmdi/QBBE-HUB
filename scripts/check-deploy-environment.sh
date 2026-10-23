@@ -106,6 +106,12 @@ secret="$(app_env CRON_JOB_SECRET)"
 (( ${#secret} >= 32 )) \
   || fail "APP_ENV for ${TARGET_ENVIRONMENT} needs a CRON_JOB_SECRET of at least 32 characters (openssl rand -base64 48)."
 
+# Google tokens are encrypted with GOOGLE_TOKEN_KEY (PRIV-011): 32 bytes in
+# base64. The server refuses to start without it, so refuse the deploy first.
+token_key="$(app_env GOOGLE_TOKEN_KEY)"
+[[ -n "$token_key" && "$(printf '%s' "$token_key" | base64 -d 2>/dev/null | wc -c)" -eq 32 ]] \
+  || fail "APP_ENV for ${TARGET_ENVIRONMENT} needs a GOOGLE_TOKEN_KEY of 32 bytes in base64 (openssl rand -base64 32); see docs/runbooks/integrations.md, Google token key."
+
 # WORKSPACE_OS_FLAGS turns unfinished modules on without touching the
 # feature_flag table (src/lib/feature-flags.ts). Staging only. Present at all
 # counts on production, even empty.

@@ -12,6 +12,8 @@ import { registerFormFile, type FormFileScan } from "@/features/forms-v2/service
 import { submitFormV2 } from "@/features/forms-v2/services/forms-v2.commands";
 import { useT } from "@/lib/i18n/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { documentUploadFolder } from "@/features/documents/services/document.commands";
+import { discardOwnUpload } from "@/features/documents/services/discard-upload";
 import { runServerAction } from "@/lib/use-server-action";
 
 type Answer = string | boolean;
@@ -243,7 +245,7 @@ function FileField({
     setBusy(true);
     try {
       const supabase = createSupabaseBrowserClient();
-      const path = storagePathFor(file.name, `forms-v2/${crypto.randomUUID()}`);
+      const path = storagePathFor(await documentUploadFolder(), file.name, crypto.randomUUID());
       const { error } = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined });
       if (error) {
         onError(text.errors.fileUploadFailed);
@@ -257,7 +259,7 @@ function FileField({
         sizeBytes: file.size,
       });
       if (!result.ok || !result.data) {
-        await supabase.storage.from("documents").remove([path]);
+        await discardOwnUpload(path);
         onError(result.ok ? text.errors.fileUploadFailed : result.error);
         e.target.value = "";
         return;

@@ -8,6 +8,9 @@ import { useT } from "@/lib/i18n/client";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { attachMeetingRecording } from "../services/meeting-v2.commands";
 import { useMeetingsV2T } from "./use-mv2-t";
+import { documentUploadFolder } from "@/features/documents/services/document.commands";
+import { storagePathFor } from "@/features/editor/adapter/files";
+import { discardOwnUpload } from "@/features/documents/services/discard-upload";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -31,8 +34,7 @@ export function RecordingUpload({ meetingId }: { meetingId: string }) {
     try {
       setStatus({ ok: true, text: t("recording.uploading") });
       const supabase = createSupabaseBrowserClient();
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
-      const path = `${crypto.randomUUID()}/${safeName}`;
+      const path = storagePathFor(await documentUploadFolder(), file.name, crypto.randomUUID());
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(path, file, { contentType: file.type || undefined });
@@ -47,7 +49,7 @@ export function RecordingUpload({ meetingId }: { meetingId: string }) {
         sizeBytes: file.size,
       });
       if (!result.ok) {
-        await supabase.storage.from("documents").remove([path]);
+        await discardOwnUpload(path);
         return setStatus({ ok: false, text: result.error ?? t("recording.error") });
       }
       setStatus({ ok: true, text: t("recording.uploaded") });

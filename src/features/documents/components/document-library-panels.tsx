@@ -10,6 +10,7 @@ import { Checkbox, FieldHint, Input, Label, Select } from "@/components/ui/input
 import { Tabs, TabPanel } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toast";
 import {
+  documentUploadFolder,
   getDocumentDownloadUrl,
   saveDocumentText,
 } from "@/features/documents/services/document.commands";
@@ -29,6 +30,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { runServerAction } from "@/lib/use-server-action";
 import { useFormatters, useT } from "@/lib/i18n/client";
 import type { TranslateFn } from "@/lib/i18n/translator";
+import { storagePathFor } from "@/features/editor/adapter/files";
+import { discardOwnUpload } from "@/features/documents/services/discard-upload";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -171,8 +174,7 @@ export function NewVersionDialog({
     setSaving(true);
     try {
       const supabase = createSupabaseBrowserClient();
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
-      const path = `${crypto.randomUUID()}/${safeName}`;
+      const path = storagePathFor(await documentUploadFolder(), file.name, crypto.randomUUID());
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(path, file, { contentType: file.type || undefined });
@@ -188,7 +190,7 @@ export function NewVersionDialog({
         sizeBytes: file.size,
       });
       if (!result.ok) {
-        await supabase.storage.from("documents").remove([path]);
+        await discardOwnUpload(path);
         setError(result.error ?? t("documents.versions.saveFailed"));
         return;
       }

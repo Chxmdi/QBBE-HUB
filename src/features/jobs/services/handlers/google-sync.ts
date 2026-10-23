@@ -9,6 +9,7 @@ import { recordJobRun } from "@/lib/job-observability";
 import type { JobContext, JobResult } from "../runner";
 import { logEvent } from "@/lib/server-log";
 import { withActiveOwners } from "../active-owners";
+import { openToken, sealToken } from "@/features/inbox/services/google-token-crypto";
 
 /**
  * Pulls changes from the connected Google services — Gmail metadata, Calendar
@@ -82,15 +83,15 @@ export async function googleSync({ db, now, definition }: JobContext): Promise<J
       if (secretError) throw new Error(`Could not load OAuth token: ${secretError.message}`);
       if (!secret?.access_token) throw new Error("Missing token for Google integration.");
 
-      let accessToken = secret.access_token as string;
+      let accessToken = openToken(secret.access_token as string, connection.id) as string;
       const expires = secret.token_expires_at ? new Date(secret.token_expires_at as string).getTime() : 0;
       if (expires && expires < Date.now() + 60_000) {
         if (!secret.refresh_token) throw new Error("Google access token expired and no refresh token is available.");
-        const refreshed = await refreshGoogleAccessToken(secret.refresh_token as string);
+        const refreshed = await refreshGoogleAccessToken(openToken(secret.refresh_token as string, connection.id) as string);
         if (!refreshed?.access_token) throw new Error("Google access token expired and could not be refreshed.");
         accessToken = refreshed.access_token;
         const { error: tokenUpdateError } = await db.from("integration_secret").update({
-          access_token: refreshed.access_token,
+          access_token: sealToken(refreshed.access_token, connection.id),
           token_expires_at: refreshed.expires_in
             ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
             : null,

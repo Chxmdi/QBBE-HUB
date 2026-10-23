@@ -126,6 +126,15 @@ const fileSchema = (t: TranslateFn) => z.object({
   editorObject: z.object({ type: z.enum(["page", "task", "meeting"]), id: z.string().uuid() }).optional(),
 });
 
+/**
+ * The uploader's own folder in the documents bucket, `<organization id>/<user id>`:
+ * the only place the bucket takes their uploads (SEC-016).
+ */
+export async function documentUploadFolder(): Promise<string> {
+  const session = await requireSession();
+  return `${session.organizationId}/${session.userId}`;
+}
+
 /** Records an uploaded file after the client streams it into Storage. */
 export async function registerUploadedDocument(
   input: unknown,

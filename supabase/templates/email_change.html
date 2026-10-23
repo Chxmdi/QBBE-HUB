@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr-CA">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Confirmez votre nouvelle adresse courriel / Confirm your new email address</title>
+</head>
+<body style="margin: 0; padding: 24px; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 1.5; color: #1a1a1a; background: #ffffff">
+  <div lang="fr-CA" style="margin: 0 0 24px">
+    <h1 style="font-size: 20px; margin: 0 0 12px">Confirmer le changement d’adresse</h1>
+    <p style="margin: 0 0 12px">Suivez ce lien pour confirmer le changement de l’adresse courriel de votre compte QBBE Hub, de {{ .Email }} à {{ .NewEmail }}.</p>
+    <p style="margin: 0 0 12px"><a href="{{ .ConfirmationURL }}" style="display: inline-block; padding: 10px 16px; background: #1f4e79; color: #ffffff; text-decoration: none; border-radius: 6px">Confirmer la nouvelle adresse</a></p>
+    <p style="margin: 0 0 12px; color: #555555">Ce lien expire dans une heure.</p>
+    <p style="margin: 0 0 12px; color: #555555">Si vous n’avez pas demandé ce changement, ne suivez pas le lien et prévenez un administrateur de votre organisme.</p>
+  </div>
+  <hr style="border: 0; border-top: 1px solid #dddddd; margin: 0 0 24px">
+  <div lang="en" style="margin: 0 0 24px">
+    <h1 style="font-size: 20px; margin: 0 0 12px">Confirm the change of address</h1>
+    <p style="margin: 0 0 12px">Follow this link to confirm changing the email address of your QBBE Hub account from {{ .Email }} to {{ .NewEmail }}.</p>
+    <p style="margin: 0 0 12px"><a href="{{ .ConfirmationURL }}" style="display: inline-block; padding: 10px 16px; background: #1f4e79; color: #ffffff; text-decoration: none; border-radius: 6px">Confirm the new address</a></p>
+    <p style="margin: 0 0 12px; color: #555555">This link expires in one hour.</p>
+    <p style="margin: 0 0 12px; color: #555555">If you did not ask for this change, do not follow the link, and tell an administrator of your organization.</p>
+  </div>
+</body>
+</html>

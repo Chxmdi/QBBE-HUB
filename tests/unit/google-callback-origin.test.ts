@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { openToken } from "@/features/inbox/services/google-token-crypto";
 
 const USER = "55555555-5555-4555-8555-555555555555";
 const ORG = "44444444-4444-4444-8444-444444444444";
@@ -79,12 +80,15 @@ describe("Google OAuth callback", () => {
     stateCookie = `google_calendar:${USER}:nonce`;
     const res = await GET(callback(`code=x&state=${encodeURIComponent(stateCookie)}`));
     expect(res.headers.get("location")).toBe("https://hub.example.org/calendar");
+    // Sealed before it leaves the server (PRIV-011).
     expect(rpc).toHaveBeenCalledWith("store_integration_tokens", {
       p_connection: CONNECTION,
-      p_access: "at",
+      p_access: expect.stringMatching(/^enc:v1:/),
       p_refresh: null,
       p_expires: expect.any(String),
     });
+    const stored = rpc.mock.calls.find((c: unknown[]) => c[0] === "store_integration_tokens")![1] as { p_access: string };
+    expect(openToken(stored.p_access, CONNECTION)).toBe("at");
     expect(rpc).toHaveBeenCalledWith("store_integration_sync_state", {
       p_connection: CONNECTION,
       p_state: { google_calendar_sync_token: "sync-1" },

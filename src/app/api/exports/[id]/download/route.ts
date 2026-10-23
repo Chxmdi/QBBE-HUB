@@ -7,6 +7,7 @@ import { isDownloadable } from "@/features/exports/schemas";
 import type { ExportStatus } from "@/features/exports/schemas";
 import { getT } from "@/lib/i18n/server";
 import { logEvent, requestIdOf } from "@/lib/server-log";
+import { auditUnavailableResponse, recordAudit } from "@/lib/audit-write";
 
 /**
  * Handing over a finished export.
@@ -103,7 +104,7 @@ export async function GET(
     return NextResponse.json({ error: t("exports.errors.countFailed") }, { status: 503 });
   }
 
-  const { error: auditError } = await service.from("audit_event").insert({
+  const audited = await recordAudit(service, {
     organization_id: row.organization_id,
     actor_id: session.userId,
     event_type: "data_export",
@@ -111,9 +112,7 @@ export async function GET(
     object_type: "export_job",
     object_id: id,
   });
-  if (auditError) {
-    return NextResponse.json({ error: t("exports.errors.auditFailed") }, { status: 503 });
-  }
+  if (!audited) return auditUnavailableResponse();
 
   const { data: signed, error } = await service.storage
     .from("exports")

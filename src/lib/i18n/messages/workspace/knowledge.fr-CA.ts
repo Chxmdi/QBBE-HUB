@@ -533,15 +533,18 @@ export const knowledgeFrCA: typeof knowledgeEn = {
       crm_contacts: "Relations et contacts",
       task_history: "Historique des tâches",
       report_bundle: "Rapports et approbations",
+      contact_data: "Tout ce qui concerne un contact",
     },
     kindDescriptions: {
       organization_data:
         "Personnes, programmes, projets, tâches, réunions, décisions, risques, problèmes et financement. Pour un audit ou une migration.",
       person_data:
-        "Une demande d’accès aux renseignements personnels : le profil, les adhésions, les tâches assignées, les messages rédigés, les notifications et les courriels d’une personne.",
+        "Une demande d’accès aux renseignements personnels : tout ce que l’organisme détient qui nomme une personne, du profil et des messages rédigés jusqu’à chaque dossier où elle figure.",
       crm_contacts: "Bailleurs de fonds, partenaires, contacts et historique des interactions.",
       task_history: "Chaque tâche, avec ses dates, son statut et son assignation.",
       report_bundle: "Les rapports avec toutes leurs versions et les décisions prises à leur sujet.",
+      contact_data:
+        "Tout ce qui est détenu sur un donateur, un bailleur de fonds ou un partenaire : le contact, les interactions, les notes, les dons et les ententes. Administrateurs avec authentification multifacteur seulement.",
     },
     statuses: {
       queued: "En file d’attente",
@@ -559,9 +562,12 @@ export const knowledgeFrCA: typeof knowledgeEn = {
       person: "Au sujet de quelle personne",
       personHint:
         "Obligatoire seulement pour une demande d’accès aux renseignements personnels.",
+      contact: "Au sujet de quel contact",
+      contactHint: "Obligatoire seulement pour une exportation au sujet d’un contact.",
     },
     errors: {
       choosePerson: "Choisissez la personne visée par cette exportation.",
+      chooseContact: "Choisissez le contact visé par cette exportation.",
       invalidInput: "Données non valides.",
       notPermitted: "Vous n’avez pas l’autorisation de demander cette exportation.",
       notFound: "Introuvable",
@@ -569,7 +575,6 @@ export const knowledgeFrCA: typeof knowledgeEn = {
       expired: "Cette exportation a expiré. Demandez-en une nouvelle.",
       invalidFile: "Fichier d’exportation non valide.",
       countFailed: "Impossible d’enregistrer le téléchargement.",
-      auditFailed: "Impossible de journaliser le téléchargement.",
       prepareFailed: "Impossible de préparer ce téléchargement.",
     },
   },

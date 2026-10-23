@@ -6,6 +6,7 @@ import {
   type ConnectedSource,
   type SourceOutcome,
 } from "./google-search";
+import { openToken, sealToken } from "@/features/inbox/services/google-token-crypto";
 
 /**
  * Runs a connected-app search for ONE person with THEIR OWN Google tokens.
@@ -47,8 +48,13 @@ async function tokenFor(
     .select("connection_id, access_token, refresh_token, token_expires_at")
     .eq("connection_id", connection.id)
     .maybeSingle();
-  const row = secret as SecretRow | null;
-  if (!row) return null;
+  const stored = secret as SecretRow | null;
+  if (!stored) return null;
+  const row = {
+    ...stored,
+    access_token: openToken(stored.access_token, stored.connection_id),
+    refresh_token: openToken(stored.refresh_token, stored.connection_id),
+  };
   const expires = row.token_expires_at ? new Date(row.token_expires_at).getTime() : 0;
   if (row.access_token && expires > now.getTime() + 60_000) return row.access_token;
   if (!row.refresh_token) return row.access_token;
@@ -57,7 +63,7 @@ async function tokenFor(
   await service
     .from("integration_secret")
     .update({
-      access_token: refreshed.access_token,
+      access_token: sealToken(refreshed.access_token, row.connection_id),
       token_expires_at: refreshed.expires_in ? new Date(now.getTime() + refreshed.expires_in * 1000).toISOString() : null,
     })
     .eq("connection_id", row.connection_id);

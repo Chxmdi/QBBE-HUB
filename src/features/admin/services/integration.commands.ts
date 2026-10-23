@@ -17,6 +17,11 @@ import { getT } from "@/lib/i18n/server";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { recordAudit } from "@/lib/audit-write";
 import { logActionFailure, logEvent } from "@/lib/server-log";
+import { createSupabaseServiceClient } from "@/lib/supabase/service";
+import { revokeQueuedGoogleTokens } from "@/features/inbox/services/google-revoke";
+
+/** Connections that hold Google tokens. */
+const GOOGLE_PROVIDERS = new Set(["gmail", "google_calendar", "google_drive"]);
 
 /** Organization-wide integrations an administrator connects for everyone. */
 const ORGANIZATION_PROVIDERS = new Set(["volunteer_system", "zeffy"]);
@@ -70,6 +75,22 @@ export async function disconnectIntegration(
     ({ error: cleanupError } = await supabase.from("document").delete().eq("integration_connection_id", disconnected.id));
   }
   if (cleanupError) logActionFailure("integration.disconnect_cleanup", cleanupError, { provider });
+
+  // The stored Google tokens go too (PRIV-011). Deleting them queues them for
+  // revocation at Google (a database trigger); asking now rather than at the
+  // next upkeep run ends the grant while the person watches. Revocation is
+  // best effort; the local copy is deleted either way.
+  let tokenError: unknown = null;
+  if (GOOGLE_PROVIDERS.has(provider)) {
+    const service = createSupabaseServiceClient();
+    ({ error: tokenError } = await service.from("integration_secret").delete().eq("connection_id", disconnected.id));
+    if (tokenError) logActionFailure("integration.disconnect_tokens", tokenError, { provider });
+    else {
+      await revokeQueuedGoogleTokens(service, { connectionId: disconnected.id }).catch((cause) =>
+        logActionFailure("integration.disconnect_revoke", cause, { provider }),
+      );
+    }
+  }
   if (provider === "volunteer_system") {
     // Removes every link and every copied assignment in the organization.
     const { error: clearError } = await supabase.rpc("clear_org_vms_ids", { p_org: session.organizationId });
@@ -85,12 +106,13 @@ export async function disconnectIntegration(
     event_type: "integration",
     action: "integration_disconnected",
     object_type: "integration_connection",
-    metadata: cleanupError ? { provider, cleanup_failed: true } : { provider },
+    metadata: {
+      provider,
+      ...(cleanupError ? { cleanup_failed: true } : {}),
+      ...(tokenError ? { token_delete_failed: true } : {}),
+    },
   });
-  if (cleanupError) {
-    logActionFailure("integration.disconnectIntegration", cleanupError);
-    return { ok: false, error: t("admin.errors.googleCleanupFailed") };
-  }
+  if (cleanupError || tokenError) return { ok: false, error: t("admin.errors.googleCleanupFailed") };
 
   revalidatePath("/admin");
   revalidatePath("/inbox");

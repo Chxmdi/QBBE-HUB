@@ -15,6 +15,7 @@ export const EXPORT_KINDS = [
   "crm_contacts",
   "task_history",
   "report_bundle",
+  "contact_data",
 ] as const;
 
 export const EXPORT_STATUSES = [
@@ -41,16 +42,19 @@ export const EXPORT_KIND_LABELS: Record<ExportKind, string> = {
   crm_contacts: "Relationships and contacts",
   task_history: "Task history",
   report_bundle: "Reports and approvals",
+  contact_data: "Everything about one contact",
 };
 
 export const EXPORT_KIND_DESCRIPTIONS: Record<ExportKind, string> = {
   organization_data:
     "People, programs, projects, tasks, meetings, decisions, risks, issues and funding. For an audit or a move away.",
   person_data:
-    "A subject access request: the profile, memberships, assigned tasks, messages written, notifications and email records for one person.",
+    "A subject access request: everything this organization holds that names one person, from the profile and messages written to every record they are named on.",
   crm_contacts: "Funders, partners, contacts and the interaction history.",
   task_history: "Every task, with its dates, status and assignment.",
   report_bundle: "Reports with every version and the decisions taken on them.",
+  contact_data:
+    "Everything held about one donor, funder or partner contact: the contact, interactions, notes, gifts and agreements. Administrators with MFA only.",
 };
 
 export const EXPORT_STATUS_LABELS: Record<ExportStatus, string> = {
@@ -99,12 +103,20 @@ export function requestExportSchemaFor(t: TranslateFn) {
     .object({
       kind: z.enum(EXPORT_KINDS),
       subjectUserId: z.string().uuid().nullable().optional(),
+      subjectContactId: z.string().uuid().nullable().optional(),
     })
     .refine(
       (value) => value.kind !== "person_data" || Boolean(value.subjectUserId),
       {
         message: t("exports.errors.choosePerson"),
         path: ["subjectUserId"],
+      },
+    )
+    .refine(
+      (value) => value.kind !== "contact_data" || Boolean(value.subjectContactId),
+      {
+        message: t("exports.errors.chooseContact"),
+        path: ["subjectContactId"],
       },
     );
 }
